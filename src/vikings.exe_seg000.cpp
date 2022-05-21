@@ -14,7 +14,7 @@ static FILE* data_handle = 0;
 
   uint32_t myOffset;
 
-extern uint16_t keys;
+extern uint16_t input_keys;
 extern bool need_quit;
 
 #include <SDL2/SDL.h>
@@ -5137,7 +5137,7 @@ cs=0x1a2;eip=0x002360; 	T(MOV(ax, word_30bbc));	// 4616 mov     ax, word_30BBC ;
 loc_12363:
 	// 4751
 cs=0x1a2;eip=0x002363; 	T(OR(ax, word_30bbe));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
-cs=0x1a2;eip=0x002363; 	T(OR(ax, keys));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
+cs=0x1a2;eip=0x002363; 	T(OR(ax, input_keys));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
 cs=0x1a2;eip=0x002367; 	X(MOV(word_28896, ax));	// 4620 mov     word_28896, ax ;~ 01A2:2367
 cs=0x1a2;eip=0x00236a; 	T(MOV(ax, word_28896));	// 4621 mov     ax, word_28896 ;~ 01A2:236A
 cs=0x1a2;eip=0x00236d; 	T(XOR(ax, word_2889a));	// 4622 xor     ax, word_2889A ;~ 01A2:236D
