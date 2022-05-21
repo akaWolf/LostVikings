@@ -1,0 +1,3 @@
+[submodule "src/adlmidi"]
+	path = src/adlmidi
+	url = https://github.com/Wohlstand/libADLMIDI.git

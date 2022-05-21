@@ -1622,6 +1622,7 @@ cs=0xd4f;eip=0x000d50; 	J(JMP(sub_1bec2));	// 33877 jmp     near ptr sub_1BEC2 ;
 
     assert(0);
     __dispatch_call:
+	J(RETF(0));
 #ifdef DOSBOX_CUSTOM
     if ((__disp >> 16) == 0xf000)
 	{cs=0xf000;eip=__disp&0xffff;m2c::fix_segs();return false;}  // Jumping to BIOS

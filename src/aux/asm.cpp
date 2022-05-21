@@ -8,6 +8,7 @@
 #include <ctime>
 
 extern void render_init(void *);
+extern void sound_init();
 
 bool from_callf=false;
 
@@ -407,6 +408,7 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 //	int8_thread.detach();
 
 	render_init((void*)_render_state);
+	sound_init();
 
     return(0);
  }

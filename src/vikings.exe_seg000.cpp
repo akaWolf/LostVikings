@@ -7,6 +7,13 @@
                 #include "vikings.exe.h"
  #include <unistd.h>
 #include <thread>
+#include <map>
+
+int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
+void stop_xmidi_external();
+void set_dontstop_external(uint8_t num);
+void stop_xmidi_external(uint8_t num);
+
 extern bool trace_instructions_to_stdout;
 extern bool trace_instructions;
 
@@ -1201,11 +1208,16 @@ cs=0x1a2;eip=0x000f5c; 	J(RETN(0));	// 2103 retn ;~ 01A2:0F5C
  assert(0);
 }
 
+std::map<uint32_t, uint32_t> chunk_sizes;
+
 bool read_chunk(m2c::_STATE *_state)
 {
   X86_REGREF
 	//m2c::_STATE *_state;
   printf("~! Loading chunk %x -> %x:%x\n", ax, es, di);
+  uint16_t start = di;
+  uint16_t start_seg = es;
+  uint16_t num = ax;
 	// 1218
 cs=0x1a2;eip=0x000982; 	X(PUSH(ds));	// 1220 push    ds ;~ 01A2:0982
 ret_1a2_983:
@@ -1218,7 +1230,9 @@ loc_10989:
 cs=0x1a2;eip=0x000989; 	T(MOV(ax, es));	// 1227 mov     ax, es ;~ 01A2:0989
 cs=0x1a2;eip=0x00098b; 	X(POP(si));	// 1228 pop     si ;~ 01A2:098B
 cs=0x1a2;eip=0x00098c; 	X(POP(ds));	// 1229 pop     ds ;~ 01A2:098C
-// printf("chunk size = %x\n", di);
+ printf("chunk size = %x\n", di - start);
+ printf("chunk addr = %x\n", (start_seg << 4) + start);
+ chunk_sizes[(start_seg << 4) + start] = di - start;
 cs=0x1a2;eip=0x00098d; 	J(RETN(0));	// 1231 retn ;~ 01A2:098D
 loc_1098e:
 	// 4483
@@ -14947,6 +14961,7 @@ cs=0x1a2;eip=0x0075b8; 	X(PUSH(*(dw*)(raddr(ds,0x86BC))));	// 17088 push    word
 cs=0x1a2;eip=0x0075bc; 	X(PUSH(*(dw*)(raddr(ds,0x86BA))));	// 17089 push    word ptr ds:86BAh ;~ 01A2:75BC
 cs=0x1a2;eip=0x0075c0; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17090 push    word ptr ds:98E6h ;~ 01A2:75C0
 cs=0x1a2;eip=0x0075c4; 	J(CALLF(sub_1c615,0));	// 17091 call    sub_1C615 ;~ 01A2:75C4
+ ax = 1;
 cs=0x1a2;eip=0x0075c9; 	T(ADD(sp, 0x0A));	// 17092 add     sp, 0Ah ;~ 01A2:75C9
 cs=0x1a2;eip=0x0075cc; 	T(OR(ax, ax));	// 17093 or      ax, ax ;~ 01A2:75CC
 cs=0x1a2;eip=0x0075ce; 	J(JNZ(loc_175d3));	// 17094 jnz     short loc_175D3 ;~ 01A2:75CE
@@ -14963,6 +14978,7 @@ cs=0x1a2;eip=0x0075eb; 	J(CALLF(sub_1c61b,0));	// 17105 call    far ptr sub_1C61
 cs=0x1a2;eip=0x0075f0; 	T(ADD(sp, 0x0A));	// 17106 add     sp, 0Ah ;~ 01A2:75F0
 cs=0x1a2;eip=0x0075f3; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17107 push    word ptr ds:98E6h ;~ 01A2:75F3
 cs=0x1a2;eip=0x0075f7; 	J(CALLF(sub_1c76f,0));	// 17108 call    sub_1C76F ;~ 01A2:75F7
+ ax = 0xe00;
 cs=0x1a2;eip=0x0075fc; 	T(ADD(sp, 2));	// 17109 add     sp, 2 ;~ 01A2:75FC
 cs=0x1a2;eip=0x0075ff; 	X(MOV(*(dw*)(raddr(ds,0x9942)), ax));	// 17110 mov     ds:9942h, ax ;~ 01A2:75FF
 cs=0x1a2;eip=0x007602; 	X(MOV(*(dw*)(raddr(ds,0x0A39A)), 1));	// 17111 mov     word ptr ds:0A39Ah, 1 ;~ 01A2:7602
@@ -15001,6 +15017,8 @@ cs=0x1a2;eip=0x00766f; 	J(CALL(sub_176bd,0));	// 17144 call    sub_176BD ;~ 01A2
 cs=0x1a2;eip=0x007672; 	X(MOV(*(dw*)(raddr(ds,0x0A378)), 1));	// 17145 mov     word ptr ds:0A378h, 1 ;~ 01A2:7672
 locret_17678:
 	// 5848
+//cs=0x1a2;eip=0x007679; 	X(MOV(*(dw*)(raddr(ds,0x302)), 0x8000));	// 17154 mov     word ptr ds:302h, 8000h ;~ 01A2:7679
+//cs=0x1a2;eip=0x00767f; 	X(MOV(*(dw*)(raddr(ds,0x304)), 0x8000));	// 17155 mov     word ptr ds:304h, 8000h ;~ 01A2:767F
 cs=0x1a2;eip=0x007678; 	J(RETN(0));	// 17149 retn ;~ 01A2:7678
 loc_17679:
 	// 5849
@@ -15035,6 +15053,13 @@ cs=0x1a2;eip=0x0076bc; 	J(RETF(0));	// 17183 retf ;~ 01A2:76BC
 sub_176bd:
  printf("AIL sub_176bd: sequence_num: %x FORM_XMID_high: %x state_table_offset: %x\n", ax, bx, si);
 	// 17188
+ printf("AIL %x\n", chunk_sizes[(bx) << 4]);
+ static int id_music = - 1;
+ if (id_music != -1)
+   stop_xmidi_external(id_music);
+ id_music = play_xmidi_external(raddr(bx,0), chunk_sizes[(bx) << 4], -1);
+ set_dontstop_external(id_music);
+cs=0x1a2;eip=0x0076bb; 	J(RETN(0));	// 17177 retn ;~ 01A2:76BB
 cs=0x1a2;eip=0x0076bd; 	X(PUSHF);	// 17190 pushf ;~ 01A2:76BD
 ret_1a2_76be:
 	// 5852
@@ -15151,8 +15176,11 @@ ret_1a2_77b5:
 cs=0x1a2;eip=0x0077b5; 	T(ADD(bx, 2));	// 17321 add     bx, 2 ;~ 01A2:77B5
 cs=0x1a2;eip=0x0077b8; 	T(AND(ax, 0x0FF));	// 17322 and     ax, 0FFh ;~ 01A2:77B8
 sub_177bb:
- printf("AIL sub_177bb: restart playback\n");
+ printf("AIL sub_177bb: ail_play_sound: sequence num = %x\n", ax);
 	// 17329
+ printf("AIL %x\n", chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4]);
+ play_xmidi_external(raddr(*(dw*)(raddr(ds,0x2E6D)),0), chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4], ax);
+cs=0x1a2;eip=0x0077b1; 	J(RETN(0));	// 17313 retn ;~ 01A2:77B1
 cs=0x1a2;eip=0x0077bb; 	X(PUSH(es));	// 17331 push    es ;~ 01A2:77BB
 cs=0x1a2;eip=0x0077bc; 	X(PUSH(bx));	// 17332 push    bx ;~ 01A2:77BC
 cs=0x1a2;eip=0x0077bd; 	T(TEST(*(dw*)(raddr(ds,0x304)), 0x0FFFF));	// 17333 test    word ptr ds:304h, 0FFFFh ;~ 01A2:77BD
@@ -15343,6 +15371,8 @@ cs=0x1a2;eip=0x007911; 	J(RETN(0));	// 17528 retn ;~ 01A2:7911
 sub_17912:
  printf("AIL sub_17912: stop2\n");
 	// 17535
+ stop_xmidi_external();
+cs=0x1a2;eip=0x007911; 	J(RETN(0));	// 17528 retn ;~ 01A2:7911
 cs=0x1a2;eip=0x007912; 	T(TEST(*(dw*)(raddr(ds,0x302)), 0x0FFFF));	// 17536 test    word ptr ds:302h, 0FFFFh ;~ 01A2:7912
 ret_1a2_7918:
 	// 5878
