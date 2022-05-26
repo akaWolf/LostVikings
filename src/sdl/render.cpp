@@ -1,6 +1,7 @@
 #include <SDL2/SDL.h>
 #include <thread>
 #include <cassert>
+#include <cstdio>
 
 const int SCREEN_SCALE = 4;
 const int SCREEN_WIDTH = 320;
@@ -86,7 +87,7 @@ void updateDraw()
     {
 	  printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );
     }
-	myWindow = SDL_CreateWindow( "FFFF", 2880 - SCREEN_SCALE*SCREEN_WIDTH, 1800 - SCREEN_SCALE*SCREEN_HEIGHT, SCREEN_WIDTH * SCREEN_SCALE, SCREEN_HEIGHT * SCREEN_SCALE, SDL_WINDOW_BORDERLESS );
+	myWindow = SDL_CreateWindow( "FFFF", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH * SCREEN_SCALE, SCREEN_HEIGHT * SCREEN_SCALE, SDL_WINDOW_SHOWN );
 		if( myWindow == NULL )
 		{
 			printf( "Window could not be created! SDL_Error: %s\n", SDL_GetError() );
@@ -103,7 +104,7 @@ void updateDraw()
 
 			myFormat = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
-		   while (true)
+		   while (!need_quit)
 			{
 			   SDL_Event event;
 			   uint16_t key_val = 0;
@@ -170,7 +171,8 @@ void updateDraw()
 			   updateDraw();
 			   //SDL_Delay(20);
 			   render_callback(_state);
-			   std::this_thread::sleep_for(std::chrono::milliseconds(15));
+			   //std::this_thread::sleep_for(std::chrono::milliseconds(15));
+			   SDL_Delay(10);
 		   }
 		}
 

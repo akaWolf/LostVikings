@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <thread>
+#include <cstdio>
 
 #include "adlmidi.h"
 
@@ -96,7 +97,7 @@ void stop_xmidi_external(uint8_t num)
   if (midi_players[num] != nullptr)
 	num_to_stop = num;
   while (midi_players[num] != nullptr)
-	SDL_Delay(10);
+	SDL_Delay(2);
   if (dontstop_num == num)
 	dontstop_num = -1;
 }

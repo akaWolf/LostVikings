@@ -1820,7 +1820,7 @@ cs=0x1a2;eip=0x000018; 	X(MOV(word_3287c, 1));	// 44 mov     word_3287C, 1 ;~ 01
 loc_1001e:
 	// 4370
  if (need_quit) {
-   printf("quitting main thread");
+   printf("quitting main thread\n");
    exit(0);
  }
 cs=0x1a2;eip=0x00001e; 	J(CALL(sub_12352,0));	// 48 call    sub_12352 ;~ 01A2:001E
@@ -1920,6 +1920,10 @@ sub_10130:
 cs=0x1a2;eip=0x000130; 	T(CMP(word_3287c, 1));	// 155 cmp     word_3287C, 1 ;~ 01A2:0130
 ret_1a2_135:
 	// 4376
+ if (need_quit) {
+   printf("quitting main thread\n");
+   exit(0);
+ }
 std::this_thread::sleep_for(std::chrono::milliseconds(2));
 cs=0x1a2;eip=0x000135; 	J(JGE(sub_10130));	// 156 jge     short sub_10130 ;~ 01A2:0135
 cs=0x1a2;eip=0x000137; 	J(RETN(0));	// 157 retn ;~ 01A2:0137
