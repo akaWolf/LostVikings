@@ -23,7 +23,7 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
 {
   	  /* Initialize ADLMIDI */
       auto curr_player = adl_init(MYFREQ);
-	  printf("player: %p %p %i\n", curr_player, xmidi, seq_num);
+	  printf("player: created %p %p %i\n", curr_player, xmidi, seq_num);
 	  if (!curr_player)
 	  {
 		  fprintf(stderr, "Couldn't initialize ADLMIDI: %s\n", adl_errorString());
@@ -35,7 +35,7 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
 	  /* Set using of embedded bank by ID */
 	  adl_setBank(curr_player, 75);
 
-	  adl_setLoopEnabled(curr_player, 0);
+	  adl_setLoopEnabled(curr_player, seq_num == -1 ? 1 : 0);
 
 	      /* Open the MIDI (or MUS, IMF or CMF) file to play */
 	if (adl_openData(curr_player, xmidi, len) < 0)
@@ -47,7 +47,8 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
 	}
 
 	  if (seq_num != -1)
-		adl_setTrackOptions(curr_player, seq_num, ADLMIDI_TrackOption_Solo);
+		adl_selectSongNum(curr_player, seq_num);
+		//adl_setTrackOptions(curr_player, seq_num, ADLMIDI_TrackOption_Solo);
 
 	*midi_player = curr_player;
 
@@ -57,7 +58,7 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
         SDL_Delay(100);
     }
 
-	printf("exiting %p\n", curr_player);
+	printf("player: exiting %p\n", curr_player);
 }
 
 int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t len, int seq_num)
@@ -226,7 +227,7 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 
 	close:
 		{
-		  printf("closing %p\n", midi_players[i]);
+		  printf("player: closing %p\n", midi_players[i]);
 		  adl_close(midi_players[i]);
 		  midi_players[i] = nullptr;
 		  if (num_to_stop == i)
