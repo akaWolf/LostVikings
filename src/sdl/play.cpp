@@ -178,14 +178,14 @@ void sound_init()
     //SDL_CloseAudio();
 }
 
-static uint8_t myBuffer[0x1000];
+static uint8_t myBuffer[0x2000];
 
 void my_audio_callback(void *argument, Uint8 *stream, int len)
 {
   //printf("size %x\n", len);
-  if (len > 0x1000) {
-	printf("SOUND ERROR!\n");
-	len = 0x1000;
+  if (len > 0x2000) {
+	printf("SOUND ERROR, len = %d!\n", len);
+	len = 0x2000;
   }
 
   memset(myBuffer, 0, len);
