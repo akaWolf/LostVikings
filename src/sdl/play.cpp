@@ -89,12 +89,28 @@ int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num)
 
 void stop_xmidi_external()
 {
+  printf("request to stop all sound players\n");
   need_stop = true;
+
+  bool there_is_something_to_stop = true;
+  while (there_is_something_to_stop)
+  {
+	int i;
+    for (i = 0; i < 100; i++)
+	  if ((midi_players[i] != nullptr) && (i != dontstop_num))
+	  {
+	    there_is_something_to_stop = true;
+	    break;
+	  }
+    if (i == 100)
+	  there_is_something_to_stop = false;
+    SDL_Delay(2);
+  }
 }
 
 void stop_xmidi_external(uint8_t num)
 {
-  printf("request to stop %x %p\n", num, midi_players[num]);
+  printf("request to stop player %x %p\n", num, midi_players[num]);
   if (midi_players[num] != nullptr)
 	num_to_stop = num;
   while (midi_players[num] != nullptr)
@@ -105,11 +121,13 @@ void stop_xmidi_external(uint8_t num)
 
 void set_dontstop_external(uint8_t num)
 {
+  printf("dontstop player: %x %p\n", num, midi_players[num]);
   dontstop_num = num;
 }
 
 void sound_init()
 {
+  printf("init sound\n");
     static SDL_AudioSpec spec, obtained;
 
 	for (int i = 0; i < 100; i++)
@@ -121,7 +139,7 @@ void sound_init()
     spec.freq = MYFREQ;
     spec.format = AUDIO_S16SYS;
     spec.channels = 2;
-    spec.samples = 2048;
+    spec.samples = 64;
 
     spec.callback = my_audio_callback;
     spec.userdata = midi_players;

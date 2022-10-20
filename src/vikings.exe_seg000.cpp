@@ -3126,7 +3126,7 @@ for (int i = 0; i < 0x100; i++)
  return 0;
 sub_10ffc:
 	// 2186c
- printf("panning_fun_02_palette_animation\n");
+ //printf("panning_fun_02_palette_animation\n");
 cs=0x1a2;eip=0x000ffc; 	X(MOV(word_303de, 0));	// 2188 mov     word_303DE, 0 ;~ 01A2:0FFC
 ret_1a2_1002:
 	// 4559
@@ -15251,6 +15251,7 @@ cs=0x1a2;eip=0x007828; 	X(POP(es));	// 17391 pop     es ;~ 01A2:7828
 cs=0x1a2;eip=0x007829; 	J(RETN(0));	// 17392 retn ;~ 01A2:7829
 sub_1782a:
  printf("AIL sub_1782a: stop\n");
+ stop_xmidi_external();
 	// 17399
 cs=0x1a2;eip=0x00782a; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 17401 mov     ax, es:[bx] ;~ 01A2:782A
 ret_1a2_782d:
