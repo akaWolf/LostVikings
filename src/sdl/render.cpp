@@ -16,7 +16,7 @@ struct myDrawInfoS
   uint32_t myOffset;
   uint8_t myPixelOffset;
 };
-struct myDrawInfoS* myDrawInfo;
+struct myDrawInfoS* myDrawInfo = nullptr;
 SDL_Window* myWindow = NULL;
 SDL_Renderer* myRenderer = NULL;
 SDL_Texture* myTexture = NULL;
@@ -79,9 +79,8 @@ void updateDraw()
   std::thread render_thread;
   void render_thread_proc(void* _state)
   {
-	myDrawInfo = (myDrawInfoS *)malloc(sizeof(myDrawInfoS));
-               if (!myDrawInfo)
-				 assert(0);
+	myDrawInfo = (myDrawInfoS *)calloc(1, sizeof(myDrawInfoS));
+	assert(myDrawInfo);
 
 	if( SDL_Init( SDL_INIT_VIDEO ) < 0 )
     {
