@@ -215,6 +215,7 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 	struct ADL_MIDIPlayer** midi_players = (struct ADL_MIDIPlayer**)argument;
 
 	uint8_t count = 0;
+	uint8_t volume;
 
 	for (int i = 0; i < 100; i++)
 	{
@@ -237,7 +238,11 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		if(samples_count <= 0)
 		  goto close;
 
-		SDL_MixAudioFormat(myBuffer, buffer, myFormat, samples_count * s_audioFormat.containerSize, SDL_MIX_MAXVOLUME);
+		volume = SDL_MIX_MAXVOLUME;
+		if (i == dontstop_num)
+		  volume = SDL_MIX_MAXVOLUME * 0.6;
+
+		SDL_MixAudioFormat(myBuffer, buffer, myFormat, samples_count * s_audioFormat.containerSize, volume);
 
 		count++;
 
