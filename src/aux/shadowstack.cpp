@@ -3,7 +3,7 @@
 namespace m2c{
   void ShadowStack::push (_STATE * _state, dd value)
   {
-     
+
      if (!m_active && !m_forceactive) return;
 //     m2c::log_info("+++ShadowStack::push %x\n",value);
 
@@ -55,14 +55,14 @@ namespace m2c{
                 print_frame(m_ss[m_current]);
               }
 
-            while (tsp < sp);
+            while (m_current && tsp < sp);
 
            if (m_itisret && m_ss[m_current].itwascall) --m_needtoskipcall;
 
       m_currentdeep = m_ss[m_current].call_deep;
                   log_debug ("m2c::counter %x m_deep %d collected m_currentdeep %d m_needtoskipcall %d\n", counter, m_deep, m_currentdeep,m_needtoskipcall);
           }
-      
+
       }
       m_itisret = false;
   }
@@ -77,9 +77,9 @@ log_debug("m_deep=%d ",m_deep);
         bool ShadowStack::needtoskipcalls(){
 /*
 log_debug("ret m_currentdeep=%d ",m_currentdeep);
-m_needtoskipcall=m_currentdeep?m_deep-m_currentdeep:0; 
+m_needtoskipcall=m_currentdeep?m_deep-m_currentdeep:0;
 if (m_needtoskipcall<0) {m_needtoskipcall=0;}
-//m_deep=m_currentdeep?m_currentdeep-1:m_deep; 
+//m_deep=m_currentdeep?m_currentdeep-1:m_deep;
 --m_deep;
 log_debug("m_deep=%d ",m_deep);
 m_currentdeep=0;

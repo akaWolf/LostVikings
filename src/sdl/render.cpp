@@ -171,7 +171,7 @@ void updateDraw()
 			   //SDL_Delay(20);
 			   render_callback(_state);
 			   //std::this_thread::sleep_for(std::chrono::milliseconds(15));
-			   SDL_Delay(10);
+			   SDL_Delay(15);
 		   }
 		}
 

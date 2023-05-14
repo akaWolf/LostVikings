@@ -14,13 +14,6 @@
 
 #include <vector>
 
-#ifndef NOSDL
-// #ifdef __LIBSDL2__
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
-// #endif
-#endif
-
 extern bool from_callf;
 
 #ifdef DOSBOX_CUSTOM
@@ -518,7 +511,7 @@ template<class S>
         else return s;
     }
 
-    static inline dd getdata(const long &s) {
+    static inline dd getdata(const long int &s) {
         if (m2c::isaddrbelongtom(&s)) {
             check_type(s);
             //   if (collect_rt_info) m2c::shadow_memory.collect_data((db*)&s, 4);
@@ -527,7 +520,7 @@ template<class S>
         else return s;
     }
 
-    static inline dd getdata(const long long &s) {
+    static inline dd getdata(const long long int &s) {
         if (m2c::isaddrbelongtom(&s)) {
             check_type(s);
             //   if (collect_rt_info) m2c::shadow_memory.collect_data((db*)&s, 4);
@@ -1459,10 +1452,11 @@ template <class D>
 #endif
 */
 
-#define MOV(dest,src) {m2c::MOV_(&dest,src);}
+//#define MOV(dest,src) {m2c::MOV_(&dest,src);}
+#define MOV(dest,src) { dest = src; }
 
 template <class D, class S>
-    MYINLINE void MOV_(D *dest, const S &src) { m2c::setdata(dest, static_cast<D>(m2c::getdata(src))); }
+MYINLINE void MOV_(D *dest, const S &src) { m2c::setdata(dest, static_cast<D>(m2c::getdata((const S&)src))); }
 
 #define LEAVE {MOV(esp, ebp));POP(ebp);}
 #define LFS(dest, src) {dw seg= *(dw*)((db*)&(src) + sizeof(dest));dest = src;fs=seg;}
