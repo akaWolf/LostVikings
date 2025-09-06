@@ -1,5 +1,6 @@
 // ============================================================================
 // Callback для второго окна (render_v2)
+// Рендер-поток: копирует v2_render_buf в stableBuffer с палитрой
 // ============================================================================
 
 #include <cstdio>
@@ -7,7 +8,7 @@
 #include <cstring>
 #include "render_v2.h"
 
-// Оригинальная структура VGA памяти (совпадает с vikings.exe_seg000.cpp)
+// Оригинальная структура VGA памяти (для палитры)
 #include <SDL2/SDL.h>
 struct myDrawInfoS_orig {
     uint8_t drawBuffer[65536*4];
@@ -47,26 +48,15 @@ void render_callback_v2(void* state)
 
     uint8_t* sbuf = myDrawInfo_v2->stableBuffer;
 
-    // Собираем линейный stableBuffer из live drawBuffer.
-    // VGA planar buf[a*4+p] == buf[y*344+x] (a=y*86+x/4, p=x%4), поэтому memcpy достаточен.
-    //   game area (rows 0-175): livebuf[P*4 .. P*4+176*344)  — активная VGA страница
-    //   UI   area (rows 176+):  livebuf[0  .. 64*344)        — фиксированный VGA addr 0
-    const uint8_t* livebuf = myDrawInfo->drawBuffer;
-    uint32_t game_off = myDrawInfo->myOffset * 4u + myDrawInfo->myPixelOffset;
-
-    if (game_off + 176u * 344u <= 262144u)
-        memcpy(sbuf, livebuf + game_off, 176u * 344u);
-    else
-        memset(sbuf, 0, 176u * 344u);
-
-    uint32_t game_end = game_off + 176u * 344u;
-    if (game_off >= 64u * 344u) {
-        // Нормальный геймплей: HUD живёт по VGA addr 0
-        memcpy(sbuf + 176u * 344u, livebuf, 64u * 344u);
-    } else if (game_end + 64u * 344u <= 262144u) {
-        // Меню/заставка: продолжаем читать игровую страницу
-        memcpy(sbuf + 176u * 344u, livebuf + game_end, 64u * 344u);
-    } else {
-        memset(sbuf + 176u * 344u, 0, 64u * 344u);
+    // Copy from display buffer under lock (game thread writes here at swap)
+    {
+        std::lock_guard<std::mutex> lock(v2_display_mutex);
+        const uint8_t* src = v2_display_buf;
+        for (int y = 0; y < 200; y++) {
+            memcpy(sbuf + y * 344, src + y * 320, 320);
+            memset(sbuf + y * 344 + 320, 0, 24); // padding
+        }
     }
+    // Clear rows 200-239
+    memset(sbuf + 200 * 344, 0, 40 * 344);
 }

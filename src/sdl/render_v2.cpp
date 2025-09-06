@@ -42,7 +42,7 @@ void updateDraw_v2()
 {
   static int call_count = 0;
   call_count++;
-  
+
   // stableBuffer is now linear (y*344+x), no page offset needed.
   uint8_t* buf = myDrawInfo_v2->stableBuffer;
 

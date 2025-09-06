@@ -10,12 +10,11 @@ extern uint8_t getPixel(uint8_t plane, uint32_t plane_offset);
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint32_t color);
 
 // External for second window
-extern struct myDrawInfoS* myDrawInfo_v2;
+extern struct myDrawInfoS_v2* myDrawInfo_v2;
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint16_t color);
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint8_t color);
 
 static int current_plane = 0;
-
 
  bool _group3(m2c::_offsets _i, struct m2c::_STATE* _state){
     X86_REGREF
