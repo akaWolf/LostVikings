@@ -82,17 +82,22 @@ void updateDraw()
 	myDrawInfo = (myDrawInfoS *)calloc(1, sizeof(myDrawInfoS));
 	assert(myDrawInfo);
 
+	printf("render: Starting initialization...\n");
 	if( SDL_Init( SDL_INIT_VIDEO ) < 0 )
     {
 	  printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );
     }
-	myWindow = SDL_CreateWindow( "FFFF", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH * SCREEN_SCALE, SCREEN_HEIGHT * SCREEN_SCALE, SDL_WINDOW_SHOWN );
+	printf("render: Creating window...\n");
+	// Позиционируем в левый верхний угол
+	myWindow = SDL_CreateWindow( "FFFF", 0, 0, SCREEN_WIDTH * SCREEN_SCALE, SCREEN_HEIGHT * SCREEN_SCALE, SDL_WINDOW_SHOWN );
 		if( myWindow == NULL )
 		{
 			printf( "Window could not be created! SDL_Error: %s\n", SDL_GetError() );
 		}
 		else
 		{
+		  printf("render: Window created successfully!\n");
+		  printf("render: Creating renderer...\n");
 		  //struct m2c::_STATE state;
 		  //struct m2c::_STATE *_state = &state;
 			  //    X86_REGREF
@@ -103,6 +108,7 @@ void updateDraw()
 
 			myFormat = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
+		   printf("render: Entering main loop...\n");
 		   while (!need_quit)
 			{
 			   SDL_Event event;

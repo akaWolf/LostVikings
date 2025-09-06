@@ -6,18 +6,21 @@
 
                 #include "vikings.exe.h"
 
-
 extern uint8_t getPixel(uint8_t plane, uint32_t plane_offset);
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint32_t color);
+
+// External for second window
+extern struct myDrawInfoS* myDrawInfo_v2;
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint16_t color);
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint8_t color);
 
 static int current_plane = 0;
 
+
  bool _group3(m2c::_offsets _i, struct m2c::_STATE* _state){
     X86_REGREF
     __disp = _i;
-
+    
     if (__disp == 0) goto _begin;
     else goto __dispatch_call;
     _group3:
@@ -763,6 +766,7 @@ locret_1ce77:
 	// 6119
 cs=0xe25;eip=0x000647; 	J(RETN(0));	// 36422 retn ;~ 0E25:0647
 seg003_648_proc:
+{static int s648_calls=0; if(++s648_calls<=5) printf("seg003_648_proc called #%d di=0x%x\n", s648_calls, di);}
 	// 36427
 loc_1ce78:
 //printf("loc_1ce78\n"); // ???
@@ -787,10 +791,10 @@ cs=0xe25;eip=0x000674; 	T(SUB(ax, 0x147));	// 36440 sub     ax, 147h ;~ 0E25:067
 cs=0xe25;eip=0x000677; 	T(CMP(cx, ax));	// 36441 cmp     cx, ax ;~ 0E25:0677
 cs=0xe25;eip=0x000679; 	J(JLE(loc_1d154));	// 36442 jle     loc_1D154 ;~ 0E25:0679
 cs=0xe25;eip=0x00067d; 	T(MOV(ax, *(dw*)(raddr(ds,0x46))));	// 36443 mov     ax, ds:46h ;~ 0E25:067D
-cs=0xe25;eip=0x000680; 	T(ADD(ax, 0x0B0));	// 36444 add     ax, 0B0h ; '°' ;~ 0E25:0680
+cs=0xe25;eip=0x000680; 	T(ADD(ax, 0x0B0));	// 36444 add     ax, 0B0h ; 'ï¿½' ;~ 0E25:0680
 cs=0xe25;eip=0x000683; 	T(CMP(dx, ax));	// 36445 cmp     dx, ax ;~ 0E25:0683
 cs=0xe25;eip=0x000685; 	J(JGE(loc_1d154));	// 36446 jge     loc_1D154 ;~ 0E25:0685
-cs=0xe25;eip=0x000689; 	T(SUB(ax, 0x0B7));	// 36447 sub     ax, 0B7h ; '·' ;~ 0E25:0689
+cs=0xe25;eip=0x000689; 	T(SUB(ax, 0x0B7));	// 36447 sub     ax, 0B7h ; 'ï¿½' ;~ 0E25:0689
 cs=0xe25;eip=0x00068c; 	T(CMP(dx, ax));	// 36448 cmp     dx, ax ;~ 0E25:068C
 cs=0xe25;eip=0x00068e; 	J(JL(loc_1d154));	// 36449 jl      loc_1D154 ;~ 0E25:068E
 cs=0xe25;eip=0x000692; 	T(MOV(si, 2));	// 36450 mov     si, 2 ;~ 0E25:0692
@@ -842,6 +846,7 @@ cs=0xe25;eip=0x00070c; 	T(MOV(ax, 0x102));	// 36494 mov     ax, 102h ;~ 0E25:070
 cs=0xe25;eip=0x00070f; 	R(OUT(dx, ax));	// 36495 out     dx, ax          ; EGA: sequencer address reg ;~ 0E25:070F
  current_plane = 0;
 cs=0xe25;eip=0x000710; 	X(POP(di));	// 36497 pop     di ;~ 0E25:0710
+    // Ð¤Ð°Ð·Ð° 1: Ð·Ð°Ñ…Ð²Ð°Ñ‚ unclipped sprite, plane 0 strip 0
 cs=0xe25;eip=0x000711; 	T(MOV(bp, m2c::kloc_1cf53));	// 36498 mov     bp, offset loc_1CF53 ;~ 0E25:0711
 cs=0xe25;eip=0x000714; 	T(MOV(bl, *(raddr(ds,si-1))));	// 36499 mov     bl, [si-1] ;~ 0E25:0714
 	cs=seg_offset(seg003);
@@ -1437,7 +1442,7 @@ cs=0xe25;eip=0x000bf0; 	X(MOV(*(dw*)(((db*)&word_1c830)), bx));	// 37001 mov    
 loc_1d425:
 	// 6162
 cs=0xe25;eip=0x000bf5; 	T(MOV(ax, *(dw*)(raddr(ds,0x46))));	// 37004 mov     ax, ds:46h ;~ 0E25:0BF5
-cs=0xe25;eip=0x000bf8; 	T(ADD(ax, 0x0B0));	// 37005 add     ax, 0B0h ; '°' ;~ 0E25:0BF8
+cs=0xe25;eip=0x000bf8; 	T(ADD(ax, 0x0B0));	// 37005 add     ax, 0B0h ; 'ï¿½' ;~ 0E25:0BF8
 cs=0xe25;eip=0x000bfb; 	T(CMP(dx, ax));	// 37006 cmp     dx, ax ;~ 0E25:0BFB
 cs=0xe25;eip=0x000bfd; 	J(JGE(loc_1d6b1));	// 37007 jge     loc_1D6B1 ;~ 0E25:0BFD
 cs=0xe25;eip=0x000c01; 	T(SUB(ax, 0x0F));	// 37008 sub     ax, 0Fh ;~ 0E25:0C01
@@ -1452,7 +1457,7 @@ cs=0xe25;eip=0x000c12; 	X(SUB(*(dw*)(((db*)&word_1c832)), ax));	// 37013 sub    
 cs=0xe25;eip=0x000c17; 	X(SHR(*(dw*)(((db*)&word_1c832)), 1));	// 37014 shr     cs:word_1C832, 1 ;~ 0E25:0C17
 loc_1d44c:
 	// 6163
-cs=0xe25;eip=0x000c1c; 	T(SUB(ax, 0x0B0));	// 37017 sub     ax, 0B0h ; '°' ;~ 0E25:0C1C
+cs=0xe25;eip=0x000c1c; 	T(SUB(ax, 0x0B0));	// 37017 sub     ax, 0B0h ; 'ï¿½' ;~ 0E25:0C1C
 cs=0xe25;eip=0x000c1f; 	T(CMP(dx, ax));	// 37018 cmp     dx, ax ;~ 0E25:0C1F
 cs=0xe25;eip=0x000c21; 	J(JL(loc_1d6b1));	// 37019 jl      loc_1D6B1 ;~ 0E25:0C21
 cs=0xe25;eip=0x000c25; 	T(ADD(ax, 0x0F));	// 37020 add     ax, 0Fh ;~ 0E25:0C25
@@ -1537,7 +1542,7 @@ cs=0xe25;eip=0x000ce4; __disp=*(dw*)(((db*)jpt_1d514)+bx);
 	J(JMP(__dispatch_call));	// 37086 jmp     cs:jpt_1D514[bx] ; switch jump ;~ 0E25:0CE4
 loc_1d519:
 	// 6167
-cs=0xe25;eip=0x000ce9; 	T(ADD(di, 0x0AC));	// 37090 add     di, 0ACh ; '¬' ;~ 0E25:0CE9
+cs=0xe25;eip=0x000ce9; 	T(ADD(di, 0x0AC));	// 37090 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0CE9
 cs=0xe25;eip=0x000ced; 	T(ADD(si, 9));	// 37091 add     si, 9 ;~ 0E25:0CED
 cs=0xe25;eip=0x000cf0; 	J(LOOP(loc_1d50a));	// 37092 loop    loc_1D50A ;~ 0E25:0CF0
 	cs=seg_offset(seg003);
@@ -1570,7 +1575,7 @@ cs=0xe25;eip=0x000d26; __disp=*(dw*)(((db*)jpt_1d514)+bx);
 	J(JMP(__dispatch_call));	// 37114 jmp     cs:jpt_1D514[bx] ; switch jump ;~ 0E25:0D26
 loc_1d55b:
 	// 6170
-cs=0xe25;eip=0x000d2b; 	T(ADD(di, 0x0AC));	// 37118 add     di, 0ACh ; '¬' ;~ 0E25:0D2B
+cs=0xe25;eip=0x000d2b; 	T(ADD(di, 0x0AC));	// 37118 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0D2B
 cs=0xe25;eip=0x000d2f; 	T(ADD(si, 9));	// 37119 add     si, 9 ;~ 0E25:0D2F
 cs=0xe25;eip=0x000d32; 	J(LOOP(loc_1d54c));	// 37120 loop    loc_1D54C ;~ 0E25:0D32
 	cs=seg_offset(seg003);
@@ -1603,7 +1608,7 @@ cs=0xe25;eip=0x000d68; __disp=*(dw*)(((db*)jpt_1d514)+bx);
 	J(JMP(__dispatch_call));	// 37142 jmp     cs:jpt_1D514[bx] ; switch jump ;~ 0E25:0D68
 loc_1d59d:
 	// 6173
-cs=0xe25;eip=0x000d6d; 	T(ADD(di, 0x0AC));	// 37146 add     di, 0ACh ; '¬' ;~ 0E25:0D6D
+cs=0xe25;eip=0x000d6d; 	T(ADD(di, 0x0AC));	// 37146 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0D6D
 cs=0xe25;eip=0x000d71; 	T(ADD(si, 9));	// 37147 add     si, 9 ;~ 0E25:0D71
 cs=0xe25;eip=0x000d74; 	J(LOOP(loc_1d58e));	// 37148 loop    loc_1D58E ;~ 0E25:0D74
 	cs=seg_offset(seg003);
@@ -1636,7 +1641,7 @@ cs=0xe25;eip=0x000daa; __disp=*(dw*)(((db*)jpt_1d514)+bx);
 	J(JMP(__dispatch_call));	// 37170 jmp     cs:jpt_1D514[bx] ; switch jump ;~ 0E25:0DAA
 loc_1d5df:
 	// 6176
-cs=0xe25;eip=0x000daf; 	T(ADD(di, 0x0AC));	// 37174 add     di, 0ACh ; '¬' ;~ 0E25:0DAF
+cs=0xe25;eip=0x000daf; 	T(ADD(di, 0x0AC));	// 37174 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0DAF
 cs=0xe25;eip=0x000db3; 	T(ADD(si, 9));	// 37175 add     si, 9 ;~ 0E25:0DB3
 cs=0xe25;eip=0x000db6; 	J(LOOP(loc_1d5d0));	// 37176 loop    loc_1D5D0 ;~ 0E25:0DB6
 	cs=seg_offset(seg003);
@@ -1668,7 +1673,7 @@ cs=0xe25;eip=0x000ded; __disp=*(dw*)(((db*)jpt_1d514)+bx);
 	J(JMP(__dispatch_call));	// 37196 jmp     cs:jpt_1D514[bx] ; switch jump ;~ 0E25:0DED
 loc_1d622:
 	// 6178
-cs=0xe25;eip=0x000df2; 	T(ADD(di, 0x0AC));	// 37200 add     di, 0ACh ; '¬' ;~ 0E25:0DF2
+cs=0xe25;eip=0x000df2; 	T(ADD(di, 0x0AC));	// 37200 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0DF2
 cs=0xe25;eip=0x000df6; 	T(ADD(si, 9));	// 37201 add     si, 9 ;~ 0E25:0DF6
 cs=0xe25;eip=0x000df9; 	J(LOOP(loc_1d613));	// 37202 loop    loc_1D613 ;~ 0E25:0DF9
 	cs=seg_offset(seg003);
@@ -1700,7 +1705,7 @@ cs=0xe25;eip=0x000e2e; __disp=*(dw*)(((db*)jpt_1d514)+bx);
 	J(JMP(__dispatch_call));	// 37222 jmp     cs:jpt_1D514[bx] ; switch jump ;~ 0E25:0E2E
 loc_1d663:
 	// 6180
-cs=0xe25;eip=0x000e33; 	T(ADD(di, 0x0AC));	// 37226 add     di, 0ACh ; '¬' ;~ 0E25:0E33
+cs=0xe25;eip=0x000e33; 	T(ADD(di, 0x0AC));	// 37226 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0E33
 cs=0xe25;eip=0x000e37; 	T(ADD(si, 9));	// 37227 add     si, 9 ;~ 0E25:0E37
 cs=0xe25;eip=0x000e3a; 	J(LOOP(loc_1d654));	// 37228 loop    loc_1D654 ;~ 0E25:0E3A
 	cs=seg_offset(seg003);
@@ -1732,7 +1737,7 @@ cs=0xe25;eip=0x000e6f; __disp=*(dw*)(((db*)jpt_1d514)+bx);
 	J(JMP(__dispatch_call));	// 37248 jmp     cs:jpt_1D514[bx] ; switch jump ;~ 0E25:0E6F
 loc_1d6a4:
 	// 6182
-cs=0xe25;eip=0x000e74; 	T(ADD(di, 0x0AC));	// 37252 add     di, 0ACh ; '¬' ;~ 0E25:0E74
+cs=0xe25;eip=0x000e74; 	T(ADD(di, 0x0AC));	// 37252 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0E74
 cs=0xe25;eip=0x000e78; 	T(ADD(si, 9));	// 37253 add     si, 9 ;~ 0E25:0E78
 cs=0xe25;eip=0x000e7b; 	J(LOOP(loc_1d695));	// 37254 loop    loc_1D695 ;~ 0E25:0E7B
 loc_1d6ad:
@@ -1783,7 +1788,7 @@ cs=0xe25;eip=0x000ed3; __disp=*(dw*)(((db*)jpt_1d703)+bx);
 	J(JMP(__dispatch_call));	// 37307 jmp     cs:jpt_1D703[bx] ; switch jump ;~ 0E25:0ED3
 loc_1d708:
 	// 6188
-cs=0xe25;eip=0x000ed8; 	T(ADD(di, 0x0AC));	// 37311 add     di, 0ACh ; '¬' ;~ 0E25:0ED8
+cs=0xe25;eip=0x000ed8; 	T(ADD(di, 0x0AC));	// 37311 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0ED8
 cs=0xe25;eip=0x000edc; 	T(ADD(si, 9));	// 37312 add     si, 9 ;~ 0E25:0EDC
 cs=0xe25;eip=0x000edf; 	J(LOOP(loc_1d6f9));	// 37313 loop    loc_1D6F9 ;~ 0E25:0EDF
 	cs=seg_offset(seg003);
@@ -1817,7 +1822,7 @@ cs=0xe25;eip=0x000f14; __disp=*(dw*)(((db*)jpt_1d703)+bx);
 	J(JMP(__dispatch_call));	// 37336 jmp     cs:jpt_1D703[bx] ; switch jump ;~ 0E25:0F14
 loc_1d749:
 	// 6191
-cs=0xe25;eip=0x000f19; 	T(ADD(di, 0x0AC));	// 37340 add     di, 0ACh ; '¬' ;~ 0E25:0F19
+cs=0xe25;eip=0x000f19; 	T(ADD(di, 0x0AC));	// 37340 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0F19
 cs=0xe25;eip=0x000f1d; 	T(ADD(si, 9));	// 37341 add     si, 9 ;~ 0E25:0F1D
 cs=0xe25;eip=0x000f20; 	J(LOOP(loc_1d73a));	// 37342 loop    loc_1D73A ;~ 0E25:0F20
 	cs=seg_offset(seg003);
@@ -1851,7 +1856,7 @@ cs=0xe25;eip=0x000f57; __disp=*(dw*)(((db*)jpt_1d703)+bx);
 	J(JMP(__dispatch_call));	// 37365 jmp     cs:jpt_1D703[bx] ; switch jump ;~ 0E25:0F57
 loc_1d78c:
 	// 6194
-cs=0xe25;eip=0x000f5c; 	T(ADD(di, 0x0AC));	// 37369 add     di, 0ACh ; '¬' ;~ 0E25:0F5C
+cs=0xe25;eip=0x000f5c; 	T(ADD(di, 0x0AC));	// 37369 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0F5C
 cs=0xe25;eip=0x000f60; 	T(ADD(si, 9));	// 37370 add     si, 9 ;~ 0E25:0F60
 cs=0xe25;eip=0x000f63; 	J(LOOP(loc_1d77d));	// 37371 loop    loc_1D77D ;~ 0E25:0F63
 	cs=seg_offset(seg003);
@@ -1886,7 +1891,7 @@ seg003_f9e_proc:
 	// 37398
 loc_1d7ce:
 	// 6197
-cs=0xe25;eip=0x000f9e; 	T(ADD(di, 0x0AC));	// 37399 add     di, 0ACh ; '¬' ;~ 0E25:0F9E
+cs=0xe25;eip=0x000f9e; 	T(ADD(di, 0x0AC));	// 37399 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0F9E
 cs=0xe25;eip=0x000fa2; 	T(ADD(si, 9));	// 37400 add     si, 9 ;~ 0E25:0FA2
 cs=0xe25;eip=0x000fa5; 	J(LOOP(loc_1d7bf));	// 37401 loop    loc_1D7BF ;~ 0E25:0FA5
 	cs=seg_offset(seg003);
@@ -1917,7 +1922,7 @@ cs=0xe25;eip=0x000fdb; __disp=*(dw*)(((db*)jpt_1d703)+bx);
 	J(JMP(__dispatch_call));	// 37420 jmp     cs:jpt_1D703[bx] ; switch jump ;~ 0E25:0FDB
 loc_1d810:
 	// 6199
-cs=0xe25;eip=0x000fe0; 	T(ADD(di, 0x0AC));	// 37424 add     di, 0ACh ; '¬' ;~ 0E25:0FE0
+cs=0xe25;eip=0x000fe0; 	T(ADD(di, 0x0AC));	// 37424 add     di, 0ACh ; 'ï¿½' ;~ 0E25:0FE0
 cs=0xe25;eip=0x000fe4; 	T(ADD(si, 9));	// 37425 add     si, 9 ;~ 0E25:0FE4
 cs=0xe25;eip=0x000fe7; 	J(LOOP(loc_1d801));	// 37426 loop    loc_1D801 ;~ 0E25:0FE7
 	cs=seg_offset(seg003);
@@ -1948,7 +1953,7 @@ cs=0xe25;eip=0x00101d; __disp=*(dw*)(((db*)jpt_1d703)+bx);
 	J(JMP(__dispatch_call));	// 37445 jmp     cs:jpt_1D703[bx] ; switch jump ;~ 0E25:101D
 loc_1d852:
 	// 6201
-cs=0xe25;eip=0x001022; 	T(ADD(di, 0x0AC));	// 37449 add     di, 0ACh ; '¬' ;~ 0E25:1022
+cs=0xe25;eip=0x001022; 	T(ADD(di, 0x0AC));	// 37449 add     di, 0ACh ; 'ï¿½' ;~ 0E25:1022
 cs=0xe25;eip=0x001026; 	T(ADD(si, 9));	// 37450 add     si, 9 ;~ 0E25:1026
 cs=0xe25;eip=0x001029; 	J(LOOP(loc_1d843));	// 37451 loop    loc_1D843 ;~ 0E25:1029
 	cs=seg_offset(seg003);
@@ -1979,7 +1984,7 @@ cs=0xe25;eip=0x00105f; __disp=*(dw*)(((db*)jpt_1d703)+bx);
 	J(JMP(__dispatch_call));	// 37470 jmp     cs:jpt_1D703[bx] ; switch jump ;~ 0E25:105F
 loc_1d894:
 	// 6203
-cs=0xe25;eip=0x001064; 	T(ADD(di, 0x0AC));	// 37474 add     di, 0ACh ; '¬' ;~ 0E25:1064
+cs=0xe25;eip=0x001064; 	T(ADD(di, 0x0AC));	// 37474 add     di, 0ACh ; 'ï¿½' ;~ 0E25:1064
 cs=0xe25;eip=0x001068; 	T(ADD(si, 9));	// 37475 add     si, 9 ;~ 0E25:1068
 cs=0xe25;eip=0x00106b; 	J(LOOP(loc_1d885));	// 37476 loop    loc_1D885 ;~ 0E25:106B
 cs=0xe25;eip=0x00106d; 	J(JMP(loc_1d6ad));	// 37477 jmp     loc_1D6AD ;~ 0E25:106D
@@ -2032,7 +2037,7 @@ cs=0xe25;eip=0x0010e6; 	X(MOV(*(dw*)(((db*)&word_1c830)), bx));	// 37523 mov    
 loc_1d91b:
 	// 6206
 cs=0xe25;eip=0x0010eb; 	T(MOV(ax, *(dw*)(raddr(ds,0x46))));	// 37526 mov     ax, ds:46h ;~ 0E25:10EB
-cs=0xe25;eip=0x0010ee; 	T(ADD(ax, 0x0B0));	// 37527 add     ax, 0B0h ; '°' ;~ 0E25:10EE
+cs=0xe25;eip=0x0010ee; 	T(ADD(ax, 0x0B0));	// 37527 add     ax, 0B0h ; 'ï¿½' ;~ 0E25:10EE
 cs=0xe25;eip=0x0010f1; 	T(CMP(dx, ax));	// 37528 cmp     dx, ax ;~ 0E25:10F1
 cs=0xe25;eip=0x0010f3; 	J(JGE(loc_1db98));	// 37529 jge     loc_1DB98 ;~ 0E25:10F3
 cs=0xe25;eip=0x0010f7; 	T(SUB(ax, 0x1F));	// 37530 sub     ax, 1Fh ;~ 0E25:10F7
@@ -2045,7 +2050,7 @@ cs=0xe25;eip=0x001103; 	X(MOV(*(dw*)(((db*)&word_1c832)), dx));	// 37534 mov    
 cs=0xe25;eip=0x001108; 	X(SUB(*(dw*)(((db*)&word_1c832)), ax));	// 37535 sub     cs:word_1C832, ax ;~ 0E25:1108
 loc_1d93d:
 	// 6207
-cs=0xe25;eip=0x00110d; 	T(SUB(ax, 0x0B0));	// 37538 sub     ax, 0B0h ; '°' ;~ 0E25:110D
+cs=0xe25;eip=0x00110d; 	T(SUB(ax, 0x0B0));	// 37538 sub     ax, 0B0h ; 'ï¿½' ;~ 0E25:110D
 cs=0xe25;eip=0x001110; 	T(CMP(dx, ax));	// 37539 cmp     dx, ax ;~ 0E25:1110
 cs=0xe25;eip=0x001112; 	J(JL(loc_1db98));	// 37540 jl      loc_1DB98 ;~ 0E25:1112
 cs=0xe25;eip=0x001116; 	T(ADD(ax, 0x1F));	// 37541 add     ax, 1Fh ;~ 0E25:1116
@@ -2574,10 +2579,33 @@ cs=0xe25;eip=0x00155c; 	T(ADD(si, 9));	// 37985 add     si, 9 ;~ 0E25:155C
 cs=0xe25;eip=0x00155f; 	J(LOOP(loc_1dd7a));	// 37986 loop    loc_1DD7A ;~ 0E25:155F
 cs=0xe25;eip=0x001561; 	J(JMP(loc_1db94));	// 37987 jmp     loc_1DB94 ;~ 0E25:1561
  sub_1dd9c: // far call
-//printf("sub_1dd9c\n"); // draw all objects!
+{
+  static int s1dd9c_calls=0;
+  static bool found_objects=false;
+  s1dd9c_calls++;
+  int active=0, dispatched=0;
+  for(int _di=0xFE; _di>=0; _di-=2) {
+    uint16_t f = *(uint16_t*)raddr(ds, _di+0x44D);
+    if((f & 0x8000) && !(f & 0x6000)) dispatched++;
+    if(f & 0x8000) active++;
+  }
+  if((active > 0 && !found_objects) || s1dd9c_calls <= 3) {
+    printf("sub_1dd9c #%d: active=%d dispatched=%d DS:9568=%02x\n",
+           s1dd9c_calls, active, dispatched, *(uint8_t*)raddr(ds,0x9568));
+    if(active > 0) {
+      found_objects=true;
+      for(int _di=0xFE; _di>=0; _di-=2) {
+        uint16_t f = *(uint16_t*)raddr(ds, _di+0x44D);
+        if(f & 0x8000)
+          printf("  obj di=0x%02x flags=0x%04x x=%d y=%d\n", _di, f,
+                 *(int16_t*)raddr(ds, _di+0x64D), *(int16_t*)raddr(ds, _di+0x74D));
+      }
+    }
+  }
+}
  //cs=0xe25;eip=0x000108; 	J(RETF(0));	// 35719 retf ;~ 0E25:0108 //debug
 	// 37997
-cs=0xe25;eip=0x00156c; 	T(MOV(di, 0x0FE));	// 37999 mov     di, 0FEh ; 'þ' ;~ 0E25:156C
+cs=0xe25;eip=0x00156c; 	T(MOV(di, 0x0FE));	// 37999 mov     di, 0FEh ; 'ï¿½' ;~ 0E25:156C
 loc_1dd9f:
 	// 6248
 cs=0xe25;eip=0x00156f; 	T(TEST(*(dw*)(raddr(ds,di+0x44D)), 0x8000));	// 38002 test    word ptr [di+44Dh], 8000h ;~ 0E25:156F
@@ -2619,7 +2647,7 @@ cs=0xe25;eip=0x0015ca; 	J(RETF(0));	// 38035 retf ;~ 0E25:15CA
 cs=0xe25;eip=0x0015d5; 	X(PUSH(es));	// 38050 push    es ;~ 0E25:15D5
 ret_e25_15d6:
 	// 6252
-cs=0xe25;eip=0x0015d6; 	T(MOV(di, 0x0FE));	// 38051 mov     di, 0FEh ; 'þ' ;~ 0E25:15D6
+cs=0xe25;eip=0x0015d6; 	T(MOV(di, 0x0FE));	// 38051 mov     di, 0FEh ; 'ï¿½' ;~ 0E25:15D6
 loc_1de09:
 	// 6253
 cs=0xe25;eip=0x0015d9; 	T(TEST(*(raddr(ds,di+0x114E)), 0x0FF));	// 38054 test    byte ptr [di+114Eh], 0FFh ;~ 0E25:15D9
@@ -2730,6 +2758,7 @@ cs=0xe25;eip=0x0016de; 	T(MOV(es, ax));	// 38166 mov     es, ax ;~ 0E25:16DE
 cs=0xe25;eip=0x0016e0; 	T(MOV(ax, 0x56));	// 38168 mov     ax, 56h ; 'V' ;~ 0E25:16E0
 cs=0xe25;eip=0x0016e3; 	T(SUB(ax, dx));	// 38169 sub     ax, dx ;~ 0E25:16E3
 cs=0xe25;eip=0x0016e5; 	T(MOV(cx, dx));	// 38170 mov     cx, dx ;~ 0E25:16E5
+
  for (int i = 0; i < cx; i++)
    for (int j = 0; j < 4; j++)
 	 drawPixel(j, di + i, getPixel(j, si + i));
@@ -2790,6 +2819,7 @@ cs=0xe25;eip=0x00171d; 	T(MOV(cx, dx));	// 38198 mov     cx, dx ;~ 0E25:171D
  for (int i = 0; i < cx; i++)
    for (int j = 0; j < 4; j++)
 	 drawPixel(j, di + i, getPixel(j, si + i));
+
 	// 38199 rep movsb ;~ 0E25:171F
 cs=0xe25;eip=0x00171f; 	X(	REP MOVSB);	// 38199 rep movsb ;~ 0E25:171F
 cs=0xe25;eip=0x001721; 	X(POP(es));	// 38200 pop     es ;~ 0E25:1721
@@ -2814,7 +2844,7 @@ cs=0xe25;eip=0x001739; 	J(RETF(0));	// 38217 retf ;~ 0E25:1739
 cs=0xe25;eip=0x00173a; 	X(PUSH(es));	// 38225 push    es ;~ 0E25:173A
 ret_e25_173b:
 	// 6262
-cs=0xe25;eip=0x00173b; 	T(MOV(di, 0x0FE));	// 38226 mov     di, 0FEh ; 'þ' ;~ 0E25:173B
+cs=0xe25;eip=0x00173b; 	T(MOV(di, 0x0FE));	// 38226 mov     di, 0FEh ; 'ï¿½' ;~ 0E25:173B
 loc_1df6e:
 	// 6263
 cs=0xe25;eip=0x00173e; 	T(TEST(*(raddr(ds,di+0x114E)), 0x0FF));	// 38229 test    byte ptr [di+114Eh], 0FFh ;~ 0E25:173E
@@ -2923,6 +2953,7 @@ cs=0xe25;eip=0x00183b; 	T(MOV(es, ax));	// 38339 mov     es, ax ;~ 0E25:183B
 cs=0xe25;eip=0x00183d; 	T(MOV(ax, 0x56));	// 38341 mov     ax, 56h ; 'V' ;~ 0E25:183D
 cs=0xe25;eip=0x001840; 	T(SUB(ax, dx));	// 38342 sub     ax, dx ;~ 0E25:1840
 cs=0xe25;eip=0x001842; 	T(MOV(cx, dx));	// 38343 mov     cx, dx ;~ 0E25:1842
+
  for (int i = 0; i < cx; i++)
    for (int j = 0; j < 4; j++)
 	 drawPixel(j, di + i, getPixel(j, si + i));
@@ -2982,6 +3013,7 @@ cs=0xe25;eip=0x00187a; 	T(MOV(cx, dx));	// 38371 mov     cx, dx ;~ 0E25:187A
  for (int i = 0; i < cx; i++)
    for (int j = 0; j < 4; j++)
 	 drawPixel(j, di + i, getPixel(j, si + i));
+
 	// 38372 rep movsb ;~ 0E25:187C
 cs=0xe25;eip=0x00187c; 	X(	REP MOVSB);	// 38372 rep movsb ;~ 0E25:187C
 cs=0xe25;eip=0x00187e; 	X(POP(es));	// 38373 pop     es ;~ 0E25:187E

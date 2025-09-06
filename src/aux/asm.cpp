@@ -9,6 +9,7 @@
 #include <ctime>
 
 extern void render_init(void *);
+extern void render_init_v2(void *);
 extern void sound_init();
 
 bool from_callf=false;
@@ -411,6 +412,7 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 //	int8_thread.detach();
 
 	render_init((void*)_render_state);
+	render_init_v2((void*)_render_state);  // Второе окно для тестов
 	sound_init();
 
     return(0);
