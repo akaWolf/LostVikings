@@ -48,15 +48,18 @@ void render_callback_v2(void* state)
 
     uint8_t* sbuf = myDrawInfo_v2->stableBuffer;
 
-    // Copy from display buffer under lock (game thread writes here at swap)
+    // Copy viewport (rows 0-175) from display buffer under lock
     {
         std::lock_guard<std::mutex> lock(v2_display_mutex);
         const uint8_t* src = v2_display_buf;
-        for (int y = 0; y < 200; y++) {
+        for (int y = 0; y < 176; y++) {
             memcpy(sbuf + y * 344, src + y * 320, 320);
             memset(sbuf + y * 344 + 320, 0, 24); // padding
         }
     }
-    // Clear rows 200-239
-    memset(sbuf + 200 * 344, 0, 40 * 344);
+    // Copy HUD (rows 176-239) from v2_hud_buf
+    for (int y = 0; y < 64; y++) {
+        memcpy(sbuf + (176 + y) * 344, v2_hud_buf + y * 320, 320);
+        memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+    }
 }

@@ -52,7 +52,28 @@ void setPalette(uint8_t color, uint8_t r, uint8_t g, uint8_t b)
 void updateDraw()
  {
    auto offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
-   //printf("VGA pan: %x\n", offset);
+  // Periodic dump of original viewport content
+  {
+    static int frame_counter = 0;
+    frame_counter++;
+    if (frame_counter % 66 == 0 && frame_counter <= 66*30) {
+      char fname[64];
+      snprintf(fname, sizeof(fname), "/tmp/orig_viewport_f%d.pgm", frame_counter);
+      FILE* f = fopen(fname, "wb");
+      if (f) {
+        fprintf(f, "P5\n320 176\n255\n");
+        // Extract 320x176 from planar drawBuffer at offset
+        for (int y = 0; y < 176; y++) {
+          for (int x = 0; x < 320; x++) {
+            uint8_t c = myDrawInfo->drawBuffer[offset + y * RENDER_WIDTH + x];
+            fputc(c, f);
+          }
+        }
+        fclose(f);
+        printf("V2-DBG-ORIG: Saved viewport dump to %s (offset=%x)\n", fname, offset);
+      }
+    }
+  }
   for (int i = 0; i < 176 * RENDER_WIDTH; i++)
   {
 	//myDrawInfo->myOffset=0x5be8;

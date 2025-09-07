@@ -12,25 +12,25 @@
 
 // V2 rendering state — definitions (declared extern in render_v2.h)
 uint8_t* v2_m2c_base = nullptr;
-uint8_t  v2_render_buf[2][320*200];
-std::atomic<int> v2_render_fill{0};
+uint8_t  v2_render_buf[320*200];
 uint8_t  v2_display_buf[320*200];
 std::mutex v2_display_mutex;
+uint8_t  v2_hud_buf[320*64];
 
 void v2_swap_render_buf() {
-    // Copy completed frame to display buffer under lock
-    {
-        std::lock_guard<std::mutex> lock(v2_display_mutex);
-        memcpy(v2_display_buf, v2_render_buf[v2_render_fill], 320*200);
-    }
-    // Flip write target
-    int old = v2_render_fill.load(std::memory_order_relaxed);
-    v2_render_fill.store(old ^ 1, std::memory_order_release);
+    // Copy current frame to display buffer under lock (render thread reads it)
+    std::lock_guard<std::mutex> lock(v2_display_mutex);
+    memcpy(v2_display_buf, v2_render_buf, 320*200);
 }
 
 void v2_set_m2c_base(void* base) {
     if (!v2_m2c_base) v2_m2c_base = (uint8_t*)base;
 }
+
+// Viewport chunk persistence for intro/menu screens.
+// Stored here so v2_draw_tiles can use it before v2_draw_viewport_chunk is defined.
+static uint8_t v2_viewport_chunk_pixels[320*176];
+static bool v2_has_viewport_chunk = false;
 
 // ============================================================================
 // v2_draw_tiles: Renders visible tiles from the tile map and tile graphics.
@@ -47,8 +47,17 @@ void v2_draw_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
-    uint8_t* buf = v2_render_buf[v2_render_fill];
-    memset(buf, 0, 320*200);
+    uint8_t* buf = v2_render_buf;
+
+    // If a viewport chunk is active (intro screens), skip tile rendering.
+    // The chunk was written to v2_render_buf once by v2_draw_viewport_chunk.
+    // UI/sprite writes accumulate on top of the persistent buffer.
+    if (v2_has_viewport_chunk) {
+        return;
+    }
+
+    // Normal: clear viewport and draw tiles
+    memset(buf, 0, 320*176);
 
     // Tile map segment (FS)
     uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
@@ -61,6 +70,12 @@ void v2_draw_tiles(uint16_t ds_val) {
 
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);  // row scroll
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);  // column scroll
+
+    // Sub-tile pixel offset from viewport pixel position
+    int16_t vp_px = *(int16_t*)(ds_base + 0x44);
+    int16_t vp_py = *(int16_t*)(ds_base + 0x46);
+    int pix_off_x = vp_px & 7;
+    int pix_off_y = vp_py & 7;
 
     for (int row_vis = 0; row_vis < 25; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x);
@@ -86,9 +101,9 @@ void v2_draw_tiles(uint16_t ds_val) {
 
             uint8_t* tile = tgfx_base + tile_gfx_off;
 
-            // Screen position
-            int screen_x = col_vis * 8;
-            int screen_y = row_vis * 8;
+            // Screen position (with sub-tile pixel offset)
+            int screen_x = col_vis * 8 - pix_off_x;
+            int screen_y = row_vis * 8 - pix_off_y;
 
             // Decode tile: 4 planes × 8 rows × 2 bytes
             // Normal pixel order per row:
@@ -97,6 +112,7 @@ void v2_draw_tiles(uint16_t ds_val) {
             for (int row = 0; row < 8; row++) {
                 int src_row = vflip ? (7 - row) : row;
                 int sy = screen_y + row;
+                if (sy < 0) continue;
                 if (sy >= 200) break;
 
                 // Extract 8 pixels for this row
@@ -107,22 +123,20 @@ void v2_draw_tiles(uint16_t ds_val) {
                     uint8_t b1 = tile[p_in * 16 + src_row * 2 + 1];
 
                     if (!hflip) {
-                        // Normal: plane→plane, byte0→addr0, byte1→addr1
-                        pixels[plane + 0] = b0;  // x + plane
-                        pixels[plane + 4] = b1;  // x + plane + 4
+                        pixels[plane + 0] = b0;
+                        pixels[plane + 4] = b1;
                     } else {
-                        // Hflip: plane→(3-plane), byte0→addr1, byte1→addr0
-                        pixels[(3 - plane) + 4] = b0;  // x + (3-plane) + 4
-                        pixels[(3 - plane) + 0] = b1;  // x + (3-plane)
+                        pixels[(3 - plane) + 4] = b0;
+                        pixels[(3 - plane) + 0] = b1;
                     }
                 }
 
-                // Write to buffer
-                int base = sy * 320 + screen_x;
+                // Write to buffer (with bounds checking for negative offsets)
                 for (int px = 0; px < 8; px++) {
                     int sx = screen_x + px;
+                    if (sx < 0) continue;
                     if (sx >= 320) break;
-                    buf[base + px] = pixels[px];
+                    buf[sy * 320 + sx] = pixels[px];
                 }
             }
         }
@@ -160,7 +174,9 @@ void v2_draw_tiles(uint16_t ds_val) {
 // Writes ALL colors including 0 (matching original VGA behavior where mask
 // controls which bytes are written, not the color value).
 static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
-    if (sx >= 0 && sx < 320 && sy >= 0 && sy < 200)
+    // Clip to viewport area (320x176). Rows 176-199 = HUD, drawn separately.
+    // Matches original VGA split screen: sprites beyond row 175 are not visible.
+    if (sx >= 0 && sx < 320 && sy >= 0 && sy < 176)
         buf[sy * 320 + sx] = color;
 }
 
@@ -168,7 +184,7 @@ void v2_draw_sprites(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
-    uint8_t* buf = v2_render_buf[v2_render_fill];
+    uint8_t* buf = v2_render_buf;
 
     // Viewport origin — pixel scroll values
     int viewport_x = (int)*(int16_t*)(ds_base + 0x44);
@@ -233,7 +249,7 @@ void v2_draw_sprites(uint16_t ds_val) {
         // Coarse bounds check — sprite pixel size
         int sprite_h = num_strips * rows_per_strip;
         int sprite_w = bytes_per_row * 4;  // 4 planes
-        if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 200 || sy0 < -sprite_h) continue;
+        if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 176 || sy0 < -sprite_h) continue;
 
         // Sprite data: offset points to first data byte, mask at offset-1
         uint8_t* sprite = v2_m2c_base + ((uint32_t)sprite_seg << 4) + sprite_off - 1;
@@ -321,7 +337,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
-    uint8_t* buf = v2_render_buf[v2_render_fill];
+    uint8_t* buf = v2_render_buf;
 
     uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
     uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
@@ -335,6 +351,12 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
 
+    // Sub-tile pixel offset (same as v2_draw_tiles)
+    int16_t vp_px = *(int16_t*)(ds_base + 0x44);
+    int16_t vp_py = *(int16_t*)(ds_base + 0x46);
+    int pix_off_x = vp_px & 7;
+    int pix_off_y = vp_py & 7;
+
     for (int row_vis = 0; row_vis < 25; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x);
         if (row_scrolled >= 64) continue;
@@ -347,9 +369,10 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
 
-            // Original condition: (entry & 1) must be set, AND (entry & 8) must be set
-            // ax=0xFFFE clears bit 0 only, doesn't affect bit 3
-            if (!(tile_entry & 1) || !(tile_entry & 8)) continue;
+            // Original sub_1c8f1 ANDs entry with ax=0xFFFE (clears dirty bit 0)
+            // then draws if bit 3 (foreground) is set. v2 draws all foreground
+            // tiles every frame — only check bit 3.
+            if (!(tile_entry & 8)) continue;
 
             uint16_t tile_gfx_off = tile_entry & 0xFFC0;
             bool hflip = (tile_entry & 0x10) != 0;
@@ -357,17 +380,16 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 
             uint8_t* tile = tgfx_base + tile_gfx_off;
 
-            // Mask: 8 bytes at gs:[(tile_entry & 0xFFC0) >> 3]
             uint16_t mask_off = tile_gfx_off >> 3;
             uint8_t* mask_data = gs_base + mask_off;
 
-            int screen_x = col_vis * 8;
-            int screen_y = row_vis * 8;
+            int screen_x = col_vis * 8 - pix_off_x;
+            int screen_y = row_vis * 8 - pix_off_y;
 
             // For each pixel in the 8×8 tile, check mask and draw if set
             for (int ty = 0; ty < 8; ty++) {
                 int sy = screen_y + (vflip ? 7 - ty : ty);
-                if (sy < 0 || sy >= 200) continue;
+                if (sy < 0 || sy >= 176) continue;
 
                 for (int tx = 0; tx < 8; tx++) {
                     int sx = screen_x + (hflip ? 7 - tx : tx);
@@ -413,7 +435,7 @@ void v2_draw_ui(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
-    uint8_t* buf = v2_render_buf[v2_render_fill];
+    uint8_t* buf = v2_render_buf;
 
     // Scan UI element list: 40 columns × 22 rows at ds:0x956C
     uint8_t* ui_list = ds_base + 0x956C;
@@ -454,6 +476,292 @@ void v2_draw_ui(uint16_t ds_val) {
 
                 glyph += 9;
             }
+        }
+    }
+}
+
+// ============================================================================
+// HUD rendering — screen rows 176-239 (VGA split screen: always from address 0)
+//
+// VGA layout: 86 bytes/row × 64 rows, 4 planes interleaved.
+// Plane p, VGA offset i → pixel x = (i % 86)*4 + p, y = i / 86
+// ============================================================================
+
+static inline void v2_hud_pixel(int x, int y, uint8_t color) {
+    if (x >= 0 && x < 320 && y >= 0 && y < 64)
+        v2_hud_buf[y * 320 + x] = color;
+}
+
+// ============================================================================
+// v2_draw_hud_background: Decode raw chunk data (4-plane) into v2_hud_buf.
+//
+// Called after read_and_display_raw_chunk loads chunk to VGA offset 0.
+// Data source: chunk buffer at segment chunk_seg (= ds:0x2E77).
+// Format: [plane0: plane_size bytes][plane1][plane2][plane3]
+// Each plane byte at offset i → VGA offset i, plane p.
+// ============================================================================
+void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_size) {
+    if (!v2_m2c_base) return;
+
+    uint8_t* chunk = v2_m2c_base + ((uint32_t)chunk_seg << 4);
+
+    memset(v2_hud_buf, 0, sizeof(v2_hud_buf));
+
+    for (int p = 0; p < 4; p++) {
+        uint8_t* plane_data = chunk + plane_size * p;
+        for (int i = 0; i < plane_size && i < 86*64; i++) {
+            int x = (i % 86) * 4 + p;
+            int y = i / 86;
+            v2_hud_pixel(x, y, plane_data[i]);
+        }
+    }
+}
+
+// ============================================================================
+// v2_draw_viewport_chunk: Store raw chunk image for viewport display.
+//
+// Used for intro/menu screen backgrounds loaded via read_and_display_raw_chunk
+// with display_offset != 0. The image is stored in a persistent buffer and
+// applied by v2_draw_tiles (which runs every frame) instead of tile rendering.
+// This is needed because the main render loop always calls v2_draw_tiles,
+// which would otherwise overwrite the chunk with memset+tiles.
+// ============================================================================
+void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
+    if (!v2_m2c_base) {
+        printf("V2-DBG: v2_draw_viewport_chunk SKIPPED (v2_m2c_base=NULL), seg=%x ps=%x\n", chunk_seg, plane_size);
+        return;
+    }
+
+    uint8_t* chunk = v2_m2c_base + ((uint32_t)chunk_seg << 4);
+
+    memset(v2_viewport_chunk_pixels, 0, sizeof(v2_viewport_chunk_pixels));
+
+    int nonzero = 0;
+    for (int p = 0; p < 4; p++) {
+        uint8_t* plane_data = chunk + plane_size * p;
+        for (int i = 0; i < plane_size && i < 86 * 176; i++) {
+            int x = (i % 86) * 4 + p;
+            int y = i / 86;
+            if (x < 320 && y < 176) {
+                v2_viewport_chunk_pixels[y * 320 + x] = plane_data[i];
+                if (plane_data[i]) nonzero++;
+            }
+        }
+    }
+
+    v2_has_viewport_chunk = true;
+
+    // Write chunk to render buffer (like drawPixel writes to drawBuffer once).
+    memcpy(v2_render_buf, v2_viewport_chunk_pixels, 320 * 176);
+    memset(v2_render_buf + 320 * 176, 0, 320 * 24);
+
+    printf("V2-DBG: v2_draw_viewport_chunk OK seg=%x ps=%x nonzero=%d rows=%d\n",
+           chunk_seg, plane_size, nonzero, plane_size / 86);
+
+    // Dump viewport chunk as PGM (grayscale) for debugging
+    static int dump_count = 0;
+    if (dump_count < 1) {
+        char fname[64];
+        snprintf(fname, sizeof(fname), "/tmp/v2_chunk_%d.pgm", dump_count);
+        FILE* f = fopen(fname, "wb");
+        if (f) {
+            fprintf(f, "P5\n320 176\n255\n");
+            fwrite(v2_viewport_chunk_pixels, 1, 320*176, f);
+            fclose(f);
+            printf("V2-DBG: Saved viewport chunk to %s\n", fname);
+        }
+        dump_count++;
+    }
+}
+
+void v2_clear_viewport_chunk() {
+    v2_has_viewport_chunk = false;
+    memset(v2_render_buf, 0, 320*200);
+}
+
+// ============================================================================
+// v2_draw_hud_item: Draw 16×16 inventory item icon in HUD.
+//
+// Mirrors draw_inventory_item (sub_1183d).
+// Data: ds:0x507D + item_id*256 = 4 planes × 16 rows × 4 bytes.
+//   Plane order in data: 3, 0, 1, 2 (each 64 bytes).
+// Position: ds:[slot - 0x7A9E] = VGA offset in HUD area.
+//   VGA offset → hud_x = (off % 86)*4 + 3, hud_y = off / 86.
+// Pixel (col, row), col 0..15:
+//   plane = {3,0,1,2}[col%4], byte = col/4
+//   color = data[plane_off + row*4 + byte]
+// ============================================================================
+// ============================================================================
+// v2_draw_hud_portrait: Draw 32×7 viking portrait in HUD.
+//
+// Mirrors sub_11aa4 (portrait rendering).
+// Data: ds:[si-0x7A7E] + 0x497D = 224 bytes = 4 planes × 7 rows × 8 bytes.
+//   Plane order in VGA writes: 3, 0, 1, 2 (POP+INC pattern).
+//   Data layout: [plane3:56][plane0:56][plane1:56][plane2:56]
+// Position: ds:[di-0x7A84] = VGA offset in HUD area.
+//   VGA offset → hud_x = (off % 86)*4 + 3, hud_y = off / 86.
+// Pixel (col, row), col 0..31:
+//   col%4 → section {0→plane3(off 0), 1→plane0(off 56), 2→plane1(off 112), 3→plane2(off 168)}
+//   byte = col/4, color = data[section_off + row*8 + byte]
+// ============================================================================
+void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si) {
+    if (!v2_m2c_base) return;
+
+    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+
+    // Portrait graphics pointer: ds:[si-0x7A7E] + 0x497D
+    // Cast to uint16_t for x86 16-bit address wrapping
+    uint16_t portrait_ptr = *(uint16_t*)(ds_base + (uint16_t)(portrait_si - 0x7A7E));
+    uint8_t* portrait_data = ds_base + portrait_ptr + 0x497D;
+
+    // HUD VGA offset: ds:[di-0x7A84]
+    uint16_t vga_off = *(uint16_t*)(ds_base + (uint16_t)(viking_di - 0x7A84));
+
+    int hud_x = (vga_off % 86) * 4 + 3;
+    int hud_y = vga_off / 86;
+
+    // Data: [plane3:56][plane0:56][plane1:56][plane2:56], each 7 rows × 8 bytes
+    static const int portrait_plane_off[4] = {0, 56, 112, 168};
+
+    for (int row = 0; row < 7; row++) {
+        for (int col = 0; col < 32; col++) {
+            int poff = portrait_plane_off[col & 3];
+            int byte_idx = col >> 2;
+            uint8_t color = portrait_data[poff + row * 8 + byte_idx];
+            v2_hud_pixel(hud_x + col, hud_y + row, color);
+        }
+    }
+}
+
+void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
+    if (!v2_m2c_base) return;
+
+    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+
+    // Special case: slot 0x18 with item 0 → use item 0x17
+    uint16_t item_id = item_ax;
+    if (slot_di == 0x18 && item_id == 0)
+        item_id = 0x17;
+
+    // Item graphics: 256 bytes at ds:0x507D + item_id * 256
+    uint8_t* item_data = ds_base + 0x507D + (item_id << 8);
+
+    // VGA offset from lookup table (uint16_t cast for x86 16-bit wrapping)
+    uint16_t vga_off = *(uint16_t*)(ds_base + (uint16_t)(slot_di - 0x7A9E));
+
+    int hud_x = (vga_off % 86) * 4 + 3;
+    int hud_y = vga_off / 86;
+
+    // Plane data offsets within item_data: plane order 3,0,1,2
+    // col%4 → plane_off: 0→0(plane3), 1→64(plane0), 2→128(plane1), 3→192(plane2)
+    static const int plane_off[4] = {0, 64, 128, 192};
+
+    for (int row = 0; row < 16; row++) {
+        for (int col = 0; col < 16; col++) {
+            int poff = plane_off[col & 3];
+            int byte_idx = col >> 2;
+            uint8_t color = item_data[poff + row * 4 + byte_idx];
+            v2_hud_pixel(hud_x + col, hud_y + row, color);
+        }
+    }
+}
+
+// ============================================================================
+// v2_draw_hud_selector: Draw selection cursor frame around inventory slot.
+//
+// Mirrors display_selector (sub_118ad).
+// Data source: ds:0x637D (256 bytes of cursor graphics).
+// Position: ds:[di - 0x7A9E] = VGA offset (di already shifted by caller).
+//
+// The original writes individual bytes/words to specific VGA offsets forming
+// a frame border (rows 0-4, 11-15 with gap in middle for item content).
+// Uses scatter-write pattern: each entry is (si_offset, vga_offset, plane).
+// Word writes cover 2 adjacent VGA bytes in the same plane.
+// ============================================================================
+void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
+    if (!v2_m2c_base) return;
+
+    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* sel_data = ds_base + 0x637D;
+
+    // VGA offset from lookup table (di already shifted by caller, uint16_t for x86 wrapping)
+    uint16_t vga_base = *(uint16_t*)(ds_base + (uint16_t)(slot_di - 0x7A9E));
+
+    // Scatter-write table: {si_offset, vga_offset_relative, plane, is_word}
+    // Extracted from sub_118ad drawPixel calls
+    static const struct { uint8_t si; uint16_t vga; uint8_t plane; uint8_t word; } t[] = {
+        // Plane 3 (mask 0x802)
+        {0x00,0x000,3,1},{0x03,0x003,3,0},{0x04,0x056,3,1},{0x07,0x059,3,0},
+        {0x08,0x0AC,3,0},{0x0C,0x102,3,0},{0x10,0x158,3,0},
+        {0x2C,0x3B2,3,0},{0x30,0x408,3,0},{0x34,0x45E,3,0},
+        {0x38,0x4B4,3,1},{0x3B,0x4B7,3,0},{0x3C,0x50A,3,1},{0x3F,0x50D,3,0},
+        // Plane 0 (mask 0x102)
+        {0x40,0x001,0,0},{0x43,0x004,0,0},{0x44,0x057,0,0},{0x47,0x05A,0,0},
+        {0x48,0x0AD,0,0},{0x4C,0x103,0,0},{0x50,0x159,0,0},
+        {0x6C,0x3B3,0,0},{0x70,0x409,0,0},{0x74,0x45F,0,0},
+        {0x78,0x4B5,0,0},{0x7B,0x4B8,0,0},{0x7C,0x50B,0,0},{0x7F,0x50E,0,0},
+        // Plane 1 (mask 0x202)
+        {0x80,0x001,1,0},{0x83,0x004,1,0},{0x84,0x057,1,0},{0x87,0x05A,1,0},
+        {0x8B,0x0B0,1,0},{0x8F,0x106,1,0},{0x93,0x15C,1,0},
+        {0xAF,0x3B6,1,0},{0xB3,0x40C,1,0},{0xB7,0x462,1,0},
+        {0xB8,0x4B5,1,0},{0xBB,0x4B8,1,0},{0xBC,0x50B,1,0},{0xBF,0x50E,1,0},
+        // Plane 2 (mask 0x402)
+        {0xC0,0x001,2,0},{0xC2,0x003,2,1},{0xC4,0x057,2,0},{0xC6,0x059,2,1},
+        {0xCB,0x0B0,2,0},{0xCF,0x106,2,0},{0xD3,0x15C,2,0},
+        {0xEF,0x3B6,2,0},{0xF3,0x40C,2,0},{0xF7,0x462,2,0},
+        {0xF8,0x4B5,2,0},{0xFA,0x4B7,2,1},{0xFC,0x50B,2,0},{0xFE,0x50D,2,1},
+    };
+
+    for (int i = 0; i < (int)(sizeof(t)/sizeof(t[0])); i++) {
+        int off = vga_base + t[i].vga;
+        int x = (off % 86) * 4 + t[i].plane;
+        int y = off / 86;
+        v2_hud_pixel(x, y, sel_data[t[i].si]);
+        if (t[i].word) {
+            int off2 = off + 1;
+            v2_hud_pixel((off2 % 86) * 4 + t[i].plane, off2 / 86, sel_data[t[i].si + 1]);
+        }
+    }
+}
+
+// ============================================================================
+// v2_draw_hud_healthbar: Draw 32×24 active viking status icon in HUD.
+//
+// Mirrors sub_117d0.
+// Data: ds:[bx*2 - 0x7AB6] where bx = viking_index + health*3.
+//   768 bytes = 4 planes × 24 rows × 8 bytes.
+//   Plane order in VGA writes: 1, 2, 3, 0 (POP+INC for plane 0 only).
+//   Data layout: [plane1:192][plane2:192][plane3:192][plane0:192]
+// Position: ds:[di*2 - 0x7AA4] = VGA offset in HUD area.
+//   VGA offset → hud_x = (off % 86)*4 + 1, hud_y = off / 86.
+//   (first plane written is plane 1, not plane 3)
+// ============================================================================
+void v2_draw_hud_healthbar(uint16_t ds_val, uint16_t health_ax, uint16_t viking_bx, uint16_t pos_di) {
+    if (!v2_m2c_base) return;
+
+    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+
+    // Data source: bx = viking + health*3, then lookup at ds:[bx*2 - 0x7AB6]
+    // uint16_t casts for x86 16-bit address wrapping
+    uint16_t idx = viking_bx + health_ax * 3;
+    uint16_t data_off = *(uint16_t*)(ds_base + (uint16_t)(idx * 2 - 0x7AB6));
+    uint8_t* bar_data = ds_base + data_off;
+
+    // VGA position: ds:[di*2 - 0x7AA4]
+    uint16_t vga_off = *(uint16_t*)(ds_base + (uint16_t)(pos_di * 2 - 0x7AA4));
+
+    int hud_x = (vga_off % 86) * 4 + 1;  // plane 1 first
+    int hud_y = vga_off / 86;
+
+    // Data: [plane1:192][plane2:192][plane3:192][plane0:192], each 24 rows × 8 bytes
+    static const int bar_plane_off[4] = {0, 192, 384, 576};
+
+    for (int row = 0; row < 24; row++) {
+        for (int col = 0; col < 32; col++) {
+            int poff = bar_plane_off[col & 3];
+            int byte_idx = col >> 2;
+            uint8_t color = bar_data[poff + row * 8 + byte_idx];
+            v2_hud_pixel(hud_x + col, hud_y + row, color);
         }
     }
 }

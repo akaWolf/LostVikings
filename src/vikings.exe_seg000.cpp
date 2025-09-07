@@ -54,6 +54,36 @@ void drawPixel(uint32_t offset, uint8_t color)
 {
   if (offset > 65536*4 - 1)
 	return;
+  // ONE-SHOT: check if drawBuffer aliases VGA memory
+  {
+    static bool checked = false;
+    if (!checked) {
+      checked = true;
+      void* vga = (void*)raddr(0xA000, 0);
+      void* db = (void*)myDrawInfo->drawBuffer;
+      printf("ALIAS-CHECK: drawBuffer=%p raddr(A000,0)=%p diff=%ld\n", db, vga, (long)((char*)db - (char*)vga));
+    }
+  }
+  // TRAP: detect who writes menu bg on ANY VGA page at y=48, x=160
+  {
+    // Page bases (linear): page1=0x8320, page2=0x19AA0, page3=0x2B220
+    // Target within page: 48*344 + 160 = 0x4120
+    static const uint32_t pw = 48*344 + 160; // 0x4120
+    static const uint32_t t1 = 0x8320 + pw;   // page 1
+    static const uint32_t t2 = 0x19AA0 + pw;  // page 2
+    static const uint32_t t3 = 0x2B220 + pw;  // page 3
+    if (offset == t1 || offset == t2 || offset == t3) {
+      static uint8_t prev[3] = {};
+      int pg = (offset == t1) ? 0 : (offset == t2) ? 1 : 2;
+      if (color != prev[pg]) {
+        void* ret0 = __builtin_return_address(0);
+        extern void drawPixel(uint32_t, uint8_t);
+        ptrdiff_t rel0 = (char*)ret0 - (char*)(void*)drawPixel;
+        printf("TRAP: pg%d color=%d->%d rel0=0x%lx\n", pg+1, prev[pg], color, (unsigned long)rel0);
+        prev[pg] = color;
+      }
+    }
+  }
   myDrawInfo->drawBuffer[offset] = color;
 }
 /*void drawPixel(uint32_t offset, uint16_t color)
@@ -994,6 +1024,7 @@ bool draw_inventory_item(m2c::_STATE *_state)
 cs=0x1a2;eip=0x00183d; 	X(PUSH(si));	// 3217 push    si ;~ 01A2:183D
 ret_1a2_183e:
 	// 4635
+ v2_draw_hud_item(ds, di, ax); // V2: draw item to v2_hud_buf
 cs=0x1a2;eip=0x00183e; 	X(PUSH(di));	// 3218 push    di ;~ 01A2:183E
 cs=0x1a2;eip=0x00183f; 	T(CMP(di, 0x18));	// 3219 cmp     di, 18h ;~ 01A2:183F
 cs=0x1a2;eip=0x001842; 	J(JNZ(loc_1184c));	// 3220 jnz     short loc_1184C ;~ 01A2:1842
@@ -1758,6 +1789,15 @@ bool read_and_display_raw_chunk(m2c::_STATE *_state)
    goto loc_10d8e;
  }
 
+ // V2: decode chunk for v2 rendering
+ if (display_offset == 0) {
+   printf("V2: chunk %x -> HUD, plane_size=%x\n", ax, plane_size);
+   v2_draw_hud_background(ds, chunk_addr, plane_size);
+ } else {
+   printf("V2: chunk %x -> viewport, offset=%x plane_size=%x myOffset=%x\n", ax, display_offset, plane_size, myOffset);
+   v2_draw_viewport_chunk(chunk_addr, plane_size);
+ }
+
  cs=0x1a2;eip=0x000d50; 	R(OUT((dw)0x3C4, (dw)0x102));	// plane 0
  for (int i = 0; i < plane_size; i++)
    T(MOV(*(db*)(raddr(0x0A000,display_offset + i)), *(db*)(raddr(chunk_addr,plane_size * 0 + i))));
@@ -1827,6 +1867,7 @@ cs=0x1a2;eip=0x000009; 	J(CALL(sub_17561,0));	// 39 call    sub_17561 ;~ 01A2:00
 cs=0x1a2;eip=0x00000c; 	J(CALL(sub_167ff,0));	// 40 call    sub_167FF ;~ 01A2:000C
 cs=0x1a2;eip=0x00000f; 	J(CALL(sub_12ca3,0));	// 41 call    sub_12CA3 ;~ 01A2:000F
 cs=0x1a2;eip=0x000012; 	J(CALL(sub_108b8,0));	// 42 call    sub_108B8 ;~ 01A2:0012
+	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); } // V2: set base before first level load
 cs=0x1a2;eip=0x000015; 	J(CALL(sub_11080,0));	// 43 call    sub_11080 ;~ 01A2:0015
 cs=0x1a2;eip=0x000018; 	X(MOV(word_3287c, 1));	// 44 mov     word_3287C, 1 ;~ 01A2:0018
 loc_1001e:
@@ -1834,6 +1875,17 @@ loc_1001e:
  if (need_quit) {
    printf("quitting main thread\n");
    exit(0);
+ }
+ // MONITOR: track pixel value at the exact updateDraw offset
+ {
+   static uint8_t prev_mon = 0xFF;
+   uint32_t uoff = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
+   uint8_t cur = myDrawInfo->drawBuffer[uoff + 48*344 + 160];
+   if (cur != prev_mon) {
+     printf("MON: frame myOffset=%x pixOff=%d pixel(160,48)=%d->%d uoff=%x addr=%x\n",
+            myDrawInfo->myOffset, myDrawInfo->myPixelOffset, prev_mon, cur, uoff, uoff + 48*344 + 160);
+     prev_mon = cur;
+   }
  }
 cs=0x1a2;eip=0x00001e; 	J(CALL(sub_12352,0));	// 48 call    sub_12352 ;~ 01A2:001E
 cs=0x1a2;eip=0x000021; 	J(CALL(sub_12d72,0));	// 49 call    sub_12D72 ;~ 01A2:0021
@@ -2367,6 +2419,7 @@ locret_1047b:
 cs=0x1a2;eip=0x00047b; 	J(RETN(0));	// 610 retn ;~ 01A2:047B
 sub_1047c:
 	// 617
+ { extern bool v2_has_viewport_chunk_fn(); printf("V2-MENU: sub_1047c called, level=%x byte_2aa9a=%x\n", word_2aa8d, byte_2aa9a); }
 cs=0x1a2;eip=0x00047c; 	T(MOV(ax, 0));	// 619 mov     ax, 0 ;~ 01A2:047C
 ret_1a2_47f:
 	// 4427
@@ -3318,7 +3371,7 @@ cs=0x1a2;eip=0x00111e; 	T(MOV(ax, word_2b357));	// 2302 mov     ax, word_2B357 ;
 cs=0x1a2;eip=0x001121; 	X(MOV(*(dw*)(((db*)&dword_2b359)+2), ax));	// 2303 mov     word ptr dword_2B359+2, ax ;~ 01A2:1121
 cs=0x1a2;eip=0x001124; 	J(CALL(sub_116e3,0));	// 2304 call    sub_116E3 ;~ 01A2:1124
 cs=0x1a2;eip=0x001127; 	J(CALL(sub_11784,0));	// 2305 call    sub_11784 ;~ 01A2:1127
-cs=0x1a2;eip=0x00112a; 	J(CALL(sub_16880,0));	// 2306 call    sub_16880 ;~ 01A2:112A
+cs=0x1a2;eip=0x00112a; 	if (myDrawInfo_v2) { memset(v2_render_buf, 0, 320*200); } J(CALL(sub_16880,0));	// 2306 call    sub_16880 ;~ 01A2:112A
 cs=0x1a2;eip=0x00112d; 	J(CALL(sub_111a1,0));	// 2307 call    sub_111A1 ;~ 01A2:112D
 cs=0x1a2;eip=0x001130; 	J(CALL(sub_11192,0));	// 2308 call    sub_11192 ;~ 01A2:1130
 cs=0x1a2;eip=0x001133; 	T(MOV(si, word_2aa8d));	// 2309 mov     si, word_2AA8D ;~ 01A2:1133
@@ -3420,6 +3473,7 @@ cs=0x1a2;eip=0x0011fd; 	X(MOV(word_28828, 0));	// 2413 mov     word_28828, 0 ;~ 
 cs=0x1a2;eip=0x001203; 	J(RETN(0));	// 2414 retn ;~ 01A2:1203
 sub_11204:
 	// 2421
+ printf("V2-DBG: sub_11204 byte_2aaaf=%x word_2aac1=%x v2_m2c_base=%p\n", byte_2aaaf, word_2aac1, v2_m2c_base);
 cs=0x1a2;eip=0x001204; 	T(TEST(byte_2aaaf, 2));	// 2422 test    byte_2AAAF, 2 ;~ 01A2:1204
 ret_1a2_1209:
 	// 4573
@@ -3429,6 +3483,8 @@ cs=0x1a2;eip=0x001210; 	J(JNZ(loc_112a2));	// 2425 jnz     loc_112A2 ;~ 01A2:121
 cs=0x1a2;eip=0x001214; 	T(TEST(byte_2aaaf, 0x40));	// 2426 test    byte_2AAAF, 40h ;~ 01A2:1214
 cs=0x1a2;eip=0x001219; 	J(JNZ(loc_1127b));	// 2427 jnz     short loc_1127B ;~ 01A2:1219
 loc_1121b:
+ printf("V2-DBG: sub_11204 -> loc_1121b (tile-based), clearing viewport chunk\n");
+	v2_clear_viewport_chunk(); // V2: entering tile-based level, clear intro chunk
 	// 4574
 cs=0x1a2;eip=0x00121b; 	T(MOV(ax, word_2aac3));	// 2430 mov     ax, word_2AAC3 ;~ 01A2:121B
 cs=0x1a2;eip=0x00121e; 	T(MOV(di, 0));	// 2431 mov     di, 0 ;~ 01A2:121E
@@ -3450,6 +3506,7 @@ cs=0x1a2;eip=0x00124d; 	T(MOV(es, word_2b33d));	// 2447 mov     es, word_2B33D ;
 //cs=0x1a2;eip=0x001251; 	J(JMP(sub_10982));	// 2448 jmp     sub_10982 ;~ 01A2:1251
  return read_chunk(_state);
 loc_11254:
+ printf("V2-DBG: sub_11204 -> loc_11254 (intro type 1, flag &2), chunk=%x\n", word_2aac1);
 	// 4575
 cs=0x1a2;eip=0x001254; 	X(PUSH(si));	// 2452 push    si ;~ 01A2:1254
 cs=0x1a2;eip=0x001255; 	T(MOV(ax, word_2aac1));	// 2453 mov     ax, word_2AAC1 ;~ 01A2:1255
@@ -3468,7 +3525,7 @@ cs=0x1a2;eip=0x001279; 	X(POP(si));	// 2465 pop     si ;~ 01A2:1279
 cs=0x1a2;eip=0x00127a; 	J(RETN(0));	// 2466 retn ;~ 01A2:127A
 loc_1127b:
 	// 4576
- printf("chunk here\n");
+ printf("V2-DBG: sub_11204 -> loc_1127b (intro type 2, flag &40), chunk=%x\n", word_2aac1);
 cs=0x1a2;eip=0x00127b; 	X(PUSH(si));	// 2470 push    si ;~ 01A2:127B
 cs=0x1a2;eip=0x00127c; 	T(MOV(ax, word_2aac1));	// 2471 mov     ax, word_2AAC1 ;~ 01A2:127C
 cs=0x1a2;eip=0x00127f; 	T(MOV(di, 0x20C8));	// 2472 mov     di, 20C8h ;~ 01A2:127F
@@ -3485,6 +3542,7 @@ cs=0x1a2;eip=0x00129d; 	J(CALL(sub_10cd8,0));	// 2482 call    sub_10CD8 ;~ 01A2:
 cs=0x1a2;eip=0x0012a0; 	X(POP(si));	// 2483 pop     si ;~ 01A2:12A0
 cs=0x1a2;eip=0x0012a1; 	J(RETN(0));	// 2484 retn ;~ 01A2:12A1
 loc_112a2:
+ printf("V2-DBG: sub_11204 -> loc_112a2 (HUD-only, flag &20), then tile loading\n");
 	// 4577
 cs=0x1a2;eip=0x0012a2; 	T(MOV(ax, 0x211));	// 2488 mov     ax, 211h ;~ 01A2:12A2
 cs=0x1a2;eip=0x0012a5; 	T(MOV(di, 0));	// 2489 mov     di, 0 ;~ 01A2:12A5
@@ -4282,6 +4340,7 @@ cs=0x1a2;eip=0x001b29; 	T(ADD(si, 4));	// 3528 add     si, 4 ;~ 01A2:1B29
 loc_11b2c:
 	// 4649
 cs=0x1a2;eip=0x001b2c; 	T(MOV(di, 0));	// 3531 mov     di, 0 ;~ 01A2:1B2C
+	v2_draw_hud_portrait(ds, di, si); // V2: draw portrait to v2_hud_buf
 cs=0x1a2;eip=0x001b2f; 	J(CALL(sub_11aa4,0));	// 3532 call    sub_11AA4 ;~ 01A2:1B2F
 cs=0x1a2;eip=0x001b32; 	T(MOV(ax, word_28909));	// 3533 mov     ax, word_28909 ;~ 01A2:1B32
 cs=0x1a2;eip=0x001b35; 	X(MOV(word_2890f, ax));	// 3534 mov     word_2890F, ax ;~ 01A2:1B35
@@ -4304,6 +4363,7 @@ cs=0x1a2;eip=0x001b5c; 	T(ADD(si, 4));	// 3550 add     si, 4 ;~ 01A2:1B5C
 loc_11b5f:
 	// 4652
 cs=0x1a2;eip=0x001b5f; 	T(MOV(di, 2));	// 3553 mov     di, 2 ;~ 01A2:1B5F
+	v2_draw_hud_portrait(ds, di, si); // V2: draw portrait to v2_hud_buf
 cs=0x1a2;eip=0x001b62; 	J(CALL(sub_11aa4,0));	// 3554 call    sub_11AA4 ;~ 01A2:1B62
 cs=0x1a2;eip=0x001b65; 	T(MOV(ax, word_2890b));	// 3555 mov     ax, word_2890B ;~ 01A2:1B65
 cs=0x1a2;eip=0x001b68; 	X(MOV(word_28911, ax));	// 3556 mov     word_28911, ax ;~ 01A2:1B68
@@ -4326,6 +4386,7 @@ cs=0x1a2;eip=0x001b8f; 	T(ADD(si, 4));	// 3572 add     si, 4 ;~ 01A2:1B8F
 loc_11b92:
 	// 4655
 cs=0x1a2;eip=0x001b92; 	T(MOV(di, 4));	// 3575 mov     di, 4 ;~ 01A2:1B92
+	v2_draw_hud_portrait(ds, di, si); // V2: draw portrait to v2_hud_buf
 cs=0x1a2;eip=0x001b95; 	J(CALL(sub_11aa4,0));	// 3576 call    sub_11AA4 ;~ 01A2:1B95
 cs=0x1a2;eip=0x001b98; 	T(MOV(ax, word_2890d));	// 3577 mov     ax, word_2890D ;~ 01A2:1B98
 cs=0x1a2;eip=0x001b9b; 	X(MOV(word_28913, ax));	// 3578 mov     word_28913, ax ;~ 01A2:1B9B
@@ -4449,6 +4510,7 @@ loc_11cb1:
 	// 4666
 cs=0x1a2;eip=0x001cb1; 	T(MOV(di, word_28923));	// 3705 mov     di, word_28923 ;~ 01A2:1CB1
 cs=0x1a2;eip=0x001cb5; 	T(SHL(di, 1));	// 3706 shl     di, 1 ;~ 01A2:1CB5
+	v2_draw_hud_selector(ds, di); // V2: draw selector to v2_hud_buf
 cs=0x1a2;eip=0x001cb7; 	J(CALL(sub_118ad,0));	// 3707 call    sub_118AD ;~ 01A2:1CB7
 locret_11cba:
 	// 4667
@@ -4846,6 +4908,7 @@ cs=0x1a2;eip=0x00206e; 	J(CALL(sub_1183d,0));	// 4145 call    sub_1183D ;~ 01A2:
 cs=0x1a2;eip=0x002071; 	T(MOV(di, word_288f4));	// 4146 mov     di, word_288F4 ;~ 01A2:2071
 cs=0x1a2;eip=0x002075; 	X(MOV(word_288fa, di));	// 4147 mov     word_288FA, di ;~ 01A2:2075
 cs=0x1a2;eip=0x002079; 	T(SHL(di, 1));	// 4148 shl     di, 1 ;~ 01A2:2079
+	v2_draw_hud_selector(ds, di); // V2
 cs=0x1a2;eip=0x00207b; 	J(CALL(sub_118ad,0));	// 4149 call    sub_118AD ;~ 01A2:207B
 loc_1207e:
 	// 4708
@@ -4861,6 +4924,7 @@ cs=0x1a2;eip=0x002097; 	T(MOV(di, word_288f6));	// 4160 mov     di, word_288F6 ;
 cs=0x1a2;eip=0x00209b; 	X(MOV(word_288fc, di));	// 4161 mov     word_288FC, di ;~ 01A2:209B
 cs=0x1a2;eip=0x00209f; 	T(ADD(di, 4));	// 4162 add     di, 4 ;~ 01A2:209F
 cs=0x1a2;eip=0x0020a2; 	T(SHL(di, 1));	// 4163 shl     di, 1 ;~ 01A2:20A2
+	v2_draw_hud_selector(ds, di); // V2
 cs=0x1a2;eip=0x0020a4; 	J(CALL(sub_118ad,0));	// 4164 call    sub_118AD ;~ 01A2:20A4
 loc_120a7:
 	// 4709
@@ -4876,6 +4940,7 @@ cs=0x1a2;eip=0x0020c0; 	T(MOV(di, word_288f8));	// 4175 mov     di, word_288F8 ;
 cs=0x1a2;eip=0x0020c4; 	X(MOV(word_288fe, di));	// 4176 mov     word_288FE, di ;~ 01A2:20C4
 cs=0x1a2;eip=0x0020c8; 	T(ADD(di, 8));	// 4177 add     di, 8 ;~ 01A2:20C8
 cs=0x1a2;eip=0x0020cb; 	T(SHL(di, 1));	// 4178 shl     di, 1 ;~ 01A2:20CB
+	v2_draw_hud_selector(ds, di); // V2
 cs=0x1a2;eip=0x0020cd; 	J(CALL(sub_118ad,0));	// 4179 call    sub_118AD ;~ 01A2:20CD
 locret_120d0:
 	// 4710
@@ -4887,16 +4952,19 @@ ret_1a2_20d5:
 	// 4711
 cs=0x1a2;eip=0x0020d5; 	X(MOV(word_288fa, di));	// 4190 mov     word_288FA, di ;~ 01A2:20D5
 cs=0x1a2;eip=0x0020d9; 	T(SHL(di, 1));	// 4191 shl     di, 1 ;~ 01A2:20D9
+	v2_draw_hud_selector(ds, di); // V2
 cs=0x1a2;eip=0x0020db; 	J(CALL(sub_118ad,0));	// 4192 call    sub_118AD ;~ 01A2:20DB
 cs=0x1a2;eip=0x0020de; 	T(MOV(di, word_288f6));	// 4193 mov     di, word_288F6 ;~ 01A2:20DE
 cs=0x1a2;eip=0x0020e2; 	X(MOV(word_288fc, di));	// 4194 mov     word_288FC, di ;~ 01A2:20E2
 cs=0x1a2;eip=0x0020e6; 	T(ADD(di, 4));	// 4195 add     di, 4 ;~ 01A2:20E6
 cs=0x1a2;eip=0x0020e9; 	T(SHL(di, 1));	// 4196 shl     di, 1 ;~ 01A2:20E9
+	v2_draw_hud_selector(ds, di); // V2
 cs=0x1a2;eip=0x0020eb; 	J(CALL(sub_118ad,0));	// 4197 call    sub_118AD ;~ 01A2:20EB
 cs=0x1a2;eip=0x0020ee; 	T(MOV(di, word_288f8));	// 4198 mov     di, word_288F8 ;~ 01A2:20EE
 cs=0x1a2;eip=0x0020f2; 	X(MOV(word_288fe, di));	// 4199 mov     word_288FE, di ;~ 01A2:20F2
 cs=0x1a2;eip=0x0020f6; 	T(ADD(di, 8));	// 4200 add     di, 8 ;~ 01A2:20F6
 cs=0x1a2;eip=0x0020f9; 	T(SHL(di, 1));	// 4201 shl     di, 1 ;~ 01A2:20F9
+	v2_draw_hud_selector(ds, di); // V2
 cs=0x1a2;eip=0x0020fb; 	J(CALL(sub_118ad,0));	// 4202 call    sub_118AD ;~ 01A2:20FB
 cs=0x1a2;eip=0x0020fe; 	J(RETN(0));	// 4203 retn ;~ 01A2:20FE
 sub_120ff: // draw active viking icon
@@ -4926,6 +4994,7 @@ cs=0x1a2;eip=0x002123; 	T(CMP(ax, word_2891b));	// 4232 cmp     ax, word_2891B ;
 cs=0x1a2;eip=0x002127; 	J(JZ(loc_12132));	// 4233 jz      short loc_12132 ;~ 01A2:2127
 cs=0x1a2;eip=0x002129; 	T(MOV(di, 0));	// 4234 mov     di, 0 ;~ 01A2:2129
 cs=0x1a2;eip=0x00212c; 	T(MOV(bx, 0));	// 4235 mov     bx, 0 ;~ 01A2:212C
+	v2_draw_hud_healthbar(ds, ax, bx, di); // V2
 cs=0x1a2;eip=0x00212f; 	J(CALL(sub_117d0,0));	// 4236 call    sub_117D0 ;~ 01A2:212F
 loc_12132:
 	// 4716
@@ -4951,6 +5020,7 @@ cs=0x1a2;eip=0x002156; 	T(CMP(ax, word_2891d));	// 4260 cmp     ax, word_2891D ;
 cs=0x1a2;eip=0x00215a; 	J(JZ(loc_12165));	// 4261 jz      short loc_12165 ;~ 01A2:215A
 cs=0x1a2;eip=0x00215c; 	T(MOV(di, 1));	// 4262 mov     di, 1 ;~ 01A2:215C
 cs=0x1a2;eip=0x00215f; 	T(MOV(bx, 1));	// 4263 mov     bx, 1 ;~ 01A2:215F
+	v2_draw_hud_healthbar(ds, ax, bx, di); // V2
 cs=0x1a2;eip=0x002162; 	J(CALL(sub_117d0,0));	// 4264 call    sub_117D0 ;~ 01A2:2162
 loc_12165:
 	// 4720
@@ -4976,6 +5046,7 @@ cs=0x1a2;eip=0x002189; 	T(CMP(ax, word_2891f));	// 4288 cmp     ax, word_2891F ;
 cs=0x1a2;eip=0x00218d; 	J(JZ(locret_12198));	// 4289 jz      short locret_12198 ;~ 01A2:218D
 cs=0x1a2;eip=0x00218f; 	T(MOV(di, 2));	// 4290 mov     di, 2 ;~ 01A2:218F
 cs=0x1a2;eip=0x002192; 	T(MOV(bx, 2));	// 4291 mov     bx, 2 ;~ 01A2:2192
+	v2_draw_hud_healthbar(ds, ax, bx, di); // V2
 cs=0x1a2;eip=0x002195; 	J(CALL(sub_117d0,0));	// 4292 call    sub_117D0 ;~ 01A2:2195
 locret_12198:
 	// 4724
