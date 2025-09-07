@@ -45,6 +45,7 @@ extern void render_callback_v2(void* state);
 // V2 rendering functions — called from seg000
 extern void v2_draw_tiles(uint16_t ds_val);
 extern void v2_draw_sprites(uint16_t ds_val);
+extern void v2_draw_flagged_tiles(uint16_t ds_val);
 extern void v2_draw_ui(uint16_t ds_val);
 extern void v2_swap_render_buf();
 extern void v2_set_m2c_base(void* base);

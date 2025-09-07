@@ -225,6 +225,11 @@ void v2_draw_sprites(uint16_t ds_val) {
             bytes_per_row = 4;
         }
 
+        // Horizontal flip: bit 9 (0x200) of flags.
+        // All three type renderers (seg003_648_proc, sub_1d3b2, loc_1d8a8)
+        // check this flag and branch to mirrored rendering paths.
+        bool hflip = (flags & 0x200) != 0;
+
         // Coarse bounds check — sprite pixel size
         int sprite_h = num_strips * rows_per_strip;
         int sprite_w = bytes_per_row * 4;  // 4 planes
@@ -233,12 +238,12 @@ void v2_draw_sprites(uint16_t ds_val) {
         // Sprite data: offset points to first data byte, mask at offset-1
         uint8_t* sprite = v2_m2c_base + ((uint32_t)sprite_seg << 4) + sprite_off - 1;
 
-        // Column formula: sx0 + N*4 + section.
-        // In the original, section S writes to VGA plane (start_plane+S)&3.
-        // When the plane wraps (3→0), VGA DI increments by 1 (= +4 pixels).
-        // The formula base_x + N*4 + p fails at the wrap boundary.
-        // Direct formula: pixel column = sx0 + N*4 + section — verified
-        // against the original VGA addressing for all start_plane values.
+        // Column formula: sx0 + N*4 + section (normal) or
+        // sx0 + (sprite_w-1) - (N*4 + section) (flipped).
+        // sx(col) computes the screen x for a given data column.
+        auto sx = [&](int col) -> int {
+            return hflip ? sx0 + sprite_w - 1 - col : sx0 + col;
+        };
 
         uint8_t* ptr = sprite;
         for (int section = 0; section < 4; section++) {
@@ -251,39 +256,139 @@ void v2_draw_sprites(uint16_t ds_val) {
                     if (type == 1) {
                         // Type 1 (jpt_1CF4E): 4 rows × 2 bytes per row
                         // Mask: 76→row0, 54→row1, 32→row2, 10→row3
-                        if (mask & 0x80) v2_put_pixel(buf, sx0 + 0*4 + section, base_y + 0, data[0]);
-                        if (mask & 0x40) v2_put_pixel(buf, sx0 + 1*4 + section, base_y + 0, data[1]);
-                        if (mask & 0x20) v2_put_pixel(buf, sx0 + 0*4 + section, base_y + 1, data[2]);
-                        if (mask & 0x10) v2_put_pixel(buf, sx0 + 1*4 + section, base_y + 1, data[3]);
-                        if (mask & 0x08) v2_put_pixel(buf, sx0 + 0*4 + section, base_y + 2, data[4]);
-                        if (mask & 0x04) v2_put_pixel(buf, sx0 + 1*4 + section, base_y + 2, data[5]);
-                        if (mask & 0x02) v2_put_pixel(buf, sx0 + 0*4 + section, base_y + 3, data[6]);
-                        if (mask & 0x01) v2_put_pixel(buf, sx0 + 1*4 + section, base_y + 3, data[7]);
+                        if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + section), base_y + 0, data[0]);
+                        if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + section), base_y + 0, data[1]);
+                        if (mask & 0x20) v2_put_pixel(buf, sx(0*4 + section), base_y + 1, data[2]);
+                        if (mask & 0x10) v2_put_pixel(buf, sx(1*4 + section), base_y + 1, data[3]);
+                        if (mask & 0x08) v2_put_pixel(buf, sx(0*4 + section), base_y + 2, data[4]);
+                        if (mask & 0x04) v2_put_pixel(buf, sx(1*4 + section), base_y + 2, data[5]);
+                        if (mask & 0x02) v2_put_pixel(buf, sx(0*4 + section), base_y + 3, data[6]);
+                        if (mask & 0x01) v2_put_pixel(buf, sx(1*4 + section), base_y + 3, data[7]);
                     } else if (type == 2) {
                         // Type 2 (jpt_1DA02): 1 row × 8 bytes
                         // Mask: bit7→data[0], ..., bit0→data[7]
-                        if (mask & 0x80) v2_put_pixel(buf, sx0 + 0*4 + section, base_y, data[0]);
-                        if (mask & 0x40) v2_put_pixel(buf, sx0 + 1*4 + section, base_y, data[1]);
-                        if (mask & 0x20) v2_put_pixel(buf, sx0 + 2*4 + section, base_y, data[2]);
-                        if (mask & 0x10) v2_put_pixel(buf, sx0 + 3*4 + section, base_y, data[3]);
-                        if (mask & 0x08) v2_put_pixel(buf, sx0 + 4*4 + section, base_y, data[4]);
-                        if (mask & 0x04) v2_put_pixel(buf, sx0 + 5*4 + section, base_y, data[5]);
-                        if (mask & 0x02) v2_put_pixel(buf, sx0 + 6*4 + section, base_y, data[6]);
-                        if (mask & 0x01) v2_put_pixel(buf, sx0 + 7*4 + section, base_y, data[7]);
+                        if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + section), base_y, data[0]);
+                        if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + section), base_y, data[1]);
+                        if (mask & 0x20) v2_put_pixel(buf, sx(2*4 + section), base_y, data[2]);
+                        if (mask & 0x10) v2_put_pixel(buf, sx(3*4 + section), base_y, data[3]);
+                        if (mask & 0x08) v2_put_pixel(buf, sx(4*4 + section), base_y, data[4]);
+                        if (mask & 0x04) v2_put_pixel(buf, sx(5*4 + section), base_y, data[5]);
+                        if (mask & 0x02) v2_put_pixel(buf, sx(6*4 + section), base_y, data[6]);
+                        if (mask & 0x01) v2_put_pixel(buf, sx(7*4 + section), base_y, data[7]);
                     } else { // type == 4
                         // Type 4 (jpt_1d514): 2 rows × 4 bytes per row
                         // Mask: 7654→row0, 3210→row1
-                        if (mask & 0x80) v2_put_pixel(buf, sx0 + 0*4 + section, base_y + 0, data[0]);
-                        if (mask & 0x40) v2_put_pixel(buf, sx0 + 1*4 + section, base_y + 0, data[1]);
-                        if (mask & 0x20) v2_put_pixel(buf, sx0 + 2*4 + section, base_y + 0, data[2]);
-                        if (mask & 0x10) v2_put_pixel(buf, sx0 + 3*4 + section, base_y + 0, data[3]);
-                        if (mask & 0x08) v2_put_pixel(buf, sx0 + 0*4 + section, base_y + 1, data[4]);
-                        if (mask & 0x04) v2_put_pixel(buf, sx0 + 1*4 + section, base_y + 1, data[5]);
-                        if (mask & 0x02) v2_put_pixel(buf, sx0 + 2*4 + section, base_y + 1, data[6]);
-                        if (mask & 0x01) v2_put_pixel(buf, sx0 + 3*4 + section, base_y + 1, data[7]);
+                        if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + section), base_y + 0, data[0]);
+                        if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + section), base_y + 0, data[1]);
+                        if (mask & 0x20) v2_put_pixel(buf, sx(2*4 + section), base_y + 0, data[2]);
+                        if (mask & 0x10) v2_put_pixel(buf, sx(3*4 + section), base_y + 0, data[3]);
+                        if (mask & 0x08) v2_put_pixel(buf, sx(0*4 + section), base_y + 1, data[4]);
+                        if (mask & 0x04) v2_put_pixel(buf, sx(1*4 + section), base_y + 1, data[5]);
+                        if (mask & 0x02) v2_put_pixel(buf, sx(2*4 + section), base_y + 1, data[6]);
+                        if (mask & 0x01) v2_put_pixel(buf, sx(3*4 + section), base_y + 1, data[7]);
                     }
                 }
                 ptr += 9;
+            }
+        }
+    }
+}
+
+// ============================================================================
+// v2_draw_flagged_tiles: Redraws flagged tiles with mask transparency.
+//
+// Reimplements sub_1c8f1 from seg003. Runs AFTER sprites — draws foreground
+// tile pixels over sprites using per-pixel mask from the GS segment.
+//
+// Scans the same 25×43 visible tile grid as v2_draw_tiles.
+// Condition: tile entry has both bit 0 (dirty) AND bit 3 (redraw) set.
+//
+// Data sources:
+//   Tile map:      FS segment (ds:0x2E69)
+//   Tile graphics: segment at ds:0x2E5F, 64 bytes per tile
+//   Tile mask:     GS segment (ds:0x2E61), 8 bytes per tile
+//   Mask offset:   (tile_entry & 0xFFC0) >> 3
+//
+// Tile data format: same 64 bytes as v2_draw_tiles (4 planes × 2 strips × 8 bytes).
+// Mask: 8 bytes, one per (plane, strip) pair. Each mask byte controls 4 rows × 2 bytes:
+//   bits 76→row0(b0,b1), 54→row1, 32→row2, 10→row3.
+//   Bit=1 → draw pixel, bit=0 → transparent (keep underlying sprite/tile).
+//
+// Flip flags (bits 4,5) affect screen position, not data/mask indexing.
+// Uses jpt_1c9b1 (no flip), jpt_1caa7 (hflip), jpt_1cba1 (vflip), jpt_1cc9b (both).
+// ============================================================================
+void v2_draw_flagged_tiles(uint16_t ds_val) {
+    if (!myDrawInfo_v2 || !v2_m2c_base) return;
+
+    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* buf = v2_render_buf[v2_render_fill];
+
+    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+    uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    uint16_t gs_seg = *(uint16_t*)(ds_base + 0x2E61);
+    if (!fs_seg || !tgfx_seg || !gs_seg) return;
+
+    uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+    uint8_t* gs_base = v2_m2c_base + ((uint32_t)gs_seg << 4);
+
+    uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
+    uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
+
+    for (int row_vis = 0; row_vis < 25; row_vis++) {
+        uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x);
+        if (row_scrolled >= 64) continue;
+
+        uint16_t lut_off = (uint16_t)(row_scrolled * 2u - 0x7098u);
+        uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
+
+        for (int col_vis = 0; col_vis < 43; col_vis++) {
+            uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y);
+            uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
+            uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
+
+            // Original condition: (entry & 1) must be set, AND (entry & 8) must be set
+            // ax=0xFFFE clears bit 0 only, doesn't affect bit 3
+            if (!(tile_entry & 1) || !(tile_entry & 8)) continue;
+
+            uint16_t tile_gfx_off = tile_entry & 0xFFC0;
+            bool hflip = (tile_entry & 0x10) != 0;
+            bool vflip = (tile_entry & 0x20) != 0;
+
+            uint8_t* tile = tgfx_base + tile_gfx_off;
+
+            // Mask: 8 bytes at gs:[(tile_entry & 0xFFC0) >> 3]
+            uint16_t mask_off = tile_gfx_off >> 3;
+            uint8_t* mask_data = gs_base + mask_off;
+
+            int screen_x = col_vis * 8;
+            int screen_y = row_vis * 8;
+
+            // For each pixel in the 8×8 tile, check mask and draw if set
+            for (int ty = 0; ty < 8; ty++) {
+                int sy = screen_y + (vflip ? 7 - ty : ty);
+                if (sy < 0 || sy >= 200) continue;
+
+                for (int tx = 0; tx < 8; tx++) {
+                    int sx = screen_x + (hflip ? 7 - tx : tx);
+                    if (sx < 0 || sx >= 320) continue;
+
+                    // Tile data layout: plane*16 + strip*8 + row*2 + byte
+                    int plane = tx & 3;       // tx % 4
+                    int byte_idx = tx >> 2;   // tx / 4 (0 or 1)
+                    int strip = ty >> 2;      // ty / 4 (0 or 1)
+                    int row = ty & 3;         // ty % 4
+
+                    // Mask: byte index = plane*2 + strip
+                    //        bit = 7 - (row*2 + byte_idx)
+                    int mb = plane * 2 + strip;
+                    int mbit = 7 - (row * 2 + byte_idx);
+                    if (!(mask_data[mb] & (1 << mbit))) continue;
+
+                    // Pixel color from tile data
+                    uint8_t color = tile[plane * 16 + strip * 8 + row * 2 + byte_idx];
+                    buf[sy * 320 + sx] = color;
+                }
             }
         }
     }

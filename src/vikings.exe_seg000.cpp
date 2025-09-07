@@ -1870,6 +1870,7 @@ cs=0x1a2;eip=0x00005f; 	J(CALLF(sub_1dd9c,0));	// 71 call    sub_1DD9C ;~ 01A2:0
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call AFTER to check if original initializes data
 cs=0x1a2;eip=0x000064; 	T(MOV(ax, 0x0FFFE));	// 72 mov     ax, 0FFFEh ;~ 01A2:0064
 	sub_1c8f1_door_rendering_with_state(_state);  // RECREATED: Call our implementation before original
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x000067; 	J(CALLF(sub_1c8f1,0));	// 73 call    sub_1C8F1 ;~ 01A2:0067
 
 cs=0x1a2;eip=0x00006c; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 74 call    sub_1E0C7 ;~ 01A2:006C
@@ -1890,6 +1891,7 @@ cs=0x1a2;eip=0x00008e; 	J(CALL(sub_16661,0));	// 84 call    sub_16661 ;~ 01A2:00
 cs=0x1a2;eip=0x000091; 	J(CALL(sub_1406d,0));	// 85 call    sub_1406D ;~ 01A2:0091
 cs=0x1a2;eip=0x000094; 	J(CALLF(sub_1dd9c,0));	// 86 call    sub_1DD9C ;~ 01A2:0094
 cs=0x1a2;eip=0x000099; 	T(MOV(ax, 0x0FFFE));	// 87 mov     ax, 0FFFEh ;~ 01A2:0099
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x00009c; 	J(CALLF(sub_1c8f1,0));	// 88 call    sub_1C8F1 ;~ 01A2:009C
 
 cs=0x1a2;eip=0x0000a1; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 89 call    sub_1E0C7 ;~ 01A2:00A1
@@ -1911,6 +1913,7 @@ cs=0x1a2;eip=0x0000c0; 	J(CALL(sub_165aa,0));	// 105 call    sub_165AA ;~ 01A2:0
 cs=0x1a2;eip=0x0000c3; 	J(CALL(sub_16661,0));	// 106 call    sub_16661 ;~ 01A2:00C3
 cs=0x1a2;eip=0x0000c6; 	J(CALLF(sub_1dd9c,0));	// 107 call    sub_1DD9C ;~ 01A2:00C6
 cs=0x1a2;eip=0x0000cb; 	T(MOV(ax, 0x0FFFE));	// 108 mov     ax, 0FFFEh ;~ 01A2:00CB
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x0000ce; 	J(CALLF(sub_1c8f1,0));	// 109 call    sub_1C8F1 ;~ 01A2:00CE
 
 cs=0x1a2;eip=0x0000d3; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 110 call    sub_1E0C7 ;~ 01A2:00D3
@@ -2431,6 +2434,7 @@ cs=0x1a2;eip=0x00050e; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); 
 cs=0x1a2;eip=0x000513; 	J(CALL(sub_165aa,0));	// 681 call    sub_165AA ;~ 01A2:0513
 cs=0x1a2;eip=0x000516; 	J(CALLF(sub_1dd9c,0));	// 682 call    sub_1DD9C ;~ 01A2:0516
 cs=0x1a2;eip=0x00051b; 	T(MOV(ax, 0x0FFFE));	// 683 mov     ax, 0FFFEh ;~ 01A2:051B
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x00051e; 	J(CALLF(sub_1c8f1,0));	// 684 call    sub_1C8F1 ;~ 01A2:051E
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 
@@ -2444,6 +2448,7 @@ cs=0x1a2;eip=0x00052e; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); 
 cs=0x1a2;eip=0x000533; 	J(CALL(sub_165aa,0));	// 689 call    sub_165AA ;~ 01A2:0533
 cs=0x1a2;eip=0x000536; 	J(CALLF(sub_1dd9c,0));	// 690 call    sub_1DD9C ;~ 01A2:0536
 cs=0x1a2;eip=0x00053b; 	T(MOV(ax, 0x0FFFE));	// 691 mov     ax, 0FFFEh ;~ 01A2:053B
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x00053e; 	J(CALLF(sub_1c8f1,0));	// 692 call    sub_1C8F1 ;~ 01A2:053E
 
 cs=0x1a2;eip=0x000543; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 693 call    sub_1E0C7 ;~ 01A2:0543
@@ -2475,6 +2480,7 @@ cs=0x1a2;eip=0x00057d; 	J(CALL(sub_1265b,0));	// 718 call    sub_1265B ;~ 01A2:0
 cs=0x1a2;eip=0x000580; 	J(CALL(sub_165aa,0));	// 719 call    sub_165AA ;~ 01A2:0580
 cs=0x1a2;eip=0x000583; 	J(CALLF(sub_1dd9c,0));	// 720 call    sub_1DD9C ;~ 01A2:0583
 cs=0x1a2;eip=0x000588; 	T(MOV(ax, 0x0FFFF));	// 721 mov     ax, 0FFFFh ;~ 01A2:0588
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x00058b; 	J(CALLF(sub_1c8f1,0));	// 722 call    sub_1C8F1 ;~ 01A2:058B
 
 cs=0x1a2;eip=0x000590; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 723 call    sub_1E0C7 ;~ 01A2:0590
@@ -2497,6 +2503,7 @@ cs=0x1a2;eip=0x0005af; 	J(CALL(sub_1265b,0));	// 737 call    sub_1265B ;~ 01A2:0
 cs=0x1a2;eip=0x0005b2; 	J(CALL(sub_165aa,0));	// 738 call    sub_165AA ;~ 01A2:05B2
 cs=0x1a2;eip=0x0005b5; 	J(CALLF(sub_1dd9c,0));	// 739 call    sub_1DD9C ;~ 01A2:05B5
 cs=0x1a2;eip=0x0005ba; 	T(MOV(ax, 0x0FFFF));	// 740 mov     ax, 0FFFFh ;~ 01A2:05BA
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x0005bd; 	J(CALLF(sub_1c8f1,0));	// 741 call    sub_1C8F1 ;~ 01A2:05BD
 
 cs=0x1a2;eip=0x0005c2; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 742 call    sub_1E0C7 ;~ 01A2:05C2
@@ -3847,6 +3854,7 @@ cs=0x1a2;eip=0x0015f5; 	J(CALL(sub_165aa,0));	// 2898 call    sub_165AA ;~ 01A2:
 cs=0x1a2;eip=0x0015f8; 	J(CALL(sub_16661,0));	// 2899 call    sub_16661 ;~ 01A2:15F8
 cs=0x1a2;eip=0x0015fb; 	J(CALLF(sub_1dd9c,0));	// 2900 call    sub_1DD9C ;~ 01A2:15FB
 cs=0x1a2;eip=0x001600; 	T(MOV(ax, 0x0FFFE));	// 2901 mov     ax, 0FFFEh ;~ 01A2:1600
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x001603; 	J(CALLF(sub_1c8f1,0));	// 2902 call    sub_1C8F1 ;~ 01A2:1603
 cs=0x1a2;eip=0x001608; 	J(CALL(sub_16775,0));	// 2903 call    sub_16775 ;~ 01A2:1608
 	if (myDrawInfo_v2) v2_swap_render_buf();
@@ -3862,6 +3870,7 @@ cs=0x1a2;eip=0x00161c; 	J(CALL(sub_165aa,0));	// 2909 call    sub_165AA ;~ 01A2:
 cs=0x1a2;eip=0x00161f; 	J(CALL(sub_16661,0));	// 2910 call    sub_16661 ;~ 01A2:161F
 cs=0x1a2;eip=0x001622; 	J(CALLF(sub_1dd9c,0));	// 2911 call    sub_1DD9C ;~ 01A2:1622
 cs=0x1a2;eip=0x001627; 	T(MOV(ax, 0x0FFFE));	// 2912 mov     ax, 0FFFEh ;~ 01A2:1627
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x00162a; 	J(CALLF(sub_1c8f1,0));	// 2913 call    sub_1C8F1 ;~ 01A2:162A
 cs=0x1a2;eip=0x00162f; 	J(CALL(sub_16775,0));	// 2914 call    sub_16775 ;~ 01A2:162F
 	if (myDrawInfo_v2) v2_swap_render_buf();
@@ -3878,6 +3887,7 @@ cs=0x1a2;eip=0x001646; 	J(CALL(sub_165aa,0));	// 2921 call    sub_165AA ;~ 01A2:
 cs=0x1a2;eip=0x001649; 	J(CALL(sub_16661,0));	// 2922 call    sub_16661 ;~ 01A2:1649
 cs=0x1a2;eip=0x00164c; 	J(CALLF(sub_1dd9c,0));	// 2923 call    sub_1DD9C ;~ 01A2:164C
 cs=0x1a2;eip=0x001651; 	T(MOV(ax, 0x0FFFE));	// 2924 mov     ax, 0FFFEh ;~ 01A2:1651
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x001654; 	J(CALLF(sub_1c8f1,0));	// 2925 call    sub_1C8F1 ;~ 01A2:1654
 cs=0x1a2;eip=0x001659; 	J(CALL(sub_16775,0));	// 2926 call    sub_16775 ;~ 01A2:1659
 	if (myDrawInfo_v2) v2_swap_render_buf();
@@ -3890,6 +3900,7 @@ cs=0x1a2;eip=0x001664; 	J(CALL(sub_165aa,0));	// 2929 call    sub_165AA ;~ 01A2:
 cs=0x1a2;eip=0x001667; 	J(CALL(sub_16661,0));	// 2930 call    sub_16661 ;~ 01A2:1667
 cs=0x1a2;eip=0x00166a; 	J(CALLF(sub_1dd9c,0));	// 2931 call    sub_1DD9C ;~ 01A2:166A
 cs=0x1a2;eip=0x00166f; 	T(MOV(ax, 0x0FFFE));	// 2932 mov     ax, 0FFFEh ;~ 01A2:166F
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x001672; 	J(CALLF(sub_1c8f1,0));	// 2933 call    sub_1C8F1 ;~ 01A2:1672
 //cs=0x1a2;eip=0x001677; 	J(JMP(sub_16775));	// 2934 jmp     sub_16775 ;~ 01A2:1677
  { auto _r = set_display_memory_addr(_state); if (myDrawInfo_v2) v2_swap_render_buf(); return _r; }
@@ -4355,6 +4366,7 @@ cs=0x1a2;eip=0x001bee; 	J(CALLF(sub_1dd9c,0));	// 3617 call    sub_1DD9C ;~ 01A2
 cs=0x1a2;eip=0x001bf3; 	T(MOV(ax, 0x0FFFE));	// 3618 mov     ax, 0FFFEh ;~ 01A2:1BF3
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 	sub_1c8f1_door_rendering_with_state(_state);  // RECREATED: Call our implementation before original
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x001bf6; 	J(CALLF(sub_1c8f1,0));	// 3619 call    sub_1C8F1 ;~ 01A2:1BF6
 
 cs=0x1a2;eip=0x001bfb; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 3620 call    sub_1E0C7 ;~ 01A2:1BFB
@@ -5790,6 +5802,7 @@ cs=0x1a2;eip=0x002782; 	J(CALL(sub_165aa,0));	// 5278 call    sub_165AA ;~ 01A2:
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x002785; 	J(CALLF(sub_1dd9c,0));	// 5279 call    sub_1DD9C ;~ 01A2:2785
 cs=0x1a2;eip=0x00278a; 	T(MOV(ax, 0x0FFFE));	// 5280 mov     ax, 0FFFEh ;~ 01A2:278A
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x00278d; 	J(CALLF(sub_1c8f1,0));	// 5281 call    sub_1C8F1 ;~ 01A2:278D
 
 cs=0x1a2;eip=0x002792; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 5282 call    sub_1E0C7 ;~ 01A2:2792
@@ -5803,6 +5816,7 @@ cs=0x1a2;eip=0x0027a2; 	J(CALL(sub_165aa,0));	// 5286 call    sub_165AA ;~ 01A2:
 cs=0x1a2;eip=0x0027a5; 	J(CALLF(sub_1dd9c,0));	// 5287 call    sub_1DD9C ;~ 01A2:27A5
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x0027aa; 	T(MOV(ax, 0x0FFFE));	// 5288 mov     ax, 0FFFEh ;~ 01A2:27AA
+	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x0027ad; 	J(CALLF(sub_1c8f1,0));	// 5289 call    sub_1C8F1 ;~ 01A2:27AD
 cs=0x1a2;eip=0x0027b2; 	J(CALL(sub_16775,0));	// 5290 call    sub_16775 ;~ 01A2:27B2
 	if (myDrawInfo_v2) v2_swap_render_buf();
