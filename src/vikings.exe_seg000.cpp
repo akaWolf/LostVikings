@@ -6,6 +6,7 @@
 
                 #include "vikings.exe.h"
  #include <unistd.h>
+#include <execinfo.h>
 #include <thread>
 #include <map>
 
@@ -64,27 +65,8 @@ void drawPixel(uint32_t offset, uint8_t color)
       printf("ALIAS-CHECK: drawBuffer=%p raddr(A000,0)=%p diff=%ld\n", db, vga, (long)((char*)db - (char*)vga));
     }
   }
-  // TRAP: detect who writes menu bg on ANY VGA page at y=48, x=160
-  {
-    // Page bases (linear): page1=0x8320, page2=0x19AA0, page3=0x2B220
-    // Target within page: 48*344 + 160 = 0x4120
-    static const uint32_t pw = 48*344 + 160; // 0x4120
-    static const uint32_t t1 = 0x8320 + pw;   // page 1
-    static const uint32_t t2 = 0x19AA0 + pw;  // page 2
-    static const uint32_t t3 = 0x2B220 + pw;  // page 3
-    if (offset == t1 || offset == t2 || offset == t3) {
-      static uint8_t prev[3] = {};
-      int pg = (offset == t1) ? 0 : (offset == t2) ? 1 : 2;
-      if (color != prev[pg]) {
-        void* ret0 = __builtin_return_address(0);
-        extern void drawPixel(uint32_t, uint8_t);
-        ptrdiff_t rel0 = (char*)ret0 - (char*)(void*)drawPixel;
-        printf("TRAP: pg%d color=%d->%d rel0=0x%lx\n", pg+1, prev[pg], color, (unsigned long)rel0);
-        prev[pg] = color;
-      }
-    }
-  }
   myDrawInfo->drawBuffer[offset] = color;
+
 }
 /*void drawPixel(uint32_t offset, uint16_t color)
 {
@@ -129,6 +111,7 @@ void setPalette(uint8_t color, uint8_t r, uint8_t g, uint8_t b)
 
 bool redraw_tilemap(m2c::_STATE *_state)
 {
+
     X86_REGREF
 	  //m2c::_STATE *_state;
 	//sub_1712b:
@@ -1177,6 +1160,7 @@ bx = offset;
 	    offset);*/
 //screen_offset = bx;
 myOffset = bx;
+{ static uint32_t prev_off = 0xFFFFFFFF; if (bx != (uint16_t)prev_off) { printf("V2-PAGE: myOffset %x->%x yD=%x yS=%x xD=%x xS=%x pg=%x\n", (uint16_t)prev_off, bx, y_disp_offset, y_some_offset, x_disp_offset, x_some_offset, page_offset); prev_off = bx; } }
 
 cs=0x1a2;eip=0x0067cb; 	X(PUSHF);	// 15462 pushf ;~ 01A2:67CB
 cs=0x1a2;eip=0x0067cc; 	T(CLI);	// 15463 cli ;~ 01A2:67CC
@@ -2419,7 +2403,6 @@ locret_1047b:
 cs=0x1a2;eip=0x00047b; 	J(RETN(0));	// 610 retn ;~ 01A2:047B
 sub_1047c:
 	// 617
- { extern bool v2_has_viewport_chunk_fn(); printf("V2-MENU: sub_1047c called, level=%x byte_2aa9a=%x\n", word_2aa8d, byte_2aa9a); }
 cs=0x1a2;eip=0x00047c; 	T(MOV(ax, 0));	// 619 mov     ax, 0 ;~ 01A2:047C
 ret_1a2_47f:
 	// 4427
@@ -2888,7 +2871,7 @@ cs=0x1a2;eip=0x0008b8; 	J(CALL(sub_12ce4,0));	// 1130 call    sub_12CE4 ;~ 01A2:
 ret_1a2_8bb:
 	// 4474
 cs=0x1a2;eip=0x0008bb; 	X(MOV(word_2aaa9, 0x27));	// 1131 mov     word_2AAA9, 27h ; ''' ;~ 01A2:08BB
-// word_2aaa9 = 0; // skip intro
+// word_2aaa9 = 0x26; // DEBUG: start at chunk intro level for testing
 cs=0x1a2;eip=0x0008c1; 	X(MOV(word_288a2, 0));	// 1132 mov     word_288A2, 0 ;~ 01A2:08C1
 cs=0x1a2;eip=0x0008c7; 	J(RETN(0));	// 1133 retn ;~ 01A2:08C7
 sub_108c8:

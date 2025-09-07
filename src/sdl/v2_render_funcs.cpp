@@ -10,6 +10,11 @@
 #include <cstdio>
 #include "render_v2.h"
 
+// For reading drawBuffer during chunk levels (VGA triple-buffer mirroring)
+struct myDrawInfoS { uint8_t drawBuffer[65536*4]; SDL_Color drawPalette[256]; uint32_t myOffset; uint8_t myPixelOffset; };
+extern struct myDrawInfoS* myDrawInfo;
+extern uint32_t myOffset;
+
 // V2 rendering state — definitions (declared extern in render_v2.h)
 uint8_t* v2_m2c_base = nullptr;
 uint8_t  v2_render_buf[320*200];
@@ -49,21 +54,34 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
     uint8_t* buf = v2_render_buf;
 
-    // If a viewport chunk is active (intro screens), skip tile rendering.
-    // The chunk was written to v2_render_buf once by v2_draw_viewport_chunk.
-    // UI/sprite writes accumulate on top of the persistent buffer.
-    if (v2_has_viewport_chunk) {
-        return;
-    }
-
-    // Normal: clear viewport and draw tiles
-    memset(buf, 0, 320*176);
-
     // Tile map segment (FS)
     uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
     // Tile graphics segment
     uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
+
     if (!fs_seg || !tgfx_seg) return;
+
+    if (v2_has_viewport_chunk) {
+        // Chunk active: copy viewport from drawBuffer (first renderer's current page).
+        // The VM and dirty rect system maintain drawBuffer. We read it directly
+        // because the VGA triple-buffering can't be replicated with a single buffer.
+        if (myDrawInfo) {
+            // Copy viewport from drawBuffer (current display page)
+            uint32_t base = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
+            for (int y = 0; y < 176; y++)
+                for (int x = 0; x < 320; x++)
+                    buf[y * 320 + x] = myDrawInfo->drawBuffer[base + y * 344 + x];
+            // Copy HUD from drawBuffer (VGA split screen at offset 0).
+            // HUD chunk has 64 rows, all displayed (RENDER_HEIGHT_V2=240).
+            for (int y = 0; y < 64; y++)
+                for (int x = 0; x < 320; x++)
+                    v2_hud_buf[y * 320 + x] = myDrawInfo->drawBuffer[y * 344 + x];
+        }
+        return;
+    }
+
+    // Normal: clear and draw tiles
+    memset(buf, 0, 320*176);
 
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
@@ -174,22 +192,20 @@ void v2_draw_tiles(uint16_t ds_val) {
 // Writes ALL colors including 0 (matching original VGA behavior where mask
 // controls which bytes are written, not the color value).
 static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
-    // Clip to viewport area (320x176). Rows 176-199 = HUD, drawn separately.
-    // Matches original VGA split screen: sprites beyond row 175 are not visible.
     if (sx >= 0 && sx < 320 && sy >= 0 && sy < 176)
         buf[sy * 320 + sx] = color;
 }
 
 void v2_draw_sprites(uint16_t ds_val) {
-    if (!myDrawInfo_v2 || !v2_m2c_base) return;
+    if (!v2_m2c_base || !myDrawInfo_v2) return;
 
     uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+
     uint8_t* buf = v2_render_buf;
 
     // Viewport origin — pixel scroll values
     int viewport_x = (int)*(int16_t*)(ds_base + 0x44);
     int viewport_y = (int)*(int16_t*)(ds_base + 0x46);
-
     for (int obj = 0xFE; obj >= 0; obj -= 2) {
         uint16_t flags = *(uint16_t*)(ds_base + obj + 0x44D);
 
@@ -577,6 +593,16 @@ void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
 void v2_clear_viewport_chunk() {
     v2_has_viewport_chunk = false;
     memset(v2_render_buf, 0, 320*200);
+}
+
+bool v2_has_chunk_active() {
+    return v2_has_viewport_chunk;
+}
+
+// Just clear the flag — v2_draw_tiles will memset+draw on the next frame.
+// No buffer clear here to avoid a black flash frame.
+void v2_deactivate_chunk() {
+    v2_has_viewport_chunk = false;
 }
 
 // ============================================================================
