@@ -1843,6 +1843,19 @@ start:
 			   myDrawInfo->drawBuffer[j*320+i] = 1;*/
 	}
 	// 35
+	// V2: dump static EXE data segment (seg004, NOT current DS which is PSP at this point)
+	{
+		static bool dumped = false;
+		if (!dumped) {
+			dumped = true;
+			// seg004 = m2c::m + 0x19F00, but we use seg_offset(seg004) * 16 to compute address
+			uint8_t* seg004_ptr = (uint8_t*)raddr(seg_offset(seg004), 0);
+			FILE* f = fopen("ds_static.bin", "wb");
+			if (f) { fwrite(seg004_ptr, 1, 0x10000, f); fclose(f);
+			         printf("V2: dumped seg004 (0x%04X) to ds_static.bin, ds[0x945A]=%04X\n",
+			                seg_offset(seg004), *(uint16_t*)(seg004_ptr + 0x945A)); }
+		}
+	}
 cs=0x1a2;eip=0x000000; 	J(CALL(sub_12948,0));	// 36 call    sub_12948 ;~ 01A2:0000
 ret_1a2_3:
 	// 4369
@@ -1852,9 +1865,16 @@ cs=0x1a2;eip=0x000009; 	J(CALL(sub_17561,0));	// 39 call    sub_17561 ;~ 01A2:00
 cs=0x1a2;eip=0x00000c; 	J(CALL(sub_167ff,0));	// 40 call    sub_167FF ;~ 01A2:000C
 cs=0x1a2;eip=0x00000f; 	J(CALL(sub_12ca3,0));	// 41 call    sub_12CA3 ;~ 01A2:000F
 cs=0x1a2;eip=0x000012; 	J(CALL(sub_108b8,0));	// 42 call    sub_108B8 ;~ 01A2:0012
-	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); } // V2: set base before first level load
+	// V2: copy DS + segments to shadow AFTER all startup functions.
+	// At this point DS = seg004 (data segment), fully initialized by sub_12948..sub_108b8:
+	// - segments allocated (sub_12ab8), DATA.DAT open (sub_12989), PRNG seeded (sub_12948)
+	// - VGA tables computed (sub_167ff), game state cleared (sub_12ca3), level set (sub_108b8)
+	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); v2_vm_init_shadow_early(ds); }
 cs=0x1a2;eip=0x000015; 	J(CALL(sub_11080,0));	// 43 call    sub_11080 ;~ 01A2:0015
 cs=0x1a2;eip=0x000018; 	X(MOV(word_3287c, 1));	// 44 mov     word_3287C, 1 ;~ 01A2:0018
+	// V2: run v2_run_animation_vm — level change detection triggers v2_sub_11080 on shadow.
+	// Then verify compares shadow (v2 init result) vs real (original init result).
+	if (myDrawInfo_v2) { v2_run_animation_vm(ds); v2_vm_verify_after_init(ds); }
 loc_1001e:
 	// 4370
  if (need_quit) {
@@ -1889,11 +1909,13 @@ cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:00
 cs=0x1a2;eip=0x00003c; 	J(CALL(sub_1386b,0));	// 58 call    sub_1386B ;~ 01A2:003C
 cs=0x1a2;eip=0x00003f; 	J(CALL(sub_1625d,0));	// 59 call    sub_1625D ;~ 01A2:003F
 cs=0x1a2;eip=0x000042; 	J(CALL(sub_15546,0));	// 60 call    sub_15546 ;~ 01A2:0042
+	if (myDrawInfo_v2) v2_vm_verify_collision(ds);
 cs=0x1a2;eip=0x000045; 	J(CALL(sub_13916,0));	// 61 call    sub_13916 ;~ 01A2:0045
 loc_10048:
 	// 4371
 	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); }
 cs=0x1a2;eip=0x000048; 	J(CALL(sub_1064b,0));	// 64 call    sub_1064B ;~ 01A2:0048
+	if (myDrawInfo_v2) { v2_vm_verify_game_loop(ds); v2_vm_verify_tilemap(ds); v2_vm_verify_all_segments(ds); }
 cs=0x1a2;eip=0x00004b; 	J(CALL(sub_12fc6,0));	// 65 call    sub_12FC6 ;~ 01A2:004B
 	static bool seg003_initialized = false;
 	if (!seg003_initialized) {
@@ -1903,7 +1925,7 @@ cs=0x1a2;eip=0x00004b; 	J(CALL(sub_12fc6,0));	// 65 call    sub_12FC6 ;~ 01A2:00
 	}
 cs=0x1a2;eip=0x00004e; 	J(CALL(sub_10130,0));	// 66 call    sub_10130 ;~ 01A2:004E
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
-cs=0x1a2;eip=0x000051; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); J(CALLF(sub_1de05,0));	// 67 call    sub_1DE05 ;~ 01A2:0051
+cs=0x1a2;eip=0x000051; 	J(CALLF(sub_1de05,0));	// 67 call    sub_1DE05 ;~ 01A2:0051
 cs=0x1a2;eip=0x000056; 	J(CALL(sub_165aa,0));	// 68 call    sub_165AA ;~ 01A2:0056
 cs=0x1a2;eip=0x000059; 	J(CALL(sub_16661,0));	// 69 call    sub_16661 ;~ 01A2:0059
 cs=0x1a2;eip=0x00005c; 	J(CALL(sub_1406d,0));	// 70 call    sub_1406D ;~ 01A2:005C
@@ -1911,12 +1933,10 @@ cs=0x1a2;eip=0x00005f; 	J(CALLF(sub_1dd9c,0));	// 71 call    sub_1DD9C ;~ 01A2:0
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call AFTER to check if original initializes data
 cs=0x1a2;eip=0x000064; 	T(MOV(ax, 0x0FFFE));	// 72 mov     ax, 0FFFEh ;~ 01A2:0064
 	sub_1c8f1_door_rendering_with_state(_state);  // RECREATED: Call our implementation before original
-	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x000067; 	J(CALLF(sub_1c8f1,0));	// 73 call    sub_1C8F1 ;~ 01A2:0067
 
-cs=0x1a2;eip=0x00006c; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 74 call    sub_1E0C7 ;~ 01A2:006C
+cs=0x1a2;eip=0x00006c; 	J(CALLF(sub_1e0c7,0));	// 74 call    sub_1E0C7 ;~ 01A2:006C
 cs=0x1a2;eip=0x000071; 	J(CALL(sub_16775,0));	// 75 call    sub_16775 ;~ 01A2:0071
-	if (myDrawInfo_v2) v2_swap_render_buf();
 cs=0x1a2;eip=0x000074; 	J(CALL(sub_12e16,0));	// 76 call    sub_12E16 ;~ 01A2:0074
 cs=0x1a2;eip=0x000077; 	J(CALL(sub_15530,0));	// 77 call    sub_15530 ;~ 01A2:0077
 cs=0x1a2;eip=0x00007a; 	J(CALL(sub_10704,0));	// 78 call    sub_10704 ;~ 01A2:007A
@@ -3389,8 +3409,14 @@ cs=0x1a2;eip=0x001171; 	J(CALL(sub_11446,0));	// 2330 call    sub_11446 ;~ 01A2:
 cs=0x1a2;eip=0x001174; 	J(CALL(sub_113b0,0));	// 2331 call    sub_113B0 ;~ 01A2:1174
 cs=0x1a2;eip=0x001177; 	J(CALL(sub_113d8,0));	// 2332 call    sub_113D8 ;~ 01A2:1177
 cs=0x1a2;eip=0x00117a; 	J(CALL(sub_17749,0));	// 2333 call    sub_17749 ;~ 01A2:117A
+ { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
+   printf("ORIG-BEFORE-173c7: FS[960]=%04X FS[0]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0)); }
 cs=0x1a2;eip=0x00117d; 	J(CALL(sub_173c7,0));	// 2334 call    sub_173C7 ;~ 01A2:117D
+ { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
+   printf("ORIG-AFTER-173c7: FS[960]=%04X FS[0]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0)); }
 cs=0x1a2;eip=0x001180; 	J(CALL(sub_11439,0));	// 2335 call    sub_11439 ;~ 01A2:1180
+ { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
+   printf("ORIG-AFTER-11439: FS[960]=%04X [962]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0x962)); }
 cs=0x1a2;eip=0x001183; 	J(CALL(sub_13ba5,0));	// 2336 call    sub_13BA5 ;~ 01A2:1183
 cs=0x1a2;eip=0x001186; 	J(CALL(sub_13a0e,0));	// 2337 call    sub_13A0E ;~ 01A2:1186
 cs=0x1a2;eip=0x001189; 	J(CALL(sub_115d2,0));	// 2338 call    sub_115D2 ;~ 01A2:1189
@@ -8662,6 +8688,7 @@ cs=0x1a2;eip=0x003fbf; 	T(CLC);	// 8414 clc ;~ 01A2:3FBF
 cs=0x1a2;eip=0x003fc0; 	J(RETN(0));	// 8415 retn ;~ 01A2:3FC0
 sub_13fc2:
 	// 8424
+ { static int orig_13fc2_cnt = 0; orig_13fc2_cnt++; printf("ORIG-sub_13fc2: call #%d si=%d di=%d ax=%04X\n", orig_13fc2_cnt, si, di, ax); }
 cs=0x1a2;eip=0x003fc2; 	X(MOV(*(dw*)(raddr(ds,0x32)), ax));	// 8426 mov     ds:32h, ax ;~ 01A2:3FC2
 ret_1a2_3fc5:
 	// 5101
@@ -14004,6 +14031,7 @@ cs=0x1a2;eip=0x0065a7; 	J(LOOP(loc_165a0));	// 15182 loop    loc_165A0 ;~ 01A2:6
 cs=0x1a2;eip=0x0065a9; 	J(RETN(0));	// 15183 retn ;~ 01A2:65A9
 sub_165aa:
 	// 15189
+ { static int rot_cnt = 0; rot_cnt++; printf("ORIG-ROT[%d]: 92F9=%04X 92FB=%04X 92F7=%04X\n", rot_cnt, *(dw*)(raddr(ds,0x92F9)), *(dw*)(raddr(ds,0x92FB)), *(dw*)(raddr(ds,0x92F7))); }
 cs=0x1a2;eip=0x0065aa; 	T(MOV(ax, *(dw*)(raddr(ds,0x92F9))));	// 15191 mov     ax, ds:92F9h ;~ 01A2:65AA
 ret_1a2_65ad:
 	// 5730
@@ -14985,6 +15013,7 @@ cs=0x1a2;eip=0x0073f1; 	T(MOV(bx, 0));	// 16850 mov     bx, 0 ;~ 01A2:73F1
 cs=0x1a2;eip=0x0073f4; 	T(MOV(di, 0));	// 16851 mov     di, 0 ;~ 01A2:73F4
 loc_173f7:
 	// 5824
+ { static int tc173=0; tc173++; if ((uint16_t)(bp+di) >= 0x960 || di >= 0x960) printf("ORIG-173C7-WRITE: tc=%d di=%04X bp+di=%04X rows_left=%d cols_left=%d\n", tc173, di, (uint16_t)(bp+di), word_17469, word_17467); }
 cs=0x1a2;eip=0x0073f7; 	T(MOV(si, *(dw*)(raddr(es,bx))));	// 16855 mov     si, es:[bx] ;~ 01A2:73F7
 cs=0x1a2;eip=0x0073fa; 	T(AND(si, 0x3FF));	// 16856 and     si, 3FFh ;~ 01A2:73FA
 cs=0x1a2;eip=0x0073fe; 	T(SHL(si, 3));	// 16857 shl     si, 3 ;~ 01A2:73FE
@@ -15590,6 +15619,10 @@ cs=0x1a2;eip=0x0078f1; 	T(TEST(*(dw*)(raddr(ds,0x302)), 0x0FFFF));	// 17515 test
 ret_1a2_78f7:
 	// 5876
 cs=0x1a2;eip=0x0078f7; 	J(JNZ(locret_17911));	// 17516 jnz     short locret_17911 ;~ 01A2:78F7
+// TODO: sub_1C7BD = AIL fade_out_sequence(1000ms, 0, handle, driver)
+// This is a seg002 AIL trampoline — calls real AIL driver which is not loaded in SDL build.
+// Should be replaced with SDL equivalent: fade_xmidi_external(1000) or similar.
+// For now: AIL call goes through trampoline and returns with no effect (driver not present).
 cs=0x1a2;eip=0x0078f9; 	X(PUSHF);	// 17517 pushf ;~ 01A2:78F9
 cs=0x1a2;eip=0x0078fa; 	T(CLI);	// 17518 cli ;~ 01A2:78FA
 cs=0x1a2;eip=0x0078fb; 	X(PUSH((dw)0x3E8));	// 17519 push    3E8h ;~ 01A2:78FB

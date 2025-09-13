@@ -10,7 +10,7 @@
 // from v2 VM's shadow DS instead of real DS. This makes rendering independent
 // from the original VM — v2 VM's writes to shadow are what gets rendered.
 // Tile map and tile/sprite graphics segments remain shared (read-only level data).
-// #define V2_RENDER_FROM_SHADOW
+#define V2_RENDER_FROM_SHADOW
 
 // ============================================================================
 // Заголовочный файл для второго окна (render_v2)
@@ -68,6 +68,9 @@ extern void v2_run_animation_vm(uint16_t ds_val);
 // Used by v2 renderer when V2_RENDER_FROM_SHADOW is defined.
 extern uint8_t* v2_vm_get_shadow_ds();
 
+// Sync shadow DS from real DS before rendering. Call right before v2_draw_tiles.
+extern void v2_vm_sync_for_render();
+
 // Mutex to synchronize render callback DS writes with replay verify DS snapshots.
 // Render callback (sub_1797b) DECs word_3287C in DS from render thread.
 // Replay verify snapshots DS before/after each opcode in game thread.
@@ -83,6 +86,18 @@ extern bool v2_vm_is_tilemap_shadow_valid();
 extern uint8_t* v2_vm_get_shadow_tilegfx();
 extern bool v2_vm_is_tilegfx_shadow_valid();
 
+// V2 VM shadow animation data (ds:0x2E67)
+extern uint8_t* v2_vm_get_shadow_animdata();
+extern bool v2_vm_is_animdata_shadow_valid();
+// V2 VM shadow GS segment (ds:0x2E61, tile masks)
+extern uint8_t* v2_vm_get_shadow_gs();
+extern bool v2_vm_is_gs_shadow_valid();
+// V2 VM shadow sound data (ds:0x2E6B)
+extern uint8_t* v2_vm_get_shadow_sound();
+extern bool v2_vm_is_sound_shadow_valid();
+// V2 VM shadow chunk buffer (ds:0x2E77)
+extern uint8_t* v2_vm_get_shadow_chunk();
+extern bool v2_vm_is_chunk_shadow_valid();
 // V2 VM shadow sprite data — 256KB buffer for decompressed sprites.
 // Returns pointer to shadow sprite data if the address falls in shadow range, else nullptr.
 extern uint8_t* v2_vm_get_shadow_sprite(uint32_t linear_addr);
@@ -94,5 +109,17 @@ extern void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax
 extern void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si);
 extern void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di);
 extern void v2_draw_hud_healthbar(uint16_t ds_val, uint16_t health_ax, uint16_t viking_bx, uint16_t pos_di);
+
+// Init shadow DS from real DS — call BEFORE sub_11080 to capture pre-init state
+extern void v2_vm_init_shadow_early(uint16_t ds_val);
+// Run v2 init chain (sub_11080 equivalent) on shadow DS
+extern void v2_vm_run_init(uint16_t ds_val);
+// Post-init verification: compare all segments after init, before game loop
+extern void v2_vm_verify_after_init(uint16_t ds_val);
+// Post-game-loop verification
+extern void v2_vm_verify_game_loop(uint16_t ds_val);
+extern void v2_vm_verify_collision(uint16_t ds_val);
+extern void v2_vm_verify_tilemap(uint16_t ds_val);
+extern void v2_vm_verify_all_segments(uint16_t ds_val);
 
 #endif // RENDER_V2_H

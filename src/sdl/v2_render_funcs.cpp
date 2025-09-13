@@ -95,17 +95,13 @@ void v2_draw_tiles(uint16_t ds_val) {
     // Normal: clear and draw tiles
     memset(buf, 0, 320*176);
 
-#ifdef V2_RENDER_FROM_SHADOW
-    uint8_t* fs_base = v2_vm_is_tilemap_shadow_valid()
-        ? v2_vm_get_shadow_tilemap()
-        : v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgfx_base = v2_vm_is_tilegfx_shadow_valid()
-        ? v2_vm_get_shadow_tilegfx()
-        : v2_m2c_base + ((uint32_t)tgfx_seg << 4);
-#else
-    uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
-#endif
+    // Tilemap: read from shadow tilemap (ES = ds:0x2E63, NOT FS = ds:0x2E69).
+    // v2 renders directly from game tilemap, not VGA render tilemap.
+    // Tile graphics: from shadow tilegfx.
+    uint8_t* fs_base = v2_vm_is_tilemap_shadow_valid() ? v2_vm_get_shadow_tilemap()
+                       : v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgfx_base = v2_vm_is_tilegfx_shadow_valid() ? v2_vm_get_shadow_tilegfx()
+                         : v2_m2c_base + ((uint32_t)tgfx_seg << 4);
 
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);  // row scroll
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);  // column scroll
@@ -290,12 +286,9 @@ void v2_draw_sprites(uint16_t ds_val) {
 
         // Sprite data: offset points to first data byte, mask at offset-1
         uint32_t sprite_linear = ((uint32_t)sprite_seg << 4) + sprite_off - 1;
-#ifdef V2_RENDER_FROM_SHADOW
-        uint8_t* sprite = v2_vm_get_shadow_sprite(sprite_linear);
-        if (!sprite) continue; // no shadow data for this sprite — skip
-#else
-        uint8_t* sprite = v2_m2c_base + sprite_linear;
-#endif
+        // Sprite data: from shadow if available, else real memory
+        uint8_t* shadow_sprite = v2_vm_get_shadow_sprite(sprite_linear);
+        uint8_t* sprite = shadow_sprite ? shadow_sprite : (v2_m2c_base + sprite_linear);
 
         // Column formula: sx0 + N*4 + section (normal) or
         // sx0 + (sprite_w-1) - (N*4 + section) (flipped).
@@ -387,18 +380,13 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint16_t gs_seg = *(uint16_t*)(ds_base + 0x2E61);
     if (!fs_seg || !tgfx_seg || !gs_seg) return;
 
-#ifdef V2_RENDER_FROM_SHADOW
-    uint8_t* fs_base = v2_vm_is_tilemap_shadow_valid()
-        ? v2_vm_get_shadow_tilemap()
-        : v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgfx_base = v2_vm_is_tilegfx_shadow_valid()
-        ? v2_vm_get_shadow_tilegfx()
-        : v2_m2c_base + ((uint32_t)tgfx_seg << 4);
-#else
-    uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
-#endif
-    uint8_t* gs_base = v2_m2c_base + ((uint32_t)gs_seg << 4);
+    // All from shadow buffers for full independence
+    uint8_t* fs_base = v2_vm_is_tilemap_shadow_valid() ? v2_vm_get_shadow_tilemap()
+                       : v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgfx_base = v2_vm_is_tilegfx_shadow_valid() ? v2_vm_get_shadow_tilegfx()
+                         : v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+    uint8_t* gs_base = v2_vm_is_gs_shadow_valid() ? v2_vm_get_shadow_gs()
+                       : v2_m2c_base + ((uint32_t)gs_seg << 4);
 
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
@@ -552,10 +540,14 @@ static inline void v2_hud_pixel(int x, int y, uint8_t color) {
 // Format: [plane0: plane_size bytes][plane1][plane2][plane3]
 // Each plane byte at offset i → VGA offset i, plane p.
 // ============================================================================
+// Replica of sub_10cd8: draw raw chunk to HUD area.
+// Original: OUT(0x3C4, 0x102/0x202/0x402/0x802) × 4 planes; copy plane_size bytes each; drawPixel().
+// For v2: draws to v2_hud_buf linear buffer.
 void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_size) {
-    if (!v2_m2c_base) return;
-
-    uint8_t* chunk = v2_m2c_base + ((uint32_t)chunk_seg << 4);
+    // Chunk data from shadow buffer (loaded by v2_read_raw_chunk or v2_read_chunk)
+    uint8_t* chunk = v2_vm_is_chunk_shadow_valid() ? v2_vm_get_shadow_chunk()
+                     : (v2_m2c_base ? v2_m2c_base + ((uint32_t)chunk_seg << 4) : nullptr);
+    if (!chunk) return;
 
     memset(v2_hud_buf, 0, sizeof(v2_hud_buf));
 
@@ -578,13 +570,13 @@ void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_
 // This is needed because the main render loop always calls v2_draw_tiles,
 // which would otherwise overwrite the chunk with memset+tiles.
 // ============================================================================
+// Replica of sub_10cd8 with di!=0: draw raw chunk to viewport area.
+// Original: OUT(0x3C4, 0x102/0x202/0x402/0x802) × 4 planes; drawPixel().
+// For v2: draws to v2_render_buf linear buffer.
 void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
-    if (!v2_m2c_base) {
-        printf("V2-DBG: v2_draw_viewport_chunk SKIPPED (v2_m2c_base=NULL), seg=%x ps=%x\n", chunk_seg, plane_size);
-        return;
-    }
-
-    uint8_t* chunk = v2_m2c_base + ((uint32_t)chunk_seg << 4);
+    uint8_t* chunk = v2_vm_is_chunk_shadow_valid() ? v2_vm_get_shadow_chunk()
+                     : (v2_m2c_base ? v2_m2c_base + ((uint32_t)chunk_seg << 4) : nullptr);
+    if (!chunk) return;
 
     memset(v2_viewport_chunk_pixels, 0, sizeof(v2_viewport_chunk_pixels));
 
@@ -666,6 +658,9 @@ void v2_deactivate_chunk() {
 //   col%4 → section {0→plane3(off 0), 1→plane0(off 56), 2→plane1(off 112), 3→plane2(off 168)}
 //   byte = col/4, color = data[section_off + row*8 + byte]
 // ============================================================================
+// Replica of sub_11aa4: draw 32×7 portrait to VGA HUD area.
+// Original: OUT(0x3C4, 0x802/0x102/0x202/0x402) × 4 planes; 7 rows × 4 MOVSW; drawPixel().
+// For v2: draws to v2_hud_buf linear buffer.
 void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si) {
     if (!v2_m2c_base) return;
 
@@ -695,6 +690,9 @@ void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait
     }
 }
 
+// Replica of sub_1183d: draw 16×16 HUD item to VGA.
+// Original: OUT(0x3C4, 0x802/0x102/0x202/0x402) × 4 planes; 16 rows × MOVSW; drawPixel().
+// For v2: draws to v2_hud_buf linear buffer instead of VGA Mode X planes.
 void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
     if (!v2_m2c_base) return;
 
@@ -740,6 +738,9 @@ void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
 // Uses scatter-write pattern: each entry is (si_offset, vga_offset, plane).
 // Word writes cover 2 adjacent VGA bytes in the same plane.
 // ============================================================================
+// Replica of sub_118ad: draw HUD selector indicator.
+// Original: drawPixel() scatter-write pattern to 3 VGA pages.
+// For v2: draws to v2_hud_buf linear buffer.
 void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
     if (!v2_m2c_base) return;
 
@@ -798,6 +799,9 @@ void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
 //   VGA offset → hud_x = (off % 86)*4 + 1, hud_y = off / 86.
 //   (first plane written is plane 1, not plane 3)
 // ============================================================================
+// Replica of sub_117d0: draw 32×24 healthbar to VGA HUD area.
+// Original: OUT(0x3C4, 0x202) plane 1; 24 rows × 4 MOVSW + 0x4E skip; drawPixel() × 4 planes.
+// For v2: draws to v2_hud_buf linear buffer.
 void v2_draw_hud_healthbar(uint16_t ds_val, uint16_t health_ax, uint16_t viking_bx, uint16_t pos_di) {
     if (!v2_m2c_base) return;
 
