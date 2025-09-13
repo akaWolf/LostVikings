@@ -2913,6 +2913,8 @@ cs=0x1a2;eip=0x00086f; 	T(MOV(bx, word_2b044));	// 1101 mov     bx, word_2B044 ;
 ret_1a2_873:
 	// 4472
 cs=0x1a2;eip=0x000873; 	T(CMP(bx, word_2a66f));	// 1102 cmp     bx, word_2A66F ;~ 01A2:0873
+{ if(bx!=word_2a66f) { uint16_t cmd=*(dw*)(raddr(ds,bx+0x1DA7));
+  fprintf(stderr,"ORIG-1086f[lv=%04X]: rd=%04X wr=%04X cmd=%d w34=%04X\n",*(dw*)(raddr(ds,0x25AD)),bx,word_2a66f,cmd,*(dw*)(raddr(ds,0x34))); } }
 cs=0x1a2;eip=0x000877; 	J(JZ(loc_108a5));	// 1103 jz      short loc_108A5 ;~ 01A2:0877
 cs=0x1a2;eip=0x000879; 	T(MOV(si, word_288a2));	// 1104 mov     si, word_288A2 ;~ 01A2:0879
 cs=0x1a2;eip=0x00087d; 	T(MOV(di, *(dw*)(raddr(ds,si+0x1A85))));	// 1105 mov     di, [si+1A85h] ;~ 01A2:087D
@@ -5589,6 +5591,7 @@ cs=0x1a2;eip=0x0024b5; 	X(POP(di));	// 4807 pop     di ;~ 01A2:24B5
 cs=0x1a2;eip=0x0024b6; 	X(POP(si));	// 4808 pop     si ;~ 01A2:24B6
 cs=0x1a2;eip=0x0024b7; 	X(PUSH(si));	// 4809 push    si ;~ 01A2:24B7
 cs=0x1a2;eip=0x0024b8; 	X(PUSH(di));	// 4810 push    di ;~ 01A2:24B8
+cs=0x1a2;eip=0x0024b9; 	J(CALL(sub_12549,0));	// 4811 call    sub_12549 ;~ 01A2:24B9 (recovered: E8 8D 00)
 cs=0x1a2;eip=0x0024bc; 	J(CALL(sub_12388,0));	// 4815 call    sub_12388 ;~ 01A2:24BC
 cs=0x1a2;eip=0x0024bf; 	X(POP(di));	// 4816 pop     di ;~ 01A2:24BF
 cs=0x1a2;eip=0x0024c0; 	T(INC(di));	// 4817 inc     di ;~ 01A2:24C0
