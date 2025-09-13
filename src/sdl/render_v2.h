@@ -6,6 +6,12 @@
 #include <mutex>
 #include <SDL2/SDL.h>
 
+// When defined, v2 renderer reads DS data (viewport, objects, flags, scroll)
+// from v2 VM's shadow DS instead of real DS. This makes rendering independent
+// from the original VM — v2 VM's writes to shadow are what gets rendered.
+// Tile map and tile/sprite graphics segments remain shared (read-only level data).
+// #define V2_RENDER_FROM_SHADOW
+
 // ============================================================================
 // Заголовочный файл для второго окна (render_v2)
 // ============================================================================
@@ -55,6 +61,25 @@ extern void v2_swap_render_buf();
 extern void v2_set_m2c_base(void* base);
 
 // HUD rendering — called from seg000
+// Animation VM — parallel to sub_14207
+extern void v2_run_animation_vm(uint16_t ds_val);
+
+// V2 VM shadow DS — 64KB copy of DS segment, written by v2 VM opcodes.
+// Used by v2 renderer when V2_RENDER_FROM_SHADOW is defined.
+extern uint8_t* v2_vm_get_shadow_ds();
+
+// V2 VM shadow tile map — 64KB copy of tile map segment, written by v2 VM.
+extern uint8_t* v2_vm_get_shadow_tilemap();
+extern bool v2_vm_is_tilemap_shadow_valid();
+
+// V2 VM shadow tile graphics — 64KB copy of tile graphics segment.
+extern uint8_t* v2_vm_get_shadow_tilegfx();
+extern bool v2_vm_is_tilegfx_shadow_valid();
+
+// V2 VM shadow sprite data — 256KB buffer for decompressed sprites.
+// Returns pointer to shadow sprite data if the address falls in shadow range, else nullptr.
+extern uint8_t* v2_vm_get_shadow_sprite(uint32_t linear_addr);
+
 extern void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_size);
 extern void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size);
 extern void v2_clear_viewport_chunk();

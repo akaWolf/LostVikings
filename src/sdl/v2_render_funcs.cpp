@@ -15,6 +15,17 @@ struct myDrawInfoS { uint8_t drawBuffer[65536*4]; SDL_Color drawPalette[256]; ui
 extern struct myDrawInfoS* myDrawInfo;
 extern uint32_t myOffset;
 
+// Helper: get DS base pointer for v2 rendering.
+// With V2_RENDER_FROM_SHADOW: reads from v2 VM's shadow DS (independent from original).
+// Without: reads from real DS (same data as original VM).
+static inline uint8_t* v2_get_ds_base(uint16_t ds_val) {
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* shadow = v2_vm_get_shadow_ds();
+    if (shadow) return shadow;
+#endif
+    return v2_m2c_base + ((uint32_t)ds_val << 4);
+}
+
 // V2 rendering state — definitions (declared extern in render_v2.h)
 uint8_t* v2_m2c_base = nullptr;
 uint8_t  v2_render_buf[320*200];
@@ -51,7 +62,7 @@ static bool v2_has_viewport_chunk = false;
 void v2_draw_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
     uint8_t* buf = v2_render_buf;
 
     // Tile map segment (FS)
@@ -83,8 +94,17 @@ void v2_draw_tiles(uint16_t ds_val) {
     // Normal: clear and draw tiles
     memset(buf, 0, 320*176);
 
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* fs_base = v2_vm_is_tilemap_shadow_valid()
+        ? v2_vm_get_shadow_tilemap()
+        : v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgfx_base = v2_vm_is_tilegfx_shadow_valid()
+        ? v2_vm_get_shadow_tilegfx()
+        : v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+#else
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+#endif
 
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);  // row scroll
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);  // column scroll
@@ -199,7 +219,7 @@ static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
 void v2_draw_sprites(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
 
     uint8_t* buf = v2_render_buf;
 
@@ -268,7 +288,13 @@ void v2_draw_sprites(uint16_t ds_val) {
         if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 176 || sy0 < -sprite_h) continue;
 
         // Sprite data: offset points to first data byte, mask at offset-1
-        uint8_t* sprite = v2_m2c_base + ((uint32_t)sprite_seg << 4) + sprite_off - 1;
+        uint32_t sprite_linear = ((uint32_t)sprite_seg << 4) + sprite_off - 1;
+#ifdef V2_RENDER_FROM_SHADOW
+        uint8_t* sprite = v2_vm_get_shadow_sprite(sprite_linear);
+        if (!sprite) continue; // no shadow data for this sprite — skip
+#else
+        uint8_t* sprite = v2_m2c_base + sprite_linear;
+#endif
 
         // Column formula: sx0 + N*4 + section (normal) or
         // sx0 + (sprite_w-1) - (N*4 + section) (flipped).
@@ -352,7 +378,7 @@ void v2_draw_sprites(uint16_t ds_val) {
 void v2_draw_flagged_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
     uint8_t* buf = v2_render_buf;
 
     uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
@@ -360,8 +386,17 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint16_t gs_seg = *(uint16_t*)(ds_base + 0x2E61);
     if (!fs_seg || !tgfx_seg || !gs_seg) return;
 
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* fs_base = v2_vm_is_tilemap_shadow_valid()
+        ? v2_vm_get_shadow_tilemap()
+        : v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgfx_base = v2_vm_is_tilegfx_shadow_valid()
+        ? v2_vm_get_shadow_tilegfx()
+        : v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+#else
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+#endif
     uint8_t* gs_base = v2_m2c_base + ((uint32_t)gs_seg << 4);
 
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
@@ -450,7 +485,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 void v2_draw_ui(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
     uint8_t* buf = v2_render_buf;
 
     // Scan UI element list: 40 columns × 22 rows at ds:0x956C
@@ -633,7 +668,7 @@ void v2_deactivate_chunk() {
 void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si) {
     if (!v2_m2c_base) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
 
     // Portrait graphics pointer: ds:[si-0x7A7E] + 0x497D
     // Cast to uint16_t for x86 16-bit address wrapping
@@ -662,7 +697,7 @@ void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait
 void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
     if (!v2_m2c_base) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
 
     // Special case: slot 0x18 with item 0 → use item 0x17
     uint16_t item_id = item_ax;
@@ -707,7 +742,7 @@ void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
 void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
     if (!v2_m2c_base) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
     uint8_t* sel_data = ds_base + 0x637D;
 
     // VGA offset from lookup table (di already shifted by caller, uint16_t for x86 wrapping)
@@ -765,7 +800,7 @@ void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
 void v2_draw_hud_healthbar(uint16_t ds_val, uint16_t health_ax, uint16_t viking_bx, uint16_t pos_di) {
     if (!v2_m2c_base) return;
 
-    uint8_t* ds_base = v2_m2c_base + ((uint32_t)ds_val << 4);
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
 
     // Data source: bx = viking + health*3, then lookup at ds:[bx*2 - 0x7AB6]
     // uint16_t casts for x86 16-bit address wrapping

@@ -1880,7 +1880,9 @@ cs=0x1a2;eip=0x00002d; 	J(CALL(sub_11ba5,0));	// 53 call    sub_11BA5 ;~ 01A2:00
 cs=0x1a2;eip=0x000030; 	J(CALL(sub_12e79,0));	// 54 call    sub_12E79 ;~ 01A2:0030
 cs=0x1a2;eip=0x000033; 	J(CALL(sub_10813,0));	// 55 call    sub_10813 ;~ 01A2:0033
 cs=0x1a2;eip=0x000036; 	J(CALL(sub_1673c,0));	// 56 call    sub_1673C ;~ 01A2:0036
+	if (myDrawInfo_v2) v2_run_animation_vm(ds); // V2: run animation VM BEFORE original (same input state)
 cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:0039
+	// Per-opcode verification is done inline in sub_1424c's opcode loop (loc_142a6)
 cs=0x1a2;eip=0x00003c; 	J(CALL(sub_1386b,0));	// 58 call    sub_1386B ;~ 01A2:003C
 cs=0x1a2;eip=0x00003f; 	J(CALL(sub_1625d,0));	// 59 call    sub_1625D ;~ 01A2:003F
 cs=0x1a2;eip=0x000042; 	J(CALL(sub_15546,0));	// 60 call    sub_15546 ;~ 01A2:0042
@@ -6887,6 +6889,17 @@ cs=0x1a2;eip=0x003059; 	X(MOV(*(dw*)(raddr(ds,0x7C)), si));	// 6409 mov     ds:7
 cs=0x1a2;eip=0x00305d; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x1AAD))));	// 6410 mov     ax, [di+1AADh] ;~ 01A2:305D
 cs=0x1a2;eip=0x003061; 	X(MOV(*(dw*)(raddr(ds,0x80)), ax));	// 6411 mov     ds:80h, ax ;~ 01A2:3061
 cs=0x1a2;eip=0x003064; 	X(MOV(*(dw*)(raddr(ds,0x38C)), 0));	// 6412 mov     word ptr ds:38Ch, 0 ;~ 01A2:3064
+	// Debug: log when original runs anim frame with suspicious bx for obj 0
+	{ static bool orig_anim_dbg = false;
+	  if (!orig_anim_dbg && *(dw*)(raddr(ds,0x42)) == 0) {
+	    uint8_t first = *(uint8_t*)(raddr(es, bx));
+	    if (first > 0x1A) {
+	      orig_anim_dbg = true;
+	      printf("ORIG-ANIM: obj=0 bx=0x%04X first_byte=0x%02X es_seg=0x%04X timer(0x78)=0x%04X\n",
+	             (uint16_t)bx, first, (uint16_t)es, *(dw*)(raddr(ds,0x78)));
+	    }
+	  }
+	}
 cs=0x1a2;eip=0x00306a; 	J(CALL(sub_13084,0));	// 6413 call    sub_13084 ;~ 01A2:306A
 cs=0x1a2;eip=0x00306d; 	T(MOV(di, *(dw*)(raddr(ds,0x42))));	// 6414 mov     di, ds:42h ;~ 01A2:306D
 cs=0x1a2;eip=0x003071; 	X(MOV(*(dw*)(raddr(ds,di+0x1A0D)), bx));	// 6415 mov     [di+1A0Dh], bx ;~ 01A2:3071
@@ -6911,7 +6924,18 @@ cs=0x1a2;eip=0x003091; 	T(MOV(di, *(dw*)(raddr(es,bx))));	// 6437 mov     di, es
 cs=0x1a2;eip=0x003094; 	T(INC(bx));	// 6438 inc     bx ;~ 01A2:3094
 cs=0x1a2;eip=0x003095; 	T(AND(di, 0x0FF));	// 6439 and     di, 0FFh ;~ 01A2:3095
 cs=0x1a2;eip=0x003099; 	T(SHL(di, 1));	// 6440 shl     di, 1 ;~ 01A2:3099
+	{ uint8_t v2_anim_cmd = (uint8_t)(di >> 1); uint16_t v2_anim_bx_before = bx;
+	  // Snapshot DS before anim cmd for comparison
+	  static uint8_t anim_ds_before[0x1C00];
+	  if (myDrawInfo_v2) memcpy(anim_ds_before, raddr(ds,0), 0x1C00);
 cs=0x1a2;eip=0x00309b; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30bc6)+di)));	// 6441 call    ds:off_30BC6[di] ;~ 01A2:309B
+	if (myDrawInfo_v2) {
+		extern void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_ptr,
+			uint16_t obj_idx, uint8_t cmd, uint16_t bx_before, uint16_t bx_after);
+		v2_vm_replay_anim_cmd(anim_ds_before, (uint8_t*)raddr(ds,0), (uint8_t*)raddr(es,0),
+			*(uint16_t*)(raddr(ds,0x42)), v2_anim_cmd, v2_anim_bx_before, bx);
+	}
+	} // end anim cmd scope
 cs=0x1a2;eip=0x00309f; 	J(JMP(loc_13091));	// 6442 jmp     short loc_13091 ;~ 01A2:309F
 locret_130a1:
 	// 4895
@@ -8980,14 +9004,41 @@ cs=0x1a2;eip=0x00429e; 	X(MOV(*(dw*)(raddr(ds,si+0x132D)), ax));	// 8821 mov    
 loc_142a2:
 	// 5138
 cs=0x1a2;eip=0x0042a2; 	T(MOV(bx, *(dw*)(raddr(ds,si+0x132D))));	// 8824 mov     bx, [si+132Dh] ;~ 01A2:42A2
+	{ static int v2_verify_step; v2_verify_step = 0; // reset per-object opcode counter
+	// V2: Verify init state — compare es, bx, si (obj), ds:0x42, ds:0x38E
+	if (myDrawInfo_v2) {
+		extern void v2_vm_verify_init(uint16_t obj_idx, uint16_t orig_es, uint16_t orig_pc, uint16_t orig_obj42);
+		uint16_t v2_init_obj = *(uint16_t*)(raddr(ds, 0x42));
+		v2_vm_verify_init(v2_init_obj, es, bx, v2_init_obj);
+	}
 loc_142a6:
 	// 5139
 cs=0x1a2;eip=0x0042a6; 	T(MOV(si, *(dw*)(raddr(es,bx))));	// 8827 mov     si, es:[bx] ;~ 01A2:42A6
 cs=0x1a2;eip=0x0042a9; 	T(INC(bx));	// 8828 inc     bx ;~ 01A2:42A9
 cs=0x1a2;eip=0x0042aa; 	T(AND(si, 0x0FF));	// 8829 and     si, 0FFh ;~ 01A2:42AA
 cs=0x1a2;eip=0x0042ae; 	T(SHL(si, 1));	// 8830 shl     si, 1 ;~ 01A2:42AE
+	{ uint8_t v2_orig_opcode = (uint8_t)(si >> 1); uint16_t v2_pc_before = bx;
+	  uint16_t v2_acc_before = *(dw*)(raddr(ds,0x8A));
+	// V2 replay: snapshot DS BEFORE opcode
+	static uint8_t v2_ds_before[0x10000];
+	if (myDrawInfo_v2) memcpy(v2_ds_before, raddr(ds,0), 0x10000);
 cs=0x1a2;eip=0x0042b0; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	// 8831 call    ds:off_30CAC[si] ;~ 01A2:42B0
+	// V2 replay verification: run v2 on BEFORE state, compare with AFTER (original's result)
+	if (myDrawInfo_v2) {
+		extern void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
+			uint8_t* es_ptr, uint16_t obj_idx, int step,
+			uint8_t opcode, uint16_t pc_before, uint16_t acc_before,
+			uint16_t orig_pc_after, uint16_t orig_acc_after);
+		v2_vm_replay_verify(v2_ds_before, (uint8_t*)raddr(ds,0),
+			(uint8_t*)raddr(es,0),
+			*(uint16_t*)(raddr(ds,0x42)), v2_verify_step,
+			v2_orig_opcode, v2_pc_before, v2_acc_before,
+			bx, *(dw*)(raddr(ds,0x8A)));
+		v2_verify_step++;
+	}
+	} // end opcode scope
 cs=0x1a2;eip=0x0042b4; 	J(JMP(loc_142a6));	// 8832 jmp     short loc_142A6 ;~ 01A2:42B4
+	} // end per-object scope
 locret_142b6:
 	// 5140
 cs=0x1a2;eip=0x0042b6; 	J(RETN(0));	// 8837 retn ;~ 01A2:42B6
@@ -12532,6 +12583,15 @@ loc_15a93:
 	// 5573
 cs=0x1a2;eip=0x005a93; 	T(MOV(di, dx));	// 13530 mov     di, dx ;~ 01A2:5A93
 cs=0x1a2;eip=0x005a95; 	J(CALL(sub_14199,0));	// 13531 call    sub_14199 ;~ 01A2:5A95
+	{ static int orig15a70_cnt = 0; if (orig15a70_cnt < 5) { orig15a70_cnt++;
+	  uint16_t flt_di = *(dw*)(raddr(ds,0x34));
+	  uint16_t flt_addr = (uint16_t)(flt_di - 0x6B34);
+	  uint8_t fval0 = *(uint8_t*)(raddr(ds, flt_addr));
+	  uint8_t fval1 = *(uint8_t*)(raddr(ds, flt_addr+1));
+	  printf("ORIG-15A70: si=%d di(y)=%d al=%d cx=%d filter=%d obj=%d flt_addr=0x%04X fval[0]=%d fval[1]=%d\n",
+	         (uint16_t)si, (uint16_t)dx, (uint8_t)al, (uint16_t)cx, flt_di, *(dw*)(raddr(ds,0x42)),
+	         flt_addr, fval0, fval1);
+	}}
 cs=0x1a2;eip=0x005a98; 	T(MOV(di, *(dw*)(raddr(ds,0x34))));	// 13532 mov     di, ds:34h ;~ 01A2:5A98
 loc_15a9c:
 	// 5574
