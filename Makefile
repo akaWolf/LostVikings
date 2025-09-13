@@ -54,7 +54,7 @@ DEPS     := $(ALL_OBJS:.o=.d)
 all: vikings
 
 vikings: $(ALL_OBJS)
-	g++ $(DBG) -rdynamic -o $@ $^ $(SDL)
+	g++ $(DBG) -rdynamic -no-pie -o $@ $^ $(SDL)
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)

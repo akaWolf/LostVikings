@@ -1101,8 +1101,10 @@ cs=0x1a2;eip=0x0018ac; 	J(RETN(0));	// 3288 retn ;~ 01A2:18AC
  assert(0);
 }
 
+static int orig_pageflip_count = 0;
 bool set_display_memory_addr(m2c::_STATE *_state)
 {
+  orig_pageflip_count++;
   X86_REGREF
 	//m2c::_STATE *_state;
   	// 15428
@@ -1324,6 +1326,18 @@ cs=0x1a2;eip=0x000a18; 	J(LOOP(loc_10a11));	// 1289 loop    loc_10A11 ;~ 01A2:0A
 cs=0x1a2;eip=0x000a1a; 	T(MOV(bx, 0));	// 1290 mov     bx, 0 ;~ 01A2:0A1A
 	cs=seg_offset(seg000);
 cs=0x1a2;eip=0x000a1d; 	T(MOV(dx, *(dw*)(((db*)&word_10980))));	// 1291 mov     dx, cs:word_10980 ;~ 01A2:0A1D
+	// Dump compressed data + ring state for chunk 0x1AA debug
+	{ static int _dump_cnt = 0;
+	  if (num == 0x1AA && _dump_cnt < 1) { _dump_cnt++;
+	    fprintf(stderr, "ORIG-LZSS: chunk 0x1AA decomp=%d si=%04X bx=%04X\n", dx, si, bx);
+	    fprintf(stderr, "ORIG-COMP-HEX:");
+	    for (int i = 0; i < 32; i++) fprintf(stderr, " %02X", *(uint8_t*)raddr(ds, si + i));
+	    fprintf(stderr, "\n");
+	    fprintf(stderr, "ORIG-RING-HEX:");
+	    for (int i = 0; i < 32; i++) fprintf(stderr, " %02X", *(uint8_t*)raddr(ds, i));
+	    fprintf(stderr, "\n");
+	  }
+	}
 loc_10a22:
 	// 4487
 cs=0x1a2;eip=0x000a22; 	T(MOV(al, *(raddr(ds,si))));	// 1294 mov     al, [si] ;~ 01A2:0A22
@@ -1893,10 +1907,17 @@ loc_1001e:
    }
  }
 	// Signal FRAME_BEGIN BEFORE sub_12352 — so v2 compare sees pre-input DS
+	{ static int _origpf = 0; static uint16_t _prevlvl = 0xFFFF;
+	  uint16_t _curlvl = *(dw*)(raddr(ds,0x25AD));
+	  if (_curlvl != _prevlvl) {
+	    fprintf(stderr, "ORIG-GAMELOOP: level=%04X page_state=%04X/%04X/%04X pageflip_count=%d\n",
+	      _curlvl, *(dw*)(raddr(ds,0x92F7)), *(dw*)(raddr(ds,0x92F9)), *(dw*)(raddr(ds,0x92FB)), orig_pageflip_count);
+	    _prevlvl = _curlvl;
+	  }
+	}
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_FRAME_BEGIN, ds);
 cs=0x1a2;eip=0x00001e; 	J(CALL(sub_12352,0));	// 48 call    sub_12352 ;~ 01A2:001E
-	// Snapshot input_keys RIGHT AFTER orig sub_12352 reads it
-	if (myDrawInfo_v2) { extern uint16_t v2_input_snapshot; v2_input_snapshot = input_keys; }
+	// V2 input snapshot now taken INSIDE sub_12352 (right after OR ax, input_keys)
 cs=0x1a2;eip=0x000021; 	J(CALL(sub_12d72,0));	// 49 call    sub_12D72 ;~ 01A2:0021
 cs=0x1a2;eip=0x000024; 	J(CALL(sub_102ad,0));	// 50 call    sub_102AD ;~ 01A2:0024
 cs=0x1a2;eip=0x000027; 	J(CALL(sub_1041c,0));	// 51 call    sub_1041C ;~ 01A2:0027
@@ -3420,11 +3441,30 @@ loc_11153:
 	// 4567
 cs=0x1a2;eip=0x001153; 	J(CALL(sub_117ad,0));	// 2320 call    sub_117AD ;~ 01A2:1153
 cs=0x1a2;eip=0x001156; 	J(CALL(sub_11204,0));	// 2321 call    sub_11204 ;~ 01A2:1156
+	// Save GS tiledata snapshot right after decompress for v2 comparison
+	{
+	  extern uint8_t v2_orig_gs_tiledata_snapshot[];
+	  extern bool v2_orig_gs_tiledata_snapshot_valid;
+	  uint16_t _gs = *(dw*)(raddr(ds,0x2E5D));
+	  if (_gs) {
+	    memcpy(v2_orig_gs_tiledata_snapshot, raddr(_gs, 0), 4096);
+	    v2_orig_gs_tiledata_snapshot_valid = true;
+	    fprintf(stderr, "ORIG-GS-SNAP: GS[0..3]=%02X %02X %02X %02X\n",
+	      v2_orig_gs_tiledata_snapshot[0], v2_orig_gs_tiledata_snapshot[1],
+	      v2_orig_gs_tiledata_snapshot[2], v2_orig_gs_tiledata_snapshot[3]);
+	  }
+	}
 cs=0x1a2;eip=0x001159; 	J(CALL(sub_11383,0));	// 2322 call    sub_11383 ;~ 01A2:1159
 cs=0x1a2;eip=0x00115c; 	J(CALL(sub_112ae,0));	// 2323 call    sub_112AE ;~ 01A2:115C
+	{ extern void v2_hw_wp_drain(); v2_hw_wp_drain();
+	  uint16_t _g=*(dw*)(raddr(ds,0x2E5D)); if(_g){uint8_t v=*(uint8_t*)raddr(_g,0); if(v!=0) fprintf(stderr,"ORIG-GS0[post-112ae]:%02X\n",v);} }
 cs=0x1a2;eip=0x00115f; 	J(CALL(sub_1133a,0));	// 2324 call    sub_1133A ;~ 01A2:115F
 cs=0x1a2;eip=0x001162; 	J(CALL(sub_1167a,0));	// 2325 call    sub_1167A ;~ 01A2:1162
+	{ extern void v2_hw_wp_drain(); v2_hw_wp_drain();
+	  uint16_t _g=*(dw*)(raddr(ds,0x2E5D)); if(_g){uint8_t v=*(uint8_t*)raddr(_g,0); if(v!=0) fprintf(stderr,"ORIG-GS0[post-1167a]:%02X\n",v);} }
 cs=0x1a2;eip=0x001165; 	J(CALL(sub_116ae,0));	// 2326 call    sub_116AE ;~ 01A2:1165
+	{ extern void v2_hw_wp_drain(); v2_hw_wp_drain();
+	  uint16_t _g=*(dw*)(raddr(ds,0x2E5D)); if(_g){uint8_t v=*(uint8_t*)raddr(_g,0); if(v!=0) fprintf(stderr,"ORIG-GS0[post-116ae]:%02X\n",v);} }
 cs=0x1a2;eip=0x001168; 	J(CALL(sub_11397,0));	// 2327 call    sub_11397 ;~ 01A2:1168
 cs=0x1a2;eip=0x00116b; 	J(CALL(sub_137f1,0));	// 2328 call    sub_137F1 ;~ 01A2:116B
 cs=0x1a2;eip=0x00116e; 	J(CALL(sub_12fb3,0));	// 2329 call    sub_12FB3 ;~ 01A2:116E
@@ -3437,6 +3477,16 @@ cs=0x1a2;eip=0x00117a; 	J(CALL(sub_17749,0));	// 2333 call    sub_17749 ;~ 01A2:
 cs=0x1a2;eip=0x00117d; 	J(CALL(sub_173c7,0));	// 2334 call    sub_173C7 ;~ 01A2:117D
  { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
    printf("ORIG-AFTER-173c7: FS[960]=%04X FS[0]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0)); }
+	// Save FS snapshot after sub_173c7 for v2 comparison
+	{
+	  extern uint8_t v2_orig_fs_after_173c7[];
+	  extern bool v2_orig_fs_after_173c7_valid;
+	  uint16_t _fs = *(dw*)(raddr(ds,0x2E69));
+	  if (_fs) {
+	    memcpy(v2_orig_fs_after_173c7, raddr(_fs, 0), 0x6000);
+	    v2_orig_fs_after_173c7_valid = true;
+	  }
+	}
 cs=0x1a2;eip=0x001180; 	J(CALL(sub_11439,0));	// 2335 call    sub_11439 ;~ 01A2:1180
  { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
    printf("ORIG-AFTER-11439: FS[960]=%04X [962]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0x962)); }
@@ -3538,6 +3588,17 @@ cs=0x1a2;eip=0x001239; 	T(MOV(di, 0));	// 2441 mov     di, 0 ;~ 01A2:1239
 cs=0x1a2;eip=0x00123c; 	T(MOV(es, word_2b343));	// 2442 mov     es, word_2B343 ;~ 01A2:123C
 cs=0x1a2;eip=0x001240; 	J(CALL(sub_10982,0));	// 2443 call    sub_10982 ;~ 01A2:1240
 cs=0x1a2;eip=0x001243; 	X(MOV(word_2b345, di));	// 2444 mov     word_2B345, di ;~ 01A2:1243
+	// Snapshot FS ring+compressed after chunk 3 for deferred v2 comparison
+	{
+		extern uint8_t v2_orig_fs_after_chunk3[8192];
+		extern bool v2_orig_fs_after_chunk3_valid;
+		uint16_t fs_seg = *(dw*)(raddr(ds,0x2E69));
+		if (fs_seg) {
+			memcpy(v2_orig_fs_after_chunk3, raddr(fs_seg, 0), 8192); // ring[0..0xFFF] + comp[0x1000..0x1FFF]
+			v2_orig_fs_after_chunk3_valid = true;
+		}
+	}
+	// GS[0] watchpoint removed — using FS[5586] watchpoint in seg003 instead
 cs=0x1a2;eip=0x001247; 	T(MOV(ax, word_2aac5));	// 2445 mov     ax, word_2AAC5 ;~ 01A2:1247
 cs=0x1a2;eip=0x00124a; 	T(MOV(di, 0));	// 2446 mov     di, 0 ;~ 01A2:124A
 cs=0x1a2;eip=0x00124d; 	T(MOV(es, word_2b33d));	// 2447 mov     es, word_2B33D ;~ 01A2:124D
@@ -5359,6 +5420,8 @@ cs=0x1a2;eip=0x002360; 	T(MOV(ax, word_30bbc));	// 4616 mov     ax, word_30BBC ;
 loc_12363:
 	// 4751
 cs=0x1a2;eip=0x002363; 	T(OR(ax, input_keys));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
+	// V2: snapshot input_keys at the EXACT moment orig reads it — before any race
+	if (myDrawInfo_v2) { extern uint16_t v2_input_snapshot; v2_input_snapshot = ax; }
 cs=0x1a2;eip=0x002367; 	X(MOV(word_28896, ax));	// 4620 mov     word_28896, ax ;~ 01A2:2367
 cs=0x1a2;eip=0x00236a; 	T(MOV(ax, word_28896));	// 4621 mov     ax, word_28896 ;~ 01A2:236A
 cs=0x1a2;eip=0x00236d; 	T(XOR(ax, word_2889a));	// 4622 xor     ax, word_2889A ;~ 01A2:236D
@@ -9198,6 +9261,14 @@ ret_1a2_432b:
 	// 5149
 cs=0x1a2;eip=0x00432b; 	J(CALL(sub_13c93,0));	// 8952 call    sub_13C93 ;~ 01A2:432B
 cs=0x1a2;eip=0x00432e; 	T(MOV(si, *(dw*)(raddr(ds,0x42))));	// 8953 mov     si, ds:42h ;~ 01A2:432E
+	// Record op=0x10 in orig trace — sub_14327 bypasses normal trace point via POP+RETN
+	if (myDrawInfo_v2) {
+		extern void v2_vm_replay_verify(uint8_t*, uint8_t*, uint8_t*, uint16_t, int, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t);
+		extern int g_v2_verify_step;
+		v2_vm_replay_verify(nullptr, (uint8_t*)raddr(ds,0),
+			(uint8_t*)raddr(es,0), si, g_v2_verify_step, 0x10, bx-1, *(dw*)(raddr(ds,0x8A)), bx, *(dw*)(raddr(ds,0x8A)));
+		g_v2_verify_step++;
+	}
 cs=0x1a2;eip=0x004332; 	X(POP(ax));	// 8954 pop     ax ;~ 01A2:4332
 cs=0x1a2;eip=0x004333; 	J(RETN(0));	// 8955 retn ;~ 01A2:4333
 sub_14334:
@@ -14078,7 +14149,13 @@ cs=0x1a2;eip=0x0065a7; 	J(LOOP(loc_165a0));	// 15182 loop    loc_165A0 ;~ 01A2:6
 cs=0x1a2;eip=0x0065a9; 	J(RETN(0));	// 15183 retn ;~ 01A2:65A9
 sub_165aa:
 	// 15189
- { static int rot_cnt = 0; rot_cnt++; printf("ORIG-ROT[%d]: 92F9=%04X 92FB=%04X 92F7=%04X\n", rot_cnt, *(dw*)(raddr(ds,0x92F9)), *(dw*)(raddr(ds,0x92FB)), *(dw*)(raddr(ds,0x92F7))); }
+ { static int rot_cnt = 0; rot_cnt++; if(rot_cnt<=80) fprintf(stderr,"ORIG-165aa[%d]: IN 92F9=%04X 92FB=%04X vp_y=%04X level=%04X\n", rot_cnt, *(dw*)(raddr(ds,0x92F9)), *(dw*)(raddr(ds,0x92FB)), *(dw*)(raddr(ds,0x46)), *(dw*)(raddr(ds,0x25AD)));
+   static dw _prev_level2 = 0xFFFF; dw _cur_level2 = *(dw*)(raddr(ds,0x25AD));
+   if (_cur_level2 != _prev_level2) { fprintf(stderr, "ORIG-165aa-COUNT: level %04X→%04X at rotation #%d\n", _prev_level2, _cur_level2, rot_cnt); _prev_level2 = _cur_level2; }
+   if (rot_cnt >= 80 && rot_cnt <= 95)
+     fprintf(stderr, "ORIG-165aa-OUT[%d]: 92F7=%04X 92F9=%04X 92FB=%04X\n", rot_cnt,
+       *(dw*)(raddr(ds,0x92F7)), *(dw*)(raddr(ds,0x92F9)), *(dw*)(raddr(ds,0x92FB)));
+ }
 cs=0x1a2;eip=0x0065aa; 	T(MOV(ax, *(dw*)(raddr(ds,0x92F9))));	// 15191 mov     ax, ds:92F9h ;~ 01A2:65AA
 ret_1a2_65ad:
 	// 5730

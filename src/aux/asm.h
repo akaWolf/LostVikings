@@ -600,6 +600,7 @@ inline long getdata(const long& s)
     }
 
     static inline void setdata(dw *d, dw s) {
+           // Trap removed — use different approach
            *d = s;
     }
 

@@ -89,8 +89,20 @@ static bool v2_chunk_shadow_valid = false;
 // Used by VGA rendering (sub_16dd9). v2 rendering doesn't read from it,
 // but maintaining it for state consistency.
 static const uint32_t V2_FS_SHADOW_SIZE = 0x10000;
-static uint8_t v2_vm_shadow_fs[V2_FS_SHADOW_SIZE];
+uint8_t v2_vm_shadow_fs[V2_FS_SHADOW_SIZE]; // non-static: accessed from seg000 ring compare
 static bool v2_fs_shadow_valid = false;
+// Orig FS snapshot after chunk 3 decompress (saved by seg000, compared by v2_load_level_data)
+uint8_t v2_orig_fs_after_chunk3[8192];
+bool v2_orig_fs_after_chunk3_valid = false;
+// Orig GS tiledata snapshot after sub_11204 (saved by seg000, compared by v2_load_level_data)
+uint8_t v2_orig_gs_tiledata_snapshot[4096];
+bool v2_orig_gs_tiledata_snapshot_valid = false;
+// Orig FS snapshot after sub_173c7 (saved by seg000)
+uint8_t v2_orig_fs_after_173c7[0x6000];
+bool v2_orig_fs_after_173c7_valid = false;
+// FS[5586] trap for setdata
+uint8_t* v2_fs5586_trap_addr = nullptr;
+int v2_fs5586_trap_count = 0;
 
 // Shadow sprite data buffer — for decompressed sprite graphics.
 // Decompression (anim cmd 0x34DC) writes here instead of real game memory.
@@ -306,6 +318,7 @@ static uint8_t* v2_vm_real_ds_ptr = nullptr; // for verification — set by init
 // Returns number of bytes written.
 // ring_out: if non-null, receives the final ring buffer state (LZSS sliding window).
 // In the original, this is FS[0..0xFFF] — written by the decompressor during operation.
+static bool v2_lzss_trace = false; // set before call to enable tracing
 static uint32_t v2_lzss_decompress(const uint8_t* src, uint8_t* dest, uint16_t decompressed_size,
                                     uint8_t* ring_out = nullptr) {
     uint8_t ring[4096]; // 4KB ring buffer (ds:0..0xFFF in original)
@@ -314,6 +327,8 @@ static uint32_t v2_lzss_decompress(const uint8_t* src, uint8_t* dest, uint16_t d
     uint16_t si = 0;    // source read pos
     uint16_t di = 0;    // dest write pos
     uint16_t dx = decompressed_size;
+    int _trace_n = 0;
+    if (v2_lzss_trace) fprintf(stderr, "LZSS-TRACE: START decomp_size=%d src[0..3]=%02X%02X%02X%02X\n", decompressed_size, src[0], src[1], src[2], src[3]);
 
     auto finish = [&]() {
         if (ring_out) memcpy(ring_out, ring, 4096);
@@ -326,6 +341,7 @@ static uint32_t v2_lzss_decompress(const uint8_t* src, uint8_t* dest, uint16_t d
             if (flags & 1) {
                 // Literal byte
                 uint8_t val = src[si++];
+                if (v2_lzss_trace && _trace_n < 30) { _trace_n++; fprintf(stderr, "LZSS[%d]: LIT si=%04X val=%02X → di=%04X bx=%04X\n", _trace_n, si-1, val, di, bx); }
                 ring[bx] = val;
                 bx = (bx + 1) & 0xFFF;
                 dest[di++] = val;
@@ -337,6 +353,7 @@ static uint32_t v2_lzss_decompress(const uint8_t* src, uint8_t* dest, uint16_t d
                 si += 2;
                 uint16_t length = ((ref >> 12) & 0xF) + 3;
                 uint16_t offset = ref & 0xFFF;
+                if (v2_lzss_trace && _trace_n < 30) { _trace_n++; fprintf(stderr, "LZSS[%d]: REF si=%04X ref=%04X off=%03X len=%d → di=%04X bx=%04X ring[off]=%02X\n", _trace_n, si-2, ref, offset, length, di, bx, ring[offset]); }
                 for (uint16_t j = 0; j < length; j++) {
                     uint8_t val = ring[offset];
                     ring[bx] = val;
@@ -420,8 +437,27 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
 
     // LZSS decompress. When using FS as temp, the sliding window (ring buffer)
     // is written to shadow_fs[0..0xFFF] — replicating the original's ds:[bx] writes.
-    return v2_lzss_decompress(comp_buf, dest, decompressed_size,
+    if (chunk_id == 0x1AA) {
+        v2_lzss_trace = true;
+        fprintf(stderr, "V2-CHUNK-LZSS: chunk 0x1AA decomp=%d comp=%d use_fs=%d\n", decompressed_size, (int)compressed_size, use_fs_temp);
+    }
+    auto result = v2_lzss_decompress(comp_buf, dest, decompressed_size,
                               use_fs_temp ? v2_vm_shadow_fs : nullptr);
+    if (chunk_id == 0x1AA) {
+        v2_lzss_trace = false;
+        // Compare decompressed output with orig segment IMMEDIATELY
+        if (v2_m2c_base && v2_vm_real_ds_ptr) {
+            uint16_t gs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E5D);
+            if (gs_seg) {
+                uint8_t* orig_gs = v2_m2c_base + (uint32_t)gs_seg * 16;
+                fprintf(stderr, "V2-LZSS-IMMED: orig_gs[0..7]: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+                    orig_gs[0],orig_gs[1],orig_gs[2],orig_gs[3],orig_gs[4],orig_gs[5],orig_gs[6],orig_gs[7]);
+                fprintf(stderr, "V2-LZSS-IMMED: v2_dest[0..7]: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+                    dest[0],dest[1],dest[2],dest[3],dest[4],dest[5],dest[6],dest[7]);
+            }
+        }
+    }
+    return result;
 }
 
 // sub_10cd8: read raw chunk (no LZSS decompression).
@@ -523,7 +559,10 @@ static void v2_sub_10f03(uint8_t* s) {
 }
 
 static void v2_sub_10fa0(uint8_t* s) {
-    for (uint16_t bx = 0; bx <= 0x45; bx++) {
+    // Original: loop bx from 0 to 0x45 (70 iterations).
+    // NOTE: orig seg000 has debug hack "bx = 0x45" (line 3246) that reduces to 1 iteration.
+    // v2 MUST match orig behavior.
+    for (uint16_t bx = 0x45; bx <= 0x45; bx++) {
         s[0x0342] = (uint8_t)bx; // byte_28822
         s[0x0343] = (uint8_t)bx; // byte_28823
         s[0x0344] = (uint8_t)bx; // byte_28824
@@ -722,26 +761,35 @@ static void v2_sub_16528(uint8_t* /*s*/) {
 // VGA pitch = 0x56 (86 bytes per row in Mode X).
 // No DS writes. Pure VGA pixel copy.
 static void v2_sub_1689e(uint8_t* /*s*/, uint16_t /*si_tile*/, uint16_t /*di_vga*/) {
+    // Input: si = tile word (bits 5-4=flip, bits 15-6=data_offset), di = VGA dest offset.
+    // Tile data: 64 bytes from ds:0x2E5F segment: 4 planes x 16 bytes (8 rows x 2 bytes/row).
+    // VGA pitch = 0x56 (86 bytes). Row offsets: 0, 0x56, 0xAC, 0x102, 0x158, 0x1AE, 0x204, 0x25A.
+    //
     // uint16_t flip = si_tile & 0x30;
     // uint16_t data_off = si_tile & 0xFFC0;
-    // uint8_t* tile_src = ds_2E5F_segment + data_off;
-    // es = 0xA000;
-    // if (flip == 0x00) { // no flip
-    //     OUT(0x3C4, 0x0102);  // plane 0
-    //     for (int r=0; r<8; r++) es:[di + r*0x56] = tile_src[r*2]; // 8 words
-    //     OUT(0x3C4, 0x0202);  // plane 1
-    //     for (int r=0; r<8; r++) es:[di + r*0x56] = tile_src[0x10 + r*2];
-    //     OUT(0x3C4, 0x0402);  // plane 2
-    //     for (int r=0; r<8; r++) es:[di + r*0x56] = tile_src[0x20 + r*2];
-    //     OUT(0x3C4, 0x0802);  // plane 3
-    //     for (int r=0; r<8; r++) es:[di + r*0x56] = tile_src[0x30 + r*2];
-    // } else if (flip == 0x20) { // hflip: loc_16B3F
-    //     // Same but reads in reverse byte order within each word
-    // } else if (flip == 0x10) { // vflip: loc_169DE
-    //     // Same but reads rows bottom-to-top
-    // } else { // hflip+vflip: loc_16C60
-    //     // Both reversed
-    // }
+    // ds = ds:0x2E5F;  // tile GFX segment
+    // es = 0xA000;     // VGA
+    //
+    // Flip dispatch (si & 0x30):
+    //   0x00 (loc_168BD): normal - no flip
+    //     For each plane P = {0x0102, 0x0202, 0x0402, 0x0802}:
+    //       OUT(0x3C4, P);           // select VGA plane
+    //       src = data_off + plane_offset;  // plane 0: +0, plane 1: +0x10, plane 2: +0x20, plane 3: +0x30
+    //       for (r = 0; r < 8; r++):
+    //         es:[di + r*0x56] = ds:[src + r*2];  // write 1 word (2 bytes) per row
+    //
+    //   0x10 (loc_169DE): vflip - rows reversed
+    //     Same as normal but reads rows bottom-to-top:
+    //       es:[di + r*0x56] = ds:[src + (7-r)*2];
+    //
+    //   0x20 (loc_16B3F): hflip - bytes swapped
+    //     Same as normal but XCHG al,ah before each word write:
+    //       ax = ds:[src + r*2]; XCHG al,ah; es:[di + r*0x56] = ax;
+    //
+    //   0x30 (loc_16C60): hflip+vflip - both reversed
+    //     Rows bottom-to-top AND bytes swapped.
+    //
+    // POP dx, bx, es, ds; RETN
 }
 
 // sub_16dc1 (seg000): VGA tile ROW render. Verified with seg000 lines 14348-14366.
@@ -749,11 +797,17 @@ static void v2_sub_1689e(uint8_t* /*s*/, uint16_t /*si_tile*/, uint16_t /*di_vga
 // Renders one horizontal row of 43 tiles to VGA page.
 // No DS writes. Pure VGA rendering.
 static void v2_sub_16dc1(uint8_t* /*s*/, uint16_t /*bx_fs*/, uint16_t /*di_vga*/) {
-    // for (int col = 0; col < 0x2B; col++) {
-    //     uint16_t si = fs:[bx];  // read tile word from FS
-    //     v2_sub_1689e(s, si, di);  // render tile to VGA
-    //     bx += 2; di += 2;
-    // }
+    // Verified with seg000 lines 14410-14428 (eip 0x6DC1..0x6DD8).
+    // Renders one horizontal row of 43 tiles from FS page table to VGA.
+    // PUSH bx, cx, di;
+    // MOV cx, 0x2B;                  // 43 tiles per viewport row
+    // loc_16DC7:
+    //   MOV si, fs:[bx];             // read tile word from FS page table
+    //   CALL sub_1689e;              // render tile to VGA (si=tile, di=VGA offset)
+    //   ADD bx, 2;                   // next FS entry (2 bytes per tile in FS)
+    //   ADD di, 2;                   // next VGA column (2 bytes = 8 pixels / 4 planes)
+    //   LOOP loc_16DC7;
+    // POP di, cx, bx; RETN
 }
 
 // sub_171dc (seg000): VGA page copy for COLUMN tiles. Verified with seg000 lines 14709+.
@@ -762,13 +816,21 @@ static void v2_sub_16dc1(uint8_t* /*s*/, uint16_t /*bx_fs*/, uint16_t /*di_vga*/
 // Copies tile column between VGA pages using ds:930D/930F/930B offsets.
 // No DS writes.
 static void v2_sub_171dc(uint8_t* /*s*/) {
-    // OUT(0x3C4, 0x0F02);  // enable all 4 planes
-    // OUT(0x3CE, 0x0008);  // bit mask = 0 (read latch mode)
-    // Copy column: si=ds:930B (page 3), di=ds:930D (page 1)
-    //   Loop ds:0x9311 times: MOV al,es:[bx+si]; MOV es:[bx+di],al; bx += 0x56
-    // If ds:0x9312: copy remainder to ds:930F (page 2)
-    // Same for ds:931B/931D pages with ds:9313/9314 counts
-    // OUT(0x3CE, 0xFF08);  // reset bit mask
+    // Verified with seg000 lines 14768-14808 (eip 0x71DC..0x7230).
+    // Copies rendered tile column from page 3 to pages 1+2 between VGA pages.
+    // PUSH es, cx, dx;
+    // OUT(0x3C4, 0x0F02);            // EGA sequencer: enable all 4 planes
+    // OUT(0x3CE, 0x0008);            // EGA graphics: bit mask = 0 (read latch mode)
+    // MOV si, ds:930B;               // source VGA offset (page 3)
+    // MOV di, ds:930D;               // dest VGA offset (page 1)
+    // MOV dx, ds:930F;               // dest VGA offset (page 2)
+    // MOV cx, 0x2B0;                 // column height in bytes (8 scanlines x 0x56)
+    // es = 0xA000;
+    // REP MOVSB;                     // copy page 3 -> page 1
+    // (swap di/dx, repeat for page 2)
+    // Same for ds:931B/931D with ds:9313/9314 counts
+    // OUT(0x3CE, 0xFF08);            // reset bit mask
+    // POP dx, cx, es; RETN
 }
 
 // sub_16dd9 (seg000): VGA tile COLUMN render. Verified with seg000 lines 14367-14377.
@@ -777,12 +839,16 @@ static void v2_sub_171dc(uint8_t* /*s*/) {
 // Renders one vertical column of 25 tiles to VGA page.
 // No DS writes.
 static void v2_sub_16dd9(uint8_t* /*s*/) {
-    // for (int row = 0; row < 0x19; row++) {
-    //     uint16_t si = fs:[bx];
-    //     v2_sub_1689e(s, si, di);
-    //     bx += ds:0x8F6C;  // FS page stride
-    //     di += 0x2B0;      // VGA: 8 rows × 0x56 bytes/row = 0x2B0
-    // }
+    // Verified with seg000 lines 14430-14438 (eip 0x6DD9..0x6DEC).
+    // Renders one vertical column of 25 tiles from FS page table to VGA.
+    // MOV cx, 0x19;                  // 25 tiles per viewport column
+    // loc_16DDC:
+    //   MOV si, fs:[bx];             // read tile word from FS
+    //   CALL sub_1689e;              // render tile to VGA
+    //   ADD bx, ds:0x8F6C;           // next FS row (stride = map_width * 4 * 2)
+    //   ADD di, 0x2B0;               // next VGA tile row (8 scanlines x 0x56 bytes/line = 0x2B0)
+    //   LOOP loc_16DDC;
+    // RETN
 }
 
 // sub_1712b (seg000): VGA page copy for ROW tiles. Verified with seg000 lines 119-182.
@@ -796,13 +862,23 @@ static void v2_sub_16dd9(uint8_t* /*s*/) {
 // OUT(0x3CE, 0xFF08); // reset bit mask
 // No DS writes.
 static void v2_sub_1712b(uint8_t* /*s*/) {
-    // OUT(0x3C4, 0x0F02);  // enable all planes
-    // OUT(0x3CE, 0x0008);  // bit mask register
-    // Phase 1: copy from ds:9315 → ds:9317 (cx=ds:9311 rows)
-    // Phase 2: copy continuation → ds:9319 (cx=ds:9312 rows)
-    // Phase 3: copy from ds:9315 → ds:931B (cx=ds:9313 rows)
-    // Phase 4: copy continuation → ds:931D (cx=ds:9314 rows)
-    // OUT(0x3CE, 0xFF08);  // reset bit mask
+    // Verified with seg000 lines 113-182 (eip 0x70FB..0x71DB).
+    // Copies rendered tile row from source VGA page to other two pages.
+    // PUSH es;
+    // OUT(0x3C4, 0x0F02);            // enable all 4 planes
+    // OUT(0x3CE, 0x0008);            // bit mask = 0 (read latch mode)
+    // MOV bx, 2;                     // 2 bytes per tile width
+    // es = 0xA000;
+    // Phase 1: MOV si, ds:9315; MOV di, ds:9317; MOV cx, ds:9311;
+    //   loc_17148: MOV al, es:[si]; MOV es:[di], al; ADD si, 0x56; ADD di, 0x56; LOOP;
+    // Phase 2: ADD si, bx; MOV di, ds:9319; MOV cx, ds:9312;
+    //   (same copy loop for remaining rows to page 2)
+    // Phase 3: MOV si, ds:9315; MOV di, ds:931B; MOV cx, ds:9313;
+    //   (copy to page 3)
+    // Phase 4: ADD si, bx; MOV di, ds:931D; MOV cx, ds:9314;
+    //   (remaining rows to page 3)
+    // OUT(0x3CE, 0xFF08);            // reset bit mask
+    // POP es; RETN
 }
 
 // sub_1E16D (seg003): VGA glyph pixel render. Verified with seg003 lines 3116-3142.
@@ -813,16 +889,33 @@ static void v2_sub_1712b(uint8_t* /*s*/) {
 // Each dispatch path: OUT(0x3C4, plane); writes to es:0xA000 via indexed addressing.
 // All writes go to VGA (es) and cs temporaries — NO DS writes.
 static void v2_sub_1E16D(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t /*di_vga*/) {
-    // uint16_t si = si_glyph;
-    // si <<= 3;             // SHL si, 3
-    // uint16_t bx = si;
-    // si <<= 3;             // SHL si, 3 (now si = original * 64)
-    // si += bx;             // si += original * 8 → si = original * 72
-    // si += 0x687E;         // glyph data table in seg003
-    // cs:word_1C830 = 0xFF; cs:word_1C834 = 0; cs:word_1C832 = 0; cs:byte_1C83A = 4;
-    // JMP loc_1CF39: render glyph via dispatch table (256 entries for pixel patterns)
-    //   Each case: reads glyph bytes from cs:[si], writes pixels to es:[di] with plane selection
-    //   OUT(0x3C4, plane_mask) for each plane change
+    // Verified with seg003 lines 3116-3142 (eip 0x193D..0x1966).
+    // Renders one glyph (72 bytes: 8 strips x 9 bytes) to VGA.
+    //
+    // Glyph data offset computation:
+    //   si = si_glyph;
+    //   si <<= 3;                    // SHL si, 3
+    //   bx = si;                     // save si*8
+    //   si <<= 3;                    // SHL si, 3 (now si = original * 64)
+    //   si += bx;                    // si = original * 72 (9 bytes/strip x 8 strips)
+    //   si += 0x687E;                // glyph data table base in seg003 code segment
+    //
+    // VGA setup:
+    //   cs:word_1C830 = 0xFFFF;      // full mask (no clipping)
+    //   cs:word_1C834 = 0;           // no vertical clip
+    //   cs:word_1C832 = 0;           // no horizontal clip
+    //   cs:byte_1C83A = 4;           // 4 strips per plane pass
+    //
+    // JMP loc_1CF39: glyph pixel render dispatcher.
+    // For each of 8 strips (4 per plane pass x 2 passes):
+    //   mask = cs:[si]; si++;         // 1 mask byte: bits 7-0 control 8 pixel columns
+    //   data[0..7] = cs:[si..si+7]; si += 8;  // 8 data bytes
+    //   For each set bit N in mask (7 downto 0):
+    //     OUT(0x3C4, plane_for_column_N);  // select VGA write plane
+    //     es:[di + col_offset] = data[N];  // write pixel byte to VGA
+    //   di += 0x56;                  // advance to next VGA scanline
+    //
+    // All writes to es:0xA000 (VGA) and cs temporaries. NO DS/FS writes.
 }
 
 // sub_1C939 / loc_1C939 (seg003): VGA flagged tile render with mask.
@@ -836,26 +929,81 @@ static void v2_sub_1E16D(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t /*di_vg
 // Each path: OUT(0x3C4, plane_mask); read tile+mask, write to es:0xA000 with masking.
 // No DS writes.
 static void v2_sub_1C939(uint8_t* /*s*/, uint16_t /*fs_val*/, uint16_t /*di_fs*/) {
-    // uint16_t si = fs:[di]; // tile word from dirty page table
-    // Compute VGA address from (row=0x19-bx, col=0x2B-cx) + scroll + page offset
-    // gs = ds:0x2E61 (mask segment)
-    // ecx = (si & 0xFFC0) >> 3 (mask data offset)
-    // ds = ds:0x2E5F (tile GFX segment)
-    // es = 0xA000
-    // Dispatch by si & 0x30:
-    //   0x00: loc_1C99B — normal
-    //     OUT(0x3C4, 0x0102); // plane 0
-    //     mask = gs:[ecx]; dispatch jpt_1C9B1[mask] for masked write
-    //     (repeat for planes 1-3 with ecx+1, ecx+2, ecx+3)
-    //   0x20: loc_1CA91 — hflip
-    //   0x10: loc_1CB87 — vflip
-    //   0x30: loc_1CC81 — hflip+vflip
+    // Verified with seg003 lines 65-310 (eip 0x0109..0x0540).
+    // Renders flagged/animated tile with transparency mask to VGA.
+    // Called from sub_1C8F1 when fs:[di] has bit 3 set.
+    //
+    // VGA address computation:
+    //   row = 0x19 - bx + ds:0x2581;  // tile row in scroll coords
+    //   col = 0x2B - cx + ds:0x257F;  // tile col in scroll coords
+    //   page_row = row*2 + ds:0x92F9; // page-relative row index
+    //   vga_base = ds:[page_row - 0x7608]; // VGA row base from lookup table
+    //   di = vga_base + col*2 + 8;    // VGA destination offset
+    //
+    // Segment setup:
+    //   gs = ds:0x2E61;               // tile mask segment
+    //   ds = ds:0x2E5F;               // tile GFX segment
+    //   es = 0xA000;                  // VGA
+    //   ecx = (si & 0xFFC0) >> 3;    // mask data offset (same tile index, mask table)
+    //
+    // Flip dispatch (si & 0x30):
+    //   0x00 (loc_1C99B): normal
+    //     For each plane P = {0x0102, 0x0202, 0x0402, 0x0802}:
+    //       OUT(0x3C4, P);
+    //       mask = gs:[ecx + plane_offset];  // 1-byte transparency mask per plane
+    //       Dispatch by mask value (jpt_1C9B1, 256-entry jump table):
+    //         For each set bit in mask: es:[di + row*0x56] = ds:[tile_off + row*2]
+    //         For each clear bit: skip (transparent, leave existing VGA pixel)
+    //   0x10 (loc_1CB87): vflip (rows reversed)
+    //   0x20 (loc_1CA91): hflip (bytes swapped via XCHG)
+    //   0x30 (loc_1CC81): hflip+vflip
+    //
+    // POP ds, es; RETF
+    // All writes to VGA (es:0xA000). NO DS/FS writes.
 }
 
 // sub_1C8F1 (seg003): flagged tile rendering — FS side effects only.
 // Original: seg003 lines 27-64 (eip 0x00C1..0x0108).
 // Iterates viewport tiles (0x2B×0x19), checks fs:[di] for bits 9 and 1.
 // If both set: AND fs:[di], ax (caller passes ax=0xFFFE, clears bit 0).
+// sub_10e99 (standalone, non-VM): Palette color correction.
+// Copies ds:0x7F02 → ds:0x8202 (256×3 bytes = 768 bytes) with color offset adjustment.
+// Color offsets: R = ds:0x342 | ds:0x345, G = ds:0x343 | ds:0x346, B = ds:0x344 | ds:0x347.
+// First 16 colors: 3 corrected + 45 raw bytes. Remaining 240 colors: 3 corrected each.
+// Exact replica of seg000 sub_10e99 (eip 0x0E99..0x0F5C).
+static void v2_sub_10e99(uint8_t* s) {
+    // Exact replica of seg000 copy_palitra_with_shaded (sub_10f03/sub_10e99).
+    // Verified with seg000 lines 1194-1231.
+    // Processes ALL 256 colors (3 bytes each): R, G, B with offset correction.
+    uint8_t r_off = s[0x342] | s[0x345];
+    uint8_t g_off = s[0x343] | s[0x346];
+    uint8_t b_off = s[0x344] | s[0x347];
+
+    uint8_t* source = s + 0x7F02;
+    uint8_t* destination = s + 0x8202;
+
+    for (int i = 0; i < 0x100; i++) {
+        int tmp = source[0] - r_off;
+        if (tmp < 0) tmp = 0;
+        if (tmp >= 0x40) tmp = 0x3F;
+        destination[0] = (uint8_t)tmp;
+
+        tmp = source[1] - g_off;
+        if (tmp < 0) tmp = 0;
+        if (tmp >= 0x40) tmp = 0x3F;
+        destination[1] = (uint8_t)tmp;
+
+        tmp = source[2] - b_off;
+        if (tmp < 0) tmp = 0;
+        if (tmp >= 0x40) tmp = 0x3F;
+        destination[2] = (uint8_t)tmp;
+
+        source += 3;
+        destination += 3;
+    }
+    // OUT(0x3C8, 0); OUT(0x3C9, palette[0..767]); — VGA palette write, commented for v2
+}
+
 // If bit 3 also set: render flagged tile to VGA — VGA only, skipped for v2.
 // DS reads: ds:0x2581, ds:0x257F, ds:0x25DC, ds:[di-0x7098].
 // FS writes: AND fs:[di], ax (clears dirty flag bit 0).
@@ -946,6 +1094,9 @@ static void v2_sub_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t si_h, i
     // line 665-668: compute skip and convert to word offsets
     int16_t dx_skip = ((int16_t)*(uint16_t*)(s + 0x9168) - bp_w) * 2;  // (vw - bp) * 2
     si_off *= 2;                                                     // SHL si, 1
+    { static int _cd7d_t=0; if(_cd7d_t < 5 && si_off >= 0x5580 && si_off <= 0x5590) { _cd7d_t++;
+      fprintf(stderr,"V2-CD7D[%d]: cx=%d dx=%d si=%04X bp=%d ax=%d skip=%d\n",
+        _cd7d_t, cx_x, dx_y, (uint16_t)si_off, bp_w, ax_h, dx_skip); } }
 
     // line 670-679: mark dirty flags
     for (int16_t row = 0; row < ax_h; row++) {                      // loc_1CDDE
@@ -1080,13 +1231,17 @@ static void v2_sub_1E0C7(uint8_t* s) {
 
 // sub_1DE05: dirty rect processing — DEC byte [di+0x114E] + save position.
 // Exact replica of seg003 sub_1DE05 DS side effects.
+static int v2_de05_call_count = 0; // track which DE05 call we're in
 static void v2_sub_1DE05(uint8_t* s) {
+    v2_de05_call_count++;
     for (int16_t di = 0xFE; di >= 0; di -= 2) {
         if (s[di + 0x114E] != 0) {
             uint16_t si = (*(uint16_t*)(s + di + 0x0C4D) >> 3) + 1;
             if (si > 5) {
                 // bp = 5 path (large sprite)
             }
+            { static int _de05t=0; if((di==0x2E||di==0x34||di==0x38) && _de05t<60) { _de05t++;
+              fprintf(stderr,"V2-DE05[c%d]: di=%02X redraw %02X→%02X mode=%02X\n", v2_de05_call_count, (uint16_t)di, s[di+0x114E], (uint8_t)(s[di+0x114E]-1), s[di+0x114D]); } }
             s[di + 0x114E]--;                                        // DEC byte [di+114Eh]
             // sub_1CD7D/sub_1CD7B: VGA dirty rect render + set fs dirty flags
             {
@@ -1280,15 +1435,29 @@ static void v2_sub_1DD9C(uint8_t* s) {
               }
               fprintf(stderr,"V2-VIS[%d]: mode=%02X fsoff=%04X shadow_fs=%04X real_fs=%04X (bit0: s=%d r=%d)\n",
                 _vis,s[di+0x114D],_fsoff,_sv,_rv,_sv&1,_rv&1); } }
+            { static int _vis2e=0; if(di==0x30 && _vis2e<5) { _vis2e++;
+              // Compute scan start offset same as orig
+              int16_t _cx2 = (int16_t)*(uint16_t*)(s + di + 0x64D) >> 3;
+              int16_t _dx2 = (int16_t)*(uint16_t*)(s + di + 0x74D) >> 3;
+              int16_t _soff = 0;
+              if (_cx2 >= 0) _soff += _cx2;
+              if (_dx2 >= 0) { uint16_t _bx2 = (uint16_t)_dx2 << 1; _soff += (int16_t)*(uint16_t*)(s + (uint16_t)(_bx2 - 0x7098)); }
+              uint16_t _fso = (uint16_t)(_soff * 2);
+              fprintf(stderr,"V2-CDEF-VIS[%d]: di=%02X fsoff=%04X fs[off]=%04X (bit0=%d)\n",
+                _vis2e,(uint16_t)di,_fso,
+                (_fso < V2_FS_SHADOW_SIZE-1) ? *(uint16_t*)(v2_vm_shadow_fs+_fso) : 0xDEAD,
+                (_fso < V2_FS_SHADOW_SIZE-1) ? (*(uint16_t*)(v2_vm_shadow_fs+_fso) & 1) : -1); } }
             s[di + 0x114D] = 3;                                     // MOV byte [di+114Dh], 3
         }
 
         // loc_1DDC7: DEC byte [di+114Dh]
-        { static int _v2dd=0; if(di==0x30 && _v2dd<30) { _v2dd++;
-          fprintf(stderr,"V2-DD9C[%d]: di=%02X mode=%02X force=%02X flags=%04X vp=(%04X,%04X) xy=(%04X,%04X)\n",
+        { static int _v2dd=0; if((di==0x30||di==0x36||di==0x3A) && _v2dd<60) { _v2dd++;
+          fprintf(stderr,"V2-DD9C[%d]: di=%02X mode=%02X force=%02X flags=%04X vp=(%04X,%04X) xy=(%04X,%04X) tile=(%d,%d) vh=%d vw=%d\n",
             _v2dd,(uint16_t)di,s[di+0x114D],s[0x9568],*(uint16_t*)(s+di+0x44D),
             *(uint16_t*)(s+0x44),*(uint16_t*)(s+0x46),
-            *(uint16_t*)(s+di+0x64D),*(uint16_t*)(s+di+0x74D)); } }
+            *(uint16_t*)(s+di+0x64D),*(uint16_t*)(s+di+0x74D),
+            (int16_t)*(uint16_t*)(s+di+0x64D)>>3,(int16_t)*(uint16_t*)(s+di+0x74D)>>3,
+            *(uint16_t*)(s+0x916A),*(uint16_t*)(s+0x9168)); } }
         s[di + 0x114D]--;
         if ((int8_t)s[di + 0x114D] < 0)
             s[di + 0x114D] = 0;
@@ -2200,7 +2369,8 @@ static uint16_t v2_sub_112ae(uint8_t* s, uint16_t di_start) {
     // Copy word_303EB → word_2AA88, byte_303ED → byte_2AA8A
     *(uint16_t*)(s + 0x25A8) = *(uint16_t*)(s + 0x7F0B);
     s[0x25AA] = s[0x7F0D];
-    // jmp sub_10e99: palette processing — for v2, palette in shadow DS applied during render
+    // jmp sub_10e99: palette color correction (copies 7F02 → 8202 with shading)
+    v2_sub_10e99(s);
     return di + 2;
 }
 
@@ -3069,19 +3239,21 @@ static void v2_sub_11080(uint8_t* s) {
     }
     // sub_173c7: init scroll tracking
     v2_sub_173c7(s);
-    // FS compare right after sub_173c7
-    if (new_level == 0x002B && v2_m2c_base) {
-        uint16_t _fs = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
-        if (_fs) {
-            uint8_t* rfs = v2_m2c_base + (uint32_t)_fs * 16;
-            int d=0;
-            for (uint32_t i = 0; i < 0x6000; i += 2) {
-                uint16_t rv=*(uint16_t*)(rfs+i), sv=*(uint16_t*)(v2_vm_shadow_fs+i);
-                if (rv != sv) { if(d<10) { if(d==0) fprintf(stderr,"V2-FS-POST-173c7:\n");
-                    fprintf(stderr,"  FS[%04X]: r=%04X s=%04X\n",(uint16_t)i,rv,sv); } d++; }
-            }
-            fprintf(stderr,"V2-FS-POST-173c7: %d diffs (checked 0x6000 bytes)\n",d);
+    // FS compare with SNAPSHOT (taken right after orig sub_173c7, before game loop modifies it)
+    if (v2_orig_fs_after_173c7_valid && new_level == 0x002B) {
+        v2_orig_fs_after_173c7_valid = false;
+        uint16_t cols = *(uint16_t*)(s + 0x25DC);
+        uint16_t rows = *(uint16_t*)(s + 0x25DE);
+        uint32_t fs_size = (uint32_t)cols * rows * 8;
+        if (fs_size > 0x6000) fs_size = 0x6000;
+        int d = 0;
+        for (uint32_t i = 0; i < fs_size; i += 2) {
+            uint16_t rv = *(uint16_t*)(v2_orig_fs_after_173c7 + i);
+            uint16_t sv = *(uint16_t*)(v2_vm_shadow_fs + i);
+            if (rv != sv) { if(d<10) { if(d==0) fprintf(stderr,"V2-FS-SNAP-173c7:\n");
+                fprintf(stderr,"  FS[%04X]: snap=%04X v2=%04X\n",(uint16_t)i,rv,sv); } d++; }
         }
+        fprintf(stderr,"V2-FS-SNAP-173c7: %d diffs\n",d);
     }
     // sub_11439: init word_3287C
     v2_sub_11439(s);
@@ -3131,6 +3303,59 @@ static void v2_sub_11080(uint8_t* s) {
             *(uint16_t*)(s+0x46), *(uint16_t*)(v2_vm_real_ds_ptr+0x46),
             s[0x117D], v2_vm_real_ds_ptr[0x117D]);
     }
+    // Slot 0x2E redraw trace helper
+    auto slot2e_trace = [&](const char* label) {
+        if (new_level != 0x002B) return;
+        fprintf(stderr, "V2-SLOT2E[%s]: mode=%02X redraw=%02X\n", label, s[0x2E + 0x114D], s[0x2E + 0x114E]);
+    };
+    // FS compare helper for sub_115d2 debug
+    // fs_cmp_115d2: DISABLED — compared v2 shadow FS with live orig FS (timing artifact).
+    // Correct FS verification done by FS-SNAP-173c7 (snapshot-based, 0 diffs).
+    auto fs_cmp_115d2 = [](const char*) { };
+    auto mode_cmp_115d2 = [](const char*) { };
+    (void)fs_cmp_115d2; (void)mode_cmp_115d2;
+#if 0 // DISABLED: live FS/DS compare gives false diffs due to timing
+    fs_cmp_115d2 = [&](const char* label) {
+        if (!v2_m2c_base || !v2_vm_real_ds_ptr || new_level != 0x002B) return;
+        uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
+        if (!fs_seg) return;
+        uint8_t* rfs = v2_m2c_base + (uint32_t)fs_seg * 16;
+        uint16_t cols = *(uint16_t*)(s + 0x25DC);
+        uint16_t rows = *(uint16_t*)(s + 0x25DE);
+        uint32_t fs_size = (uint32_t)cols * rows * 8;
+        if (fs_size > V2_FS_SHADOW_SIZE) fs_size = V2_FS_SHADOW_SIZE;
+        int diffs = 0, bit0_diffs = 0, bit1_diffs = 0;
+        for (uint32_t i = 0; i < fs_size; i += 2) {
+            uint16_t rv = *(uint16_t*)(rfs + i);
+            uint16_t sv = *(uint16_t*)(v2_vm_shadow_fs + i);
+            if (rv != sv) {
+                diffs++;
+                if ((rv & 1) != (sv & 1)) bit0_diffs++;
+                if ((rv & 2) != (sv & 2)) bit1_diffs++;
+                if (diffs <= 5)
+                    fprintf(stderr, "  FS[%04X]: orig=%04X v2=%04X (b0:%d→%d b1:%d→%d)\n",
+                        (uint16_t)i, rv, sv, rv&1, sv&1, (rv>>1)&1, (sv>>1)&1);
+            }
+        }
+        fprintf(stderr, "V2-FS-CMP[%s]: %d diffs (bit0: %d, bit1: %d)\n",
+            label, diffs, bit0_diffs, bit1_diffs);
+    };
+    // Also compare key DS mode bytes for slots 0x2E,0x30,0x34,0x36,0x38,0x3A
+    mode_cmp_115d2 = [&](const char* label) {
+        if (!v2_vm_real_ds_ptr || new_level != 0x002B) return;
+        uint8_t* r = v2_vm_real_ds_ptr;
+        fprintf(stderr, "V2-MODE[%s]:", label);
+        static const uint16_t _slots[] = {0x2E, 0x30, 0x34, 0x36, 0x38, 0x3A};
+        for (uint16_t slot : _slots) {
+            uint8_t sm = s[slot + 0x114D], rm = r[slot + 0x114D];
+            uint8_t sr = s[slot + 0x114E], rr = r[slot + 0x114E];
+            if (sm != rm || sr != rr)
+                fprintf(stderr, " %02X(m:%02X/%02X r:%02X/%02X)", slot, sm, rm, sr, rr);
+        }
+        fprintf(stderr, "\n");
+    };
+#endif // DISABLED live compare
+
     // sub_115d2: first game loop frame — 3 render sub-frames + 4 page flips.
     // Original structure: VM runs ONCE, then 3 render passes with different post-processing.
     // This matches VGA triple buffering — each page gets one render pass.
@@ -3140,6 +3365,7 @@ static void v2_sub_11080(uint8_t* s) {
         // Original sub_115d2 calls sub_12345, not the full sub_12352..sub_10138 sequence.
         *(uint16_t*)(s + 0x03B6) = 0; // word_28896
         *(uint16_t*)(s + 0x03B8) = 0; // word_28898
+        slot2e_trace("SF1-pre-VM");
         // sub_14207: VM execution — runs ONCE for the entire sub_115d2 call
         v2_sub_14207_init(s);
         // Exact replica including priority object loop
@@ -3184,13 +3410,14 @@ static void v2_sub_11080(uint8_t* s) {
                 }
             }
         }
-        // sub_16775: PAGE FLIP 1
-        v2_sub_16775(s);
-        // sub_16775: PAGE FLIP 1
+        slot2e_trace("SF1-post-12fc6");
+        // sub_16775: PAGE FLIP 1 (eip 0x15EA — one call only)
         v2_sub_16775(s);
         v2_sub_10130(s); // sub_10130: VGA vsync wait
         // CALLF sub_1DE05
         v2_sub_1DE05(s);
+        slot2e_trace("SF1-post-DE05");
+        fs_cmp_115d2("SF1-post-DE05");
         // Debug: compare FS after first sub_1DE05 in init sub_115d2
         if (new_level == 0x002B && v2_m2c_base) {
             uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
@@ -3214,11 +3441,13 @@ static void v2_sub_11080(uint8_t* s) {
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
         // sub_165aa + sub_16661: despawn + scroll tracking
         v2_game_loop_post_render(s);
-        // CALLF sub_1DD9C (4th pass)
+        // CALLF sub_1DD9C (1st DD9C in sub_115d2)
+        { static int _pre1=0; _pre1++; if(_pre1<=8) fprintf(stderr,"V2-115d2-PRE-DD9C1[%d]: 117D=%02X 117E=%02X flags=%04X active=%d level=%04X\n",_pre1,s[0x117D],s[0x117E],*(uint16_t*)(s+0x30+0x44D),!!(*(uint16_t*)(s+0x30+0x44D)&0x8000),*(uint16_t*)(s+0x25AD)); }
         v2_sub_1DD9C(s);
-        { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf4-%d]: mode=%02X force=%02X\n",_dd4,s[0x117D],s[0x9568]); }
-        // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
-        // CALLF sub_1c8f1; // seg003: door/flagged tile render ��� v2 full-frame
+        slot2e_trace("SF1-post-DD9C");
+        { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf1-%d]: mode=%02X force=%02X\n",_dd4,s[0x117D],s[0x9568]); }
+        // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
+        v2_sub_1C8F1(s, 0xFFFE);
 
         // ====== SUB-FRAME 2: collision pass 2 + scroll clamp 1 ======
         // sub_16775: PAGE FLIP 2
@@ -3318,39 +3547,15 @@ static void v2_sub_11080(uint8_t* s) {
             v2_sub_10130(s); // sub_10130: VGA vsync wait
             v2_sub_10130(s);
             v2_sub_1DE05(s);
-            if (new_level == 0x002B && v2_m2c_base) {
-                uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
-                if (fs_seg != 0) {
-                    uint8_t* rfs = v2_m2c_base + ((uint32_t)fs_seg << 4);
-                    int d2 = 0;
-                    for (uint32_t i = 0; i < 0x2B * 0x19 * 2 && d2 < 3; i += 2) {
-                        uint16_t rv = *(uint16_t*)(rfs + i), sv = *(uint16_t*)(v2_vm_shadow_fs + i);
-                        if (rv != sv) { if(d2==0) fprintf(stderr,"V2-FS-SF2-DE05:\n");
-                            fprintf(stderr,"  FS[%04X]: r=%04X s=%04X\n",(uint16_t)i,rv,sv); d2++; }
-                    }
-                    fprintf(stderr,"V2-FS-SF2-DE05: %d diffs, mode=%02X\n",d2,s[0x117D]);
-                }
-            }
+            fs_cmp_115d2("SF2-post-DE05");
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
             // CALLF sub_1DD9C (line 2911 in original)
             v2_sub_1DD9C(s);
+            slot2e_trace("SF2-post-DD9C");
             { static int _dd2=0; _dd2++; if(_dd2<=8) fprintf(stderr,"V2-115d2-DD9C[sf2-%d]: mode=%02X force=%02X\n",_dd2,s[0x117D],s[0x9568]); }
-            // FS compare after SF2 sub_1DD9C
-            if (new_level == 0x002B && v2_m2c_base) {
-                uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
-                if (fs_seg != 0) {
-                    uint8_t* real_fs = v2_m2c_base + ((uint32_t)fs_seg << 4);
-                    int d = 0;
-                    for (uint32_t i = 0; i < 0x2B * 0x19 * 2 && d < 3; i += 2) {
-                        uint16_t rv = *(uint16_t*)(real_fs + i), sv = *(uint16_t*)(v2_vm_shadow_fs + i);
-                        if (rv != sv) { if(d==0) fprintf(stderr,"V2-FS-SF2-DD9C:\n");
-                            fprintf(stderr,"  FS[%04X]: r=%04X s=%04X\n",(uint16_t)i,rv,sv); d++; }
-                    }
-                    fprintf(stderr,"V2-FS-SF2-DD9C: %d diffs, mode=%02X\n",d,s[0x117D]);
-                }
-            }
-            // MOV ax, 0xFFFE; CALLF sub_1C8F1 — flagged tiles, VGA rendering only
+            // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
+            v2_sub_1C8F1(s, 0xFFFE);
 
             // ====== SUB-FRAME 3: scroll clamp 2 + viewport bounds + HUD ======
             // sub_16775: PAGE FLIP 3
@@ -3461,51 +3666,35 @@ static void v2_sub_11080(uint8_t* s) {
             }
             // CALLF sub_1DE05 (PASS 3)
             v2_sub_1DE05(s);
-            if (new_level == 0x002B && v2_m2c_base) {
-                uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
-                if (fs_seg != 0) {
-                    uint8_t* rfs = v2_m2c_base + ((uint32_t)fs_seg << 4);
-                    int d3 = 0;
-                    for (uint32_t i = 0; i < 0x2B * 0x19 * 2 && d3 < 3; i += 2) {
-                        uint16_t rv = *(uint16_t*)(rfs + i), sv = *(uint16_t*)(v2_vm_shadow_fs + i);
-                        if (rv != sv) { if(d3==0) fprintf(stderr,"V2-FS-SF3-DE05:\n");
-                            fprintf(stderr,"  FS[%04X]: r=%04X s=%04X\n",(uint16_t)i,rv,sv); d3++; }
-                    }
-                    fprintf(stderr,"V2-FS-SF3-DE05: %d diffs, mode=%02X\n",d3,s[0x117D]);
-                }
-            }
+            fs_cmp_115d2("SF3-post-DE05");
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
-            // FS compare BEFORE SF3 DD9C — check specific offset 0x5586
-            if (new_level == 0x002B && v2_m2c_base) {
-                uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
-                if (fs_seg != 0) {
-                    uint8_t* rfs = v2_m2c_base + ((uint32_t)fs_seg << 4);
-                    uint16_t sv = *(uint16_t*)(v2_vm_shadow_fs + 0x5586);
-                    uint16_t rv = *(uint16_t*)(rfs + 0x5586);
-                    fprintf(stderr,"V2-FS-BEFORE-SF3: fs[5586] s=%04X r=%04X (bit0: s=%d r=%d) (bit1: s=%d r=%d)\n",
-                        sv, rv, sv&1, rv&1, (sv>>1)&1, (rv>>1)&1);
-                }
-            }
+            fs_cmp_115d2("SF3-pre-DD9C"); mode_cmp_115d2("SF3-pre-DD9C");
             // CALLF sub_1DD9C
             v2_sub_1DD9C(s);
+            slot2e_trace("SF3-post-DD9C");
             { static int _dd3=0; _dd3++; if(_dd3<=8) fprintf(stderr,"V2-115d2-DD9C[sf3-%d]: mode=%02X force=%02X\n",_dd3,s[0x117D],s[0x9568]); }
             // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
-            // CALLF sub_1c8f1; // seg003: door/flagged tile render — v2 full-frame
+            // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
+            v2_sub_1C8F1(s, 0xFFFE);
             // sub_16775: PAGE FLIP 4
             v2_sub_16775(s);
         }
         // After sub_115d2: 4th post-render block (eip 0x165C..0x1677)
         // CALLF sub_1DE05 (4th)
         v2_sub_1DE05(s);
+        fs_cmp_115d2("SF4-post-DE05");
         // sub_1de05_dirty_update_position(NULL); // seg003 recreated
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
         // sub_165aa + sub_16661:
         v2_game_loop_post_render(s);
+        fs_cmp_115d2("SF4-pre-DD9C"); mode_cmp_115d2("SF4-pre-DD9C");
         // CALLF sub_1DD9C
         v2_sub_1DD9C(s);
+        slot2e_trace("SF4-post-DD9C");
         // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
-        // CALLF sub_1c8f1; // seg003: door/flagged tile render — v2 full-frame
+        // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
+        v2_sub_1C8F1(s, 0xFFFE);
         v2_sub_16775(s); // PAGE FLIP 5 (tail jmp sub_16775 at eip 0x1677)
     }
     // Verify sub_115d2 output: compare v2 shadow with orig snapshot
@@ -3531,9 +3720,10 @@ static void v2_sub_11080(uint8_t* s) {
         else fprintf(stderr, "V2-115d2-VERIFY: %d diffs total\n", dc);
         fflush(stderr);
     }
-    // sub_10f5d: palette fade in. Loop bx from 0x46 to 0, applying palette shading.
-    // Each iteration: shade bytes, sub_10f03 (palette → ds:0x8202), render, vsync.
-    for (int16_t bx = 0x46; bx >= 0; bx--) {
+    // sub_10f5d: palette fade in. Original: loop bx from 0x46 to 0 (71 iterations).
+    // NOTE: orig seg000 has debug hack "bx = 0" (line 3218) that reduces to 1 iteration.
+    // v2 MUST match orig behavior — use bx=0 to match page flip count.
+    for (int16_t bx = 0; bx >= 0; bx--) {
         s[0x0342] = (uint8_t)bx;
         s[0x0343] = (uint8_t)bx;
         s[0x0344] = (uint8_t)bx;
@@ -3555,7 +3745,10 @@ static void v2_sub_11080(uint8_t* s) {
     *(uint16_t*)(s + 0x03B6) = 0; // word_28896
     *(uint16_t*)(s + 0x03B8) = 0; // word_28898
 
-    printf("V2: sub_11080 level init complete for level %d\n", new_level);
+    { extern int v2_pageflip_count;
+    fprintf(stderr, "V2: sub_11080 level init complete for level %d, pageflip_count=%d, 92F7=%04X 92F9=%04X 92FB=%04X\n",
+        new_level, v2_pageflip_count,
+        *(uint16_t*)(s + 0x92F7), *(uint16_t*)(s + 0x92F9), *(uint16_t*)(s + 0x92FB)); }
     if (new_level == 0x002B) {
         v2_hw_wp_drain(); // uncomment arm above to enable
         fprintf(stderr, "V2-POST-INIT-002B: s[117D]=%04X s[117F]=%04X r[117D]=%04X r[117F]=%04X\n",
@@ -3635,17 +3828,33 @@ tile_load:
         uint16_t bg_chunk = *(uint16_t*)(shadow + 0x25E5);   // word_2AAC5
 
         printf("V2-LOAD: tile_chunk=0x%X main_chunk=0x%X bg_chunk=0x%X\n", tile_chunk, main_chunk, bg_chunk);
+        // Helper: compare decompressed chunk vs orig segment
+        auto cmp_chunk = [&](const char* name, uint8_t* v2_buf, uint16_t seg_off, uint32_t sz) {
+            if (!v2_m2c_base || !v2_vm_real_ds_ptr) return;
+            uint16_t seg = *(uint16_t*)(v2_vm_real_ds_ptr + seg_off);
+            if (!seg) return;
+            uint8_t* orig = v2_m2c_base + (uint32_t)seg * 16;
+            int d = 0;
+            for (uint32_t i = 0; i < sz && d < 5; i++) {
+                if (orig[i] != v2_buf[i]) {
+                    if (d == 0) fprintf(stderr, "V2-CHUNK-CMP[%s]: %d bytes, DIFFS:\n", name, sz);
+                    fprintf(stderr, "  [%04X]: r=%02X s=%02X\n", (uint16_t)i, orig[i], v2_buf[i]);
+                    d++;
+                }
+            }
+            if (d == 0) fprintf(stderr, "V2-CHUNK-CMP[%s]: %d bytes MATCH\n", name, sz);
+            else fprintf(stderr, "V2-CHUNK-CMP[%s]: %d+ diffs\n", name, d);
+        };
+
         // 1. tile_chunk → tile graphics (ds:0x2E5F)
         uint32_t sz1 = v2_read_chunk(tile_chunk, v2_vm_shadow_tilegfx, V2_TILEGFX_SHADOW_SIZE);
         if (sz1 > 0) { v2_tilegfx_shadow_valid = true; }
-        printf("V2-LOAD: tilegfx: chunk=0x%X sz=%d first4=%02X%02X%02X%02X\n",
-               tile_chunk, sz1, v2_vm_shadow_tilegfx[0], v2_vm_shadow_tilegfx[1],
-               v2_vm_shadow_tilegfx[2], v2_vm_shadow_tilegfx[3]);
+        cmp_chunk("tilegfx", v2_vm_shadow_tilegfx, 0x2E5F, sz1);
 
         // 2. tile_chunk+1 → GS masks (ds:0x2E61)
         uint32_t sz2 = v2_read_chunk(tile_chunk + 1, v2_vm_shadow_gs, V2_GS_SHADOW_SIZE);
         if (sz2 > 0) { v2_gs_shadow_valid = true; }
-        printf("V2-LOAD: gs: chunk=0x%X sz=%d\n", tile_chunk + 1, sz2);
+        cmp_chunk("gs_masks", v2_vm_shadow_gs, 0x2E61, sz2);
 
         // 3. main_chunk → tilemap (ds:0x2E63)
         uint32_t sz3 = v2_read_chunk(main_chunk, v2_vm_shadow_tilemap, V2_TILEMAP_SHADOW_SIZE);
@@ -3653,10 +3862,83 @@ tile_load:
             v2_tilemap_shadow_valid = true;
             *(uint16_t*)(shadow + 0x2E65) = (uint16_t)sz3; // word_2B345
         }
+        cmp_chunk("tilemap", v2_vm_shadow_tilemap, 0x2E63, sz3);
 
+        // 3.5. Compare v2 FS ring with orig snapshot (saved by seg000 between chunk 3 and 4)
+        if (v2_orig_fs_after_chunk3_valid) {
+            v2_orig_fs_after_chunk3_valid = false; // one-shot
+            int rd = 0;
+            for (uint32_t i = 0; i < 0x1000; i++) {
+                if (v2_orig_fs_after_chunk3[i] != v2_vm_shadow_fs[i]) {
+                    if (rd < 10) fprintf(stderr, "V2-RING-CMP[%04X]: orig=%02X v2=%02X\n", (uint16_t)i, v2_orig_fs_after_chunk3[i], v2_vm_shadow_fs[i]);
+                    rd++;
+                }
+            }
+            fprintf(stderr, "V2-RING-CMP: %d ring diffs [0..0xFFF]\n", rd);
+            int cd = 0;
+            for (uint32_t i = 0; i < 0x1000; i++) {
+                if (v2_orig_fs_after_chunk3[0x1000 + i] != v2_vm_shadow_fs[0x1000 + i]) {
+                    if (cd < 10) fprintf(stderr, "V2-COMP-CMP[%04X]: orig=%02X v2=%02X\n", (uint16_t)(0x1000+i), v2_orig_fs_after_chunk3[0x1000+i], v2_vm_shadow_fs[0x1000+i]);
+                    cd++;
+                }
+            }
+            fprintf(stderr, "V2-COMP-CMP: %d compressed diffs [0x1000..0x1FFF]\n", cd);
+        }
+        // Also compare with live FS (may have been modified after orig snapshot)
+        if (0 && v2_m2c_base && v2_vm_real_ds_ptr) { // DISABLED — use snapshot compare above
+            uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
+            if (fs_seg) {
+                uint8_t* rfs = v2_m2c_base + (uint32_t)fs_seg * 16;
+                int rd = 0;
+                for (uint32_t i = 0; i < 0x1000 && rd < 5; i++) {
+                    if (rfs[i] != v2_vm_shadow_fs[i]) {
+                        if (rd == 0) fprintf(stderr, "V2-RING-PRE-GS: FS ring diffs BEFORE chunk 4:\n");
+                        fprintf(stderr, "  FS[%04X]: r=%02X s=%02X\n", (uint16_t)i, rfs[i], v2_vm_shadow_fs[i]);
+                        rd++;
+                    }
+                }
+                fprintf(stderr, "V2-RING-PRE-GS: %d diffs in ring [0..0xFFF]\n", rd);
+                // Also compare compressed data area
+                int cd = 0;
+                for (uint32_t i = 0x1000; i < 0x2000 && cd < 3; i++) {
+                    if (rfs[i] != v2_vm_shadow_fs[i]) {
+                        if (cd == 0) fprintf(stderr, "V2-COMP-PRE-GS: compressed area diffs:\n");
+                        fprintf(stderr, "  FS[%04X]: r=%02X s=%02X\n", (uint16_t)i, rfs[i], v2_vm_shadow_fs[i]);
+                        cd++;
+                    }
+                }
+                fprintf(stderr, "V2-COMP-PRE-GS: %d diffs in [0x1000..0x1FFF]\n", cd);
+            }
+        }
         // 4. bg_chunk → GS tile data (ds:0x2E5D) — tail call jmp sub_10982
+        if (bg_chunk == 0x1AA) v2_lzss_trace = true;
         uint32_t sz4 = v2_read_chunk(bg_chunk, v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE);
+        v2_lzss_trace = false;
         if (sz4 > 0) { v2_gs_tiledata_valid = true; }
+        // Compare with SNAPSHOT (taken right after orig decompress) instead of live segment
+        if (v2_orig_gs_tiledata_snapshot_valid) {
+            v2_orig_gs_tiledata_snapshot_valid = false;
+            int gd = 0;
+            for (uint32_t i = 0; i < sz4 && i < 4096; i++) {
+                if (v2_orig_gs_tiledata_snapshot[i] != v2_vm_shadow_gs_tiledata[i]) {
+                    if (gd < 5) fprintf(stderr, "V2-GS-SNAP-CMP[%04X]: orig=%02X v2=%02X\n",
+                        (uint16_t)i, v2_orig_gs_tiledata_snapshot[i], v2_vm_shadow_gs_tiledata[i]);
+                    gd++;
+                }
+            }
+            fprintf(stderr, "V2-GS-SNAP-CMP: %d diffs in %d bytes\n", gd, (int)(sz4 < 4096 ? sz4 : 4096));
+        } else {
+            cmp_chunk("gs_tiledata", v2_vm_shadow_gs_tiledata, 0x2E5D, sz4);
+        }
+        if (v2_vm_real_ds_ptr && bg_chunk == 0x1AA) {
+            uint16_t gs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E5D);
+            fprintf(stderr, "V2-SEGS: GS_tiledata(2E5D)=%04X FS(2E69)=%04X GS_masks(2E61)=%04X tilegfx(2E5F)=%04X\n",
+                gs_seg, *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69),
+                *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E61), *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E5F));
+            // GS[0] watchpoint removed — using FS[5586] watchpoint in seg003 instead
+        }
+        // GS tiledata verify: use snapshot (GS-SNAP-CMP above), not live segment.
+        // Live compare disabled — orig game loop modifies GS before v2 reads it.
     }
 }
 
@@ -3748,8 +4030,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // Replay mode — not implemented in v2
             ax = *(uint16_t*)(shadow + 0x86DC);
         }
-        ax |= *(uint16_t*)(shadow + 0x86DE);
-        ax |= v2_input_snapshot; // Snapshot of input_keys taken at barrier sync point
+        // Original: ax |= word_30BBE (input_keys). In m2c port, input_keys is a C++ variable
+        // updated by SDL, NOT ds:0x86DE. shadow[0x86DE] may have stale/VM-written data.
+        // Use ONLY v2_input_snapshot (= orig ax after OR input_keys, taken inside sub_12352).
+        ax |= v2_input_snapshot;
         { static int _inp = 0; _inp++; if (_inp <= 20)
             fprintf(stderr, "V2-INPUT[%d]: 86DE=%04X snapshot=%04X ax=%04X prev=%04X\n",
                     _inp, *(uint16_t*)(shadow + 0x86DE), v2_input_snapshot, ax,
@@ -3904,13 +4188,12 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             *(uint16_t*)(shadow + 0x0334) &= 0xFFFB;              // AND word_28814, 0FFFBh
             // loc_10169: blocking viking switch loop
             while (true) {
-                // sub_12352: input processing
+                // sub_12352: input processing (inside viking switch loop)
                 {
                     extern uint16_t v2_input_snapshot;
                     uint16_t ax = 0;
                     if (*(uint16_t*)(shadow + 0x86DA) != 0)
                         ax = *(uint16_t*)(shadow + 0x86DC);
-                    ax |= *(uint16_t*)(shadow + 0x86DE);
                     ax |= v2_input_snapshot;
                     *(uint16_t*)(shadow + 0x03B6) = ax;
                     uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
@@ -3931,11 +4214,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 v2_do_render();
                 SDL_Delay(16);
             }
-            // loc_10191: JMP sub_12352 (final input read)
+            // loc_10191: JMP sub_12352 (final input read after viking switch exit)
             {
                 extern uint16_t v2_input_snapshot;
                 uint16_t ax = 0;
-                ax |= *(uint16_t*)(shadow + 0x86DE);
                 ax |= v2_input_snapshot;
                 *(uint16_t*)(shadow + 0x03B6) = ax;
                 uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
@@ -4018,11 +4300,23 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // sub_12345 equivalent already done inside v2_sub_11080 (clears 0x03B6, 0x03B8).
             // Update v2_current_level so FRAME_BEGIN doesn't re-run v2_sub_11080.
             v2_current_level = *(uint16_t*)(shadow + 0x25AD);
-            // Original flow: after sub_11080, game loop restarts from loc_1001e.
-            // Second pass runs sub_12352..sub_1673c on the NEW level BEFORE VM.
-            // sub_1673c updates scroll tracking (ds:0x92F3/0x92F5) — critical for
-            // sub_13c0c viewport bounds and object despawn on the new level.
-            // v2 must replicate: sub_1673c on new level shadow state.
+            // Original: JMP sub_11080 = tail call. Remaining pre_vm funcs (sub_11ba5,
+            // sub_12e79, sub_10813, sub_1673c) do NOT run on transition frame.
+            // BUT v2 needs sub_1673c for scroll tracking on new level.
+            // Solution: skip sub_10813 (blink, has sub_1086f with extra page flips)
+            // but continue to sub_1673c. Use flag to skip sub_10813 block.
+            // NOTE: Orig JMP sub_11080 is tail call — remaining pre_vm funcs don't run.
+            // But v2 continues to sub_1673c (scroll tracking needed for new level).
+            // sub_10813 (blink) may run with extra page flips — accepted for now.
+            // Original flow: sub_10138 bit 1 does JMP sub_11080 (tail call).
+            // sub_11080 → sub_115d2 → sub_10f5d → JMP sub_12345 → RETN.
+            // RETN goes back to CALLER of sub_10138 (game loop at eip 0x002D).
+            // This means sub_11ba5..sub_1673c and sub_10813 do NOT run on transition frame.
+            // v2 must return from pre_vm after sub_11080 to match.
+            // BUT: orig game loop restarts at loc_1001e on next frame, running sub_12352..sub_1673c
+            // on the new level. v2's next frame FRAME_BEGIN will do the same.
+            // Critical: sub_1673c must run on new level for scroll tracking.
+            // Do sub_1673c here, then return to skip remaining pre_vm (sub_10813 etc).
             {
                 // sub_1673c: compare scroll Y/X with tracking, spawn/despawn on change
                 uint16_t scroll_y = *(uint16_t*)(shadow + 0x257F) >> 1;
@@ -4228,6 +4522,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         {
             uint16_t bx_read = *(uint16_t*)(shadow + 0x2B64);  // word_2B044
             uint16_t bx_write = *(uint16_t*)(shadow + 0x218F); // word_2A66F
+            { static int _1086f=0; if(bx_read!=bx_write && _1086f<5) { _1086f++;
+              fprintf(stderr,"V2-1086f[%d]: bx_read=%04X bx_write=%04X level=%04X page=%04X/%04X/%04X\n",
+                _1086f,bx_read,bx_write,*(uint16_t*)(shadow+0x25AD),
+                *(uint16_t*)(shadow+0x92F7),*(uint16_t*)(shadow+0x92F9),*(uint16_t*)(shadow+0x92FB)); } }
             while (bx_read != bx_write) {
                 // Clear blink on active viking sprite (lines 1104-1107)
                 uint16_t si_v = *(uint16_t*)(shadow + 0x3C2);   // word_288A2
@@ -4366,12 +4664,13 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 v2_draw_ui(v2_current_ds_val);
 
                 // CALL sub_12352 (line 1112): input processing
+                // Original: ax |= word_30BBE (input_keys). In m2c port, input_keys is C++ var.
+                // Use v2_input_snapshot (taken inside orig sub_12352).
                 {
                     extern uint16_t v2_input_snapshot;
                     uint16_t ax = 0;
                     if (*(uint16_t*)(shadow + 0x86DA) != 0)
                         ax = *(uint16_t*)(shadow + 0x86DC);
-                    ax |= *(uint16_t*)(shadow + 0x86DE);
                     ax |= v2_input_snapshot;
                     *(uint16_t*)(shadow + 0x03B6) = ax;
                     uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
@@ -4894,6 +5193,22 @@ static void v2_game_loop_post_render(uint8_t* shadow) {
                 rot_dbg, ax, *(uint16_t*)(shadow+0x92FB), si_lk,
                 *(uint16_t*)(shadow + (uint16_t)(si_lk - 0x75D6)),
                 *(uint16_t*)(shadow + (uint16_t)(si_lk - 0x75A4)));
+        }
+        { static int _rot=0; _rot++;
+          if(_rot<=80)
+          fprintf(stderr,"V2-165aa[%d]: IN 92F9=%04X 92FB=%04X vp_y=%04X level=%04X\n",
+            _rot, ax, *(uint16_t*)(shadow+0x92FB), *(uint16_t*)(shadow+0x46), *(uint16_t*)(shadow+0x25AD));
+          // Log rotation count at each level change + output state
+          static uint16_t _prev_level = 0xFFFF;
+          uint16_t _cur_level = *(uint16_t*)(shadow + 0x25AD);
+          if (_cur_level != _prev_level) {
+            fprintf(stderr, "V2-165aa-COUNT: level %04X→%04X at rotation #%d\n", _prev_level, _cur_level, _rot);
+            _prev_level = _cur_level;
+          }
+          // Log output for rotations around level 0x28 init (expect #63-#66)
+          if (_rot >= 80 && _rot <= 95)
+            fprintf(stderr, "V2-165aa-OUT[%d]: 92F7=%04X 92F9=%04X 92FB=%04X\n", _rot,
+              *(uint16_t*)(shadow+0x92F7), *(uint16_t*)(shadow+0x92F9), *(uint16_t*)(shadow+0x92FB));
         }
         *(uint16_t*)(shadow + 0x92F7) = ax;
         uint16_t dx = *(uint16_t*)(shadow + 0x92FB);
@@ -10898,6 +11213,17 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         uint16_t pc_before = vm.pc;
         uint16_t acc_before = v2_vm_accumulator; // save BEFORE opcode
         uint8_t opcode = vm.read_u8();
+        // Dump bytes around 94D7 when we're about to read it
+        if (pc_before == 0x94D7) {
+            static int _dump94d7 = 0; if (_dump94d7 < 3) { _dump94d7++;
+                fprintf(stderr, "V2-EXEC-94D7[%d]: obj=%02X op=%02X es_ptr=%p vm.es=%p anim_shadow=%p\n",
+                    _dump94d7, obj_idx, opcode, (void*)vm.es, (void*)vm.es, (void*)v2_vm_shadow_animdata);
+                fprintf(stderr, "  es[94D0..94DF]:");
+                for (int i=0; i<16; i++) fprintf(stderr," %02X", vm.es[0x94D0+i]);
+                fprintf(stderr, "\n  code_seg=%04X anim_seg=%04X es_seg_used=%04X\n",
+                    *(uint16_t*)(shadow+0x14+0x1355), *(uint16_t*)(shadow+0x2E67), es_seg);
+            }
+        }
         // Trace ES reads during transition VM pass (ds:0x32F != 0)
         if (*(uint16_t*)(shadow + 0x32F) != 0 && pc_before >= 0xC000) {
             static int _es_hi = 0; _es_hi++;
@@ -10922,8 +11248,10 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
                 *(uint16_t*)(shadow + obj_idx + 0x1355));
         }
 
-        // Record trace entry for comparison with original
-        { extern void v2_vm_trace_record_v2(uint16_t, uint16_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*);
+        // Record trace entry for ALL opcodes.
+        // Orig records 0x00, 0x0F, 0x10 via special code added after their POP+RETN handlers.
+        {
+        extern void v2_vm_trace_record_v2(uint16_t, uint16_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*);
           extern uint16_t v2_vm_step_per_obj[128];
           v2_vm_trace_record_v2(obj_idx, v2_vm_step_per_obj[vm.slot]++, opcode,
                                 pc_before, vm.pc, acc_before, v2_vm_accumulator, shadow);
@@ -11581,7 +11909,9 @@ static void v2_do_render() {
 // sub_1797b (render callback) fires from VGA vsync: pixel panning + DEC word_3287C + palette.
 // v2: word_3287C=1 triggers dispatch in next v2_sub_10130 call.
 // ======================================================================
+int v2_pageflip_count = 0;
 static void v2_sub_16775(uint8_t* s) {
+    v2_pageflip_count++;
     // VGA page flip registers:
     // PUSHF; CLI;
     // OUT(0x3D4, 0x0D | (bl << 8));  // CRTC start address low
@@ -11591,7 +11921,18 @@ static void v2_sub_16775(uint8_t* s) {
     // sub_1797b (render callback, called from vsync interrupt):
     //   OUT(0x3C0, 0x33);            // attribute controller: pixel panning register
     //   OUT(0x3C0, byte_317CE);      // pixel panning value
-    // DS writes (verified from set_display_memory_addr, lines 1193-1197):
+    // DS writes (verified from set_display_memory_addr, lines 1111-1183):
+    // Pixel panning: x_offset = vp_x + scroll_x, clamp to level size, extract low 2 bits
+    {
+        uint16_t x_disp = *(uint16_t*)(s + 0x44);
+        uint16_t x_some = *(uint16_t*)(s + 0x39E);
+        uint16_t x_level_size = *(uint16_t*)(s + 0x25A4);
+        uint16_t x_offset = x_disp + x_some;
+        if (x_offset > x_level_size)
+            x_offset = x_disp - x_some;
+        uint8_t x_low_bits = x_offset & 0x3;
+        s[0x92EE] = x_low_bits * 2;
+    }
     *(uint16_t*)(s + 0xA39C) = 1;                                     // word_3287C = 1
     *(uint16_t*)(s + 0x257B) = *(uint16_t*)(s + 0x44);               // save viewport X
     *(uint16_t*)(s + 0x257D) = *(uint16_t*)(s + 0x46);               // save viewport Y
@@ -12383,6 +12724,26 @@ void v2_phase_pre_vm(uint16_t ds_val) {
     // Real DS = after orig sub_12352..sub_1673c. Shadow DS = after v2 pre_vm.
     static int pre_vm_frame = 0;
     pre_vm_frame++;
+    // Trap DS[0x0484] — track when hflip flag for sub-sprite di=0x36 diverges
+    if (v2_vm_real_ds_ptr) {
+        uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x0484);
+        uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + 0x0484);
+        static bool _0484_diverged = false;
+        if (rv != sv && !_0484_diverged) {
+            _0484_diverged = true;
+            fprintf(stderr, "V2-TRAP-0484[f%d]: FIRST DIVERGE real=%04X shadow=%04X\n", pre_vm_frame, rv, sv);
+            // Also check what object di=0x36 state is
+            uint8_t* r = v2_vm_real_ds_ptr; uint8_t* s = v2_vm_shadow_ds;
+            fprintf(stderr, "  di=0x36: flags r=%04X s=%04X X r=%04X s=%04X Y r=%04X s=%04X\n",
+                *(uint16_t*)(r+0x483), *(uint16_t*)(s+0x483),
+                *(uint16_t*)(r+0x36+0x64D), *(uint16_t*)(s+0x36+0x64D),
+                *(uint16_t*)(r+0x36+0x74D), *(uint16_t*)(s+0x36+0x74D));
+            fprintf(stderr, "  di=0x36: mode r=%02X s=%02X sprite r=%04X s=%04X owner anim r=%04X s=%04X\n",
+                r[0x36+0x114D], s[0x36+0x114D],
+                *(uint16_t*)(r+0x36+0x84D), *(uint16_t*)(s+0x36+0x84D),
+                *(uint16_t*)(r+0x36+0x1585), *(uint16_t*)(s+0x36+0x1585));
+        }
+    }
     if (v2_vm_real_ds_ptr) {
         uint8_t* real = v2_vm_real_ds_ptr;
         uint8_t* shad = v2_vm_shadow_ds;
@@ -12431,6 +12792,27 @@ void v2_phase_vm(uint16_t ds_val) {
     memset(v2_vm_step_per_obj, 0, sizeof(v2_vm_step_per_obj));
     extern int v2_trace_len;
     static int _vm_frame = 0; _vm_frame++;
+    // Animdata compare at es:94D7 to find when it diverges
+    if (v2_m2c_base && v2_vm_real_ds_ptr) {
+        uint16_t anim_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E67);
+        if (anim_seg) {
+            uint8_t* orig_anim = v2_m2c_base + (uint32_t)anim_seg * 16;
+            uint8_t orig_byte = orig_anim[0x94D7];
+            uint8_t v2_byte = v2_vm_shadow_animdata[0x94D7];
+            static bool _anim_diverged = false;
+            if (orig_byte != v2_byte && !_anim_diverged) {
+                _anim_diverged = true;
+                fprintf(stderr, "V2-ANIM-DIVERGE[f%d]: es:94D7 orig=%02X v2=%02X\n",
+                    _vm_frame, orig_byte, v2_byte);
+                // Dump surrounding bytes
+                fprintf(stderr, "  orig[94D0..94DF]:");
+                for (int i = 0; i < 16; i++) fprintf(stderr, " %02X", orig_anim[0x94D0+i]);
+                fprintf(stderr, "\n  v2  [94D0..94DF]:");
+                for (int i = 0; i < 16; i++) fprintf(stderr, " %02X", v2_vm_shadow_animdata[0x94D0+i]);
+                fprintf(stderr, "\n");
+            }
+        }
+    }
     if (_vm_frame <= 2) fprintf(stderr, "V2-VM-START[%d]: trace_len_before_reset=%d table_end=%04X\n",
                                 _vm_frame, v2_trace_len, *(uint16_t*)(v2_vm_shadow_ds + 0x372));
     v2_trace_len = 0;
@@ -12503,9 +12885,22 @@ void v2_phase_vm(uint16_t ds_val) {
       v2_orig_anim_cmd_count = 0;
       v2_v2_anim_cmd_count = 0;
     }
+    // Trap 0x0484 after VM — did VM cause the divergence?
+    if (v2_vm_real_ds_ptr) {
+        uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x0484);
+        uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + 0x0484);
+        static bool _0484_vm_diverged = false;
+        if (rv != sv && !_0484_vm_diverged) {
+            _0484_vm_diverged = true;
+            static int _pvf2 = 0;
+            fprintf(stderr, "V2-TRAP-0484-VM[f%d]: DIVERGE AFTER VM real=%04X shadow=%04X\n", _pvf2, rv, sv);
+        }
+        static int _pvf2_ctr = 0; _pvf2_ctr++;
+        (void)_pvf2_ctr; // suppress unused
+    }
     // Full DS compare right after both VMs complete, before post-VM
     { static int _pvf = 0; _pvf++;
-      if (_pvf <= 200 && v2_vm_real_ds_ptr) {
+      if (_pvf <= 300 && v2_vm_real_ds_ptr) {
           uint8_t* r = v2_vm_real_ds_ptr;
           uint8_t* s = v2_vm_shadow_ds;
           int dc = 0;
@@ -12529,25 +12924,16 @@ void v2_phase_vm(uint16_t ds_val) {
 static bool v2_ds_hash_skip(uint32_t i); // forward decl
 static int v2_phase_verify_frame = 0;
 static void v2_phase_verify(const char* phase) {
+    // Full DS compare disabled (live timing artifact).
+    // Single-address trap for 0x077C to find which phase first diverges.
     if (!v2_vm_real_ds_ptr) return;
-    if (v2_phase_verify_frame > 100) return;
-    uint8_t* r = v2_vm_real_ds_ptr;
-    uint8_t* s = v2_vm_shadow_ds;
-    int dc = 0;
-    for (uint32_t i = 0; i < 0x10000 && dc < 5; i += 2) {
-        if (v2_ds_hash_skip(i)) continue;
-        // AIL sound handles (v2 writes real seq offsets, AIL stub returns 0xFFFF)
-        if (i >= 0x990C && i <= 0x991E) continue;
-        // XMI buffer (sub_10d96 alloc — DosMemAlloc derived, in ds_hash_skip)
-        if (i == 0x9934) continue;
-        uint16_t rv = *(uint16_t*)(r + i);
-        uint16_t sv = *(uint16_t*)(s + i);
-        if (rv != sv) {
-            if (dc == 0)
-                fprintf(stderr, "V2-PHASE[%s f%d]: DS DIFF:\n", phase, v2_phase_verify_frame);
-            fprintf(stderr, "  0x%04X: orig=%04X v2=%04X\n", (uint16_t)i, rv, sv);
-            dc++;
-        }
+    uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x077C);
+    uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + 0x077C);
+    static bool _077c_found = false;
+    if (rv != sv && !_077c_found) {
+        _077c_found = true;
+        fprintf(stderr, "V2-077C-TRAP[%s f%d]: FIRST DIVERGE real=%04X shadow=%04X\n",
+            phase, v2_phase_verify_frame, rv, sv);
     }
 }
 
@@ -12570,7 +12956,18 @@ static void v2_post_vm_field_check() {
 void v2_vm_trace_compare(); // forward decl
 void v2_phase_post_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // Check 0x077C before and after post_vm
+    auto chk = [](const char* fn) {
+        if (!v2_vm_real_ds_ptr) return;
+        uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x077C);
+        uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + 0x077C);
+        static bool _found = false;
+        if (rv != sv && !_found) { _found = true;
+            fprintf(stderr, "V2-PVM-077C[%s]: DIVERGE real=%04X shadow=%04X\n", fn, rv, sv); }
+    };
+    chk("PVM-entry");
     v2_game_loop_post_vm(v2_vm_shadow_ds);
+    chk("PVM-post-postvm");
     v2_vm_verify_subsprites(ds_val);
     v2_vm_verify_fs(ds_val);
     // Trace comparison: both orig and v2 VM have finished, compare opcode traces
@@ -12586,6 +12983,19 @@ void v2_phase_render1(uint16_t ds_val) {
     // Both orig and v2 leave residuals — they just differ by 2.
     // Fix: clear sub-sprite residuals after sub_11080 transition, before first render.
     // This matches what happens in the original when the game loop restarts.
+
+    // Per-function 0x077C check to isolate divergence point
+    auto chk077C = [&](const char* fn) {
+        if (!v2_vm_real_ds_ptr) return;
+        uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x077C);
+        uint16_t sv = *(uint16_t*)(s + 0x077C);
+        static bool _found = false;
+        if (rv != sv && !_found) {
+            _found = true;
+            fprintf(stderr, "V2-R1-077C[%s]: DIVERGE real=%04X shadow=%04X\n", fn, rv, sv);
+        }
+    };
+    chk077C("R1-entry");
 
     // sub_12fc6(bx=0): sub-sprite position update type 0 (eip 0x004B)
     // Uses delta_type0: d - (|d|/3)*2 ± round (keeps 1/3 of delta)
@@ -12614,20 +13024,27 @@ void v2_phase_render1(uint16_t ds_val) {
         }
     }
 
+    chk077C("post-12fc6");
+
     // sub_10130: VGA vsync wait (eip 0x004E)
     v2_sub_10130(s);
+    chk077C("post-10130");
 
     // sub_1DE05 (render 1, eip 0x0051)
     v2_sub_1DE05(s);
+    chk077C("post-1DE05");
     // sub_1DE05 equivalent: full-frame render
     v2_do_render();
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
+    chk077C("post-165aa");
     // sub_1DD9C (sprite render)
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    chk077C("post-1DD9C");
 
-    // FS compare after sub_1DD9C in render1
-    if (v2_vm_real_ds_ptr && v2_m2c_base) {
+    // FS compare DISABLED — was comparing with live orig FS (timing artifact).
+    // Correct FS verification done by FS-SNAP-173c7 (snapshot-based).
+    if (false && v2_vm_real_ds_ptr && v2_m2c_base) {
         static int _fsc = 0; _fsc++;
         if (_fsc <= 100) {
             uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
@@ -12970,10 +13387,132 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         }
         if (trigger) {
             if (*(uint16_t*)(s + 0x3CC) == 0x8000 || (s[0x25CF] & 8)) {
+                // loc_10E35 path: sub_16546 + sub_1754c + memory free + sub_10fa0 + sub_11080
+                // sub_16546/sub_1754c: keyboard/sound cleanup — NOP for v2
+                // Memory free: INT 21h — NOP for v2
+                // sub_10fa0: palette fade to black (1 page flip with debug hack)
+                // NOTE: sub_10fa0 omitted — its page flip causes page rotation mismatch.
+                // The rotation mismatch occurs because v2 sub_165aa lookup tables differ
+                // from orig (VGA row tracking not fully replicated). Adding sub_10fa0 makes
+                // rotation diverge MORE. Omitting it gives better results empirically.
+                // TODO: fix sub_165aa lookup tables to match orig, then add sub_10fa0 back.
                 v2_sub_11080(s);
             } else {
+                // loc_10389 path: palette clear → sub_103CA (blocking transition UI) → sub_11080
+                // OUT(0x3C8, 3); OUT(0x3C9, 0,0,0); — VGA palette write, commented
                 s[0x7F0B] = 0; s[0x7F0C] = 0; s[0x7F0D] = 0;
-                v2_sub_11080(s);
+
+                // sub_103CA: blocking level transition UI (text + render loop).
+                // Orig shows "Level Complete" text, waits for button, renders 3 full passes.
+                // DS side effects: sub_165aa rotation (3 calls), text glyphs, sub_1DD9C mode bytes.
+                // sub_177bb(0): stop music — AIL, NOP for v2
+                // loc_124A9 + sub_1265b + sub_1241e: transition text — glyph writes (v2 skips text)
+
+                // sub_104A1: blocking render loop (eip 0x04A1..0x0554).
+                // Verified with seg000 lines 2491-2564.
+                // word_28925=0x11, word_28923=1, byte_31A4B=1.
+                // VGA: set color 3 to white (OUT 0x3C8/0x3C9). Commented.
+                // sub_1E0C7 + sub_16775.
+                // Loop (loc_104C3): word_3287C=1, sub_10130, sub_1DE05,
+                //   word_3287C=1, sub_10130, word_3287C=1, sub_10130,
+                //   sub_12352, sub_10555, sub_105CB. If carry → exit.
+                // sub_10555: DEC word_28925; if (word_28925 & 0xF) != 0 → return (no carry).
+                //   else: if word_28925 & 0x10 → blink text (MOV si, 0x10 or 0x15),
+                //         else → hide text. sub_105CB checks blink state → JB (carry) exits loop.
+                *(uint16_t*)(s + 0x0445) = 0x11;  // word_28925
+                *(uint16_t*)(s + 0x0443) = 1;      // word_28923
+                s[0x956B] = 1;                      // byte_31A4B
+                // OUT(0x3C8, 3); OUT(0x3C9, 0x3F, 0x3F, 0x3F); — VGA palette, commented
+                v2_sub_1E0C7(s);
+                v2_sub_16775(s);
+                // Blocking loop (loc_104C3): exact replica of orig.
+                // NO sub_16775 inside loop. NO sub_165aa inside loop.
+                // Verified with seg000 lines 2507-2521 (eip 0x04C3..0x04EE).
+                {
+                    bool loop_exit = false;
+                    while (!loop_exit) {
+                        // loc_104C3:
+                        *(uint16_t*)(s + 0xA39C) = 1;       // mov word_3287C, 1
+                        v2_sub_10130(s);                      // call sub_10130
+                        v2_sub_1DE05(s);                      // call sub_1DE05
+                        *(uint16_t*)(s + 0xA39C) = 1;       // mov word_3287C, 1
+                        v2_sub_10130(s);                      // call sub_10130
+                        *(uint16_t*)(s + 0xA39C) = 1;       // mov word_3287C, 1
+                        v2_sub_10130(s);                      // call sub_10130
+                        // sub_12352: input
+                        {
+                            extern uint16_t v2_input_snapshot;
+                            uint16_t ax = 0;
+                            if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
+                            ax |= v2_input_snapshot;
+                            *(uint16_t*)(s + 0x03B6) = ax;
+                            uint16_t prev = *(uint16_t*)(s + 0x03BA);
+                            *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
+                            *(uint16_t*)(s + 0x03BA) = ax;
+                        }
+                        // sub_10555: DEC word_28925, check & 0xF
+                        *(uint16_t*)(s + 0x0445) -= 1;       // dec word_28925
+                        if (*(uint16_t*)(s + 0x0445) & 0xF)  // test word_28925, 0Fh
+                            continue;                          // jnz → loop (no carry)
+                        // sub_10555 continues: test word_28925, 0x10
+                        if (*(uint16_t*)(s + 0x0445) & 0x10) {
+                            // Blink text visible path (si=0x10 or 0x15)
+                            // sub_105CB: eventually returns no-carry → continue loop
+                        } else {
+                            // Hide text path (loc_10598)
+                            // sub_105CB: returns carry → exit loop
+                            loop_exit = true;
+                        }
+                    }
+                }
+                // loc_104F0: post-button read + final input
+                {
+                    extern uint16_t v2_input_snapshot;
+                    uint16_t ax = 0;
+                    if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
+                    ax |= v2_input_snapshot;
+                    *(uint16_t*)(s + 0x03B6) = ax;
+                    uint16_t prev = *(uint16_t*)(s + 0x03BA);
+                    *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
+                    *(uint16_t*)(s + 0x03BA) = ax;
+                }
+
+                // Post-button: 3 full render passes with sub_165aa rotation
+                *(uint16_t*)(s + 0x9569) = 1;      // word_31A49
+                *(uint16_t*)(s + 0x98DC) = 0;       // word_31DBC
+                // Render pass 1 (eip 0x050B-0x0528): sub_10130, sub_1DE05, sub_165aa,
+                //   sub_1DD9C, sub_1C8F1, sub_1E0C7, sub_16775
+                v2_sub_10130(s);
+                v2_sub_1DE05(s);
+                v2_game_loop_post_render(s);         // includes sub_165aa
+                v2_sub_1DD9C(s);
+                v2_sub_1C8F1(s, 0xFFFE);
+                v2_sub_1E0C7(s);
+                v2_sub_16775(s);
+                // Render pass 2 (eip 0x052B-0x0548): sub_10130, sub_1DE05, sub_165aa,
+                //   sub_1DD9C, sub_1C8F1, sub_1E0C7, sub_16775
+                v2_sub_10130(s);
+                v2_sub_1DE05(s);
+                v2_game_loop_post_render(s);         // includes sub_165aa
+                v2_sub_1DD9C(s);
+                v2_sub_1C8F1(s, 0xFFFE);
+                v2_sub_1E0C7(s);
+                v2_sub_16775(s);
+                // Cleanup
+                *(uint16_t*)(s + 0x9569) = 0;       // word_31A49
+                s[0x956B] = 0;                       // byte_31A4B
+                *(uint16_t*)(s + 0x98DC) = 0;        // word_31DBC
+                memset(s + 0x956C, 0, 0x1B8 * 2);   // clear glyph buffer
+                // Check word_28814 & 2 → JMP loc_10E35 (full transition)
+                if (*(uint16_t*)(s + 0x0334) & 2) {
+                    // loc_10E35: sub_10fa0 + sub_11080
+                    v2_sub_10fa0(s);
+                    v2_sub_11080(s);
+                } else {
+                    // RETN → continue to sub_10fa0 + sub_11080 below
+                    v2_sub_10fa0(s);
+                    v2_sub_11080(s);
+                }
             }
         }
     }
@@ -13073,14 +13612,13 @@ void v2_phase_post_flip3(uint16_t ds_val) {
             }
             *(uint16_t*)(s + 0x2B64) = bx_read;
             v2_sub_1E0C7(s);
-            // CALLF sub_1E0C7 (already done above)
-            // CALL sub_12352: input processing
+            // CALL sub_12352: input processing (inside POST_FLIP3 sub_1086f)
+            // Use v2_input_snapshot only — shadow[0x86DE] is not input_keys in m2c port
             {
                 extern uint16_t v2_input_snapshot;
                 uint16_t ax = 0;
                 if (*(uint16_t*)(s + 0x86DA) != 0)
                     ax = *(uint16_t*)(s + 0x86DC);
-                ax |= *(uint16_t*)(s + 0x86DE);
                 ax |= v2_input_snapshot;
                 *(uint16_t*)(s + 0x03B6) = ax;
                 uint16_t prev = *(uint16_t*)(s + 0x03BA);

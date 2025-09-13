@@ -671,6 +671,13 @@ loc_1cdde:
 cs=0xe25;eip=0x0005ae; 	T(MOV(cx, bp));	// 36318 mov     cx, bp ;~ 0E25:05AE
 loc_1cde0:
 	// 6106
+{ static int _orfs=0; if(si >= 0x5580 && si <= 0x5590 && _orfs < 10) { _orfs++;
+  fprintf(stderr,"ORIG-FS-OR[%d]: fs[%04X] %04X→%04X\n",_orfs,(uint16_t)si,*(uint16_t*)raddr(fs,si),*(uint16_t*)raddr(fs,si)|3);
+  if (si == 0x5586) {
+    extern uint8_t* v2_fs5586_trap_addr;
+    v2_fs5586_trap_addr = (uint8_t*)raddr(fs, 0x5586);
+    fprintf(stderr,"FS5586-ARM: trap armed at %p\n", v2_fs5586_trap_addr);
+  } } }
 cs=0xe25;eip=0x0005b0; 	X(OR(*(dw*)(raddr(fs,si)), 3));	// 36321 or      word ptr fs:[si], 3 ;~ 0E25:05B0
 cs=0xe25;eip=0x0005b4; 	T(ADD(si, 2));	// 36322 add     si, 2 ;~ 0E25:05B4
 cs=0xe25;eip=0x0005b7; 	J(LOOP(loc_1cde0));	// 36323 loop    loc_1CDE0 ;~ 0E25:05B7
@@ -746,6 +753,10 @@ cs=0xe25;eip=0x000628; 	T(MOV(dx, *(dw*)(raddr(ds,0x9168))));	// 36400 mov     d
 cs=0xe25;eip=0x00062c; 	T(SUB(dx, bp));	// 36401 sub     dx, bp ;~ 0E25:062C
 cs=0xe25;eip=0x00062e; 	T(ADD(dx, dx));	// 36402 add     dx, dx ;~ 0E25:062E
 cs=0xe25;eip=0x000630; 	T(ADD(si, si));	// 36403 add     si, si ;~ 0E25:0630
+{ extern void v2_hw_wp_drain(); v2_hw_wp_drain(); }
+{ static int _fsdbg=0; if(di==0x30 && *(uint8_t*)raddr(ds,di+0x114D)==0 && _fsdbg<5) { _fsdbg++;
+  fprintf(stderr,"ORIG-FSSCAN[%d]: di=%02X si=%04X ax=%d bp=%d dx=%d fs[si]=%04X\n",
+    _fsdbg,(uint16_t)di,(uint16_t)si,(uint16_t)ax,(uint16_t)bp,(uint16_t)dx,*(uint16_t*)raddr(fs,si)); } }
 loc_1ce62:
 	// 6116
 cs=0xe25;eip=0x000632; 	T(MOV(cx, bp));	// 36406 mov     cx, bp ;~ 0E25:0632
@@ -761,10 +772,17 @@ cs=0xe25;eip=0x000643; 	J(JNZ(loc_1ce62));	// 36415 jnz     short loc_1CE62 ;~ 0
 loc_1ce75:
 	// 6118
 { static int _onv=0; if(di==0x30 && *(uint8_t*)raddr(ds,di+0x114D)==0 && _onv<10) { _onv++;
-  fprintf(stderr,"ORIG-NOTVIS[%d]: si=%04X ax=%04X cx_x=%d dx_y=%d xy=(%04X,%04X)\n",
-    _onv,(uint16_t)si,(uint16_t)ax,
-    (int16_t)*(uint16_t*)raddr(ds,di+0x64D)>>3, (int16_t)*(uint16_t*)raddr(ds,di+0x74D)>>3,
-    *(uint16_t*)raddr(ds,di+0x64D), *(uint16_t*)raddr(ds,di+0x74D)); } }
+  // Recompute si_off and scan position to show FS values
+  int16_t _cx = (int16_t)*(uint16_t*)raddr(ds,di+0x64D) >> 3;
+  int16_t _dx = (int16_t)*(uint16_t*)raddr(ds,di+0x74D) >> 3;
+  int16_t _si = 0;
+  if (_cx >= 0) _si += _cx;
+  if (_dx >= 0) { uint16_t _bx = (uint16_t)_dx << 1; _si += (int16_t)*(uint16_t*)raddr(ds, (uint16_t)(_bx - 0x7098)); }
+  uint16_t _fs_off = (uint16_t)(_si * 2);
+  fprintf(stderr,"ORIG-NOTVIS[%d]: si=%04X ax=%04X cx_x=%d dx_y=%d xy=(%04X,%04X) fs_off=%04X fs[off]=%04X\n",
+    _onv,(uint16_t)si,(uint16_t)ax, _cx, _dx,
+    *(uint16_t*)raddr(ds,di+0x64D), *(uint16_t*)raddr(ds,di+0x74D),
+    _fs_off, (_fs_off < 0xFFFE) ? *(uint16_t*)raddr(fs, _fs_off) : 0xDEAD); } }
 cs=0xe25;eip=0x000645; 	T(XOR(ax, ax));	// 36419 xor     ax, ax ;~ 0E25:0645
 locret_1ce77:
 	// 6119
@@ -2073,6 +2091,8 @@ cs=0xe25;eip=0x00112b; 	T(MOV(bp, 5));	// 37549 mov     bp, 5 ;~ 0E25:112B
 cs=0xe25;eip=0x00112e; 	T(MOV(si, *(dw*)(raddr(ds,di+0x0C4D))));	// 37550 mov     si, [di+0C4Dh] ;~ 0E25:112E
 cs=0xe25;eip=0x001132; 	T(SHR(si, 3));	// 37551 shr     si, 3 ;~ 0E25:1132
 cs=0xe25;eip=0x001135; 	T(INC(si));	// 37552 inc     si ;~ 0E25:1135
+{ static int _ocd7d=0; if(di==0x30 && _ocd7d<5) { _ocd7d++;
+  fprintf(stderr,"ORIG-CD7D-TYPE2[%d]: di=%02X cx=%04X dx=%04X si=%d bp=%d\n",_ocd7d,(uint16_t)di,(uint16_t)cx,(uint16_t)dx,si,bp); } }
 cs=0xe25;eip=0x001136; 	J(CALL(sub_1cd7d,0));	// 37553 call    sub_1CD7D ;~ 0E25:1136
 cs=0xe25;eip=0x001139; 	T(MOV(si, *(dw*)(raddr(ds,di+0x74D))));	// 37554 mov     si, [di+74Dh] ;~ 0E25:1139
 	cs=seg_offset(seg003);
@@ -2615,8 +2635,8 @@ cs=0xe25;eip=0x00156c; 	T(MOV(di, 0x0FE));	// 37999 mov     di, 0FEh ; '�' ;~ 
 loc_1dd9f:
 	// 6248
 { uint16_t _f=*(uint16_t*)raddr(ds,di+0x44D); static int _oa=0;
-  if(di==0x30 && (_f & 0x8000) && _oa<12) { _oa++;
-  fprintf(stderr,"ORIG-DD9C-ACT[%d]: flags=%04X mode=%02X force=%02X\n",_oa,_f,*(uint8_t*)raddr(ds,di+0x114D),*(uint8_t*)raddr(ds,0x9568)); } }
+  if((di==0x30||di==0x36||di==0x3A) && (_f & 0x8000) && _oa<30) { _oa++;
+  fprintf(stderr,"ORIG-DD9C-ACT[%d]: di=%02X flags=%04X mode=%02X force=%02X xy=(%04X,%04X) tile=(%d,%d)\n",_oa,(uint16_t)di,_f,*(uint8_t*)raddr(ds,di+0x114D),*(uint8_t*)raddr(ds,0x9568),*(uint16_t*)raddr(ds,di+0x64D),*(uint16_t*)raddr(ds,di+0x74D),(int16_t)*(uint16_t*)raddr(ds,di+0x64D)>>3,(int16_t)*(uint16_t*)raddr(ds,di+0x74D)>>3); } }
 cs=0xe25;eip=0x00156f; 	T(TEST(*(dw*)(raddr(ds,di+0x44D)), 0x8000));	// 38002 test    word ptr [di+44Dh], 8000h ;~ 0E25:156F
 cs=0xe25;eip=0x001575; 	J(JZ(loc_1ddf0));	// 38003 jz      short loc_1DDF0 ;~ 0E25:1575
 cs=0xe25;eip=0x001577; 	T(TEST(*(dw*)(raddr(ds,di+0x44D)), 0x6000));	// 38004 test    word ptr [di+44Dh], 6000h ;~ 0E25:1577
@@ -2678,6 +2698,8 @@ cs=0xe25;eip=0x0015eb; 	J(JLE(loc_1de41));	// 38060 jle     short loc_1DE41 ;~ 0
 cs=0xe25;eip=0x0015ed; 	T(MOV(bp, 5));	// 38061 mov     bp, 5 ;~ 0E25:15ED
 cs=0xe25;eip=0x0015f0; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0F4D))));	// 38062 mov     cx, [di+0F4Dh] ;~ 0E25:15F0
 cs=0xe25;eip=0x0015f4; 	T(MOV(dx, *(dw*)(raddr(ds,di+0x104D))));	// 38063 mov     dx, [di+104Dh] ;~ 0E25:15F4
+{ static int _ode05=0; if((di==0x2E||di==0x34||di==0x38) && _ode05<40) { _ode05++;
+  static int _ocall=0; fprintf(stderr,"ORIG-DE05[c?]: di=%02X redraw %02X→%02X (si>5 path)\n", (uint16_t)di, *(uint8_t*)raddr(ds,di+0x114E), (uint8_t)(*(uint8_t*)raddr(ds,di+0x114E)-1)); } }
 cs=0xe25;eip=0x0015f8; 	X(DEC(*(raddr(ds,di+0x114E))));	// 38064 dec     byte ptr [di+114Eh] ;~ 0E25:15F8
 cs=0xe25;eip=0x0015fc; 	J(CALL(sub_1cd7d,0));	// 38065 call    sub_1CD7D ;~ 0E25:15FC
 cs=0xe25;eip=0x0015ff; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0D4D))));	// 38066 mov     cx, [di+0D4Dh] ;~ 0E25:15FF
@@ -2689,6 +2711,8 @@ loc_1de41:
 	// 6254
 cs=0xe25;eip=0x001611; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0F4D))));	// 38074 mov     cx, [di+0F4Dh] ;~ 0E25:1611
 cs=0xe25;eip=0x001615; 	T(MOV(dx, *(dw*)(raddr(ds,di+0x104D))));	// 38075 mov     dx, [di+104Dh] ;~ 0E25:1615
+{ static int _ode05b=0; if((di==0x2E||di==0x34||di==0x38) && _ode05b<40) { _ode05b++;
+  fprintf(stderr,"ORIG-DE05[c?]: di=%02X redraw %02X→%02X (si<=5 path)\n", (uint16_t)di, *(uint8_t*)raddr(ds,di+0x114E), (uint8_t)(*(uint8_t*)raddr(ds,di+0x114E)-1)); } }
 cs=0xe25;eip=0x001619; 	X(DEC(*(raddr(ds,di+0x114E))));	// 38076 dec     byte ptr [di+114Eh] ;~ 0E25:1619
 cs=0xe25;eip=0x00161d; 	J(CALL(sub_1cd7b,0));	// 38077 call    sub_1CD7B ;~ 0E25:161D
 cs=0xe25;eip=0x001620; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0D4D))));	// 38078 mov     cx, [di+0D4Dh] ;~ 0E25:1620
