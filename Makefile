@@ -1,4 +1,4 @@
-DBG    := #-fsanitize=address -ggdb3 -O0
+DBG    := -ggdb3 -O0 #-fsanitize=address
 SDL    := $(shell pkg-config --cflags --libs sdl2)
 OBJDIR := .obj
 
@@ -26,6 +26,7 @@ CXX_SRCS := \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
+  src/sdl/v2_vm.cpp \
   src/adlmidi/src/adlmidi.cpp \
   src/adlmidi/src/adlmidi_load.cpp \
   src/adlmidi/src/adlmidi_midiplay.cpp \
@@ -53,7 +54,7 @@ DEPS     := $(ALL_OBJS:.o=.d)
 all: vikings
 
 vikings: $(ALL_OBJS)
-	g++ $(DBG) -o $@ $^ $(SDL)
+	g++ $(DBG) -rdynamic -o $@ $^ $(SDL)
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)

@@ -14,6 +14,9 @@ extern void sound_init();
 
 bool from_callf=false;
 
+// v2 DosMemAlloc replay: record each allocation result
+extern void v2_record_alloc(uint16_t seg);
+
 namespace m2c {
 
 #ifdef M2CDEBUG
@@ -285,6 +288,8 @@ X86_REGREF
       }
 	AFFECT_CF(rc!=SUCCESS);
       ax++;   /* DosMemAlloc() returns seg of MCB rather than data */
+      // Record allocation result for v2 replay
+      ::v2_record_alloc(ax);
 	return;
 			break;
 		}
@@ -325,6 +330,17 @@ X86_REGREF
 			exit(al);
 			return;
 		}
+		case 0x35: // GET INTERRUPT VECTOR — not implemented, return 0
+			bx = 0; es = 0;
+			AFFECT_CF(0);
+			return;
+		case 0x25: // SET INTERRUPT VECTOR — not implemented, ignore
+			AFFECT_CF(0);
+			return;
+		case 0x2C: // GET CURRENT TIME — return fixed value for deterministic PRNG
+			cx = 0x1234; dx = 0x5678;
+			AFFECT_CF(0);
+			return;
 		case 0x58: // mem allocation policy
 		{
 #ifdef __DJGPP__

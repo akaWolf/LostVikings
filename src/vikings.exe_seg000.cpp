@@ -1874,7 +1874,7 @@ cs=0x1a2;eip=0x000015; 	J(CALL(sub_11080,0));	// 43 call    sub_11080 ;~ 01A2:00
 cs=0x1a2;eip=0x000018; 	X(MOV(word_3287c, 1));	// 44 mov     word_3287C, 1 ;~ 01A2:0018
 	// V2: run v2_run_animation_vm — level change detection triggers v2_sub_11080 on shadow.
 	// Then verify compares shadow (v2 init result) vs real (original init result).
-	if (myDrawInfo_v2) { v2_run_animation_vm(ds); v2_vm_verify_after_init(ds); }
+	if (myDrawInfo_v2) { v2_run_animation_vm(ds); v2_vm_verify_after_init(ds); v2_game_thread_start(); }
 loc_1001e:
 	// 4370
  if (need_quit) {
@@ -1892,7 +1892,11 @@ loc_1001e:
      prev_mon = cur;
    }
  }
+	// Signal FRAME_BEGIN BEFORE sub_12352 — so v2 compare sees pre-input DS
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_FRAME_BEGIN, ds);
 cs=0x1a2;eip=0x00001e; 	J(CALL(sub_12352,0));	// 48 call    sub_12352 ;~ 01A2:001E
+	// Snapshot input_keys RIGHT AFTER orig sub_12352 reads it
+	if (myDrawInfo_v2) { extern uint16_t v2_input_snapshot; v2_input_snapshot = input_keys; }
 cs=0x1a2;eip=0x000021; 	J(CALL(sub_12d72,0));	// 49 call    sub_12D72 ;~ 01A2:0021
 cs=0x1a2;eip=0x000024; 	J(CALL(sub_102ad,0));	// 50 call    sub_102AD ;~ 01A2:0024
 cs=0x1a2;eip=0x000027; 	J(CALL(sub_1041c,0));	// 51 call    sub_1041C ;~ 01A2:0027
@@ -1901,21 +1905,20 @@ cs=0x1a2;eip=0x00002d; 	J(CALL(sub_11ba5,0));	// 53 call    sub_11BA5 ;~ 01A2:00
 cs=0x1a2;eip=0x000030; 	J(CALL(sub_12e79,0));	// 54 call    sub_12E79 ;~ 01A2:0030
 cs=0x1a2;eip=0x000033; 	J(CALL(sub_10813,0));	// 55 call    sub_10813 ;~ 01A2:0033
 cs=0x1a2;eip=0x000036; 	J(CALL(sub_1673c,0));	// 56 call    sub_1673C ;~ 01A2:0036
-	// Note: word_3287C is DEC'd by render callback (sub_1797b) asynchronously.
-	// v2 shadow handles this independently (set to 0 in reset_frame_state).
-	if (myDrawInfo_v2) v2_run_animation_vm(ds); // V2: run animation VM BEFORE original (same input state)
+	// V2: barrier-synced phases — FRAME_BEGIN already signaled before sub_12352
+	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_PRE_VM, ds); }
+	// Reset orig trace before main VM (discard init sub_115d2 entries)
+	{ extern int orig_trace_len; orig_trace_len = 0; }
 cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:0039
-	// Per-opcode verification is done inline in sub_1424c's opcode loop (loc_142a6)
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VM, ds);
 cs=0x1a2;eip=0x00003c; 	J(CALL(sub_1386b,0));	// 58 call    sub_1386B ;~ 01A2:003C
 cs=0x1a2;eip=0x00003f; 	J(CALL(sub_1625d,0));	// 59 call    sub_1625D ;~ 01A2:003F
 cs=0x1a2;eip=0x000042; 	J(CALL(sub_15546,0));	// 60 call    sub_15546 ;~ 01A2:0042
-	if (myDrawInfo_v2) v2_vm_verify_collision(ds);
 cs=0x1a2;eip=0x000045; 	J(CALL(sub_13916,0));	// 61 call    sub_13916 ;~ 01A2:0045
 loc_10048:
-	// 4371
 	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); }
 cs=0x1a2;eip=0x000048; 	J(CALL(sub_1064b,0));	// 64 call    sub_1064B ;~ 01A2:0048
-	if (myDrawInfo_v2) { v2_vm_verify_game_loop(ds); v2_vm_verify_tilemap(ds); v2_vm_verify_all_segments(ds); }
+	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_VM, ds); v2_vm_verify_game_loop(ds); v2_vm_verify_tilemap(ds); v2_vm_verify_all_segments(ds); }
 cs=0x1a2;eip=0x00004b; 	J(CALL(sub_12fc6,0));	// 65 call    sub_12FC6 ;~ 01A2:004B
 	static bool seg003_initialized = false;
 	if (!seg003_initialized) {
@@ -1937,6 +1940,7 @@ cs=0x1a2;eip=0x000067; 	J(CALLF(sub_1c8f1,0));	// 73 call    sub_1C8F1 ;~ 01A2:0
 
 cs=0x1a2;eip=0x00006c; 	J(CALLF(sub_1e0c7,0));	// 74 call    sub_1E0C7 ;~ 01A2:006C
 cs=0x1a2;eip=0x000071; 	J(CALL(sub_16775,0));	// 75 call    sub_16775 ;~ 01A2:0071
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER1, ds); // AFTER pass 1 complete
 cs=0x1a2;eip=0x000074; 	J(CALL(sub_12e16,0));	// 76 call    sub_12E16 ;~ 01A2:0074
 cs=0x1a2;eip=0x000077; 	J(CALL(sub_15530,0));	// 77 call    sub_15530 ;~ 01A2:0077
 cs=0x1a2;eip=0x00007a; 	J(CALL(sub_10704,0));	// 78 call    sub_10704 ;~ 01A2:007A
@@ -1945,6 +1949,7 @@ cs=0x1a2;eip=0x00007d; 	J(CALL(sub_12fcb,0));	// 79 call    sub_12FCB ;~ 01A2:00
 cs=0x1a2;eip=0x000080; 	J(CALL(sub_12d2c,0));	// 80 call    sub_12D2C ;~ 01A2:0080
 cs=0x1a2;eip=0x000083; 	J(CALL(sub_10130,0));	// 81 call    sub_10130 ;~ 01A2:0083
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_POST_FLIP1, ds); // AFTER post-flip 1 complete
 cs=0x1a2;eip=0x000086; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); J(CALLF(sub_1de05,0));	// 82 call    sub_1DE05 ;~ 01A2:0086
 	sub_1c8f1_door_rendering_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x00008b; 	J(CALL(sub_165aa,0));	// 83 call    sub_165AA ;~ 01A2:008B
@@ -1957,7 +1962,7 @@ cs=0x1a2;eip=0x00009c; 	J(CALLF(sub_1c8f1,0));	// 88 call    sub_1C8F1 ;~ 01A2:0
 
 cs=0x1a2;eip=0x0000a1; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 89 call    sub_1E0C7 ;~ 01A2:00A1
 cs=0x1a2;eip=0x0000a6; 	J(CALL(sub_16775,0));	// 90 call    sub_16775 ;~ 01A2:00A6
-	if (myDrawInfo_v2) v2_swap_render_buf();
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER2, ds); // AFTER pass 2 complete
 cs=0x1a2;eip=0x0000a9; 	J(CALL(sub_10753,0));	// 91 call    sub_10753 ;~ 01A2:00A9
 cs=0x1a2;eip=0x0000ac; 	J(CALL(sub_13c0c,0));	// 92 call    sub_13C0C ;~ 01A2:00AC
 cs=0x1a2;eip=0x0000af; 	J(CALL(sub_12fd0,0));	// 93 call    sub_12FD0 ;~ 01A2:00AF
@@ -1965,6 +1970,7 @@ cs=0x1a2;eip=0x0000b2; 	J(CALL(sub_11792,0));	// 94 call    sub_11792 ;~ 01A2:00
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x0000b5; 	J(CALL(sub_101be,0));	// 95 call    sub_101BE ;~ 01A2:00B5
 cs=0x1a2;eip=0x0000b8; 	J(CALL(sub_10130,0));	// 96 call    sub_10130 ;~ 01A2:00B8
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_POST_FLIP2, ds); // AFTER post-flip 2 complete
 sub_100bb:
 	// 103
 	sub_1c8f1_door_rendering_with_state(_state);  // RECREATED: Call our implementation before original
@@ -1979,11 +1985,12 @@ cs=0x1a2;eip=0x0000ce; 	J(CALLF(sub_1c8f1,0));	// 109 call    sub_1C8F1 ;~ 01A2:
 
 cs=0x1a2;eip=0x0000d3; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 110 call    sub_1E0C7 ;~ 01A2:00D3
 cs=0x1a2;eip=0x0000d8; 	J(CALL(sub_16775,0));	// 111 call    sub_16775 ;~ 01A2:00D8
-	if (myDrawInfo_v2) v2_swap_render_buf();
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER3, ds); // AFTER pass 3 complete
 cs=0x1a2;eip=0x0000db; 	X(MOV(word_30c14, 0));	// 112 mov     word_30C14, 0 ;~ 01A2:00DB
 cs=0x1a2;eip=0x0000e1; 	J(CALL(sub_108c8,0));	// 113 call    sub_108C8 ;~ 01A2:00E1
 cs=0x1a2;eip=0x0000e4; 	J(CALL(sub_10350,0));	// 114 call    sub_10350 ;~ 01A2:00E4
 cs=0x1a2;eip=0x0000e7; 	J(CALL(sub_1086f,0));	// 115 call    sub_1086F ;~ 01A2:00E7
+	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_FLIP3, ds); v2_signal_phase(V2_PHASE_FRAME_END, ds); }
 cs=0x1a2;eip=0x0000ea; 	T(CMP(byte_3168a, 1));	// 116 cmp     byte_3168A, 1 ;~ 01A2:00EA
 cs=0x1a2;eip=0x0000ef; 	J(JNZ(loc_100f7));	// 117 jnz     short loc_100F7 ;~ 01A2:00EF
 cs=0x1a2;eip=0x0000f1; 	X(MOV(byte_3168a, 0));	// 118 mov     byte_3168A, 0 ;~ 01A2:00F1
@@ -2015,6 +2022,18 @@ loc_1012d:
 cs=0x1a2;eip=0x00012d; 	J(JMP(loc_1001e));	// 146 jmp     loc_1001E ;~ 01A2:012D
 sub_10130:
 	// 153
+	// ======================================================================
+	// VGA VSYNC WAIT (sub_10130, eip 0x0130-0x0137)
+	// ======================================================================
+	// Original DOS: spin wait while word_3287C >= 1. VGA vertical retrace
+	// interrupt fires at ~60Hz, calls sub_1797b which DECs word_3287C and
+	// dispatches palette writes.
+	//
+	// Current fix: render_callback REMOVED from render_thread (commented in render.cpp:203).
+	// sub_1797b called SYNCHRONOUSLY from game thread here, after sleep(16ms).
+	// This gives deterministic timing: palette dispatch always happens at the same
+	// point relative to barrier signals. v2_sub_10130 does the same.
+	// ======================================================================
 cs=0x1a2;eip=0x000130; 	T(CMP(word_3287c, 1));	// 155 cmp     word_3287C, 1 ;~ 01A2:0130
 ret_1a2_135:
 	// 4376
@@ -2022,7 +2041,11 @@ ret_1a2_135:
    printf("quitting main thread\n");
    exit(0);
  }
-std::this_thread::sleep_for(std::chrono::milliseconds(2));
+ if (word_3287c >= 1) {
+   std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60Hz VGA vsync
+   extern bool sub_1797b(m2c::_offsets, struct m2c::_STATE*);
+   sub_1797b((m2c::_offsets)0, _state); // DEC word_3287C + palette dispatch
+ }
 cs=0x1a2;eip=0x000135; 	J(JGE(sub_10130));	// 156 jge     short sub_10130 ;~ 01A2:0135
 cs=0x1a2;eip=0x000137; 	J(RETN(0));	// 157 retn ;~ 01A2:0137
 sub_10138:
@@ -3420,7 +3443,8 @@ cs=0x1a2;eip=0x001180; 	J(CALL(sub_11439,0));	// 2335 call    sub_11439 ;~ 01A2:
 cs=0x1a2;eip=0x001183; 	J(CALL(sub_13ba5,0));	// 2336 call    sub_13BA5 ;~ 01A2:1183
 cs=0x1a2;eip=0x001186; 	J(CALL(sub_13a0e,0));	// 2337 call    sub_13A0E ;~ 01A2:1186
 cs=0x1a2;eip=0x001189; 	J(CALL(sub_115d2,0));	// 2338 call    sub_115D2 ;~ 01A2:1189
-//debug
+	// Snapshot orig DS after sub_115d2 for v2 comparison
+	if (myDrawInfo_v2) { extern void v2_save_115d2_snapshot(uint8_t*); v2_save_115d2_snapshot((uint8_t*)raddr(ds,0)); }
 cs=0x1a2;eip=0x00118c; 	J(CALL(sub_10f5d,0));	// 2339 call    sub_10F5D ;~ 01A2:118C
 // sleep(5);
 cs=0x1a2;eip=0x00118f; 	J(JMP(sub_12345));	// 2340 jmp     sub_12345 ;~ 01A2:118F
@@ -5334,7 +5358,6 @@ cs=0x1a2;eip=0x00235d; 	J(CALL(sub_12ef8,0));	// 4615 call    sub_12EF8 ;~ 01A2:
 cs=0x1a2;eip=0x002360; 	T(MOV(ax, word_30bbc));	// 4616 mov     ax, word_30BBC ;~ 01A2:2360
 loc_12363:
 	// 4751
-cs=0x1a2;eip=0x002363; 	T(OR(ax, word_30bbe));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
 cs=0x1a2;eip=0x002363; 	T(OR(ax, input_keys));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
 cs=0x1a2;eip=0x002367; 	X(MOV(word_28896, ax));	// 4620 mov     word_28896, ax ;~ 01A2:2367
 cs=0x1a2;eip=0x00236a; 	T(MOV(ax, word_28896));	// 4621 mov     ax, word_28896 ;~ 01A2:236A
@@ -6953,10 +6976,11 @@ cs=0x1a2;eip=0x003091; 	T(MOV(di, *(dw*)(raddr(es,bx))));	// 6437 mov     di, es
 cs=0x1a2;eip=0x003094; 	T(INC(bx));	// 6438 inc     bx ;~ 01A2:3094
 cs=0x1a2;eip=0x003095; 	T(AND(di, 0x0FF));	// 6439 and     di, 0FFh ;~ 01A2:3095
 cs=0x1a2;eip=0x003099; 	T(SHL(di, 1));	// 6440 shl     di, 1 ;~ 01A2:3099
-	{ uint8_t v2_anim_cmd = (uint8_t)(di >> 1); uint16_t v2_anim_bx_before = bx;
-	  // Snapshot DS before anim cmd for comparison
-	  static uint8_t anim_ds_before[0x1C00];
-	  if (myDrawInfo_v2) memcpy(anim_ds_before, raddr(ds,0), 0x1C00);
+	{ extern int v2_orig_anim_cmd_count; v2_orig_anim_cmd_count++;
+	  uint8_t v2_anim_cmd = (uint8_t)(di >> 1); uint16_t v2_anim_bx_before = bx;
+	  // Snapshot DS before anim cmd for comparison (full 64KB for out-of-range reads)
+	  static uint8_t anim_ds_before[0x10000];
+	  if (myDrawInfo_v2) memcpy(anim_ds_before, raddr(ds,0), 0x10000);
 cs=0x1a2;eip=0x00309b; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30bc6)+di)));	// 6441 call    ds:off_30BC6[di] ;~ 01A2:309B
 	if (myDrawInfo_v2) {
 		extern void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_ptr,
@@ -9015,6 +9039,13 @@ loc_14266:
 	// 5136
 cs=0x1a2;eip=0x004266; 	X(MOV(*(dw*)(raddr(ds,0x42)), si));	// 8804 mov     ds:42h, si ;~ 01A2:4266
 cs=0x1a2;eip=0x00426a; 	X(MOV(*(dw*)(raddr(ds,0x38E)), 0));	// 8805 mov     word ptr ds:38Eh, 0 ;~ 01A2:426A
+	// Pre-animation hash trace (opcode=0xFE marker)
+	if (myDrawInfo_v2) {
+		extern void v2_vm_replay_verify(uint8_t*, uint8_t*, uint8_t*, uint16_t, int, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t);
+		extern uint16_t v2_vm_step_per_obj[128];
+		v2_vm_replay_verify(nullptr, (uint8_t*)raddr(ds,0), (uint8_t*)raddr(es,0),
+			si, v2_vm_step_per_obj[si/2], 0xFE, 0, 0, 0, 0);
+	}
 cs=0x1a2;eip=0x004270; 	T(MOV(es, *(dw*)(raddr(ds,si+0x1355))));	// 8806 mov     es, word ptr [si+1355h] ;~ 01A2:4270
 cs=0x1a2;eip=0x004274; 	T(TEST(*(dw*)(raddr(ds,si+0x1585)), 0x200));	// 8807 test    word ptr [si+1585h], 200h ;~ 01A2:4274
 cs=0x1a2;eip=0x00427a; 	J(JNZ(loc_14283));	// 8808 jnz     short loc_14283 ;~ 01A2:427A
@@ -9034,7 +9065,7 @@ cs=0x1a2;eip=0x00429e; 	X(MOV(*(dw*)(raddr(ds,si+0x132D)), ax));	// 8821 mov    
 loc_142a2:
 	// 5138
 cs=0x1a2;eip=0x0042a2; 	T(MOV(bx, *(dw*)(raddr(ds,si+0x132D))));	// 8824 mov     bx, [si+132Dh] ;~ 01A2:42A2
-	{ static int v2_verify_step; v2_verify_step = 0; // reset per-object opcode counter
+	{ extern int g_v2_verify_step; g_v2_verify_step = 0; // reset per-object opcode counter
 	// V2: Verify init state — compare es, bx, si (obj), ds:0x42, ds:0x38E
 	if (myDrawInfo_v2) {
 		extern void v2_vm_verify_init(uint16_t obj_idx, uint16_t orig_es, uint16_t orig_pc, uint16_t orig_obj42);
@@ -9047,7 +9078,7 @@ cs=0x1a2;eip=0x0042a6; 	T(MOV(si, *(dw*)(raddr(es,bx))));	// 8827 mov     si, es
 cs=0x1a2;eip=0x0042a9; 	T(INC(bx));	// 8828 inc     bx ;~ 01A2:42A9
 cs=0x1a2;eip=0x0042aa; 	T(AND(si, 0x0FF));	// 8829 and     si, 0FFh ;~ 01A2:42AA
 cs=0x1a2;eip=0x0042ae; 	T(SHL(si, 1));	// 8830 shl     si, 1 ;~ 01A2:42AE
-	{ uint8_t v2_orig_opcode = (uint8_t)(si >> 1); uint16_t v2_pc_before = bx;
+	{ uint8_t v2_orig_opcode = (uint8_t)(si >> 1); uint16_t v2_pc_before = bx - 1; // before INC, same as v2
 	  uint16_t v2_acc_before = *(dw*)(raddr(ds,0x8A));
 	// V2 replay: lock DS to prevent render callback from modifying it
 	// during snapshot → opcode → comparison sequence.
@@ -9063,10 +9094,10 @@ cs=0x1a2;eip=0x0042b0; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	/
 			uint16_t orig_pc_after, uint16_t orig_acc_after);
 		v2_vm_replay_verify(v2_ds_before, (uint8_t*)raddr(ds,0),
 			(uint8_t*)raddr(es,0),
-			*(uint16_t*)(raddr(ds,0x42)), v2_verify_step,
+			*(uint16_t*)(raddr(ds,0x42)), g_v2_verify_step,
 			v2_orig_opcode, v2_pc_before, v2_acc_before,
 			bx, *(dw*)(raddr(ds,0x8A)));
-		v2_verify_step++;
+		g_v2_verify_step++;
 	}
 	} // unlock v2_ds_modify_mutex
 	} // end opcode scope
@@ -9082,6 +9113,14 @@ ret_1a2_42b8:
 	// 5141
 cs=0x1a2;eip=0x0042b8; 	T(MOV(si, *(dw*)(raddr(ds,0x42))));	// 8847 mov     si, ds:42h ;~ 01A2:42B8
 cs=0x1a2;eip=0x0042bc; 	X(MOV(*(dw*)(raddr(ds,si+0x132D)), bx));	// 8848 mov     [si+132Dh], bx ;~ 01A2:42BC
+	// Record yield (op=0x00) in orig trace — sub_142b7 bypasses normal trace point
+	if (myDrawInfo_v2) {
+		extern void v2_vm_replay_verify(uint8_t*, uint8_t*, uint8_t*, uint16_t, int, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t);
+		extern int g_v2_verify_step;
+		v2_vm_replay_verify(nullptr, (uint8_t*)raddr(ds,0),
+			(uint8_t*)raddr(es,0), si, g_v2_verify_step, 0x00, bx-1, *(dw*)(raddr(ds,0x8A)), bx, *(dw*)(raddr(ds,0x8A)));
+		g_v2_verify_step++;
+	}
 nullsub_5:
 	// 8855
 cs=0x1a2;eip=0x0042c0; 	J(RETN(0));	// 8857 retn ;~ 01A2:42C0
@@ -9142,6 +9181,14 @@ cs=0x1a2;eip=0x00431c; 	X(OR(*(dw*)(raddr(ds,0x334)), 1));	// 8939 or      word 
 ret_1a2_4321:
 	// 5148
 cs=0x1a2;eip=0x004321; 	T(MOV(si, *(dw*)(raddr(ds,0x42))));	// 8940 mov     si, ds:42h ;~ 01A2:4321
+	// Record op=0x0F in orig trace — sub_1431c bypasses normal trace point
+	if (myDrawInfo_v2) {
+		extern void v2_vm_replay_verify(uint8_t*, uint8_t*, uint8_t*, uint16_t, int, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t);
+		extern int g_v2_verify_step;
+		v2_vm_replay_verify(nullptr, (uint8_t*)raddr(ds,0),
+			(uint8_t*)raddr(es,0), si, g_v2_verify_step, 0x0F, bx-1, *(dw*)(raddr(ds,0x8A)), bx, *(dw*)(raddr(ds,0x8A)));
+		g_v2_verify_step++;
+	}
 cs=0x1a2;eip=0x004325; 	X(POP(ax));	// 8941 pop     ax ;~ 01A2:4325
 cs=0x1a2;eip=0x004326; 	J(RETN(0));	// 8942 retn ;~ 01A2:4326
 sub_14327:

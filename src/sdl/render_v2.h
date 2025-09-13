@@ -52,7 +52,8 @@ extern bool need_quit_v2;
 extern void render_init_v2(void* state);
 extern void render_callback_v2(void* state);
 
-// V2 rendering functions — called from seg000
+// V2 rendering functions — called from seg000 and v2 VM.
+// With V2_RENDER_FROM_SHADOW: seg000 calls are skipped (v2 VM handles rendering).
 extern void v2_draw_tiles(uint16_t ds_val);
 extern void v2_draw_sprites(uint16_t ds_val);
 extern void v2_draw_flagged_tiles(uint16_t ds_val);
@@ -60,9 +61,32 @@ extern void v2_draw_ui(uint16_t ds_val);
 extern void v2_swap_render_buf();
 extern void v2_set_m2c_base(void* base);
 
-// HUD rendering — called from seg000
-// Animation VM — parallel to sub_14207
-extern void v2_run_animation_vm(uint16_t ds_val);
+#ifdef V2_RENDER_FROM_SHADOW
+// When true, v2 VM is executing its frame — rendering calls proceed.
+// When false (seg000 hooks), rendering calls are skipped.
+extern bool v2_vm_in_frame;
+#endif
+
+// V2 game loop — runs in separate thread, synchronized with original via barriers.
+// Each phase runs in parallel with the original's corresponding phase.
+// seg000 calls v2_signal_phase() at each eip to trigger the v2 phase + wait for completion.
+enum V2Phase {
+    V2_PHASE_FRAME_BEGIN = 0,  // level check + state init (eip 0x001E)
+    V2_PHASE_PRE_VM,           // sub_12352..sub_1673c (eip 0x001E..0x0036)
+    V2_PHASE_VM,               // sub_14207 (eip 0x0039)
+    V2_PHASE_POST_VM,          // sub_1386b..sub_1064b (eip 0x003C..0x004E)
+    V2_PHASE_RENDER1,          // render + rotation1 + pageflip1 (eip 0x0051..0x0071)
+    V2_PHASE_POST_FLIP1,       // sub_12e16..sub_12d2c (eip 0x0074..0x0083)
+    V2_PHASE_RENDER2,          // rotation2 + pageflip2 (eip 0x0086..0x00A6)
+    V2_PHASE_POST_FLIP2,       // sub_10753..sub_101be (eip 0x00A9..0x00B8)
+    V2_PHASE_RENDER3,          // rotation3 + pageflip3 (eip 0x00BB..0x00D8)
+    V2_PHASE_POST_FLIP3,       // sub_108c8..sub_10350 (eip 0x00DB..0x00E7)
+    V2_PHASE_FRAME_END,        // verify + cleanup
+};
+extern void v2_signal_phase(V2Phase phase, uint16_t ds_val);  // signal v2 thread + wait
+extern void v2_game_thread_start();   // launch v2 thread (called once at startup)
+extern void v2_game_thread_stop();    // stop v2 thread
+extern void v2_run_animation_vm(uint16_t ds_val);  // legacy: full frame (used during init)
 
 // V2 VM shadow DS — 64KB copy of DS segment, written by v2 VM opcodes.
 // Used by v2 renderer when V2_RENDER_FROM_SHADOW is defined.
@@ -121,5 +145,10 @@ extern void v2_vm_verify_game_loop(uint16_t ds_val);
 extern void v2_vm_verify_collision(uint16_t ds_val);
 extern void v2_vm_verify_tilemap(uint16_t ds_val);
 extern void v2_vm_verify_all_segments(uint16_t ds_val);
+
+// Segment resolver: maps segment value to shadow buffer pointer.
+// For standalone v2: fake segments → shadow buffers.
+// For verify mode: real segments → real memory via v2_m2c_base.
+extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds = nullptr);
 
 #endif // RENDER_V2_H

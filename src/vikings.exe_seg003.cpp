@@ -760,9 +760,16 @@ cs=0xe25;eip=0x000642; 	T(DEC(ax));	// 36414 dec     ax ;~ 0E25:0642
 cs=0xe25;eip=0x000643; 	J(JNZ(loc_1ce62));	// 36415 jnz     short loc_1CE62 ;~ 0E25:0643
 loc_1ce75:
 	// 6118
+{ static int _onv=0; if(di==0x30 && *(uint8_t*)raddr(ds,di+0x114D)==0 && _onv<10) { _onv++;
+  fprintf(stderr,"ORIG-NOTVIS[%d]: si=%04X ax=%04X cx_x=%d dx_y=%d xy=(%04X,%04X)\n",
+    _onv,(uint16_t)si,(uint16_t)ax,
+    (int16_t)*(uint16_t*)raddr(ds,di+0x64D)>>3, (int16_t)*(uint16_t*)raddr(ds,di+0x74D)>>3,
+    *(uint16_t*)raddr(ds,di+0x64D), *(uint16_t*)raddr(ds,di+0x74D)); } }
 cs=0xe25;eip=0x000645; 	T(XOR(ax, ax));	// 36419 xor     ax, ax ;~ 0E25:0645
 locret_1ce77:
 	// 6119
+{ static int _ov=0; if(di==0x30 && *(uint8_t*)raddr(ds,di+0x114D)==0 && _ov<5) { _ov++;
+  fprintf(stderr,"ORIG-VIS[%d]: di=%02X VISIBLE si=%04X fs[si]=%04X\n",_ov,(uint16_t)di,(uint16_t)si,*(uint16_t*)raddr(fs,si)); } }
 cs=0xe25;eip=0x000647; 	J(RETN(0));	// 36422 retn ;~ 0E25:0647
 seg003_648_proc:
 {static int s648_calls=0; if(++s648_calls<=5) printf("seg003_648_proc called #%d di=0x%x\n", s648_calls, di);}
@@ -2607,6 +2614,9 @@ cs=0xe25;eip=0x001561; 	J(JMP(loc_1db94));	// 37987 jmp     loc_1DB94 ;~ 0E25:15
 cs=0xe25;eip=0x00156c; 	T(MOV(di, 0x0FE));	// 37999 mov     di, 0FEh ; '�' ;~ 0E25:156C
 loc_1dd9f:
 	// 6248
+{ uint16_t _f=*(uint16_t*)raddr(ds,di+0x44D); static int _oa=0;
+  if(di==0x30 && (_f & 0x8000) && _oa<12) { _oa++;
+  fprintf(stderr,"ORIG-DD9C-ACT[%d]: flags=%04X mode=%02X force=%02X\n",_oa,_f,*(uint8_t*)raddr(ds,di+0x114D),*(uint8_t*)raddr(ds,0x9568)); } }
 cs=0xe25;eip=0x00156f; 	T(TEST(*(dw*)(raddr(ds,di+0x44D)), 0x8000));	// 38002 test    word ptr [di+44Dh], 8000h ;~ 0E25:156F
 cs=0xe25;eip=0x001575; 	J(JZ(loc_1ddf0));	// 38003 jz      short loc_1DDF0 ;~ 0E25:1575
 cs=0xe25;eip=0x001577; 	T(TEST(*(dw*)(raddr(ds,di+0x44D)), 0x6000));	// 38004 test    word ptr [di+44Dh], 6000h ;~ 0E25:1577
@@ -2620,6 +2630,11 @@ cs=0xe25;eip=0x001590; 	J(JZ(loc_1ddf0));	// 38011 jz      short loc_1DDF0 ;~ 0E
 cs=0xe25;eip=0x001592; 	X(MOV(*(raddr(ds,di+0x114D)), 3));	// 38012 mov     byte ptr [di+114Dh], 3 ;~ 0E25:1592
 loc_1ddc7:
 	// 6249
+{ static int _orig_dd=0; if(di==0x30) { _orig_dd++;
+  if(_orig_dd<=30) fprintf(stderr,"ORIG-DD9C[%d]: di=%02X mode=%02X force=%02X flags=%04X vp=(%04X,%04X) xy=(%04X,%04X)\n",
+    _orig_dd,(uint16_t)di,*(uint8_t*)raddr(ds,di+0x114D),*(uint8_t*)raddr(ds,0x9568),*(uint16_t*)raddr(ds,di+0x44D),
+    *(uint16_t*)raddr(ds,0x44),*(uint16_t*)raddr(ds,0x46),
+    *(uint16_t*)raddr(ds,di+0x64D),*(uint16_t*)raddr(ds,di+0x74D)); } }
 cs=0xe25;eip=0x001597; 	X(DEC(*(raddr(ds,di+0x114D))));	// 38016 dec     byte ptr [di+114Dh] ;~ 0E25:1597
 cs=0xe25;eip=0x00159b; 	J(JNS(loc_1ddd2));	// 38017 jns     short loc_1DDD2 ;~ 0E25:159B
 cs=0xe25;eip=0x00159d; 	X(MOV(*(raddr(ds,di+0x114D)), 0));	// 38018 mov     byte ptr [di+114Dh], 0 ;~ 0E25:159D
@@ -2628,6 +2643,10 @@ loc_1ddd2:
 cs=0xe25;eip=0x0015a2; 	T(MOV(bp, 7));	// 38021 mov     bp, 7 ;~ 0E25:15A2
 cs=0xe25;eip=0x0015a5; 	T(AND(bp, *(dw*)(raddr(ds,di+0x44D))));	// 38022 and     bp, [di+44Dh] ;~ 0E25:15A5
 cs=0xe25;eip=0x0015a9; 	T(SHL(bp, 1));	// 38023 shl     bp, 1 ;~ 0E25:15A9
+{ static bool _dumped=false; if(!_dumped) { _dumped=true;
+  fprintf(stderr,"ORIG-DISPATCH-TABLE:");
+  for(int t=0;t<8;t++) fprintf(stderr," [%d]=%04X",t,*(uint16_t*)raddr(cs,t*2+0x15CB));
+  fprintf(stderr,"\n"); } }
 cs=0xe25;eip=0x0015ab; 	J(CALL(__dispatch_call,*(dw*)(raddr(cs,bp+0x15CB))));	// 38024 call    word ptr cs:[bp+15CBh] ;~ 0E25:15AB
 cs=0xe25;eip=0x0015b0; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x64D))));	// 38025 mov     ax, [di+64Dh] ;~ 0E25:15B0
 cs=0xe25;eip=0x0015b4; 	X(MOV(*(dw*)(raddr(ds,di+0x0D4D)), ax));	// 38026 mov     [di+0D4Dh], ax ;~ 0E25:15B4

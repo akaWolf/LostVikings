@@ -23,6 +23,7 @@ SDL_Texture* myTexture = NULL;
 SDL_PixelFormat *myFormat = NULL;
 
 extern void render_callback(void *);
+extern uint16_t input_keys_v2;
 uint16_t input_keys = 0;
 bool need_quit = false;
 
@@ -181,10 +182,13 @@ void updateDraw()
 					   key_val = 0;
 					   break;
 				   }
-				   if (event.type == SDL_KEYDOWN)
+				   if (event.type == SDL_KEYDOWN) {
 					 input_keys |= key_val;
-				   else
+					 input_keys_v2 |= key_val;
+				   } else {
 					 input_keys &= ~key_val;
+					 input_keys_v2 &= ~key_val;
+				   }
 				   break;
 
 				 case SDL_QUIT:
@@ -196,7 +200,11 @@ void updateDraw()
 			   //printf("VGA pan: %x %x\n", myDrawInfo->myOffset, myDrawInfo->myPixelOffset);
 			   updateDraw();
 			   //SDL_Delay(20);
-			   render_callback(_state);
+			   // render_callback(_state);
+			   // MOVED to game thread (sub_10130 in seg000.cpp) for deterministic timing.
+			   // Original: render_callback = sub_1797b (DEC word_3287C + palette dispatch).
+			   // When called from render_thread: nondeterministic timing vs barrier signals.
+			   // When called from game thread sub_10130: deterministic (always same point).
 			   //std::this_thread::sleep_for(std::chrono::milliseconds(15));
 			   SDL_Delay(15);
 		   }
