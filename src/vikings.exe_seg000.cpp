@@ -8,6 +8,7 @@
  #include <unistd.h>
 #include <execinfo.h>
 #include <thread>
+#include <mutex>
 #include <map>
 
 int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
@@ -1880,6 +1881,8 @@ cs=0x1a2;eip=0x00002d; 	J(CALL(sub_11ba5,0));	// 53 call    sub_11BA5 ;~ 01A2:00
 cs=0x1a2;eip=0x000030; 	J(CALL(sub_12e79,0));	// 54 call    sub_12E79 ;~ 01A2:0030
 cs=0x1a2;eip=0x000033; 	J(CALL(sub_10813,0));	// 55 call    sub_10813 ;~ 01A2:0033
 cs=0x1a2;eip=0x000036; 	J(CALL(sub_1673c,0));	// 56 call    sub_1673C ;~ 01A2:0036
+	// Note: word_3287C is DEC'd by render callback (sub_1797b) asynchronously.
+	// v2 shadow handles this independently (set to 0 in reset_frame_state).
 	if (myDrawInfo_v2) v2_run_animation_vm(ds); // V2: run animation VM BEFORE original (same input state)
 cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:0039
 	// Per-opcode verification is done inline in sub_1424c's opcode loop (loc_142a6)
@@ -9019,8 +9022,10 @@ cs=0x1a2;eip=0x0042aa; 	T(AND(si, 0x0FF));	// 8829 and     si, 0FFh ;~ 01A2:42AA
 cs=0x1a2;eip=0x0042ae; 	T(SHL(si, 1));	// 8830 shl     si, 1 ;~ 01A2:42AE
 	{ uint8_t v2_orig_opcode = (uint8_t)(si >> 1); uint16_t v2_pc_before = bx;
 	  uint16_t v2_acc_before = *(dw*)(raddr(ds,0x8A));
-	// V2 replay: snapshot DS BEFORE opcode
+	// V2 replay: lock DS to prevent render callback from modifying it
+	// during snapshot → opcode → comparison sequence.
 	static uint8_t v2_ds_before[0x10000];
+	{ extern std::mutex v2_ds_modify_mutex; std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
 	if (myDrawInfo_v2) memcpy(v2_ds_before, raddr(ds,0), 0x10000);
 cs=0x1a2;eip=0x0042b0; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	// 8831 call    ds:off_30CAC[si] ;~ 01A2:42B0
 	// V2 replay verification: run v2 on BEFORE state, compare with AFTER (original's result)
@@ -9036,6 +9041,7 @@ cs=0x1a2;eip=0x0042b0; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	/
 			bx, *(dw*)(raddr(ds,0x8A)));
 		v2_verify_step++;
 	}
+	} // unlock v2_ds_modify_mutex
 	} // end opcode scope
 cs=0x1a2;eip=0x0042b4; 	J(JMP(loc_142a6));	// 8832 jmp     short loc_142A6 ;~ 01A2:42B4
 	} // end per-object scope
@@ -15666,7 +15672,9 @@ cs=0x1a2;eip=0x007995; 	T(MOV(al, byte_317ce));	// 17611 mov     al, byte_317CE 
  myDrawInfo->myPixelOffset = al / 2;
 myDrawInfo->myOffset = myOffset;
 cs=0x1a2;eip=0x007998; 	R(OUT(dx, al));	// 17612 out     dx, al          ; EGA: palette register: select colors for attribute AL: ;~ 01A2:7998
+	{ extern std::mutex v2_ds_modify_mutex; std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
 cs=0x1a2;eip=0x007999; 	X(DEC(word_3287c));	// 17619 dec     word_3287C ;~ 01A2:7999
+	}
 cs=0x1a2;eip=0x00799d; 	T(MOV(bp, word_303de));	// 17620 mov     bp, word_303DE ;~ 01A2:799D
 	cs=seg_offset(seg000);
 	//cs=0x1a2;eip=0x0079a1 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_17974)+bp)));	// 17621 call    cs:off_17974[bp] ;~ 01A2:79A1

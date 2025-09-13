@@ -28,6 +28,7 @@ static inline uint8_t* v2_get_ds_base(uint16_t ds_val) {
 
 // V2 rendering state — definitions (declared extern in render_v2.h)
 uint8_t* v2_m2c_base = nullptr;
+std::mutex v2_ds_modify_mutex;
 uint8_t  v2_render_buf[320*200];
 uint8_t  v2_display_buf[320*200];
 std::mutex v2_display_mutex;

@@ -80,6 +80,12 @@ static void v2_vm_reset_frame_state(uint8_t* ds) {
     memcpy(v2_vm_shadow_ds, ds, V2_VM_SHADOW_SIZE); // Full 64KB DS copy
     // Accumulator lives at shadow[0x8A] — already copied by memcpy above.
     v2_vm_acc_base = v2_vm_shadow_ds;
+
+    // word_3287C (DS:0xA39C): v2 manages independently, not from real DS.
+    // Original flow per frame: main loop sets to 1, render callback DECs to 0, VM sees 0.
+    // v2: always set to 0 in shadow (the value VM should see after render callback DEC).
+    // This avoids the race condition where real DS may have 0 or 1 depending on timing.
+    *(uint16_t*)(v2_vm_shadow_ds + 0xA39C) = 0;
     memset(v2_vm_trace_count, 0, sizeof(v2_vm_trace_count));
     v2_vm_real_ds_ptr = ds;
 
@@ -583,6 +589,88 @@ static bool v2_vm_sub_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 }
 static bool v2_vm_sub_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + 0x150D) + 1);
+}
+
+// sub_15ae9: tile search at ds:0x6C, ds:0x6E (single point, not range).
+// Entry to loc_15a93 with si=ds:0x6C, di=ds:0x6E, dx=di, cx=si.
+static bool v2_vm_sub_15ae9(V2VM& vm, uint16_t filter_si) {
+    vm.ds_write(0x34, filter_si);
+    uint16_t x = vm.ds_read(0x6C);
+    uint16_t y = vm.ds_read(0x6E);
+    // Single point tile check: x_left=x, x_right=x, y_start=y
+    // Reuse tile search with y as-is. The loop checks one tile at (x,y).
+    uint16_t si_div16 = x >> 4;
+    uint16_t di_div16 = y >> 4;
+    uint16_t tile_val = v2_vm_sub_141ba(vm, si_div16, di_div16);
+    uint8_t al = (uint8_t)((tile_val & 0xFC00) >> 10);
+    // Filter comparison
+    uint16_t flt = filter_si;
+    while (true) {
+        uint8_t fval = *(uint8_t*)(vm.ds + (uint16_t)(flt - 0x6B34));
+        if (al < fval) break;
+        if (al == fval) {
+            vm.ds_write(0x3B2, al);
+            return true;
+        }
+        flt++;
+    }
+    return false;
+}
+
+// sub_160cf: object search using ds:0x6C (X) and ds:0x6E (Y) as reference.
+// Checks: X in [obj.X_start, obj.X_end), Y in [obj.Y_start, obj.Y_end).
+static bool v2_vm_sub_160cf(V2VM& vm, uint16_t filter_si) {
+    vm.ds_write(0x34, filter_si);
+    uint16_t ref_x = vm.ds_read(0x6C);
+    uint16_t ref_y = vm.ds_read(0x6E);
+    vm.ds_write(0x36, ref_x);
+    vm.ds_write(0x38, ref_y);
+    uint8_t* rds = vm.ds;
+    uint16_t table_end = *(uint16_t*)(rds + 0x372);
+
+    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+        if (*(uint16_t*)(rds + si + 0x1355) == 0) continue;
+        if (si == *(uint16_t*)(rds + 0x42)) continue;
+        vm.ds_write(0x3A, si);
+
+        // Type match via filter table
+        uint8_t obj_type = (uint8_t)*(uint16_t*)(rds + si + 0x17DD);
+        uint16_t flt = filter_si;
+        bool match = false;
+        while (true) {
+            uint8_t fval = *(uint8_t*)(vm.ds + (uint16_t)(flt - 0x6B34));
+            if (obj_type < fval) break;
+            if (obj_type == fval) { match = true; break; }
+            flt++;
+        }
+        if (!match) continue;
+
+        // X bounds: ref_x >= obj.X_start AND ref_x-1 < obj.X_end
+        if ((int16_t)ref_x < (int16_t)*(uint16_t*)(rds + si + 0x1535)) continue;
+        if ((int16_t)(ref_x - 1) >= (int16_t)*(uint16_t*)(rds + si + 0x155D)) continue;
+
+        // Y bounds: ref_y >= obj.Y_start AND ref_y-1 < obj.Y_end
+        if ((int16_t)ref_y < (int16_t)*(uint16_t*)(rds + si + 0x14E5)) continue;
+        if ((int16_t)(ref_y - 1) >= (int16_t)*(uint16_t*)(rds + si + 0x150D)) continue;
+
+        // Found!
+        vm.ds_write(0x3B2, *(uint16_t*)(rds + si + 0x17DD));
+        vm.ds_write(0x3B4, si);
+        return true;
+    }
+    return false;
+}
+
+// sub_1589b: animation load using ds:0x6C/0x6E position search.
+// ds:0x3B4=0xFFFF; call sub_15ae9 (tile at 6C/6E); JC→ret; call sub_160cf (obj at 6C/6E); ret.
+static void v2_vm_sub_1589b(V2VM& vm, uint16_t filter_si) {
+    vm.ds_write(0x3B4, 0xFFFF);
+    bool found_tile = v2_vm_sub_15ae9(vm, filter_si);
+    if (found_tile) {
+        vm.carry = true;
+        return;
+    }
+    vm.carry = v2_vm_sub_160cf(vm, filter_si);
 }
 
 // sub_158c8: animation load using Y_start-1 search paths.
@@ -1898,38 +1986,47 @@ static void v2_vm_op_43(V2VM& vm) {
 }
 
 // sub_163ac: Tile type check for platform detection. 0 bytes. Sets carry.
-// Checks tiles around object's position to determine if on solid ground.
+// sub_163ac: Exact tile check chain. 3 sub_14199 calls with conditional logic.
 static bool v2_vm_sub_163ac(V2VM& vm) {
-    uint16_t di = vm.global_r(0x42);
+    uint16_t obj = vm.global_r(0x42);
     uint16_t si_x;
-    if (!(vm.ds_read(di + 0x1585) & 0x40)) {
-        si_x = vm.ds_read(di + 0x173D) + 0x10;
+    if (!(vm.ds_read(obj + 0x1585) & 0x40)) {
+        si_x = vm.ds_read(obj + 0x173D) + 0x10;
     } else {
-        si_x = vm.ds_read(di + 0x173D) - 0x10;
+        si_x = vm.ds_read(obj + 0x173D) - 0x10;
     }
-    uint16_t di_y = vm.ds_read(di + 0x150D);
+    uint16_t di_y = vm.ds_read(obj + 0x150D);
 
-    // sub_14199: tile lookup at (si_x/16, di_y/16) → type in ax
-    // Simplified: read tile type from tile map
-    uint16_t si16 = si_x >> 4;
-    uint16_t di16 = di_y >> 4;
-    uint16_t tile_type;
-    {
-        // sub_141ba + sub_141a7: read tile, extract upper 6 bits as type
-        uint16_t tile_val = v2_vm_sub_141ba(vm, si16, di16);
-        tile_type = (tile_val & 0xFC00) >> 10;
+    // Helper: tile type at (si, di) via sub_14199
+    auto tile_type_at = [&](uint16_t sx, uint16_t dy) -> uint16_t {
+        uint16_t tv = v2_vm_sub_141ba(vm, sx >> 4, dy >> 4);
+        return (tv & 0xFC00) >> 10;
+    };
+
+    // Check 1: tile at (si_x, di_y)
+    uint16_t ax = tile_type_at(si_x, di_y);
+    if (ax >= 0x30) return true; // carry
+
+    if (ax == 1) {
+        // Type 1: check tile above (di_y - 0x10)
+        ax = tile_type_at(si_x, di_y - 0x10);
+        if (ax >= 0x30) return true;
+        if (ax == 0 || ax == 0x0C || ax == 3) return true;
+        // Fall through to check 2
     }
 
-    // Check if tile type indicates platform
-    // Original checks: >= 0x30 → carry (platform)
-    // type == 1 → check above, complex chain
-    // Various specific types (0, 3, 0xC, 5, 0x20, 4, 2) → carry
-    // Otherwise → no carry
-    if (tile_type >= 0x30) return true;
-    if (tile_type == 0 || tile_type == 0x0C || tile_type == 3 ||
-        tile_type == 1 || tile_type == 5 || tile_type == 0x20 ||
-        tile_type == 4 || tile_type == 2) return true;
-    return false;
+    // Check 2: tile at original X position (si from obj+0x173D, NOT si_x)
+    // Original reloads: di = ds:0x42; di = ds:[di+0x150D]; si preserved from check 1
+    uint16_t di_y2 = vm.ds_read(vm.global_r(0x42) + 0x150D);
+    ax = tile_type_at(si_x, di_y2);
+    if (ax == 0 || ax == 0x0C || ax == 3) {
+        // Check 3: tile below (di_y2 + 0x10)
+        ax = tile_type_at(si_x, di_y2 + 0x10);
+        if (ax >= 0x30) return true;
+        if (ax == 1 || ax == 5 || ax == 0x20 || ax == 4 || ax == 2) return true;
+        return false; // no carry
+    }
+    return false; // no carry
 }
 
 // 0x13 (sub_1434c): Level/palette command. 3 bytes consumed (always ADD bx,3).
@@ -2198,14 +2295,16 @@ static void v2_vm_op_9D(V2VM& vm) {
     vm.ds_write(addr, val);
 }
 
-// 0x9E (sub_14bcf): Same as 0x9D — conditional mask set + AND/OR field. 3 bytes.
+// 0x9E (sub_14bcf): Conditional mask set + AND/OR indexed+1995 field. 2 bytes.
+// idx1 (mask), idx2 (field via indexed+1995 pattern A).
 static void v2_vm_op_9E(V2VM& vm) {
-    uint8_t idx = vm.read_u8();
+    uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0) {
-        v2_vm_accumulator = *(uint16_t*)(vm.ds + (uint16_t)(idx - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.ds + (uint16_t)(idx1 - 0x6C34));
     }
-    uint16_t clear_mask = *(uint16_t*)(vm.ds + (uint16_t)(idx - 0x6C14));
-    uint16_t addr = vm.read_u16();
+    uint16_t clear_mask = *(uint16_t*)(vm.ds + (uint16_t)(idx1 - 0x6C14));
+    // idx2 → indexed+1995 field (pattern A)
+    uint16_t addr = v2_vm_indexed_1995_target(vm); // reads 1 byte
     uint16_t val = vm.ds_read(addr);
     val &= clear_mask;
     val |= v2_vm_accumulator;
@@ -2214,15 +2313,7 @@ static void v2_vm_op_9E(V2VM& vm) {
 
 // 0xB5 (sub_14e67): sub_15445 (indexed+1995 bit test, 2 bytes). If ne → skip 2, eq → call-jump.
 static void v2_vm_op_B5(V2VM& vm) {
-    // sub_15445: read 2 bytes (idx1, idx2) → indexed+1995 field → bit test
-    uint8_t idx1 = vm.read_u8();
-    uint8_t idx2 = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.ds + (uint16_t)(idx2 - 0x6CBA));
-    uint16_t obj = vm.global_r(0x42);
-    uint16_t si = field_off + obj + vm.ds_read(obj + 0x1995);
-    uint16_t val = vm.ds_read(si + 0x14E5);
-    uint16_t mask = *(uint16_t*)(vm.ds + (uint16_t)(idx1 - 0x6C34));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_read_indexed_field_15445(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
@@ -3846,11 +3937,16 @@ static void v2_vm_op_49(V2VM& vm) {
     vm.ds_write(0x6E, y_val);
 
     // Read animation index (1 byte consumed)
-    vm.read_u8();
+    uint8_t anim_idx = vm.read_u8();
 
-    // TODO: sub_1589B animation load — needs full implementation
-    // Dispatch off_30C8E[0]
-    v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+    // sub_1589B: tile search at (6C,6E) + object search at (6C,6E)
+    v2_vm_sub_1589b(vm, anim_idx);
+
+    // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
+    if (vm.carry)
+        v2_vm_do_jump(vm);
+    else
+        vm.pc += 2;
 }
 
 // 0x4A (sub_14fc8): Same as 0x49 but PUSH 2 → off_30C8E[2] dispatch.
@@ -3863,10 +3959,8 @@ static void v2_vm_op_4A(V2VM& vm) {
     uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3);
     vm.ds_write(0x6E, y_val);
     uint8_t anim_idx = vm.read_u8();
-    // sub_1589B animation load (same as 0x49) — TODO
-    // Dispatch off_30C8E[2] (loc_144f3: carry → skip 2, no carry → jump)
-    uint16_t di = vm.global_r(0x42);
-    v2_vm_sub_158d7(vm, anim_idx, di);
+    // sub_1589B: tile search at (6C,6E) + object search at (6C,6E)
+    v2_vm_sub_1589b(vm, anim_idx);
     uint16_t cs_addr = *(uint16_t*)(vm.ds + 0x87AE + 2); // si=2 → byte offset 2
     if (cs_addr == 0x44F3) {
         if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
@@ -4486,6 +4580,24 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
         if (pc_err < 10) {
             printf("V2-REPLAY: obj=%d step=%d opcode=0x%02X PC MISMATCH: orig=0x%04X v2=0x%04X (from 0x%04X)\n",
                    obj_idx, step, opcode, orig_pc_after, v2_pc_after, pc_before);
+            // Extra debug for 0xB5 bit test mismatch
+            if (opcode == 0xB5) {
+                uint8_t idx1 = replay_shadow[pc_before];
+                uint8_t idx2 = replay_shadow[pc_before + 1]; // bytecodes from ES, not DS!
+                // Actually read from ES
+                uint8_t* es_at = es_ptr;
+                idx1 = es_at[pc_before];
+                idx2 = es_at[pc_before + 1];
+                uint16_t foff = *(uint16_t*)(replay_shadow + (uint16_t)(idx2 - 0x6CBA));
+                uint16_t obj42 = *(uint16_t*)(replay_shadow + 0x42);
+                uint16_t f1995 = *(uint16_t*)(replay_shadow + obj42 + 0x1995);
+                uint16_t si = foff + obj42 + f1995;
+                uint16_t val = *(uint16_t*)(replay_shadow + (uint16_t)(si + 0x14E5));
+                uint16_t mask = *(uint16_t*)(replay_shadow + (uint16_t)(idx1 - 0x6C34));
+                uint16_t acc = *(uint16_t*)(replay_shadow + 0x8A);
+                printf("  B5 debug: idx1=%d idx2=%d foff=0x%04X obj42=%d f1995=%d si=0x%04X val=0x%04X mask=0x%04X result=%d acc=%d\n",
+                       idx1, idx2, foff, obj42, f1995, si, val, mask, (val & mask) ? 1 : 0, acc);
+            }
             pc_err++;
         }
     }
@@ -4507,6 +4619,8 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
             uint16_t orig_val = *(uint16_t*)(ds_after + i);
             uint16_t v2_val = *(uint16_t*)(replay_shadow + i);
             if (orig_val != v2_val) {
+                // Note: 0xA39C (word_3287C) may differ due to render thread race
+                // (sub_1797b DECs asynchronously). Not a v2 bug.
                 printf("V2-REPLAY: obj=%d step=%d opcode=0x%02X DS DIFF at 0x%04X: orig=0x%04X v2=0x%04X\n",
                        obj_idx, step, opcode, (uint16_t)i, orig_val, v2_val);
                 ds_err++;

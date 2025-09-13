@@ -68,6 +68,13 @@ extern void v2_run_animation_vm(uint16_t ds_val);
 // Used by v2 renderer when V2_RENDER_FROM_SHADOW is defined.
 extern uint8_t* v2_vm_get_shadow_ds();
 
+// Mutex to synchronize render callback DS writes with replay verify DS snapshots.
+// Render callback (sub_1797b) DECs word_3287C in DS from render thread.
+// Replay verify snapshots DS before/after each opcode in game thread.
+// Without lock: race condition causes spurious verify diffs.
+extern std::mutex v2_ds_modify_mutex;
+
+
 // V2 VM shadow tile map — 64KB copy of tile map segment, written by v2 VM.
 extern uint8_t* v2_vm_get_shadow_tilemap();
 extern bool v2_vm_is_tilemap_shadow_valid();
