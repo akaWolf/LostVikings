@@ -8,8 +8,10 @@ ADL_DEFINES := -DADLMIDI_DISABLE_DOSBOX_EMULATOR \
 
 INCLUDES := -I ./src/aux/ -I ./src/rendering/ -I src/adlmidi/include
 
-CXXFLAGS := $(SDL) $(DBG) $(INCLUDES)
-CFLAGS   := $(SDL) $(DBG) $(INCLUDES)
+V2_DEFINES := -DV2_RENDER_FROM_SHADOW
+
+CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES)
+CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES)
 
 CXX_SRCS := \
   src/vikings.exe.cpp \

@@ -1935,7 +1935,9 @@ cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:00
 	extern uint16_t v2_orig_obj0_Y_after[5];
 	extern uint16_t v2_orig_obj0_Y_before;
 	extern void v2_record_orig_post_vm_hash(int idx);
+	extern void v2_record_orig_post_vm_entry();
 	if (myDrawInfo_v2) v2_orig_obj0_Y_before = *(uint16_t*)(raddr(ds, 0x1765));
+	if (myDrawInfo_v2) v2_record_orig_post_vm_entry();
 cs=0x1a2;eip=0x00003c; 	J(CALL(sub_1386b,0));	// 58 call    sub_1386B ;~ 01A2:003C
 	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[0] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(0); }
 cs=0x1a2;eip=0x00003f; 	J(CALL(sub_1625d,0));	// 59 call    sub_1625D ;~ 01A2:003F
@@ -3588,8 +3590,6 @@ cs=0x1a2;eip=0x001210; 	J(JNZ(loc_112a2));	// 2425 jnz     loc_112A2 ;~ 01A2:121
 cs=0x1a2;eip=0x001214; 	T(TEST(byte_2aaaf, 0x40));	// 2426 test    byte_2AAAF, 40h ;~ 01A2:1214
 cs=0x1a2;eip=0x001219; 	J(JNZ(loc_1127b));	// 2427 jnz     short loc_1127B ;~ 01A2:1219
 loc_1121b:
- printf("V2-DBG: sub_11204 -> loc_1121b (tile-based), clearing viewport chunk\n");
-	v2_clear_viewport_chunk(); // V2: entering tile-based level, clear intro chunk
 	// 4574
 cs=0x1a2;eip=0x00121b; 	T(MOV(ax, word_2aac3));	// 2430 mov     ax, word_2AAC3 ;~ 01A2:121B
 cs=0x1a2;eip=0x00121e; 	T(MOV(di, 0));	// 2431 mov     di, 0 ;~ 01A2:121E
@@ -8806,7 +8806,6 @@ cs=0x1a2;eip=0x003fbf; 	T(CLC);	// 8414 clc ;~ 01A2:3FBF
 cs=0x1a2;eip=0x003fc0; 	J(RETN(0));	// 8415 retn ;~ 01A2:3FC0
 sub_13fc2:
 	// 8424
- { static int orig_13fc2_cnt = 0; orig_13fc2_cnt++; printf("ORIG-sub_13fc2: call #%d si=%d di=%d ax=%04X\n", orig_13fc2_cnt, si, di, ax); }
 cs=0x1a2;eip=0x003fc2; 	X(MOV(*(dw*)(raddr(ds,0x32)), ax));	// 8426 mov     ds:32h, ax ;~ 01A2:3FC2
 ret_1a2_3fc5:
 	// 5101
@@ -8842,6 +8841,14 @@ cs=0x1a2;eip=0x004028; 	X(OR(*(dw*)(raddr(fs,bp+2)), 1));	// 8455 or      word p
 cs=0x1a2;eip=0x00402d; 	T(MOV(cx, *(dw*)(raddr(ds,0x8734))));	// 8456 mov     cx, ds:8734h ;~ 01A2:402D
 cs=0x1a2;eip=0x004031; 	T(MOV(bx, cx));	// 8457 mov     bx, cx ;~ 01A2:4031
 cs=0x1a2;eip=0x004033; 	T(SHL(bx, 1));	// 8458 shl     bx, 1 ;~ 01A2:4033
+	{ extern int v2_orig_post_vm_frame; static int _oc = 0;
+	  if (myDrawInfo_v2 && _oc < 30) { _oc++;
+	    fprintf(stderr, "ORIG-13FC2[f%d obj=%04X]: si_pix=%04X di_pix=%04X | bp=%04X cx=%04X | write[%04X]=%04X\n",
+	      v2_orig_post_vm_frame, *(dw*)(raddr(ds,0x42)),
+	      *(dw*)(raddr(ds,0x6C)), *(dw*)(raddr(ds,0x6E)),
+	      (uint16_t)bp, (uint16_t)cx, (uint16_t)(bx - 0x78CA), (uint16_t)bp);
+	  }
+	}
 cs=0x1a2;eip=0x004035; 	X(MOV(*(dw*)(raddr(ds,bx-0x78CA)), bp));	// 8459 mov     [bx-78CAh], bp ;~ 01A2:4035
 cs=0x1a2;eip=0x004039; 	T(MOV(ax, *(dw*)(raddr(ds,0x6C))));	// 8460 mov     ax, ds:6Ch ;~ 01A2:4039
 cs=0x1a2;eip=0x00403c; 	X(MOV(*(dw*)(raddr(ds,bx-0x78C8)), ax));	// 8461 mov     [bx-78C8h], ax ;~ 01A2:403C
@@ -12070,7 +12077,36 @@ cs=0x1a2;eip=0x005586; 	T(AND(si, 0x0FF));	// 12686 and     si, 0FFh ;~ 01A2:558
 cs=0x1a2;eip=0x00558a; 	T(CMP(si, 1));	// 12687 cmp     si, 1 ;~ 01A2:558A
 cs=0x1a2;eip=0x00558d; 	J(JZ(loc_15597));	// 12688 jz      short loc_15597 ;~ 01A2:558D
 cs=0x1a2;eip=0x00558f; 	T(SHL(si, 1));	// 12689 shl     si, 1 ;~ 01A2:558F
+	// ORIG-COLL trace: per-opcode watch over multiple addresses (ds:0x34/0x36/0x14E4/0x150C/0x1764).
+	// Pushed to ring buffer; dumped on POSTVM-HASH DIVERGE.
+	extern int v2_orig_post_vm_frame;
+	extern void orig_coll_ring_push(int frame, uint16_t obj, uint16_t addr, uint8_t op, uint16_t pc, uint16_t pre, uint16_t post);
+	static const uint16_t orig_coll_watch_addrs[] = { 0x0034, 0x0036, 0x14E4, 0x150C, 0x1764, 0x14E5, 0x150D, 0x1765 };
+	static const int orig_coll_watch_count = (int)(sizeof(orig_coll_watch_addrs)/sizeof(orig_coll_watch_addrs[0]));
+	static uint16_t orig_coll_pre[8] = {0,0,0,0,0,0,0,0};
+	static uint8_t  orig_coll_op  = 0;
+	static uint16_t orig_coll_pc  = 0;
+	static uint16_t orig_coll_obj = 0;
+	static int      orig_coll_active = 0;
+	if (myDrawInfo_v2) {
+	    for (int wi = 0; wi < orig_coll_watch_count; wi++)
+	        orig_coll_pre[wi] = *(dw*)(raddr(ds, orig_coll_watch_addrs[wi]));
+	    orig_coll_op  = (uint8_t)(si >> 1);
+	    orig_coll_pc  = (uint16_t)(bx - 1);
+	    orig_coll_obj = *(dw*)(raddr(ds,0x42));
+	    orig_coll_active = 1;
+	}
 cs=0x1a2;eip=0x005591; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	// 12690 call    ds:off_30CAC[si] ;~ 01A2:5591
+	if (orig_coll_active) {
+	    for (int wi = 0; wi < orig_coll_watch_count; wi++) {
+	        uint16_t cur = *(dw*)(raddr(ds, orig_coll_watch_addrs[wi]));
+	        if (cur != orig_coll_pre[wi]) {
+	            orig_coll_ring_push(v2_orig_post_vm_frame, orig_coll_obj, orig_coll_watch_addrs[wi],
+	                                orig_coll_op, orig_coll_pc, orig_coll_pre[wi], cur);
+	        }
+	    }
+	    orig_coll_active = 0;
+	}
 cs=0x1a2;eip=0x005595; 	J(JMP(loc_15582));	// 12691 jmp     short loc_15582 ;~ 01A2:5595
 loc_15597:
 	// 5482
@@ -12963,6 +12999,17 @@ cs=0x1a2;eip=0x005bda; 	J(JMP(loc_15b09));	// 13717 jmp     loc_15B09 ;~ 01A2:5B
 loc_15bdd:
 	// 5592
 cs=0x1a2;eip=0x005bdd; 	T(MOV(si, *(dw*)(raddr(ds,di+0x150D))));	// 13721 mov     si, [di+150Dh] ;~ 01A2:5BDD
+	{ extern int v2_orig_post_vm_frame; static int _o36 = 0;
+	  if (myDrawInfo_v2 && _o36 < 500 && si != *(dw*)(raddr(ds,0x36))) {
+	    _o36++;
+	    fprintf(stderr, "ORIG-WR-36-15BDD[f%d obj=%04X]: %04X->%04X | obj0: Y=%04X Y_prev=%04X Y_end=%04X Y_start=%04X | ds: 6C=%04X 6E=%04X 38E=%04X 390=%04X\n",
+	      v2_orig_post_vm_frame, *(dw*)(raddr(ds,0x42)), *(dw*)(raddr(ds,0x36)), si,
+	      *(dw*)(raddr(ds,0x1765)), *(dw*)(raddr(ds,0x13CD)),
+	      *(dw*)(raddr(ds,0x150D)), *(dw*)(raddr(ds,0x14E5)),
+	      *(dw*)(raddr(ds,0x6C)), *(dw*)(raddr(ds,0x6E)),
+	      *(dw*)(raddr(ds,0x38E)), *(dw*)(raddr(ds,0x390)));
+	  }
+	}
 cs=0x1a2;eip=0x005be1; 	X(MOV(*(dw*)(raddr(ds,0x36)), si));	// 13722 mov     ds:36h, si ;~ 01A2:5BE1
 cs=0x1a2;eip=0x005be5; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x155D))));	// 13723 mov     ax, [di+155Dh] ;~ 01A2:5BE5
 cs=0x1a2;eip=0x005be9; 	X(MOV(*(dw*)(raddr(ds,0x38)), ax));	// 13724 mov     ds:38h, ax ;~ 01A2:5BE9

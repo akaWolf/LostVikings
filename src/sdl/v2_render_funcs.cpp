@@ -10,13 +10,9 @@
 #include <cstdio>
 #include "render_v2.h"
 
-// For reading drawBuffer during chunk levels (VGA triple-buffer mirroring)
-struct myDrawInfoS { uint8_t drawBuffer[65536*4]; SDL_Color drawPalette[256]; uint32_t myOffset; uint8_t myPixelOffset; };
-extern struct myDrawInfoS* myDrawInfo;
-extern uint32_t myOffset;
-
-// Accessor for original drawBuffer — used by v2_vm.cpp for HUD copy.
-void* v2_get_original_drawbuffer() { return myDrawInfo ? myDrawInfo->drawBuffer : nullptr; }
+// V2 is fully independent of myDrawInfo / orig drawBuffer.
+// v2 decodes chunks itself via v2_draw_viewport_chunk (writes to v2_render_buf
+// directly, mirroring orig sub_10cd8 → VGA) and v2_draw_hud_background → v2_hud_buf.
 
 #ifdef V2_RENDER_FROM_SHADOW
 bool v2_vm_in_frame = false;
@@ -54,11 +50,6 @@ void v2_set_m2c_base(void* base) {
     if (!v2_m2c_base) v2_m2c_base = (uint8_t*)base;
 }
 
-// Viewport chunk persistence for intro/menu screens.
-// Stored here so v2_draw_tiles can use it before v2_draw_viewport_chunk is defined.
-static uint8_t v2_viewport_chunk_pixels[320*176];
-static bool v2_has_viewport_chunk = false;
-
 // ============================================================================
 // v2_draw_tiles: Renders visible tiles from the tile map and tile graphics.
 //
@@ -86,24 +77,12 @@ void v2_draw_tiles(uint16_t ds_val) {
 
     if (!fs_seg || !tgfx_seg) return;
 
-    if (v2_has_viewport_chunk) {
-        // Chunk active: copy viewport from drawBuffer (first renderer's current page).
-        // The VM and dirty rect system maintain drawBuffer. We read it directly
-        // because the VGA triple-buffering can't be replicated with a single buffer.
-        if (myDrawInfo) {
-            // Copy viewport from drawBuffer (current display page)
-            uint32_t base = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
-            for (int y = 0; y < 176; y++)
-                for (int x = 0; x < 320; x++)
-                    buf[y * 320 + x] = myDrawInfo->drawBuffer[base + y * 344 + x];
-            // Copy HUD from drawBuffer (VGA split screen at offset 0).
-            // HUD chunk has 64 rows, all displayed (RENDER_HEIGHT_V2=240).
-            for (int y = 0; y < 64; y++)
-                for (int x = 0; x < 320; x++)
-                    v2_hud_buf[y * 320 + x] = myDrawInfo->drawBuffer[y * 344 + x];
-        }
-        return;
-    }
+    // Match orig sub_11439 (eip 0x1439): TEST byte_2AAAF,42h / JNZ loc_11443.
+    // On intro flags (0x40=INTRO_TYPE2 OR 0x02=INTRO_TYPE1) orig SKIPS sub_16ded
+    // (per-frame tile render) and jumps to set_display_memory_addr — chunk pixels
+    // written by sub_10cd8 stay in VGA. HUD-only (0x20) goes through tile render.
+    uint8_t lvl_flags = ds_base[0x25CF];
+    if (lvl_flags & 0x42) return;
 
     // Normal: clear and draw tiles
     memset(buf, 0, 320*176);
@@ -637,13 +616,14 @@ void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_
 }
 
 // ============================================================================
-// v2_draw_viewport_chunk: Store raw chunk image for viewport display.
+// v2_draw_viewport_chunk: Decode raw chunk image directly into v2_render_buf.
 //
-// Used for intro/menu screen backgrounds loaded via read_and_display_raw_chunk
-// with display_offset != 0. The image is stored in a persistent buffer and
-// applied by v2_draw_tiles (which runs every frame) instead of tile rendering.
-// This is needed because the main render loop always calls v2_draw_tiles,
-// which would otherwise overwrite the chunk with memset+tiles.
+// Mirrors orig sub_10cd8 (read_and_display_raw_chunk) which writes 4 VGA planes
+// directly to A000:display_offset via OUT(0x3C4) plane select + REP MOVSB.
+// In v2 the equivalent of VGA viewport area is v2_render_buf — write there directly.
+// No persistent flag: orig has none. On level transition sub_16880 clears VGA
+// (v2_render_buf), and the next per-frame render either re-decodes the chunk
+// (intro level) or draws tiles (tile level).
 // ============================================================================
 void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
     if (!v2_m2c_base) return;
@@ -655,59 +635,18 @@ void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
     uint8_t* chunk = v2_m2c_base + ((uint32_t)chunk_seg << 4);
 #endif
 
-    memset(v2_viewport_chunk_pixels, 0, sizeof(v2_viewport_chunk_pixels));
-
-    int nonzero = 0;
+    // Orig: VGA Mode X 4 planes at display_offset; v2: equivalent rectangle in v2_render_buf.
+    // Plane interleave x = (i % pitch) * 4 + plane, y = i / pitch. pitch=86 = 320/4 + slack.
     for (int p = 0; p < 4; p++) {
         uint8_t* plane_data = chunk + plane_size * p;
         for (int i = 0; i < plane_size && i < 86 * 176; i++) {
             int x = (i % 86) * 4 + p;
             int y = i / 86;
             if (x < 320 && y < 176) {
-                v2_viewport_chunk_pixels[y * 320 + x] = plane_data[i];
-                if (plane_data[i]) nonzero++;
+                v2_render_buf[y * 320 + x] = plane_data[i];
             }
         }
     }
-
-    v2_has_viewport_chunk = true;
-
-    // Write chunk to render buffer (like drawPixel writes to drawBuffer once).
-    memcpy(v2_render_buf, v2_viewport_chunk_pixels, 320 * 176);
-    memset(v2_render_buf + 320 * 176, 0, 320 * 24);
-
-    printf("V2-DBG: v2_draw_viewport_chunk OK seg=%x ps=%x nonzero=%d rows=%d\n",
-           chunk_seg, plane_size, nonzero, plane_size / 86);
-
-    // Dump viewport chunk as PGM (grayscale) for debugging
-    static int dump_count = 0;
-    if (dump_count < 1) {
-        char fname[64];
-        snprintf(fname, sizeof(fname), "/tmp/v2_chunk_%d.pgm", dump_count);
-        FILE* f = fopen(fname, "wb");
-        if (f) {
-            fprintf(f, "P5\n320 176\n255\n");
-            fwrite(v2_viewport_chunk_pixels, 1, 320*176, f);
-            fclose(f);
-            printf("V2-DBG: Saved viewport chunk to %s\n", fname);
-        }
-        dump_count++;
-    }
-}
-
-void v2_clear_viewport_chunk() {
-    v2_has_viewport_chunk = false;
-    memset(v2_render_buf, 0, 320*200);
-}
-
-bool v2_has_chunk_active() {
-    return v2_has_viewport_chunk;
-}
-
-// Just clear the flag — v2_draw_tiles will memset+draw on the next frame.
-// No buffer clear here to avoid a black flash frame.
-void v2_deactivate_chunk() {
-    v2_has_viewport_chunk = false;
 }
 
 // ============================================================================

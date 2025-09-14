@@ -128,7 +128,6 @@ extern uint8_t* v2_vm_get_shadow_sprite(uint32_t linear_addr);
 
 extern void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_size);
 extern void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size);
-extern void v2_clear_viewport_chunk();
 extern void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax);
 extern void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si);
 extern void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di);
