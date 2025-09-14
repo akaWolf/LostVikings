@@ -1558,11 +1558,11 @@ static void v2_sub_1DE05(uint8_t* s) {
             bx--;                                                        // 38144 dec bx
 
         de05_render:
-            // loc_1DEE4: VGA tile copy — PUSH cx,bx,di,ds,es then render.
-            // Compute VGA addresses from si_row, ax_col.
-            // Verified: seg003 lines 38147-38206. All VGA copy, no DS writes.
-            // v2: skip VGA render. After render: POP es,ds,di,bx,cx → continue.
-            // bx/cx/di already updated above.
+            // loc_1DEE4: orig calls sub_1689e to redraw dirty tile (= erase sprite trail).
+            // v2 cannot replicate per-pass tile redraw without page-flip — single buffer
+            // + multi-pass swap causes flicker. Tile-based levels use full-frame redraw
+            // in v2_draw_tiles instead; intro/menu uses chunk_bg restore. dirty bit
+            // marking still happens above (v2_sub_1CD7D) which other DS-aware code uses.
             (void)si_row; (void)ax_col; (void)dx_tl;
         }
     }
@@ -2627,6 +2627,13 @@ static void v2_sub_16880(uint8_t* s) {
     // REP STOSW ax=0, cx=0x8000 words (64KB) to es:0 (VGA 0xA000)
     memset(v2_render_buf, 0, 320 * 200);
     memset(v2_hud_buf, 0, 320 * 64);
+    // Invalidate chunk_bg backup — old level's static pixels (with old palette)
+    // must NOT be restored against new level's palette → would cause wrong colors
+    // (green/red flicker). New chunk_bg saved later by v2_draw_viewport_chunk if
+    // the new level is intro-type.
+    extern uint8_t v2_chunk_bg_backup[320*176];
+    extern bool v2_chunk_bg_valid;
+    v2_chunk_bg_valid = false;
 }
 
 // sub_116e3: init level descriptor. Sets transition mode based on level number.
@@ -4262,18 +4269,6 @@ tile_load:
         v2_read_chunk(bg_chunk, v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE);
         v2_gs_tiledata_valid = true;
 
-        // TILE-DUMP: dump first row of shadow_tilemap and FS for diagnosis
-        fprintf(stderr,
-            "TILE-DUMP[lvl=%04X chunks t=%X g=%X m=%X b=%X sz3=%u]:\n"
-            "  shadow_tilemap[0..31]:",
-            *(uint16_t*)(shadow + 0x25AD), tile_chunk, tile_chunk + 1,
-            main_chunk, bg_chunk, (unsigned)sz3);
-        for (int i = 0; i < 32; i++)
-            fprintf(stderr, " %02X", v2_vm_shadow_tilemap[i]);
-        fprintf(stderr, "\n  shadow_tilegfx[0..31]:");
-        for (int i = 0; i < 32; i++)
-            fprintf(stderr, " %02X", v2_vm_shadow_tilegfx[i]);
-        fprintf(stderr, "\n");
     }
 }
 
@@ -5274,6 +5269,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 }
 
                 // sub_11C52: item blink counter. Verified with seg000 lines 3662-3697.
+                // CRITICAL: orig sub_11c52 only calls sub_1183D (HUD render, no DS write
+                // to ds:0x3FC) + sub_120D1 (selector). It does NOT modify ds:0x3FC.
+                // Earlier v2 had a bogus write here that overwrote ds:0x3FC=0 during the
+                // "hide" phase of item blink, causing HUD inventory divergence at frame 504+.
                 {
                     uint16_t w27 = *(uint16_t*)(shadow + 0x0447); // word_28927
                     *(uint16_t*)(shadow + 0x0445) -= 1;            // DEC word_28925
@@ -5284,10 +5283,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         if (*(uint16_t*)(shadow + 0x0445) & 0x10) {
                             ax_item = *(uint16_t*)(shadow + 0x0441); // word_28921 (show item)
                         } else {
-                            ax_item = 0; // hide item
+                            ax_item = 0; // hide item (visual only — does NOT write ds:0x3FC)
                         }
-                        // sub_1183d: DS write [di+3FC] = ax (item slot display)
-                        *(uint16_t*)(shadow + di_s + 0x3FC) = ax_item;
+                        // sub_1183d: HUD item RENDER ONLY (no DS write to ds:0x3FC).
+                        // (void)ax_item; // ax_item used by v2 render call below
+                        (void)di_s; (void)ax_item;
                         // sub_120D1: DS writes [41A]=[414], [41C]=[416], [41E]=[418]
                         *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
                         *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
@@ -6805,20 +6805,7 @@ struct V2VM {
                         v2_orig_post_vm_frame, obj, pc, addr, *(uint16_t*)(shadow + addr), val);
                 }
             }
-            // Trap ds:0x36 writes inside collision VM — log writer with full context
-            if (addr == 0x36 && val != *(uint16_t*)(shadow + addr)) {
-                static int _t36 = 0;
-                if (_t36 < 500) {
-                    _t36++;
-                    extern int v2_orig_post_vm_frame;
-                    fprintf(stderr, "V2-WR-36[f%d obj=%04X pc=%04X]: %04X->%04X | obj0: Y=%04X Y_prev=%04X Y_end=%04X Y_start=%04X | ds: 6C=%04X 6E=%04X 38E=%04X 390=%04X\n",
-                        v2_orig_post_vm_frame, obj, pc, *(uint16_t*)(shadow + addr), val,
-                        *(uint16_t*)(shadow + 0x1765), *(uint16_t*)(shadow + 0x13CD),
-                        *(uint16_t*)(shadow + 0x150D), *(uint16_t*)(shadow + 0x14E5),
-                        *(uint16_t*)(shadow + 0x6C), *(uint16_t*)(shadow + 0x6E),
-                        *(uint16_t*)(shadow + 0x38E), *(uint16_t*)(shadow + 0x390));
-                }
-            }
+            // V2-WR-36 spam — commented (496 lines/run, ds:0x36 trace)
             // (0x077E trace removed — root cause: VGA interrupt timing in original)
             if (addr == 0x3CC && val != *(uint16_t*)(shadow + addr)) {
                 static int _tw = 0; if (_tw < 5) { _tw++;
@@ -8100,7 +8087,7 @@ static void v2_vm_sub_158c8(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 
 // sub_158d7: animation load function. Sets carry based on search results.
 static void v2_vm_sub_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-{ static int _o=0; _o++; if(_o<=600) fprintf(stderr,"V2-158d7[#%d]: filter=%04X obj=%04X pc=%04X\n", _o, filter_si, obj_di, vm.pc); }
+// V2-158d7 spam — commented (599 lines/run)
     vm.ds_write(0x3B4, 0xFFFF);
     bool found_a = v2_vm_loc_15A70(vm, filter_si, obj_di);
     if (found_a) {
@@ -10120,15 +10107,39 @@ static void v2_vm_op_13(V2VM& vm) {
         vm.ds_write(0x7EFE, 4);
         vm.ds_write(0x7F00, 0x8202);
     } else if (al == 0x11) {
-        // Orig sub_1434c loc_14396: clears VGA viewport (mass REP STOSB on all 4 planes)
-        // and saves top-of-page copies to off-screen scratch areas (REP MOVSB) for use
-        // by CRTC page-flip + pixel-panning later. v2 has single linear render buffer
-        // and no page-flip equivalent — replicate only the visible-viewport clear.
-        // (The MOVSB saves go to byte offsets 0x2ADC and 0x70BC which, when interpreted
-        //  via 86-byte pitch, land at row 127 col 312 and beyond — outside or at edge
-        //  of v2's 320×176 viewport, so saves have no useful pixel effect for v2.)
+        // Orig sub_1434c loc_14396 — exact semantic translation to v2 bifurcated buffers.
+        //
+        // Orig VGA layout: HUD at VGA[0..~0x1580] (64 rows × 86-byte pitch), viewport
+        // page areas at higher offsets (0x2ADC = page-0 start). HUD displayed via CRTC
+        // line compare at row 176; viewport via CRTC start address (default 0x2ADC).
+        //
+        // Orig sequence:
+        //   1. MOVSB src=0,    dst=0x2ADC, cnt=0x1600  ; copy HUD VGA bytes → viewport page-0 start
+        //   2. MOVSB src=0,    dst=0x70BC, cnt=0x1600  ; copy HUD → another viewport page area
+        //   3. STOSB di=0,     cnt=0x2ADC, val=0       ; clear HUD area + buffer
+        //   4. STOSB di=0x40DC, cnt=0x2FE0, val=0      ; clear viewport page-1 area
+        //   5. STOSB di=0x86BC, cnt=0x7000, val=0      ; clear viewport page-2 area
+        //
+        // Net visual effect: HUD picture COPIED to top of viewport, HUD cleared.
+        // = "picture moves from HUD area UP to viewport top".
+        //
+        // V2 architecture: v2_hud_buf (320×64) holds HUD; v2_render_buf (320×176) holds
+        // viewport. Translate orig's intermixed VGA ops to per-buffer ops:
+        //   - Copy v2_hud_buf → v2_render_buf top 64 rows (viewport top gets HUD picture)
+        //   - Clear v2_hud_buf (HUD area emptied)
+        //   - Clear v2_render_buf rows 64..176 (rest of viewport cleared)
         extern uint8_t v2_render_buf[320*200];
-        memset(v2_render_buf, 0, 320 * 176);
+        extern uint8_t v2_hud_buf[320*64];
+        // 1. Copy HUD picture → top of viewport (= orig MOVSB src=0 → dst=0x2ADC visible part)
+        memcpy(v2_render_buf, v2_hud_buf, 320 * 64);
+        // 2. Clear HUD area (= orig STOSB di=0..0x2ADC clearing VGA[0..HUD_END])
+        memset(v2_hud_buf, 0, 320 * 64);
+        // 3. Clear viewport bottom (= orig STOSB clearing rest of viewport pages)
+        memset(v2_render_buf + 320 * 64, 0, 320 * (176 - 64));
+        // 4. Refresh chunk_bg backup so per-frame restore in v2_draw_tiles preserves
+        //    new static state (HUD picture at top + cleared bottom). Without this,
+        //    next frame restore would bring back vikings from old chunk_bg.
+        v2_chunk_bg_update_from_render();
     } else if (al == 0x01) {
         // Orig sub_1434c loc_143eb → JMP loc_10E35: GAME EXIT.
         // loc_10E35 (eip 0x0E35) frees all DOS memory blocks (5× INT 21h 0x4900),
@@ -10528,25 +10539,19 @@ static void v2_vm_op_CA(V2VM& vm) {
 // sub_12312: if word_288AC != 0 → alternate XOR path. Else LCG.
 // Both paths read/write game globals outside DS shadow range.
 static void v2_vm_op_55(V2VM& vm) {
-    // word_288AC, word_28832, dword_30B19 are all in real DS or CS space.
-    // Access via vm.ds (real DS pointer for out-of-shadow reads).
+    // word_288AC at DS:0x03CC, word_28832 at DS:0x0352, dword_30B19 at CS:0x30B19.
 
-    // word_288AC is at a high DS address. Check if non-zero for alternate path.
-    // Address: word_288AC = DS global. Using real DS.
-    uint16_t check = *(uint16_t*)(vm.shadow +0x03CC); // word_288AC at DS:0x03CC
+    uint16_t check = *(uint16_t*)(vm.shadow + 0x03CC); // word_288AC
     if (check != 0) {
-        // Alternate XOR random: word_28832
+        // Alternate XOR random — exact orig sequence.
         // Original: ax = word_28832; XCHG ah,al; word_28832 = ax; RCL ax,3; XOR word_28832, ax
-        // v2 uses own copy to avoid corrupting original state
-        static uint16_t v2_word_28832 = 0;
-        static bool v2_28832_init = false;
-        if (!v2_28832_init) { v2_word_28832 = *(uint16_t*)(vm.shadow +0x0352); v2_28832_init = true; } // word_28832 at DS:0x0352
-        uint16_t ax = v2_word_28832;
-        ax = (ax >> 8) | (ax << 8); // XCHG ah,al
-        v2_word_28832 = ax;
+        // Both writes go to shadow DS (= match orig DS state for replay verify).
+        uint16_t ax = *(uint16_t*)(vm.shadow + 0x0352);   // ax = word_28832
+        ax = (ax >> 8) | (ax << 8);                        // XCHG ah,al
+        *(uint16_t*)(vm.shadow + 0x0352) = ax;             // word_28832 = ax
         // RCL ax,3 — 17-bit rotate (CF=0 from dispatch SHL)
         { uint32_t v17 = (uint32_t)ax; v17 = ((v17 << 3) | (v17 >> 14)) & 0x1FFFF; ax = (uint16_t)(v17 & 0xFFFF); }
-        v2_word_28832 ^= ax; // XOR [mem], ax — modifies memory only
+        *(uint16_t*)(vm.shadow + 0x0352) ^= ax;            // XOR word_28832, ax
         v2_vm_accumulator = ax; // Original returns ax (rotated), NOT the XOR'd memory
     } else {
         // LCG: own seed copy to avoid corrupting original
@@ -14304,10 +14309,36 @@ void v2_run_animation_vm(uint16_t ds_val) {
     // sub_12fc6 (resource tick) — NOP for v2
     v2_sub_10130(v2_vm_shadow_ds); // sub_10130: VGA vsync wait
 
+    // POST-VM DS scan: catch divergences created by VM phase that PRE-VM-CMP misses
+    // (when divergence resolved by next pre-vm boundary — e.g., POST-FLIP1 hash mismatches)
+    if (v2_vm_real_ds_ptr) {
+        static int _pvf = 0; _pvf++;
+        if (_pvf <= 100) {
+            int pvm_diffs = 0;
+            for (uint32_t i = 0; i < 0x10000 && pvm_diffs < 10; i += 2) {
+                uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + i);
+                uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + i);
+                if (rv != sv) {
+                    if (i == 0xA39C) continue;
+                    if (i >= 0x990C && i <= 0x991E) continue;
+                    if (pvm_diffs == 0)
+                        fprintf(stderr, "POSTVM-CMP[f%d]: DS DIFFS:\n", _pvf);
+                    fprintf(stderr, "  0x%04X: real=%04X v2=%04X\n", (uint16_t)i, rv, sv);
+                    pvm_diffs++;
+                }
+            }
+        }
+    }
+
     // ====== RENDER (eip 0x0051..0x0056) ======
-    // Original: CALLF sub_1DE05 (seg003 dirty rect update)
-    // sub_1de05: updates VGA dirty rectangles — for v2: full-frame rendering instead.
-    // sub_1de05_dirty_update_position(NULL); // seg003 — commented for v2
+    // Original: CALLF sub_1DE05 (seg003 dirty rect update for sprite erase).
+    // V2 architecture: single-buffer + immediate v2_sub_16775 swap per pass causes
+    // flicker if intermediate sub_1DE05 erase happens. Orig avoids this via 3-page
+    // VGA + CRTC page-flip (each pass renders to different page, display switches
+    // on vsync). v2 doesn't replicate page-flip → cannot literally mirror per-pass
+    // dirty-rect erase. v2 uses full-frame redraw (v2_draw_tiles) for tile-based
+    // levels and chunk_bg restore for intro/menu — semantic equivalent of orig effect.
+    // sub_1de05_dirty_update_position(NULL); // seg003 — semantic-equivalent below
     v2_do_render();
 
     // ====== POST-RENDER (eip 0x0056..0x006C) ======
@@ -15117,8 +15148,30 @@ void v2_phase_pre_vm(uint16_t ds_val) {
                 ds_diffs++;
             }
         }
-        fprintf(stderr, "V2-PRE-VM-CMP[f%d]: total diffs=%d\n", pre_vm_frame, ds_diffs);
-        fflush(stderr);
+        // Only print summary if there are actual diffs (avoid 600+ "diffs=0" lines/run)
+        if (ds_diffs > 0) {
+            fprintf(stderr, "V2-PRE-VM-CMP[f%d]: total diffs=%d\n", pre_vm_frame, ds_diffs);
+            fflush(stderr);
+        }
+        // ITEM-TRAP: log ds:0x3E4..0x402 (HUD item slots) + 0x3FC mirror when changed
+        // — comparing real (orig) vs shadow (v2) slot-by-slot.
+        {
+            int item_diffs = 0;
+            for (int i = 0; i < 0x18; i += 2) {
+                uint16_t r3e4 = *(uint16_t*)(real + 0x3E4 + i);
+                uint16_t s3e4 = *(uint16_t*)(shad + 0x3E4 + i);
+                uint16_t r3fc = *(uint16_t*)(real + 0x3FC + i);
+                uint16_t s3fc = *(uint16_t*)(shad + 0x3FC + i);
+                if (r3e4 != s3e4 || r3fc != s3fc) {
+                    if (item_diffs == 0)
+                        fprintf(stderr, "ITEM-TRAP[f%d]: HUD slot diffs:\n", pre_vm_frame);
+                    fprintf(stderr, "  slot=%d ds:0x3E4+%d real=%04X v2=%04X | ds:0x3FC+%d real=%04X v2=%04X\n",
+                        i/2, i, r3e4, s3e4, i, r3fc, s3fc);
+                    item_diffs++;
+                }
+            }
+        }
+
         // Also compare animation segment (ES data)
         uint16_t anim_seg = *(uint16_t*)(real + 0x2E67);
         if (anim_seg != 0 && v2_m2c_base) {

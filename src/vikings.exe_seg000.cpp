@@ -1163,7 +1163,7 @@ bx = offset;
 	    offset);*/
 //screen_offset = bx;
 myOffset = bx;
-{ static uint32_t prev_off = 0xFFFFFFFF; if (bx != (uint16_t)prev_off) { printf("V2-PAGE: myOffset %x->%x yD=%x yS=%x xD=%x xS=%x pg=%x\n", (uint16_t)prev_off, bx, y_disp_offset, y_some_offset, x_disp_offset, x_some_offset, page_offset); prev_off = bx; } }
+// V2-PAGE spam — commented (1667 lines/run)
 
 cs=0x1a2;eip=0x0067cb; 	X(PUSHF);	// 15462 pushf ;~ 01A2:67CB
 cs=0x1a2;eip=0x0067cc; 	T(CLI);	// 15463 cli ;~ 01A2:67CC
@@ -1895,17 +1895,7 @@ loc_1001e:
    printf("quitting main thread\n");
    exit(0);
  }
- // MONITOR: track pixel value at the exact updateDraw offset
- {
-   static uint8_t prev_mon = 0xFF;
-   uint32_t uoff = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
-   uint8_t cur = myDrawInfo->drawBuffer[uoff + 48*344 + 160];
-   if (cur != prev_mon) {
-     printf("MON: frame myOffset=%x pixOff=%d pixel(160,48)=%d->%d uoff=%x addr=%x\n",
-            myDrawInfo->myOffset, myDrawInfo->myPixelOffset, prev_mon, cur, uoff, uoff + 48*344 + 160);
-     prev_mon = cur;
-   }
- }
+ // MON pixel monitor — commented (debug, 167 lines/run)
 	// Signal FRAME_BEGIN BEFORE sub_12352 — so v2 compare sees pre-input DS
 	{ static int _origpf = 0; static uint16_t _prevlvl = 0xFFFF;
 	  uint16_t _curlvl = *(dw*)(raddr(ds,0x25AD));
@@ -8426,20 +8416,19 @@ cs=0x1a2;eip=0x003c0a; 	T(STC);	// 7999 stc ;~ 01A2:3C0A
 cs=0x1a2;eip=0x003c0b; 	J(RETN(0));	// 8000 retn ;~ 01A2:3C0B
 sub_13c0c:
 	// 8007
-{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13c0c-ENTRY[#%d]: vp_x=ds:0x44=%04X ds:34=%04X\n",
-  _c, *(dw*)(raddr(ds,0x44)), *(dw*)(raddr(ds,0x34))); }
+// ORIG-13c0c-ENTRY — commented (spam)
 cs=0x1a2;eip=0x003c0c; 	T(MOV(ax, *(dw*)(raddr(ds,0x44))));	// 8009 mov     ax, ds:44h ;~ 01A2:3C0C
 ret_1a2_3c0f:
 	// 5063
 cs=0x1a2;eip=0x003c0f; 	T(SUB(ax, 0x10));	// 8010 sub     ax, 10h ;~ 01A2:3C0F
 cs=0x1a2;eip=0x003c12; 	J(JGE(loc_13c1c));	// 8011 jge     short loc_13C1C ;~ 01A2:3C12
 cs=0x1a2;eip=0x003c14; 	X(MOV(*(dw*)(raddr(ds,0x34)), 0));	// 8012 mov     word ptr ds:34h, 0 ;~ 01A2:3C14
-{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13c14[#%d]: ds:34 = 0\n", _c); }
+// ORIG-13c14 — commented (spam)
 cs=0x1a2;eip=0x003c1a; 	J(JMP(loc_13c1f));	// 8013 jmp     short loc_13C1F ;~ 01A2:3C1A
 loc_13c1c:
 	// 5064
 cs=0x1a2;eip=0x003c1c; 	X(MOV(*(dw*)(raddr(ds,0x34)), ax));	// 8017 mov     ds:34h, ax ;~ 01A2:3C1C
-{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13c1c[#%d]: ds:34 = %04X (vp_x-0x10)\n", _c, ax); }
+// ORIG-13c1c — commented (spam)
 loc_13c1f:
 	// 5065
 cs=0x1a2;eip=0x003c1f; 	T(ADD(ax, 0x160));	// 8020 add     ax, 160h ;~ 01A2:3C1F
@@ -8598,19 +8587,19 @@ cs=0x1a2;eip=0x003d6d; 	J(JZ(loc_13d8c));	// 8192 jz      short loc_13D8C ;~ 01A
 cs=0x1a2;eip=0x003d6f; 	T(CMP(*(dw*)(raddr(ds,0x374)), 1));	// 8193 cmp     word ptr ds:374h, 1 ;~ 01A2:3D6F
 cs=0x1a2;eip=0x003d74; 	J(JZ(loc_13d81));	// 8194 jz      short loc_13D81 ;~ 01A2:3D74
 cs=0x1a2;eip=0x003d76; 	T(MOV(di, 0));	// 8195 mov     di, 0 ;~ 01A2:3D76
-{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13d79[#%d]: ds:374=%04X (else) → ds:32=0x30 (caller obj=ds:42=%04X)\n", _c, *(dw*)raddr(ds,0x374), *(dw*)raddr(ds,0x42)); }
+// ORIG-13d79 — commented (spam)
 cs=0x1a2;eip=0x003d79; 	X(MOV(*(dw*)(raddr(ds,0x32)), 0x30));	// 8196 mov     word ptr ds:32h, 30h ; '0' ;~ 01A2:3D79
 cs=0x1a2;eip=0x003d7f; 	J(JMP(loc_13d95));	// 8197 jmp     short loc_13D95 ;~ 01A2:3D7F
 loc_13d81:
 	// 5085
 cs=0x1a2;eip=0x003d81; 	T(MOV(di, 0x30));	// 8201 mov     di, 30h ; '0' ;~ 01A2:3D81
-{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13d84[#%d]: ds:374=1 → ds:32=0x50 (caller obj=ds:42=%04X)\n", _c, *(dw*)raddr(ds,0x42)); }
+// ORIG-13d84 — commented (spam)
 cs=0x1a2;eip=0x003d84; 	X(MOV(*(dw*)(raddr(ds,0x32)), 0x50));	// 8202 mov     word ptr ds:32h, 50h ; 'P' ;~ 01A2:3D84
 cs=0x1a2;eip=0x003d8a; 	J(JMP(loc_13d95));	// 8203 jmp     short loc_13D95 ;~ 01A2:3D8A
 loc_13d8c:
 	// 5086
 cs=0x1a2;eip=0x003d8c; 	T(MOV(di, 0x48));	// 8207 mov     di, 48h ; 'H' ;~ 01A2:3D8C
-{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13d8c[#%d]: ds:374=0 → ds:32=0x100 (caller obj=ds:42=%04X)\n", _c, *(dw*)raddr(ds,0x42)); }
+// ORIG-13d8c — commented (spam)
 cs=0x1a2;eip=0x003d8f; 	X(MOV(*(dw*)(raddr(ds,0x32)), 0x100));	// 8208 mov     word ptr ds:32h, 100h ;~ 01A2:3D8F
 loc_13d95:
 	// 5087
@@ -12547,7 +12536,7 @@ locret_158d6:
 	// 5539
 cs=0x1a2;eip=0x0058d6; 	J(RETN(0));	// 13219 retn ;~ 01A2:58D6
 sub_158d7:
-{ static int _o=0; _o++; if(_o<=600) fprintf(stderr,"ORIG-158d7[#%d]: si(filter)=%04X di=%04X bx=%04X\n", _o, si, di, bx); }
+// ORIG-158d7 spam — commented (600 lines/run)
 	// 13226
 cs=0x1a2;eip=0x0058d7; 	X(MOV(*(dw*)(raddr(ds,0x3B4)), 0x0FFFF));	// 13227 mov     word ptr ds:3B4h, 0FFFFh ;~ 01A2:58D7
 ret_1a2_58dd:
@@ -15245,7 +15234,7 @@ cs=0x1a2;eip=0x0073f1; 	T(MOV(bx, 0));	// 16850 mov     bx, 0 ;~ 01A2:73F1
 cs=0x1a2;eip=0x0073f4; 	T(MOV(di, 0));	// 16851 mov     di, 0 ;~ 01A2:73F4
 loc_173f7:
 	// 5824
- { static int tc173=0; tc173++; if ((uint16_t)(bp+di) >= 0x960 || di >= 0x960) printf("ORIG-173C7-WRITE: tc=%d di=%04X bp+di=%04X rows_left=%d cols_left=%d\n", tc173, di, (uint16_t)(bp+di), word_17469, word_17467); }
+ // ORIG-173C7-WRITE — commented (3167 lines/run, sub_173c7 verified)
 cs=0x1a2;eip=0x0073f7; 	T(MOV(si, *(dw*)(raddr(es,bx))));	// 16855 mov     si, es:[bx] ;~ 01A2:73F7
 cs=0x1a2;eip=0x0073fa; 	T(AND(si, 0x3FF));	// 16856 and     si, 3FFh ;~ 01A2:73FA
 cs=0x1a2;eip=0x0073fe; 	T(SHL(si, 3));	// 16857 shl     si, 3 ;~ 01A2:73FE

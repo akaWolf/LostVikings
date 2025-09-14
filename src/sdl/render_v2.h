@@ -128,6 +128,11 @@ extern uint8_t* v2_vm_get_shadow_sprite(uint32_t linear_addr);
 
 extern void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_size);
 extern void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size);
+// Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
+extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col);
+// Refresh static intro/menu chunk_bg backup from current v2_render_buf (call after
+// op_13/0x11 menu activation to capture cleared+moved state as new static background).
+extern void v2_chunk_bg_update_from_render();
 extern void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax);
 extern void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si);
 extern void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di);

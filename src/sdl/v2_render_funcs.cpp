@@ -37,6 +37,21 @@ uint8_t  v2_display_buf[320*200];
 std::mutex v2_display_mutex;
 uint8_t  v2_hud_buf[320*64];
 
+// Static intro/menu chunk pixels backup. Orig keeps static chunk pixels in VGA
+// across frames, dirty-rect (sub_1de05) erases sprite trails by redrawing tiles
+// (which in intro have empty content, effectively reverting to chunk pixels via
+// CRTC page persistence). v2 single-buffer architecture lacks page-flip — so we
+// save chunk pixels at load time and restore each frame in v2_draw_tiles for
+// intro flag levels (= semantic equivalent of "tile redraw + chunk persistence").
+// On op_13/0x11 (menu activation) backup is updated to match cleared+moved state.
+uint8_t v2_chunk_bg_backup[320*176];
+bool v2_chunk_bg_valid = false;
+
+void v2_chunk_bg_update_from_render() {
+    memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
+    v2_chunk_bg_valid = true;
+}
+
 void v2_swap_render_buf() {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -81,8 +96,17 @@ void v2_draw_tiles(uint16_t ds_val) {
     // On intro flags (0x40=INTRO_TYPE2 OR 0x02=INTRO_TYPE1) orig SKIPS sub_16ded
     // (per-frame tile render) and jumps to set_display_memory_addr — chunk pixels
     // written by sub_10cd8 stay in VGA. HUD-only (0x20) goes through tile render.
+    // V2 single-buffer architecture: restore chunk_bg_backup each frame to erase
+    // dynamic content (sprites, cursor) and recover static chunk pixels — semantic
+    // equivalent of orig page-flip + dirty-rect tile-redraw mechanism.
     uint8_t lvl_flags = ds_base[0x25CF];
-    if (lvl_flags & 0x42) return;
+    if (lvl_flags & 0x42) {
+        if (v2_chunk_bg_valid) {
+            memcpy(v2_render_buf, v2_chunk_bg_backup, 320 * 176);
+        }
+        return;
+    }
+    v2_chunk_bg_valid = false; // tile-based level; static backup no longer relevant
 
     // Normal: clear and draw tiles
     memset(buf, 0, 320*176);
@@ -166,6 +190,83 @@ void v2_draw_tiles(uint16_t ds_val) {
                     buf[sy * 320 + sx] = pixels[px];
                 }
             }
+        }
+    }
+}
+
+// ============================================================================
+// v2_draw_single_tile: Render ONE tile at (abs_row, abs_col) in v2_render_buf.
+//
+// Mirrors orig sub_1689e called from sub_1de05 dirty-rect inner loop.
+// Used to erase sprite trails on intro levels (where v2_draw_tiles is skipped):
+// when sprite moves, sub_1de05 marks tiles under old position dirty, then this
+// function redraws each dirty tile's content → erases the sprite pixels.
+//
+// fs_offset = byte offset in FS shadow where tile entry resides
+// abs_row, abs_col = absolute tilemap coordinates (used for screen position)
+// ============================================================================
+void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col) {
+#ifdef V2_RENDER_FROM_SHADOW
+    if (!v2_vm_in_frame) return;
+#endif
+    if (!v2_m2c_base) return;
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
+    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+    uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    if (!fs_seg || !tgfx_seg) return;
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* fs_base = v2_resolve_segment(fs_seg);
+    uint8_t* tgfx_base = v2_resolve_segment(tgfx_seg);
+#else
+    uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+#endif
+    uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
+    uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
+    int16_t vp_px = *(int16_t*)(ds_base + 0x44);
+    int16_t vp_py = *(int16_t*)(ds_base + 0x46);
+    int pix_off_x = vp_px & 7;
+    int pix_off_y = vp_py & 7;
+
+    // Convert absolute tilemap coords → visible viewport position
+    int visible_row = abs_row - (int)scroll_x;
+    int visible_col = abs_col - (int)scroll_y;
+    if (visible_row < 0 || visible_row >= 25) return;
+    if (visible_col < 0 || visible_col >= 43) return;
+
+    if ((uint32_t)fs_offset + 1 >= 0x6000) return;
+    uint16_t tile_entry = *(uint16_t*)(fs_base + fs_offset);
+    uint16_t tile_gfx_off = tile_entry & 0xFFC0;
+    bool hflip = (tile_entry & 0x10) != 0;
+    bool vflip = (tile_entry & 0x20) != 0;
+    uint8_t* tile = tgfx_base + tile_gfx_off;
+
+    int screen_x = visible_col * 8 - pix_off_x;
+    int screen_y = visible_row * 8 - pix_off_y;
+    uint8_t* buf = v2_render_buf;
+
+    for (int row = 0; row < 8; row++) {
+        int src_row = vflip ? (7 - row) : row;
+        int sy = screen_y + row;
+        if (sy < 0) continue;
+        if (sy >= 200) break;
+        uint8_t pixels[8];
+        for (int plane = 0; plane < 4; plane++) {
+            uint8_t b0 = tile[plane * 16 + src_row * 2];
+            uint8_t b1 = tile[plane * 16 + src_row * 2 + 1];
+            if (!hflip) {
+                pixels[plane + 0] = b0;
+                pixels[plane + 4] = b1;
+            } else {
+                pixels[(3 - plane) + 4] = b0;
+                pixels[(3 - plane) + 0] = b1;
+            }
+        }
+        for (int px = 0; px < 8; px++) {
+            int sx = screen_x + px;
+            if (sx < 0) continue;
+            if (sx >= 320) break;
+            buf[sy * 320 + sx] = pixels[px];
         }
     }
 }
@@ -647,6 +748,9 @@ void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
             }
         }
     }
+    // Save backup for per-frame restore in v2_draw_tiles intro path
+    memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
+    v2_chunk_bg_valid = true;
 }
 
 // ============================================================================
