@@ -1932,13 +1932,22 @@ cs=0x1a2;eip=0x000036; 	J(CALL(sub_1673c,0));	// 56 call    sub_1673C ;~ 01A2:00
 	{ extern int orig_trace_len; orig_trace_len = 0; }
 cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:0039
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VM, ds);
+	extern uint16_t v2_orig_obj0_Y_after[5];
+	extern uint16_t v2_orig_obj0_Y_before;
+	extern void v2_record_orig_post_vm_hash(int idx);
+	if (myDrawInfo_v2) v2_orig_obj0_Y_before = *(uint16_t*)(raddr(ds, 0x1765));
 cs=0x1a2;eip=0x00003c; 	J(CALL(sub_1386b,0));	// 58 call    sub_1386B ;~ 01A2:003C
+	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[0] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(0); }
 cs=0x1a2;eip=0x00003f; 	J(CALL(sub_1625d,0));	// 59 call    sub_1625D ;~ 01A2:003F
+	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[1] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(1); }
 cs=0x1a2;eip=0x000042; 	J(CALL(sub_15546,0));	// 60 call    sub_15546 ;~ 01A2:0042
+	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[2] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(2); }
 cs=0x1a2;eip=0x000045; 	J(CALL(sub_13916,0));	// 61 call    sub_13916 ;~ 01A2:0045
+	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[3] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(3); }
 loc_10048:
 	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); }
 cs=0x1a2;eip=0x000048; 	J(CALL(sub_1064b,0));	// 64 call    sub_1064B ;~ 01A2:0048
+	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[4] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(4); }
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_VM, ds); v2_vm_verify_game_loop(ds); v2_vm_verify_tilemap(ds); v2_vm_verify_all_segments(ds); }
 cs=0x1a2;eip=0x00004b; 	J(CALL(sub_12fc6,0));	// 65 call    sub_12FC6 ;~ 01A2:004B
 	static bool seg003_initialized = false;
@@ -2086,6 +2095,12 @@ loc_1014b:
 cs=0x1a2;eip=0x00014b; 	X(MOV(word_2aaa9, 0x25));	// 177 mov     word_2AAA9, 25h ; '%' ;~ 01A2:014B
 loc_10151:
 	// 4379
+	{ static int _ot = 0; if (++_ot <= 10) {
+		extern int v2_orig_post_vm_frame, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
+		fprintf(stderr, "ORIG-TRANS-ENTRY[%d]: pre=%d post=%d rec=%d ax=%04X cur_lv=%04X next_lv=%04X 334=%04X\n",
+			_ot, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame, (uint16_t)ax,
+			*(uint16_t*)(raddr(ds, 0x25AD)), *(uint16_t*)(raddr(ds, 0x25C9)),
+			*(uint16_t*)(raddr(ds, 0x334))); } }
 cs=0x1a2;eip=0x000151; 	X(MOV(word_28814, 0));	// 180 mov     word_28814, 0 ;~ 01A2:0151
 cs=0x1a2;eip=0x000157; 	J(CALL(sub_1774f,0));	// 181 call    sub_1774F ;~ 01A2:0157
 cs=0x1a2;eip=0x00015a; 	X(INC(word_2880f));	// 182 inc     word_2880F ;~ 01A2:015A
@@ -3604,8 +3619,14 @@ cs=0x1a2;eip=0x001243; 	X(MOV(word_2b345, di));	// 2444 mov     word_2B345, di ;
 cs=0x1a2;eip=0x001247; 	T(MOV(ax, word_2aac5));	// 2445 mov     ax, word_2AAC5 ;~ 01A2:1247
 cs=0x1a2;eip=0x00124a; 	T(MOV(di, 0));	// 2446 mov     di, 0 ;~ 01A2:124A
 cs=0x1a2;eip=0x00124d; 	T(MOV(es, word_2b33d));	// 2447 mov     es, word_2B33D ;~ 01A2:124D
+ { uint16_t _gs = word_2b33d; fprintf(stderr, "ORIG-PRE-GS-DECOMP: gs=%04X chunk=%04X gs[0x2000]=%04X gs[0x201C]=%04X gs[0x3600]=%02X gs[0x36BA]=%02X\n",
+   _gs, word_2aac5, *(dw*)raddr(_gs, 0x2000), *(dw*)raddr(_gs, 0x201C), *(db*)raddr(_gs, 0x3600), *(db*)raddr(_gs, 0x36BA)); }
 //cs=0x1a2;eip=0x001251; 	J(JMP(sub_10982));	// 2448 jmp     sub_10982 ;~ 01A2:1251
- return read_chunk(_state);
+ { bool _r = read_chunk(_state);
+   uint16_t _gs = word_2b33d;
+   fprintf(stderr, "ORIG-POST-GS-DECOMP: gs[0x2000]=%04X gs[0x201C]=%04X gs[0x3600]=%02X\n",
+     *(dw*)raddr(_gs, 0x2000), *(dw*)raddr(_gs, 0x201C), *(db*)raddr(_gs, 0x3600));
+   return _r; }
 loc_11254:
  printf("V2-DBG: sub_11204 -> loc_11254 (intro type 1, flag &2), chunk=%x\n", word_2aac1);
 	// 4575
@@ -8405,16 +8426,20 @@ cs=0x1a2;eip=0x003c0a; 	T(STC);	// 7999 stc ;~ 01A2:3C0A
 cs=0x1a2;eip=0x003c0b; 	J(RETN(0));	// 8000 retn ;~ 01A2:3C0B
 sub_13c0c:
 	// 8007
+{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13c0c-ENTRY[#%d]: vp_x=ds:0x44=%04X ds:34=%04X\n",
+  _c, *(dw*)(raddr(ds,0x44)), *(dw*)(raddr(ds,0x34))); }
 cs=0x1a2;eip=0x003c0c; 	T(MOV(ax, *(dw*)(raddr(ds,0x44))));	// 8009 mov     ax, ds:44h ;~ 01A2:3C0C
 ret_1a2_3c0f:
 	// 5063
 cs=0x1a2;eip=0x003c0f; 	T(SUB(ax, 0x10));	// 8010 sub     ax, 10h ;~ 01A2:3C0F
 cs=0x1a2;eip=0x003c12; 	J(JGE(loc_13c1c));	// 8011 jge     short loc_13C1C ;~ 01A2:3C12
 cs=0x1a2;eip=0x003c14; 	X(MOV(*(dw*)(raddr(ds,0x34)), 0));	// 8012 mov     word ptr ds:34h, 0 ;~ 01A2:3C14
+{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13c14[#%d]: ds:34 = 0\n", _c); }
 cs=0x1a2;eip=0x003c1a; 	J(JMP(loc_13c1f));	// 8013 jmp     short loc_13C1F ;~ 01A2:3C1A
 loc_13c1c:
 	// 5064
 cs=0x1a2;eip=0x003c1c; 	X(MOV(*(dw*)(raddr(ds,0x34)), ax));	// 8017 mov     ds:34h, ax ;~ 01A2:3C1C
+{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13c1c[#%d]: ds:34 = %04X (vp_x-0x10)\n", _c, ax); }
 loc_13c1f:
 	// 5065
 cs=0x1a2;eip=0x003c1f; 	T(ADD(ax, 0x160));	// 8020 add     ax, 160h ;~ 01A2:3C1F
@@ -8573,16 +8598,19 @@ cs=0x1a2;eip=0x003d6d; 	J(JZ(loc_13d8c));	// 8192 jz      short loc_13D8C ;~ 01A
 cs=0x1a2;eip=0x003d6f; 	T(CMP(*(dw*)(raddr(ds,0x374)), 1));	// 8193 cmp     word ptr ds:374h, 1 ;~ 01A2:3D6F
 cs=0x1a2;eip=0x003d74; 	J(JZ(loc_13d81));	// 8194 jz      short loc_13D81 ;~ 01A2:3D74
 cs=0x1a2;eip=0x003d76; 	T(MOV(di, 0));	// 8195 mov     di, 0 ;~ 01A2:3D76
+{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13d79[#%d]: ds:374=%04X (else) → ds:32=0x30 (caller obj=ds:42=%04X)\n", _c, *(dw*)raddr(ds,0x374), *(dw*)raddr(ds,0x42)); }
 cs=0x1a2;eip=0x003d79; 	X(MOV(*(dw*)(raddr(ds,0x32)), 0x30));	// 8196 mov     word ptr ds:32h, 30h ; '0' ;~ 01A2:3D79
 cs=0x1a2;eip=0x003d7f; 	J(JMP(loc_13d95));	// 8197 jmp     short loc_13D95 ;~ 01A2:3D7F
 loc_13d81:
 	// 5085
 cs=0x1a2;eip=0x003d81; 	T(MOV(di, 0x30));	// 8201 mov     di, 30h ; '0' ;~ 01A2:3D81
+{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13d84[#%d]: ds:374=1 → ds:32=0x50 (caller obj=ds:42=%04X)\n", _c, *(dw*)raddr(ds,0x42)); }
 cs=0x1a2;eip=0x003d84; 	X(MOV(*(dw*)(raddr(ds,0x32)), 0x50));	// 8202 mov     word ptr ds:32h, 50h ; 'P' ;~ 01A2:3D84
 cs=0x1a2;eip=0x003d8a; 	J(JMP(loc_13d95));	// 8203 jmp     short loc_13D95 ;~ 01A2:3D8A
 loc_13d8c:
 	// 5086
 cs=0x1a2;eip=0x003d8c; 	T(MOV(di, 0x48));	// 8207 mov     di, 48h ; 'H' ;~ 01A2:3D8C
+{ static int _c=0; _c++; if(_c<=200) fprintf(stderr,"ORIG-13d8c[#%d]: ds:374=0 → ds:32=0x100 (caller obj=ds:42=%04X)\n", _c, *(dw*)raddr(ds,0x42)); }
 cs=0x1a2;eip=0x003d8f; 	X(MOV(*(dw*)(raddr(ds,0x32)), 0x100));	// 8208 mov     word ptr ds:32h, 100h ;~ 01A2:3D8F
 loc_13d95:
 	// 5087
@@ -9242,6 +9270,11 @@ locret_1431b:
 	// 5147
 cs=0x1a2;eip=0x00431b; 	J(RETN(0));	// 8930 retn ;~ 01A2:431B
 sub_1431c:
+	{ static int _oc = 0;
+	  extern int v2_orig_post_vm_frame, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
+	  if (++_oc <= 10) fprintf(stderr, "ORIG-op_0F[%d]: pre=%d post=%d rec=%d ds:42=%04X bx=%04X 334before=%04X\n",
+	    _oc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
+	    *(dw*)(raddr(ds, 0x42)), bx, *(dw*)(raddr(ds, 0x334))); }
 	// 8937
 cs=0x1a2;eip=0x00431c; 	X(OR(*(dw*)(raddr(ds,0x334)), 1));	// 8939 or      word ptr ds:334h, 1 ;~ 01A2:431C
 ret_1a2_4321:
@@ -11210,6 +11243,7 @@ cs=0x1a2;eip=0x004f53; 	X(POP(ax));	// 11583 pop     ax ;~ 01A2:4F53
 cs=0x1a2;eip=0x004f54; 	T(MOV(si, dx));	// 11584 mov     si, dx ;~ 01A2:4F54
 cs=0x1a2;eip=0x004f56; 	J(JMP(loc_154bc));	// 11585 jmp     loc_154BC ;~ 01A2:4F56
 sub_14f59:
+{ static int _c=0; _c++; if(_c<=30) fprintf(stderr,"ORIG-14f59[#%d]: parent=ds:42=%04X bx=%04X 374=%04X 32F=%04X\n", _c, *(dw*)raddr(ds,0x42), bx, *(dw*)raddr(ds,0x374), *(dw*)raddr(ds,0x32F)); }
 	// 11592
 cs=0x1a2;eip=0x004f59; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 11594 mov     ax, es:[bx] ;~ 01A2:4F59
 ret_1a2_4f5c:
@@ -11250,6 +11284,7 @@ cs=0x1a2;eip=0x004fad; 	X(MOV(*(dw*)(raddr(ds,si+0x182D)), di));	// 11627 mov   
 cs=0x1a2;eip=0x004fb1; 	T(CMP(di, *(dw*)(raddr(ds,0x42))));	// 11628 cmp     di, ds:42h ;~ 01A2:4FB1
 cs=0x1a2;eip=0x004fb5; 	J(JGE(locret_14fc3));	// 11629 jge     short locret_14FC3 ;~ 01A2:4FB5
 cs=0x1a2;eip=0x004fb7; 	T(MOV(si, *(dw*)(raddr(ds,0x376))));	// 11630 mov     si, ds:376h ;~ 01A2:4FB7
+{ static int _p=0; _p++; if(_p<=200) fprintf(stderr,"ORIG-PRIO-W[#%d]: ds:376=%04X writing di=%04X (parent ds:42=%04X)\n", _p, *(dw*)raddr(ds,0x376), di, *(dw*)raddr(ds,0x42)); }
 cs=0x1a2;eip=0x004fbb; 	X(MOV(*(dw*)(raddr(ds,si+0x378)), di));	// 11631 mov     [si+378h], di ;~ 01A2:4FBB
 cs=0x1a2;eip=0x004fbf; 	X(INC(*(dw*)(raddr(ds,0x376))));	// 11632 inc     word ptr ds:376h ;~ 01A2:4FBF
 locret_14fc3:
@@ -12476,6 +12511,7 @@ locret_158d6:
 	// 5539
 cs=0x1a2;eip=0x0058d6; 	J(RETN(0));	// 13219 retn ;~ 01A2:58D6
 sub_158d7:
+{ static int _o=0; _o++; if(_o<=600) fprintf(stderr,"ORIG-158d7[#%d]: si(filter)=%04X di=%04X bx=%04X\n", _o, si, di, bx); }
 	// 13226
 cs=0x1a2;eip=0x0058d7; 	X(MOV(*(dw*)(raddr(ds,0x3B4)), 0x0FFFF));	// 13227 mov     word ptr ds:3B4h, 0FFFFh ;~ 01A2:58D7
 ret_1a2_58dd:
@@ -12567,6 +12603,12 @@ cs=0x1a2;eip=0x00596b; 	X(MOV(*(dw*)(raddr(ds,di+0x19BD)), 0));	// 13328 mov    
 cs=0x1a2;eip=0x005971; 	J(RETN(0));	// 13329 retn ;~ 01A2:5971
 sub_15972:
 	// 13336
+	if (myDrawInfo_v2 && di == 0) {
+		static int _o15972 = 0; if (++_o15972 <= 30)
+			fprintf(stderr, "ORIG-15972[%d]: di=0 ax=%04X(s=%d) Y=%04X Y_end=%04X Y_start=%04X\n",
+				_o15972, (uint16_t)ax, (int16_t)ax,
+				*(uint16_t*)(raddr(ds, 0x1765)), *(uint16_t*)(raddr(ds, 0x150D)), *(uint16_t*)(raddr(ds, 0x14E5)));
+	}
 cs=0x1a2;eip=0x005972; 	T(CMP(ax, 0));	// 13338 cmp     ax, 0 ;~ 01A2:5972
 ret_1a2_5975:
 	// 5552
@@ -12814,6 +12856,15 @@ cs=0x1a2;eip=0x005af9; 	T(MOV(cx, si));	// 13606 mov     cx, si ;~ 01A2:5AF9
 cs=0x1a2;eip=0x005afb; 	J(JMP(loc_15a93));	// 13607 jmp     short loc_15A93 ;~ 01A2:5AFB
 sub_15afd:
 	// 13614
+	if (myDrawInfo_v2 && di == 0) {
+		static int _orig_dbg = 0;
+		if (++_orig_dbg <= 30) {
+			fprintf(stderr, "ORIG-15AFD[%d]: obj=0 si=%04X di=0 Y=%04X Y_prev=%04X Y_end=%04X Y_start=%04X\n",
+				_orig_dbg, (uint16_t)si,
+				*(uint16_t*)(raddr(ds, 0x1765)), *(uint16_t*)(raddr(ds, 0x13CD)),
+				*(uint16_t*)(raddr(ds, 0x150D)), *(uint16_t*)(raddr(ds, 0x14E5)));
+		}
+	}
 cs=0x1a2;eip=0x005afd; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x1765))));	// 13615 mov     ax, [di+1765h] ;~ 01A2:5AFD
 ret_1a2_5b01:
 	// 5582
@@ -13140,6 +13191,13 @@ cs=0x1a2;eip=0x005da1; 	X(MOV(*(dw*)(raddr(ds,di+0x19BD)), 0));	// 13990 mov    
 cs=0x1a2;eip=0x005da7; 	J(RETN(0));	// 13991 retn ;~ 01A2:5DA7
 sub_15da8:
 	// 13998
+	if (myDrawInfo_v2 && di == 0) {
+		static int _o15da8 = 0; if (++_o15da8 <= 30)
+			fprintf(stderr, "ORIG-15DA8[%d]: di=0 ax_dir=%d si=%04X Y=%04X Y_end=%04X p_Y_end=%04X p_Y_start=%04X\n",
+				_o15da8, (int16_t)ax, (uint16_t)si,
+				*(uint16_t*)(raddr(ds, 0x1765)), *(uint16_t*)(raddr(ds, 0x150D)),
+				*(uint16_t*)(raddr(ds, si + 0x150D)), *(uint16_t*)(raddr(ds, si + 0x14E5)));
+	}
 cs=0x1a2;eip=0x005da8; 	T(CMP(ax, 0));	// 14000 cmp     ax, 0 ;~ 01A2:5DA8
 ret_1a2_5dab:
 	// 5620

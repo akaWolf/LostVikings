@@ -600,8 +600,19 @@ inline long getdata(const long& s)
     }
 
     static inline void setdata(dw *d, dw s) {
-           // Trap removed — use different approach
-           *d = s;
+        // Trap: log every write to a specific m2c flat-address (= ds:0x34 in current
+        // ds_seg). The trap address is supplied by extern v2_orig_trap_addr; when
+        // non-zero and matches d, we log the writer's return address so we can
+        // resolve it via dladdr later.
+        extern uintptr_t v2_orig_trap_addr;
+        extern uint64_t  v2_orig_trap_count;
+        if (v2_orig_trap_addr && (uintptr_t)d == v2_orig_trap_addr) {
+            void* ra = __builtin_return_address(0);
+            fprintf(stderr, "ORIG-TRAP-W[%llu]: ds:0x34 = %04X  ret=%p\n",
+                    (unsigned long long)v2_orig_trap_count, (unsigned)s, ra);
+            v2_orig_trap_count++;
+        }
+        *d = s;
     }
 
     static inline void setdata(dd *d, dd s) {

@@ -14,9 +14,20 @@ extern void sound_init();
 
 bool from_callf=false;
 
-// v2 DosMemAlloc replay: record each allocation result
-extern void v2_record_alloc(uint16_t seg);
+// v2 DosMemAlloc replay: record each allocation result + MCB header bytes
+extern void v2_record_alloc(uint16_t seg, const uint8_t* mcb_ptr);
 
+// (orig-write trap defined inside namespace m2c below — placeholder removed)
+
+namespace m2c {
+
+// orig-write trap: m2c::setdata logs every write to v2_orig_trap_addr (with caller IP).
+uintptr_t v2_orig_trap_addr = 0;
+uint64_t  v2_orig_trap_count = 0;
+} // close namespace m2c temporarily for global helper
+extern "C++" uintptr_t* v2_orig_trap_addr_ptr_helper() {
+    return &m2c::v2_orig_trap_addr;
+}
 namespace m2c {
 
 #ifdef M2CDEBUG
@@ -288,8 +299,9 @@ X86_REGREF
       }
 	AFFECT_CF(rc!=SUCCESS);
       ax++;   /* DosMemAlloc() returns seg of MCB rather than data */
-      // Record allocation result for v2 replay
-      ::v2_record_alloc(ax);
+      // Record allocation result + MCB header for v2 replay.
+      // MCB sits at (ax-1)*16 in flat m2c memory.
+      ::v2_record_alloc(ax, (const uint8_t*)&m2c::m + (uint32_t)(ax - 1) * 16);
 	return;
 			break;
 		}
@@ -463,6 +475,8 @@ int main(int argc, char *argv[]) {
     AFFECT_IF(0);
     cx = 0xff; // dummy size of executable
 
+    // (HW watchpoint moved to v2 shadow_ds[0x34] hunt — armed in v2_vm.cpp after
+    //  shadow_ds becomes available.)
 
     try {
         m2c::_indent = 0;

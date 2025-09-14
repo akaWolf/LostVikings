@@ -186,14 +186,16 @@ void v2_hw_wp_arm(uint8_t* ptr, const char* label) {
     pe.bp_len = HW_BREAKPOINT_LEN_1;
     pe.disabled = 0;
     pe.sample_period = 1;
-    pe.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_ADDR;
+    pe.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_ADDR | PERF_SAMPLE_CALLCHAIN;
     pe.wakeup_events = 1;
+    pe.exclude_callchain_kernel = 1; // only user-space frames
 
     v2_hw_wp_fd = syscall(__NR_perf_event_open, &pe, 0, -1, -1, 0);
     if (v2_hw_wp_fd < 0) { perror("HW-WP: perf_event_open"); return; }
 
-    // mmap ring buffer: 1 metadata page + 4 data pages (must be 1+2^n pages)
-    size_t mmap_size = (1 + 4) * 4096;
+    // mmap ring buffer: 1 metadata page + 16 data pages (must be 1+2^n pages)
+    // Larger ring tolerates callchain samples (~300B each) between drains.
+    size_t mmap_size = (1 + 16) * 4096;
     void* mm = mmap(NULL, mmap_size,
                     PROT_READ | PROT_WRITE, MAP_SHARED, v2_hw_wp_fd, 0);
     if (mm == MAP_FAILED) { perror("HW-WP: mmap"); close(v2_hw_wp_fd); v2_hw_wp_fd = -1; return; }
@@ -206,41 +208,116 @@ void v2_hw_wp_arm(uint8_t* ptr, const char* label) {
     fprintf(stderr, "HW-WP: armed on %s (addr=%p) mmap ring=%zuB\n", label, ptr, v2_hw_wp_ring_size);
 }
 
-// Drain ring buffer — call periodically to read samples with IP
+// Drain ring buffer — call periodically to read samples with IP + callchain
 void v2_hw_wp_drain() {
     if (!v2_hw_wp_mmap || v2_hw_wp_fd < 0) return;
     static int total_samples = 0;
+    static bool wp_disabled = false;
+    static int call_count = 0;
+    static uint8_t last_val = 0;
+    if (wp_disabled) return;
+    call_count++;
+
+    // Peek: if the watched byte ever changes value, writes ARE happening.
+    if (v2_hw_wp_ptr) {
+        uint8_t cur = *(volatile uint8_t*)v2_hw_wp_ptr;
+        uint8_t shadow_cur = v2_vm_shadow_gs_tiledata[0x3600];
+        static uint8_t last_shadow = 0;
+        if (cur != last_val || shadow_cur != last_shadow || (call_count % 100) == 1) {
+            fprintf(stderr, "HW-WP-PEEK[call=%d]: real=%s=0x%02X (was 0x%02X) shadow_gs[0x3600]=0x%02X (was 0x%02X)\n",
+                    call_count, v2_hw_wp_label, cur, last_val, shadow_cur, last_shadow);
+            last_val = cur;
+            last_shadow = shadow_cur;
+        }
+    }
 
     // Memory barrier to see latest data_head
     uint64_t head = __atomic_load_n(&v2_hw_wp_mmap->data_head, __ATOMIC_ACQUIRE);
     uint64_t tail = v2_hw_wp_mmap->data_tail;
+    if (head != tail && (call_count % 50) == 1) {
+        fprintf(stderr, "HW-WP-RING[call=%d]: head=%lu tail=%lu pending=%lu\n",
+                call_count, (unsigned long)head, (unsigned long)tail,
+                (unsigned long)(head - tail));
+    }
 
-    while (tail < head && total_samples < 200) {
+    // Modular byte reader — record fields may straddle the ring wrap point.
+    auto read_modular = [&](uint64_t& p, void* dst, size_t n) {
+        uint8_t* d = (uint8_t*)dst;
+        for (size_t i = 0; i < n; i++) {
+            d[i] = v2_hw_wp_ring[(p + i) % v2_hw_wp_ring_size];
+        }
+        p = (p + n) % v2_hw_wp_ring_size;
+    };
+
+    while (tail < head && total_samples < 5000) {
         uint64_t off = tail % v2_hw_wp_ring_size;
-        struct perf_event_header* hdr = (struct perf_event_header*)(v2_hw_wp_ring + off);
+        struct perf_event_header hdr;
+        uint64_t hp = off;
+        read_modular(hp, &hdr, sizeof(hdr));
 
-        if (hdr->type == PERF_RECORD_SAMPLE) {
-            // Layout: { ip (uint64), addr (uint64) } after header
-            uint64_t ip = 0, addr = 0;
-            uint64_t p = (off + sizeof(*hdr)) % v2_hw_wp_ring_size;
-            memcpy(&ip, v2_hw_wp_ring + p, sizeof(ip));
-            p = (p + sizeof(uint64_t)) % v2_hw_wp_ring_size;
-            memcpy(&addr, v2_hw_wp_ring + p, sizeof(addr));
+        if (hdr.type == PERF_RECORD_SAMPLE) {
+            // Layout (sample_type = IP | ADDR | CALLCHAIN, in canonical order):
+            //   u64 ip; u64 addr; u64 nr; u64 ips[nr];
+            uint64_t p = (off + sizeof(hdr)) % v2_hw_wp_ring_size;
+            uint64_t ip = 0, addr = 0, nr = 0;
+            read_modular(p, &ip, sizeof(ip));
+            read_modular(p, &addr, sizeof(addr));
+            read_modular(p, &nr, sizeof(nr));
+
             total_samples++;
             uint8_t val = v2_hw_wp_ptr ? *v2_hw_wp_ptr : 0;
-            // IP-4 = the actual store instruction on aarch64
+            // Filter: only print on value change OR every 50th sample (to track activity).
+            static uint8_t prev_val = 0xFE; // unlikely initial
+            static int dup_run = 0;
+            bool changed = (val != prev_val);
+            if (!changed) { dup_run++; tail += hdr.size; continue; }
+            if (dup_run > 0) {
+                fprintf(stderr, "  (... %d more samples with same val=0x%02X)\n", dup_run, prev_val);
+                dup_run = 0;
+            }
+            prev_val = val;
+            // IP-4 = the actual store instruction on aarch64 (PC has advanced past it)
             uint64_t store_ip = ip - 4;
-            // dladdr to resolve function name
             Dl_info dli = {};
             dladdr((void*)store_ip, &dli);
             const char* fname = dli.dli_sname ? dli.dli_sname : "??";
             uintptr_t foff = dli.dli_saddr ? (store_ip - (uintptr_t)dli.dli_saddr) : 0;
-            fprintf(stderr, "HW-WP[%d]: %s = 0x%02X  store=0x%lX (%s+0x%lX) data_addr=0x%lX\n",
+            fprintf(stderr, "HW-WP[%d]: %s = 0x%02X  store=0x%lX (%s+0x%lX) data_addr=0x%lX  callchain nr=%lu\n",
                 total_samples, v2_hw_wp_label, val,
                 (unsigned long)store_ip, fname, (unsigned long)foff,
-                (unsigned long)addr);
+                (unsigned long)addr, (unsigned long)nr);
+
+            uint64_t print_n = nr > 40 ? 40 : nr;
+            for (uint64_t i = 0; i < print_n; i++) {
+                uint64_t cip = 0;
+                read_modular(p, &cip, sizeof(cip));
+                // Context markers (PERF_CONTEXT_*) live in the top of the u64 range:
+                // PERF_CONTEXT_MAX = (u64)-4095, so any value >= it is a marker.
+                if (cip >= (uint64_t)PERF_CONTEXT_MAX) {
+                    const char* ctx = "CTX";
+                    if (cip == (uint64_t)PERF_CONTEXT_USER)        ctx = "USER";
+                    else if (cip == (uint64_t)PERF_CONTEXT_KERNEL) ctx = "KERNEL";
+                    else if (cip == (uint64_t)PERF_CONTEXT_HV)     ctx = "HV";
+                    fprintf(stderr, "    [%2lu] %s\n", (unsigned long)i, ctx);
+                    continue;
+                }
+                Dl_info cdli = {};
+                dladdr((void*)cip, &cdli);
+                const char* cfname = cdli.dli_sname ? cdli.dli_sname : "??";
+                uintptr_t cfoff = cdli.dli_saddr ? (cip - (uintptr_t)cdli.dli_saddr) : 0;
+                fprintf(stderr, "    [%2lu] 0x%lX  %s+0x%lX\n",
+                    (unsigned long)i, (unsigned long)cip, cfname, (unsigned long)cfoff);
+            }
+
+            // Disable after 200 samples (safety) — enough to capture writers between
+            // a few frame transitions without flooding stderr.
+            if (total_samples >= 200) {
+                ioctl(v2_hw_wp_fd, PERF_EVENT_IOC_DISABLE, 0);
+                wp_disabled = true;
+                fprintf(stderr, "HW-WP: DISABLED after %d samples (val=0x%02X)\n", total_samples, val);
+            }
         }
-        tail += hdr->size;
+        tail += hdr.size;
     }
     __atomic_store_n(&v2_hw_wp_mmap->data_tail, tail, __ATOMIC_RELEASE);
 }
@@ -283,6 +360,15 @@ uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds) {
     if (seg == *(uint16_t*)(shadow_ds + 0x2E63)) return v2_vm_shadow_tilemap;
     if (seg == *(uint16_t*)(shadow_ds + 0x2E69)) return v2_vm_shadow_fs;
     if (seg == *(uint16_t*)(shadow_ds + 0x2E67)) return v2_vm_shadow_animdata;
+    // Sound buffer alias: 0xE47-paragraph buffer at ds:0x992C contains chunks 1+2+3 (orig
+    // sub_111f8). Any seg in [base, base+0xE47) maps to offset within shadow_sound.
+    // Covers ds:0x2E6F (chunk 2 start), ds:0x2E6D (chunk 3 start), ds:0x2E6B (after).
+    {
+        uint16_t snd_base = *(uint16_t*)(shadow_ds + 0x992C);
+        if (snd_base && seg >= snd_base && seg < (uint16_t)(snd_base + 0xE47)) {
+            return v2_vm_shadow_sound + (uint32_t)(seg - snd_base) * 16;
+        }
+    }
     if (seg == *(uint16_t*)(shadow_ds + 0x2E6B)) return v2_vm_shadow_sound;
     // Animdata: range [base .. base + 0xC00 paragraphs] (for normalized pointers)
     uint16_t anim_base = *(uint16_t*)(shadow_ds + 0x2E67);
@@ -508,6 +594,11 @@ static void v2_game_loop_post_vm(uint8_t* shadow);
 static void v2_game_loop_post_render(uint8_t* shadow);
 static void v2_vm_execute_object(uint8_t* ds, uint16_t si);
 static void v2_run_collision_vm(uint8_t* shadow, uint16_t si);
+static uint32_t v2_ds_hash(uint8_t* ds);
+static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx);
+static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx);
+static uint32_t v2_fs_hash(uint8_t* ds);
+static uint32_t v2_fs_hash_shadow();
 
 // sub_10fe6: write full palette to VGA DAC. Reads 768 bytes from ds:[word_303E0] (usually ds:0x8202).
 // Original: OUT 0x3C8=0 (start color), REP OUTSB 0x300 bytes to port 0x3C9, then setPalette().
@@ -2122,9 +2213,13 @@ static void v2_sub_173c7(uint8_t* s) {
     // Source: GS (ds:0x2E5D) at offset 0
     // Dest: ES (tilemap ds:0x2E63) at offset ds:0x2E65 (= decompressed tilemap size)
     uint16_t di_dest = *(uint16_t*)(s + 0x2E65);
+    fprintf(stderr, "V2-173C7-GSCOPY: di_dest=%04X (0x78 words → %04X..%04X)\n",
+            di_dest, di_dest, di_dest + 0x78*2);
     for (uint16_t i = 0; i < 0x78; i++) {
         *(uint16_t*)(es + di_dest + i * 2) = *(uint16_t*)(gs + i * 2);
     }
+    // (HW watchpoint moved to seg000.cpp right after orig chunk decompress —
+    //  catches writers that fire BEFORE v2_sub_173c7.)
 }
 
 // sub_11439: init word_3287C rendering flag
@@ -2839,14 +2934,87 @@ static void v2_sub_12989(uint8_t* s) {
 // Original: 9× sub_10d9f (DOS INT 21h/48h = alloc memory), then chunk decompressions.
 // For v2: shadow buffers already allocated. Write segment addresses to DS, load chunks.
 // DosMemAlloc replay: original records results, v2 replays them in order.
+struct V2McbSnap {
+    uint16_t alloc_seg;     // segment returned by DosMemAlloc (data segment)
+    uint16_t size_para;     // m_size from MCB (block size in 16-byte paragraphs)
+    uint8_t  mcb_bytes[16]; // MCB header bytes at linear ((seg-1)*16)..((seg-1)*16+15)
+};
 static uint16_t v2_alloc_record[64];
+static V2McbSnap v2_mcb_snaps[64];
 static int v2_alloc_record_count = 0;
+static int v2_mcb_snap_count = 0;
 static int v2_alloc_replay_idx = 0;
 
-// Called from asm.cpp INT 21h/48h handler after each successful DosMemAlloc
-void v2_record_alloc(uint16_t seg) {
+// Called from asm.cpp INT 21h/48h handler after each successful DosMemAlloc.
+// Records both the returned data segment AND the 16-byte MCB header that DOS
+// just wrote at (seg-1)*16. v2 replays MCB into shadow buffers via
+// v2_apply_mcb_snapshots() so DS-comparison sees no spurious diffs from MCBs
+// that alias into shadow GS_tiledata / FS / tilemap regions.
+void v2_record_alloc(uint16_t seg, const uint8_t* mcb_ptr) {
     if (v2_alloc_record_count < 64) {
         v2_alloc_record[v2_alloc_record_count++] = seg;
+    }
+    if (v2_mcb_snap_count < 64 && mcb_ptr) {
+        v2_mcb_snaps[v2_mcb_snap_count].alloc_seg = seg;
+        // MCB layout (DOS): byte m_type, word m_psp, word m_size, ... — size at offset 3.
+        // Use memcpy to avoid unaligned-read UB on aarch64 (offset 3 is odd).
+        uint16_t sz_para;
+        memcpy(&sz_para, mcb_ptr + 3, sizeof(sz_para));
+        v2_mcb_snaps[v2_mcb_snap_count].size_para = sz_para;
+        memcpy(v2_mcb_snaps[v2_mcb_snap_count].mcb_bytes, mcb_ptr, 16);
+        v2_mcb_snap_count++;
+    }
+}
+
+// Returns the recorded allocation size (in 16-byte paragraphs) for a given segment,
+// or 0 if no allocation was recorded for that segment.
+uint16_t v2_get_alloc_size_para(uint16_t seg_val) {
+    for (int j = 0; j < v2_mcb_snap_count; j++)
+        if (v2_mcb_snaps[j].alloc_seg == seg_val) return v2_mcb_snaps[j].size_para;
+    return 0;
+}
+
+// Apply recorded MCB snapshots into v2 shadow buffers.
+// Strategy: each shadow buffer X corresponds to a DosMemAlloc'd segment with a known
+// size (the alloc request from v2_sub_12ab8). MCB at (alloc_seg-1)*16 falls into
+// shadow Y iff (Y.seg * 16) <= mcb_lin < (Y.seg + Y.alloc_size_para) * 16.
+// We derive Y.alloc_size_para from the recorded MCB's m_size field (since the alloc
+// for shadow Y is one of the v2_mcb_snaps with that alloc_seg).
+void v2_apply_mcb_snapshots(uint8_t* shadow_ds) {
+    struct ShadowSeg { uint16_t ds_off; uint8_t* buf; const char* name; };
+    ShadowSeg segs[] = {
+        {0x2E5F, v2_vm_shadow_tilegfx,    "tilegfx"},
+        {0x2E61, v2_vm_shadow_gs,         "gs_masks"},
+        {0x2E5D, v2_vm_shadow_gs_tiledata,"gs_tiledata"},
+        {0x2E63, v2_vm_shadow_tilemap,    "tilemap"},
+        {0x2E69, v2_vm_shadow_fs,         "fs"},
+        {0x2E67, v2_vm_shadow_animdata,   "animdata"},
+        {0x2E6B, v2_vm_shadow_sound,      "sound"},
+    };
+    auto find_alloc_size = [&](uint16_t seg_val) -> uint16_t {
+        for (int j = 0; j < v2_mcb_snap_count; j++)
+            if (v2_mcb_snaps[j].alloc_seg == seg_val) return v2_mcb_snaps[j].size_para;
+        return 0;
+    };
+    for (int i = 0; i < v2_mcb_snap_count; i++) {
+        uint16_t mcb_seg = (uint16_t)(v2_mcb_snaps[i].alloc_seg - 1);
+        uint32_t mcb_lin = (uint32_t)mcb_seg * 16;
+        for (auto& s : segs) {
+            uint16_t seg_val = *(uint16_t*)(shadow_ds + s.ds_off);
+            if (seg_val == 0) continue;
+            uint16_t size_para = find_alloc_size(seg_val);
+            if (size_para == 0) continue;  // unknown size — can't bound check safely
+            uint32_t base_lin = (uint32_t)seg_val * 16;
+            uint32_t end_lin  = base_lin + (uint32_t)size_para * 16;
+            if (mcb_lin >= base_lin && mcb_lin + 16 <= end_lin) {
+                uint32_t off = mcb_lin - base_lin;
+                memcpy(s.buf + off, v2_mcb_snaps[i].mcb_bytes, 16);
+                fprintf(stderr, "V2-MCB-APPLY: alloc_seg=%04X(size=%04Xpara) mcb_seg=%04X → shadow_%s[0x%04X..+15]\n",
+                        v2_mcb_snaps[i].alloc_seg, v2_mcb_snaps[i].size_para,
+                        mcb_seg, s.name, (uint16_t)off);
+                break;
+            }
+        }
     }
 }
 
@@ -2875,30 +3043,46 @@ static void v2_sub_12ab8(uint8_t* s) {
     // Original allocates sound driver buffer, decompresses 3 sound chunks, inits AIL.
     // For v2: AIL not used. Copy sound-related DS fields from real DS if available.
     if (!(*(uint16_t*)(s + 0x302) & *(uint16_t*)(s + 0x304) & 0x8000)) {
-        // sub_10d9f(0xE47) → ds:0x992C (sound driver buffer)
-        *(uint16_t*)(s + 0x992C) = v2_sub_10d9f(0xE47);
+        // sub_10d9f(0xE47) → ds:0x992C (sound driver buffer base seg)
+        uint16_t sound_buf_seg = v2_sub_10d9f(0xE47);
+        *(uint16_t*)(s + 0x992C) = sound_buf_seg;
         *(uint16_t*)(s + 0x992A) = 0;
 
-        // Decompress chunk (0x1C7 + ds:0x86B6) → sound driver buffer (ds:0x2E6F)
-        // sub_10982 + sub_10E85 → ds:0x2E6F = normalized es
-        // For v2: decompress into shadow sound buffer
-        uint16_t base = *(uint16_t*)(s + 0x86B6);
-        // v2_read_chunk(0x1C7 + base, ...) — sound driver init, commented for v2
-        // v2_read_chunk(0x20C + base, ...) — sound bank data
-        // v2_read_chunk(0x207 + base, ...) → ds:0x2E6B = sound data segment
-        uint16_t sound_chunk = 0x207 + base;
-        v2_read_chunk(sound_chunk, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE);
+        // Mirror orig flow (seg000:6458-6480): allocate one buffer, decompress 3 chunks
+        // sequentially with sub_10E85 normalization (es += (di>>4)+1, di=0) between.
+        // shadow_sound mirrors that 0xE47-paragraph buffer; offsets 0..0xE470 contain
+        // chunk1+pad+chunk2+pad+chunk3+pad. ds:0x2E6F/0x2E6D/0x2E6B point to chunk
+        // boundaries (chunk2-start, chunk3-start, after-chunk3) so sub_177bb / verify
+        // can resolve them via segment alias.
+        uint16_t base86B6 = *(uint16_t*)(s + 0x86B6);
+        uint16_t base86B8 = *(uint16_t*)(s + 0x86B8);
+        // Layout cursor in BYTES within shadow_sound; converted to paragraphs for seg.
+        uint32_t cur_off = 0;
+        // Chunk 1: 0x1C7 + ds:0x86B6 → at offset 0 (sound driver)
+        uint32_t sz1 = v2_read_chunk((uint16_t)(0x1C7 + base86B6),
+                                      v2_vm_shadow_sound + cur_off,
+                                      V2_SOUND_SHADOW_SIZE - cur_off);
+        // sub_10E85 normalize: cur_off += ((sz1 + 15) & ~15) + 16 (= (di>>4)+1 paragraphs)
+        // sub_10E85 mirror: es += (di >> 4) + 1, di = 0. di was decomp_size, es base was cur_off>>4.
+        // New cur_off (bytes) = ((sz >> 4) + 1) * 16 = (sz & ~15) + 16, plus prior cur_off.
+        cur_off = (cur_off + sz1) & ~15u;
+        cur_off += 16;
+        *(uint16_t*)(s + 0x2E6F) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
+        // Chunk 2: 0x20C + ds:0x86B8 (sound bank)
+        uint32_t sz2 = v2_read_chunk((uint16_t)(0x20C + base86B8),
+                                      v2_vm_shadow_sound + cur_off,
+                                      V2_SOUND_SHADOW_SIZE - cur_off);
+        cur_off = (cur_off + sz2) & ~15u;
+        cur_off += 16;
+        *(uint16_t*)(s + 0x2E6D) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
+        // Chunk 3: 0x207 + ds:0x86B8
+        uint32_t sz3 = v2_read_chunk((uint16_t)(0x207 + base86B8),
+                                      v2_vm_shadow_sound + cur_off,
+                                      V2_SOUND_SHADOW_SIZE - cur_off);
+        cur_off = (cur_off + sz3) & ~15u;
+        cur_off += 16;
+        *(uint16_t*)(s + 0x2E6B) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
         v2_sound_shadow_valid = true;
-        // Sound segment pointers: sub_10E85 normalizes es:di after each chunk decompression.
-        // sub_10E85: es = (di >> 4) + es + 1; di = 0.
-        // Results depend on decompressed sizes of chunks 0x1C7+base, 0x20C+base, 0x207+base.
-        // V2 doesn't decompress all 3 chunks — read normalized results from real DS.
-        // These are DosMemAlloc-derived (offset within 0x992C allocation).
-        if (v2_vm_real_ds_ptr) {
-            *(uint16_t*)(s + 0x2E6F) = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E6F); // sound driver
-            *(uint16_t*)(s + 0x2E6D) = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E6D); // sound bank
-            *(uint16_t*)(s + 0x2E6B) = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E6B); // sound data
-        }
     }
 
     // sub_10d9f(0x2ABA) → ds:0x2E77 (chunk buffer)
@@ -2957,6 +3141,12 @@ static void v2_sub_12ab8(uint8_t* s) {
     *(uint16_t*)(s + 0x9288) = 0x8000;
     *(uint16_t*)(s + 0x9210) = 0x40;
     *(uint16_t*)(s + 0x922C) = 0x4000;
+
+    // Apply DOS MCB headers into shadow buffers — DosMemAlloc placed MCBs at
+    // (alloc_seg-1)*16 in m2c flat memory, which aliases into shadow buffers
+    // via raddr_(seg, off) mapping. Without this, GS-FULL/FS-FULL verify shows
+    // sparse 'M'/PSP/size byte diffs that are actually DOS plumbing, not game data.
+    v2_apply_mcb_snapshots(s);
 }
 
 // sub_17561: AIL sound driver init.
@@ -3117,6 +3307,11 @@ static void v2_sub_14207_init(uint8_t* ds) {
 }
 
 static void v2_sub_11080(uint8_t* s) {
+    extern int v2_orig_post_vm_frame, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
+    { static int _sc = 0; if (++_sc <= 10)
+        fprintf(stderr, "V2-sub_11080[%d]: pre=%d post=%d rec=%d cur_25AD=%04X next_25C9=%04X\n",
+            _sc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
+            *(uint16_t*)(s + 0x25AD), *(uint16_t*)(s + 0x25C9)); }
     // Clear game state variables (20+ words)
     *(uint16_t*)(s + 0x032F) = 0; // word_2880F
     *(uint16_t*)(s + 0x0394) = 0; // word_28874
@@ -3296,7 +3491,9 @@ static void v2_sub_11080(uint8_t* s) {
     //   type 4 → NOP (locret_177b1)
     {
         // sub_1775d: load music track if changed. DS write: ds:0x25AF.
-        // Decompresses music chunk into sound segment (ds:0x2E6B shadow).
+        // Orig (seg000:15580-15586): es=ds:0x2E6B, di=0, sub_10982 → decompresses music
+        // chunk into sound segment at ds:0x2E6B (which is AFTER chunk 3 in the 0xE47-para
+        // buffer). For v2 this is shadow_sound + (ds:0x2E6B - ds:0x992C) * 16.
         auto v2_sub_1775d = [&]() {
             if (*(uint16_t*)(s + 0x302) & 0x8000) return;
             uint16_t new_track = *(uint16_t*)(s + 0x25B8) & 0xFF;
@@ -3306,7 +3503,13 @@ static void v2_sub_11080(uint8_t* s) {
             uint16_t chunk_table_idx = new_track * 2;
             uint16_t chunk_rel = *(uint16_t*)(s + (uint16_t)(chunk_table_idx - 0x5C7C));
             uint16_t chunk_id = chunk_rel + *(uint16_t*)(s + 0x86B8);
-            v2_read_chunk(chunk_id, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE);
+            uint16_t snd_base = *(uint16_t*)(s + 0x992C);
+            uint16_t es_seg   = *(uint16_t*)(s + 0x2E6B);
+            uint32_t off = (uint32_t)((uint16_t)(es_seg - snd_base)) * 16;
+            if (off < V2_SOUND_SHADOW_SIZE) {
+                v2_read_chunk(chunk_id, v2_vm_shadow_sound + off,
+                              V2_SOUND_SHADOW_SIZE - off);
+            }
         };
 
         // sub_176bd: allocate + start XMIDI sequence.
@@ -4026,6 +4229,26 @@ tile_load:
             *(uint16_t*)(shadow + 0x2E65) = (uint16_t)sz3; // word_2B345
         }
         cmp_chunk("tilemap", v2_vm_shadow_tilemap, 0x2E63, sz3);
+        // Full tilemap segment compare (beyond chunk data)
+        if (v2_m2c_base && v2_vm_real_ds_ptr) {
+            uint16_t ts = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E63);
+            if (ts) {
+                uint8_t* real_tm = v2_m2c_base + (uint32_t)ts * 16;
+                int diffs = 0;
+                for (uint32_t i = 0; i < 0x4000 && diffs < 10; i += 2) {
+                    uint16_t rv = *(uint16_t*)(real_tm + i);
+                    uint16_t sv = *(uint16_t*)(v2_vm_shadow_tilemap + i);
+                    if (rv != sv) {
+                        if (diffs == 0) fprintf(stderr, "V2-TM-FULL[lv=%04X]: chunk=%d DIFFS beyond chunk:\n",
+                            *(uint16_t*)(shadow+0x25AD), sz3);
+                        fprintf(stderr, "  [0x%04X]: real=%04X shadow=%04X %s\n",
+                            (uint16_t)i, rv, sv, i < sz3 ? "IN-CHUNK" : "BEYOND");
+                        diffs++;
+                    }
+                }
+                if (diffs == 0) fprintf(stderr, "V2-TM-FULL[lv=%04X]: 0 diffs in 16KB\n", *(uint16_t*)(shadow+0x25AD));
+            }
+        }
 
         // 3.5. Compare v2 FS ring with orig snapshot (saved by seg000 between chunk 3 and 4)
         if (v2_orig_fs_after_chunk3_valid) {
@@ -4093,6 +4316,8 @@ tile_load:
         } else {
             cmp_chunk("gs_tiledata", v2_vm_shadow_gs_tiledata, 0x2E5D, sz4);
         }
+        // (removed: full-segment compare at decompress-time; not a barrier-aligned
+        //  point. Use V2-GAMELOOP GS-TILEDATA at frame end instead.)
         if (v2_vm_real_ds_ptr && bg_chunk == 0x1AA) {
             uint16_t gs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E5D);
             fprintf(stderr, "V2-SEGS: GS_tiledata(2E5D)=%04X FS(2E69)=%04X GS_masks(2E61)=%04X tilegfx(2E5F)=%04X\n",
@@ -4150,6 +4375,7 @@ void v2_vm_init_shadow_early(uint16_t ds_val) {
     // DS is NOT copied — loaded from ds_static.bin + v2_startup instead.
     // Only set real_ds_ptr for verification comparisons.
     printf("V2: init_shadow_early: real DS at 0x%04X (for verify only)\n", ds_val);
+    // (HW WP disabled — using ANIMDATA full compare instead.)
 }
 
 void v2_vm_run_init(uint16_t ds_val) {
@@ -4554,6 +4780,13 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
         // Check bit 1 (also reached by bit 2 fall-through):
         if ((buttons & 3) && !(buttons & 4)) {
+            { static int _vt = 0;
+              extern int v2_orig_post_vm_frame, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
+              if (++_vt <= 10)
+                fprintf(stderr, "V2-TRANS-ENTRY[%d]: pre=%d post=%d rec=%d buttons=%04X cur_lv=%04X next_lv=%04X\n",
+                    _vt, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame, buttons,
+                    *(uint16_t*)(shadow + 0x25AD), *(uint16_t*)(shadow + 0x25C9));
+            }
             // Original: clear buttons, sub_1774f, INC word_2880F, sub_14207, JMP sub_11080.
             *(uint16_t*)(shadow + 0x0334) = 0;
             // sub_1774f: palette fade — VGA OUT only, no DS writes needed.
@@ -5739,8 +5972,173 @@ static bool v2_gameloop_sub_15fbe(uint8_t* ds, uint16_t filter_si, uint16_t obj_
     return false;
 }
 
+// Generic per-phase divergence trap.
+//   shadow: v2 shadow DS to compare against v2_vm_real_ds_ptr
+//   label : checkpoint name (printed in output)
+//   watch : array of DS word addresses to compare (uint16_t reads)
+//   n     : length of watch
+//   found : caller-owned bool[n], set to true once that address has fired (one-shot per address)
+// Prints "V2-DIVERGE[label]: addr=... real=... shadow=..." on first divergence per address.
+// Caller controls scope (per-phase, per-frame, etc) by where they call it.
+static void v2_phase_diverge_trap(uint8_t* shadow, const char* label,
+                                   const uint16_t* watch, size_t n, bool* found) {
+    if (!v2_vm_real_ds_ptr) return;
+    uint8_t* r = v2_vm_real_ds_ptr;
+    for (size_t k = 0; k < n; k++) {
+        if (found[k]) continue;
+        uint16_t rv = *(uint16_t*)(r + watch[k]);
+        uint16_t sv = *(uint16_t*)(shadow + watch[k]);
+        if (rv != sv) {
+            found[k] = true;
+            fprintf(stderr, "V2-DIVERGE[%s]: addr=0x%04X real=%04X shadow=%04X\n",
+                label, watch[k], rv, sv);
+        }
+    }
+}
+
+// Legacy wrapper used by old call sites in v2_game_loop_post_vm. Specific to a
+// hardcoded post_vm watch list — kept as a thin shim around v2_phase_diverge_trap.
+static bool _postvm_diverge_found[4] = {0};
+uint16_t v2_orig_obj0_Y_after[5] = {0,0,0,0,0};
+uint16_t v2_orig_obj0_Y_before = 0;
+static uint16_t v2_obj0_Y_before_postvm = 0;
+
+// Per-sub-function DS hash + byte snapshots from orig main thread. orig records
+// hash AND full DS bytes AFTER each sub_1386b/1625d/15546/13916/1064b on real_ds.
+// v2 phase_post_vm compares its shadow hash AFTER the matching v2 sub-function,
+// and on hash mismatch dumps timepoint-aligned byte diffs against the snapshot.
+//
+// Index → orig sub:
+//   0: sub_1386b (gravity / velocity apply)
+//   1: sub_1625d (ground detection / Y snap)
+//   2: sub_15546 (collision detection VM)
+//   3: sub_13916 (collision resolution)
+//   4: sub_1064b (camera follow)
+uint32_t v2_orig_post_vm_ds_hash[5] = {0,0,0,0,0};
+static uint8_t v2_orig_post_vm_ds_bytes[5][0x10000];
+static bool    v2_orig_post_vm_ds_valid[5] = {0};
+int v2_orig_post_vm_frame = 0; // bumps on each idx=0 record (once per game frame)
+static uint32_t v2_ds_hash(uint8_t* ds); // forward; defined later in this file
+void v2_record_orig_post_vm_hash(int idx) {
+    if (idx < 0 || idx >= 5) return;
+    if (!v2_vm_real_ds_ptr) return;
+    if (idx == 0) v2_orig_post_vm_frame++;
+    v2_orig_post_vm_ds_hash[idx] = v2_ds_hash(v2_vm_real_ds_ptr);
+    memcpy(v2_orig_post_vm_ds_bytes[idx], v2_vm_real_ds_ptr, 0x10000);
+    v2_orig_post_vm_ds_valid[idx] = true;
+}
+static bool v2_ds_hash_skip(uint32_t i); // forward
+// Counters incremented at v2 phase entries to disambiguate iter timing.
+int v2_dbg_pre_vm_iter = 0;
+int v2_dbg_post_vm_iter = 0;
+// Set true ONLY while inside v2_phase_post_vm (NOT when game_loop_post_vm is called
+// from sub_11080 transition path or v2_run_animation_vm init). Used to gate
+// check_hash so it doesn't compare against stale snapshot during level init.
+bool v2_in_phase_post_vm = false;
+
+// Watch shadow & real ds:0x334 changes (transition flag, button state).
+static uint16_t v2_watch_334_prev_shadow = 0xFFFF;
+static uint16_t v2_watch_334_prev_real = 0xFFFF;
+void v2_watch_334(const char* where) {
+    extern int v2_orig_post_vm_frame;
+    uint16_t s_cur = *(uint16_t*)(v2_vm_shadow_ds + 0x334);
+    uint16_t r_cur = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + 0x334) : 0xDEAD;
+    if (s_cur != v2_watch_334_prev_shadow) {
+        fprintf(stderr, "V2-WATCH-334[%s pre=%d post=%d rec=%d]: shadow %04X → %04X (real=%04X)\n",
+            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
+            v2_watch_334_prev_shadow, s_cur, r_cur);
+        v2_watch_334_prev_shadow = s_cur;
+    }
+    if (r_cur != v2_watch_334_prev_real) {
+        fprintf(stderr, "V2-WATCH-334[%s pre=%d post=%d rec=%d]: real   %04X → %04X (shadow=%04X)\n",
+            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
+            v2_watch_334_prev_real, r_cur, s_cur);
+        v2_watch_334_prev_real = r_cur;
+    }
+}
+
+// Watch shadow & real ds:0x25AD changes — both sides shown so we can compare timing.
+static uint16_t v2_watch_25AD_prev_shadow = 0xFFFF;
+static uint16_t v2_watch_25AD_prev_real = 0xFFFF;
+void v2_watch_25AD(const char* where) {
+    extern int v2_orig_post_vm_frame;
+    uint16_t s_cur = *(uint16_t*)(v2_vm_shadow_ds + 0x25AD);
+    uint16_t r_cur = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + 0x25AD) : 0xDEAD;
+    if (s_cur != v2_watch_25AD_prev_shadow) {
+        fprintf(stderr, "V2-WATCH-25AD[%s pre=%d post=%d rec=%d]: shadow %04X → %04X (real=%04X)\n",
+            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
+            v2_watch_25AD_prev_shadow, s_cur, r_cur);
+        v2_watch_25AD_prev_shadow = s_cur;
+    }
+    if (r_cur != v2_watch_25AD_prev_real) {
+        fprintf(stderr, "V2-WATCH-25AD[%s pre=%d post=%d rec=%d]: real   %04X → %04X (shadow=%04X)\n",
+            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
+            v2_watch_25AD_prev_real, r_cur, s_cur);
+        v2_watch_25AD_prev_real = r_cur;
+    }
+}
+
+// Compare v2 shadow hash against orig snapshot at the same sub-function boundary.
+// On mismatch, dumps timepoint-aligned byte diffs (shadow vs orig snapshot bytes
+// recorded at the same sub-function boundary on orig side).
+// One-shot per idx to keep output clean — useful as "first divergence" tool.
+static void v2_postvm_check_hash(uint8_t* shadow, const char* label, int idx) {
+    static bool first_seen[5] = {0};
+    extern bool v2_in_phase_post_vm;
+    if (!v2_in_phase_post_vm) return; // skip when called from sub_11080 / init paths
+    if (idx < 0 || idx >= 5) return;
+    if (first_seen[idx]) return;
+    if (!v2_orig_post_vm_ds_valid[idx]) return;
+    uint32_t h_orig = v2_orig_post_vm_ds_hash[idx];
+    uint32_t h_v2 = v2_ds_hash(shadow);
+    if (h_v2 == h_orig) return;
+    first_seen[idx] = true;
+    extern int v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
+    fprintf(stderr, "V2-POSTVM-HASH[%s pre=%d post=%d rec=%d]: v2=%08X orig=%08X DIVERGE\n",
+        label, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame, h_v2, h_orig);
+    // Timepoint-aligned byte diff: orig snapshot at idx vs shadow now (v2 finished
+    // its sub-function with same idx). Same logical time-point on both sides.
+    uint8_t* o = v2_orig_post_vm_ds_bytes[idx];
+    int dc = 0;
+    for (uint32_t j = 0; j < 0x10000 && dc < 24; j++) {
+        if (v2_ds_hash_skip(j & ~3u)) continue;
+        if (o[j] != shadow[j]) {
+            fprintf(stderr, "  BYTE-DIFF[%d]: addr=0x%04X orig_snap=%02X shadow=%02X\n",
+                dc, j, o[j], shadow[j]);
+            dc++;
+        }
+    }
+}
+static void _postvm_diverge_trap(uint8_t* shadow, const char* lbl) {
+    if (!v2_vm_real_ds_ptr) return;
+    if (strcmp(lbl, "entry") == 0) {
+        v2_obj0_Y_before_postvm = *(uint16_t*)(shadow + 0x1765);
+    }
+    int idx = -1;
+    if (strcmp(lbl, "after-sub_1386b") == 0) idx = 0;
+    else if (strcmp(lbl, "after-sub_1625d") == 0) idx = 1;
+    else if (strcmp(lbl, "after-sub_15546") == 0) idx = 2;
+    else if (strcmp(lbl, "after-sub_13916") == 0) idx = 3;
+    else if (strcmp(lbl, "after-sub_1064b") == 0) idx = 4;
+    if (idx >= 0) {
+        uint16_t v2_y = *(uint16_t*)(shadow + 0x1765);
+        uint16_t orig_y = v2_orig_obj0_Y_after[idx];
+        static bool sub_diverge_found[5] = {0};
+        bool both_active = v2_y != 0 && orig_y != 0;
+        bool same_input = v2_obj0_Y_before_postvm == v2_orig_obj0_Y_before;
+        if (!sub_diverge_found[idx] && v2_y != orig_y && both_active && same_input) {
+            sub_diverge_found[idx] = true;
+            fprintf(stderr, "V2-SUB-DIVERGE[%s]: obj0 Y v2=%04X orig=%04X (input v2=%04X orig=%04X) (DIVERGENCE INTRODUCED HERE)\n",
+                lbl, v2_y, orig_y, v2_obj0_Y_before_postvm, v2_orig_obj0_Y_before);
+        }
+    }
+    static const uint16_t watch[] = { 0x0034, 0x14E4, 0x150C, 0x1764 };
+    v2_phase_diverge_trap(shadow, lbl, watch, 4, _postvm_diverge_found);
+}
+
 // V2 post-VM game loop
 static void v2_game_loop_post_vm(uint8_t* shadow) {
+    _postvm_diverge_trap(shadow, "entry");
     // sub_1386b: backup X/Y + apply velocity to positions
     {
         uint16_t table_end = *(uint16_t*)(shadow + 0x372);
@@ -5804,6 +6202,9 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             }
         }
     }
+    _postvm_diverge_trap(shadow, "after-sub_1386b");
+    v2_postvm_check_hash(shadow, "after-sub_1386b", 0);
+    v2_watch_25AD("after-sub_1386b");
 
     // sub_1625d: ground detection + position snapping for objects with flag 0x2000
     // NOTE: original order is sub_1386b → sub_1625d → sub_15546 (verified seg000 lines 3958-3960)
@@ -5899,6 +6300,8 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             *(uint16_t*)(shadow + di + 0x196D) = 0;
         }
     }
+    _postvm_diverge_trap(shadow, "after-sub_1625d");
+    v2_postvm_check_hash(shadow, "after-sub_1625d", 1);
 
     // sub_15546: clear collision result fields + run collision detection VM (sub_15569)
     // NOTE: runs AFTER sub_1625d (verified seg000 line 3960, eip 0x15DE)
@@ -5914,6 +6317,8 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             v2_run_collision_vm(shadow, si);
         }
     }
+    _postvm_diverge_trap(shadow, "after-sub_15546");
+    v2_postvm_check_hash(shadow, "after-sub_15546", 2);
 
     // sub_13916: collision resolution — process objects with active collision state
     {
@@ -6019,9 +6424,14 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             }
         }
     }
+    _postvm_diverge_trap(shadow, "after-sub_13916");
+    v2_postvm_check_hash(shadow, "after-sub_13916", 3);
 
     // sub_1064b: camera follow
     v2_sub_1064b(shadow);
+    _postvm_diverge_trap(shadow, "after-sub_1064b");
+    v2_postvm_check_hash(shadow, "after-sub_1064b", 4);
+    v2_watch_25AD("after-sub_1064b");
 
     // NOTE: original eip order after sub_1064b (0x0048):
     //   [POST_VM signal at line 1959]
@@ -6616,12 +7026,16 @@ static void v2_vm_subdispatch_unimpl(V2VM& vm, uint16_t cs_addr) {
 
 // 0x0F (sub_1431c): Exit VM + set flag ds:0x334 |= 1. Same as yield.
 // 0x0F = sub_1431c: [si+0x132D] = bx; OR [si+0x1585], 0x200; POP ax; RETN
+extern void v2_watch_334(const char*);
 static void v2_vm_op_exit_with_flag(V2VM& vm) {
-    // sub_1431c: OR [DS:334h], 1; MOV SI, [DS:42h]; POP AX; RETN
-    // Sets bit 0 in global button flag (level transition trigger).
-    // Does NOT save PC (permanent exit — object cannot resume).
-    // POP AX discards dispatcher return address — exits VM entirely.
+    extern int v2_orig_post_vm_frame;
+    extern int v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
+    { static int _vc = 0; if (++_vc <= 10)
+        fprintf(stderr, "V2-op_0F[%d]: pre=%d post=%d rec=%d obj=%d pc=%04X 334before=%04X\n",
+            _vc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
+            vm.obj, vm.pc, *(uint16_t*)(vm.shadow + 0x0334)); }
     *(uint16_t*)(vm.shadow + 0x0334) |= 1;
+    v2_watch_334("op_0F");
     vm.running = false;
 }
 
@@ -6842,9 +7256,12 @@ static void v2_vm_op_0A(V2VM& vm) {
 static void v2_vm_op_D4(V2VM& vm) {
     vm.ds_write(0x3E, 0);
     vm.ds_write(0x40, 0);
-    // Read mode byte and dispatch off_30C98 for X target
-    uint8_t mode = vm.read_u8();
-    vm.ds_write(0x34, mode);
+    // Orig sub_1531c eips 0x5328-0x532C: MOV ax, es:[bx] (word read), INC bx (1 byte),
+    // MOV ds:34h, ax (full word). High byte is lookahead consumed by next opcode/dispatch.
+    uint16_t mode_word = *(uint16_t*)(vm.es + vm.pc);
+    vm.pc += 1;
+    uint8_t mode = (uint8_t)mode_word;
+    vm.ds_write(0x34, mode_word);
     uint16_t target_x = v2_vm_dispatch_30C98(vm, mode & 7);
     uint16_t si = vm.global_r(0x42);
     int16_t delta_x = (int16_t)(target_x - vm.ds_read(si + 0x173D));
@@ -7395,18 +7812,22 @@ static bool v2_vm_tile_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uin
 
 // Entry point wrappers for tile search
 static bool v2_vm_sub_15a57(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    vm.ds_write(0x34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A59
     uint16_t y = vm.ds_read(obj_di + 0x14E5) - 1;
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_loc_15a64(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    vm.ds_write(0x34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A66
     uint16_t y = vm.ds_read(obj_di + 0x14E5);
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_loc_15A70(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    vm.ds_write(0x34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A72
     uint16_t y = vm.ds_read(obj_di + 0x150D) + 1;
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_loc_15a7d(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    vm.ds_write(0x34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A7F
     uint16_t y = vm.ds_read(obj_di + 0x150D);
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
@@ -7665,6 +8086,7 @@ static void v2_vm_sub_158c8(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 
 // sub_158d7: animation load function. Sets carry based on search results.
 static void v2_vm_sub_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+{ static int _o=0; _o++; if(_o<=600) fprintf(stderr,"V2-158d7[#%d]: filter=%04X obj=%04X pc=%04X\n", _o, filter_si, obj_di, vm.pc); }
     vm.ds_write(0x3B4, 0xFFFF);
     bool found_a = v2_vm_loc_15A70(vm, filter_si, obj_di);
     if (found_a) {
@@ -7716,12 +8138,7 @@ static void v2_vm_op_14(V2VM& vm) {
     vm.ds_write(0x3E0, 0xFFFF);
 
     // sub_13d30: pre-check
-    uint16_t ds_32F = vm.ds_read(0x32F);
-    if (ds_32F != 0) {
-        static bool d14a = false; if (!d14a) { d14a = true;
-            printf("V2-DBG-14: FAIL at sub_13d30: ds:0x32F=0x%04X\n", ds_32F); }
-        return;
-    }
+    if (vm.ds_read(0x32F) != 0) return;
 
     // sub_13d52: find free slot (0 to 0x28, step 2)
     int16_t new_slot = -1;
@@ -7875,6 +8292,8 @@ static void v2_vm_op_14(V2VM& vm) {
         } else {
             di_alloc = 0; limit_32 = 0x30;
         }
+        // Orig sub_13d68 (eips 0x3D79/0x3D84/0x3D8F): MOV ds:32h, limit_32.
+        vm.ds_write(0x32, limit_32);
 
         // Phase 1 (loc_13d95): Find first free slot
         uint16_t di_found = 0xFFFF;
@@ -7915,10 +8334,16 @@ static void v2_vm_op_14(V2VM& vm) {
             return;
         }
 
-        // Set sub-sprite range
+        // Set sub-sprite range. Orig sub_13d68 also writes scratch fields
+        // ds:0x3A = di_found (eip 0x3DAA: MOV ds:3Ah, di) and
+        // ds:0x38 = end_needed (eip 0x3DB6: MOV ds:38h, ax). Mirror those writes
+        // so any later reader of these scratch slots sees orig-equivalent state.
         uint16_t need_count = vm.ds_read(si_slot + 0x1AD5);
+        uint16_t end_needed = di_found + need_count * 2;
+        vm.ds_write(0x3A, di_found);
+        vm.ds_write(0x38, end_needed);
         vm.ds_write(si_slot + 0x1A85, di_found);
-        vm.ds_write(si_slot + 0x1AAD, di_found + need_count * 2);
+        vm.ds_write(si_slot + 0x1AAD, end_needed);
 
         // sub_13dd6: initialize sub-sprite base fields
         {
@@ -7965,8 +8390,12 @@ static void v2_vm_op_14(V2VM& vm) {
     // If di < ds:0x42: ds:[ds:0x376 + 0x378] = di; ds:0x376++
     if ((int16_t)di_new < (int16_t)vm.global_r(0x42)) {
         uint16_t idx376 = vm.ds_read(0x376);
+        { static int _p=0; _p++; if(_p<=200) fprintf(stderr,"V2-PRIO-W[#%d]: ds:376=%04X writing di=%04X (parent ds:42=%04X)\n", _p, idx376, di_new, vm.global_r(0x42)); }
         vm.ds_write(idx376 + 0x378, di_new);
         vm.ds_write(0x376, idx376 + 1);
+    } else {
+        static int _ps=0; _ps++;
+        if(_ps<=200) fprintf(stderr,"V2-PRIO-SKIP[#%d]: di=%04X >= ds:42=%04X (no append)\n", _ps, di_new, vm.global_r(0x42));
     }
 }
 
@@ -8312,6 +8741,11 @@ static void v2_vm_op_5C(V2VM& vm) {
 // di = object index
 static void v2_vm_sub_15972(V2VM& vm, int16_t ax, uint16_t di) {
     uint16_t dx;
+    if (di == 0) {
+        static int _s15972 = 0; if (++_s15972 <= 30)
+            fprintf(stderr, "V2-15972[%d]: di=0 ax=%04X(s=%d) Y=%04X Y_end=%04X Y_start=%04X\n",
+                _s15972, (uint16_t)ax, ax, vm.ds_read(0x1765), vm.ds_read(0x150D), vm.ds_read(0x14E5));
+    }
     if (ax == 0) {
         // loc_15984: snap Y_end to tile boundary
         uint16_t y_end = vm.ds_read(di + 0x150D);
@@ -8371,11 +8805,15 @@ static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si) {
     int16_t target_adj = (int16_t)vm.ds_read(si + 0x14E5) - (int16_t)vm.ds_read(si + 0x1765)
                          + (int16_t)vm.ds_read(si + 0x13CD);
     if ((int16_t)target_adj < (int16_t)vm.ds_read(si + 0x14E5)) {
-        // target_adj < target.Y_start: check ds:0x36 >= target_adj AND target.Y_start >= ds:0x34
+        // target_adj < target.Y_start: orig loc_161f2 — MOV ds:32h, ax (= target_adj) at eip 0x6204.
+        vm.ds_write(0x32, (uint16_t)target_adj);
+        // check ds:0x36 >= target_adj AND target.Y_start >= ds:0x34
         if ((int16_t)ds36 < target_adj) return false;
         if ((int16_t)vm.ds_read(si + 0x14E5) < (int16_t)ds34) return false;
     } else {
-        // target_adj >= target.Y_start: check ds:0x36 >= target.Y_start AND target_adj >= ds:0x34
+        // target_adj >= target.Y_start: orig loc_1621c — MOV ds:32h, ax (= target.Y_start) at eip 0x621C.
+        vm.ds_write(0x32, vm.ds_read(si + 0x14E5));
+        // check ds:0x36 >= target.Y_start AND target_adj >= ds:0x34
         if ((int16_t)ds36 < (int16_t)vm.ds_read(si + 0x14E5)) return false;
         if ((int16_t)target_adj < (int16_t)ds34) return false;
     }
@@ -8419,6 +8857,12 @@ static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 // ax = direction (0 = moved down, !0 = moved up). si = partner, di = self.
 static void v2_vm_sub_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di) {
     uint16_t dx;
+    if (di == 0) {
+        static int _s15da8 = 0; if (++_s15da8 <= 30)
+            fprintf(stderr, "V2-15DA8[%d]: di=0 ax_dir=%d si=%04X Y=%04X Y_end=%04X p_Y_end=%04X p_Y_start=%04X\n",
+                _s15da8, ax_dir, si_partner, vm.ds_read(0x1765), vm.ds_read(0x150D),
+                vm.ds_read(si_partner + 0x150D), vm.ds_read(si_partner + 0x14E5));
+    }
     if (ax_dir == 0) {
         // Moved down: snap up. dx = self.Y_end - partner.Y_start + 1
         dx = vm.ds_read(di + 0x150D) - vm.ds_read(si_partner + 0x14E5) + 1;
@@ -8462,6 +8906,15 @@ static void v2_vm_sub_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint1
 // Path 3 (ds:0x390 == 0): check bit in [obj+0x13F5] → collision if set
 static bool v2_vm_collision_check_1584e(V2VM& vm) {
     int16_t state = (int16_t)vm.global_r(0x390);
+    static int _coll_dbg = 0;
+    bool dbg = (vm.obj == 0 && _coll_dbg < 30);
+    if (dbg) {
+        _coll_dbg++;
+        fprintf(stderr, "V2-COLL-1584E[%d]: obj=0 state=%d Y=%04X Y_prev=%04X Y_end=%04X Y_start=%04X\n",
+            _coll_dbg, state,
+            vm.ds_read(vm.obj + 0x1765), vm.ds_read(vm.obj + 0x13CD),
+            vm.ds_read(vm.obj + 0x150D), vm.ds_read(vm.obj + 0x14E5));
+    }
 
     if (state == 0) {
         // loc_15886: INC bx + check bit in collision flags
@@ -8491,9 +8944,13 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         uint16_t filter_si = (uint16_t)filter;
         bool tile_found = false;
         int16_t tile_ax = 0; // result for sub_15972
+        if (dbg) fprintf(stderr, "  filter_byte=%02X di=%04X\n", filter, di);
 
         // --- sub_15AFD: downward tile collision ---
+        // Orig sub_15afd does NOT write ds:0x34 — only ds:0x6C (filter) and ds:0x6E (di).
+        // (sub_15911, the UPward equivalent, has its own writers via loc_15a7d/64; not here.)
         int16_t y_moved = (int16_t)vm.ds_read(di + 0x1765) - (int16_t)vm.ds_read(di + 0x13CD);
+        if (dbg) fprintf(stderr, "  y_moved=%d\n", y_moved);
         if (y_moved > 0) {
             vm.ds_write(0x6C, filter_si);
             vm.ds_write(0x6E, di);
@@ -8507,16 +8964,19 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
                 flt++;
             }
 
+            if (dbg) fprintf(stderr, "  filt_val=%02X\n", filt_val);
             if (filt_val >= 0x30 && filt_val != 0xFF) {
                 uint16_t obj_x = vm.ds_read(di + 0x173D);
                 int16_t adj_y = (int16_t)vm.ds_read(di + 0x13CD) - (int16_t)vm.ds_read(di + 0x1765)
                                 + (int16_t)vm.ds_read(di + 0x150D);
                 uint16_t tt = (v2_vm_sub_141ba(vm, obj_x >> 4, (uint16_t)adj_y >> 4) & 0xFC00) >> 10;
+                if (dbg) fprintf(stderr, "  obj_x=%04X adj_y=%04X tt=%02X\n", obj_x, adj_y, tt);
                 if (tt >= 0x30) {
                     vm.ds_write(0x3A, tt);
                     di = vm.ds_read(0x6E);
                     uint16_t cur_y_end = vm.ds_read(di + 0x150D);
                     uint16_t tt2 = (v2_vm_sub_141ba(vm, obj_x >> 4, cur_y_end >> 4) & 0xFC00) >> 10;
+                    if (dbg) fprintf(stderr, "  cur_y_end=%04X tt2=%02X\n", cur_y_end, tt2);
                     if (tt2 < 0x30) {
                         uint16_t saved = cur_y_end;
                         uint16_t temp = (tt2 & 0xFFF0) - 1;
@@ -8525,10 +8985,18 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
                         uint16_t sidx = ((slope_tt & 0xF) << 4) + (obj_x & 0xF);
                         uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
                         int16_t sr = (int16_t)((temp & 0xF) - sv);
-                        vm.ds_write(di + 0x150D, saved);
+                        if (dbg) fprintf(stderr, "  saved=%04X temp=%04X slope_tt=%02X sidx=%04X sv=%02X sr=%d\n",
+                            saved, temp, slope_tt, sidx, sv, sr);
                         if (sr >= 0) {
+                            // Orig eip 0x5B72: MOV ds:32h, ax (=sr from sub_16390) — used at eip 0x5B7D ADD ax, ds:32h.
+                            vm.ds_write(0x32, (uint16_t)sr);
+                            vm.ds_write(di + 0x150D, saved);
                             tile_ax = (int16_t)((uint16_t)((saved & 0xF) + (uint16_t)sr + 1) | 0x8000);
                             tile_found = true;
+                            if (dbg) fprintf(stderr, "  PATH=A tile_ax=%04X\n", (uint16_t)tile_ax);
+                        } else {
+                            // Orig loc_15b84: just POP into [di+150Dh] — restore saved.
+                            vm.ds_write(di + 0x150D, saved);
                         }
                     }
                 }
@@ -8540,11 +9008,15 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
                 uint16_t obj_x = vm.ds_read(di + 0x173D);
                 uint16_t cur_y = vm.ds_read(di + 0x150D);
                 uint16_t tt3 = (v2_vm_sub_141ba(vm, obj_x >> 4, cur_y >> 4) & 0xFC00) >> 10;
+                if (dbg) fprintf(stderr, "  loc_15b88: cur_y=%04X tt3=%02X\n", cur_y, tt3);
                 if (tt3 >= 0x30) {
                     uint16_t sidx = ((tt3 & 0xF) << 4) + (obj_x & 0xF);
                     uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
                     int16_t sr = (int16_t)((cur_y & 0xF) - sv);
-                    if (sr >= 0) { tile_ax = (int16_t)((uint16_t)sr | 0x8000); tile_found = true; }
+                    if (dbg) fprintf(stderr, "    sidx=%04X sv=%02X sr=%d\n", sidx, sv, sr);
+                    if (sr >= 0) { tile_ax = (int16_t)((uint16_t)sr | 0x8000); tile_found = true;
+                        if (dbg) fprintf(stderr, "    PATH=B tile_ax=%04X\n", (uint16_t)tile_ax);
+                    }
                 }
             }
 
@@ -8559,24 +9031,35 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
                     vm.ds_write(0x36, ye); vm.ds_write(0x38, xe);
                     for (uint16_t s = vm.ds_read(di + 0x1535); ; ) {
                         uint8_t al = (uint8_t)((v2_vm_sub_141ba(vm, s >> 4, vm.ds_read(0x36) >> 4) & 0xFC00) >> 10);
+                        bool advance = false;
                         if (al >= 0x30) {
-                            di = vm.ds_read(0x6E);
-                            uint16_t sidx = ((al & 0xF) << 4) + (s & 0xF);
-                            uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
-                            int16_t sr = (int16_t)((vm.ds_read(di + 0x150D) & 0xF) - sv);
-                            if (sr >= 0) { tile_ax = (int16_t)((uint16_t)sr | 0x8000); tile_found = true; }
-                            break;
+                            // orig loc_15bf0: if slope (>= 0x30), JGE loc_15c0b — SKIP slope, continue scan.
+                            // Slope adjustment is NOT applied in horizontal scan.
+                            advance = true;
+                        } else {
+                            // Filter scan (loc_15c00): cmp al with each filter byte until match or above.
+                            uint16_t f = filter_si; bool m = false; bool below = false;
+                            while (true) {
+                                uint8_t fv = vm.shadow[(uint16_t)(f - 0x6B34)];
+                                // JB (al < fv) → loc_15c0b (advance)
+                                if (al < fv) { below = true; break; }
+                                // JZ (al == fv) → loc_15c20 (match)
+                                if (al == fv) { m = true; break; }
+                                f++;
+                            }
+                            if (m) { tile_ax = 0; tile_found = true; break; }
+                            // below or fall through: advance
+                            advance = true;
                         }
-                        uint16_t f = filter_si; bool m = false;
-                        while (true) {
-                            uint8_t fv = vm.shadow[(uint16_t)(f - 0x6B34)];
-                            if (al < fv) break;
-                            if (al == fv) { m = true; break; }
-                            f++;
+                        if (advance) {
+                            // loc_15c0b: cmp si, ds:38 (X_end)
+                            if (s == xe) break; // jz loc_15c2d (CLC return)
+                            s += 0x10;
+                            // cmp si, ds:38; jl loc_15bf0 → continue
+                            // else: si = ds:38 (clamp); jmp loc_15bf0
+                            if ((int16_t)s >= (int16_t)xe) s = xe;
+                            continue;
                         }
-                        if (m) { tile_ax = 0; tile_found = true; break; }
-                        if (s == xe) break;
-                        s += 0x10; if ((int16_t)s >= (int16_t)xe) s = xe;
                     }
                 }
             }
@@ -8605,6 +9088,55 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         }
         return false; // ALWAYS CLC
     }
+}
+
+// sub_157eb: UPward collision check (orig — analog sub_1584e but uses sub_15911/sub_15c93).
+// Same state-machine: state==0 → check collision bit (return CARRY if set),
+// state<0 → INC bx, no carry, state>0 → full check (always CLC).
+static bool v2_vm_collision_check_157eb(V2VM& vm) {
+    int16_t state = (int16_t)vm.global_r(0x390);
+    if (state == 0) {
+        // loc_15823: INC bx + check collision bit
+        vm.pc += 1;
+        uint16_t di = vm.global_r(0x42);
+        uint16_t si = vm.global_r(0x38E);
+        uint16_t mask = *(uint16_t*)(vm.ds + (uint16_t)(si - 0x6C34));
+        if (vm.ds_read(di + 0x13F5) & mask) return true;
+        return false;
+    }
+    if (state < 0) {
+        // loc_15820: INC bx + CLC
+        vm.pc += 1;
+        return false;
+    }
+    // state > 0 (orig sub_157eb body):
+    //   mov si, es:[bx]; inc bx; and si, 0xFF; mov di, ds:42
+    //   call sub_15911; if carry → sub_15972 + set bit; else call sub_15c93;
+    //   if carry → sub_15da8 + set bit; else skip. Returns CLC always.
+    uint8_t filter = vm.read_u8();
+    uint16_t di = vm.global_r(0x42);
+    vm.ds_write(0x3A, (uint16_t)filter); // sub_15911 reads filter from ds:0x3A
+    uint16_t out_dir = 0;
+    bool collision_found = false;
+    int16_t tile_ax = 0;
+    if (v2_sub_15911(vm, di, out_dir)) {
+        // sub_15972: Y tile snap
+        v2_vm_sub_15972(vm, tile_ax, di);
+        collision_found = true;
+    } else {
+        if (v2_sub_15c93(vm, (uint16_t)filter, di, out_dir)) {
+            uint16_t partner = vm.ds_read(0x3B4);
+            v2_vm_sub_15DA8(vm, 0, partner, di);
+            collision_found = true;
+        }
+    }
+    if (collision_found) {
+        di = vm.global_r(0x42);
+        uint16_t si_38e = vm.global_r(0x38E);
+        uint16_t mask = *(uint16_t*)(vm.ds + (uint16_t)(si_38e - 0x6C34));
+        vm.ds_write(di + 0x13F5, vm.ds_read(di + 0x13F5) | mask);
+    }
+    return false; // ALWAYS CLC
 }
 
 // 0x3C (sub_15838): Collision check via sub_1584e + ds:0x38E increment.
@@ -10640,8 +11172,12 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             anim_bx += 1;
 
             // Skip if same sprite already loaded
-            if (spr_idx == (uint8_t)vm.ds_read(obj_d + 0x191D))
+            if (spr_idx == (uint8_t)vm.ds_read(obj_d + 0x191D)) {
+                static int _skip = 0;
+                if (_skip++ < 5) fprintf(stderr, "V2-134DC-SKIP[%d]: si=%04X spr=%02X same as 191D\n",
+                                          _skip, si_s, spr_idx);
                 return true;
+            }
             vm.ds_write(obj_d + 0x191D, spr_idx);
             vm.ds_write(si_s + 0x114D, 0x202); // dirty
 
@@ -10663,6 +11199,16 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             if (!dst_base) return true;
             uint8_t* dst = dst_base + dst_off;
             uint8_t flags = (0x70 & (uint8_t)vm.ds_read(si_s + 0x44D)) | 0x80;
+            // Trace: identify if this invocation hits offset 0x2000 in GS_tiledata
+            { static int _trace = 0;
+              uint16_t gs_seg_now = vm.ds_read(0x2E5D);
+              bool is_gs = (dst_seg == gs_seg_now) && (dst_base == v2_vm_shadow_gs_tiledata);
+              if (_trace < 30 && is_gs && dst_off >= 0x1F00 && dst_off <= 0x2100) {
+                  _trace++;
+                  fprintf(stderr, "V2-134DC-TRACE[%d]: si=%04X spr=%02X dst_seg=%04X dst_off=%04X (writes ~0x2000 in shadow GS)\n",
+                          _trace, si_s, spr_idx, dst_seg, dst_off);
+              }
+            }
 
             // Decompress 128 strips
             // Each strip: 1 mask byte + up to 8 data bytes
@@ -11636,7 +12182,11 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
         uint16_t mask = *(uint16_t*)(vm.ds + (uint16_t)(si_38e - 0x6C34));
         uint16_t flags = vm.ds_read(di + 0x13F5);
         if (flags & mask) {
-            // sub_16243 → ds:[di+0x1995] = collided obj
+            // sub_16243: read stored partner from ds:[(di<<4) + ds:38E + 0x1B25],
+            // write to ds:[di+0x1995]. Orig eips 0x5769..0x576C.
+            uint16_t addr = (uint16_t)((di << 4) + si_38e + 0x1B25);
+            uint16_t partner = vm.ds_read(addr);
+            vm.ds_write(di + 0x1995, partner);
             return true;  // STC
         }
         return false;  // CLC
@@ -11654,6 +12204,11 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     uint16_t x_right = vm.ds_read(di + 0x155D);
     uint16_t y_top   = vm.ds_read(di + 0x14E5);
     uint16_t y_bot   = vm.ds_read(di + 0x150D);
+    // Orig eips 0x56DD/0x56E4/0x56EB/0x56F2: stash bbox into scratch ds:0x34/36/38/3A.
+    vm.ds_write(0x34, x_left);
+    vm.ds_write(0x36, x_right);
+    vm.ds_write(0x38, y_top);
+    vm.ds_write(0x3A, y_bot);
 
     uint16_t table_end = vm.global_r(0x372);
     for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
@@ -11669,6 +12224,12 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
         uint16_t si_38e = vm.global_r(0x38E);
         uint16_t mask = *(uint16_t*)(vm.ds + (uint16_t)(si_38e - 0x6C34));
         vm.ds_write(di + 0x13F5, vm.ds_read(di + 0x13F5) | mask);
+        // sub_16235: stash collided partner at ds:[(di<<4) + ds:38E + 0x1B25].
+        // (orig eips 0x573F → 0x6235..0x6242). Missed in original v2 port.
+        {
+            uint16_t addr = (uint16_t)((di << 4) + si_38e + 0x1B25);
+            vm.ds_write(addr, si);
+        }
         return false;  // CLC
     }
     return false;  // CLC
@@ -11791,11 +12352,13 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
             // Y overlap with velocity adjustment:
             // self.Y_end_adj >= partner.Y_start_adj?
             int16_t partner_ys_adj = (int16_t)*(uint16_t*)(rds + si2 + 0x14E5) - (int16_t)*(uint16_t*)(rds + si2 + 0x196D);
+            vm.ds_write(0x32, (uint16_t)partner_ys_adj); // orig eip 0x5D0E
             int16_t self_ye_adj = (int16_t)vm.ds_read(di + 0x150D) - (int16_t)vm.ds_read(di + 0x196D);
             if (self_ye_adj < partner_ys_adj) continue;
 
             // partner.Y_end_adj >= self.Y_start_adj?
             int16_t self_ys_adj = (int16_t)vm.ds_read(di + 0x14E5) - (int16_t)vm.ds_read(di + 0x196D);
+            vm.ds_write(0x32, (uint16_t)self_ys_adj);    // orig eip 0x5D27
             int16_t partner_ye_adj = (int16_t)*(uint16_t*)(rds + si2 + 0x150D) - (int16_t)*(uint16_t*)(rds + si2 + 0x196D);
             if (partner_ye_adj < self_ys_adj) continue;
 
@@ -11824,7 +12387,8 @@ static void v2_vm_op_32(V2VM& vm) {
 
 // 0x33 (sub_157d5): collision_157eb (sub_1584e) + ds:0x38E += 2 (always) + skip/call-jump
 static void v2_vm_op_33(V2VM& vm) {
-    bool collision = v2_vm_collision_check_1584e(vm); // sub_157eb → sub_1584e pattern
+    // Orig: sub_157eb (UPward collision) — NOT sub_1584e (downward).
+    bool collision = v2_vm_collision_check_157eb(vm);
     vm.ds_write(0x38E, vm.ds_read(0x38E) + 2); // ALWAYS increment
     if (collision) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
@@ -12223,7 +12787,11 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
     vm.pc = pc;
 
     int max_ops = 5000;
+    uint16_t y_in = (obj_si == 0) ? *(uint16_t*)(shadow + 0x1765) : 0;
+    static int _coll0_trace = 0;
+    bool trace_this = (obj_si == 0) && (_coll0_trace < 30);
     while (vm.running && max_ops-- > 0) {
+        uint16_t pc_before = vm.pc;
         uint8_t opcode = vm.es[vm.pc];
         vm.pc++;
         opcode &= 0xFF;
@@ -12236,7 +12804,16 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
             fprintf(stderr, "FATAL: unimplemented collision VM opcode 0x%02X at pc=%04X obj=%d\n", opcode, vm.pc-1, obj_si);
             exit(1);
         }
+        uint16_t y_pre = (obj_si == 0) ? *(uint16_t*)(shadow + 0x1765) : 0;
         v2_vm_optable[opcode](vm);
+        if (obj_si == 0) {
+            uint16_t y_post = *(uint16_t*)(shadow + 0x1765);
+            if (y_post != y_pre && _coll0_trace < 30) {
+                _coll0_trace++;
+                fprintf(stderr, "V2-COLL-VM-Y[%d]: obj0 op=%02X pc=%04X Y %04X->%04X\n",
+                    _coll0_trace, opcode, pc_before, y_pre, y_post);
+            }
+        }
     }
 }
 
@@ -12620,6 +13197,9 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         }
         uint16_t pc_before = vm.pc;
         uint16_t acc_before = v2_vm_accumulator; // save BEFORE opcode
+        // Snapshot DS hashes BEFORE opcode runs — used for hash-before verify.
+        uint32_t ds_hash_before_snap = v2_ds_hash(shadow);
+        uint32_t obj_hash_before_snap = v2_obj_hash(shadow, obj_idx);
         uint8_t opcode = vm.read_u8();
         // Dump bytes around 94D7 when we're about to read it
         if (pc_before == 0x94D7) {
@@ -12659,10 +13239,11 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         // Record trace entry for ALL opcodes.
         // Orig records 0x00, 0x0F, 0x10 via special code added after their POP+RETN handlers.
         {
-        extern void v2_vm_trace_record_v2(uint16_t, uint16_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*);
+        extern void v2_vm_trace_record_v2_ext(uint16_t, uint16_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*, uint32_t, uint32_t);
           extern uint16_t v2_vm_step_per_obj[128];
-          v2_vm_trace_record_v2(obj_idx, v2_vm_step_per_obj[vm.slot]++, opcode,
-                                pc_before, vm.pc, acc_before, v2_vm_accumulator, shadow);
+          v2_vm_trace_record_v2_ext(obj_idx, v2_vm_step_per_obj[vm.slot]++, opcode,
+                                pc_before, vm.pc, acc_before, v2_vm_accumulator, shadow,
+                                ds_hash_before_snap, obj_hash_before_snap);
         }
 
         // Record trace for per-opcode verification
@@ -12817,7 +13398,8 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
     cmp_seg("TILEGFX", v2_vm_shadow_tilegfx, 0x8B80, 0x2E5F);       // 0x8B8 para
     cmp_seg("ANIMDATA", v2_vm_shadow_animdata, 0xC000, 0x2E67);      // 0xC00 para
     cmp_seg("GS", v2_vm_shadow_gs, 0x2000, 0x2E61);                  // 0x200 para
-    cmp_seg("SOUND", v2_vm_shadow_sound, 0x7000, 0x2E6B);            // 0x700 para
+    // shadow_sound now mirrors full 0xE47-paragraph buffer at ds:0x992C, not just chunk 3.
+    cmp_seg("SOUND", v2_vm_shadow_sound, 0xE470, 0x992C);            // 0xE47 para
     cmp_seg("CHUNK", v2_vm_shadow_chunk, V2_CHUNK_SHADOW_SIZE, 0x2E77); // 0x2ABA para
     cmp_seg("GS_TILEDATA", v2_vm_shadow_gs_tiledata, 0x3600, 0x2E5D); // 0x360 para
     printf("  v2_sub_13fc2 calls: %d\n", v2_13fc2_count);
@@ -12939,6 +13521,99 @@ void v2_vm_verify_game_loop(uint16_t ds_val) {
               }
             }
             gl_err++;
+        }
+    }
+    // Full per-segment compare — shadow_X vs orig m+seg*16, bounded by alloc size.
+    extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
+    if (v2_m2c_base) {
+        struct SegCmp { uint16_t ds_off; uint8_t* buf; uint32_t size; const char* name; };
+        SegCmp segs[] = {
+            {0x2E5F, v2_vm_shadow_tilegfx,    V2_TILEGFX_SHADOW_SIZE, "TILEGFX"},
+            {0x2E61, v2_vm_shadow_gs,         V2_GS_SHADOW_SIZE,      "GS_MASKS"},
+            {0x2E63, v2_vm_shadow_tilemap,    V2_TILEMAP_SHADOW_SIZE, "TILEMAP"},
+            {0x2E69, v2_vm_shadow_fs,         V2_FS_SHADOW_SIZE,      "FS"},
+            // SOUND: shadow_sound mirrors real ds:0x992C buffer (0xE47 paragraphs of
+            // chunks 1+2+3 + sub_10E85 padding), so compare from base 0x992C, not 0x2E6B.
+            {0x992C, v2_vm_shadow_sound,      V2_SOUND_SHADOW_SIZE,   "SOUND"},
+        };
+        for (auto& s : segs) {
+            uint16_t seg = *(uint16_t*)(real + s.ds_off);
+            if (!seg) continue;
+            uint16_t size_para = v2_get_alloc_size_para(seg);
+            uint32_t sz = (uint32_t)size_para * 16;
+            if (sz == 0 || sz > s.size) sz = s.size;
+            uint8_t* rs = v2_m2c_base + (uint32_t)seg * 16;
+            int d = 0;
+            for (uint32_t i = 0; i < sz && d < 5; i++) {
+                if (rs[i] != s.buf[i]) {
+                    if (d == 0)
+                        fprintf(stderr, "V2-GAMELOOP[%d]: %s DIFFS (alloc=%u):\n",
+                                gl_frame, s.name, sz);
+                    fprintf(stderr, "  %s[0x%04X]: real=%02X shadow=%02X\n",
+                            s.name, (uint16_t)i, rs[i], s.buf[i]);
+                    d++;
+                }
+            }
+        }
+    }
+    if (v2_m2c_base) {
+        uint16_t anim_seg = *(uint16_t*)(real + 0x2E67);
+        uint16_t anim_size_para = v2_get_alloc_size_para(anim_seg);
+        uint32_t anim_size_bytes = (uint32_t)anim_size_para * 16;
+        if (anim_size_bytes > V2_ANIMDATA_SHADOW_SIZE) anim_size_bytes = V2_ANIMDATA_SHADOW_SIZE;
+        if (anim_seg && anim_size_bytes) {
+            uint8_t* real_anim = v2_m2c_base + (uint32_t)anim_seg * 16;
+            int an_diffs = 0;
+            for (uint32_t i = 0; i < anim_size_bytes && an_diffs < 10; i++) {
+                if (real_anim[i] != v2_vm_shadow_animdata[i]) {
+                    if (an_diffs == 0)
+                        fprintf(stderr, "V2-GAMELOOP[%d]: ANIMDATA DIFFS (alloc=%u bytes):\n",
+                                gl_frame, anim_size_bytes);
+                    fprintf(stderr, "  ANIM[0x%04X]: real=%02X shadow=%02X\n",
+                            (uint16_t)i, real_anim[i], v2_vm_shadow_animdata[i]);
+                    an_diffs++;
+                }
+            }
+            static int last_an_zero = -1;
+            if (an_diffs == 0 && last_an_zero != gl_frame) {
+                last_an_zero = gl_frame;
+                static int an_zero_count = 0;
+                if ((an_zero_count++ % 30) == 0)
+                    fprintf(stderr, "V2-GAMELOOP[%d]: ANIMDATA 0 diffs in alloc=%u bytes\n",
+                            gl_frame, anim_size_bytes);
+            }
+        }
+    }
+    // Full GS_tiledata compare at end of game loop (steady state, both sides done).
+    // Bound the compare by the actual DosMemAlloc size — beyond it, real m2c memory
+    // contains MCB / other-segment data via raddr_ aliasing, which is not part of
+    // the gs_tiledata segment proper.
+    if (v2_m2c_base) {
+        uint16_t gs_seg = *(uint16_t*)(real + 0x2E5D);
+        uint16_t gs_size_para = v2_get_alloc_size_para(gs_seg);
+        uint32_t gs_size_bytes = (uint32_t)gs_size_para * 16;
+        if (gs_size_bytes > V2_GS_TILEDATA_SIZE) gs_size_bytes = V2_GS_TILEDATA_SIZE;
+        if (gs_seg && gs_size_bytes) {
+            uint8_t* real_gs = v2_m2c_base + (uint32_t)gs_seg * 16;
+            int gs_diffs = 0;
+            for (uint32_t i = 0; i < gs_size_bytes && gs_diffs < 10; i++) {
+                if (real_gs[i] != v2_vm_shadow_gs_tiledata[i]) {
+                    if (gs_diffs == 0)
+                        fprintf(stderr, "V2-GAMELOOP[%d]: GS-TILEDATA DIFFS (alloc=%u bytes):\n",
+                                gl_frame, gs_size_bytes);
+                    fprintf(stderr, "  GS[0x%04X]: real=%02X shadow=%02X\n",
+                            (uint16_t)i, real_gs[i], v2_vm_shadow_gs_tiledata[i]);
+                    gs_diffs++;
+                }
+            }
+            static int last_gl_frame_zero = -1;
+            if (gs_diffs == 0 && last_gl_frame_zero != gl_frame) {
+                last_gl_frame_zero = gl_frame;
+                static int zero_count = 0;
+                if ((zero_count++ % 30) == 0)
+                    fprintf(stderr, "V2-GAMELOOP[%d]: GS-TILEDATA 0 diffs in alloc=%u bytes\n",
+                            gl_frame, gs_size_bytes);
+            }
         }
     }
 }
@@ -14144,11 +14819,54 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // TODO: implement keyboard scancode dispatch for F10(0x91B0), X/F4(0x9199), etc.
 }
 
+// sub_11b0b portrait state sync — must run per-frame to mirror orig sub_11792 call
+// in sub_115d2 (orig eip 0x163B per frame). Without this, ds:0x423/0x425/0x427 stay at
+// init value while orig updates them to match ds:0x15AD/0x15AF/0x15B1.
+static void v2_sub_11b0b_per_frame(uint8_t* s) {
+    // Same gating as orig sub_11792: only run if HUD active and not on level 0x2C.
+    if (!(s[0x25CF] & 1) || *(uint16_t*)(s + 0x25AD) == 0x2C) return;
+    // Viking 1
+    if (*(uint16_t*)(s + 0x0429) != *(uint16_t*)(s + 0x042F) ||
+        *(uint16_t*)(s + 0x15AD) != *(uint16_t*)(s + 0x0423)) {
+        *(uint16_t*)(s + 0x042F) = *(uint16_t*)(s + 0x0429);
+        *(uint16_t*)(s + 0x0423) = *(uint16_t*)(s + 0x15AD);
+    }
+    // Viking 2
+    if (*(uint16_t*)(s + 0x042B) != *(uint16_t*)(s + 0x0431) ||
+        *(uint16_t*)(s + 0x15AF) != *(uint16_t*)(s + 0x0425)) {
+        *(uint16_t*)(s + 0x0431) = *(uint16_t*)(s + 0x042B);
+        *(uint16_t*)(s + 0x0425) = *(uint16_t*)(s + 0x15AF);
+    }
+    // Viking 3
+    if (*(uint16_t*)(s + 0x042D) != *(uint16_t*)(s + 0x0433) ||
+        *(uint16_t*)(s + 0x15B1) != *(uint16_t*)(s + 0x0427)) {
+        *(uint16_t*)(s + 0x0433) = *(uint16_t*)(s + 0x042D);
+        *(uint16_t*)(s + 0x0427) = *(uint16_t*)(s + 0x15B1);
+    }
+}
+
 void v2_phase_pre_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    extern int v2_dbg_pre_vm_iter; v2_dbg_pre_vm_iter++;
+    v2_watch_25AD("PRE-entry");
+    v2_watch_334("PRE-entry");
+    // Arm HW WP on shadow_ds[0x1765] (Erik Y, obj=0) at f58 — catch writers
+    // up to f63 verify exit.
+    { static int _f = 0; _f++;
+      if (_f == 58) {
+          fprintf(stderr, "HW-WP-PREARM[f%d]: arming shadow_ds[0x1765] (Erik Y)\n", _f);
+          v2_hw_wp_arm_ds(0x1765);
+      }
+    }
     // Snapshot ds:0x32F BEFORE pre-VM modifies it (sub_10138 INC)
     v2_pre_vm_32F_snapshot = *(uint16_t*)(v2_vm_shadow_ds + 0x32F);
     v2_game_loop_pre_vm(v2_vm_shadow_ds, ds_val);
+    v2_watch_25AD("PRE-exit");
+    v2_watch_334("PRE-exit");
+    // sub_11b0b: portrait/sound state sync. orig calls this per-frame from sub_115d2
+    // (eip 0x163B). v2 missed this — caused ds:0x423 to stay at init value 6 while
+    // orig updated it to ds:0x15AD.
+    v2_sub_11b0b_per_frame(v2_vm_shadow_ds);
     v2_hw_wp_drain(); // read HW watchpoint samples
 
     // Post-pre_vm DS compare: both orig and v2 have done their pre-VM functions.
@@ -14218,7 +14936,11 @@ void v2_phase_pre_vm(uint16_t ds_val) {
 }
 
 uint16_t v2_vm_step_per_obj[128] = {};
+extern void v2_watch_25AD(const char*);
+extern void v2_watch_334(const char*);
 void v2_phase_vm(uint16_t ds_val) {
+    v2_watch_25AD("VM-entry");
+    v2_watch_334("VM-entry");
     if (!v2_frame_active) return;
     memset(v2_vm_step_per_obj, 0, sizeof(v2_vm_step_per_obj));
     extern int v2_trace_len;
@@ -14355,17 +15077,14 @@ void v2_phase_vm(uint16_t ds_val) {
 static bool v2_ds_hash_skip(uint32_t i); // forward decl
 static int v2_phase_verify_frame = 0;
 static void v2_phase_verify(const char* phase) {
-    // Full DS compare disabled (live timing artifact).
-    // Single-address trap for 0x077C to find which phase first diverges.
-    if (!v2_vm_real_ds_ptr) return;
-    uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x077C);
-    uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + 0x077C);
-    static bool _077c_found = false;
-    if (rv != sv && !_077c_found) {
-        _077c_found = true;
-        fprintf(stderr, "V2-077C-TRAP[%s f%d]: FIRST DIVERGE real=%04X shadow=%04X\n",
-            phase, v2_phase_verify_frame, rv, sv);
-    }
+    // Per-phase divergence trap. Uses generic v2_phase_diverge_trap; watch list and
+    // found state are static here so the trap fires once per (address, run).
+    static const uint16_t watch[] = { 0x0034, 0x077C, 0x14E4, 0x150C, 0x1764 };
+    static bool found[sizeof(watch)/sizeof(watch[0])] = {0};
+    char label[64];
+    snprintf(label, sizeof(label), "PHASE-%s f%d", phase, v2_phase_verify_frame);
+    v2_phase_diverge_trap(v2_vm_shadow_ds, label,
+                           watch, sizeof(watch)/sizeof(watch[0]), found);
 }
 
 static void v2_post_vm_field_check() {
@@ -14387,6 +15106,10 @@ static void v2_post_vm_field_check() {
 void v2_vm_trace_compare(); // forward decl
 void v2_phase_post_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    extern int v2_dbg_post_vm_iter; v2_dbg_post_vm_iter++;
+    extern bool v2_in_phase_post_vm; v2_in_phase_post_vm = true;
+    v2_watch_25AD("POST-entry");
+    v2_watch_334("POST-entry");
     // Check 0x077C before and after post_vm
     auto chk = [](const char* fn) {
         if (!v2_vm_real_ds_ptr) return;
@@ -14403,6 +15126,7 @@ void v2_phase_post_vm(uint16_t ds_val) {
     v2_vm_verify_fs(ds_val);
     // Trace comparison: both orig and v2 VM have finished, compare opcode traces
     v2_vm_trace_compare();
+    v2_in_phase_post_vm = false;
 }
 
 void v2_phase_render1(uint16_t ds_val) {
@@ -15371,12 +16095,10 @@ static uint32_t vm_ds_hash(uint8_t* ds) {
 }
 
 // DS hash for per-opcode comparison.
-// Skips same ranges as GAMELOOP verify (DosMemAlloc segments + AIL sound + DOS/VGA state).
+// Skips ONLY ranges where orig has real DOS/AIL/VGA state that v2 cannot replicate
+// (because it stubs those subsystems). Segment-pointer tables now match via
+// DosMemAlloc replay (v2_record_alloc), so they are NOT skipped.
 static bool v2_ds_hash_skip(uint32_t i) {
-    if (i >= 0x2E5C && i <= 0x2E7C) return true; // segment pointer table
-    if (i >= 0x1354 && i <= 0x1454) return true; // per-object code_seg
-    if (i >= 0x094C && i <= 0x0A4C) return true; // per-sub-sprite sprite_seg
-    if (i >= 0x0B4C && i <= 0x0C4C) return true; // per-sub-sprite base_seg
     if (i >= 0x990C && i <= 0x9944) return true; // AIL sound handles + driver buffer
     if (i >= 0x86AC && i <= 0x86B0) return true; // DOS INT 24h vector
     if (i >= 0x8638 && i <= 0x863C) return true; // PRNG seed
@@ -15411,8 +16133,84 @@ struct VMTraceEntry {
     uint16_t ds_8A;
     uint16_t ds_6C;
     uint16_t ds_334;
-    uint32_t ds_hash;   // hash of DS[0..0x1C00) AFTER opcode execution
+    uint32_t ds_hash_before;   // full DS hash BEFORE opcode
+    uint32_t ds_hash;          // full DS hash AFTER opcode
+    uint32_t obj_hash_before;  // per-object slice hash BEFORE
+    uint32_t obj_hash;         // per-object slice hash AFTER
+    uint32_t es_hash;          // bytecode segment (anim/code) hash
+    uint32_t fs_hash;          // FS render buffer hash
 };
+
+// Per-object slice — fields at scattered offsets, summed via hash for quick localization.
+static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx) {
+    uint32_t h = 0;
+    static const uint16_t offs[] = {
+        0x1355, 0x132D, 0x137D, 0x141D, 0x1445, 0x146D, 0x14E5, 0x150D,
+        0x1535, 0x155D, 0x1585, 0x15AD, 0x15D5, 0x15FD, 0x1625, 0x164D,
+        0x1675, 0x169D, 0x16C5, 0x16ED, 0x1715, 0x173D, 0x1765, 0x178D,
+        0x17B5, 0x17DD, 0x1805, 0x182D, 0x1855, 0x187D, 0x18A5, 0x18CD,
+        0x18F5, 0x191D, 0x1945, 0x196D, 0x19BD, 0x19E5, 0x1A0D, 0x1A85,
+        0x1AAD, 0x1AD5, 0x13A5, 0x13CD, 0x13F5, 0x14BD, 0x1495,
+    };
+    for (size_t k = 0; k < sizeof(offs) / sizeof(offs[0]); k++) {
+        h = h * 131 + *(uint16_t*)(ds + obj_idx + offs[k]);
+    }
+    return h;
+}
+
+// Bytecode (ES) content hash — hashes anim/code segment data bounded by alloc size.
+// Returns 0 if segment not registered via DosMemAlloc (no safe size known).
+static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx) {
+    if (!v2_m2c_base) return 0;
+    uint16_t es_seg = *(uint16_t*)(ds + obj_idx + 0x1355);
+    if (!es_seg) return 0;
+    extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
+    uint16_t size_para = v2_get_alloc_size_para(es_seg);
+    if (size_para == 0) return 0;          // unknown size — skip (no bounds-safe access)
+    uint32_t size_bytes = (uint32_t)size_para * 16;
+    if (size_bytes > 0x10000) size_bytes = 0x10000;
+    uint8_t* es_ptr = v2_m2c_base + (uint32_t)es_seg * 16;
+    uint32_t h = 0;
+    for (uint32_t i = 0; i + 4 <= size_bytes; i += 4) {
+        h = h * 131 + *(uint32_t*)(es_ptr + i);
+    }
+    return h;
+}
+
+// FS render-buffer hash — bounded by alloc size. Reads m2c flat memory.
+static uint32_t v2_fs_hash(uint8_t* ds) {
+    if (!v2_m2c_base) return 0;
+    uint16_t fs_seg = *(uint16_t*)(ds + 0x2E69);
+    if (!fs_seg) return 0;
+    extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
+    uint16_t size_para = v2_get_alloc_size_para(fs_seg);
+    if (size_para == 0) return 0;
+    uint32_t size_bytes = (uint32_t)size_para * 16;
+    if (size_bytes > 0xC080) size_bytes = 0xC080;
+    uint8_t* fs_ptr = v2_m2c_base + (uint32_t)fs_seg * 16;
+    uint32_t h = 0;
+    for (uint32_t i = 0; i + 4 <= size_bytes; i += 4) {
+        h = h * 131 + *(uint32_t*)(fs_ptr + i);
+    }
+    return h;
+}
+
+// V2 FS shadow buffer hash.
+extern uint8_t v2_vm_shadow_fs[];
+static uint32_t v2_fs_hash_shadow() {
+    extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
+    uint16_t fs_seg = *(uint16_t*)(v2_vm_shadow_ds + 0x2E69);
+    if (!fs_seg) return 0;
+    uint16_t size_para = v2_get_alloc_size_para(fs_seg);
+    if (size_para == 0) return 0;
+    uint32_t size_bytes = (uint32_t)size_para * 16;
+    if (size_bytes > 0xC080) size_bytes = 0xC080;
+    uint32_t h = 0;
+    for (uint32_t i = 0; i + 4 <= size_bytes; i += 4) {
+        h = h * 131 + *(uint32_t*)(v2_vm_shadow_fs + i);
+    }
+    return h;
+}
 
 static const int VM_TRACE_MAX = 50000;
 static VMTraceEntry v2_trace[VM_TRACE_MAX];
@@ -15421,10 +16219,14 @@ int v2_trace_len = 0;
 int orig_trace_len = 0;
 int g_v2_verify_step = 0;
 
-void v2_vm_trace_record_v2(uint16_t obj, uint16_t step, uint8_t opcode,
-                           uint16_t pc_before, uint16_t pc_after,
-                           uint16_t acc_before, uint16_t acc_after,
-                           uint8_t* ds) {
+// Extended record_v2 — caller provides ds_hash_before/obj_hash_before snapshots
+// taken at exact moment BEFORE opcode runs (chained reference is unreliable when
+// other threads / phases write to shadow_ds between trace entries).
+void v2_vm_trace_record_v2_ext(uint16_t obj, uint16_t step, uint8_t opcode,
+                               uint16_t pc_before, uint16_t pc_after,
+                               uint16_t acc_before, uint16_t acc_after,
+                               uint8_t* ds,
+                               uint32_t ds_hash_before, uint32_t obj_hash_before) {
     if (v2_trace_len < VM_TRACE_MAX) {
         auto& e = v2_trace[v2_trace_len++];
         e.obj = obj; e.step = step; e.opcode = opcode;
@@ -15438,8 +16240,24 @@ void v2_vm_trace_record_v2(uint16_t obj, uint16_t step, uint8_t opcode,
         e.ds_8A = *(uint16_t*)(ds + 0x8A);
         e.ds_6C = *(uint16_t*)(ds + 0x6C);
         e.ds_334 = *(uint16_t*)(ds + 0x334);
+        e.ds_hash_before = ds_hash_before;
+        e.obj_hash_before = obj_hash_before;
         e.ds_hash = v2_ds_hash(ds);
+        e.obj_hash = v2_obj_hash(ds, obj);
+        e.es_hash = v2_es_hash(ds, obj);
+        e.fs_hash = v2_fs_hash_shadow();
     }
+}
+
+// Backwards-compat wrapper for old callers (e.g. 0xFE marker) — uses current ds for both.
+void v2_vm_trace_record_v2(uint16_t obj, uint16_t step, uint8_t opcode,
+                           uint16_t pc_before, uint16_t pc_after,
+                           uint16_t acc_before, uint16_t acc_after,
+                           uint8_t* ds) {
+    uint32_t h_ds = v2_ds_hash(ds);
+    uint32_t h_obj = v2_obj_hash(ds, obj);
+    v2_vm_trace_record_v2_ext(obj, step, opcode, pc_before, pc_after,
+                              acc_before, acc_after, ds, h_ds, h_obj);
 }
 
 // Called from original VM loop after each opcode
@@ -15460,7 +16278,23 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
         e.ds_8A = *(uint16_t*)(ds_after + 0x8A);
         e.ds_6C = *(uint16_t*)(ds_after + 0x6C);
         e.ds_334 = *(uint16_t*)(ds_after + 0x334);
+        // ds_before may be nullptr from in-handler call sites (FE marker / op_0x00 /
+        // op_0x0F / op_0x10 — recorded after the handler ran, no pre-snapshot).
+        // For these the orig dispatcher does writes between opcodes (ds:0x42 obj index,
+        // ds:0x38E clear, per-obj timer decrement) that are NOT trace-recorded.
+        // True ds_before is unknowable here — degenerate to ds_after for symmetry
+        // with v2 side wrapper. Hash_before/hash_after will be equal on these entries.
+        if (ds_before) {
+            e.ds_hash_before = v2_ds_hash(ds_before);
+            e.obj_hash_before = v2_obj_hash(ds_before, obj_idx);
+        } else {
+            e.ds_hash_before = v2_ds_hash(ds_after);
+            e.obj_hash_before = v2_obj_hash(ds_after, obj_idx);
+        }
         e.ds_hash = v2_ds_hash(ds_after);
+        e.obj_hash = v2_obj_hash(ds_after, obj_idx);
+        e.es_hash = v2_es_hash(ds_after, obj_idx);
+        e.fs_hash = v2_fs_hash(ds_after);
     }
 }
 
@@ -15468,7 +16302,7 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
 void v2_vm_trace_compare() {
     static int frame = 0;
     frame++;
-    if (frame > 200) return;
+    // No frame limit — verify must catch divergence regardless of when it happens.
     // Dump full traces for frames with issues
     if (frame == 42 || frame == 43 || frame == 44) {
         printf("=== ORIG TRACE f%d (len=%d) ===\n", frame, orig_trace_len);
@@ -15485,9 +16319,13 @@ void v2_vm_trace_compare() {
         }
     }
 
-    int len = (v2_trace_len < orig_trace_len) ? v2_trace_len : orig_trace_len;
+    // Iterate up to MAX of both lengths so trailing extra entries are caught.
+    int len_min = (v2_trace_len < orig_trace_len) ? v2_trace_len : orig_trace_len;
+    int len_max = (v2_trace_len > orig_trace_len) ? v2_trace_len : orig_trace_len;
     static int total_err = 0;
     static bool first_mismatch_printed = false;
+    // First pass: check opcode/pc/acc/HASH match in shared prefix.
+    int len = len_min;
     for (int i = 0; i < len && total_err < 100; i++) {
         auto& o = orig_trace[i];
         auto& v = v2_trace[i];
@@ -15495,8 +16333,20 @@ void v2_vm_trace_compare() {
         bool op_match = (v.opcode == o.opcode);
         bool pc_match = (v.pc_before == o.pc_before && v.pc_after == o.pc_after);
         bool acc_match = (v.acc_after == o.acc_after);
-        bool hash_match = (v.ds_hash == o.ds_hash);
-        if (!obj_match || !op_match || !pc_match || !acc_match) {
+        // ds_hash_before is unreliable on orig side: between dispatcher iterations
+        // the mutex is released, allowing other threads to write real_ds, which
+        // makes orig hash_before(N+1) ≠ orig hash_after(N) even though no opcode
+        // ran between them. v2 shadow has no such race. Only verify hash_after.
+        bool hash_before_match = true; // (v.ds_hash_before == o.ds_hash_before)
+        bool hash_after_match = (v.ds_hash == o.ds_hash);
+        bool obj_hash_before_match = true; // same reason
+        bool obj_hash_after_match = (v.obj_hash == o.obj_hash);
+        bool es_hash_match = (v.es_hash == o.es_hash);
+        bool fs_hash_match = (v.fs_hash == o.fs_hash);
+        if (!obj_match || !op_match || !pc_match || !acc_match
+            || !hash_before_match || !hash_after_match
+            || !obj_hash_before_match || !obj_hash_after_match
+            || !es_hash_match || !fs_hash_match) {
             if (!first_mismatch_printed) {
                 first_mismatch_printed = true;
                 // Print context: up to 5 preceding matching entries
@@ -15510,12 +16360,38 @@ void v2_vm_trace_compare() {
                            v2_trace[j].obj, v2_trace[j].opcode, v2_trace[j].pc_before, v2_trace[j].pc_after,
                            v2_trace[j].acc_before, v2_trace[j].acc_after, v2_trace[j].flags);
                 }
-                fprintf(stderr, "  [%d] BAD ORIG obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X es=%04X fl=%04X x=%04X y=%04X 42=%04X 6C=%04X hash=%08X\n",
-                       i, o.obj, o.opcode, o.pc_before, o.pc_after, o.acc_before, o.acc_after,
-                       o.es_seg, o.flags, o.x, o.y, o.ds_42, o.ds_6C, o.ds_hash);
-                fprintf(stderr, "           V2  obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X es=%04X fl=%04X x=%04X y=%04X 42=%04X 6C=%04X hash=%08X\n",
+                const char* why = !obj_match ? "OBJ" : !op_match ? "OP"
+                                : !pc_match ? "PC" : !acc_match ? "ACC"
+                                : !hash_before_match ? "DS-HASH-BEFORE"
+                                : !hash_after_match ? "DS-HASH-AFTER"
+                                : !obj_hash_before_match ? "OBJ-HASH-BEFORE"
+                                : !obj_hash_after_match ? "OBJ-HASH-AFTER"
+                                : !es_hash_match ? "ES-HASH"
+                                : "FS-HASH";
+                fprintf(stderr, "  [%d] BAD (%s) ORIG obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X es=%04X fl=%04X x=%04X y=%04X 42=%04X 6C=%04X dsH=%08X→%08X objH=%08X→%08X esH=%08X fsH=%08X\n",
+                       i, why, o.obj, o.opcode, o.pc_before, o.pc_after, o.acc_before, o.acc_after,
+                       o.es_seg, o.flags, o.x, o.y, o.ds_42, o.ds_6C,
+                       o.ds_hash_before, o.ds_hash, o.obj_hash_before, o.obj_hash, o.es_hash, o.fs_hash);
+                fprintf(stderr, "           V2  obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X es=%04X fl=%04X x=%04X y=%04X 42=%04X 6C=%04X dsH=%08X→%08X objH=%08X→%08X esH=%08X fsH=%08X\n",
                        v.obj, v.opcode, v.pc_before, v.pc_after, v.acc_before, v.acc_after,
-                       v.es_seg, v.flags, v.x, v.y, v.ds_42, v.ds_6C, v.ds_hash);
+                       v.es_seg, v.flags, v.x, v.y, v.ds_42, v.ds_6C,
+                       v.ds_hash_before, v.ds_hash, v.obj_hash_before, v.obj_hash, v.es_hash, v.fs_hash);
+                // Byte-level DS diff dump (only on DS-HASH mismatch).
+                if (!hash_after_match && v2_vm_real_ds_ptr) {
+                    uint8_t* r = v2_vm_real_ds_ptr; uint8_t* s = v2_vm_shadow_ds;
+                    int diff_count = 0;
+                    for (uint32_t j = 0; j < 0x10000; j++) {
+                        if (v2_ds_hash_skip(j & ~3u)) continue; // skip same ranges as hash
+                        if (r[j] != s[j]) {
+                            if (diff_count < 32) {
+                                fprintf(stderr, "  DS-DIFF[%d]: addr=0x%04X real=0x%02X shadow=0x%02X\n",
+                                    diff_count, j, r[j], s[j]);
+                            }
+                            diff_count++;
+                        }
+                    }
+                    fprintf(stderr, "  DS-DIFF total=%d bytes\n", diff_count);
+                }
                 fflush(stderr);
                 fflush(stdout);
                 exit(1);
@@ -15543,11 +16419,38 @@ void v2_vm_trace_compare() {
         }
     }
 
-    if (v2_trace_len != orig_trace_len && total_err < 100) {
-        if (!first_mismatch_printed) {
-            fprintf(stderr, "V2-TRACE: LENGTH MISMATCH at frame %d: orig=%d v2=%d\n", frame, orig_trace_len, v2_trace_len);
+    if (v2_trace_len != orig_trace_len && !first_mismatch_printed) {
+        first_mismatch_printed = true;
+        // Print context (last 5 common entries) + the divergent extra entry.
+        int ctx_start = (len_min > 5) ? len_min - 5 : 0;
+        fprintf(stderr, "V2-TRACE: LENGTH MISMATCH at frame %d: orig_len=%d v2_len=%d (extra side: %s)\n",
+                frame, orig_trace_len, v2_trace_len,
+                (orig_trace_len > v2_trace_len) ? "ORIG" : "V2");
+        for (int j = ctx_start; j < len_min; j++) {
+            fprintf(stderr, "  [%d] OK  ORIG obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X fl=%04X\n",
+                j, orig_trace[j].obj, orig_trace[j].opcode, orig_trace[j].pc_before, orig_trace[j].pc_after,
+                orig_trace[j].acc_before, orig_trace[j].acc_after, orig_trace[j].flags);
+            fprintf(stderr, "           V2  obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X fl=%04X\n",
+                v2_trace[j].obj, v2_trace[j].opcode, v2_trace[j].pc_before, v2_trace[j].pc_after,
+                v2_trace[j].acc_before, v2_trace[j].acc_after, v2_trace[j].flags);
         }
-        total_err++;
+        // Print the extra entries on the longer side
+        for (int i = len_min; i < len_max; i++) {
+            if (orig_trace_len > v2_trace_len) {
+                auto& o = orig_trace[i];
+                fprintf(stderr, "  [%d] EXTRA-ORIG obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X es=%04X fl=%04X x=%04X y=%04X 42=%04X hash=%08X\n",
+                        i, o.obj, o.opcode, o.pc_before, o.pc_after, o.acc_before, o.acc_after,
+                        o.es_seg, o.flags, o.x, o.y, o.ds_42, o.ds_hash);
+            } else {
+                auto& v = v2_trace[i];
+                fprintf(stderr, "  [%d] EXTRA-V2   obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X es=%04X fl=%04X x=%04X y=%04X 42=%04X hash=%08X\n",
+                        i, v.obj, v.opcode, v.pc_before, v.pc_after, v.acc_before, v.acc_after,
+                        v.es_seg, v.flags, v.x, v.y, v.ds_42, v.ds_hash);
+            }
+        }
+        fflush(stderr);
+        fflush(stdout);
+        exit(1);
     }
     v2_trace_len = 0;
     orig_trace_len = 0;
