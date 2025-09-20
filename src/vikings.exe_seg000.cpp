@@ -2444,6 +2444,7 @@ cs=0x1a2;eip=0x000390; 	T(MOV(ax, 0));	// 495 mov     ax, 0 ;~ 01A2:0390
 cs=0x1a2;eip=0x000393; 	R(OUT(dx, al));	// 496 out     dx, al ;~ 01A2:0393
 cs=0x1a2;eip=0x000394; 	R(OUT(dx, al));	// 497 out     dx, al ;~ 01A2:0394
 cs=0x1a2;eip=0x000395; 	R(OUT(dx, al));	// 498 out     dx, al ;~ 01A2:0395
+	setPalette(3, 0, 0, 0); // SDL: mirror VGA DAC OUT above
 cs=0x1a2;eip=0x000396; 	X(MOV(*(db*)(((db*)&word_303eb)), al));	// 499 mov     byte ptr word_303EB, al ;~ 01A2:0396
 cs=0x1a2;eip=0x000399; 	X(MOV(*(db*)(((db*)&word_303eb)), 0));	// 500 mov     byte ptr word_303EB, 0 ;~ 01A2:0399
 cs=0x1a2;eip=0x00039e; 	X(MOV(*(db*)(((db*)&word_303eb)+1), 0));	// 501 mov     byte ptr word_303EB+1, 0 ;~ 01A2:039E
@@ -2519,6 +2520,7 @@ cs=0x1a2;eip=0x000442; 	T(MOV(ax, 0));	// 584 mov     ax, 0 ;~ 01A2:0442
 cs=0x1a2;eip=0x000445; 	R(OUT(dx, al));	// 585 out     dx, al ;~ 01A2:0445
 cs=0x1a2;eip=0x000446; 	R(OUT(dx, al));	// 586 out     dx, al ;~ 01A2:0446
 cs=0x1a2;eip=0x000447; 	R(OUT(dx, al));	// 587 out     dx, al ;~ 01A2:0447
+	setPalette(3, 0, 0, 0); // SDL: mirror the VGA DAC OUT above
 cs=0x1a2;eip=0x000448; 	X(MOV(*(db*)(((db*)&word_303eb)), al));	// 588 mov     byte ptr word_303EB, al ;~ 01A2:0448
 cs=0x1a2;eip=0x00044b; 	X(MOV(*(db*)(((db*)&word_303eb)), 0));	// 589 mov     byte ptr word_303EB, 0 ;~ 01A2:044B
 cs=0x1a2;eip=0x000450; 	X(MOV(*(db*)(((db*)&word_303eb)+1), 0));	// 590 mov     byte ptr word_303EB+1, 0 ;~ 01A2:0450
@@ -6190,6 +6192,11 @@ cs=0x1a2;eip=0x00280c; 	T(MOV(ax, 0x3E));	// 5331 mov     ax, 3Eh ; '>' ;~ 01A2:
 cs=0x1a2;eip=0x00280f; 	T(AND(ax, cx));	// 5332 and     ax, cx ;~ 01A2:280F
 cs=0x1a2;eip=0x002811; 	R(OUT(dx, al));	// 5333 out     dx, al ;~ 01A2:2811
 cs=0x1a2;eip=0x002812; 	X(MOV(byte_303ed, al));	// 5334 mov     byte_303ED, al ;~ 01A2:2812
+	// SDL: mirror VGA DAC writes above — set color 3 from software copy
+	setPalette(3,
+		*(db*)(((db*)&word_303eb)) << 2,
+		*(db*)(((db*)&word_303eb)+1) << 2,
+		byte_303ed << 2);
 cs=0x1a2;eip=0x002815; 	J(RETN(0));	// 5335 retn ;~ 01A2:2815
 sub_12816:
 	// 5340
