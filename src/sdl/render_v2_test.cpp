@@ -57,6 +57,13 @@ void render_callback_v2(void* state)
                 myDrawInfo_v2->drawPalette[i].b = pal[i*3 + 2] << 2;
                 myDrawInfo_v2->drawPalette[i].a = 255;
             }
+            // Volatile VGA DAC override for palette[3] — set by cmd_type=6 (dialog
+            // text bg, per-character color). Orig calls OUT(0x3C9, R/G/B) writing
+            // directly to VGA DAC + stores soft mirror in shadow[0x7F0B/7F0C/7F0D].
+            // Static palette at shadow[0x8202+3*3] never updates → must override here.
+            myDrawInfo_v2->drawPalette[3].r = shad[0x7F0B] << 2;
+            myDrawInfo_v2->drawPalette[3].g = shad[0x7F0C] << 2;
+            myDrawInfo_v2->drawPalette[3].b = shad[0x7F0D] << 2;
             // Debug: log first few palette entries + display buf state every 60 frames.
             static int _pal_dbg = 0; _pal_dbg++;
             if (_pal_dbg <= 3 || _pal_dbg % 120 == 0) {
