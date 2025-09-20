@@ -2027,6 +2027,50 @@ cs=0x1a2;eip=0x0000e1; 	J(CALL(sub_108c8,0));	// 113 call    sub_108C8 ;~ 01A2:0
 cs=0x1a2;eip=0x0000e4; 	J(CALL(sub_10350,0));	// 114 call    sub_10350 ;~ 01A2:00E4
 cs=0x1a2;eip=0x0000e7; 	J(CALL(sub_1086f,0));	// 115 call    sub_1086F ;~ 01A2:00E7
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(9); /* POST_FLIP3_END */ }
+	{
+	  // CUR-FULL-WATCH: per-frame watch on ALL 12 slots of 0x3E4 (master) and
+	  // 0x3FC (mirror) in REAL DS. Plus shadow's same slots via v2_get_shadow_ds().
+	  // Reports any change in any slot, both real and shadow side.
+	  extern uint8_t* v2_vm_get_shadow_ds();
+	  uint8_t* shad = v2_vm_get_shadow_ds();
+	  static uint16_t prev_real_3e4[12] = {0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,
+	                                       0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD};
+	  static uint16_t prev_real_3fc[12] = {0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,
+	                                       0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD};
+	  static uint16_t prev_shad_3e4[12] = {0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,
+	                                       0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD};
+	  static uint16_t prev_shad_3fc[12] = {0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,
+	                                       0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD,0xDEAD};
+	  static int _watch_frame = 0; _watch_frame++;
+	  bool any_change = false;
+	  for (int i = 0; i < 12; i++) {
+	    uint16_t r_m = *(dw*)(raddr(ds, 0x3E4 + i*2));
+	    uint16_t r_b = *(dw*)(raddr(ds, 0x3FC + i*2));
+	    uint16_t s_m = shad ? *(uint16_t*)(shad + 0x3E4 + i*2) : 0;
+	    uint16_t s_b = shad ? *(uint16_t*)(shad + 0x3FC + i*2) : 0;
+	    if (r_m != prev_real_3e4[i] || r_b != prev_real_3fc[i] ||
+	        s_m != prev_shad_3e4[i] || s_b != prev_shad_3fc[i]) {
+	      any_change = true;
+	    }
+	  }
+	  if (any_change) {
+	    fprintf(stderr, "CUR-FULL-WATCH[f%d lvl=%04X 25CF=%02X]:\n",
+	      _watch_frame, *(dw*)(raddr(ds, 0x25AD)), *(raddr(ds, 0x25CF)));
+	    for (int i = 0; i < 12; i++) {
+	      uint16_t r_m = *(dw*)(raddr(ds, 0x3E4 + i*2));
+	      uint16_t r_b = *(dw*)(raddr(ds, 0x3FC + i*2));
+	      uint16_t s_m = shad ? *(uint16_t*)(shad + 0x3E4 + i*2) : 0;
+	      uint16_t s_b = shad ? *(uint16_t*)(shad + 0x3FC + i*2) : 0;
+	      bool ch = (r_m != prev_real_3e4[i] || r_b != prev_real_3fc[i] ||
+	                 s_m != prev_shad_3e4[i] || s_b != prev_shad_3fc[i]);
+	      bool diff = (r_m != s_m || r_b != s_b);
+	      fprintf(stderr, "  slot=%2d real(3E4=%04X 3FC=%04X) shad(3E4=%04X 3FC=%04X)%s%s\n",
+	        i, r_m, r_b, s_m, s_b, ch ? " CHG" : "", diff ? " DIFF" : "");
+	      prev_real_3e4[i] = r_m; prev_real_3fc[i] = r_b;
+	      prev_shad_3e4[i] = s_m; prev_shad_3fc[i] = s_b;
+	    }
+	  }
+	}
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_FLIP3, ds); v2_signal_phase(V2_PHASE_FRAME_END, ds); }
 cs=0x1a2;eip=0x0000ea; 	T(CMP(byte_3168a, 1));	// 116 cmp     byte_3168A, 1 ;~ 01A2:00EA
 cs=0x1a2;eip=0x0000ef; 	J(JNZ(loc_100f7));	// 117 jnz     short loc_100F7 ;~ 01A2:00EF
@@ -4232,6 +4276,21 @@ cs=0x1a2;eip=0x00178a; 	X(MOV(word_288a4, 0));	// 3086 mov     word_288A4, 0 ;~ 
 cs=0x1a2;eip=0x001790; 	J(RETN(0));	// 3087 retn ;~ 01A2:1790
 sub_11792:
 	// 3096
+{
+  // CUR-11792-ENTRY: trap orig sub_11792 entry, log condition + 0x3FC state
+  static int _cur11792 = 0; _cur11792++;
+  if (_cur11792 <= 30 || _cur11792 % 200 == 0) {
+    uint16_t lvl = *(dw*)(raddr(ds, 0x25AD));
+    uint8_t flag = *(raddr(ds, 0x25CF));
+    fprintf(stderr,
+      "CUR-11792-ENTRY[%d]: lvl=%04X 25CF=%02X enter=%d 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
+      _cur11792, lvl, flag, ((flag & 1) && lvl != 0x2C) ? 1 : 0,
+      *(dw*)(raddr(ds, 0x3FC + 8)),
+      *(dw*)(raddr(ds, 0x3FC + 16)),
+      *(dw*)(raddr(ds, 0x3E4 + 8)),
+      *(dw*)(raddr(ds, 0x3E4 + 16)));
+  }
+}
 cs=0x1a2;eip=0x001792; 	T(TEST(byte_2aaaf, 1));	// 3098 test    byte_2AAAF, 1 ;~ 01A2:1792
 ret_1a2_1797:
 	// 4626
@@ -4547,6 +4606,21 @@ locret_11bb6:
 cs=0x1a2;eip=0x001bb6; 	J(RETN(0));	// 3600 retn ;~ 01A2:1BB6
 loc_11bb7:
 	// 4659
+{
+  // CUR-11BA5-ENTER: pause/inventory loop entered (HUD active && TAB pressed)
+  static int _cur11ba5 = 0; _cur11ba5++;
+  if (_cur11ba5 <= 50)
+    fprintf(stderr,
+      "CUR-11BA5-ENTER[%d]: 25CF=%02X 3B6=%04X 3B8=%04X 3CC=%04X 3D0=%04X 25AD=%04X 3C2=%04X\n",
+      _cur11ba5,
+      *(raddr(ds, 0x25CF)),
+      *(dw*)(raddr(ds, 0x3B6)),
+      *(dw*)(raddr(ds, 0x3B8)),
+      *(dw*)(raddr(ds, 0x3CC)),
+      *(dw*)(raddr(ds, 0x3D0)),
+      *(dw*)(raddr(ds, 0x25AD)),
+      *(dw*)(raddr(ds, 0x3C2)));
+}
 cs=0x1a2;eip=0x001bb7; 	T(MOV(ax, 0));	// 3604 mov     ax, 0 ;~ 01A2:1BB7
 cs=0x1a2;eip=0x001bba; 	J(CALL(sub_177bb,0));	// 3605 call    sub_177BB ;~ 01A2:1BBA
 cs=0x1a2;eip=0x001bbd; 	X(MOV(word_28925, 0x11));	// 3606 mov     word_28925, 11h ;~ 01A2:1BBD
@@ -4978,6 +5052,25 @@ loc_11fc2:
 cs=0x1a2;eip=0x001fc2; 	T(MOV(ax, 2));	// 4065 mov     ax, 2 ;~ 01A2:1FC2
 cs=0x1a2;eip=0x001fc5; 	J(CALL(sub_177bb,0));	// 4066 call    sub_177BB ;~ 01A2:1FC5
 cs=0x1a2;eip=0x001fc8; 	T(MOV(ax, word_28921));	// 4067 mov     ax, word_28921 ;~ 01A2:1FC8
+{
+  // CUR-11F93-WRITE: trap item placement to slot. Show frame, di (slot byte off),
+  // ax (item ID), input state, level — to identify who triggers item placement
+  // in real DS for ITEM-TRAP divergence investigation (#64).
+  static int _cur11f93 = 0; _cur11f93++;
+  if (_cur11f93 <= 100) {
+    fprintf(stderr,
+      "CUR-11F93-WRITE[%d]: di=%04X(slot=%d) ax(item)=%04X 25CF=%02X 3B6=%04X 3B8=%04X 3CC=%04X 3CE=%04X 3D0=%04X 3C2=%04X 25AD=%04X\n",
+      _cur11f93, di, di/2, ax,
+      *(raddr(ds, 0x25CF)),
+      *(dw*)(raddr(ds, 0x3B6)),
+      *(dw*)(raddr(ds, 0x3B8)),
+      *(dw*)(raddr(ds, 0x3CC)),
+      *(dw*)(raddr(ds, 0x3CE)),
+      *(dw*)(raddr(ds, 0x3D0)),
+      *(dw*)(raddr(ds, 0x3C2)),
+      *(dw*)(raddr(ds, 0x25AD)));
+  }
+}
 cs=0x1a2;eip=0x001fcb; 	X(MOV(*(dw*)(raddr(ds,di+0x3E4)), ax));	// 4068 mov     [di+3E4h], ax ;~ 01A2:1FCB
 cs=0x1a2;eip=0x001fcf; 	T(MOV(si, word_28923));	// 4069 mov     si, word_28923 ;~ 01A2:1FCF
 cs=0x1a2;eip=0x001fd3; 	T(AND(si, 0x0FFFC));	// 4070 and     si, 0FFFCh ;~ 01A2:1FD3
@@ -5011,6 +5104,18 @@ cs=0x1a2;eip=0x002016; 	X(MOV(word_28919, 0x0FFFF));	// 4101 mov     word_28919,
 cs=0x1a2;eip=0x00201c; 	J(RETN(0));	// 4102 retn ;~ 01A2:201C
 sub_1201d:
 	// 4109
+{
+  // CUR-1201D-ENTRY: trap orig sub_1201d entry (init copy 0x3E4 → 0x3FC)
+  static int _cur1201d = 0; _cur1201d++;
+  if (_cur1201d <= 30)
+    fprintf(stderr,
+      "CUR-1201D-ENTRY[%d]: lvl=%04X 25CF=%02X 3E4[4]=%04X 3E4[8]=%04X 3FC[4]=%04X 3FC[8]=%04X\n",
+      _cur1201d, *(dw*)(raddr(ds, 0x25AD)), *(raddr(ds, 0x25CF)),
+      *(dw*)(raddr(ds, 0x3E4 + 8)),
+      *(dw*)(raddr(ds, 0x3E4 + 16)),
+      *(dw*)(raddr(ds, 0x3FC + 8)),
+      *(dw*)(raddr(ds, 0x3FC + 16)));
+}
 cs=0x1a2;eip=0x00201d; 	T(MOV(di, 0));	// 4110 mov     di, 0 ;~ 01A2:201D
 loc_12020:
 	// 4705
@@ -5197,6 +5302,15 @@ loc_1219c:
 cs=0x1a2;eip=0x00219c; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x3E4))));	// 4307 mov     ax, [di+3E4h] ;~ 01A2:219C
 cs=0x1a2;eip=0x0021a0; 	T(CMP(ax, *(dw*)(raddr(ds,di+0x3FC))));	// 4308 cmp     ax, [di+3FCh] ;~ 01A2:21A0
 cs=0x1a2;eip=0x0021a4; 	J(JZ(loc_121b0));	// 4309 jz      short loc_121B0 ;~ 01A2:21A4
+{
+  // CUR-12199-SYNC: orig sub_12199 syncs mirror 0x3FC[di] = ax (= 0x3E4[di])
+  static int _cur12199 = 0; _cur12199++;
+  if (_cur12199 <= 50)
+    fprintf(stderr,
+      "CUR-12199-SYNC[%d]: di=%04X(slot=%d) ax(=3E4)=%04X prev_3FC=%04X lvl=%04X\n",
+      _cur12199, di, di/2, ax, *(dw*)(raddr(ds, di + 0x3FC)),
+      *(dw*)(raddr(ds, 0x25AD)));
+}
 cs=0x1a2;eip=0x0021a6; 	X(MOV(*(dw*)(raddr(ds,di+0x3FC)), ax));	// 4310 mov     [di+3FCh], ax ;~ 01A2:21A6
 cs=0x1a2;eip=0x0021aa; 	J(CALL(sub_1183d,0));	// 4311 call    sub_1183D ;~ 01A2:21AA
 cs=0x1a2;eip=0x0021ad; 	J(CALL(sub_120d1,0));	// 4312 call    sub_120D1 ;~ 01A2:21AD
@@ -9925,6 +10039,18 @@ ret_1a2_46a6:
 	// 5201
 cs=0x1a2;eip=0x0046a6; 	T(ADD(bx, 2));	// 9680 add     bx, 2 ;~ 01A2:46A6
 cs=0x1a2;eip=0x0046a9; 	T(MOV(ax, *(dw*)(raddr(ds,0x8A))));	// 9681 mov     ax, ds:8Ah ;~ 01A2:46A9
+{
+  // CUR-OP57-3E4: trap orig op_57 writes to item slot region (0x3E4 master + 0x3FC mirror)
+  if (si >= 0x3E4 && si <= 0x413) {
+    static int _curop57 = 0; _curop57++;
+    if (_curop57 <= 500)
+      fprintf(stderr,
+        "CUR-OP57-3E4[%d]: addr=%04X(slot=%d) val=%04X lvl=%04X 3C2=%04X\n",
+        _curop57, si, (si - 0x3E4) / 2, ax,
+        *(dw*)(raddr(ds, 0x25AD)),
+        *(dw*)(raddr(ds, 0x3C2)));
+  }
+}
 cs=0x1a2;eip=0x0046ac; 	X(MOV(*(dw*)(raddr(ds,si)), ax));	// 9682 mov     [si], ax ;~ 01A2:46AC
 cs=0x1a2;eip=0x0046ae; 	J(RETN(0));	// 9683 retn ;~ 01A2:46AE
 sub_146af:
@@ -9979,6 +10105,18 @@ ret_1a2_4707:
 cs=0x1a2;eip=0x004707; 	T(ADD(bx, 2));	// 9759 add     bx, 2 ;~ 01A2:4707
 cs=0x1a2;eip=0x00470a; 	T(MOV(ax, *(dw*)(raddr(ds,si))));	// 9760 mov     ax, [si] ;~ 01A2:470A
 cs=0x1a2;eip=0x00470c; 	T(ADD(ax, *(dw*)(raddr(ds,0x8A))));	// 9761 add     ax, ds:8Ah ;~ 01A2:470C
+{
+  // CUR-OP5A-3E4: trap orig op_5A (ADD acc to abs addr) writes to item slot region
+  if (si >= 0x3E4 && si <= 0x413) {
+    static int _curop5a = 0; _curop5a++;
+    if (_curop5a <= 200)
+      fprintf(stderr,
+        "CUR-OP5A-3E4[%d]: addr=%04X(slot=%d) prev=%04X new=%04X (acc=%04X) lvl=%04X\n",
+        _curop5a, si, (si - 0x3E4) / 2,
+        (uint16_t)(ax - *(dw*)(raddr(ds, 0x8A))), ax, *(dw*)(raddr(ds, 0x8A)),
+        *(dw*)(raddr(ds, 0x25AD)));
+  }
+}
 cs=0x1a2;eip=0x004710; 	X(MOV(*(dw*)(raddr(ds,si)), ax));	// 9762 mov     [si], ax ;~ 01A2:4710
 cs=0x1a2;eip=0x004712; 	J(RETN(0));	// 9763 retn ;~ 01A2:4712
 sub_14713:

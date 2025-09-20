@@ -7092,6 +7092,15 @@ struct V2VM {
                 printf("V2-VM-WRITE-3CC: obj=%04X val=%04X (was %04X)\n",
                     obj, val, *(uint16_t*)(shadow + addr)); }
             }
+            // V2-3FC-WR: trap ALL ds_write to mirror (0x3FC..0x413) — see WHO writes shadow mirror
+            if (addr >= 0x3FC && addr <= 0x413 && val != *(uint16_t*)(shadow + addr)) {
+                static int _v23fc = 0; _v23fc++;
+                if (_v23fc <= 100)
+                    fprintf(stderr,
+                      "V2-3FC-WR[%d]: addr=%04X(slot=%d mirror) old=%04X new=%04X obj=%02X pc=%04X\n",
+                      _v23fc, addr, (addr - 0x3FC) / 2,
+                      *(uint16_t*)(shadow + addr), val, obj, pc);
+            }
             // V2-ERIK-WR: trap writes to Erik vel_X_field (0x164D), vel_Y_field (0x1675),
             // flags (0x1585), anim_id (0x16ED) on level 002B. Catches ALL ds_write paths
             // (op_56, op_5A, op_60, op_62, op_67, sub_135cf, sub_1386b, etc).
@@ -11295,7 +11304,6 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
         if (*(uint16_t*)(vm.shadow + 0x25AD) == 0x002B) {
             static int _v2_op_trace = 0;
             if (++_v2_op_trace <= 1500) {
-                extern uint16_t v2_input_snapshot;
                 fprintf(stderr,
                   "V2-OP[%d] obj=%02X: bx=%04X cmd=%02X hdlr=%04X anim=%04X PC=%04X "
                   "acc=%04X 32F=%04X 86DE=%04X 3B6=%04X 3B8=%04X "
@@ -12139,6 +12147,16 @@ static void v2_vm_op_load_acc_indexed_1995(V2VM& vm) {
 // si=es:[bx]; bx+=2; ax=ds:0x8A; ds:[si]=ax
 static void v2_vm_op_57(V2VM& vm) {
     uint16_t addr = vm.read_u16();
+    // V2-OP57-3E4: trap writes to item slot region (0x3E4 master + 0x3FC mirror)
+    if (addr >= 0x3E4 && addr <= 0x413) {
+        static int _op57 = 0; _op57++;
+        if (_op57 <= 500)
+            fprintf(stderr,
+              "V2-OP57-3E4[%d]: obj=%02X pc=%04X addr=%04X(slot=%d) val=%04X lvl=%04X\n",
+              _op57, vm.obj, (uint16_t)(vm.pc - 2), addr, (addr - 0x3E4) / 2,
+              v2_vm_accumulator,
+              *(uint16_t*)(vm.shadow + 0x25AD));
+    }
     vm.ds_write(addr, v2_vm_accumulator);
 }
 
@@ -16374,6 +16392,19 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     // sub_11792: HUD update — orig calls sub_120FF + sub_12199 + loc_1205B + sub_11B0B.
     // Previously v2 only had sub_120FF (healthbar). Missing sub_12199 caused ds:0x3FC
     // to never sync with ds:0x3E4 after item pickup → ITEM-TRAP divergence at frame ~393.
+    {
+        // V2-11792-ENTRY: trap v2 sub_11792 entry condition
+        static int _v211792 = 0; _v211792++;
+        if (_v211792 <= 30 || _v211792 % 200 == 0)
+            fprintf(stderr,
+              "V2-11792-ENTRY[%d]: lvl=%04X 25CF=%02X enter=%d 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
+              _v211792, *(uint16_t*)(s + 0x25AD), s[0x25CF],
+              ((s[0x25CF] & 1) && *(uint16_t*)(s + 0x25AD) != 0x2C) ? 1 : 0,
+              *(uint16_t*)(s + 0x3FC + 8),
+              *(uint16_t*)(s + 0x3FC + 16),
+              *(uint16_t*)(s + 0x3E4 + 8),
+              *(uint16_t*)(s + 0x3E4 + 16));
+    }
     if ((s[0x25CF] & 1) && *(uint16_t*)(s + 0x25AD) != 0x2C) {
         // sub_120FF: healthbar state tracking + rendering (3 vikings)
         for (int vk = 0; vk < 3; vk++) {
@@ -16385,12 +16416,58 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             if (ax != prev) v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
         }
         // sub_12199 (eip 0x2199): item display sync. Loop slot 0..0x18 step 2:
-        //   if ds:[di+3E4] != ds:[di+3FC]: copy + redraw.
+        //   if ds:[di+3E4] != ds:[di+3FC]: copy + redraw + sub_120d1.
+        {
+            // V2-12199-ENTRY: log entry to v2 sub_12199 (per-frame mirror sync)
+            static int _v212199 = 0; _v212199++;
+            if (_v212199 <= 30 || _v212199 % 200 == 0)
+                fprintf(stderr,
+                  "V2-12199-ENTRY[%d]: lvl=%04X 25CF=%02X 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
+                  _v212199, *(uint16_t*)(s + 0x25AD), s[0x25CF],
+                  *(uint16_t*)(s + 0x3FC + 8),
+                  *(uint16_t*)(s + 0x3FC + 16),
+                  *(uint16_t*)(s + 0x3E4 + 8),
+                  *(uint16_t*)(s + 0x3E4 + 16));
+        }
         for (uint16_t di2 = 0; di2 < 0x18; di2 += 2) {
             uint16_t item = *(uint16_t*)(s + di2 + 0x3E4);
             if (item != *(uint16_t*)(s + di2 + 0x3FC)) {
+                {
+                    // V2-12199-SYNC: log when v2 sub_12199 syncs a slot
+                    static int _v2sync = 0; _v2sync++;
+                    if (_v2sync <= 50)
+                        fprintf(stderr,
+                          "V2-12199-SYNC[%d]: di=%04X(slot=%d) item=%04X prev_3FC=%04X\n",
+                          _v2sync, di2, di2/2, item,
+                          *(uint16_t*)(s + di2 + 0x3FC));
+                }
                 *(uint16_t*)(s + di2 + 0x3FC) = item;
                 v2_draw_hud_item(v2_current_ds_val, di2, item);
+                // sub_120d1 (eip 0x20D1): redraw 3 viking selectors AND unconditionally
+                // sync 0x41A=0x414, 0x41C=0x416, 0x41E=0x418. Called on every item change.
+                {
+                    // viking 1: word_288fa (0x41A) = word_288f4 (0x414)
+                    uint16_t v1 = *(uint16_t*)(s + 0x0414);
+                    *(uint16_t*)(s + 0x041A) = v1;
+                    v2_draw_hud_selector(v2_current_ds_val, v1 * 2);
+                    // viking 2: word_288fc (0x41C) = word_288f6 (0x416)
+                    uint16_t v2v = *(uint16_t*)(s + 0x0416);
+                    *(uint16_t*)(s + 0x041C) = v2v;
+                    v2_draw_hud_selector(v2_current_ds_val, (v2v + 4) * 2);
+                    // viking 3: word_288fe (0x41E) = word_288f8 (0x418)
+                    uint16_t v3 = *(uint16_t*)(s + 0x0418);
+                    *(uint16_t*)(s + 0x041E) = v3;
+                    v2_draw_hud_selector(v2_current_ds_val, (v3 + 8) * 2);
+                    // BIT-EXACT BUG REPLICATION: orig sub_120d1 leaves di clobbered
+                    // (= last "di = word_288f8 + 8 << 1" = (s[0x418]+8)*2). orig
+                    // sub_12199 loop's "ADD di,2" then continues from this wrong value,
+                    // skipping intermediate slots. We must replicate this to get
+                    // byte-identical 0x3FC mirror state vs orig real DS.
+                    // sub_118ad preserves di (PUSH/POP), so final di after sub_120d1 RETN
+                    // = (word_288f8 + 8) * 2.
+                    di2 = (uint16_t)((v3 + 8) * 2);
+                    // Loop's di2 += 2 will then be: di2 = (v3+8)*2 + 2 next iteration.
+                }
             }
         }
         // loc_1205B: HUD selector sync (orig sub_120D1 inline). Per viking:
