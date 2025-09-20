@@ -1858,17 +1858,31 @@ start:
 			   myDrawInfo->drawBuffer[j*320+i] = 1;*/
 	}
 	// 35
-	// V2: dump static EXE data segment (seg004, NOT current DS which is PSP at this point)
+	// V2: dump static EXE data segments. Run once at first frame, before any
+	// gameplay writes change m2c::m.
 	{
 		static bool dumped = false;
 		if (!dumped) {
 			dumped = true;
-			// seg004 = m2c::m + 0x19F00, but we use seg_offset(seg004) * 16 to compute address
+			// (1) seg004 (orig DS): 64KB starting at m+0x19F00 — used by various v2 readers.
 			uint8_t* seg004_ptr = (uint8_t*)raddr(seg_offset(seg004), 0);
 			FILE* f = fopen("ds_static.bin", "wb");
 			if (f) { fwrite(seg004_ptr, 1, 0x10000, f); fclose(f);
 			         printf("V2: dumped seg004 (0x%04X) to ds_static.bin, ds[0x945A]=%04X\n",
 			                seg_offset(seg004), *(uint16_t*)(seg004_ptr + 0x945A)); }
+			// (2) exe_static.bin: snapshot of m2c::m[0..0x29F00] right after the
+			// C++ Initializer in vikings.exe.cpp ran — i.e. the static data baked
+			// into the original DOS .EXE image (analogous to .text+.rdata+.data
+			// of a modern executable). Covers seg001 (text/menu @+0x9480 read by
+			// sub_12529) and the dialog strings region between seg001 and seg004.
+			// The V2_ONLY build loads this file at startup since it doesn't link
+			// the C++ Initializer.
+			uint8_t* m_ptr = (uint8_t*)&m2c::m;
+			FILE* f2 = fopen("exe_static.bin", "wb");
+			if (f2) { fwrite(m_ptr, 1, 0x29F00, f2); fclose(f2);
+			          printf("V2: dumped m2c::m[0..0x29F00] to exe_static.bin "
+			                 "(seg001 sample @0x9480: %02X %02X %02X %02X)\n",
+			                 m_ptr[0x9480], m_ptr[0x9481], m_ptr[0x9482], m_ptr[0x9483]); }
 		}
 	}
 cs=0x1a2;eip=0x000000; 	J(CALL(sub_12948,0));	// 36 call    sub_12948 ;~ 01A2:0000

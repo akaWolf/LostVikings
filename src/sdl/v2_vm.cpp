@@ -748,8 +748,10 @@ static void v2_sub_10130(uint8_t* s) {
     // Original: spin wait while word_3287C (ds:0xA39C) >= 1.
     // VGA retrace interrupt calls sub_1797b: DEC word_3287C + palette dispatch.
     //
-    // v2: call sub_1797b logic synchronously. No sleep needed in v2 thread
-    // (timing controlled by barrier sync with original's sub_10130 which sleeps).
+    // Default mode: barrier sync with original's sub_10130 (sleeps in m2c).
+    //   v2 self-DECs word_3287C after palette dispatch (no extra sleep).
+    // V2_ONLY mode: render_v2 thread DECs shadow[0xA39C] at ~66Hz.
+    //   v2 spin-waits with SDL_Delay until DEC happens → throttles to 60Hz.
     // ======================================================================
     while ((int16_t)*(uint16_t*)(s + 0xA39C) >= 1) {
         // sub_1797b: DEC word_3287C + palette dispatch (off_17974[word_303DE])
@@ -760,7 +762,7 @@ static void v2_sub_10130(uint8_t* s) {
             v2_sub_10ffc(s);       // off_17974[2] = sub_10ffc: palette animation
         }
         // pal_mode == 0: off_17974[0] = nullsub_1 (no-op)
-        *(uint16_t*)(s + 0xA39C) -= 1; // DEC word_3287C
+        *(uint16_t*)(s + 0xA39C) -= 1; // DEC word_3287C — v2 self-DECs
     }
 }
 
@@ -1692,7 +1694,7 @@ static void v2_sub_1DD9C(uint8_t* s) {
               uint16_t _fsoff = (uint16_t)(si_off * 2);
               uint16_t _sv = (_fsoff < V2_FS_SHADOW_SIZE - 1) ? *(uint16_t*)(v2_vm_shadow_fs + _fsoff) : 0xDEAD;
               uint16_t _rv = 0xDEAD;
-              if (v2_m2c_base) {
+              if (v2_m2c_base && v2_vm_real_ds_ptr) {
                   uint16_t _fsseg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
                   if (_fsseg) _rv = *(uint16_t*)(v2_m2c_base + (uint32_t)_fsseg * 16 + _fsoff);
               }
@@ -3080,9 +3082,20 @@ static uint16_t v2_sub_10d9f(uint16_t paragraphs) {
     if (v2_alloc_replay_idx < v2_alloc_record_count) {
         return v2_alloc_record[v2_alloc_replay_idx++];
     }
+#ifdef V2_ONLY
+    // V2_ONLY: orig didn't run, no recorded allocations. Synthesize sequential
+    // segments. v2_resolve_segment uses these as keys to map seg→shadow buffer
+    // (compares with shadow[0x2E5F], 0x2E69, etc). Just need NON-ZERO + UNIQUE.
+    static uint16_t v2_synth_seg = 0x1000;
+    uint16_t seg = v2_synth_seg;
+    v2_synth_seg += paragraphs;
+    fprintf(stderr, "V2: v2_sub_10d9f(%04X) → synth seg=%04X\n", paragraphs, seg);
+    return seg;
+#else
     // Fallback: no recorded value yet (shouldn't happen if original ran first)
     fprintf(stderr, "V2: v2_sub_10d9f(%04X) — no recorded alloc available!\n", paragraphs);
     return 0;
+#endif
 }
 
 static void v2_sub_12ab8(uint8_t* s) {
@@ -3855,7 +3868,7 @@ static void v2_sub_11080(uint8_t* s) {
         slot2e_trace("SF1-post-DE05");
         fs_cmp_115d2("SF1-post-DE05");
         // Debug: compare FS after first sub_1DE05 in init sub_115d2
-        if (new_level == 0x002B && v2_m2c_base) {
+        if (new_level == 0x002B && v2_m2c_base && v2_vm_real_ds_ptr) {
             uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + 0x2E69);
             if (fs_seg != 0) {
                 uint8_t* real_fs = v2_m2c_base + ((uint32_t)fs_seg << 4);
@@ -4362,11 +4375,19 @@ static bool v2_load_exe_ds() {
 void v2_vm_init_shadow_early(uint16_t ds_val) {
     if (!v2_m2c_base) return;
     uint8_t* ds = v2_m2c_base + ((uint32_t)ds_val << 4);
-    v2_vm_real_ds_ptr = ds;
     v2_current_ds_val = ds_val;
+#ifdef V2_ONLY
+    // V2_ONLY: orig m2c main loop disabled, real DS not updated per-frame.
+    // Setting v2_vm_real_ds_ptr=nullptr disables ALL verify/compare paths
+    // (PSNAP, PRE-VM-CMP, POSTVM-HASH, ITEM-TRAP, replay_verify, etc).
+    v2_vm_real_ds_ptr = nullptr;
+    printf("V2: init_shadow_early: V2_ONLY mode — real DS verify disabled\n");
+#else
+    v2_vm_real_ds_ptr = ds;
     // DS is NOT copied — loaded from ds_static.bin + v2_startup instead.
     // Only set real_ds_ptr for verification comparisons.
     printf("V2: init_shadow_early: real DS at 0x%04X (for verify only)\n", ds_val);
+#endif
     // (HW WP disabled — using ANIMDATA full compare instead.)
 }
 
@@ -4374,7 +4395,10 @@ void v2_vm_run_init(uint16_t ds_val) {
     if (!v2_shadow_initialized) return;
     v2_vm_init_table(); // ensure VM opcode table initialized before sub_115d2
     v2_current_ds_val = ds_val;
+#ifndef V2_ONLY
+    // Don't reset real_ds_ptr in V2_ONLY mode — keep nullptr to disable verify.
     v2_vm_real_ds_ptr = v2_m2c_base + ((uint32_t)ds_val << 4);
+#endif
     printf("V2: running v2_sub_11080 on shadow DS (level=%d)...\n", v2_current_level);
     printf("V2: shadow seg ptrs: ES=%04X TG=%04X AN=%04X GS=%04X FS=%04X CH=%04X\n",
            *(uint16_t*)(v2_vm_shadow_ds + 0x2E63), *(uint16_t*)(v2_vm_shadow_ds + 0x2E5F),
@@ -4411,10 +4435,18 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // Replay mode — not implemented in v2
             ax = *(uint16_t*)(shadow + 0x86DC);
         }
-        // Original: ax |= word_30BBE (input_keys). In m2c port, input_keys is a C++ variable
-        // updated by SDL, NOT ds:0x86DE. shadow[0x86DE] may have stale/VM-written data.
-        // Use ONLY v2_input_snapshot (= orig ax after OR input_keys, taken inside sub_12352).
+#ifdef V2_ONLY
+        // V2_ONLY: orig sub_12352 doesn't run, v2_input_snapshot stays stale.
+        // Read input directly from shadow's word_30bbe (set by v2's sub_12d72) +
+        // SDL keyboard state (input_keys, updated by render thread).
+        extern uint16_t input_keys;
+        ax |= *(uint16_t*)(shadow + 0x86DE);  // fake input from v2's sub_12d72
+        ax |= input_keys;                      // SDL keyboard
+#else
+        // Standard mode (orig still runs): use v2_input_snapshot taken at exact
+        // moment orig sub_12352 wrote ax. Avoids divergence with orig's ds:0x3B6.
         ax |= v2_input_snapshot;
+#endif
         { static int _inp = 0; _inp++; if (_inp <= 20)
             fprintf(stderr, "V2-INPUT[%d]: 86DE=%04X snapshot=%04X ax=%04X prev=%04X\n",
                     _inp, *(uint16_t*)(shadow + 0x86DE), v2_input_snapshot, ax,
@@ -7023,7 +7055,9 @@ static void v2_vm_frame_update(uint8_t* ds) {
     // (sub_11080 → sub_111b1 → sub_11204 → v2_read_chunk).
 
     memset(v2_vm_trace_count, 0, sizeof(v2_vm_trace_count));
+#ifndef V2_ONLY
     v2_vm_real_ds_ptr = ds;
+#endif
 }
 
 // Combined: init or update
@@ -16027,8 +16061,11 @@ void v2_phase_post_vm(uint16_t ds_val) {
     chk("PVM-post-postvm");
     v2_vm_verify_subsprites(ds_val);
     v2_vm_verify_fs(ds_val);
-    // Trace comparison: both orig and v2 VM have finished, compare opcode traces
+#ifndef V2_ONLY
+    // Trace comparison: both orig and v2 VM have finished, compare opcode traces.
+    // Disabled in V2_ONLY: orig doesn't run, orig_trace stays empty, would always mismatch.
     v2_vm_trace_compare();
+#endif
     v2_in_phase_post_vm = false;
 }
 
@@ -16465,8 +16502,16 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                     // byte-identical 0x3FC mirror state vs orig real DS.
                     // sub_118ad preserves di (PUSH/POP), so final di after sub_120d1 RETN
                     // = (word_288f8 + 8) * 2.
+                    // V2_ONLY: safety bound (s[0x418] init differs → clobber may
+                    // wrap and loop forever). Default mode keeps exact orig behavior.
+#ifdef V2_ONLY
+                    uint32_t clobber = (uint32_t)((v3 + 8) * 2);
+                    if (clobber > di2 && clobber < 0x18) di2 = (uint16_t)clobber;
+                    else di2 = 0x18;  // force exit
+#else
                     di2 = (uint16_t)((v3 + 8) * 2);
                     // Loop's di2 += 2 will then be: di2 = (v3+8)*2 + 2 next iteration.
+#endif
                 }
             }
         }

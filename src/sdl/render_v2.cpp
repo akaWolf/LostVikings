@@ -124,17 +124,55 @@ void render_thread_proc_v2(void* _state)
     myFormat_v2 = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
     printf("render_v2: Entering main loop...\n");
-    
+
     int loop_counter = 0;
     while (!need_quit)  // Используем флаг первого окна
     {
-      // НЕ вызываем SDL_PollEvent - события обрабатываются только в первом окне
+#ifdef V2_ONLY
+      // V2_ONLY: orig window hidden, no event handler there → handle events here.
+      extern uint16_t input_keys, input_keys_v2;
+      SDL_Event event;
+      while (SDL_PollEvent(&event) > 0) {
+          switch (event.type) {
+          case SDL_QUIT:
+              need_quit = true;
+              break;
+          case SDL_KEYDOWN:
+          case SDL_KEYUP: {
+              uint16_t key_val = 0;
+              switch (event.key.keysym.sym) {
+                case SDLK_LEFT:   key_val = 0x200; break;
+                case SDLK_RIGHT:  key_val = 0x100; break;
+                case SDLK_UP:     key_val = 0x800; break;
+                case SDLK_DOWN:   key_val = 0x400; break;
+                case SDLK_SPACE:
+                case SDLK_RETURN: key_val = 0x8000; break;
+                case SDLK_LCTRL:
+                case SDLK_RCTRL:  key_val = 0x20; break;
+                case SDLK_TAB:    key_val = 0x2000; break;
+                case SDLK_e:      key_val = 0x40; break;
+                case SDLK_s:      key_val = 0x80; break;
+                case SDLK_d:      key_val = 0x4000; break;
+                case SDLK_f:      key_val = 0x8000; break;
+                case SDLK_ESCAPE: key_val = 0x1000; break;
+              }
+              if (event.type == SDL_KEYDOWN) {
+                  input_keys |= key_val; input_keys_v2 |= key_val;
+              } else {
+                  input_keys &= ~key_val; input_keys_v2 &= ~key_val;
+              }
+              break;
+          }
+          }
+      }
+#endif
+      // НЕ вызываем SDL_PollEvent (default mode) - события обрабатываются только в первом окне
       // Это избегает конфликтов с обработкой событий
-      
+
       render_callback_v2(_state);  // snapshot drawBuffer→stableBuffer + sprite replay
       updateDraw_v2();             // читает только stableBuffer
       SDL_Delay(15);
-      
+
       loop_counter++;
     }
   }

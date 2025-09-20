@@ -111,8 +111,15 @@ void updateDraw()
 	  printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );
     }
 	printf("render: Creating window...\n");
+#ifdef V2_ONLY
+	// V2_ONLY: hide orig window — orig m2c renders to myDrawInfo->drawBuffer for v2's
+	// drawBuffer mirror but orig window itself is unused.
+	uint32_t _window_flags = SDL_WINDOW_HIDDEN;
+#else
+	uint32_t _window_flags = SDL_WINDOW_SHOWN;
+#endif
 	// Позиционируем в левый верхний угол
-	myWindow = SDL_CreateWindow( "FFFF", 0, 0, SCREEN_WIDTH * SCREEN_SCALE, SCREEN_HEIGHT * SCREEN_SCALE, SDL_WINDOW_SHOWN );
+	myWindow = SDL_CreateWindow( "FFFF", 0, 0, SCREEN_WIDTH * SCREEN_SCALE, SCREEN_HEIGHT * SCREEN_SCALE, _window_flags );
 		if( myWindow == NULL )
 		{
 			printf( "Window could not be created! SDL_Error: %s\n", SDL_GetError() );
@@ -204,7 +211,9 @@ void updateDraw()
 			   // render thread at ~60Hz. Without this, game thread sub_10130 sleeps
 			   // 16ms each call (3+ per frame) → severe slowdown.
 			   { extern std::atomic<int64_t> v2_dbg_render_callback_calls; v2_dbg_render_callback_calls++; }
+#ifndef V2_ONLY
 			   render_callback(_state);
+#endif
 			   SDL_Delay(15);
 		   }
 		}

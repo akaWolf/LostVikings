@@ -89,6 +89,18 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
     // Tile graphics segment
     uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    // V2-DRAWT-DBG: log entry state every 60 frames
+    {
+        static int _dt_dbg = 0; _dt_dbg++;
+        if (_dt_dbg <= 5 || _dt_dbg % 200 == 0) {
+            fprintf(stderr,
+              "V2-DRAWT-DBG[%d]: ds=%04X fs_seg=%04X tgfx_seg=%04X 25CF=%02X 25AD=%04X 25C9=%04X\n",
+              _dt_dbg, ds_val, fs_seg, tgfx_seg,
+              ds_base[0x25CF],
+              *(uint16_t*)(ds_base + 0x25AD),
+              *(uint16_t*)(ds_base + 0x25C9));
+        }
+    }
 
     if (!fs_seg || !tgfx_seg) return;
 
