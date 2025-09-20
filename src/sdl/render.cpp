@@ -2,6 +2,7 @@
 #include <thread>
 #include <cassert>
 #include <cstdio>
+#include <atomic>
 
 const int SCREEN_SCALE = 4;
 const int SCREEN_WIDTH = 320;
@@ -199,13 +200,11 @@ void updateDraw()
 			   }
 			   //printf("VGA pan: %x %x\n", myDrawInfo->myOffset, myDrawInfo->myPixelOffset);
 			   updateDraw();
-			   //SDL_Delay(20);
-			   // render_callback(_state);
-			   // MOVED to game thread (sub_10130 in seg000.cpp) for deterministic timing.
-			   // Original: render_callback = sub_1797b (DEC word_3287C + palette dispatch).
-			   // When called from render_thread: nondeterministic timing vs barrier signals.
-			   // When called from game thread sub_10130: deterministic (always same point).
-			   //std::this_thread::sleep_for(std::chrono::milliseconds(15));
+			   // RESTORED from orig: render_callback (sub_1797b) DECs word_3287C from
+			   // render thread at ~60Hz. Without this, game thread sub_10130 sleeps
+			   // 16ms each call (3+ per frame) → severe slowdown.
+			   { extern std::atomic<int64_t> v2_dbg_render_callback_calls; v2_dbg_render_callback_calls++; }
+			   render_callback(_state);
 			   SDL_Delay(15);
 		   }
 		}

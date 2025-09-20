@@ -609,6 +609,32 @@ static void v2_do_render_and_swap(); // forward decl for init functions
 static bool v2_load_exe_ds(); // forward decl
 static void v2_sub_16775(uint8_t* s);
 static void v2_do_render();
+
+// Forward declarations for the universal phase snapshot infrastructure (defined
+// later in this file at line ~5990). v2_sub_115d2 calls v2_compare_phase_snap()
+// using transition-frame indices V2_PSNAP_T_SF1_VM_END..V2_PSNAP_T_SF4_END.
+enum V2PhaseSnapIdx {
+    V2_PSNAP_FRAME_BEGIN = 0,
+    V2_PSNAP_PRE_VM_END,
+    V2_PSNAP_VM_END,
+    V2_PSNAP_POST_VM_END,
+    V2_PSNAP_RENDER1_END,
+    V2_PSNAP_POST_FLIP1_END,
+    V2_PSNAP_RENDER2_END,
+    V2_PSNAP_POST_FLIP2_END,
+    V2_PSNAP_RENDER3_END,
+    V2_PSNAP_POST_FLIP3_END,
+    V2_PSNAP_T_SF1_VM_END,
+    V2_PSNAP_T_SF1_POSTVM_END,
+    V2_PSNAP_T_SF1_PF1_END,
+    V2_PSNAP_T_SF1_PF2_END,
+    V2_PSNAP_T_SF2_PF_END,
+    V2_PSNAP_T_SF3_PF_END,
+    V2_PSNAP_T_SF4_END,
+    V2_PSNAP_COUNT
+};
+void v2_record_orig_phase_snap(int phase_idx);
+void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name);
 static bool v2_frame_active = false; // true between frame_begin and frame_end, false when JMP sub_11080 skips rest
 static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val);
 static void v2_game_loop_post_vm(uint8_t* shadow);
@@ -1456,11 +1482,13 @@ static void v2_sub_1E0C7(uint8_t* s) {
             bp += 2;                                                  // ADD bp, 2
             cx--;                                                     // LOOP (implicit DEC cx)
         }
-        // If cx reached 0 → return (fall through loop)
+        // If cx reached 0 → return (LOOP fell through to locret_1E16C)
         if (cx == 0) return;
-        // Otherwise: ds:[bx]==0 → go back to outer scan (loc_1E0EA)
-        bx++;  // skip the zero byte, advance to next scan position
-        // cx was already decremented by the inner loop; continue outer scan
+        // Otherwise: ds:[bx]==0 → go back to outer scan (loc_1E0EA).
+        // Orig DOES NOT advance bx past the zero — it does `mov di, bx; repe scasb`
+        // which scans past zero bytes (di++ and cx-- per zero) until non-zero.
+        // Previous v2 had a spurious `bx++` here that mis-aligned cx by one each
+        // restart, causing ds:0x98DC throttle differential downstream.
     }
 }
 
@@ -3341,6 +3369,12 @@ static void v2_sub_11080(uint8_t* s) {
         fprintf(stderr, "V2-sub_11080[%d]: pre=%d post=%d rec=%d cur_25AD=%04X next_25C9=%04X\n",
             _sc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
             *(uint16_t*)(s + 0x25AD), *(uint16_t*)(s + 0x25C9)); }
+    // Invalidate cross-scenario snapshots: when sub_11080 runs (level transition),
+    // orig main loop is bypassed, so the orig_post_vm_entry snapshot from a previous
+    // frame's main loop becomes invalid for comparison against v2_sub_115d2 internal
+    // state. Without this, _postvm_diverge_trap(\"entry\") fires false-positive diffs
+    // (e.g. addr=0x14E4 cross-scenario). Re-enabled when next main-loop sub_1386b runs.
+    extern void v2_invalidate_postvm_snaps(); v2_invalidate_postvm_snaps();
     // Clear game state variables (20+ words)
     *(uint16_t*)(s + 0x032F) = 0; // word_2880F
     *(uint16_t*)(s + 0x0394) = 0; // word_28874
@@ -3776,6 +3810,9 @@ static void v2_sub_11080(uint8_t* s) {
                 *(uint16_t*)(s + 0x376) = 0;
             }
         }
+        // PSNAP compare: at this point v2 has finished SF1 main VM. Should match
+        // orig snap[T_SF1_VM_END] taken at orig sub_115d2 eip 0x15D5 (after sub_14207).
+        v2_compare_phase_snap(V2_PSNAP_T_SF1_VM_END, "v2_sub_115d2 SF1 post-VM");
         // sub_1386b..sub_13916: physics, collision, spawn
         v2_game_loop_post_vm(s);
         // sub_12fc6: sub-sprite position delta type 0
@@ -3805,8 +3842,13 @@ static void v2_sub_11080(uint8_t* s) {
             }
         }
         slot2e_trace("SF1-post-12fc6");
+        // PSNAP compare: v2 has finished SF1 post-VM (sub_1386b..sub_1064b + sub_12fc6).
+        // Should match orig snap[T_SF1_POSTVM_END] at eip 0x15E7.
+        v2_compare_phase_snap(V2_PSNAP_T_SF1_POSTVM_END, "v2_sub_115d2 SF1 post-postvm");
         // sub_16775: PAGE FLIP 1 (eip 0x15EA — one call only)
         v2_sub_16775(s);
+        // PSNAP compare: after PF1.
+        v2_compare_phase_snap(V2_PSNAP_T_SF1_PF1_END, "v2_sub_115d2 SF1 post-PF1");
         v2_sub_10130(s); // sub_10130: VGA vsync wait
         // CALLF sub_1DE05
         v2_sub_1DE05(s);
@@ -3846,6 +3888,8 @@ static void v2_sub_11080(uint8_t* s) {
         // ====== SUB-FRAME 2: collision pass 2 + scroll clamp 1 ======
         // sub_16775: PAGE FLIP 2
         v2_sub_16775(s);
+        // PSNAP compare: after PF2 (eip 0x1608).
+        v2_compare_phase_snap(V2_PSNAP_T_SF1_PF2_END, "v2_sub_115d2 SF1 post-PF2");
         // sub_15530: collision detection pass 2 (ds:0x390 = 0xFFFF)
         *(uint16_t*)(s + 0x390) = 0xFFFF;
         {
@@ -3954,6 +3998,8 @@ static void v2_sub_11080(uint8_t* s) {
             // ====== SUB-FRAME 3: scroll clamp 2 + viewport bounds + HUD ======
             // sub_16775: PAGE FLIP 3
             v2_sub_16775(s);
+            // PSNAP compare: after PF3 (eip 0x162F = end of SF2).
+            v2_compare_phase_snap(V2_PSNAP_T_SF2_PF_END, "v2_sub_115d2 SF2 post-PF");
             // sub_10753: scroll clamp 2 — lookup at ds:[si*2 + 0x2B80]
             do_scroll(0x2B80); // sub_10753
 
@@ -4073,6 +4119,8 @@ static void v2_sub_11080(uint8_t* s) {
             v2_sub_1C8F1(s, 0xFFFE);
             // sub_16775: PAGE FLIP 4
             v2_sub_16775(s);
+            // PSNAP compare: after PF4 (eip 0x1659 = end of SF3).
+            v2_compare_phase_snap(V2_PSNAP_T_SF3_PF_END, "v2_sub_115d2 SF3 post-PF");
         }
         // After sub_115d2: 4th post-render block (eip 0x165C..0x1677)
         // CALLF sub_1DE05 (4th)
@@ -4090,6 +4138,8 @@ static void v2_sub_11080(uint8_t* s) {
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_sub_1C8F1(s, 0xFFFE);
         v2_sub_16775(s); // PAGE FLIP 5 (tail jmp sub_16775 at eip 0x1677)
+        // PSNAP compare: SF4 final flush (eip 0x1677).
+        v2_compare_phase_snap(V2_PSNAP_T_SF4_END, "v2_sub_115d2 SF4 final");
     }
     // Verify sub_115d2 output: compare v2 shadow with orig snapshot
     if (v2_115d2_snapshot_valid) {
@@ -4537,7 +4587,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         // loc_104C3: blocking password screen loop
         uint16_t exit_ax = 0;
         bool pw_exit = false;
-        int pw_safety = 10000;
+        int pw_safety = 1; // HYPOTHESIS TEST: was 10000. If freeze gone → this loop is the cause.
+        fprintf(stderr, "V2-PWLOOP-ENTRY: triggered (was 10000-iter blocking)\n");
         while (!pw_exit && pw_safety-- > 0) {
             *(uint16_t*)(shadow + 0xA39C) = 1;                          // word_3287C
             v2_sub_10130(shadow);
@@ -4659,7 +4710,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // For v2: blocking loop with SDL input + render passes.
             *(uint16_t*)(shadow + 0x0334) &= 0xFFFB;              // AND word_28814, 0FFFBh
             // loc_10169: blocking viking switch loop
-            while (true) {
+            // HYPOTHESIS TEST: cap to 1 iteration to verify if this is causing freeze.
+            int vsw_safety = 1;
+            fprintf(stderr, "V2-VSWITCHLOOP-ENTRY: triggered (was unbounded blocking)\n");
+            while (vsw_safety-- > 0) {
                 // sub_12352: input processing (inside viking switch loop)
                 {
                     extern uint16_t v2_input_snapshot;
@@ -4921,7 +4975,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         // and orig blocks after v2 returns. Both exit when pause button pressed.
         {
             bool pause_exit = false;
-            int max_iters = 10000; // safety
+            int max_iters = 1; // HYPOTHESIS TEST: was 10000. If freeze gone → this loop is the cause.
+            fprintf(stderr, "V2-PAUSELOOP-ENTRY: triggered (was 10000-iter blocking)\n");
             while (!pause_exit && max_iters-- > 0) {
                 // sub_12352: input
                 {
@@ -5981,6 +6036,231 @@ void v2_record_orig_post_vm_entry() {
     memcpy(v2_orig_post_vm_entry_ds, v2_vm_real_ds_ptr, 0x10000);
     v2_orig_post_vm_entry_valid = true;
 }
+// Invalidate post-VM snapshots taken during orig main loop. Called from v2_sub_11080
+// (level transition) so the entry/sub-VM traps don't fire false positives from
+// previous frame's main loop snapshot vs v2's sub_115d2 internal state.
+void v2_invalidate_postvm_snaps() {
+    v2_orig_post_vm_entry_valid = false;
+    for (int i = 0; i < 5; i++) v2_orig_post_vm_ds_valid[i] = false;
+}
+
+// ============================================================================
+// Universal phase snapshot infrastructure (extended verify).
+// Captures orig DS at well-defined phase boundaries (FRAME_BEGIN, PRE_VM_END,
+// VM_END, POST_VM_END, RENDER1/2/3_END, POST_FLIP1/2/3_END). v2 compares its
+// shadow against the corresponding snapshot at its phase entry. On first
+// divergence in any watched address, dumps phase name + diff list + main VM
+// trace + collision ring → bisects exactly which phase introduced drift.
+// ============================================================================
+// V2PhaseSnapIdx enum forward-declared at top of file (line ~611).
+static const char* v2_psnap_names[V2_PSNAP_COUNT] = {
+    "FRAME_BEGIN", "PRE_VM_END", "VM_END", "POST_VM_END",
+    "RENDER1_END", "POST_FLIP1_END", "RENDER2_END", "POST_FLIP2_END",
+    "RENDER3_END", "POST_FLIP3_END",
+    "T_SF1_VM_END", "T_SF1_POSTVM_END", "T_SF1_PF1_END", "T_SF1_PF2_END",
+    "T_SF2_PF_END", "T_SF3_PF_END", "T_SF4_END"
+};
+static uint8_t v2_psnap_ds[V2_PSNAP_COUNT][0x10000];
+static bool    v2_psnap_valid[V2_PSNAP_COUNT] = {0};
+static int     v2_psnap_frame[V2_PSNAP_COUNT] = {0};
+
+// Watch list: every word/byte we want monitored for obj 0 Y drift + sub-sprite
+// allocation pool selector + collision scratch + viewport. Sized for "wide net":
+// catches drift in obj 0 fields, vp_y, working scratches, sub-sprite pool key.
+static const uint16_t v2_psnap_watch[] = {
+    0x0032, 0x0034, 0x0036, 0x0038, 0x003A,   // scratch ds:0x32..3A
+    0x0042,                                     // current obj index
+    0x0044, 0x0046,                             // viewport X, Y
+    0x006C, 0x006E,                             // working pos (X, Y)
+    0x0078, 0x007A, 0x007C, 0x0080,             // anim PC tracking + sub-sprite range
+    0x008A,                                     // accumulator
+    0x0334, 0x032E, 0x032F,                     // game state flags
+    0x0356, 0x0358,                             // bit flags
+    0x0372, 0x0374, 0x0376, 0x0378,             // table_end, sub-sprite pool, prio counter
+    0x038C, 0x038E, 0x0390,                     // collision mask/counter/state
+    0x039A, 0x039C, 0x039E, 0x03A0,             // shake X amp/dir, Y amp/dir
+    0x03A2, 0x03A4,                             // shake counters
+    // obj 0 specific Y-fields:
+    0x13CD,  // Y_prev
+    0x14E5,  // Y_start bound (anti-aliased word at 14E5)
+    0x150D,  // Y_end bound
+    0x1535,  // X_start
+    0x155D,  // X_end
+    0x173D,  // parent X
+    0x1765,  // parent Y
+    0x1855,  // sprite base
+    0x1945,  // X velocity
+    0x196D,  // Y velocity
+    0x141D,  // collision flag
+    0x13F5,  // collision flag bits
+    0x114D,  // mode
+    0x1585,  // type flags
+    0x1A85, 0x1AAD, 0x1AD5,  // sub-sprite range start/end/count
+    // === Tier 1: missing obj 0 fields (physics/anim) ===
+    0x14BD,  // half_width
+    0x1495,  // half_height
+    0x16C5,  // Y_top
+    0x16ED,  // health
+    0x169D,  // anim flags (sub_13e52 init source)
+    0x18AD,  // animation pc (current bytecode position)
+    0x18D5,  // animation seg
+    0x132D,  // collision-VM PC
+    0x1355,  // collision-VM seg / active flag
+    0x12AD,  // code segment
+    0x19BD,  // X velocity accumulator
+    0x19E5,  // Y velocity accumulator
+    0x1715,  // sub-sprite frame counter
+    0x179D,  // anim chunk index
+    0x178D,  // anim variation
+    0x17B5,  // anim variation 2
+    0x1995,  // sub-object pointer
+    0x1AFD,  // sub-sprite anim ptr
+    0x12ED,  // template pointer
+    0x1235,  // anim seg ref
+    0x125D,  // anim chunk ref
+    0x1285,  // alt anim ptr
+    0x1445,  // collision misc 1
+    0x146D,  // collision misc 2
+    0x15AD,  // portrait
+    0x15D5,  // portrait alt
+    0x15FD,  // portrait state
+    0x1625,  // sound id
+    0x142D,  // damage tracker
+    0x143D,  // i-frame counter
+    0x1805,  // owner pointer
+    0x182D,  // owner alt
+    0x13A5,  // X_prev (paired with 0x13CD Y_prev)
+    0x141D,  // collision flag (already have for obj 0, also need for sub-sprites)
+    // === Tier 1: vikings 2 + 4 (di=2, di=4) — all key Y/X/anim fields ===
+    // viking 2 (di=2)
+    0x1767, 0x14E7, 0x150F, 0x1537, 0x155F, 0x173F, 0x1857, 0x1947, 0x196F,
+    0x141F, 0x13F7, 0x114F, 0x1587, 0x1A87, 0x1AAF, 0x1AD7, 0x14BF, 0x1497,
+    0x16C7, 0x16EF, 0x169F, 0x18AF, 0x18D7, 0x132F, 0x1357, 0x12AF,
+    0x19BF, 0x19E7, 0x1717, 0x179F, 0x178F, 0x17B7, 0x1997, 0x1AFF,
+    0x12EF, 0x1237, 0x125F, 0x1287, 0x1447, 0x146F, 0x15AF, 0x15D7,
+    0x15FF, 0x1627, 0x142F, 0x143F, 0x1807, 0x182F, 0x13A7,
+    0x13CF, // Y_prev viking 2
+    // viking 4 (di=4)
+    0x1769, 0x14E9, 0x1511, 0x1539, 0x1561, 0x1741, 0x1859, 0x1949, 0x1971,
+    0x1421, 0x13F9, 0x1151, 0x1589, 0x1A89, 0x1AB1, 0x1AD9, 0x14C1, 0x1499,
+    0x16C9, 0x16F1, 0x16A1, 0x18B1, 0x18D9, 0x1331, 0x1359, 0x12B1,
+    0x19C1, 0x19E9, 0x1719, 0x17A1, 0x1791, 0x17B9, 0x1999, 0x1B01,
+    0x12F1, 0x1239, 0x1261, 0x1289, 0x1449, 0x1471, 0x15B1, 0x15D9,
+    0x1601, 0x1629, 0x1431, 0x1441, 0x1809, 0x1831, 0x13A9,
+    0x13D1, // Y_prev viking 4
+    // === Tier 1: level/page/HUD state ===
+    0x25AD, 0x25AF, 0x25C9, 0x25CF, 0x25A4, 0x25A6, 0x25B7,    // level + dimensions
+    0x92EE, 0x92EF, 0x92F1, 0x92F7, 0x92F9, 0x92FB,            // page state + saved scroll
+    0x257B, 0x257D, 0x257F, 0x2581,                            // saved/current viewport
+    // 0xA39C (word_3287C, vsync counter) — EXCLUDED from watch.
+    // Set to 1 by sub_16775 (page flip), DEC'd by VBL render callback (sub_1797b)
+    // running on a separate timer thread. orig real DS reflects live VBL timing
+    // (race-driven), v2 shadow does not — divergence is intrinsic timing artifact,
+    // not a game-state bug. PSNAP would otherwise flood every phase with diff=-1.
+    // === Tier 2: gravity/scroll/shake ===
+    0x3D8, 0x3DA, 0x3DC, 0x3DE,                                // scroll direction flags
+    0x3CC, 0x3CE, 0x3D0, 0x3D2,                                // gravity counters
+    0x342, 0x343, 0x344, 0x345, 0x346, 0x347, 0x348,           // palette shade RGB+flag
+    0x394, 0x396,                                              // scroll lock flags
+    0x3B6, 0x3B8, 0x3BA,                                       // pre-VM scratch
+    0x3C2, 0x3CC,                                              // viking active state, gravity
+    0x34E, 0x350,                                              // scroll offset latch
+    // === Tier 2: UI/HUD/sound ===
+    0x956B,                                                     // glyph dirty flag
+    0x9568, 0x9569, 0x956A,                                     // global force flags
+    0x98DC,                                                     // UI throttle
+    0x86DC, 0x86DE,                                             // input keys snapshot
+    0x423, 0x425, 0x427, 0x429, 0x42B, 0x42D, 0x42F,           // viking item slots
+    0x431, 0x433, 0x435, 0x437, 0x439, 0x43B, 0x43D,           // viking HUD healthbar prev
+    0x414, 0x416, 0x418, 0x41A, 0x41C, 0x41E,                  // selector slot tracking
+    // === Tier 3: main objects 0x06..0x2E (parent Y, X, flags) ===
+    // parent Y (di + 0x1765) for slots 0x06..0x2E
+    0x176B, 0x176D, 0x176F, 0x1771, 0x1773, 0x1775, 0x1777, 0x1779, 0x177B,
+    0x177D, 0x177F, 0x1781, 0x1783, 0x1785, 0x1787, 0x1789, 0x178B, 0x178D,
+    0x178F, 0x1791, 0x1793,
+    // parent X (di + 0x173D) for slots 0x06..0x2E
+    0x1743, 0x1745, 0x1747, 0x1749, 0x174B, 0x174D, 0x174F, 0x1751, 0x1753,
+    0x1755, 0x1757, 0x1759, 0x175B, 0x175D, 0x175F, 0x1761, 0x1763,
+    // === Sub-sprite Y values for slots 0x30..0x4A ===
+    // (Y at di + 0x74D, diverged in TRANSITION verify at 0x77D-0x789, 0x795/0x797)
+    0x077D, 0x077F, 0x0781, 0x0783, 0x0785, 0x0787, 0x0789,  // slots 0x30..0x3C
+    0x078B, 0x078D, 0x078F, 0x0791, 0x0793, 0x0795, 0x0797,  // slots 0x3E..0x4A
+    // Sub-sprite X (di + 0x64D)
+    0x067D, 0x067F, 0x0681, 0x0683, 0x0685, 0x0687, 0x0689,
+    0x068B, 0x068D, 0x068F, 0x0691, 0x0693, 0x0695, 0x0697,
+    // Sub-sprite flags (di + 0x44D)
+    0x047D, 0x047F, 0x0481, 0x0483, 0x0485, 0x0487, 0x0489,
+    0x048B, 0x048D, 0x048F, 0x0491, 0x0493, 0x0495, 0x0497,
+    // Sub-sprite mode (di + 0x114D)
+    0x117D, 0x117F, 0x1181, 0x1183, 0x1185, 0x1187, 0x1189,
+    0x118B, 0x118D, 0x118F, 0x1191, 0x1193, 0x1195, 0x1197,
+    // Sub-sprite Y_start (di + 0x14E5)
+    0x1515, 0x1517, 0x1519, 0x151B, 0x151D, 0x151F, 0x1521,
+    0x1523, 0x1525, 0x1527, 0x1529, 0x152B, 0x152D, 0x152F,
+    // Sub-sprite Y_end (di + 0x150D)
+    0x153D, 0x153F, 0x1541, 0x1543, 0x1545, 0x1547, 0x1549,
+    0x154B, 0x154D, 0x154F, 0x1551, 0x1553, 0x1555, 0x1557,
+    // Sub-sprite type/half_W (di + 0x0C4D)
+    0x0C7D, 0x0C7F, 0x0C81, 0x0C83, 0x0C85, 0x0C87, 0x0C89,
+    0x0C8B, 0x0C8D, 0x0C8F, 0x0C91, 0x0C93, 0x0C95, 0x0C97,
+};
+static const int v2_psnap_watch_count = (int)(sizeof(v2_psnap_watch)/sizeof(v2_psnap_watch[0]));
+
+extern int v2_orig_post_vm_frame; // already declared
+
+// Called by orig at each phase boundary (from seg000 hooks).
+void v2_record_orig_phase_snap(int phase_idx) {
+    if (phase_idx < 0 || phase_idx >= V2_PSNAP_COUNT) return;
+    if (!v2_vm_real_ds_ptr) return;
+    static bool _first[V2_PSNAP_COUNT] = {0};
+    if (!_first[phase_idx]) {
+        _first[phase_idx] = true;
+        fprintf(stderr, "V2-PSNAP-RECORD-FIRST[%d %s]: recorded f=%d\n",
+            phase_idx, v2_psnap_names[phase_idx], v2_orig_post_vm_frame);
+    }
+    memcpy(v2_psnap_ds[phase_idx], v2_vm_real_ds_ptr, 0x10000);
+    v2_psnap_valid[phase_idx] = true;
+    v2_psnap_frame[phase_idx] = v2_orig_post_vm_frame;
+}
+
+// Compare v2 shadow against snapshot for previous phase. Dumps first divergence
+// in watched addresses → tells you which phase introduced the drift.
+// Called from v2 phase entry. `prev_phase_idx` = the phase whose end snapshot
+// we expect v2 shadow to match BEFORE this phase modifies anything.
+void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name) {
+    if (prev_phase_idx < 0 || prev_phase_idx >= V2_PSNAP_COUNT) return;
+    static bool _first_call[V2_PSNAP_COUNT] = {0};
+    if (!_first_call[prev_phase_idx]) {
+        _first_call[prev_phase_idx] = true;
+        fprintf(stderr, "V2-PSNAP-COMPARE-FIRST[at %s, prev=%s, valid=%d]: f=%d\n",
+            my_phase_name, v2_psnap_names[prev_phase_idx],
+            v2_psnap_valid[prev_phase_idx] ? 1 : 0, v2_orig_post_vm_frame);
+    }
+    if (!v2_psnap_valid[prev_phase_idx]) return;
+    if (!v2_vm_shadow_ds) return;
+    // Per-(phase, address) one-shot to avoid log flooding.
+    static bool _found[V2_PSNAP_COUNT][512] = {0};
+    const uint8_t* snap = v2_psnap_ds[prev_phase_idx];
+    uint8_t* shadow = v2_vm_shadow_ds;
+    int wn = (v2_psnap_watch_count > 512) ? 512 : v2_psnap_watch_count;
+    bool first = true;
+    for (int wi = 0; wi < wn; wi++) {
+        if (_found[prev_phase_idx][wi]) continue;
+        uint16_t addr = v2_psnap_watch[wi];
+        uint16_t snap_v = *(uint16_t*)(snap + addr);
+        uint16_t shadow_v = *(uint16_t*)(shadow + addr);
+        if (snap_v != shadow_v) {
+            _found[prev_phase_idx][wi] = true;
+            if (first) {
+                fprintf(stderr, "V2-PSNAP-DIVERGE[after %s, at %s entry, f=%d]:\n",
+                    v2_psnap_names[prev_phase_idx], my_phase_name, v2_psnap_frame[prev_phase_idx]);
+                first = false;
+            }
+            fprintf(stderr, "  addr=0x%04X orig_snap=%04X shadow=%04X (diff=%+d)\n",
+                addr, snap_v, shadow_v, (int16_t)(shadow_v - snap_v));
+        }
+    }
+}
 static bool v2_ds_hash_skip(uint32_t i); // forward
 // Counters incremented at v2 phase entries to disambiguate iter timing.
 int v2_dbg_pre_vm_iter = 0;
@@ -6811,6 +7091,27 @@ struct V2VM {
                 static int _tw = 0; if (_tw < 5) { _tw++;
                 printf("V2-VM-WRITE-3CC: obj=%04X val=%04X (was %04X)\n",
                     obj, val, *(uint16_t*)(shadow + addr)); }
+            }
+            // V2-ERIK-WR: trap writes to Erik vel_X_field (0x164D), vel_Y_field (0x1675),
+            // flags (0x1585), anim_id (0x16ED) on level 002B. Catches ALL ds_write paths
+            // (op_56, op_5A, op_60, op_62, op_67, sub_135cf, sub_1386b, etc).
+            if (*(uint16_t*)(shadow + 0x25AD) == 0x002B &&
+                (addr == 0x164D || addr == 0x1675 || addr == 0x1585 || addr == 0x16ED ||
+                 addr == 0x1945 || addr == 0x196D) &&
+                val != *(uint16_t*)(shadow + addr)) {
+                static int _ew = 0; _ew++;
+                if (_ew <= 300) {
+                    const char* fname =
+                        addr == 0x164D ? "vel_X_field" :
+                        addr == 0x1675 ? "vel_Y_field" :
+                        addr == 0x1585 ? "Erik_flags" :
+                        addr == 0x16ED ? "Erik_anim_id" :
+                        addr == 0x1945 ? "vel_X_acc" :
+                        addr == 0x196D ? "vel_Y_acc" : "?";
+                    fprintf(stderr,
+                      "V2-ERIK-WR[%d]: addr=%04X(%s) old=%04X new=%04X writer_obj=%02X pc=%04X\n",
+                      _ew, addr, fname, *(uint16_t*)(shadow + addr), val, obj, pc);
+                }
             }
             *(uint16_t*)(shadow + addr) = val;
         }
@@ -10988,6 +11289,43 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
         uint16_t bx_before = anim_bx;
         uint8_t cmd = vm.es[anim_bx++];
         uint16_t handler = *(uint16_t*)(vm.shadow +0x86E6 + cmd * 2);
+        // PER-OPCODE TRACE for ALL objects on level 0x002B (looking for cutscene
+        // controller — object that writes other obj's anim_id at 0x16ED).
+        // Shows pre-state; companion trap below logs writes to *any* obj's 0x16ED.
+        if (*(uint16_t*)(vm.shadow + 0x25AD) == 0x002B) {
+            static int _v2_op_trace = 0;
+            if (++_v2_op_trace <= 1500) {
+                extern uint16_t v2_input_snapshot;
+                fprintf(stderr,
+                  "V2-OP[%d] obj=%02X: bx=%04X cmd=%02X hdlr=%04X anim=%04X PC=%04X "
+                  "acc=%04X 32F=%04X 86DE=%04X 3B6=%04X 3B8=%04X "
+                  "X=%04X Y=%04X\n",
+                  _v2_op_trace, vm.obj, bx_before, cmd, handler,
+                  vm.ds_read(vm.obj + 0x16ED),  // this obj's anim ID
+                  vm.ds_read(vm.obj + 0x132D),  // PC
+                  vm.ds_read(0x8A),             // accumulator
+                  vm.ds_read(0x32F),
+                  vm.ds_read(0x86DE),           // input keys
+                  vm.ds_read(0x3B6),            // current input
+                  vm.ds_read(0x3B8),            // edge input
+                  vm.ds_read(vm.obj + 0x173D),  // X
+                  vm.ds_read(vm.obj + 0x1765)); // Y
+            }
+            // CUTSCENE CONTROLLER TRAP: snapshot all 16ED before opcode, compare after
+            uint16_t pre_16ED[10];
+            for (int i = 0; i < 10; i++)
+                pre_16ED[i] = *(uint16_t*)(vm.shadow + (i * 2) + 0x16ED);
+            // (Run opcode below in normal flow, then compare via post-trap.)
+            // Stash for post-check via static so post-block can find it:
+            extern uint16_t v2_op_pre_16ED[10];
+            extern uint16_t v2_op_who;
+            extern uint16_t v2_op_cmd;
+            extern uint16_t v2_op_bx;
+            for (int i = 0; i < 10; i++) v2_op_pre_16ED[i] = pre_16ED[i];
+            v2_op_who = vm.obj;
+            v2_op_cmd = cmd;
+            v2_op_bx = bx_before;
+        }
 
         // Debug: catch invalid anim commands
         if (cmd > 0x1A) {
@@ -11019,7 +11357,29 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
             }
         }
 
-        if (!v2_vm_exec_anim_cmd(vm, handler, anim_bx, cmd)) {
+        bool _ok = v2_vm_exec_anim_cmd(vm, handler, anim_bx, cmd);
+
+        // POST-OPCODE TRAP: detect any 0x16ED writes (anim_id changes for ANY obj).
+        // This finds the cutscene controller — the obj whose VM modifies others' anim.
+        if (*(uint16_t*)(vm.shadow + 0x25AD) == 0x002B) {
+            extern uint16_t v2_op_pre_16ED[10];
+            extern uint16_t v2_op_who, v2_op_cmd, v2_op_bx;
+            for (int i = 0; i < 10; i++) {
+                uint16_t now = *(uint16_t*)(vm.shadow + (i * 2) + 0x16ED);
+                if (now != v2_op_pre_16ED[i]) {
+                    static int _aid_trace = 0;
+                    if (++_aid_trace <= 100) {
+                        fprintf(stderr,
+                          "V2-ANIM-WR[%d]: writer_obj=%02X cmd=%02X bx=%04X "
+                          "→ target_obj=%02X 0x16ED: %04X → %04X\n",
+                          _aid_trace, v2_op_who, v2_op_cmd, v2_op_bx,
+                          i * 2, v2_op_pre_16ED[i], now);
+                    }
+                }
+            }
+        }
+
+        if (!_ok) {
             // Record trace entry
             AnimCmdTrace& t = v2_anim_trace[v2_anim_trace_idx & 15];
             t.cmd = cmd; t.handler = handler; t.bx_before = bx_before; t.bx_after = anim_bx;
@@ -11033,6 +11393,12 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
         v2_anim_trace_idx++;
     }
 }
+
+// Globals for cutscene controller trap (defined here, declared extern above).
+uint16_t v2_op_pre_16ED[10] = {0};
+uint16_t v2_op_who = 0;
+uint16_t v2_op_cmd = 0;
+uint16_t v2_op_bx = 0;
 
 // Execute a single anim cmd. Returns true = continue (next cmd), false = exit (end/delay).
 static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd) {
@@ -11063,11 +11429,15 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             return true;
 
         case 0x31A4: { // [8] sub_131a4: Set sub-sprite X absolute — 2 bytes PER sub-sprite (LOOPS!)
+            // Orig sub_131a4 (eip 0x31A4, body at loc_131B5..loc_131DA): do-while pattern.
+            // Body executes UNCONDITIONALLY once, then `add si, 2; cmp si, ds:80h; jl loop`.
+            // If ds:0x7C == ds:0x80 (zero range), orig still runs body once with garbage data,
+            // exits with si = ds:0x7C + 2. v2 must match exactly — off-by-2 in residual writes.
             uint16_t si = vm.ds_read(0x7C);
             uint16_t di = vm.global_r(0x42);
             uint16_t dx_base = vm.ds_read(di + 0x173D);
             uint16_t end_si = vm.ds_read(0x80);
-            for (; (int16_t)si < (int16_t)end_si; si += 2) {
+            do {
                 int16_t off = *(int16_t*)(vm.es + anim_bx); anim_bx += 2;
                 uint16_t x = (uint16_t)(dx_base + off);
                 vm.ds_write(si + 0x64D, x);
@@ -11077,7 +11447,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                     vm.ds_write(si + 0x44D, vm.ds_read(si + 0x44D) | 0x1000);
                 }
                 vm.ds_write(si + 0x114D, 0x202);
-            }
+                si += 2;
+            } while ((int16_t)si < (int16_t)end_si);
             // After loop: hflip check → JMP loc_136FC if flag 0x40 set
             di = vm.global_r(0x42);
             if (vm.ds_read(di + 0x1585) & 0x40) {
@@ -11097,11 +11468,16 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
         }
 
         case 0x323D: { // [10] sub_1323d: Set sub-sprite Y absolute — 2 bytes PER sub-sprite (LOOPS!)
+            // Orig sub_1323d (eip 0x323D, body at loc_13249..loc_1326b): do-while pattern.
+            // Body executes UNCONDITIONALLY once, then `add si, 2; cmp si, ds:80h; jl loop`.
+            // If ds:0x7C == ds:0x80 (zero range), orig still runs body once with garbage data,
+            // exits with si = ds:0x7C + 2. The previous v2 used `for (...)` which skips body
+            // entirely on zero range — caused off-by-2 residual at sub-sprite Y (0x77D-0x789).
             uint16_t si = vm.ds_read(0x7C);
             uint16_t di = vm.global_r(0x42);
             uint16_t dx_base = vm.ds_read(di + 0x1765);
             uint16_t end_si = vm.ds_read(0x80);
-            for (; (int16_t)si < (int16_t)end_si; si += 2) {
+            do {
                 int16_t off = *(int16_t*)(vm.es + anim_bx); anim_bx += 2;
                 uint16_t y = (uint16_t)(dx_base + off);
                 vm.ds_write(si + 0x74D, y);
@@ -11111,7 +11487,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                     vm.ds_write(si + 0x44D, vm.ds_read(si + 0x44D) | 0x800);
                 }
                 vm.ds_write(si + 0x114D, 0x202);
-            }
+                si += 2;
+            } while ((int16_t)si < (int16_t)end_si);
             // After loop: vflip check using si (loop exit value, NOT ds:42h!)
             // Original: TEST [si+1585h], 80h; JZ ret; JMP loc_137B8
             // si at this point = end_si (post-loop). loc_137B8 uses si as object.
@@ -11134,6 +11511,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
         case 0x3158: { // [7] sub_13158: X signed offset — 1 byte.
             // Masked: loop sub-sprites, ADD offset to each [si+64D].
             // Unmasked: ADD (offset & 0xFF) << 8 to OBJECT X velocity [di+1945].
+            // Orig sub_13158 (loc_1317a): do-while pattern. Body executes once unconditionally
+            // before `add si, 2; cmp si, ds:80h; jl loop`. v2 must match — off-by-2 bug otherwise.
             uint16_t si = vm.ds_read(0x7C);
             int8_t raw = (int8_t)vm.es[anim_bx++];
             int16_t off = raw;
@@ -11142,12 +11521,13 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t end_s = vm.ds_read(0x80);
             if (vm.ds_read(0x38C) != 0) {
                 uint16_t dx = vm.ds_read(0x38C);
-                for (; (int16_t)si < (int16_t)end_s; si += 2) {
+                do {
                     if (vm.ds_read(si + 0x54D) & dx) {
                         vm.ds_write(si + 0x64D, vm.ds_read(si + 0x64D) + (uint16_t)off);
                         vm.ds_write(si + 0x114D, 0x202);
                     }
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end_s);
             } else {
                 uint16_t vel_add = ((uint16_t)(off & 0xFF)) << 8;
                 vm.ds_write(di + 0x1945, vm.ds_read(di + 0x1945) + vel_add);
@@ -11159,6 +11539,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
         case 0x31F1: { // [9] sub_131f1: Y signed offset — 1 byte.
             // Masked: loop sub-sprites, ADD signed offset to each [si+74D].
             // Unmasked: ADD (offset & 0xFF) << 8 to OBJECT Y velocity [di+196D].
+            // Orig sub_131f1 (loc_13213): do-while pattern. Body executes once unconditionally.
             uint16_t si = vm.ds_read(0x7C);
             int8_t raw = (int8_t)vm.es[anim_bx++]; // CBW
             int16_t off = raw; // sign-extend to 16-bit
@@ -11168,12 +11549,13 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             if (vm.ds_read(0x38C) != 0) {
                 // Masked: loop, ADD offset to matching sub-sprites' Y position
                 uint16_t dx = vm.ds_read(0x38C);
-                for (; (int16_t)si < (int16_t)end_s; si += 2) {
+                do {
                     if (vm.ds_read(si + 0x54D) & dx) {
                         vm.ds_write(si + 0x74D, vm.ds_read(si + 0x74D) + (uint16_t)off);
                         vm.ds_write(si + 0x114D, 0x202);
                     }
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end_s);
             } else {
                 // Unmasked: add (off & 0xFF) << 8 to object Y velocity
                 uint16_t vel_add = ((uint16_t)(off & 0xFF)) << 8;
@@ -13386,7 +13768,48 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
             fprintf(stderr, "FATAL: unimplemented VM opcode 0x%02X at pc=%04X obj=%d\n", opcode, pc_before, obj_idx);
             exit(1);
         }
+        // Pre-opcode snapshot for divergence detection (gameplay levels only).
+        uint16_t pre_acc = v2_vm_accumulator;
+        uint16_t pre_obj_141D = *(uint16_t*)(shadow + obj_idx + 0x141D);
+        uint16_t pre_obj_16ED = *(uint16_t*)(shadow + obj_idx + 0x16ED);
+        // Snapshot ALL obj's anim_id to detect cutscene-controller writes.
+        uint16_t pre_all_16ED[128];
+        for (int oi = 0; oi < 128; oi++)
+            pre_all_16ED[oi] = *(uint16_t*)(shadow + (oi*2) + 0x16ED);
+
         v2_vm_optable[opcode](vm);
+
+        // MAIN-VM PER-OPCODE TRACE: ALL objects, gameplay level (002B+).
+        // Only print first 3000 entries to avoid flood.
+        if (*(uint16_t*)(shadow + 0x25AD) == 0x002B) {
+            static int _mvm = 0;
+            if (++_mvm <= 3000) {
+                fprintf(stderr,
+                  "V2-MVM[%d] obj=%02X: op=%02X pc=%04X→%04X acc=%04X→%04X "
+                  "141D=%04X→%04X 16ED=%04X→%04X 32F=%04X 86DE=%04X 3B8=%04X\n",
+                  _mvm, obj_idx, opcode, pc_before, vm.pc,
+                  pre_acc, v2_vm_accumulator,
+                  pre_obj_141D, *(uint16_t*)(shadow + obj_idx + 0x141D),
+                  pre_obj_16ED, *(uint16_t*)(shadow + obj_idx + 0x16ED),
+                  *(uint16_t*)(shadow + 0x32F),
+                  *(uint16_t*)(shadow + 0x86DE),
+                  *(uint16_t*)(shadow + 0x3B8));
+            }
+            // CUTSCENE-CONTROLLER trap: detect writes to OTHER obj's 0x16ED.
+            for (int oi = 0; oi < 128; oi++) {
+                uint16_t now = *(uint16_t*)(shadow + (oi*2) + 0x16ED);
+                if (now != pre_all_16ED[oi]) {
+                    static int _cw = 0;
+                    if (++_cw <= 100) {
+                        fprintf(stderr,
+                          "V2-MVM-ANIM-WR[%d]: writer_obj=%02X op=%02X pc=%04X "
+                          "→ target_obj=%02X 16ED: %04X → %04X\n",
+                          _cw, obj_idx, opcode, pc_before,
+                          oi*2, pre_all_16ED[oi], now);
+                    }
+                }
+            }
+        }
 
         // Per-object detailed trace (configurable via v2_trace_object)
         if (obj_idx == v2_trace_object) {
@@ -14666,6 +15089,27 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // sub_11792: HUD full update (if flag &1 and level != 0x2C)
         // Calls sub_120ff (healthbar), sub_12199 (items), loc_1205b (?), sub_11b0b (portrait)
         // For v2: HUD rendered each frame by v2_draw_ui, state in shadow DS.
+        // SUB11792-TRAP: log entry condition + slot 0 state every frame
+        {
+            extern int v2_orig_post_vm_frame;
+            static int trap_call_count = 0;
+            static uint16_t prev_3e4 = 0xFFFF, prev_3fc = 0xFFFF;
+            uint8_t* sd = v2_vm_shadow_ds;
+            uint8_t flag = sd[0x25CF];
+            uint16_t lvl = *(uint16_t*)(sd + 0x25AD);
+            bool entered = (flag & 1) && (lvl != 0x2C);
+            uint16_t cur_3e4 = *(uint16_t*)(sd + 0x3E4);
+            uint16_t cur_3fc = *(uint16_t*)(sd + 0x3FC);
+            trap_call_count++;
+            if (trap_call_count <= 3 || cur_3e4 != prev_3e4 || cur_3fc != prev_3fc) {
+                fprintf(stderr,
+                    "SUB11792-TRAP[c=%d f=%d lvl=%04X flag=%02X enter=%d]: ds:0x3E4=%04X→%04X ds:0x3FC=%04X→%04X\n",
+                    trap_call_count, v2_orig_post_vm_frame, lvl, flag, entered,
+                    prev_3e4, cur_3e4, prev_3fc, cur_3fc);
+                prev_3e4 = cur_3e4;
+                prev_3fc = cur_3fc;
+            }
+        }
         if ((s[0x25CF] & 1) && *(uint16_t*)(s + 0x25AD) != 0x2C) {
             // sub_120ff: healthbar state tracking + rendering (3 vikings)
             // For each viking: compare current health state with previous,
@@ -14923,7 +15367,10 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     v2_sub_1E0C7(s);                                     // CALLF sub_1E0C7
                     v2_sub_16775(s);                                     // CALL sub_16775
                     // Blocking input wait loop
-                    while (true) {
+                    // HYPOTHESIS TEST: cap to 1 iteration.
+                    int pw2_safety = 1;
+                    fprintf(stderr, "V2-PWLOOP2-ENTRY: triggered (was unbounded blocking)\n");
+                    while (pw2_safety-- > 0) {
                         v2_sub_10130(s); v2_sub_10130(s); v2_sub_10130(s); // sub_10130 × 3
                         // sub_1DE05: dirty rect
                         v2_sub_1DE05(s);
@@ -15086,6 +15533,9 @@ void v2_phase_pre_vm(uint16_t ds_val) {
     extern int v2_dbg_pre_vm_iter; v2_dbg_pre_vm_iter++;
     v2_watch_25AD("PRE-entry");
     v2_watch_334("PRE-entry");
+    // PSNAP compare: at v2_phase_pre_vm entry, v2 shadow should match orig's
+    // FRAME_BEGIN snapshot (= state right before any pre-VM work).
+    v2_compare_phase_snap(V2_PSNAP_FRAME_BEGIN, "v2_phase_pre_vm");
     // Arm HW WP on real_ds[0x8FB8] (row_offset[40] entry) at frame 1.
     // We want to catch the writer that produces orig's value 0x2E20 vs shadow's 0x2D00.
     { static int _f = 0; _f++;
@@ -15200,6 +15650,9 @@ void v2_phase_vm(uint16_t ds_val) {
     v2_watch_25AD("VM-entry");
     v2_watch_334("VM-entry");
     if (!v2_frame_active) return;
+    // PSNAP compare: v2 shadow at VM phase entry should match orig PRE_VM_END snap
+    // (= both have just finished pre-VM work). Catches divergence in pre-VM.
+    v2_compare_phase_snap(V2_PSNAP_PRE_VM_END, "v2_phase_vm");
     memset(v2_vm_step_per_obj, 0, sizeof(v2_vm_step_per_obj));
     extern int v2_trace_len;
     static int _vm_frame = 0; _vm_frame++;
@@ -15269,7 +15722,7 @@ void v2_phase_vm(uint16_t ds_val) {
 
     { static int _vf = 0; _vf++;
       uint16_t r3CC = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + 0x3CC) : 0xDEAD;
-      if (_vf <= 100)
+      if (_vf <= 2000)
         printf("V2-VM-PHASE: f=%d te=%d lv=%04X s3CC=%04X r3CC=%04X s334=%04X\n",
           _vf, *(uint16_t*)(v2_vm_shadow_ds + 0x372), *(uint16_t*)(v2_vm_shadow_ds + 0x25AD), *(uint16_t*)(v2_vm_shadow_ds + 0x3CC),
           r3CC, *(uint16_t*)(v2_vm_shadow_ds + 0x0334)); }
@@ -15345,6 +15798,178 @@ static void v2_phase_verify(const char* phase) {
                            watch, sizeof(watch)/sizeof(watch[0]), found);
 }
 
+// ============================================================================
+// Stuck-state + per-frame divergence detector.
+// Catches bugs where some DS field is supposed to change over time (counters,
+// timers, anim_id transitions) but stays stuck due to off-by-one or wrong
+// comparison in a v2 opcode handler. Runs at FRAME_END.
+// ============================================================================
+static void v2_frame_end_verify() {
+    if (!v2_vm_shadow_ds || !v2_vm_real_ds_ptr) return;
+    static int _frame = 0; _frame++;
+    if (_frame < 5) return; // skip boot transitions
+    if (_frame > 5000) return; // wider cap to catch later events
+
+    uint8_t* s = v2_vm_shadow_ds;
+    uint8_t* r = v2_vm_real_ds_ptr;
+    uint16_t lvl = *(uint16_t*)(s + 0x25AD);
+
+    // Per-30-frames Erik (obj=0) position trace from BOTH sides (real=orig, shadow=v2).
+    // Reveals if orig advances Erik but v2 doesn't (or both stuck).
+    if (_frame % 30 == 0 && lvl == 0x002B) {
+        uint16_t r_x = *(uint16_t*)(r + 0x173D), r_y = *(uint16_t*)(r + 0x1765);
+        uint16_t s_x = *(uint16_t*)(s + 0x173D), s_y = *(uint16_t*)(s + 0x1765);
+        uint16_t r_aid = *(uint16_t*)(r + 0x16ED), s_aid = *(uint16_t*)(s + 0x16ED);
+        uint16_t r_velx = *(uint16_t*)(r + 0x1945), s_velx = *(uint16_t*)(s + 0x1945);
+        uint16_t r_2880F = *(uint16_t*)(r + 0x32F), s_2880F = *(uint16_t*)(s + 0x32F);
+        fprintf(stderr,
+          "V2-FE-ERIK[f%d]: REAL X=%04X Y=%04X aid=%04X vel=%04X 32F=%04X | "
+          "SHADOW X=%04X Y=%04X aid=%04X vel=%04X 32F=%04X\n",
+          _frame, r_x, r_y, r_aid, r_velx, r_2880F,
+          s_x, s_y, s_aid, s_velx, s_2880F);
+    }
+    // Move detection: if real Erik X changes, log immediately
+    {
+        static uint16_t prev_real_x = 0xFFFF;
+        uint16_t cur_real_x = *(uint16_t*)(r + 0x173D);
+        if (lvl == 0x002B && prev_real_x != 0xFFFF && cur_real_x != prev_real_x) {
+            static int _move = 0;
+            if (++_move <= 30) {
+                fprintf(stderr, "V2-FE-REAL-ERIK-MOVE[f%d]: real X %04X → %04X\n",
+                  _frame, prev_real_x, cur_real_x);
+            }
+        }
+        prev_real_x = cur_real_x;
+    }
+    // FULL DS DUMP at stable level-002B-relative frame counts. Counter starts
+    // when level 002B first seen, counts game frames since. Dumps at counter=2
+    // (right after init, identical state both builds) and counter=500 (well past
+    // any cutscene trigger). Compare /tmp/curbuild_*.bin vs /tmp/orig_clean_*.bin.
+    {
+        static int lvl002B_frame = 0;
+        static bool dumped_early = false, dumped_late = false;
+        if (lvl == 0x002B) {
+            lvl002B_frame++;
+            if (!dumped_early && lvl002B_frame == 2) {
+                dumped_early = true;
+                FILE* fr = fopen("/tmp/curbuild_real_ds_early.bin", "wb");
+                FILE* fs = fopen("/tmp/curbuild_shadow_ds_early.bin", "wb");
+                if (fr) { fwrite(r, 1, 0x10000, fr); fclose(fr); }
+                if (fs) { fwrite(s, 1, 0x10000, fs); fclose(fs); }
+                fprintf(stderr, "V2-FE-DUMP-EARLY[lvl002B_f=%d]: dumped real+shadow DS (Erik X=%04X)\n",
+                  lvl002B_frame, *(uint16_t*)(r + 0x173D));
+            }
+            if (!dumped_late && lvl002B_frame == 500) {
+                dumped_late = true;
+                FILE* fr = fopen("/tmp/curbuild_real_ds_late.bin", "wb");
+                FILE* fs = fopen("/tmp/curbuild_shadow_ds_late.bin", "wb");
+                if (fr) { fwrite(r, 1, 0x10000, fr); fclose(fr); }
+                if (fs) { fwrite(s, 1, 0x10000, fs); fclose(fs); }
+                fprintf(stderr, "V2-FE-DUMP-LATE[lvl002B_f=%d]: dumped real+shadow DS (Erik X=%04X)\n",
+                  lvl002B_frame, *(uint16_t*)(r + 0x173D));
+            }
+        }
+    }
+
+    // ---- 1) Per-obj anim_id (0x16ED) change tracking ----
+    // For each obj 0..2*0xFE, record this frame's anim_id. If shadow vs real
+    // diverge at any obj's anim_id, flag (orig advances anim, v2 doesn't or v.v.).
+    static uint16_t prev_anim[256] = {0};
+    static int anim_stuck_frames[256] = {0};
+    static bool anim_diverge_logged[256] = {0};
+    for (int oi = 0; oi < 0xFE; oi += 2) {
+        uint16_t s_aid = *(uint16_t*)(s + oi + 0x16ED);
+        uint16_t r_aid = *(uint16_t*)(r + oi + 0x16ED);
+        // Divergence: orig has different anim_id than v2 → likely the cutscene
+        // controller in orig advanced anim but v2 didn't (or v.v.).
+        if (s_aid != r_aid && !anim_diverge_logged[oi]) {
+            anim_diverge_logged[oi] = true;
+            fprintf(stderr,
+              "V2-FE-ANIM-DIVERGE[f%d]: obj=%02X anim_id real=%04X shadow=%04X (lvl=%04X)\n",
+              _frame, oi, r_aid, s_aid, lvl);
+        }
+        // Stuck detector: same anim_id across 60+ frames in shadow but real changed.
+        if (s_aid == prev_anim[oi]) anim_stuck_frames[oi]++;
+        else anim_stuck_frames[oi] = 0;
+        prev_anim[oi] = s_aid;
+    }
+
+    // ---- 2) Per-obj accumulator-like counter divergence ----
+    // ds:[obj+0x141D] = collision flag, often used as countdown.
+    // ds:[obj+0x1715] = frame counter.
+    // ds:[obj+0x196D], 0x1945 = velocities.
+    // ds:[obj+0x16ED] = anim_id (covered above).
+    // Compare each across all obj slots.
+    static const uint16_t per_obj_offsets[] = {
+        0x141D,  // collision/counter flag
+        0x1715,  // frame counter
+        0x196D,  // Y velocity
+        0x1945,  // X velocity
+        0x132D,  // collision-VM PC
+        0x18AD,  // anim PC (per memory)
+    };
+    static bool per_obj_logged[6][256] = {0};
+    int field_idx = 0;
+    for (uint16_t off : per_obj_offsets) {
+        for (int oi = 0; oi < 0xFE; oi += 2) {
+            uint16_t sv = *(uint16_t*)(s + oi + off);
+            uint16_t rv = *(uint16_t*)(r + oi + off);
+            if (sv != rv && !per_obj_logged[field_idx][oi]) {
+                per_obj_logged[field_idx][oi] = true;
+                fprintf(stderr,
+                  "V2-FE-OBJ-DIVERGE[f%d]: obj=%02X +0x%04X real=%04X shadow=%04X (lvl=%04X)\n",
+                  _frame, oi, off, rv, sv, lvl);
+            }
+        }
+        field_idx++;
+    }
+
+    // ---- 3) Global accumulator (ds:0x8A) divergence ----
+    {
+        uint16_t sv = *(uint16_t*)(s + 0x8A), rv = *(uint16_t*)(r + 0x8A);
+        static bool logged = false;
+        if (sv != rv && !logged) {
+            logged = true;
+            fprintf(stderr, "V2-FE-ACC-DIVERGE[f%d]: ds:0x8A real=%04X shadow=%04X (lvl=%04X)\n",
+              _frame, rv, sv, lvl);
+        }
+    }
+
+    // ---- 4) Stuck-state detection: per-frame change count for key fields ----
+    // If v2 hasn't changed a critical field in N frames during gameplay, log.
+    // Helps catch "counter stuck" bugs where v2's opcode never decrements past 1.
+    static uint16_t prev_obj_141D[256] = {0};
+    static int stuck_141D[256] = {0};
+    static bool stuck_141D_logged[256] = {0};
+    for (int oi = 0; oi < 0xFE; oi += 2) {
+        uint16_t v = *(uint16_t*)(s + oi + 0x141D);
+        if (v == prev_obj_141D[oi]) stuck_141D[oi]++;
+        else stuck_141D[oi] = 0;
+        prev_obj_141D[oi] = v;
+        // Flag if stuck for 60+ frames AND value is suspicious (1, 0xFFFF, near-zero non-zero)
+        if (stuck_141D[oi] == 60 && (v == 1 || v == 2 || (v != 0 && v < 10)) && !stuck_141D_logged[oi]) {
+            stuck_141D_logged[oi] = true;
+            fprintf(stderr,
+              "V2-FE-STUCK[f%d]: obj=%02X ds:0x141D=%04X stuck for 60 frames (likely off-by-one counter, lvl=%04X)\n",
+              _frame, oi, v, lvl);
+        }
+    }
+
+    // ---- 5) Per-frame DS hash divergence summary (every 30 frames) ----
+    if (_frame % 30 == 0) {
+        // Count diff bytes (excluding skip-list addresses)
+        int total_diff = 0;
+        for (uint32_t i = 0; i < 0x10000; i++) {
+            if (v2_ds_hash_skip(i & ~3u)) continue;
+            if (s[i] != r[i]) total_diff++;
+        }
+        if (total_diff > 0) {
+            fprintf(stderr, "V2-FE-DS-DIFF[f%d]: %d bytes differ (lvl=%04X)\n",
+              _frame, total_diff, lvl);
+        }
+    }
+}
+
 static void v2_post_vm_field_check() {
     if (!v2_vm_real_ds_ptr) return;
     uint8_t* r = v2_vm_real_ds_ptr;
@@ -15368,6 +15993,8 @@ void v2_phase_post_vm(uint16_t ds_val) {
     extern bool v2_in_phase_post_vm; v2_in_phase_post_vm = true;
     v2_watch_25AD("POST-entry");
     v2_watch_334("POST-entry");
+    // PSNAP compare: v2 shadow should match orig VM_END (both just finished main VM).
+    v2_compare_phase_snap(V2_PSNAP_VM_END, "v2_phase_post_vm");
     // Check 0x077C before and after post_vm
     auto chk = [](const char* fn) {
         if (!v2_vm_real_ds_ptr) return;
@@ -15389,6 +16016,8 @@ void v2_phase_post_vm(uint16_t ds_val) {
 
 void v2_phase_render1(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // PSNAP compare: v2 shadow should match orig POST_VM_END.
+    v2_compare_phase_snap(V2_PSNAP_POST_VM_END, "v2_phase_render1");
     uint8_t* s = v2_vm_shadow_ds;
     // Debug: trace sub-sprite Y inputs for transition frame
     // sub_111a1 clears 0x44D..0x204D. Sub-sprite Y at 0x77F is in this range.
@@ -15450,8 +16079,12 @@ void v2_phase_render1(uint16_t ds_val) {
 
     // sub_1DE05 (render 1, eip 0x0051)
     v2_sub_1DE05(s);
-    // sub_1DE05 equivalent: full-frame render
-    v2_do_render();
+    // v2 single-buffer rendering: redraw tile background + sprites here. The full
+    // v2_do_render() helper used to be called but it ALSO invokes v2_sub_1E0C7,
+    // which gets called again 6 lines below — caused 0x98DC throttle to advance
+    // 1 ahead of orig per game tick (orig calls sub_1e0c7 ONCE per pass at eip 0x006C).
+    v2_draw_tiles(v2_current_ds_val);
+    v2_draw_sprites(v2_current_ds_val);
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // sub_1DD9C (sprite render)
@@ -15495,6 +16128,8 @@ static uint32_t v2_ds_hash(uint8_t* ds);
 
 void v2_phase_post_flip1(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // PSNAP compare: catches divergence in render1 (sub_1DE05/sub_1DD9C/sub_1c8f1/sub_1e0c7/sub_16775).
+    v2_compare_phase_snap(V2_PSNAP_RENDER1_END, "v2_phase_post_flip1");
     uint8_t* s = v2_vm_shadow_ds;
     // sub_12e16: viking death check
     {
@@ -15631,8 +16266,18 @@ void v2_phase_post_flip1(uint16_t ds_val) {
 
 void v2_phase_render2(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // PSNAP compare: catches divergence in post_flip1 (12e16/15530/10704/12fcb/12d2c).
+    v2_compare_phase_snap(V2_PSNAP_POST_FLIP1_END, "v2_phase_render2");
+    // Mirrors orig pass 2 (eip 0x0086..0x00A6).
     // sub_1DE05 (render 2)
     v2_sub_1DE05(v2_vm_shadow_ds);
+    // 3-PASS SUB-FRAME 2: orig renders to a DIFFERENT VGA page here, with sub-sprite
+    // positions updated by post_flip1's sub_12fcb (delta_type1 = 1/3 of remaining delta).
+    // For 60fps animation parity v2 must redraw tiles+sprites at this intermediate
+    // position too. Without this, render2/render3 show same buffer as render1
+    // (effective 20fps animation).
+    v2_draw_tiles(v2_current_ds_val);
+    v2_draw_sprites(v2_current_ds_val);
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // sub_1DD9C (sprite render)
@@ -15648,6 +16293,8 @@ void v2_phase_render2(uint16_t ds_val) {
 
 void v2_phase_post_flip2(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // PSNAP compare: catches divergence in render2.
+    v2_compare_phase_snap(V2_PSNAP_RENDER2_END, "v2_phase_post_flip2");
     uint8_t* s = v2_vm_shadow_ds;
     // Render callback fires between RENDER2's sub_16775 and here.
     v2_sub_10130(s);
@@ -15724,8 +16371,11 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             }
         }
     }
-    // sub_11792: HUD update
+    // sub_11792: HUD update — orig calls sub_120FF + sub_12199 + loc_1205B + sub_11B0B.
+    // Previously v2 only had sub_120FF (healthbar). Missing sub_12199 caused ds:0x3FC
+    // to never sync with ds:0x3E4 after item pickup → ITEM-TRAP divergence at frame ~393.
     if ((s[0x25CF] & 1) && *(uint16_t*)(s + 0x25AD) != 0x2C) {
+        // sub_120FF: healthbar state tracking + rendering (3 vikings)
         for (int vk = 0; vk < 3; vk++) {
             uint16_t prev = *(uint16_t*)(s + 0x0435 + vk * 2);
             *(uint16_t*)(s + 0x043B + vk * 2) = prev;
@@ -15734,13 +16384,55 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             *(uint16_t*)(s + 0x0435 + vk * 2) = ax;
             if (ax != prev) v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
         }
+        // sub_12199 (eip 0x2199): item display sync. Loop slot 0..0x18 step 2:
+        //   if ds:[di+3E4] != ds:[di+3FC]: copy + redraw.
+        for (uint16_t di2 = 0; di2 < 0x18; di2 += 2) {
+            uint16_t item = *(uint16_t*)(s + di2 + 0x3E4);
+            if (item != *(uint16_t*)(s + di2 + 0x3FC)) {
+                *(uint16_t*)(s + di2 + 0x3FC) = item;
+                v2_draw_hud_item(v2_current_ds_val, di2, item);
+            }
+        }
+        // loc_1205B: HUD selector sync (orig sub_120D1 inline). Per viking:
+        //   if ds:[414+vk*2] != ds:[41A+vk*2]: redraw old selector slot, update tracking.
+        for (int vk = 0; vk < 3; vk++) {
+            uint16_t cur_off = 0x0414 + vk * 2;
+            uint16_t prev_off = 0x041A + vk * 2;
+            if (*(uint16_t*)(s + cur_off) != *(uint16_t*)(s + prev_off)) {
+                uint16_t old_di = *(uint16_t*)(s + prev_off) * 2;
+                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + 0x3E4));
+                *(uint16_t*)(s + prev_off) = *(uint16_t*)(s + cur_off);
+                v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + cur_off) * 2);
+            }
+        }
+        // sub_11B0B: portrait/sound state sync (3 vikings) — same logic as init at sub_11080.
+        for (int vk = 0; vk < 3; vk++) {
+            uint16_t sound_prev = *(uint16_t*)(s + 0x0429 + vk * 2);
+            uint16_t sound_cur  = *(uint16_t*)(s + 0x042F + vk * 2);
+            uint16_t port_prev  = *(uint16_t*)(s + 0x15AD + vk * 2);
+            uint16_t port_cur   = *(uint16_t*)(s + 0x0423 + vk * 2);
+            if (sound_prev != sound_cur || port_prev != port_cur) {
+                uint16_t portrait_si = port_prev;
+                if (sound_prev != 0) portrait_si += 4;
+                v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
+                *(uint16_t*)(s + 0x042F + vk * 2) = sound_prev;
+                *(uint16_t*)(s + 0x0423 + vk * 2) = port_prev;
+            }
+        }
     }
 }
 
 void v2_phase_render3(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // PSNAP compare: catches divergence in post_flip2 (10753/13c0c/12fd0/11792/101be).
+    v2_compare_phase_snap(V2_PSNAP_POST_FLIP2_END, "v2_phase_render3");
+    // Mirrors orig pass 3 (eip 0x00BB..0x00D8).
     // sub_1DE05 (render 3)
     v2_sub_1DE05(v2_vm_shadow_ds);
+    // 3-PASS SUB-FRAME 3: orig renders to 3rd VGA page with sub-sprite positions
+    // updated by post_flip2's sub_12fd0 (delta_type2 = 1/3 of remaining delta).
+    v2_draw_tiles(v2_current_ds_val);
+    v2_draw_sprites(v2_current_ds_val);
     // sub_165aa + sub_16661
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // sub_1DD9C (sprite render)
@@ -15756,6 +16448,8 @@ void v2_phase_render3(uint16_t ds_val) {
 
 void v2_phase_post_flip3(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // PSNAP compare: catches divergence in render3.
+    v2_compare_phase_snap(V2_PSNAP_RENDER3_END, "v2_phase_post_flip3");
     uint8_t* s = v2_vm_shadow_ds;
     // Render callback (sub_1797b) fires between RENDER3's sub_16775 and here.
     // v2: dispatch palette synchronously (equivalent of render callback timing).
@@ -16160,6 +16854,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
 void v2_phase_frame_end(uint16_t ds_val) {
     if (!v2_frame_active) return;
     v2_frame_active = false;
+    // Per-frame divergence + stuck-state verify (gameplay-level only)
+    v2_frame_end_verify();
 
     // End-of-frame level transition check.
     // Verified with seg000 lines 122-146 (eip 0x00F7..0x012D, loc_100f7).
@@ -16262,14 +16958,43 @@ void v2_save_115d2_snapshot(uint8_t* orig_ds) {
     v2_115d2_snapshot_valid = true;
 }
 
+// BLOCKING-DIAGNOSTIC counters. Public so other code (sub_1797b, sub_10130) can bump.
+std::atomic<int64_t> v2_dbg_render_callback_calls{0};
+std::atomic<int64_t> v2_dbg_word3287c_dec_calls{0};
+std::atomic<int64_t> v2_dbg_sub10130_spins{0};
+std::atomic<int64_t> v2_dbg_sub10130_exits{0};
+std::atomic<int64_t> v2_dbg_signal_phase_calls{0};
+std::atomic<int64_t> v2_dbg_phase_complete{0};
+
 void v2_signal_phase(V2Phase phase, uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
-    std::unique_lock<std::mutex> lock(v2_barrier_mutex);
-    v2_barrier_ds = ds_val;
-    v2_pending_phase = (int)phase;
-    v2_phase_complete = false;
-    v2_cv_start.notify_one();
-    v2_cv_done.wait(lock, []{ return v2_phase_complete; });
+    v2_dbg_signal_phase_calls++;
+    {
+        std::unique_lock<std::mutex> lock(v2_barrier_mutex);
+        v2_barrier_ds = ds_val;
+        v2_pending_phase = (int)phase;
+        v2_phase_complete = false;
+        v2_cv_start.notify_one();
+        v2_cv_done.wait(lock, []{ return v2_phase_complete; });
+    }
+    v2_dbg_phase_complete++;
+    // Blocking diagnostic: every 60 FRAME_END signals print all counters.
+    // If render_callback_calls or word3287c_dec stops growing → render thread blocked.
+    // If signal_phase_calls > phase_complete by a lot → v2 thread blocked.
+    // If sub10130_spins grows but exits doesn't → word_3287c not being DEC'd → render thread issue.
+    static int fe_count = 0;
+    if (phase == V2_PHASE_FRAME_END && ++fe_count % 60 == 0) {
+        fprintf(stderr,
+          "V2-BLOCK-DIAG[%d frame_ends]: render_callback=%lld word3287c_dec=%lld "
+          "sub10130: spins=%lld exits=%lld | signal_phase=%lld phase_complete=%lld\n",
+          fe_count,
+          (long long)v2_dbg_render_callback_calls.load(),
+          (long long)v2_dbg_word3287c_dec_calls.load(),
+          (long long)v2_dbg_sub10130_spins.load(),
+          (long long)v2_dbg_sub10130_exits.load(),
+          (long long)v2_dbg_signal_phase_calls.load(),
+          (long long)v2_dbg_phase_complete.load());
+    }
 }
 
 void v2_game_thread_start() {

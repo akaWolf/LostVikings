@@ -122,14 +122,32 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);  // row scroll
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);  // column scroll
 
-    // Sub-tile pixel offset from viewport pixel position
+    // Sub-tile pixel offset from viewport pixel position.
+    // Mirrors orig set_display_memory_addr (sub_16775, seg000.cpp:1105):
+    //   x_offset = x_disp + x_some; if (x_offset > x_level_size) x_offset = x_disp - x_some;
+    //   y_offset = y_disp + y_some; if (y_offset > y_level_size) y_offset = y_disp - y_some;
+    // x_some/y_some (ds:0x39E/0x3A0) are screen shake offsets (sub_12d2c, eip 0x2D2C).
+    // x_low_bits = x_offset & 0b11 (pixel pan 0..3, OUT to attribute reg 0x33)
+    // x_high_bits = x_offset >> 2 (byte position in VGA row, → CRTC start addr)
+    // Combined display position = (x_high_bits<<2) + x_low_bits = x_offset (full pixel precision).
+    // In v2 linear buffer: total sub-tile pixel offset = x_offset & 7.
     int16_t vp_px = *(int16_t*)(ds_base + 0x44);
     int16_t vp_py = *(int16_t*)(ds_base + 0x46);
-    int pix_off_x = vp_px & 7;
-    int pix_off_y = vp_py & 7;
+    int16_t x_some = *(int16_t*)(ds_base + 0x39E);
+    int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
+    int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
+    int16_t y_lvl  = *(int16_t*)(ds_base + 0x25A6);
+    int x_eff = (int)vp_px + (int)x_some; if (x_eff > (int)x_lvl) x_eff = (int)vp_px - (int)x_some;
+    int y_eff = (int)vp_py + (int)y_some; if (y_eff > (int)y_lvl) y_eff = (int)vp_py - (int)y_some;
+    int pix_off_x = x_eff & 7;
+    int pix_off_y = y_eff & 7;
+    // Tile-aligned shift due to shake (when shake crosses tile boundary).
+    // Source tile column index is shifted by (x_eff/8 - vp_px/8); same for rows.
+    int extra_tile_x = (x_eff >> 3) - ((int)vp_px >> 3);
+    int extra_tile_y = (y_eff >> 3) - ((int)vp_py >> 3);
 
     for (int row_vis = 0; row_vis < 25; row_vis++) {
-        uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x);
+        uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
         if (row_scrolled >= 64) continue;
 
         // Row base from lookup table at ds-0x7098
@@ -137,7 +155,7 @@ void v2_draw_tiles(uint16_t ds_val) {
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
         for (int col_vis = 0; col_vis < 43; col_vis++) {
-            uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y);
+            uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
 
             // Read tile map entry: word at fs:[(row_base + col_scrolled) * 2]
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
@@ -223,14 +241,23 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 #endif
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
+    // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
     int16_t vp_px = *(int16_t*)(ds_base + 0x44);
     int16_t vp_py = *(int16_t*)(ds_base + 0x46);
-    int pix_off_x = vp_px & 7;
-    int pix_off_y = vp_py & 7;
+    int16_t x_some = *(int16_t*)(ds_base + 0x39E);
+    int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
+    int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
+    int16_t y_lvl  = *(int16_t*)(ds_base + 0x25A6);
+    int x_eff = (int)vp_px + (int)x_some; if (x_eff > (int)x_lvl) x_eff = (int)vp_px - (int)x_some;
+    int y_eff = (int)vp_py + (int)y_some; if (y_eff > (int)y_lvl) y_eff = (int)vp_py - (int)y_some;
+    int pix_off_x = x_eff & 7;
+    int pix_off_y = y_eff & 7;
+    int extra_tile_x = (x_eff >> 3) - ((int)vp_px >> 3);
+    int extra_tile_y = (y_eff >> 3) - ((int)vp_py >> 3);
 
-    // Convert absolute tilemap coords → visible viewport position
-    int visible_row = abs_row - (int)scroll_x;
-    int visible_col = abs_col - (int)scroll_y;
+    // Convert absolute tilemap coords → visible viewport position (with shake-aware tile shift)
+    int visible_row = abs_row - (int)scroll_x - extra_tile_y;
+    int visible_col = abs_col - (int)scroll_y - extra_tile_x;
     if (visible_row < 0 || visible_row >= 25) return;
     if (visible_col < 0 || visible_col >= 43) return;
 
@@ -316,9 +343,19 @@ void v2_draw_sprites(uint16_t ds_val) {
 
     uint8_t* buf = v2_render_buf;
 
-    // Viewport origin — pixel scroll values
-    int viewport_x = (int)*(int16_t*)(ds_base + 0x44);
-    int viewport_y = (int)*(int16_t*)(ds_base + 0x46);
+    // Viewport origin — pixel scroll values.
+    // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
+    // Sprites in orig are drawn at world_pos - vp_px in VGA buffer; CRTC then shifts
+    // entire display by x_some via start address + pixel pan. v2 single-buffer:
+    // bake the shake into the effective camera so all elements stay aligned.
+    int16_t _vp_px = *(int16_t*)(ds_base + 0x44);
+    int16_t _vp_py = *(int16_t*)(ds_base + 0x46);
+    int16_t _xs   = *(int16_t*)(ds_base + 0x39E);
+    int16_t _ys   = *(int16_t*)(ds_base + 0x3A0);
+    int16_t _xlvl = *(int16_t*)(ds_base + 0x25A4);
+    int16_t _ylvl = *(int16_t*)(ds_base + 0x25A6);
+    int viewport_x = (int)_vp_px + (int)_xs; if (viewport_x > (int)_xlvl) viewport_x = (int)_vp_px - (int)_xs;
+    int viewport_y = (int)_vp_py + (int)_ys; if (viewport_y > (int)_ylvl) viewport_y = (int)_vp_py - (int)_ys;
     static int spr_dbg = 0; spr_dbg++;
     for (int obj = 0xFE; obj >= 0; obj -= 2) {
         uint16_t flags = *(uint16_t*)(ds_base + obj + 0x44D);
@@ -537,21 +574,30 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
 
-    // Sub-tile pixel offset (same as v2_draw_tiles)
+    // Sub-tile pixel offset (same as v2_draw_tiles).
+    // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
     int16_t vp_px = *(int16_t*)(ds_base + 0x44);
     int16_t vp_py = *(int16_t*)(ds_base + 0x46);
-    int pix_off_x = vp_px & 7;
-    int pix_off_y = vp_py & 7;
+    int16_t x_some = *(int16_t*)(ds_base + 0x39E);
+    int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
+    int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
+    int16_t y_lvl  = *(int16_t*)(ds_base + 0x25A6);
+    int x_eff = (int)vp_px + (int)x_some; if (x_eff > (int)x_lvl) x_eff = (int)vp_px - (int)x_some;
+    int y_eff = (int)vp_py + (int)y_some; if (y_eff > (int)y_lvl) y_eff = (int)vp_py - (int)y_some;
+    int pix_off_x = x_eff & 7;
+    int pix_off_y = y_eff & 7;
+    int extra_tile_x = (x_eff >> 3) - ((int)vp_px >> 3);
+    int extra_tile_y = (y_eff >> 3) - ((int)vp_py >> 3);
 
     for (int row_vis = 0; row_vis < 25; row_vis++) {
-        uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x);
+        uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
         if (row_scrolled >= 64) continue;
 
         uint16_t lut_off = (uint16_t)(row_scrolled * 2u - 0x7098u);
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
         for (int col_vis = 0; col_vis < 43; col_vis++) {
-            uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y);
+            uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
 

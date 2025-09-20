@@ -9,6 +9,7 @@
 #include <execinfo.h>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <map>
 
 int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
@@ -1893,6 +1894,10 @@ loc_1001e:
 	// 4370
  if (need_quit) {
    printf("quitting main thread\n");
+   // Stop v2 game thread BEFORE exit() — otherwise std::thread destructor calls
+   // std::terminate (no join/detach). Causes "terminate called without an active
+   // exception" on SDL_QUIT.
+   { extern void v2_game_thread_stop(); v2_game_thread_stop(); }
    exit(0);
  }
  // MON pixel monitor — commented (debug, 167 lines/run)
@@ -1906,6 +1911,7 @@ loc_1001e:
 	  }
 	}
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_FRAME_BEGIN, ds);
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(0); /* FRAME_BEGIN */ }
 cs=0x1a2;eip=0x00001e; 	J(CALL(sub_12352,0));	// 48 call    sub_12352 ;~ 01A2:001E
 	// V2 input snapshot now taken INSIDE sub_12352 (right after OR ax, input_keys)
 cs=0x1a2;eip=0x000021; 	J(CALL(sub_12d72,0));	// 49 call    sub_12D72 ;~ 01A2:0021
@@ -1917,10 +1923,12 @@ cs=0x1a2;eip=0x000030; 	J(CALL(sub_12e79,0));	// 54 call    sub_12E79 ;~ 01A2:00
 cs=0x1a2;eip=0x000033; 	J(CALL(sub_10813,0));	// 55 call    sub_10813 ;~ 01A2:0033
 cs=0x1a2;eip=0x000036; 	J(CALL(sub_1673c,0));	// 56 call    sub_1673C ;~ 01A2:0036
 	// V2: barrier-synced phases — FRAME_BEGIN already signaled before sub_12352
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(1); /* PRE_VM_END */ }
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_PRE_VM, ds); }
 	// Reset orig trace before main VM (discard init sub_115d2 entries)
 	{ extern int orig_trace_len; orig_trace_len = 0; }
 cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:0039
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(2); /* VM_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VM, ds);
 	extern uint16_t v2_orig_obj0_Y_after[5];
 	extern uint16_t v2_orig_obj0_Y_before;
@@ -1940,6 +1948,7 @@ loc_10048:
 	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); }
 cs=0x1a2;eip=0x000048; 	J(CALL(sub_1064b,0));	// 64 call    sub_1064B ;~ 01A2:0048
 	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[4] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(4); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(3); /* POST_VM_END */ }
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_VM, ds); v2_vm_verify_game_loop(ds); v2_vm_verify_tilemap(ds); v2_vm_verify_all_segments(ds); }
 cs=0x1a2;eip=0x00004b; 	J(CALL(sub_12fc6,0));	// 65 call    sub_12FC6 ;~ 01A2:004B
 	static bool seg003_initialized = false;
@@ -1962,6 +1971,7 @@ cs=0x1a2;eip=0x000067; 	J(CALLF(sub_1c8f1,0));	// 73 call    sub_1C8F1 ;~ 01A2:0
 
 cs=0x1a2;eip=0x00006c; 	J(CALLF(sub_1e0c7,0));	// 74 call    sub_1E0C7 ;~ 01A2:006C
 cs=0x1a2;eip=0x000071; 	J(CALL(sub_16775,0));	// 75 call    sub_16775 ;~ 01A2:0071
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(4); /* RENDER1_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER1, ds); // AFTER pass 1 complete
 cs=0x1a2;eip=0x000074; 	J(CALL(sub_12e16,0));	// 76 call    sub_12E16 ;~ 01A2:0074
 cs=0x1a2;eip=0x000077; 	J(CALL(sub_15530,0));	// 77 call    sub_15530 ;~ 01A2:0077
@@ -1971,6 +1981,7 @@ cs=0x1a2;eip=0x00007d; 	J(CALL(sub_12fcb,0));	// 79 call    sub_12FCB ;~ 01A2:00
 cs=0x1a2;eip=0x000080; 	J(CALL(sub_12d2c,0));	// 80 call    sub_12D2C ;~ 01A2:0080
 cs=0x1a2;eip=0x000083; 	J(CALL(sub_10130,0));	// 81 call    sub_10130 ;~ 01A2:0083
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(5); /* POST_FLIP1_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_POST_FLIP1, ds); // AFTER post-flip 1 complete
 cs=0x1a2;eip=0x000086; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); J(CALLF(sub_1de05,0));	// 82 call    sub_1DE05 ;~ 01A2:0086
 	sub_1c8f1_door_rendering_with_state(_state);  // RECREATED: Call our implementation before original
@@ -1984,6 +1995,7 @@ cs=0x1a2;eip=0x00009c; 	J(CALLF(sub_1c8f1,0));	// 88 call    sub_1C8F1 ;~ 01A2:0
 
 cs=0x1a2;eip=0x0000a1; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 89 call    sub_1E0C7 ;~ 01A2:00A1
 cs=0x1a2;eip=0x0000a6; 	J(CALL(sub_16775,0));	// 90 call    sub_16775 ;~ 01A2:00A6
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(6); /* RENDER2_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER2, ds); // AFTER pass 2 complete
 cs=0x1a2;eip=0x0000a9; 	J(CALL(sub_10753,0));	// 91 call    sub_10753 ;~ 01A2:00A9
 cs=0x1a2;eip=0x0000ac; 	J(CALL(sub_13c0c,0));	// 92 call    sub_13C0C ;~ 01A2:00AC
@@ -1992,6 +2004,7 @@ cs=0x1a2;eip=0x0000b2; 	J(CALL(sub_11792,0));	// 94 call    sub_11792 ;~ 01A2:00
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x0000b5; 	J(CALL(sub_101be,0));	// 95 call    sub_101BE ;~ 01A2:00B5
 cs=0x1a2;eip=0x0000b8; 	J(CALL(sub_10130,0));	// 96 call    sub_10130 ;~ 01A2:00B8
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(7); /* POST_FLIP2_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_POST_FLIP2, ds); // AFTER post-flip 2 complete
 sub_100bb:
 	// 103
@@ -2007,11 +2020,13 @@ cs=0x1a2;eip=0x0000ce; 	J(CALLF(sub_1c8f1,0));	// 109 call    sub_1C8F1 ;~ 01A2:
 
 cs=0x1a2;eip=0x0000d3; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 110 call    sub_1E0C7 ;~ 01A2:00D3
 cs=0x1a2;eip=0x0000d8; 	J(CALL(sub_16775,0));	// 111 call    sub_16775 ;~ 01A2:00D8
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(8); /* RENDER3_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER3, ds); // AFTER pass 3 complete
 cs=0x1a2;eip=0x0000db; 	X(MOV(word_30c14, 0));	// 112 mov     word_30C14, 0 ;~ 01A2:00DB
 cs=0x1a2;eip=0x0000e1; 	J(CALL(sub_108c8,0));	// 113 call    sub_108C8 ;~ 01A2:00E1
 cs=0x1a2;eip=0x0000e4; 	J(CALL(sub_10350,0));	// 114 call    sub_10350 ;~ 01A2:00E4
 cs=0x1a2;eip=0x0000e7; 	J(CALL(sub_1086f,0));	// 115 call    sub_1086F ;~ 01A2:00E7
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(9); /* POST_FLIP3_END */ }
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_FLIP3, ds); v2_signal_phase(V2_PHASE_FRAME_END, ds); }
 cs=0x1a2;eip=0x0000ea; 	T(CMP(byte_3168a, 1));	// 116 cmp     byte_3168A, 1 ;~ 01A2:00EA
 cs=0x1a2;eip=0x0000ef; 	J(JNZ(loc_100f7));	// 117 jnz     short loc_100F7 ;~ 01A2:00EF
@@ -2061,14 +2076,17 @@ ret_1a2_135:
 	// 4376
  if (need_quit) {
    printf("quitting main thread\n");
+   { extern void v2_game_thread_stop(); v2_game_thread_stop(); }
    exit(0);
  }
- if (word_3287c >= 1) {
-   std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60Hz VGA vsync
-   extern bool sub_1797b(m2c::_offsets, struct m2c::_STATE*);
-   sub_1797b((m2c::_offsets)0, _state); // DEC word_3287C + palette dispatch
- }
+ // REVERT to orig: render_callback (sub_1797b) is called by render thread (render.cpp).
+ // Just sleep 2ms while waiting for word_3287c to drop. Render thread DECs it ~60Hz.
+ { extern std::atomic<int64_t> v2_dbg_sub10130_spins;
+   if (word_3287c >= 1) v2_dbg_sub10130_spins++;
+   else v2_dbg_sub10130_spins++; /* track every entry */ }
+ std::this_thread::sleep_for(std::chrono::milliseconds(2));
 cs=0x1a2;eip=0x000135; 	J(JGE(sub_10130));	// 156 jge     short sub_10130 ;~ 01A2:0135
+ { extern std::atomic<int64_t> v2_dbg_sub10130_exits; v2_dbg_sub10130_exits++; }
 cs=0x1a2;eip=0x000137; 	J(RETN(0));	// 157 retn ;~ 01A2:0137
 sub_10138:
 	// 164
@@ -4007,6 +4025,7 @@ cs=0x1a2;eip=0x0015d2; 	J(CALL(sub_12345,0));	// 2887 call    sub_12345 ;~ 01A2:
 ret_1a2_15d5:
 	// 4611
 cs=0x1a2;eip=0x0015d5; 	J(CALL(sub_14207,0));	// 2888 call    sub_14207 ;~ 01A2:15D5
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(10); /* T_SF1_VM_END */ }
 cs=0x1a2;eip=0x0015d8; 	J(CALL(sub_1386b,0));	// 2889 call    sub_1386B ;~ 01A2:15D8
 cs=0x1a2;eip=0x0015db; 	J(CALL(sub_1625d,0));	// 2890 call    sub_1625D ;~ 01A2:15DB
 cs=0x1a2;eip=0x0015de; 	J(CALL(sub_15546,0));	// 2891 call    sub_15546 ;~ 01A2:15DE
@@ -4014,8 +4033,10 @@ cs=0x1a2;eip=0x0015e1; 	J(CALL(sub_13916,0));	// 2892 call    sub_13916 ;~ 01A2:
 cs=0x1a2;eip=0x0015e4; 	J(CALL(sub_1064b,0));	// 2893 call    sub_1064B ;~ 01A2:15E4
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x0015e7; 	J(CALL(sub_12fc6,0));	// 2894 call    sub_12FC6 ;~ 01A2:15E7
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(11); /* T_SF1_POSTVM_END */ }
 cs=0x1a2;eip=0x0015ea; 	J(CALL(sub_16775,0));	// 2895 call    sub_16775 ;~ 01A2:15EA
 	if (myDrawInfo_v2) v2_swap_render_buf();
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(12); /* T_SF1_PF1_END */ }
 cs=0x1a2;eip=0x0015ed; 	J(CALL(sub_10130,0));	// 2896 call    sub_10130 ;~ 01A2:15ED
 cs=0x1a2;eip=0x0015f0; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); J(CALLF(sub_1de05,0));	// 2897 call    sub_1DE05 ;~ 01A2:15F0
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
@@ -4028,6 +4049,7 @@ cs=0x1a2;eip=0x001600; 	T(MOV(ax, 0x0FFFE));	// 2901 mov     ax, 0FFFEh ;~ 01A2:
 cs=0x1a2;eip=0x001603; 	J(CALLF(sub_1c8f1,0));	// 2902 call    sub_1C8F1 ;~ 01A2:1603
 cs=0x1a2;eip=0x001608; 	J(CALL(sub_16775,0));	// 2903 call    sub_16775 ;~ 01A2:1608
 	if (myDrawInfo_v2) v2_swap_render_buf();
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(13); /* T_SF1_PF2_END */ }
 cs=0x1a2;eip=0x00160b; 	J(CALL(sub_15530,0));	// 2904 call    sub_15530 ;~ 01A2:160B
 cs=0x1a2;eip=0x00160e; 	J(CALL(sub_10704,0));	// 2905 call    sub_10704 ;~ 01A2:160E
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
@@ -4044,6 +4066,7 @@ cs=0x1a2;eip=0x001627; 	T(MOV(ax, 0x0FFFE));	// 2912 mov     ax, 0FFFEh ;~ 01A2:
 cs=0x1a2;eip=0x00162a; 	J(CALLF(sub_1c8f1,0));	// 2913 call    sub_1C8F1 ;~ 01A2:162A
 cs=0x1a2;eip=0x00162f; 	J(CALL(sub_16775,0));	// 2914 call    sub_16775 ;~ 01A2:162F
 	if (myDrawInfo_v2) v2_swap_render_buf();
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(14); /* T_SF2_PF_END */ }
 cs=0x1a2;eip=0x001632; 	J(CALL(sub_10753,0));	// 2915 call    sub_10753 ;~ 01A2:1632
 cs=0x1a2;eip=0x001635; 	J(CALL(sub_13c0c,0));	// 2916 call    sub_13C0C ;~ 01A2:1635
 cs=0x1a2;eip=0x001638; 	J(CALL(sub_12fd0,0));	// 2917 call    sub_12FD0 ;~ 01A2:1638
@@ -4061,6 +4084,7 @@ cs=0x1a2;eip=0x001651; 	T(MOV(ax, 0x0FFFE));	// 2924 mov     ax, 0FFFEh ;~ 01A2:
 cs=0x1a2;eip=0x001654; 	J(CALLF(sub_1c8f1,0));	// 2925 call    sub_1C8F1 ;~ 01A2:1654
 cs=0x1a2;eip=0x001659; 	J(CALL(sub_16775,0));	// 2926 call    sub_16775 ;~ 01A2:1659
 	if (myDrawInfo_v2) v2_swap_render_buf();
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(15); /* T_SF3_PF_END */ }
 cs=0x1a2;eip=0x00165c; 	J(CALL(sub_10130,0));	// 2927 call    sub_10130 ;~ 01A2:165C
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x00165f; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); J(CALLF(sub_1de05,0));	// 2928 call    sub_1DE05 ;~ 01A2:165F
@@ -4073,7 +4097,9 @@ cs=0x1a2;eip=0x00166f; 	T(MOV(ax, 0x0FFFE));	// 2932 mov     ax, 0FFFEh ;~ 01A2:
 	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x001672; 	J(CALLF(sub_1c8f1,0));	// 2933 call    sub_1C8F1 ;~ 01A2:1672
 //cs=0x1a2;eip=0x001677; 	J(JMP(sub_16775));	// 2934 jmp     sub_16775 ;~ 01A2:1677
- { auto _r = set_display_memory_addr(_state); if (myDrawInfo_v2) v2_swap_render_buf(); return _r; }
+ { auto _r = set_display_memory_addr(_state); if (myDrawInfo_v2) v2_swap_render_buf();
+   { extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(16); /* T_SF4_END */ }
+   return _r; }
 sub_1167a:
 	// 2941
 cs=0x1a2;eip=0x00167a; 	T(MOV(si, 0));	// 2942 mov     si, 0 ;~ 01A2:167A
@@ -5432,7 +5458,8 @@ cs=0x1a2;eip=0x00235d; 	J(CALL(sub_12ef8,0));	// 4615 call    sub_12EF8 ;~ 01A2:
 cs=0x1a2;eip=0x002360; 	T(MOV(ax, word_30bbc));	// 4616 mov     ax, word_30BBC ;~ 01A2:2360
 loc_12363:
 	// 4751
-cs=0x1a2;eip=0x002363; 	T(OR(ax, input_keys));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
+cs=0x1a2;eip=0x002363; 	T(OR(ax, word_30bbe));	// 4619 or      ax, word_30BBE ;~ 01A2:2363 — orig fake input (cutscene injection)
+	T(OR(ax, input_keys));	// SDL keyboard input (replaces orig INT 9 keyboard handler)
 	// V2: snapshot input_keys at the EXACT moment orig reads it — before any race
 	if (myDrawInfo_v2) { extern uint16_t v2_input_snapshot; v2_input_snapshot = ax; }
 cs=0x1a2;eip=0x002367; 	X(MOV(word_28896, ax));	// 4620 mov     word_28896, ax ;~ 01A2:2367
@@ -6644,6 +6671,27 @@ cs=0x1a2;eip=0x002d6b; 	X(MOV(*(dw*)(raddr(ds,0x3A0)), 0));	// 5966 mov     word
 cs=0x1a2;eip=0x002d71; 	J(RETN(0));	// 5967 retn ;~ 01A2:2D71
 sub_12d72:
 	// 5974
+{
+  // CUR-12D72: log 0x3CC, 0x3CE, 0x3D0, 0x86DE state at function entry
+  if (*(dw*)(raddr(ds, 0x25AD)) == 0x002B) {
+    static int _curtr = 0; _curtr++;
+    static uint16_t prev_3CC=0xDEAD, prev_3CE=0xDEAD, prev_3D0=0xDEAD, prev_86DE=0xDEAD;
+    uint16_t cur_3CC = *(dw*)(raddr(ds, 0x3CC));
+    uint16_t cur_3CE = *(dw*)(raddr(ds, 0x3CE));
+    uint16_t cur_3D0 = *(dw*)(raddr(ds, 0x3D0));
+    uint16_t cur_86DE = *(dw*)(raddr(ds, 0x86DE));
+    if (_curtr <= 100 ||
+        (cur_3CC != prev_3CC || cur_3CE != prev_3CE ||
+         cur_3D0 != prev_3D0 || cur_86DE != prev_86DE)) {
+      fprintf(stderr,
+        "CUR-12D72[%d]: 3CC=%04X 3CE=%04X 3D0=%04X 86DE=%04X (3B6=%04X)\n",
+        _curtr, cur_3CC, cur_3CE, cur_3D0, cur_86DE,
+        *(dw*)(raddr(ds, 0x3B6)));
+      prev_3CC = cur_3CC; prev_3CE = cur_3CE;
+      prev_3D0 = cur_3D0; prev_86DE = cur_86DE;
+    }
+  }
+}
 cs=0x1a2;eip=0x002d72; 	T(MOV(ax, *(dw*)(raddr(ds,0x3CC))));	// 5976 mov     ax, ds:3CCh ;~ 01A2:2D72
 ret_1a2_2d75:
 	// 4838
@@ -7680,6 +7728,22 @@ cs=0x1a2;eip=0x0035c8; 	X(MOV(*(dw*)(raddr(ds,di+0x191D)), 0x0FFFF));	// 7142 mo
 cs=0x1a2;eip=0x0035ce; 	J(RETN(0));	// 7143 retn ;~ 01A2:35CE
 sub_135cf:
 	// 7148
+{
+  // CUR-135CF-ENTRY: log Erik's 0x141D + flags at ENTRY (before early-return).
+  // Detects when 0x141D becomes != 0xFFFF (causes early-return → no vel update).
+  if (di == 0 && *(dw*)(raddr(ds, 0x25AD)) == 0x002B) {
+    static int _curen = 0; _curen++;
+    static uint16_t prev_141D = 0xFFFF, prev_flags = 0;
+    uint16_t cur_141D = *(dw*)(raddr(ds, 0x141D));
+    uint16_t cur_flags = *(dw*)(raddr(ds, 0x1585));
+    if (_curen <= 3000 && (cur_141D != prev_141D || cur_flags != prev_flags)) {
+      fprintf(stderr,
+        "CUR-135CF-ENTRY[%d]: 141D %04X→%04X flags %04X→%04X\n",
+        _curen, prev_141D, cur_141D, prev_flags, cur_flags);
+      prev_141D = cur_141D; prev_flags = cur_flags;
+    }
+  }
+}
 cs=0x1a2;eip=0x0035cf; 	T(CMP(*(dw*)(raddr(ds,di+0x141D)), 0x0FFFF));	// 7149 cmp     word ptr [di+141Dh], 0FFFFh ;~ 01A2:35CF
 ret_1a2_35d4:
 	// 4970
@@ -7759,6 +7823,28 @@ cs=0x1a2;eip=0x00366d; 	T(NEG(ax));	// 7229 neg     ax ;~ 01A2:366D
 loc_1366f:
 	// 4983
 cs=0x1a2;eip=0x00366f; 	X(ADD(*(dw*)(raddr(ds,di+0x196D)), ax));	// 7232 add     [di+196Dh], ax ;~ 01A2:366F
+{
+  // CUR-135CF-ERIK: same trap as clean orig — log Erik's vel state at end of sub_135cf.
+  // Compare CUR vs ORIG to find where v2 build diverges from clean.
+  if (di == 0 && *(dw*)(raddr(ds, 0x25AD)) == 0x002B) {
+    static int _curvc = 0; _curvc++;
+    static uint16_t prev_vel_field = 0, prev_flags = 0, prev_vel_acc = 0, prev_pos_x = 0;
+    uint16_t vel_field = *(dw*)(raddr(ds, 0x164D));
+    uint16_t flags = *(dw*)(raddr(ds, 0x1585));
+    uint16_t vel_acc = *(dw*)(raddr(ds, 0x1945));
+    uint16_t pos_x = *(dw*)(raddr(ds, 0x173D));
+    if (_curvc <= 3000 &&
+        (vel_field != prev_vel_field || flags != prev_flags ||
+         vel_acc != prev_vel_acc || pos_x != prev_pos_x)) {
+      fprintf(stderr,
+        "CUR-135CF-ERIK[%d]: vel_field %04X→%04X flags %04X→%04X vel_acc %04X→%04X pos_X %04X→%04X\n",
+        _curvc, prev_vel_field, vel_field, prev_flags, flags,
+        prev_vel_acc, vel_acc, prev_pos_x, pos_x);
+      prev_vel_field = vel_field; prev_flags = flags;
+      prev_vel_acc = vel_acc; prev_pos_x = pos_x;
+    }
+  }
+}
 cs=0x1a2;eip=0x003673; 	J(RETN(0));	// 7233 retn ;~ 01A2:3673
 sub_13674:
 	// 7240
@@ -9170,11 +9256,17 @@ cs=0x1a2;eip=0x0042aa; 	T(AND(si, 0x0FF));	// 8829 and     si, 0FFh ;~ 01A2:42AA
 cs=0x1a2;eip=0x0042ae; 	T(SHL(si, 1));	// 8830 shl     si, 1 ;~ 01A2:42AE
 	{ uint8_t v2_orig_opcode = (uint8_t)(si >> 1); uint16_t v2_pc_before = bx - 1; // before INC, same as v2
 	  uint16_t v2_acc_before = *(dw*)(raddr(ds,0x8A));
-	// V2 replay: lock DS to prevent render callback from modifying it
-	// during snapshot → opcode → comparison sequence.
+	// Fine-grained sync: lock only around 64KB memcpy snapshot (the actual race
+	// vs render thread's sub_1797b DEC of word_3287c). Opcode dispatch + replay_verify
+	// run UNLOCKED — they don't race (replay_verify reads its OWN copy v2_ds_before).
+	// Previous coarse lock around all 3 caused render thread to wait ~1ms/opcode →
+	// orig sub_10130 spinning forever → game logic frozen.
 	static uint8_t v2_ds_before[0x10000];
-	{ extern std::mutex v2_ds_modify_mutex; std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
-	if (myDrawInfo_v2) memcpy(v2_ds_before, raddr(ds,0), 0x10000);
+	if (myDrawInfo_v2) {
+		extern std::mutex v2_ds_modify_mutex;
+		std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
+		memcpy(v2_ds_before, raddr(ds,0), 0x10000);
+	}
 cs=0x1a2;eip=0x0042b0; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	// 8831 call    ds:off_30CAC[si] ;~ 01A2:42B0
 	// V2 replay verification: run v2 on BEFORE state, compare with AFTER (original's result)
 	if (myDrawInfo_v2) {
@@ -9189,7 +9281,6 @@ cs=0x1a2;eip=0x0042b0; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	/
 			bx, *(dw*)(raddr(ds,0x8A)));
 		g_v2_verify_step++;
 	}
-	} // unlock v2_ds_modify_mutex
 	} // end opcode scope
 cs=0x1a2;eip=0x0042b4; 	J(JMP(loc_142a6));	// 8832 jmp     short loc_142A6 ;~ 01A2:42B4
 	} // end per-object scope
@@ -15928,6 +16019,7 @@ myDrawInfo->myOffset = myOffset;
 cs=0x1a2;eip=0x007998; 	R(OUT(dx, al));	// 17612 out     dx, al          ; EGA: palette register: select colors for attribute AL: ;~ 01A2:7998
 	{ extern std::mutex v2_ds_modify_mutex; std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
 cs=0x1a2;eip=0x007999; 	X(DEC(word_3287c));	// 17619 dec     word_3287C ;~ 01A2:7999
+	{ extern std::atomic<int64_t> v2_dbg_word3287c_dec_calls; v2_dbg_word3287c_dec_calls++; }
 	}
 cs=0x1a2;eip=0x00799d; 	T(MOV(bp, word_303de));	// 17620 mov     bp, word_303DE ;~ 01A2:799D
 	cs=seg_offset(seg000);
