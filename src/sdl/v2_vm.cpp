@@ -16564,7 +16564,25 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                   *(uint16_t*)(s + 0x3E4 + 8),
                   *(uint16_t*)(s + 0x3E4 + 16));
         }
+        // sub_12199 loop. orig sub_120d1 leaves di clobbered = (word_288F8+8)*2;
+        // sub_12199's "ADD di,2" continues from this wrong value, skipping slots.
+        // We replicate this bit-exact for byte-identical 0x3FC vs orig real DS.
+        // Hard iteration cap: max legit iterations = 12 (0x18 / 2). Anything
+        // beyond means s[0x418] is corrupted and clobber wraps — abort with diag
+        // instead of looping forever (this would have been caught by orig DS-verify
+        // in default mode; no verify in V2_ONLY → must catch explicitly).
+        int _iter = 0;
         for (uint16_t di2 = 0; di2 < 0x18; di2 += 2) {
+            if (++_iter > 13) {
+                fprintf(stderr,
+                    "FATAL v2 sub_12199 loop runaway: iter=%d di2=%04X "
+                    "s[0x418]=%04X (clobber would be %04X). "
+                    "shadow DS corrupted at level=%04X.\n",
+                    _iter, di2, *(uint16_t*)(s + 0x0418),
+                    (uint16_t)((*(uint16_t*)(s + 0x0418) + 8) * 2),
+                    *(uint16_t*)(s + 0x25AD));
+                abort();
+            }
             uint16_t item = *(uint16_t*)(s + di2 + 0x3E4);
             if (item != *(uint16_t*)(s + di2 + 0x3FC)) {
                 {
@@ -16593,23 +16611,10 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                     uint16_t v3 = *(uint16_t*)(s + 0x0418);
                     *(uint16_t*)(s + 0x041E) = v3;
                     v2_draw_hud_selector(v2_current_ds_val, (v3 + 8) * 2);
-                    // BIT-EXACT BUG REPLICATION: orig sub_120d1 leaves di clobbered
-                    // (= last "di = word_288f8 + 8 << 1" = (s[0x418]+8)*2). orig
-                    // sub_12199 loop's "ADD di,2" then continues from this wrong value,
-                    // skipping intermediate slots. We must replicate this to get
-                    // byte-identical 0x3FC mirror state vs orig real DS.
-                    // sub_118ad preserves di (PUSH/POP), so final di after sub_120d1 RETN
-                    // = (word_288f8 + 8) * 2.
-                    // V2_ONLY: safety bound (s[0x418] init differs → clobber may
-                    // wrap and loop forever). Default mode keeps exact orig behavior.
-#ifdef V2_ONLY
-                    uint32_t clobber = (uint32_t)((v3 + 8) * 2);
-                    if (clobber > di2 && clobber < 0x18) di2 = (uint16_t)clobber;
-                    else di2 = 0x18;  // force exit
-#else
+                    // sub_120d1 leaves di clobbered = (word_288F8 + 8) * 2.
+                    // sub_118ad preserves di (PUSH/POP). On return, di = clobber.
+                    // sub_12199 loop's "ADD di,2" then continues from this value.
                     di2 = (uint16_t)((v3 + 8) * 2);
-                    // Loop's di2 += 2 will then be: di2 = (v3+8)*2 + 2 next iteration.
-#endif
                 }
             }
         }
