@@ -15,10 +15,18 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <map>
 #include "render_v2.h"
 
 // Access to emulated memory
 extern uint8_t* v2_m2c_base;
+
+// SDL/adlmidi sound API (defined in sdl/play.cpp).
+// In default mode the orig also calls these; in V2_ONLY only v2 calls them.
+extern int  play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
+extern void stop_xmidi_external();
+extern void stop_xmidi_external(uint8_t num);
+extern void set_dontstop_external(uint8_t num);
 
 // ============================================================================
 // V2 VM shadow state — complete copy of DS region used by animation VM.
@@ -75,6 +83,97 @@ static bool v2_gs_tiledata_valid = false;
 static const uint32_t V2_SOUND_SHADOW_SIZE = 0x10000;
 static uint8_t v2_vm_shadow_sound[V2_SOUND_SHADOW_SIZE];
 static bool v2_sound_shadow_valid = false;
+
+// ============================================================================
+// V2 sound state — mirror of orig sound bookkeeping for adlmidi/play.cpp.
+//
+// Orig (vikings.exe_seg000.cpp):
+//   - std::map<uint32_t,uint32_t> chunk_sizes — keyed by linear address (seg<<4)+offset.
+//     Populated in read_chunk (sub_10982) line 1266.
+//   - static int id_music inside sub_176bd — tracks current music player num.
+//
+// In V2_ONLY mode the orig sub_10982 doesn't run, so v2_chunk_sizes_by_seg is
+// populated by v2_read_chunk callers when loading sound chunks. Lookup is by
+// segment value (start offset is always 0 for sound chunks per orig sub_12ab8).
+//
+// In default mode v2 sound calls are no-ops (orig handles real sound emission).
+// ============================================================================
+static std::map<uint16_t, uint32_t> v2_chunk_sizes_by_seg;
+static int v2_id_music = -1;  // matches orig's `static int id_music = -1;` in sub_176bd
+
+// Resolve a sound segment value to (pointer-into-shadow, recorded-size).
+// Returns nullptr if seg is outside the v2_vm_shadow_sound window.
+static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out_size) {
+    uint16_t snd_base = *(const uint16_t*)(s + 0x992C);
+    uint32_t off = (uint32_t)(uint16_t)(seg - snd_base) * 16;
+    if (off >= V2_SOUND_SHADOW_SIZE) {
+        if (out_size) *out_size = 0;
+        return nullptr;
+    }
+    if (out_size) {
+        auto it = v2_chunk_sizes_by_seg.find(seg);
+        *out_size = (it != v2_chunk_sizes_by_seg.end()) ? it->second : 0;
+    }
+    return v2_vm_shadow_sound + off;
+}
+
+// orig sub_176bd SDL inline (vikings.exe_seg000.cpp:15780-15788).
+// Plays MUSIC track from segment bx_seg as default sequence (-1).
+// Maintains v2_id_music to allow stop+set_dontstop on next call (just like orig).
+static void v2_sub_176bd_v2(const uint8_t* s, uint16_t bx_seg) {
+#ifdef V2_ONLY
+    uint32_t size = 0;
+    uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
+    if (!xmidi || size == 0) return;
+    if (v2_id_music != -1) stop_xmidi_external((uint8_t)v2_id_music);
+    v2_id_music = play_xmidi_external(xmidi, size, -1);
+    if (v2_id_music >= 0) set_dontstop_external((uint8_t)v2_id_music);
+#else
+    (void)s; (void)bx_seg;  // default mode: orig sub_176bd handles real playback
+#endif
+}
+
+// orig sub_177bb SDL inline (vikings.exe_seg000.cpp:15905-15909).
+// Plays SFX/sequence ax_seq from segment ds:0x2E6D (sound bank).
+// Returns adlmidi player num (>=0) or -1 on failure / no-op.
+static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq) {
+#ifdef V2_ONLY
+    uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6D);
+    uint32_t size = 0;
+    uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
+    if (!xmidi || size == 0) return -1;
+    return play_xmidi_external(xmidi, size, (int)ax_seq);
+#else
+    (void)s; (void)ax_seq;
+    return -1;
+#endif
+}
+
+// orig sub_1782a SDL inline (vikings.exe_seg000.cpp:15976).
+// Stops all SFX (music protected via set_dontstop_external).
+static void v2_sub_1782a_v2() {
+#ifdef V2_ONLY
+    stop_xmidi_external();
+#endif
+}
+
+// orig sub_178d6 (vikings.exe_seg000.cpp:16062): if music not muted, replay it.
+static void v2_sub_178d6_v2(const uint8_t* s) {
+#ifdef V2_ONLY
+    if (*(const uint16_t*)(s + 0x302) != 0) return;  // music muted/off
+    uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6B);
+    v2_sub_176bd_v2(s, bx_seg);
+#else
+    (void)s;
+#endif
+}
+
+// orig sub_17912 SDL inline (vikings.exe_seg000.cpp:16105). Stop everything.
+static void v2_sub_17912_v2() {
+#ifdef V2_ONLY
+    stop_xmidi_external();
+#endif
+}
 
 // Shadow chunk buffer segment (ds:0x2E77).
 // Large multi-purpose buffer: animation bytecodes (from sub_116ae) + intro chunk data.
@@ -3129,9 +3228,11 @@ static void v2_sub_12ab8(uint8_t* s) {
         // Layout cursor in BYTES within shadow_sound; converted to paragraphs for seg.
         uint32_t cur_off = 0;
         // Chunk 1: 0x1C7 + ds:0x86B6 → at offset 0 (sound driver)
+        uint16_t chunk1_seg = sound_buf_seg + (uint16_t)(cur_off >> 4);
         uint32_t sz1 = v2_read_chunk((uint16_t)(0x1C7 + base86B6),
                                       v2_vm_shadow_sound + cur_off,
                                       V2_SOUND_SHADOW_SIZE - cur_off);
+        v2_chunk_sizes_by_seg[chunk1_seg] = sz1;  // mirror orig chunk_sizes record
         // sub_10E85 normalize: cur_off += ((sz1 + 15) & ~15) + 16 (= (di>>4)+1 paragraphs)
         // sub_10E85 mirror: es += (di >> 4) + 1, di = 0. di was decomp_size, es base was cur_off>>4.
         // New cur_off (bytes) = ((sz >> 4) + 1) * 16 = (sz & ~15) + 16, plus prior cur_off.
@@ -3139,16 +3240,20 @@ static void v2_sub_12ab8(uint8_t* s) {
         cur_off += 16;
         *(uint16_t*)(s + 0x2E6F) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
         // Chunk 2: 0x20C + ds:0x86B8 (sound bank)
+        uint16_t chunk2_seg = sound_buf_seg + (uint16_t)(cur_off >> 4);
         uint32_t sz2 = v2_read_chunk((uint16_t)(0x20C + base86B8),
                                       v2_vm_shadow_sound + cur_off,
                                       V2_SOUND_SHADOW_SIZE - cur_off);
+        v2_chunk_sizes_by_seg[chunk2_seg] = sz2;
         cur_off = (cur_off + sz2) & ~15u;
         cur_off += 16;
         *(uint16_t*)(s + 0x2E6D) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
         // Chunk 3: 0x207 + ds:0x86B8
+        uint16_t chunk3_seg = sound_buf_seg + (uint16_t)(cur_off >> 4);
         uint32_t sz3 = v2_read_chunk((uint16_t)(0x207 + base86B8),
                                       v2_vm_shadow_sound + cur_off,
                                       V2_SOUND_SHADOW_SIZE - cur_off);
+        v2_chunk_sizes_by_seg[chunk3_seg] = sz3;
         cur_off = (cur_off + sz3) & ~15u;
         cur_off += 16;
         *(uint16_t*)(s + 0x2E6B) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
@@ -3583,26 +3688,18 @@ static void v2_sub_11080(uint8_t* s) {
             uint16_t es_seg   = *(uint16_t*)(s + 0x2E6B);
             uint32_t off = (uint32_t)((uint16_t)(es_seg - snd_base)) * 16;
             if (off < V2_SOUND_SHADOW_SIZE) {
-                v2_read_chunk(chunk_id, v2_vm_shadow_sound + off,
-                              V2_SOUND_SHADOW_SIZE - off);
+                uint32_t sz = v2_read_chunk(chunk_id, v2_vm_shadow_sound + off,
+                                            V2_SOUND_SHADOW_SIZE - off);
+                // Mirror orig chunk_sizes record (so v2_sub_176bd_v2 can find size).
+                v2_chunk_sizes_by_seg[es_seg] = sz;
             }
         };
 
-        // sub_176bd: allocate + start XMIDI sequence.
-        // Original calls AIL library (sub_1C763/sub_1C77B/sub_1C781), replaced by SDL wrappers.
-        // DS writes: [si-0x66F4]=handle, 0x9946=info, 0x993E=hi, 0x9940=lo, 0x9930=seg, 0x992E=off
-        // si parameter: sound slot (0 for music).
-        auto v2_sub_176bd = [&](uint16_t si_slot) {
-            // Original SDL wrapper (replaces AIL sub_1C763/sub_1C77B/sub_1C781):
-            //   stop_xmidi_external(id_music);
-            //   id_music = play_xmidi_external(raddr(bx, 0), chunk_sizes[bx << 4], -1);
-            //   set_dontstop_external(id_music);
-            // where bx = ds:0x2E6B (sound segment)
-
-            // In original SDL build: play_xmidi_external replaces AIL.
-            // AIL sub_1C763 never runs → handle stays at whatever was in memory.
-            // Original does NOT write to these DS addresses (AIL code bypassed).
-            // So: do NOT write any sound state — leave shadow as-is.
+        // sub_176bd: SDL wrapper invokes adlmidi via play_xmidi_external. Mirrors orig
+        // SDL inline (vikings.exe_seg000.cpp:15780-15788). Defined as global v2_sub_176bd_v2;
+        // here we just call it with bx=ds:0x2E6B (music segment).
+        auto v2_sub_176bd = [&](uint16_t /*si_slot*/) {
+            v2_sub_176bd_v2(s, *(uint16_t*)(s + 0x2E6B));
         };
 
         // sub_178f1: AIL fade sound over 1000ms.
@@ -7391,36 +7488,31 @@ static void v2_vm_op_skip3(V2VM& vm) { vm.pc += 3; }
 // ============================================================================
 
 // 0x02 (sub_177b2): Play sound sequence. 2 bytes consumed.
-// Original: reads sequence number, checks ds:0x304 (sound disabled flag),
-// finds free sound slot in ds:[si-0x66F4] table (si=8..?),
-// stores sequence in ds:[si-0x66EA], calls sub_176bd(bx=ds:0x2E6D, ax=seq).
+// Original SDL inline (vikings.exe_seg000.cpp:15904-15909) does just three things:
+//   printf debug; play_xmidi_external(raddr(ds:0x2E6D, 0), chunk_sizes[ds:0x2E6D<<4], ax); RETN
+// The slot-allocation logic below RETN is dead code in SDL build (was AIL bookkeeping).
+// We still keep the slot writes for shadow-DS bookkeeping (excluded from verify).
 static void v2_vm_op_sound(V2VM& vm) {
     uint16_t seq = vm.read_u16();
     seq &= 0xFF; // AND ax, 0FFh
     if (vm.ds_read(0x304) != 0) return; // sound disabled
-    // Original sub_177bb: si=8, check if slot free.
-    // If [si-0x66F4] == 0xFFFF → free: store seq in [si-0x66EA], call sub_176bd. Return.
-    // If occupied → check AIL status (sub_1c7ab). If status == 1 → sub si,2;jg → try next.
-    // If status != 1 (done) → stop+release old, store new seq, call sub_176bd. Return.
-    // For v2: no AIL calls, so occupied slots stay occupied. Only free slots can be used.
+    // Mirror orig SDL inline: play SFX/sequence via adlmidi (V2_ONLY only; default
+    // mode lets orig sub_177bb emit sound).
+    int handle = v2_sub_177bb_v2(v2_vm_shadow_ds, seq);
+    // Slot bookkeeping. Verify already excludes 0x990C..0x991E so we can store the
+    // actual adlmidi player num (so op_sound1/op_D7 can call stop_xmidi_external(num)
+    // selectively). Default mode: handle == -1 → write 0xFFFF (no-op).
+    uint16_t hword = (handle >= 0 && handle <= 0xFE) ? (uint16_t)handle : 0xFFFF;
     for (int16_t si = 8; si > 0; si -= 2) {
         uint16_t handle_addr = (uint16_t)(si - 0x66F4);
         uint16_t seq_addr = (uint16_t)(si - 0x66EA);
         if (vm.ds_read(handle_addr) == 0xFFFF) {
-            // Free slot: store sequence and mark as used-then-done
             vm.ds_write(seq_addr, seq);
-            // Original calls sub_176bd which allocates AIL handle, starts playback.
-            // No real AIL in v2. Write 0xFFFF as handle (same as "done/free"),
-            // matching original behavior after sound completes.
-            vm.ds_write(handle_addr, 0xFFFF);
+            vm.ds_write(handle_addr, hword);
             break;
         }
-        // Occupied: original checks AIL status via sub_1c7ab.
-        // If status == 1 (playing) → try next slot.
-        // If status != 1 (done) → stop, release, reuse.
-        // v2: no AIL, treat all occupied slots as "done" → reuse immediately.
         vm.ds_write(seq_addr, seq);
-        vm.ds_write(handle_addr, 0xFFFF);
+        vm.ds_write(handle_addr, hword);
         break;
     }
 }
@@ -7432,19 +7524,24 @@ static void v2_vm_op_sound1(V2VM& vm) {
     uint8_t param = vm.read_u8();
     param &= 0xFF;
     if (vm.ds_read(0x304) != 0) return; // sound disabled
-    // Original sub_1782a: si=8, search DOWN for matching sequence in ds:[si-0x66EA].
-    // If found: stop AIL playback, mark slot free (both handle and seq = 0xFFFF).
+    // Iterate slots, find ones matching seq=param. For each, selectively stop the
+    // adlmidi player by stored handle (set by v2_vm_op_sound), then mark slot free.
+    // Falls back to v2_sub_1782a_v2 (stop-all) if no matching slot has a valid handle.
+    bool stopped_any = false;
     for (int16_t si = 8; si > 0; si -= 2) {
         if (vm.ds_read((uint16_t)(si - 0x66EA)) == param) {
-            // sub_1c79f: stop_sequence(handle, driver)
-            // stop_xmidi_external();
-            // sub_1c769: release_sequence(handle, driver)
-            // Mark slot as free
+            uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
+#ifdef V2_ONLY
+            if (handle != 0xFFFF) { stop_xmidi_external((uint8_t)handle); stopped_any = true; }
+#endif
             vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
             vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
-            // Don't break — original continues loop (sub si,2; jg)
         }
     }
+    // Mirror orig SDL inline (vikings.exe_seg000.cpp:15976): stop_xmidi_external() —
+    // belt-and-suspenders fallback when no slot tracked the handle (e.g. sound played
+    // outside our slot list). dontstop protects music.
+    if (!stopped_any) v2_sub_1782a_v2();
 }
 
 // ============================================================================
@@ -7656,13 +7753,11 @@ static void v2_vm_op_D4(V2VM& vm) {
 }
 
 // 0xD5 (sub_178d6): Sound play via sub_176bd. 1 byte consumed.
-// Original: INC bx (1 byte), test ds:0x302, if 0: call sub_176bd(si=0, ax=0, bx=ds:0x2E6B).
+// Original (vikings.exe_seg000.cpp:16062): INC bx (1 byte); if ds:0x302==0:
+// sub_176bd(si=0, ax=0, bx=ds:0x2E6B) → play music. v2 mirrors via v2_sub_178d6_v2.
 static void v2_vm_op_D5(V2VM& vm) {
     vm.pc += 1;
-    if (vm.ds_read(0x302) != 0) return;
-    // sub_176bd: play sound from ds:0x2E6B segment
-    // uint16_t snd_seg = vm.ds_read(0x2E6B);
-    // play_xmidi_external(v2_m2c_base + (uint32_t)snd_seg * 16, ..., 0);
+    v2_sub_178d6_v2(v2_vm_shadow_ds);
 }
 
 // 0xD6 (sub_178f1): Timer delay. 0 bytes consumed.
@@ -7674,21 +7769,24 @@ static void v2_vm_op_D6(V2VM& vm) {
     // if (vm.ds_read(0x302) == 0) { /* delay 1000ms */ }
 }
 
-// 0xD7 (sub_1787f): Sound sequence check + restart. 3 bytes consumed.
-// Original: reads 1 byte (seq), ADD bx,3. If ds:0x304 != 0 → skip.
-// Searches ds:[si-0x66EA] for matching seq (si=8 down to 2).
-// If found: stop old (AIL), restart with new sequence. If not found: no action.
+// 0xD7 (sub_1787f): Sound sequence check + clear slot. 3 bytes consumed.
+// Original sub_1787f (vikings.exe_seg000.cpp:16020-16061): reads 1 byte (seq),
+// ADD bx,3. If ds:0x304 != 0 → skip. Searches ds:[si-0x66EA] for matching seq.
+// If found: AIL stop+release (sub_1C79F + sub_1C769) — orig SDL port LEFT THESE
+// AS AIL stubs (no SDL replacement). Then clears slots.
+// V2 uses adlmidi via stored handle (v2_vm_op_sound stored player num).
 static void v2_vm_op_D7(V2VM& vm) {
     uint8_t seq = vm.es[vm.pc] & 0xFF;
     vm.pc += 3;
     if (vm.ds_read(0x304) != 0) return;
     for (int16_t si = 8; si > 0; si -= 2) {
         if (vm.ds_read((uint16_t)(si - 0x66EA)) == seq) {
-            // Found matching slot: stop + release (AIL calls skipped)
-            // Original: sub_1c79f (stop), sub_1c769 (release)
-            // Then clear both slots:
-            vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF); // MOV [si-66F4h], 0FFFFh
-            vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF); // MOV [si-66EAh], 0FFFFh
+            uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
+#ifdef V2_ONLY
+            if (handle != 0xFFFF) stop_xmidi_external((uint8_t)handle);
+#endif
+            vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
+            vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
             // Original does NOT break — continues loop to check all slots
         }
     }
