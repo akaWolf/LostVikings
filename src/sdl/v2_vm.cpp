@@ -16564,13 +16564,43 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                   *(uint16_t*)(s + 0x3E4 + 8),
                   *(uint16_t*)(s + 0x3E4 + 16));
         }
-        // sub_12199 loop. orig sub_120d1 leaves di clobbered = (word_288F8+8)*2;
-        // sub_12199's "ADD di,2" continues from this wrong value, skipping slots.
-        // We replicate this bit-exact for byte-identical 0x3FC vs orig real DS.
-        // Hard iteration cap: max legit iterations = 12 (0x18 / 2). Anything
-        // beyond means s[0x418] is corrupted and clobber wraps — abort with diag
-        // instead of looping forever (this would have been caught by orig DS-verify
-        // in default mode; no verify in V2_ONLY → must catch explicitly).
+        // ====================================================================
+        // ORIG BUG REPLICATION: sub_12199 loop has a register-clobber bug.
+        // ====================================================================
+        // Orig sub_12199 (vikings.exe_seg000.cpp:5326) runs an iteration loop:
+        //     MOV di, 0
+        //   loc_1219c:
+        //     MOV ax, [di+3E4h]; CMP ax, [di+3FCh]
+        //     JZ loc_121b0
+        //     MOV [di+3FCh], ax
+        //     CALL sub_1183d                 ; render slot
+        //     CALL sub_120d1                 ; ⚠️ TRASHES DI
+        //   loc_121b0:
+        //     ADD di, 2; CMP di, 18h; JL loc_1219c
+        //     RETN
+        //
+        // sub_120d1 (vikings.exe_seg000.cpp:5220) does NOT save/restore di:
+        //   ... last instruction touching di:
+        //     MOV  di, word_288F8        ; viking 3 selector
+        //     ADD  di, 8
+        //     SHL  di, 1                 ; di = (word_288F8 + 8) * 2
+        //     CALL sub_118AD             ; PUSHes/POPs di — preserves it
+        //     RETN                       ; di = (word_288F8+8)*2 on return
+        //
+        // Result: sub_12199's next "ADD di, 2" continues from wrong di value,
+        // skipping intermediate slots. This is a genuine bug in the original
+        // DOS game — but it's deterministic, so observable behavior of orig
+        // depends on it. We must replicate it bit-exact to keep ds:0x3FC
+        // mirror identical between v2 shadow and orig real DS (DS-verify).
+        //
+        // Hard cap: max legit iterations = 12 (0x18 / 2). With the clobber
+        // bug, depending on word_288F8 the loop visits a SUBSET of those 12
+        // slots, never more. If iteration exceeds 13 the shadow s[0x418]
+        // (= word_288F8) is corrupted to a value where (v3+8)*2 wraps
+        // uint16_t back into [0..0x16] → infinite loop. Default mode catches
+        // such corruption upstream via DS-verify; V2_ONLY has no verify, so
+        // we abort here with diagnostic to surface root cause early.
+        // ====================================================================
         int _iter = 0;
         for (uint16_t di2 = 0; di2 < 0x18; di2 += 2) {
             if (++_iter > 13) {
@@ -16611,9 +16641,10 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                     uint16_t v3 = *(uint16_t*)(s + 0x0418);
                     *(uint16_t*)(s + 0x041E) = v3;
                     v2_draw_hud_selector(v2_current_ds_val, (v3 + 8) * 2);
-                    // sub_120d1 leaves di clobbered = (word_288F8 + 8) * 2.
-                    // sub_118ad preserves di (PUSH/POP). On return, di = clobber.
-                    // sub_12199 loop's "ADD di,2" then continues from this value.
+                    // ORIG BUG (see top of loop): sub_120d1 leaves di clobbered
+                    // = (word_288F8 + 8) * 2. sub_12199 loop's "ADD di,2" then
+                    // continues from this wrong value, skipping slots. Replicate
+                    // bit-exact for byte-identical 0x3FC mirror vs orig real DS.
                     di2 = (uint16_t)((v3 + 8) * 2);
                 }
             }
