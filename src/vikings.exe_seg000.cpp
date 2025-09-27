@@ -3058,6 +3058,11 @@ cs=0x1a2;eip=0x0008e4; 	J(JNZ(loc_10935));	// 1149 jnz     short loc_10935 ;~ 01
 cs=0x1a2;eip=0x0008e6; 	X(MOV(byte_3166b, 0));	// 1150 mov     byte_3166B, 0 ;~ 01A2:08E6
 cs=0x1a2;eip=0x0008eb; 	X(XOR(*(db*)(((db*)&word_287e4)), 1));	// 1151 xor     byte ptr word_287E4, 1 ;~ 01A2:08EB
 cs=0x1a2;eip=0x0008f0; 	J(JZ(loc_10935));	// 1152 jz      short loc_10935 ;~ 01A2:08F0
+ // SDL replacement for the per-slot AIL sub_1C79F+sub_1C769 (stop+release) pair
+ // in the slot loop below. AIL trampolines are no-op stubs in SDL build → SFX
+ // would keep playing on mute toggle. dontstop_num protects music. Called ONCE
+ // before slot loop, not per-iteration (slot loop runs only on mute key press).
+ stop_xmidi_external();
 cs=0x1a2;eip=0x0008f2; 	T(MOV(si, 2));	// 1153 mov     si, 2 ;~ 01A2:08F2
 loc_108f5:
 	// 4476
