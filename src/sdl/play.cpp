@@ -87,16 +87,25 @@ int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num)
   return play_xmidi(midi_players, xmidi, len, seq_num);
 }
 
-// Non-blocking: just sets the flag. SDL audio callback (running in its own
-// thread) sees need_stop=true on next tick and closes all non-dontstop
-// players asynchronously. Caller does NOT wait — orig callers (sub_1782a /
-// sub_108c8 mute toggle / sub_17912) all use fire-and-forget semantics
-// and are called from the main game thread, where blocking would freeze
-// the render loop.
 void stop_xmidi_external()
 {
   printf("request to stop all sound players\n");
   need_stop = true;
+
+  bool there_is_something_to_stop = true;
+  while (there_is_something_to_stop)
+  {
+	int i;
+    for (i = 0; i < 100; i++)
+	  if ((midi_players[i] != nullptr) && (i != dontstop_num))
+	  {
+	    there_is_something_to_stop = true;
+	    break;
+	  }
+    if (i == 100)
+	  there_is_something_to_stop = false;
+    SDL_Delay(2);
+  }
 }
 
 void stop_xmidi_external(uint8_t num)
@@ -104,6 +113,8 @@ void stop_xmidi_external(uint8_t num)
   printf("request to stop player %x %p\n", num, midi_players[num]);
   if (midi_players[num] != nullptr)
 	num_to_stop = num;
+  while (midi_players[num] != nullptr)
+	SDL_Delay(2);
   if (dontstop_num == num)
 	dontstop_num = -1;
 }
