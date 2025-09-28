@@ -18,6 +18,15 @@ static uint32_t _sound_now_ms() {
 bool _sound_first_tick[100] = {};
 void _sound_reset_first_tick(int i) { if (i >= 0 && i < 100) _sound_first_tick[i] = false; }
 
+// Per-slot saved XMI buffer pointer + length, captured at play_xmidi time.
+// Used to RE-OPEN the XMI when music track ends naturally (samples=0). Original
+// DOS AIL handles XMI Branch (CC 0x77) loop events; adlmidi doesn't support them
+// for these files. This is a workaround: full adl_openData re-init = same effect
+// as restarting music from beginning, mimicking AIL's loop behavior.
+const void* _sound_xmi_buf[100] = {};
+uint32_t    _sound_xmi_len[100] = {};
+int         _sound_xmi_seq[100] = {};
+
 extern bool need_quit;
 
 // Per-slot async close flag. Set by stop_xmidi_external(num) or stop_all_sfx().
@@ -68,6 +77,14 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
 
 	  if (seq_num != -1)
 		adl_selectSongNum(curr_player, seq_num);
+
+	{
+	  int songs = adl_getSongsCount(curr_player);
+	  double total_sec = adl_totalTimeLength(curr_player);
+	  double loopstart = adl_loopStartTime(curr_player);
+	  printf("[%ums] SOUND-OPEN: player=%p len=%u seq=%d songs=%d total_time=%.2fs loopStart=%.2fs\n",
+	         _sound_now_ms(), (void*)curr_player, len, seq_num, songs, total_sec, loopstart);
+	}
 		//adl_setTrackOptions(curr_player, seq_num, ADLMIDI_TrackOption_Solo);
 
 	*midi_player = curr_player;
@@ -94,6 +111,11 @@ int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t
 	  {
 		bool stale = need_close[i].load();
 		need_close[i].store(false);
+		// Save XMI ptr+len+seq for later reload-on-end (used by audio_callback
+		// to re-init music when adlmidi reaches end-of-track).
+		_sound_xmi_buf[i] = xmidi;
+		_sound_xmi_len[i] = len;
+		_sound_xmi_seq[i] = seq_num;
 		std::thread midi_thread(midi_thread_proc, &midi_players[i], xmidi, len, seq_num);
 		midi_thread.detach();
 		printf("[%ums] SOUND-PLAY: slot=%d seq=%d len=%u%s\n",
@@ -265,13 +287,14 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
   memset(myBuffer, 0, len);
   memset(buffer, 0, len);
 
-    int samples_count = len / s_audioFormat.containerSize;
+    const int requested_samples = len / s_audioFormat.containerSize;
 
 	struct ADL_MIDIPlayer** midi_players = (struct ADL_MIDIPlayer**)argument;
 
 	uint8_t count = 0;
 	uint8_t volume;
 	int dn = dontstop_num.load();
+	int samples_count = 0;
 
 	for (int i = 0; i < 100; i++)
 	{
@@ -282,7 +305,12 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		if (need_close[i].load())
 		  goto close;
 
-		samples_count = adl_playFormat(midi_players[i], samples_count,
+		// BUG FIX: samples_count must be RESET to requested per-iteration.
+		// Old code reused samples_count across iterations: if first player
+		// returned 0 (track ended), subsequent calls got passed 0 → all
+		// returned 0 → all closed prematurely. Music would die after one
+		// adl_playFormat call returned 0 even though track had 28-45 sec left.
+		samples_count = adl_playFormat(midi_players[i], requested_samples,
 									   buffer,
 									   buffer + s_audioFormat.containerSize,
 									   &s_audioFormat);
@@ -297,7 +325,7 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		}
 		if (samples_count <= 0) {
 		  printf("[%ums] SOUND-NO-SAMPLES: slot=%d (samples=%d) — closing as natural-end%s\n",
-		         _sound_now_ms(), i, samples_count, (i == dn) ? " (was music!)" : "");
+		         _sound_now_ms(), i, samples_count, (i == dn) ? " (was music)" : "");
 		  _sound_first_tick[i] = false;
 		  goto close;
 		}
@@ -307,7 +335,12 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		if (i == dn)
 		  volume = SDL_MIX_MAXVOLUME * 0.6;
 
-		SDL_MixAudioFormat(myBuffer, buffer, myFormat, samples_count * s_audioFormat.containerSize, volume);
+		{
+		  // Mix: samples_count is per-slot return; convert to bytes via container size.
+		  int mix_bytes = samples_count * s_audioFormat.containerSize;
+		  if (mix_bytes > len) mix_bytes = len;
+		  SDL_MixAudioFormat(myBuffer, buffer, myFormat, mix_bytes, volume);
+		}
 
 		count++;
 
