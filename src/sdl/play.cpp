@@ -1,13 +1,20 @@
 #include <SDL2/SDL.h>
 #include <thread>
+#include <atomic>
 #include <cstdio>
 
 #include "adlmidi.h"
 
 extern bool need_quit;
-static bool need_stop = false;
-static int num_to_stop = -1;
-static int dontstop_num = -1;
+
+// Per-slot async close flag. Set by stop_xmidi_external(num) or stop_all_sfx().
+// Audio callback reads this per-iteration; on true: closes player and resets to false.
+// Atomic since written from main game thread, read from SDL audio thread.
+static std::atomic<bool> need_close[100] = {};
+
+// Currently-playing music slot (set by set_music_handle, used by audio_callback to
+// scale volume and to skip in stop_all_sfx). -1 = no music.
+static std::atomic<int> dontstop_num{-1};
 
 void my_audio_callback(void *midi_player, Uint8 *stream, int len);
 
@@ -66,17 +73,19 @@ int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t
   int num = -1;
   	for (int i = 0; i < 100; i++)
 	{
+	  // Pick any free slot (midi_players[i] == nullptr). need_close[i] could still
+	  // be true from a recent stop request that the audio callback hasn't processed
+	  // yet — we clear it BEFORE spawning the thread so the new player isn't
+	  // immediately closed by stale flag.
 	  if (midi_players[i] == nullptr)
 	  {
+		need_close[i].store(false);
 		std::thread midi_thread(midi_thread_proc, &midi_players[i], xmidi, len, seq_num);
 		midi_thread.detach();
-		//SDL_Delay(10);
 		num = i;
 		break;
 	  }
 	}
-
-	need_stop = false;
 
 	return num;
 }
@@ -87,42 +96,50 @@ int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num)
   return play_xmidi(midi_players, xmidi, len, seq_num);
 }
 
-void stop_xmidi_external()
-{
-  printf("request to stop all sound players\n");
-  need_stop = true;
-
-  bool there_is_something_to_stop = true;
-  while (there_is_something_to_stop)
-  {
-	int i;
-    for (i = 0; i < 100; i++)
-	  if ((midi_players[i] != nullptr) && (i != dontstop_num))
-	  {
-	    there_is_something_to_stop = true;
-	    break;
-	  }
-    if (i == 100)
-	  there_is_something_to_stop = false;
-    SDL_Delay(2);
-  }
-}
-
+// Stop a specific player by handle (from play_xmidi_external return value).
+// Non-blocking: marks slot for close; audio_callback closes asynchronously
+// on next tick. If the handle was the music handle, clear dontstop too.
 void stop_xmidi_external(uint8_t num)
 {
+  if (num >= 100) return;
   printf("request to stop player %x %p\n", num, midi_players[num]);
-  if (midi_players[num] != nullptr)
-	num_to_stop = num;
-  while (midi_players[num] != nullptr)
-	SDL_Delay(2);
-  if (dontstop_num == num)
-	dontstop_num = -1;
+  if (dontstop_num.load() == num) dontstop_num.store(-1);
+  need_close[num].store(true);
 }
 
+// Stop ALL non-music SFX. Music (dontstop_num) is preserved.
+// Non-blocking. Used for mute toggle (sub_108c8 SFX path), sub_1782a / sub_17912
+// "stop all" semantics.
+void stop_all_sfx()
+{
+  printf("request to stop all SFX\n");
+  int dn = dontstop_num.load();
+  for (int i = 0; i < 100; i++)
+    if (i != dn) need_close[i].store(true);
+}
+
+// Backward-compat: legacy "stop all" entry. Same semantics as stop_all_sfx().
+void stop_xmidi_external()
+{
+  stop_all_sfx();
+}
+
+// Mark a player as the "music" player. Audio callback scales its volume to
+// 60% and stop_all_sfx skips it. Pass -1 to clear (no music).
 void set_dontstop_external(uint8_t num)
 {
+  if (num >= 100) return;
   printf("dontstop player: %x %p\n", num, midi_players[num]);
-  dontstop_num = num;
+  dontstop_num.store((int)num);
+}
+
+// Returns true if a player handle is currently playing audio (not yet exited).
+// Used by sub_177bb slot allocation to find a slot that's "done" so we can
+// reuse it without leaving an orphaned player.
+bool is_player_active(int num)
+{
+  if (num < 0 || num >= 100) return false;
+  return midi_players[num] != nullptr && !need_close[num].load();
 }
 
 void sound_init()
@@ -130,8 +147,10 @@ void sound_init()
   printf("init sound\n");
     static SDL_AudioSpec spec, obtained;
 
-	for (int i = 0; i < 100; i++)
+	for (int i = 0; i < 100; i++) {
 	  midi_players[i] = nullptr;
+	  need_close[i].store(false);
+	}
 
     if(SDL_Init(SDL_INIT_AUDIO) < 0)
         return;
@@ -216,19 +235,16 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 
 	uint8_t count = 0;
 	uint8_t volume;
+	int dn = dontstop_num.load();
 
 	for (int i = 0; i < 100; i++)
 	{
 		if (!midi_players[i])
 		  continue;
 
-		if (need_stop && (i != dontstop_num))
+		// Per-slot async close request from main thread.
+		if (need_close[i].load())
 		  goto close;
-
-		if (i == num_to_stop)
-		{
-		  goto close;
-		}
 
 		samples_count = adl_playFormat(midi_players[i], samples_count,
 									   buffer,
@@ -239,7 +255,7 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		  goto close;
 
 		volume = SDL_MIX_MAXVOLUME;
-		if (i == dontstop_num)
+		if (i == dn)
 		  volume = SDL_MIX_MAXVOLUME * 0.6;
 
 		SDL_MixAudioFormat(myBuffer, buffer, myFormat, samples_count * s_audioFormat.containerSize, volume);
@@ -253,8 +269,10 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		  printf("player: closing %p\n", midi_players[i]);
 		  adl_close(midi_players[i]);
 		  midi_players[i] = nullptr;
-		  if (num_to_stop == i)
-			num_to_stop = -1;
+		  need_close[i].store(false);
+		  // If we just closed the music player, clear dontstop so future stop_all_sfx
+		  // doesn't try to skip a freed slot.
+		  if (dn == i) dontstop_num.store(-1);
 		  continue;
 		}
 
