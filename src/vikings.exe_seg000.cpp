@@ -15925,7 +15925,29 @@ sub_177bb:
  printf("AIL sub_177bb: ail_play_sound: sequence num = %x\n", ax);
 	// 17329
  printf("AIL %x\n", chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4]);
- play_xmidi_external(raddr(*(dw*)(raddr(ds,0x2E6D)),0), chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4], ax);
+ // SDL replacement for AIL sub_1C763/77B/781: play SFX sequence ax. Then
+ // store SDL handle + seq in first free slot (si=8/6/4/2, addr ds:[si-0x66F4])
+ // so sub_1782a / sub_1787f / sub_108c8 mute toggle can stop selectively
+ // by handle. Slot tag 0xFFFF = free.
+ {
+   int sdl_handle = play_xmidi_external(raddr(*(dw*)(raddr(ds,0x2E6D)),0),
+                                         chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4], ax);
+   if (sdl_handle >= 0 && *(dw*)(raddr(ds,0x304)) == 0) {
+     // Try slots si=8,6,4,2 for free slot (matches orig sub_177bb scan order
+     // in the dead code below — preserves orig semantics for the slot table).
+     for (int _si = 8; _si > 0; _si -= 2) {
+       if (*(dw*)(raddr(ds, _si - 0x66F4)) == 0xFFFF) {
+         *(dw*)(raddr(ds, _si - 0x66F4)) = (dw)sdl_handle;
+         *(dw*)(raddr(ds, _si - 0x66EA)) = ax & 0xFF;
+         break;
+       }
+     }
+     // If all slots full: don't track. SFX still plays; can't be selectively
+     // stopped, but plays through to end. Same as orig DOS behavior with full
+     // AIL slot table (orig sub_177bb tries to free a "done" slot via AIL
+     // status check sub_1C7AB — we'd need is_player_active here for parity).
+   }
+ }
 cs=0x1a2;eip=0x0077b1; 	J(RETN(0));	// 17313 retn ;~ 01A2:77B1
 cs=0x1a2;eip=0x0077bb; 	X(PUSH(es));	// 17331 push    es ;~ 01A2:77BB
 cs=0x1a2;eip=0x0077bc; 	X(PUSH(bx));	// 17332 push    bx ;~ 01A2:77BC
@@ -15992,7 +16014,7 @@ cs=0x1a2;eip=0x007827; 	X(POP(bx));	// 17390 pop     bx ;~ 01A2:7827
 cs=0x1a2;eip=0x007828; 	X(POP(es));	// 17391 pop     es ;~ 01A2:7828
 cs=0x1a2;eip=0x007829; 	J(RETN(0));	// 17392 retn ;~ 01A2:7829
 sub_1782a:
- printf("AIL sub_1782a: stop\n");
+ printf("CALLER=sub_1782a (op_04 stop sound by seq):\n");
  stop_xmidi_external();
 	// 17399
 cs=0x1a2;eip=0x00782a; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 17401 mov     ax, es:[bx] ;~ 01A2:782A
@@ -16120,7 +16142,7 @@ locret_17911:
 	// 5877
 cs=0x1a2;eip=0x007911; 	J(RETN(0));	// 17528 retn ;~ 01A2:7911
 sub_17912:
- printf("AIL sub_17912: stop2\n");
+ printf("CALLER=sub_17912 (level transition stop):\n");
 	// 17535
  stop_xmidi_external();
 cs=0x1a2;eip=0x007911; 	J(RETN(0));	// 17528 retn ;~ 01A2:7911

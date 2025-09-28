@@ -2,8 +2,21 @@
 #include <thread>
 #include <atomic>
 #include <cstdio>
+#include <chrono>
 
 #include "adlmidi.h"
+
+// Time-since-program-start in ms — for diagnostic timestamps in sound logs.
+static auto _sound_t0 = std::chrono::steady_clock::now();
+static uint32_t _sound_now_ms() {
+    using namespace std::chrono;
+    return (uint32_t)duration_cast<milliseconds>(steady_clock::now() - _sound_t0).count();
+}
+
+// First-tick diagnostic: tracks when audio_callback first sees samples from each
+// slot. Reset on close so reused slots re-log latency.
+bool _sound_first_tick[100] = {};
+void _sound_reset_first_tick(int i) { if (i >= 0 && i < 100) _sound_first_tick[i] = false; }
 
 extern bool need_quit;
 
@@ -79,14 +92,19 @@ int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t
 	  // immediately closed by stale flag.
 	  if (midi_players[i] == nullptr)
 	  {
+		bool stale = need_close[i].load();
 		need_close[i].store(false);
 		std::thread midi_thread(midi_thread_proc, &midi_players[i], xmidi, len, seq_num);
 		midi_thread.detach();
+		printf("[%ums] SOUND-PLAY: slot=%d seq=%d len=%u%s\n",
+		       _sound_now_ms(), i, seq_num, len, stale ? " (cleared stale need_close)" : "");
 		num = i;
 		break;
 	  }
 	}
-
+	if (num < 0) {
+	  printf("[%ums] SOUND-PLAY-FAIL: no free slot (all 100 occupied!)\n", _sound_now_ms());
+	}
 	return num;
 }
 
@@ -102,8 +120,10 @@ int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num)
 void stop_xmidi_external(uint8_t num)
 {
   if (num >= 100) return;
-  printf("request to stop player %x %p\n", num, midi_players[num]);
-  if (dontstop_num.load() == num) dontstop_num.store(-1);
+  int dn = dontstop_num.load();
+  printf("[%ums] SOUND-STOP: slot=%u player=%p (dontstop=%d) — marking need_close\n",
+         _sound_now_ms(), num, (void*)midi_players[num], dn);
+  if (dn == num) dontstop_num.store(-1);
   need_close[num].store(true);
 }
 
@@ -112,10 +132,16 @@ void stop_xmidi_external(uint8_t num)
 // "stop all" semantics.
 void stop_all_sfx()
 {
-  printf("request to stop all SFX\n");
   int dn = dontstop_num.load();
-  for (int i = 0; i < 100; i++)
-    if (i != dn) need_close[i].store(true);
+  int marked = 0;
+  for (int i = 0; i < 100; i++) {
+    if (i != dn && midi_players[i] != nullptr) {
+      need_close[i].store(true);
+      marked++;
+    }
+  }
+  printf("[%ums] SOUND-STOP-ALL: dontstop=%d marked %d active slots\n",
+         _sound_now_ms(), dn, marked);
 }
 
 // Backward-compat: legacy "stop all" entry. Same semantics as stop_all_sfx().
@@ -126,11 +152,21 @@ void stop_xmidi_external()
 
 // Mark a player as the "music" player. Audio callback scales its volume to
 // 60% and stop_all_sfx skips it. Pass -1 to clear (no music).
+//
+// Also clears need_close[num]: undoes any pending stop request for this slot.
+// Without this, a stop_all_sfx() call between play_xmidi() and set_dontstop()
+// would mark the new music slot for close, killing music before it starts.
+// Orig caller pattern is exactly: id_music = play_xmidi(...); set_dontstop(id_music)
+// — race window is tiny but real, audio thread has 1.5ms tick.
 void set_dontstop_external(uint8_t num)
 {
   if (num >= 100) return;
-  printf("dontstop player: %x %p\n", num, midi_players[num]);
+  bool was_marked = need_close[num].load();
+  printf("[%ums] SOUND-DONTSTOP: slot=%u player=%p%s\n",
+         _sound_now_ms(), num, (void*)midi_players[num],
+         was_marked ? " (cleared stale need_close — music save)" : "");
   dontstop_num.store((int)num);
+  need_close[num].store(false);
 }
 
 // Returns true if a player handle is currently playing audio (not yet exited).
@@ -251,6 +287,20 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 									   buffer + s_audioFormat.containerSize,
 									   &s_audioFormat);
 
+		// First-tick log for each player: when did audio_callback first see
+		// samples from this slot? Helps detect adlmidi init latency. Reset on close.
+		extern bool _sound_first_tick[100];
+		if (!_sound_first_tick[i]) {
+		  _sound_first_tick[i] = true;
+		  printf("[%ums] SOUND-FIRST-TICK: slot=%d samples=%d (adlmidi init latency observed)\n",
+		         _sound_now_ms(), i, samples_count);
+		}
+		if (samples_count <= 0) {
+		  printf("[%ums] SOUND-NO-SAMPLES: slot=%d (samples=%d) — closing as natural-end\n",
+		         _sound_now_ms(), i, samples_count);
+		  _sound_first_tick[i] = false;
+		}
+
 		if(samples_count <= 0)
 		  goto close;
 
@@ -266,10 +316,17 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 
 	close:
 		{
-		  printf("player: closing %p\n", midi_players[i]);
+		  // Why-closing diagnostic: distinguish need_close request from natural end.
+		  const char* reason = need_close[i].load() ? "stop-request" : "natural-end";
+		  printf("[%ums] SOUND-CLOSE: slot=%d player=%p reason=%s%s\n",
+		         _sound_now_ms(), i, (void*)midi_players[i], reason,
+		         (i == dn) ? " (was music!)" : "");
 		  adl_close(midi_players[i]);
 		  midi_players[i] = nullptr;
 		  need_close[i].store(false);
+		  // Reset first-tick diagnostic so next play in this slot re-logs.
+		  extern void _sound_reset_first_tick(int);
+		  _sound_reset_first_tick(i);
 		  // If we just closed the music player, clear dontstop so future stop_all_sfx
 		  // doesn't try to skip a freed slot.
 		  if (dn == i) dontstop_num.store(-1);
