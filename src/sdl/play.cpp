@@ -296,13 +296,12 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		         _sound_now_ms(), i, samples_count);
 		}
 		if (samples_count <= 0) {
-		  printf("[%ums] SOUND-NO-SAMPLES: slot=%d (samples=%d) — closing as natural-end\n",
-		         _sound_now_ms(), i, samples_count);
+		  printf("[%ums] SOUND-NO-SAMPLES: slot=%d (samples=%d) — closing as natural-end%s\n",
+		         _sound_now_ms(), i, samples_count, (i == dn) ? " (was music!)" : "");
 		  _sound_first_tick[i] = false;
+		  goto close;
 		}
 
-		if(samples_count <= 0)
-		  goto close;
 
 		volume = SDL_MIX_MAXVOLUME;
 		if (i == dn)
