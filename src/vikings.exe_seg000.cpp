@@ -16014,8 +16014,9 @@ cs=0x1a2;eip=0x007827; 	X(POP(bx));	// 17390 pop     bx ;~ 01A2:7827
 cs=0x1a2;eip=0x007828; 	X(POP(es));	// 17391 pop     es ;~ 01A2:7828
 cs=0x1a2;eip=0x007829; 	J(RETN(0));	// 17392 retn ;~ 01A2:7829
 sub_1782a:
- printf("CALLER=sub_1782a (op_04 stop sound by seq):\n");
- stop_xmidi_external();
+ // Replaced unconditional stop_all_sfx() with selective stop by seq below
+ // (after AND ax, 0xFF). Slot loop in orig already iterates ds:[si-0x66EA]
+ // for matching seq — we hook in there via the AIL sub_1C79F replacement.
 	// 17399
 cs=0x1a2;eip=0x00782a; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 17401 mov     ax, es:[bx] ;~ 01A2:782A
 ret_1a2_782d:
@@ -16031,6 +16032,14 @@ loc_1783e:
 	// 5867
 cs=0x1a2;eip=0x00783e; 	T(CMP(*(dw*)(raddr(ds,si-0x66EA)), ax));	// 17411 cmp     [si-66EAh], ax ;~ 01A2:783E
 cs=0x1a2;eip=0x007842; 	J(JNZ(loc_17877));	// 17412 jnz     short loc_17877 ;~ 01A2:7842
+ // SDL replacement for AIL sub_1C79F (stop) + sub_1C769 (release): selective
+ // stop of SFX matching seq=ax. Slot's [si-0x66F4] holds adlmidi player num
+ // stored by sub_177bb. AIL stubs below NOP under SDL build → without this,
+ // stop sound by seq doesn't actually stop anything.
+ {
+   dw h = *(dw*)(raddr(ds, si - 0x66F4));
+   if (h != 0xFFFF) stop_xmidi_external((uint8_t)h);
+ }
 cs=0x1a2;eip=0x007844; 	X(PUSHF);	// 17413 pushf ;~ 01A2:7844
 cs=0x1a2;eip=0x007845; 	T(CLI);	// 17414 cli ;~ 01A2:7845
 cs=0x1a2;eip=0x007846; 	X(PUSH(si));	// 17415 push    si ;~ 01A2:7846
@@ -16075,6 +16084,12 @@ loc_17895:
 	// 5871
 cs=0x1a2;eip=0x007895; 	T(CMP(*(dw*)(raddr(ds,si-0x66EA)), ax));	// 17457 cmp     [si-66EAh], ax ;~ 01A2:7895
 cs=0x1a2;eip=0x007899; 	J(JNZ(loc_178ce));	// 17458 jnz     short loc_178CE ;~ 01A2:7899
+ // SDL replacement for AIL sub_1C79F + sub_1C769: selective stop of SFX matching
+ // seq=ax. Same pattern as sub_1782a — slot's [si-0x66F4] holds adlmidi player num.
+ {
+   dw h = *(dw*)(raddr(ds, si - 0x66F4));
+   if (h != 0xFFFF) stop_xmidi_external((uint8_t)h);
+ }
 cs=0x1a2;eip=0x00789b; 	X(PUSHF);	// 17459 pushf ;~ 01A2:789B
 cs=0x1a2;eip=0x00789c; 	T(CLI);	// 17460 cli ;~ 01A2:789C
 cs=0x1a2;eip=0x00789d; 	X(PUSH(si));	// 17461 push    si ;~ 01A2:789D
