@@ -3063,6 +3063,13 @@ loc_108f5:
 	// 4476
 cs=0x1a2;eip=0x0008f5; 	T(CMP(*(dw*)(raddr(ds,si-0x66F4)), 0x0FFFF));	// 1156 cmp     word ptr [si-66F4h], 0FFFFh ;~ 01A2:08F5
 cs=0x1a2;eip=0x0008fb; 	J(JZ(loc_1092d));	// 1157 jz      short loc_1092D ;~ 01A2:08FB
+ // SDL replacement for AIL sub_1C79F + sub_1C769 (mute toggle: stop occupied
+ // SFX slot). Slot's [si-0x66F4] holds adlmidi player num (set by sub_177bb).
+ // Triggers when user presses 'S' to toggle SFX off.
+ {
+   dw h = *(dw*)(raddr(ds, si - 0x66F4));
+   if (h != 0xFFFF) stop_xmidi_external((uint8_t)h);
+ }
  printf("AIL sub_108c8: stop1\n");
 cs=0x1a2;eip=0x0008fd; 	X(PUSH(si));	// 1158 push    si ;~ 01A2:08FD
 cs=0x1a2;eip=0x0008fe; 	X(PUSH(si));	// 1159 push    si ;~ 01A2:08FE
@@ -3102,6 +3109,14 @@ loc_10959:
 	// 4479
 cs=0x1a2;eip=0x000959; 	T(TEST(word_287e2, 0x8000));	// 1195 test    word_287E2, 8000h ;~ 01A2:0959
 cs=0x1a2;eip=0x00095f; 	J(JNZ(locret_1097e));	// 1196 jnz     short locret_1097E ;~ 01A2:095F
+ // SDL replacement for AIL sub_1C79F + sub_1C769 (music mute toggle off→on:
+ // stop music). Music handle is in play.cpp's dontstop_num — orig stored in
+ // ds:0x990C but our SDL sub_176bd doesn't write that DS slot. Use getter.
+ {
+   extern int get_music_handle();
+   int h = get_music_handle();
+   if (h >= 0) stop_xmidi_external((uint8_t)h);
+ }
  printf("AIL sub_108c8: stop2\n");
 cs=0x1a2;eip=0x000961; 	X(PUSH(word_31dec));	// 1197 push    word_31DEC ;~ 01A2:0961
 cs=0x1a2;eip=0x000965; 	X(PUSH(word_31dc6));	// 1198 push    word_31DC6 ;~ 01A2:0965

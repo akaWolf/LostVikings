@@ -200,6 +200,14 @@ bool is_player_active(int num)
   return midi_players[num] != nullptr && !need_close[num].load();
 }
 
+// Returns the current music player handle (dontstop_num) or -1 if none.
+// Used by sub_108c8 music mute toggle path to selectively stop music
+// (which is protected from stop_all_sfx — needs explicit handle).
+int get_music_handle()
+{
+  return dontstop_num.load();
+}
+
 void sound_init()
 {
   printf("init sound\n");
