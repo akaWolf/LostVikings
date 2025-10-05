@@ -16155,10 +16155,10 @@ cs=0x1a2;eip=0x0078f1; 	T(TEST(*(dw*)(raddr(ds,0x302)), 0x0FFFF));	// 17515 test
 ret_1a2_78f7:
 	// 5876
 cs=0x1a2;eip=0x0078f7; 	J(JNZ(locret_17911));	// 17516 jnz     short locret_17911 ;~ 01A2:78F7
-// TODO: sub_1C7BD = AIL fade_out_sequence(1000ms, 0, handle, driver)
-// This is a seg002 AIL trampoline — calls real AIL driver which is not loaded in SDL build.
-// Should be replaced with SDL equivalent: fade_xmidi_external(1000) or similar.
-// For now: AIL call goes through trampoline and returns with no effect (driver not present).
+ // SDL replacement for AIL sub_1C7BD (set_sequence_tempo for fade): fade music
+ // out over 1000ms (matches orig PUSH 3E8h argument). play.cpp's audio_callback
+ // applies per-tick volume ramp and closes player when fade reaches 0.
+ { extern void fade_music(int); fade_music(1000); }
 cs=0x1a2;eip=0x0078f9; 	X(PUSHF);	// 17517 pushf ;~ 01A2:78F9
 cs=0x1a2;eip=0x0078fa; 	T(CLI);	// 17518 cli ;~ 01A2:78FA
 cs=0x1a2;eip=0x0078fb; 	X(PUSH((dw)0x3E8));	// 17519 push    3E8h ;~ 01A2:78FB

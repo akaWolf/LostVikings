@@ -27,6 +27,13 @@ const void* _sound_xmi_buf[100] = {};
 uint32_t    _sound_xmi_len[100] = {};
 int         _sound_xmi_seq[100] = {};
 
+// Per-slot fade-out state. fade_volume is current scale (1.0 = full, 0.0 = silent).
+// fade_step is per-callback decrement (positive). When fade_volume reaches 0.0,
+// slot is marked for close. Used by fade_music() to gradually fade music out
+// (orig sub_178f1 calls AIL fade over 1 sec for level transitions).
+static std::atomic<float> _sound_fade_volume[100];
+static std::atomic<float> _sound_fade_step[100];
+
 extern bool need_quit;
 
 // Per-slot async close flag. Set by stop_xmidi_external(num) or stop_all_sfx().
@@ -111,6 +118,9 @@ int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t
 	  {
 		bool stale = need_close[i].load();
 		need_close[i].store(false);
+		// Reset fade state for this slot (no fade in progress for new player).
+		_sound_fade_volume[i].store(1.0f);
+		_sound_fade_step[i].store(0.0f);
 		// Save XMI ptr+len+seq for later reload-on-end (used by audio_callback
 		// to re-init music when adlmidi reaches end-of-track).
 		_sound_xmi_buf[i] = xmidi;
@@ -172,6 +182,35 @@ void stop_xmidi_external()
   stop_all_sfx();
 }
 
+// Fade music out over duration_ms milliseconds. After fade completes, the
+// music slot is closed automatically by audio_callback. AIL DOS sub_1C7BD
+// (set_sequence_tempo) was used for fades in original — we approximate via
+// volume ramp in audio callback. duration_ms <= 0 = immediate stop.
+void fade_music(int duration_ms)
+{
+  int dn = dontstop_num.load();
+  if (dn < 0) {
+    printf("[%ums] SOUND-FADE: no music to fade\n", _sound_now_ms());
+    return;
+  }
+  if (duration_ms <= 0) {
+    printf("[%ums] SOUND-FADE: duration<=0 → immediate stop_xmidi_external(%d)\n",
+           _sound_now_ms(), dn);
+    stop_xmidi_external((uint8_t)dn);
+    return;
+  }
+  // Per-callback fade step: audio_callback fires every (samples / freq) sec.
+  // SDL spec.samples=64, freq=44100 → ~1.45ms per callback. Step = 1/N callbacks.
+  // N = duration_ms * freq / samples / 1000.
+  const float ticks_per_sec = (float)MYFREQ / 64.0f;       // ~689 ticks/sec
+  const float total_ticks   = (duration_ms / 1000.0f) * ticks_per_sec;
+  const float step          = (total_ticks > 0) ? (1.0f / total_ticks) : 1.0f;
+  _sound_fade_volume[dn].store(1.0f);
+  _sound_fade_step[dn].store(step);
+  printf("[%ums] SOUND-FADE: slot=%d duration=%dms step=%.5f/tick (%.0f ticks)\n",
+         _sound_now_ms(), dn, duration_ms, step, total_ticks);
+}
+
 // Mark a player as the "music" player. Audio callback scales its volume to
 // 60% and stop_all_sfx skips it. Pass -1 to clear (no music).
 //
@@ -216,6 +255,8 @@ void sound_init()
 	for (int i = 0; i < 100; i++) {
 	  midi_players[i] = nullptr;
 	  need_close[i].store(false);
+	  _sound_fade_volume[i].store(1.0f);
+	  _sound_fade_step[i].store(0.0f);
 	}
 
     if(SDL_Init(SDL_INIT_AUDIO) < 0)
@@ -342,6 +383,25 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		volume = SDL_MIX_MAXVOLUME;
 		if (i == dn)
 		  volume = SDL_MIX_MAXVOLUME * 0.6;
+
+		{
+		  // Fade-out: per-callback decrement of volume scale. When reaches <= 0,
+		  // mark slot for close so audio thread closes it on next iter.
+		  float fade_v = _sound_fade_volume[i].load();
+		  float fade_s = _sound_fade_step[i].load();
+		  if (fade_s > 0.0f) {
+		    fade_v -= fade_s;
+		    if (fade_v <= 0.0f) {
+		      fade_v = 0.0f;
+		      _sound_fade_step[i].store(0.0f);
+		      need_close[i].store(true);
+		      printf("[%ums] SOUND-FADE-DONE: slot=%d → marking need_close\n",
+		             _sound_now_ms(), i);
+		    }
+		    _sound_fade_volume[i].store(fade_v);
+		    volume = (uint8_t)(volume * fade_v);
+		  }
+		}
 
 		{
 		  // Mix: samples_count is per-slot return; convert to bytes via container size.
