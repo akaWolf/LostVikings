@@ -3726,14 +3726,16 @@ static void v2_sub_11080(uint8_t* s) {
             v2_sub_176bd_v2(s, *(uint16_t*)(s + 0x2E6B));
         };
 
-        // sub_178f1: AIL fade sound over 1000ms.
+        // sub_178f1: fade music over 1000ms.
         // Original: PUSHF; CLI; sub_1C7BD(0x3E8, 0, ds:0x990C, ds:0x98E6); POPF
-        //   sub_1C7BD: seg002 AIL trampoline → AIL_set_sequence_tempo(handle, tempo)
-        // AIL driver not loaded in SDL build → call has no effect.
-        // No DS writes — pure AIL driver call.
+        //   sub_1C7BD: AIL_set_sequence_tempo (fade) — replaced by SDL fade_music.
+        // play.cpp's audio_callback ramps volume per-tick and closes player at 0.
         auto v2_sub_178f1 = [&]() {
-            if (*(uint16_t*)(s + 0x302) != 0) return;
-            // fade_xmidi_external(1000); // AIL fade_out_sequence — commented for v2
+            if (*(uint16_t*)(s + 0x302) != 0) return;  // music muted/off
+#ifdef V2_ONLY
+            extern void fade_music(int);
+            fade_music(1000);
+#endif
         };
 
         uint16_t snd_type = *(uint16_t*)(s + 0x25B7) & 0xFF;
@@ -7789,10 +7791,15 @@ static void v2_vm_op_D5(V2VM& vm) {
 // 0xD6 (sub_178f1): Timer delay. 0 bytes consumed.
 // Original: test ds:0x302, if 0: pushf, cli, push args, call sub_1c7bd (delay), popf.
 static void v2_vm_op_D6(V2VM& vm) {
-    (void)vm;
-    // Timer delay — no effect on game state for v2.
-    // Original calls AIL timer for 1000ms delay.
-    // if (vm.ds_read(0x302) == 0) { /* delay 1000ms */ }
+    // sub_178f1 (eip 0x78F1): TEST word_287E2, 0xFFFFh; JNZ ret. If music enabled,
+    // call AIL sub_1C7BD with duration 0x3E8 (1000ms) — fade music to silence.
+    // SDL replacement: fade_music(1000) — play.cpp's audio_callback ramps volume
+    // and closes player when fade completes.
+    if (vm.ds_read(0x302) != 0) return;  // music muted/off
+#ifdef V2_ONLY
+    extern void fade_music(int);
+    fade_music(1000);
+#endif
 }
 
 // 0xD7 (sub_1787f): Sound sequence check + clear slot. 3 bytes consumed.
