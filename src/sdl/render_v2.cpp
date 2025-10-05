@@ -140,6 +140,7 @@ void render_thread_proc_v2(void* _state)
           case SDL_KEYDOWN:
           case SDL_KEYUP: {
               uint16_t key_val = 0;
+              uint16_t spec_off = 0;
               switch (event.key.keysym.sym) {
                 case SDLK_LEFT:   key_val = 0x200; break;
                 case SDLK_RIGHT:  key_val = 0x100; break;
@@ -148,16 +149,29 @@ void render_thread_proc_v2(void* _state)
                 case SDLK_SPACE:
                 case SDLK_RETURN: key_val = 0x8000; break;
                 case SDLK_LCTRL:
-                case SDLK_RCTRL:  key_val = 0x20; break;
+                case SDLK_RCTRL:  key_val = 0x20;   spec_off = 0x9189; break;  // CTRL → byte_31669
                 case SDLK_TAB:    key_val = 0x2000; break;
                 case SDLK_e:      key_val = 0x40; break;
-                case SDLK_s:      key_val = 0x80; break;
+                case SDLK_s:      key_val = 0x80;   spec_off = 0x918B; break;  // mute SFX
                 case SDLK_d:      key_val = 0x4000; break;
                 case SDLK_f:      key_val = 0x8000; break;
                 case SDLK_ESCAPE: key_val = 0x1000; break;
+                case SDLK_m:      spec_off = 0x919E; break;  // mute music
+                case SDLK_x:      spec_off = 0x9199; break;
+                case SDLK_LALT:
+                case SDLK_RALT:   spec_off = 0x91A4; break;
+                case SDLK_F10:    spec_off = 0x91B0; break;
+                case SDLK_DELETE: spec_off = 0x91BF; break;
               }
               if (event.type == SDL_KEYDOWN) {
                   input_keys |= key_val; input_keys_v2 |= key_val;
+                  if (spec_off) {
+                      extern uint8_t* v2_m2c_base;
+                      if (v2_m2c_base) v2_m2c_base[0x19F00 + spec_off] = 1;
+                      extern uint8_t* v2_vm_get_shadow_ds();
+                      uint8_t* sh = v2_vm_get_shadow_ds();
+                      if (sh) sh[spec_off] = 1;
+                  }
               } else {
                   input_keys &= ~key_val; input_keys_v2 &= ~key_val;
               }

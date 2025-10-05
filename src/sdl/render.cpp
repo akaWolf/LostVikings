@@ -144,6 +144,10 @@ void updateDraw()
 			   SDL_Event event;
 			   uint16_t key_val = 0;
 			   while (SDL_PollEvent(&event) > 0) {
+				 // Spec-flag DS offset (orig DOS keyboard ISR special-mode handlers
+				 // at eip 0x648E..0x6517). 0 = no flag for this key. Set only on
+				 // KEYDOWN. Game logic gates processing by other state.
+				 uint16_t spec_off = 0;
 				 switch (event.type) {
 				 case SDL_KEYDOWN:
 				 case SDL_KEYUP:
@@ -167,6 +171,7 @@ void updateDraw()
 				     case SDLK_LCTRL:
 					 case SDLK_RCTRL:
 					   key_val = 0x20;
+					   spec_off = 0x9189;  // sc 0x1D byte_31669
 					   break;
 					 case SDLK_TAB:
 					   key_val = 0x2000;
@@ -176,6 +181,7 @@ void updateDraw()
 					   break;
 					 case SDLK_s:
 					   key_val = 0x80;
+					   spec_off = 0x918B;  // sc 0x1F byte_3166b — mute SFX
 					   break;
 					 case SDLK_d:
 					   key_val = 0x4000;
@@ -186,6 +192,22 @@ void updateDraw()
 					 case SDLK_ESCAPE:
 					   key_val = 0x1000;
 					   break;
+					 case SDLK_m:
+					   spec_off = 0x919E;  // sc 0x32 byte_3167e — mute music
+					   break;
+					 case SDLK_x:
+					   spec_off = 0x9199;  // sc 0x2D byte_31679
+					   break;
+					 case SDLK_LALT:
+					 case SDLK_RALT:
+					   spec_off = 0x91A4;  // sc 0x38 byte_31684
+					   break;
+					 case SDLK_F10:
+					   spec_off = 0x91B0;  // sc 0x44 byte_31690
+					   break;
+					 case SDLK_DELETE:
+					   spec_off = 0x91BF;  // sc 0x53 byte_3169f
+					   break;
 				     default:
 					   key_val = 0;
 					   break;
@@ -193,6 +215,16 @@ void updateDraw()
 				   if (event.type == SDL_KEYDOWN) {
 					 input_keys |= key_val;
 					 input_keys_v2 |= key_val;
+					 if (spec_off) {
+					   // Default: m2c::m + 0x19F00 + spec_off = real DS byte. Orig
+					   // sub_108c8 etc read from there.
+					   extern uint8_t* v2_m2c_base;
+					   if (v2_m2c_base) v2_m2c_base[0x19F00 + spec_off] = 1;
+					   // V2_ONLY: also set shadow DS for v2 mute toggle (TBD #73).
+					   extern uint8_t* v2_vm_get_shadow_ds();
+					   uint8_t* sh = v2_vm_get_shadow_ds();
+					   if (sh) sh[spec_off] = 1;
+					 }
 				   } else {
 					 input_keys &= ~key_val;
 					 input_keys_v2 &= ~key_val;
