@@ -69,8 +69,19 @@ static void v2_load_static_data() {
            n, v2_m2c_buf[0x9480], v2_m2c_buf[0x9481], v2_m2c_buf[0x9482], v2_m2c_buf[0x9483]);
 }
 
+// --debug CLI flag: enable orig debug-build cheats (F4 INT 3, F5/F6 level cheats).
+// Mirrors orig DOS conditional gated by word_286E2 (ds:0x202) being non-zero.
+bool g_debug_mode = false;
+
 int main(int argc, char* argv[]) {
     printf("V2_ONLY: starting standalone v2 build (no m2c)\n");
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--debug") == 0) {
+            g_debug_mode = true;
+            fprintf(stderr, "[v2_main] --debug enabled: F4/F5/F6 cheats active\n");
+        }
+    }
 
     // SIGINT (Ctrl-C) → graceful shutdown.
     signal(SIGINT, sigint_handler);
@@ -85,6 +96,9 @@ int main(int argc, char* argv[]) {
     v2_set_m2c_base(v2_m2c_buf);
     v2_vm_init_shadow_early(0);
     v2_run_animation_vm(0);
+    // --debug shadow_ds[0x202] write happens inside v2_startup() (called from
+    // v2_run_animation_vm above). g_debug_mode parsed from argv at top of main.
+
     v2_game_thread_start();
 
     // Main loop: signal v2 phases sequentially. Each phase blocks until done.

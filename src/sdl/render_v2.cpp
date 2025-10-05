@@ -166,6 +166,17 @@ void render_thread_proc_v2(void* _state)
                 case SDLK_RALT:   spec_off = 0x91A4; break;
                 case SDLK_F10:    spec_off = 0x91B0; break;
                 case SDLK_DELETE: spec_off = 0x91BF; break;
+                case SDLK_q:      spec_off = 0x917C; break;  // sc 0x10 — ALT+Q reset
+                case SDLK_r:      spec_off = 0x917F; break;  // sc 0x13
+                case SDLK_y:      spec_off = 0x9181; break;  // sc 0x15 yes
+                case SDLK_a:      spec_off = 0x918A; break;  // sc 0x1E
+                case SDLK_n:      spec_off = 0x919D; break;  // sc 0x31 no
+                case SDLK_F4:     spec_off = 0x91AA; break;  // sc 0x3E INT 3 debug
+                case SDLK_F5:     spec_off = 0x91AB; break;  // sc 0x3F prev level
+                case SDLK_F6:     spec_off = 0x91AC; break;  // sc 0x40 next level
+                case SDLK_1:      spec_off = 0x916E; break;  // sc 0x02 viking 1
+                case SDLK_2:      spec_off = 0x916F; break;  // sc 0x03 viking 2
+                case SDLK_3:      spec_off = 0x9170; break;  // sc 0x04 viking 3
               }
               if (event.type == SDL_KEYDOWN) {
                   input_keys |= key_val; input_keys_v2 |= key_val;

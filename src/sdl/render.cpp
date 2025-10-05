@@ -182,11 +182,12 @@ void updateDraw()
 		   while (!need_quit)
 			{
 			   SDL_Event event;
-			   uint16_t key_val = 0;
 			   while (SDL_PollEvent(&event) > 0) {
-				 // Spec-flag DS offset (orig DOS keyboard ISR special-mode handlers
-				 // at eip 0x648E..0x6517). 0 = no flag for this key. Set only on
-				 // KEYDOWN. Game logic gates processing by other state.
+				 // Per-event scope: declared INSIDE while so they reset on each
+				 // event. Previously key_val leaked from previous keydown, so
+				 // pressing a spec-only key (Q/R/Y/A/N/M/X/ALT/F10/DEL/F4-F6/1-3)
+				 // after a movement key would re-OR the leftover bit into input_keys.
+				 uint16_t key_val = 0;
 				 uint16_t spec_off = 0;
 				 switch (event.type) {
 				 case SDL_KEYDOWN:
@@ -243,10 +244,43 @@ void updateDraw()
 					   spec_off = 0x91A4;  // sc 0x38 byte_31684
 					   break;
 					 case SDLK_F10:
-					   spec_off = 0x91B0;  // sc 0x44 byte_31690
+					   spec_off = 0x91B0;  // sc 0x44 byte_31690 — restart level
 					   break;
 					 case SDLK_DELETE:
-					   spec_off = 0x91BF;  // sc 0x53 byte_3169f
+					   spec_off = 0x91BF;  // sc 0x53 byte_3169f — CTRL+ALT+DEL combo
+					   break;
+					 case SDLK_q:
+					   spec_off = 0x917C;  // sc 0x10 byte_3165C — ALT+Q restart level
+					   break;
+					 case SDLK_r:
+					   spec_off = 0x917F;  // sc 0x13 byte_3165F — eip 0x2901 read
+					   break;
+					 case SDLK_y:
+					   spec_off = 0x9181;  // sc 0x15 byte_31661 — yes/no prompt YES
+					   break;
+					 case SDLK_a:
+					   spec_off = 0x918A;  // sc 0x1E byte_3166A — eip 0x2905 read
+					   break;
+					 case SDLK_n:
+					   spec_off = 0x919D;  // sc 0x31 byte_3167D — yes/no prompt NO
+					   break;
+					 case SDLK_F4:
+					   spec_off = 0x91AA;  // sc 0x3E byte_3168A — INT 3 debug trap
+					   break;
+					 case SDLK_F5:
+					   spec_off = 0x91AB;  // sc 0x3F byte_3168B — prev level cheat
+					   break;
+					 case SDLK_F6:
+					   spec_off = 0x91AC;  // sc 0x40 byte_3168C — next level cheat
+					   break;
+					 case SDLK_1:
+					   spec_off = 0x916E;  // sc 0x02 — viking 1 select (orig has no reader; infra ready)
+					   break;
+					 case SDLK_2:
+					   spec_off = 0x916F;  // sc 0x03 — viking 2 select
+					   break;
+					 case SDLK_3:
+					   spec_off = 0x9170;  // sc 0x04 — viking 3 select
 					   break;
 				     default:
 					   key_val = 0;

@@ -29,8 +29,8 @@ extern uint8_t sdl_spec_get(uint16_t off);
 // In default mode the orig also calls these; in V2_ONLY only v2 calls them.
 extern int  play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
 extern void stop_xmidi_external();
-extern void stop_xmidi_external(uint8_t num);
-extern void set_dontstop_external(uint8_t num);
+extern void stop_xmidi_external(uint16_t handle);
+extern void set_dontstop_external(uint16_t handle);
 
 // ============================================================================
 // V2 VM shadow state — complete copy of DS region used by animation VM.
@@ -103,7 +103,7 @@ static bool v2_sound_shadow_valid = false;
 // In default mode v2 sound calls are no-ops (orig handles real sound emission).
 // ============================================================================
 static std::map<uint16_t, uint32_t> v2_chunk_sizes_by_seg;
-static int v2_id_music = -1;  // matches orig's `static int id_music = -1;` in sub_176bd
+static int v2_id_music = 0;  // 0 = no music (matches handle convention: 0/0xFFFF reserved)
 
 // Resolve a sound segment value to (pointer-into-shadow, recorded-size).
 // Returns nullptr if seg is outside the v2_vm_shadow_sound window.
@@ -129,9 +129,9 @@ static void v2_sub_176bd_v2(const uint8_t* s, uint16_t bx_seg) {
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
     if (!xmidi || size == 0) return;
-    if (v2_id_music != -1) stop_xmidi_external((uint8_t)v2_id_music);
+    if (v2_id_music != 0) stop_xmidi_external((uint16_t)v2_id_music);
     v2_id_music = play_xmidi_external(xmidi, size, -1);
-    if (v2_id_music >= 0) set_dontstop_external((uint8_t)v2_id_music);
+    if (v2_id_music > 0) set_dontstop_external((uint16_t)v2_id_music);
 #else
     (void)s; (void)bx_seg;  // default mode: orig sub_176bd handles real playback
 #endif
@@ -947,17 +947,19 @@ static void v2_sub_101be(uint8_t* s) {
 static void v2_sub_108c8(uint8_t* s) {
     uint16_t ax = *(uint16_t*)(s + 0x0302) & *(uint16_t*)(s + 0x0304);  // word_287E2 & word_287E4
     if (ax & 0x8000) return;                                              // TEST ax, 8000h; JNZ ret
-    if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) != 1) return;        // CMP byte_31684, 1; JNZ ret
-    if ((uint8_t)(s[0x918B] | sdl_spec_get(0x918B)) == 1) {              // CMP byte_3166B, 1; JNZ skip
+    s[0x91A4] |= sdl_spec_get(0x91A4);  // SDL ALT OR-in
+    s[0x918B] |= sdl_spec_get(0x918B);  // SDL S OR-in
+    if (s[0x91A4] != 1) return;        // CMP byte_31684, 1; JNZ ret
+    if (s[0x918B] == 1) {              // CMP byte_3166B, 1; JNZ skip
         s[0x918B] = 0;                                                   // MOV byte_3166B, 0
         s[0x0304] ^= 1;                                                  // XOR byte ptr word_287E4, 1
         if (s[0x0304] != 0) {                                           // JZ skips stop → do stop when nonzero
-            // Mute toggled ON: stop all sound slots
+            // Mute toggled ON: stop SFX channels via SDL handles.
             for (uint16_t si = 2; si < 0x0A; si += 2) {
                 uint16_t h_off = (uint16_t)(si - 0x66F4);
-                if (*(uint16_t*)(s + h_off) != 0xFFFF) {
-                    // sub_1C79F(handle, driver): stop sequence — AIL, commented
-                    // sub_1C769(handle, driver): release sequence — AIL, commented
+                uint16_t handle = *(uint16_t*)(s + h_off);
+                if (handle != 0xFFFF) {
+                    stop_xmidi_external(handle);  // SDL replacement for AIL sub_1C79F + sub_1C769
                     *(uint16_t*)(s + h_off) = 0xFFFF;                    // clear handle
                     *(uint16_t*)(s + (uint16_t)(si - 0x66EA)) = 0xFFFF; // clear sequence
                 }
@@ -965,15 +967,23 @@ static void v2_sub_108c8(uint8_t* s) {
         }
     }
     // loc_10935: music toggle
-    if ((uint8_t)(s[0x919E] | sdl_spec_get(0x919E)) != 1) return;        // CMP byte_3167E, 1; JNZ ret
+    s[0x919E] |= sdl_spec_get(0x919E);  // SDL M OR-in
+    if (s[0x919E] != 1) return;        // CMP byte_3167E, 1; JNZ ret
     s[0x919E] = 0;                                                       // MOV byte_3167E, 0
     s[0x0302] ^= 1;                                                      // XOR byte ptr word_287E2, 1
-    if (s[0x0302] != 0) {                                                 // JNZ loc_10959
-        // loc_10959: music OFF. AIL stop+release calls only, NO DS writes.
-        // test word_287E2, 8000h; jnz ret — skip if bit 15 set
-        // push word_31DEC; push word_31DC6; call sub_1C79F; call sub_1C769 — AIL, no DS writes
-    } else {
-        // Music ON: sub_176BD(si=0, ax=0, bx=word_2B34B) — AIL start, no DS writes for v2
+    if (s[0x0302] != 0) {                                                 // JNZ loc_10959 (music STOP path)
+        // loc_10959: music OFF. Skip if bit 15 set.
+        if (!(*(uint16_t*)(s + 0x0302) & 0x8000)) {
+            extern uint16_t get_music_handle();
+            uint16_t mh = get_music_handle();
+            if (mh != 0) stop_xmidi_external(mh);  // SDL replacement for AIL sub_1C79F + sub_1C769
+        }
+    } else {                                                              // music ON path
+        // sub_176BD(si=0, ax=0, bx=word_2B34B): play music with sequence from ds:0x2E6B
+        // (orig fall-through path at eip 0x947). v2_sub_176bd_v2 handles SDL replacement
+        // and updates v2_id_music + dontstop.
+        uint16_t bx_seg = *(uint16_t*)(s + 0x2E6B);  // word_2B34B at ds:0x2E6B
+        v2_sub_176bd_v2(s, bx_seg);
     }
 }
 
@@ -3468,6 +3478,16 @@ static void v2_startup(uint8_t* s) {
     v2_sub_167ff(s);   // VGA Mode X (skipped, DS flags only)
     v2_sub_12ca3(s);   // game state clear
     v2_sub_108b8(s);   // starting level + health
+
+    // --debug CLI flag: enable orig debug-build cheats (F4 INT 3, F5/F6 level
+    // cheats). Orig conditional at eip 0xFE: TEST word_286E2, 0xFFFFh; JZ skip.
+    // MUST be after ds_static.bin load (which would overwrite earlier writes).
+    extern bool g_debug_mode;
+    if (g_debug_mode) {
+        *(uint16_t*)(s + 0x202) = 1;
+        printf("V2-STARTUP: shadow word_286E2=1 (debug cheats enabled)\n");
+    }
+
     printf("V2-STARTUP: complete\n");
 }
 
@@ -4780,10 +4800,12 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         v2_loc_124c5(shadow, 0x10, 0x0F, bx_e); }
                   }
               }
+              shadow[0x9181] |= sdl_spec_get(0x9181);  // SDL Y OR-in
+              shadow[0x919D] |= sdl_spec_get(0x919D);  // SDL N OR-in
               if (ni & 0x8000) { exit_ax = *(uint16_t*)(shadow + 0x443); pw_exit = true; }
               else if (ni & 0x1000) { exit_ax = 1; pw_exit = true; }
-              else if (shadow[0x9181] != 0) { exit_ax = 0; pw_exit = true; }  // byte_31661
-              else if (shadow[0x919D] != 0) { exit_ax = 1; pw_exit = true; }  // byte_3167D
+              else if (shadow[0x9181] != 0) { exit_ax = 0; pw_exit = true; }  // byte_31661 Y
+              else if (shadow[0x919D] != 0) { exit_ax = 1; pw_exit = true; }  // byte_3167D N
             }
             v2_do_render(); SDL_Delay(16);
         }
@@ -7536,7 +7558,7 @@ static void v2_vm_op_sound1(V2VM& vm) {
         if (vm.ds_read((uint16_t)(si - 0x66EA)) == param) {
             uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
 #ifdef V2_ONLY
-            if (handle != 0xFFFF) { stop_xmidi_external((uint8_t)handle); stopped_any = true; }
+            if (handle != 0xFFFF) { stop_xmidi_external(handle); stopped_any = true; }
 #endif
             vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
             vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
@@ -7787,7 +7809,7 @@ static void v2_vm_op_D7(V2VM& vm) {
         if (vm.ds_read((uint16_t)(si - 0x66EA)) == seq) {
             uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
 #ifdef V2_ONLY
-            if (handle != 0xFFFF) stop_xmidi_external((uint8_t)handle);
+            if (handle != 0xFFFF) stop_xmidi_external(handle);
 #endif
             vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
             vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
@@ -15419,8 +15441,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 // Orig (eip 0x8DF): CMP byte_3166B, 1; JNZ loc_10935 (skip XOR if !=1).
                 // i.e. XOR fires ONLY when byte_3166B == 1. Previous inline had inverted
                 // branch — toggled DS[0x304] every frame when no key pressed → diverged.
-                if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1 &&
-                    (uint8_t)(s[0x918B] | sdl_spec_get(0x918B)) == 1) {
+                s[0x91A4] |= sdl_spec_get(0x91A4);  // SDL ALT OR-in
+                s[0x918B] |= sdl_spec_get(0x918B);  // SDL S OR-in
+                if (s[0x91A4] == 1 && s[0x918B] == 1) {
                     s[0x918B] = 0;   // byte_3166B = 0
                     s[0x304] ^= 1;   // word_287E4 ^= 1
                     if (s[0x304] & 1) {
@@ -15436,7 +15459,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     }
                 }
                 // Part 2: music channel toggle (byte_3167E ds:0x919E)
-                if ((uint8_t)(s[0x919E] | sdl_spec_get(0x919E)) == 1) {
+                s[0x919E] |= sdl_spec_get(0x919E);  // SDL M OR-in
+                if (s[0x919E] == 1) {
                     s[0x919E] = 0;   // byte_3167E = 0
                     s[0x302] ^= 1;   // word_287E2 ^= 1
                     if (!(s[0x302] & 1)) {
@@ -15456,19 +15480,26 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // sub_10350: level transition check (eip 0x00E4). Exact replica.
         if (*(uint16_t*)(s + 0x218F) == 0) {
             bool trigger = false;
-            if ((uint8_t)(s[0x91B0] | sdl_spec_get(0x91B0)) == 1) trigger = true;
-            else if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1) {
-                if ((uint8_t)(s[0x9199] | sdl_spec_get(0x9199)) == 1 || s[0x917C] == 1) trigger = true;
+            s[0x91B0] |= sdl_spec_get(0x91B0);  // SDL F10 OR-in
+            s[0x91A4] |= sdl_spec_get(0x91A4);  // SDL ALT OR-in
+            s[0x9199] |= sdl_spec_get(0x9199);  // SDL X OR-in
+            s[0x917C] |= sdl_spec_get(0x917C);  // SDL Q OR-in
+            if (s[0x91B0] == 1) trigger = true;
+            else if (s[0x91A4] == 1) {
+                if (s[0x9199] == 1 || s[0x917C] == 1) trigger = true;
             }
             if (trigger) {
                 if (*(uint16_t*)(s + 0x3CC) == 0x8000 || (s[0x25CF] & 8)) {
-                    // loc_10e35: cleanup + reload level
-                    // sub_16546: clear VGA dirty state (VGA only, no DS writes)
-                    // sub_1754c: sound cleanup (AIL exit — skipped for v2)
-                    // INT 21h/49: free DOS memory segments — for v2: shadow buffers reloaded on init
-                    // Then falls through to sub_11080 (level reload)
-                    // For v2: trigger level reload
-                    v2_sub_11080(s);
+                    // loc_10e35: orig path = QUIT to DOS, NOT level reload.
+                    // sub_16546 (VGA cleanup, no DS writes), sub_1754c (AIL exit),
+                    // INT 21h/49 (free DOS memory), INT 21h/4C (terminate program).
+                    // For v2: stop sound + _exit(0) to bypass static destructors
+                    // (render thread mid-Mesa would SEGV otherwise).
+                    extern void stop_xmidi_external();
+                    stop_xmidi_external();
+                    fflush(stdout); fflush(stderr);
+                    extern bool need_quit; need_quit = true; SDL_Delay(50);
+                    _exit(0);
                 } else {
                     // Normal level complete: palette transition + interactive UI
                     // DS writes before UI:
@@ -15541,7 +15572,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         }
                         // sub_105cb: check exit (word_28898 & 0x9000 or byte_31661)
                         if (*(uint16_t*)(s + 0x3B8) & 0x9000) break;
-                        if (s[0x9181] != 0) break; // byte_31661
+                        s[0x9181] |= sdl_spec_get(0x9181);  // SDL Y OR-in
+                        if (s[0x9181] != 0) break; // byte_31661 Y
                         v2_do_render();
                         SDL_Delay(16);
                     }
@@ -16720,52 +16752,31 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     v2_sub_10130(s);
     // word_30C14 = 0 (eip 0x00DB)
     *(uint16_t*)(s + 0x8734) = 0;
-    // sub_108c8: sound crossfade (eip 0x00E1) — kept in shadow state
-    {
-        if (!((*(uint16_t*)(s + 0x302) & *(uint16_t*)(s + 0x304)) & 0x8000)) {
-            // Orig (eip 0x8DF): CMP byte_3166B, 1; JNZ skip. XOR fires only when ==1.
-            if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1 &&
-                (uint8_t)(s[0x918B] | sdl_spec_get(0x918B)) == 1) {
-                s[0x918B] = 0;
-                s[0x304] ^= 1;
-                if (s[0x304] & 1) {
-                    for (uint16_t si_s = 2; (int16_t)si_s < 0x0A; si_s += 2) {
-                        uint16_t h = (uint16_t)(si_s - 0x66F4);
-                        if (*(uint16_t*)(s + h) != 0xFFFF) {
-                            *(uint16_t*)(s + h) = 0xFFFF;
-                            *(uint16_t*)(s + (uint16_t)(si_s - 0x66EA)) = 0xFFFF;
-                        }
-                    }
-                }
-            }
-            if ((uint8_t)(s[0x919E] | sdl_spec_get(0x919E)) == 1) {
-                s[0x919E] = 0;
-                s[0x302] ^= 1;
-                if (s[0x302] & 1 && !(*(uint16_t*)(s + 0x302) & 0x8000)) {
-                    uint16_t h = (uint16_t)(0 - 0x66F4);
-                    if (*(uint16_t*)(s + h) != 0xFFFF) {
-                        *(uint16_t*)(s + h) = 0xFFFF;
-                        *(uint16_t*)(s + (uint16_t)(0 - 0x66EA)) = 0xFFFF;
-                    }
-                }
-            }
-        }
-    }
+    // sub_108c8: sound crossfade (eip 0x00E1). Use the proper v2_sub_108c8 function
+    // which handles ALT+S/M toggle + actual SDL stop_xmidi_external/play_xmidi_external
+    // (previously inline duplicate just toggled DS without making sound effects).
+    v2_sub_108c8(s);
     // sub_10350: level transition check (eip 0x00E4)
     if (*(uint16_t*)(s + 0x218F) == 0) {
         bool trigger = false;
-        if ((uint8_t)(s[0x91B0] | sdl_spec_get(0x91B0)) == 1) trigger = true;
-        else if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1) {
-            if ((uint8_t)(s[0x9199] | sdl_spec_get(0x9199)) == 1 || s[0x917C] == 1) trigger = true;
+        s[0x91B0] |= sdl_spec_get(0x91B0);
+        s[0x91A4] |= sdl_spec_get(0x91A4);
+        s[0x9199] |= sdl_spec_get(0x9199);
+        s[0x917C] |= sdl_spec_get(0x917C);
+        if (s[0x91B0] == 1) trigger = true;
+        else if (s[0x91A4] == 1) {
+            if (s[0x9199] == 1 || s[0x917C] == 1) trigger = true;
         }
         if (trigger) {
             if (*(uint16_t*)(s + 0x3CC) == 0x8000 || (s[0x25CF] & 8)) {
-                // loc_10E35 path: sub_16546 + sub_1754c + memory free + sub_10fa0 + sub_11080
-                // sub_16546/sub_1754c: keyboard/sound cleanup — NOP for v2
-                // Memory free: INT 21h — NOP for v2
-                // sub_10fa0: palette fade to black (1 page flip with debug hack)
-                v2_sub_10fa0(s);
-                v2_sub_11080(s);
+                // loc_10E35 path: orig = QUIT to DOS (sub_16546 VGA cleanup +
+                // sub_1754c AIL exit + INT 21h/49 free memory + INT 21h/4C
+                // terminate). For v2: stop sound + _exit(0).
+                extern void stop_xmidi_external();
+                stop_xmidi_external();
+                fflush(stdout); fflush(stderr);
+                extern bool need_quit; need_quit = true; SDL_Delay(50);
+                _exit(0);
             } else {
                 // loc_10389 path: palette clear → sub_103CA (blocking transition UI) → sub_11080
                 // OUT(0x3C8, 3); OUT(0x3C9, 0,0,0); — VGA palette write, commented
@@ -16974,16 +16985,16 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 s[0x956B] = 0;                       // byte_31A4B
                 *(uint16_t*)(s + 0x98DC) = 0;        // word_31DBC
                 memset(s + 0x956C, 0, 0x1B8 * 2);   // clear glyph buffer
-                // Check word_28814 & 2 → JMP loc_10E35 (full transition)
+                // Check word_28814 & 2 → JMP loc_10E35 (QUIT to DOS)
                 if (*(uint16_t*)(s + 0x0334) & 2) {
-                    // loc_10E35: sub_10fa0 + sub_11080
-                    v2_sub_10fa0(s);
-                    v2_sub_11080(s);
-                } else {
-                    // RETN → continue to sub_10fa0 + sub_11080 below
-                    v2_sub_10fa0(s);
-                    v2_sub_11080(s);
+                    // loc_10E35 = QUIT (same as F10 quit branch above).
+                    extern void stop_xmidi_external();
+                    stop_xmidi_external();
+                    fflush(stdout); fflush(stderr);
+                    extern bool need_quit; need_quit = true; SDL_Delay(50);
+                    _exit(0);
                 }
+                // else: RETN — continue gameplay (UI was just a popup that returned).
             }
         }
     }
@@ -17134,15 +17145,17 @@ void v2_phase_frame_end(uint16_t ds_val) {
         uint8_t* s = v2_vm_shadow_ds;
         int16_t level = (int16_t)*(uint16_t*)(s + 0x25AD); // word_2AA8D
         if (level < 0x25) {
-            uint16_t w286e2 = *(uint16_t*)(s + 0x0202); // word_286E2
+            uint16_t w286e2 = *(uint16_t*)(s + 0x0202); // word_286E2 (debug build flag)
             if (w286e2 != 0) {
-                if (s[0x91AB] == 1) { // byte_3168B == 1 (all dead)
+                s[0x91AB] |= sdl_spec_get(0x91AB);  // SDL F5 OR-in
+                s[0x91AC] |= sdl_spec_get(0x91AC);  // SDL F6 OR-in
+                if (s[0x91AB] == 1) { // byte_3168B == 1 (F5: prev level)
                     *(uint16_t*)(s + 0x0334) |= 1; // OR word_28814, 1
                     int16_t ax = level;
                     ax -= 1; // DEC ax
                     if (ax < 0) ax = 0;
                     *(uint16_t*)(s + 0x25C9) = (uint16_t)ax; // MOV word_2AAA9, ax
-                } else if (s[0x91AC] == 1) { // byte_3168C == 1 (level complete)
+                } else if (s[0x91AC] == 1) { // byte_3168C == 1 (F6: next level)
                     *(uint16_t*)(s + 0x0334) |= 1; // OR word_28814, 1
                     // word_2AAA9 already set by VM (next level destination)
                 }

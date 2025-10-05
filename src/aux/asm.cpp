@@ -485,10 +485,24 @@ static void v2_terminate_handler() {
     std::abort();
 }
 
+// Global "debug build" flag — set by --debug CLI option. Mirrors orig DOS
+// debug-build conditional that gated F4 (INT 3), F5 (prev level cheat),
+// F6 (next level cheat). orig had these enabled only in dev builds via
+// non-zero word_286E2 (ds:0x202). Game logic at eip 0xFE: TEST word_286E2,
+// 0xFFFFh; JZ skip — so any non-zero value enables.
+bool g_debug_mode = false;
+
 int main(int argc, char *argv[]) {
     std::set_terminate(v2_terminate_handler);
     signal(SIGINT, asm_sigint_handler);
     signal(SIGTERM, asm_sigint_handler);
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--debug") == 0) {
+            g_debug_mode = true;
+            fprintf(stderr, "[main] --debug enabled: F4 (INT 3), F5 (prev level), F6 (next level) cheats active\n");
+        }
+    }
 
     struct m2c::_STATE state;
     struct m2c::_STATE *_state = &state;

@@ -1910,6 +1910,17 @@ ret_1a2_3:
 	// 4369
 cs=0x1a2;eip=0x000003; 	J(CALL(sub_12989,0));	// 37 call    sub_12989 ;~ 01A2:0003
 cs=0x1a2;eip=0x000006; 	J(CALL(sub_12ab8,0));	// 38 call    sub_12AB8 ;~ 01A2:0006
+	// --debug CLI flag: enable orig debug-build cheats (F4 INT 3, F5/F6 level
+	// cheats). Orig conditional at eip 0xFE: TEST word_286E2, 0xFFFFh; JZ skip.
+	// Real DS only — shadow_ds is set later in v2_startup() (which runs from
+	// v2_run_animation_vm at line ~1937). Setting shadow here would be
+	// overwritten by v2_startup's ds_static.bin load.
+	{ extern bool g_debug_mode;
+	  if (g_debug_mode) {
+	    *(dw*)(raddr(ds, 0x202)) = 1;
+	    fprintf(stderr, "[main] real word_286E2=1 (debug cheats enabled)\n");
+	  }
+	}
 cs=0x1a2;eip=0x000009; 	J(CALL(sub_17561,0));	// 39 call    sub_17561 ;~ 01A2:0009
 cs=0x1a2;eip=0x00000c; 	J(CALL(sub_167ff,0));	// 40 call    sub_167FF ;~ 01A2:000C
 cs=0x1a2;eip=0x00000f; 	J(CALL(sub_12ca3,0));	// 41 call    sub_12CA3 ;~ 01A2:000F
@@ -2106,6 +2117,7 @@ cs=0x1a2;eip=0x0000e7; 	J(CALL(sub_1086f,0));	// 115 call    sub_1086F ;~ 01A2:0
 	  }
 	}
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_FLIP3, ds); v2_signal_phase(V2_PHASE_FRAME_END, ds); }
+	byte_3168a |= sdl_spec_get(0x91AA);  // SDL F4 (INT 3 debug) OR-in
 cs=0x1a2;eip=0x0000ea; 	T(CMP(byte_3168a, 1));	// 116 cmp     byte_3168A, 1 ;~ 01A2:00EA
 cs=0x1a2;eip=0x0000ef; 	J(JNZ(loc_100f7));	// 117 jnz     short loc_100F7 ;~ 01A2:00EF
 cs=0x1a2;eip=0x0000f1; 	X(MOV(byte_3168a, 0));	// 118 mov     byte_3168A, 0 ;~ 01A2:00F1
@@ -2116,6 +2128,7 @@ cs=0x1a2;eip=0x0000f7; 	T(CMP(word_2aa8d, 0x25));	// 122 cmp     word_2AA8D, 25h
 cs=0x1a2;eip=0x0000fc; 	J(JGE(loc_1012d));	// 123 jge     short loc_1012D ;~ 01A2:00FC
 cs=0x1a2;eip=0x0000fe; 	T(TEST(word_286e2, 0x0FFFF));	// 124 test    word_286E2, 0FFFFh ;~ 01A2:00FE
 cs=0x1a2;eip=0x000104; 	J(JZ(loc_1012d));	// 125 jz      short loc_1012D ;~ 01A2:0104
+	byte_3168b |= sdl_spec_get(0x91AB);  // SDL F5 (prev level cheat) OR-in
 cs=0x1a2;eip=0x000106; 	T(CMP(byte_3168b, 1));	// 126 cmp     byte_3168B, 1 ;~ 01A2:0106
 cs=0x1a2;eip=0x00010b; 	J(JNZ(loc_10121));	// 127 jnz     short loc_10121 ;~ 01A2:010B
 cs=0x1a2;eip=0x00010d; 	X(OR(word_28814, 1));	// 128 or      word_28814, 1 ;~ 01A2:010D
@@ -2129,6 +2142,7 @@ cs=0x1a2;eip=0x00011b; 	X(MOV(word_2aaa9, ax));	// 135 mov     word_2AAA9, ax ;~
 cs=0x1a2;eip=0x00011e; 	J(JMP(loc_1001e));	// 136 jmp     loc_1001E ;~ 01A2:011E
 loc_10121:
 	// 4374
+	byte_3168c |= sdl_spec_get(0x91AC);  // SDL F6 (next level cheat) OR-in
 cs=0x1a2;eip=0x000121; 	T(CMP(byte_3168c, 1));	// 140 cmp     byte_3168C, 1 ;~ 01A2:0121
 cs=0x1a2;eip=0x000126; 	J(JNZ(loc_1012d));	// 141 jnz     short loc_1012D ;~ 01A2:0126
 cs=0x1a2;eip=0x000128; 	X(OR(word_28814, 1));	// 142 or      word_28814, 1 ;~ 01A2:0128
@@ -2450,11 +2464,15 @@ cs=0x1a2;eip=0x000350; 	T(TEST(word_2a66f, 0x0FFFF));	// 466 test    word_2A66F,
 ret_1a2_356:
 	// 4416
 cs=0x1a2;eip=0x000356; 	J(JNZ(locret_103c9));	// 467 jnz     short locret_103C9 ;~ 01A2:0356
-cs=0x1a2;eip=0x000358; 	T(CMP((db)(byte_31690 | sdl_spec_get(0x91B0)), 1));	// 468 cmp     byte_31690, 1 ;~ 01A2:0358
+	byte_31690 |= sdl_spec_get(0x91B0);  // SDL F10 OR-in
+	byte_31684 |= sdl_spec_get(0x91A4);  // SDL ALT OR-in
+	byte_31679 |= sdl_spec_get(0x9199);  // SDL X OR-in
+	byte_3165c |= sdl_spec_get(0x917C);  // SDL Q OR-in
+cs=0x1a2;eip=0x000358; 	T(CMP(byte_31690, 1));	// 468 cmp     byte_31690, 1 ;~ 01A2:0358
 cs=0x1a2;eip=0x00035d; 	J(JZ(loc_10374));	// 469 jz      short loc_10374 ;~ 01A2:035D
-cs=0x1a2;eip=0x00035f; 	T(CMP((db)(byte_31684 | sdl_spec_get(0x91A4)), 1));	// 470 cmp     byte_31684, 1 ;~ 01A2:035F
+cs=0x1a2;eip=0x00035f; 	T(CMP(byte_31684, 1));	// 470 cmp     byte_31684, 1 ;~ 01A2:035F
 cs=0x1a2;eip=0x000364; 	J(JNZ(locret_103c9));	// 471 jnz     short locret_103C9 ;~ 01A2:0364
-cs=0x1a2;eip=0x000366; 	T(CMP((db)(byte_31679 | sdl_spec_get(0x9199)), 1));	// 472 cmp     byte_31679, 1 ;~ 01A2:0366
+cs=0x1a2;eip=0x000366; 	T(CMP(byte_31679, 1));	// 472 cmp     byte_31679, 1 ;~ 01A2:0366
 cs=0x1a2;eip=0x00036b; 	J(JZ(loc_10374));	// 473 jz      short loc_10374 ;~ 01A2:036B
 cs=0x1a2;eip=0x00036d; 	T(CMP(byte_3165c, 1));	// 474 cmp     byte_3165C, 1 ;~ 01A2:036D
 cs=0x1a2;eip=0x000372; 	J(JNZ(locret_103c9));	// 475 jnz     short locret_103C9 ;~ 01A2:0372
@@ -2764,6 +2782,7 @@ cs=0x1a2;eip=0x00062f; 	T(STC);	// 792 stc ;~ 01A2:062F
 cs=0x1a2;eip=0x000630; 	J(RETN(0));	// 793 retn ;~ 01A2:0630
 loc_10631:
 	// 4440
+	byte_31661 |= sdl_spec_get(0x9181);  // SDL Y key OR-in (mirrors orig ISR write)
 cs=0x1a2;eip=0x000631; 	T(TEST(byte_31661, 0x0FF));	// 797 test    byte_31661, 0FFh ;~ 01A2:0631
 cs=0x1a2;eip=0x000636; 	J(JZ(loc_1063d));	// 798 jz      short loc_1063D ;~ 01A2:0636
 cs=0x1a2;eip=0x000638; 	T(MOV(ax, 0));	// 799 mov     ax, 0 ;~ 01A2:0638
@@ -2771,6 +2790,7 @@ cs=0x1a2;eip=0x00063b; 	T(STC);	// 800 stc ;~ 01A2:063B
 cs=0x1a2;eip=0x00063c; 	J(RETN(0));	// 801 retn ;~ 01A2:063C
 loc_1063d:
 	// 4441
+	byte_3167d |= sdl_spec_get(0x919D);  // SDL N key OR-in
 cs=0x1a2;eip=0x00063d; 	T(TEST(byte_3167d, 0x0FF));	// 805 test    byte_3167D, 0FFh ;~ 01A2:063D
 cs=0x1a2;eip=0x000642; 	J(JZ(loc_10649));	// 806 jz      short loc_10649 ;~ 01A2:0642
 cs=0x1a2;eip=0x000644; 	T(MOV(ax, 1));	// 807 mov     ax, 1 ;~ 01A2:0644
@@ -3067,9 +3087,11 @@ ret_1a2_8cb:
 cs=0x1a2;eip=0x0008cb; 	T(AND(ax, word_287e4));	// 1143 and     ax, word_287E4 ;~ 01A2:08CB
 cs=0x1a2;eip=0x0008cf; 	T(TEST(ax, 0x8000));	// 1144 test    ax, 8000h ;~ 01A2:08CF
 cs=0x1a2;eip=0x0008d2; 	J(JNZ(locret_1097e));	// 1145 jnz     locret_1097E ;~ 01A2:08D2
-cs=0x1a2;eip=0x0008d6; 	T(CMP((db)(byte_31684 | sdl_spec_get(0x91A4)), 1));	// 1146 cmp     byte_31684, 1 ;~ 01A2:08D6
+	byte_31684 |= sdl_spec_get(0x91A4);  // SDL ALT OR-in
+	byte_3166b |= sdl_spec_get(0x918B);  // SDL S OR-in
+cs=0x1a2;eip=0x0008d6; 	T(CMP(byte_31684, 1));	// 1146 cmp     byte_31684, 1 ;~ 01A2:08D6
 cs=0x1a2;eip=0x0008db; 	J(JNZ(locret_1097e));	// 1147 jnz     locret_1097E ;~ 01A2:08DB
-cs=0x1a2;eip=0x0008df; 	T(CMP((db)(byte_3166b | sdl_spec_get(0x918B)), 1));	// 1148 cmp     byte_3166B, 1 ;~ 01A2:08DF
+cs=0x1a2;eip=0x0008df; 	T(CMP(byte_3166b, 1));	// 1148 cmp     byte_3166B, 1 ;~ 01A2:08DF
 cs=0x1a2;eip=0x0008e4; 	J(JNZ(loc_10935));	// 1149 jnz     short loc_10935 ;~ 01A2:08E4
 cs=0x1a2;eip=0x0008e6; 	X(MOV(byte_3166b, 0));	// 1150 mov     byte_3166B, 0 ;~ 01A2:08E6
 cs=0x1a2;eip=0x0008eb; 	X(XOR(*(db*)(((db*)&word_287e4)), 1));	// 1151 xor     byte ptr word_287E4, 1 ;~ 01A2:08EB
@@ -3109,7 +3131,8 @@ cs=0x1a2;eip=0x000930; 	T(CMP(si, 0x0A));	// 1175 cmp     si, 0Ah ;~ 01A2:0930
 cs=0x1a2;eip=0x000933; 	J(JL(loc_108f5));	// 1176 jl      short loc_108F5 ;~ 01A2:0933
 loc_10935:
 	// 4478
-cs=0x1a2;eip=0x000935; 	T(CMP((db)(byte_3167e | sdl_spec_get(0x919E)), 1));	// 1180 cmp     byte_3167E, 1 ;~ 01A2:0935
+	byte_3167e |= sdl_spec_get(0x919E);  // SDL M OR-in
+cs=0x1a2;eip=0x000935; 	T(CMP(byte_3167e, 1));	// 1180 cmp     byte_3167E, 1 ;~ 01A2:0935
 cs=0x1a2;eip=0x00093a; 	J(JNZ(locret_1097e));	// 1181 jnz     short locret_1097E ;~ 01A2:093A
 cs=0x1a2;eip=0x00093c; 	X(MOV(byte_3167e, 0));	// 1182 mov     byte_3167E, 0 ;~ 01A2:093C
 cs=0x1a2;eip=0x000941; 	X(XOR(*(db*)(((db*)&word_287e2)), 1));	// 1183 xor     byte ptr word_287E2, 1 ;~ 01A2:0941
@@ -3224,7 +3247,10 @@ loc_10e30:
 	// 4534
 cs=0x1a2;eip=0x000e30; 	T(MOV(ax, 0x4C00));	// 1889 mov     ax, 4C00h ;~ 01A2:0E30
 cs=0x1a2;eip=0x000e33; 	R(_INT(0x21));	// 1890 int     21h             ; DOS - 2+ - QUIT WITH EXIT CODE (EXIT) ;~ 01A2:0E33
-exit(0);
+// Tell render threads to stop, give them a tick to finish their current Mesa
+// call, then _exit. Without the delay, _exit kills threads mid-libgallium
+// call → SEGV reported even though process exits.
+need_quit = true; SDL_Delay(50); _exit(0);
 seg000_e35_proc:
 	// 1898
 loc_10e35:
@@ -3259,7 +3285,10 @@ cs=0x1a2;eip=0x000e7a; 	J(CALL(sub_1686f,0));	// 1931 call    sub_1686F ;~ 01A2:
 cs=0x1a2;eip=0x000e7d; 	J(CALL(sub_1292f,0));	// 1932 call    sub_1292F ;~ 01A2:0E7D
 cs=0x1a2;eip=0x000e80; 	T(MOV(ax, 0x4C00));	// 1933 mov     ax, 4C00h ;~ 01A2:0E80
 cs=0x1a2;eip=0x000e83; 	R(_INT(0x21));	// 1934 int     21h             ; DOS - 2+ - QUIT WITH EXIT CODE (EXIT) ;~ 01A2:0E83
-exit(0);
+// Tell render threads to stop, give them a tick to finish their current Mesa
+// call, then _exit. Without the delay, _exit kills threads mid-libgallium
+// call → SEGV reported even though process exits.
+need_quit = true; SDL_Delay(50); _exit(0);
 sub_10e85:
 	// 1940
 cs=0x1a2;eip=0x000e85; 	X(PUSH(ax));	// 1942 push    ax ;~ 01A2:0E85
@@ -6391,13 +6420,17 @@ cs=0x1a2;eip=0x0028fe; 	R(_INT(0x21));	// 5485 int     21h             ; DOS - P
 cs=0x1a2;eip=0x002900; 	T(STI);	// 5487 sti ;~ 01A2:2900
 loc_12901:
 	// 4814
+	byte_3165f |= sdl_spec_get(0x917F);  // SDL R key OR-in
+	byte_3166a |= sdl_spec_get(0x918A);  // SDL A key OR-in
 cs=0x1a2;eip=0x002901; 	T(MOV(ah, byte_3165f));	// 5490 mov     ah, byte_3165F ;~ 01A2:2901
 cs=0x1a2;eip=0x002905; 	T(OR(ah, byte_3166a));	// 5491 or      ah, byte_3166A ;~ 01A2:2905
 cs=0x1a2;eip=0x002909; 	J(JNZ(loc_12901));	// 5492 jnz     short loc_12901 ;~ 01A2:2909
 loc_1290b:
 	// 4815
+	byte_3165f |= sdl_spec_get(0x917F);
 cs=0x1a2;eip=0x00290b; 	T(TEST(byte_3165f, 0x0FF));	// 5495 test    byte_3165F, 0FFh ;~ 01A2:290B
 cs=0x1a2;eip=0x002910; 	J(JNZ(loc_12923));	// 5496 jnz     short loc_12923 ;~ 01A2:2910
+	byte_3166a |= sdl_spec_get(0x918A);
 cs=0x1a2;eip=0x002912; 	T(TEST(byte_3166a, 0x0FF));	// 5497 test    byte_3166A, 0FFh ;~ 01A2:2912
 cs=0x1a2;eip=0x002917; 	J(JZ(loc_1290b));	// 5498 jz      short loc_1290B ;~ 01A2:2917
 cs=0x1a2;eip=0x002919; 	T(CLI);	// 5499 cli ;~ 01A2:2919
