@@ -29,6 +29,20 @@ extern uint16_t input_keys_v2;
 uint16_t input_keys = 0;
 bool need_quit = false;
 
+// Cherry-pick 3f2114a: gate updateDraw() on word_3287c (VSYNC counter).
+// Game thread DECs word_3287c in render_callback (via sub_1797b). When > 0,
+// game has finished a frame and is waiting in sub_10130 for next render tick.
+// Reading drawBuffer ONLY then prevents race vs game thread writing
+// (graphics artefacts on door/dialog).
+//
+// V2_ONLY: word_3287c is in seg000/m2c which isn't linked. orig window is
+// hidden anyway (V2 renders to its own window via render_v2.cpp), so the
+// gate is moot — always update.
+#ifndef V2_ONLY
+typedef uint16_t dw;
+extern dw& word_3287c;
+#endif
+
 // SDL spec-key state (replaces orig int 9 ISR's writes to byte_31669 etc).
 // Game logic ORs sdl_spec_get(off) at byte_316xx CMP/TEST sites.
 //
@@ -94,6 +108,10 @@ void setPalette(uint8_t color, uint8_t r, uint8_t g, uint8_t b)
 void updateDraw()
  {
    auto offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
+   // Cherry-pick 3f2114a: VGA memory wraparound — drawBuffer is 65536*4 bytes,
+   // offset+i can exceed it during page-flip transitions. Bounds-safe access
+   // prevents reading past buffer (graphics artefacts).
+   constexpr int VGA_MEM_SIZE = 65536 * 4;
   // Periodic dump of original viewport content
   {
     static int frame_counter = 0;
@@ -122,7 +140,7 @@ void updateDraw()
 	//myDrawInfo->myOffset=0xa1c8;
 	//myDrawInfo->myOffset=0x66a8;
 	//myDrawInfo->myOffset=0;
-	auto color = myDrawInfo->drawBuffer[offset + i];
+	auto color = myDrawInfo->drawBuffer[(offset + i) % VGA_MEM_SIZE];
 	auto sdl_color = myDrawInfo->drawPalette[color];
 	tempDrawBuffer[i + 0 * RENDER_WIDTH] = SDL_MapRGBA(myFormat, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
   }
@@ -330,7 +348,13 @@ void updateDraw()
 			      }
 			   }
 			   //printf("VGA pan: %x %x\n", myDrawInfo->myOffset, myDrawInfo->myPixelOffset);
-			   updateDraw();
+			   // Cherry-pick 3f2114a: only update screen when game has finished a
+			   // frame (waits in sub_10130). Prevents race with game thread writes
+			   // (door/dialog artifacts). V2_ONLY: gate disabled (no m2c).
+#ifndef V2_ONLY
+			   if (word_3287c > 0)
+#endif
+				   updateDraw();
 			   // RESTORED from orig: render_callback (sub_1797b) DECs word_3287C from
 			   // render thread at ~60Hz. Without this, game thread sub_10130 sleeps
 			   // 16ms each call (3+ per frame) → severe slowdown.

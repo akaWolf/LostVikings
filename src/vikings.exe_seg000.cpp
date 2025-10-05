@@ -2450,6 +2450,9 @@ cs=0x1a2;eip=0x000336; 	X(MOV(word_2aaa9, 0x27));	// 441 mov     word_2AAA9, 27h
 loc_1033c:
 	// 4413
 cs=0x1a2;eip=0x00033c; 	X(MOV(word_288ac, 0));	// 444 mov     word_288AC, 0 ;~ 01A2:033C
+	// TODO: original bug — word_288ac = 0 skips music reload in sub_116e3
+	// when skipping intro scenes. Needs more careful fix that doesn't
+	// cause sub_116e3 to read the level table out of intro context.
 cs=0x1a2;eip=0x000342; 	J(JMP(loc_1034a));	// 445 jmp     short loc_1034A ;~ 01A2:0342
 loc_10344:
 	// 4414
@@ -5662,7 +5665,24 @@ cs=0x1a2;eip=0x002360; 	T(MOV(ax, word_30bbc));	// 4616 mov     ax, word_30BBC ;
 loc_12363:
 	// 4751
 cs=0x1a2;eip=0x002363; 	T(OR(ax, word_30bbe));	// 4619 or      ax, word_30BBE ;~ 01A2:2363 — orig fake input (cutscene injection)
-	T(OR(ax, input_keys));	// SDL keyboard input (replaces orig INT 9 keyboard handler)
+	// SDL input: OR input_keys into ax, but mask movement keys during intro.
+	// Original INT 9 handler (loc_164ca) blocked normal key→word_30bbe mapping
+	// when word_288ac == 0x8000, only allowing special keys through.
+	// Intro/menu mode (word_288ac == 0x8000): set word_30bbe = 0xFFFF on edge
+	// (any key event, once per press). Normal mode: pass individual key bits.
+	// Cherry-pick 3f2114a — fixes intro key press behavior matching orig ISR.
+	{
+		static uint16_t prev_intro_keys = 0;
+		if (word_288ac != (dw)0x8000) {
+			ax |= input_keys;
+			prev_intro_keys = 0;
+		} else {
+			if (input_keys != prev_intro_keys) {
+				ax |= 0xFFFF;
+			}
+			prev_intro_keys = input_keys;
+		}
+	}
 	// V2: snapshot input_keys at the EXACT moment orig reads it — before any race
 	if (myDrawInfo_v2) { extern uint16_t v2_input_snapshot; v2_input_snapshot = ax; }
 cs=0x1a2;eip=0x002367; 	X(MOV(word_28896, ax));	// 4620 mov     word_28896, ax ;~ 01A2:2367
@@ -5736,6 +5756,13 @@ cs=0x1a2;eip=0x0023eb; 	J(CALL(sub_1241e,0));	// 4696 call    sub_1241E ;~ 01A2:
 cs=0x1a2;eip=0x0023ee; 	X(POP(ax));	// 4697 pop     ax ;~ 01A2:23EE
 cs=0x1a2;eip=0x0023ef; 	T(CMP(al, 6));	// 4698 cmp     al, 6 ;~ 01A2:23EF
 cs=0x1a2;eip=0x0023f1; 	J(JZ(loc_12415));	// 4699 jz      short loc_12415 ;~ 01A2:23F1
+	// Cherry-pick 3f2114a: skip dialog pointer chars (0x1A/0x1B).
+	// Glyph 0x1A is a downward triangle (speech bubble pointer). Stays in text
+	// buffer permanently after dialog dismissal. sub_1e0c7 renders triangle every
+	// frame to game area. Not visible in DOSBox due to VGA buffer read timing
+	// (background redraws cover it before scanout). In SDL the race-aware
+	// updateDraw() captures the stale pixels — skip render to avoid artifact.
+	goto loc_12415;
 cs=0x1a2;eip=0x0023f3; 	T(MOV(di, word_2854e));	// 4700 mov     di, word_2854E ;~ 01A2:23F3
 cs=0x1a2;eip=0x0023f7; 	T(ADD(di, word_2851a));	// 4701 add     di, word_2851A ;~ 01A2:23F7
 cs=0x1a2;eip=0x0023fb; 	T(MOV(si, word_2854c));	// 4702 mov     si, word_2854C ;~ 01A2:23FB
@@ -6279,6 +6306,11 @@ cs=0x1a2;eip=0x00280c; 	T(MOV(ax, 0x3E));	// 5331 mov     ax, 3Eh ; '>' ;~ 01A2:
 cs=0x1a2;eip=0x00280f; 	T(AND(ax, cx));	// 5332 and     ax, cx ;~ 01A2:280F
 cs=0x1a2;eip=0x002811; 	R(OUT(dx, al));	// 5333 out     dx, al ;~ 01A2:2811
 cs=0x1a2;eip=0x002812; 	X(MOV(byte_303ed, al));	// 5334 mov     byte_303ED, al ;~ 01A2:2812
+	// Cherry-pick 3f2114a: SDL mirror of VGA DAC OUT writes above (color 3 RGB).
+	setPalette(3,
+		*(db*)(((db*)&word_303eb)) << 2,
+		*(db*)(((db*)&word_303eb)+1) << 2,
+		byte_303ed << 2);
 	// SDL: mirror VGA DAC writes above — set color 3 from software copy
 	setPalette(3,
 		*(db*)(((db*)&word_303eb)) << 2,

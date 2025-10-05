@@ -64,7 +64,7 @@ static int slot_for_handle(uint16_t h) {
 
 void my_audio_callback(void *midi_player, Uint8 *stream, int len);
 
-static Uint8 buffer[8192]; /* Audio buffer */
+static Uint8 buffer[16384]; /* Audio buffer (cherry-pick 3f2114a — fix audio glitches) */
 static struct ADLMIDI_AudioFormat s_audioFormat;
 static SDL_AudioFormat myFormat;
 const uint32_t MYFREQ = 44100;
@@ -302,7 +302,7 @@ void sound_init()
     spec.freq = MYFREQ;
     spec.format = AUDIO_S16SYS;
     spec.channels = 2;
-    spec.samples = 64;
+    spec.samples = 1024;  // cherry-pick 3f2114a — was 64, larger reduces audio glitches
 
     spec.callback = my_audio_callback;
     spec.userdata = midi_players;
@@ -360,18 +360,20 @@ void sound_init()
     //SDL_CloseAudio();
 }
 
-static uint8_t myBuffer[0x2000];
+static uint8_t myBuffer[16384];  // cherry-pick 3f2114a
 
 void my_audio_callback(void *argument, Uint8 *stream, int len)
 {
   //printf("size %x\n", len);
-  if (len > 0x2000) {
+  if (len > (int)sizeof(myBuffer)) {
 	printf("SOUND ERROR, len = %d!\n", len);
-	len = 0x2000;
+	len = sizeof(myBuffer);
   }
 
   memset(myBuffer, 0, len);
-  memset(buffer, 0, len);
+  // memset(buffer) moved INSIDE the slot loop (cherry-pick 3f2114a) — buffer is
+  // reused per slot; without re-zeroing, leftover from previous slot bleeds
+  // into next slot's mix.
 
     const int requested_samples = len / s_audioFormat.containerSize;
 
@@ -397,6 +399,7 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		// returned 0 (track ended), subsequent calls got passed 0 → all
 		// returned 0 → all closed prematurely. Music would die after one
 		// adl_playFormat call returned 0 even though track had 28-45 sec left.
+		memset(buffer, 0, len);  // cherry-pick 3f2114a: zero per-slot
 		samples_count = adl_playFormat(midi_players[i], requested_samples,
 									   buffer,
 									   buffer + s_audioFormat.containerSize,
