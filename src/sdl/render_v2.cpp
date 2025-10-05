@@ -1,7 +1,9 @@
 #include <SDL2/SDL.h>
 #include <thread>
+#include <atomic>
 #include <cassert>
 #include <cstdio>
+#include <unistd.h>  // _exit
 
 // ============================================================================
 // Второе окно для тестирования новой реализации рендера
@@ -136,6 +138,8 @@ void render_thread_proc_v2(void* _state)
           switch (event.type) {
           case SDL_QUIT:
               need_quit = true;
+              fflush(stdout);
+              _exit(0);
               break;
           case SDL_KEYDOWN:
           case SDL_KEYUP: {
@@ -165,15 +169,17 @@ void render_thread_proc_v2(void* _state)
               }
               if (event.type == SDL_KEYDOWN) {
                   input_keys |= key_val; input_keys_v2 |= key_val;
-                  if (spec_off) {
-                      extern uint8_t* v2_m2c_base;
-                      if (v2_m2c_base) v2_m2c_base[0x19F00 + spec_off] = 1;
-                      extern uint8_t* v2_vm_get_shadow_ds();
-                      uint8_t* sh = v2_vm_get_shadow_ds();
-                      if (sh) sh[spec_off] = 1;
-                  }
               } else {
                   input_keys &= ~key_val; input_keys_v2 &= ~key_val;
+              }
+              if (spec_off) {
+                  extern std::atomic<uint8_t> sdl_spec_state[256];
+                  if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+                      sdl_spec_state[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+                  } else if (event.type == SDL_KEYUP && (spec_off == 0x91A4 || spec_off == 0x9189)) {
+                      // Modifiers (ALT, CTRL): clear on release.
+                      sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
+                  }
               }
               break;
           }

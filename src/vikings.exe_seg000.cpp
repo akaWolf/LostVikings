@@ -13,9 +13,13 @@
 #include <map>
 
 int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
-void stop_xmidi_external();
-void set_dontstop_external(uint8_t num);
-void stop_xmidi_external(uint8_t num);
+// Sound API uses unique 16-bit handles (mirrors AIL design).
+// 0 = no handle / "play failed". 0xFFFF = "free slot" sentinel in DS slot table.
+// Stale handle in stop_xmidi_external() → slot_for_handle returns -1 → no-op.
+void stop_xmidi_external();              // stop all SFX (preserves music)
+void stop_xmidi_external(uint16_t h);    // stop specific SFX by handle
+void set_dontstop_external(uint16_t h);  // mark handle as music
+extern uint16_t get_music_handle();      // current music handle, 0 if none
 
 extern bool trace_instructions_to_stdout;
 extern bool trace_instructions;
@@ -25,6 +29,9 @@ static FILE* data_handle = 0;
   uint32_t myOffset;
 
 extern uint16_t input_keys;
+// SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
+// Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.
+extern uint8_t sdl_spec_get(uint16_t off);
 extern bool need_quit;
 
 #include <SDL2/SDL.h>
@@ -2443,11 +2450,11 @@ cs=0x1a2;eip=0x000350; 	T(TEST(word_2a66f, 0x0FFFF));	// 466 test    word_2A66F,
 ret_1a2_356:
 	// 4416
 cs=0x1a2;eip=0x000356; 	J(JNZ(locret_103c9));	// 467 jnz     short locret_103C9 ;~ 01A2:0356
-cs=0x1a2;eip=0x000358; 	T(CMP(byte_31690, 1));	// 468 cmp     byte_31690, 1 ;~ 01A2:0358
+cs=0x1a2;eip=0x000358; 	T(CMP((db)(byte_31690 | sdl_spec_get(0x91B0)), 1));	// 468 cmp     byte_31690, 1 ;~ 01A2:0358
 cs=0x1a2;eip=0x00035d; 	J(JZ(loc_10374));	// 469 jz      short loc_10374 ;~ 01A2:035D
-cs=0x1a2;eip=0x00035f; 	T(CMP(byte_31684, 1));	// 470 cmp     byte_31684, 1 ;~ 01A2:035F
+cs=0x1a2;eip=0x00035f; 	T(CMP((db)(byte_31684 | sdl_spec_get(0x91A4)), 1));	// 470 cmp     byte_31684, 1 ;~ 01A2:035F
 cs=0x1a2;eip=0x000364; 	J(JNZ(locret_103c9));	// 471 jnz     short locret_103C9 ;~ 01A2:0364
-cs=0x1a2;eip=0x000366; 	T(CMP(byte_31679, 1));	// 472 cmp     byte_31679, 1 ;~ 01A2:0366
+cs=0x1a2;eip=0x000366; 	T(CMP((db)(byte_31679 | sdl_spec_get(0x9199)), 1));	// 472 cmp     byte_31679, 1 ;~ 01A2:0366
 cs=0x1a2;eip=0x00036b; 	J(JZ(loc_10374));	// 473 jz      short loc_10374 ;~ 01A2:036B
 cs=0x1a2;eip=0x00036d; 	T(CMP(byte_3165c, 1));	// 474 cmp     byte_3165C, 1 ;~ 01A2:036D
 cs=0x1a2;eip=0x000372; 	J(JNZ(locret_103c9));	// 475 jnz     short locret_103C9 ;~ 01A2:0372
@@ -3045,15 +3052,24 @@ cs=0x1a2;eip=0x0008c1; 	X(MOV(word_288a2, 0));	// 1132 mov     word_288A2, 0 ;~ 
 cs=0x1a2;eip=0x0008c7; 	J(RETN(0));	// 1133 retn ;~ 01A2:08C7
 sub_108c8:
 	// 1140
+	{
+	  uint8_t alt = sdl_spec_get(0x91A4);
+	  uint8_t s_k = sdl_spec_get(0x918B);
+	  uint8_t m_k = sdl_spec_get(0x919E);
+	  if (alt || s_k || m_k) {
+	    fprintf(stderr, "SUB_108C8-IN: 287E2=%04X 287E4=%04X byte_31684(ALT)=%02X|sdl=%d byte_3166B(S)=%02X|sdl=%d byte_3167E(M)=%02X|sdl=%d\n",
+	            word_287e2, word_287e4, byte_31684, alt, byte_3166b, s_k, byte_3167e, m_k);
+	  }
+	}
 cs=0x1a2;eip=0x0008c8; 	T(MOV(ax, word_287e2));	// 1142 mov     ax, word_287E2 ;~ 01A2:08C8
 ret_1a2_8cb:
 	// 4475
 cs=0x1a2;eip=0x0008cb; 	T(AND(ax, word_287e4));	// 1143 and     ax, word_287E4 ;~ 01A2:08CB
 cs=0x1a2;eip=0x0008cf; 	T(TEST(ax, 0x8000));	// 1144 test    ax, 8000h ;~ 01A2:08CF
 cs=0x1a2;eip=0x0008d2; 	J(JNZ(locret_1097e));	// 1145 jnz     locret_1097E ;~ 01A2:08D2
-cs=0x1a2;eip=0x0008d6; 	T(CMP(byte_31684, 1));	// 1146 cmp     byte_31684, 1 ;~ 01A2:08D6
+cs=0x1a2;eip=0x0008d6; 	T(CMP((db)(byte_31684 | sdl_spec_get(0x91A4)), 1));	// 1146 cmp     byte_31684, 1 ;~ 01A2:08D6
 cs=0x1a2;eip=0x0008db; 	J(JNZ(locret_1097e));	// 1147 jnz     locret_1097E ;~ 01A2:08DB
-cs=0x1a2;eip=0x0008df; 	T(CMP(byte_3166b, 1));	// 1148 cmp     byte_3166B, 1 ;~ 01A2:08DF
+cs=0x1a2;eip=0x0008df; 	T(CMP((db)(byte_3166b | sdl_spec_get(0x918B)), 1));	// 1148 cmp     byte_3166B, 1 ;~ 01A2:08DF
 cs=0x1a2;eip=0x0008e4; 	J(JNZ(loc_10935));	// 1149 jnz     short loc_10935 ;~ 01A2:08E4
 cs=0x1a2;eip=0x0008e6; 	X(MOV(byte_3166b, 0));	// 1150 mov     byte_3166B, 0 ;~ 01A2:08E6
 cs=0x1a2;eip=0x0008eb; 	X(XOR(*(db*)(((db*)&word_287e4)), 1));	// 1151 xor     byte ptr word_287E4, 1 ;~ 01A2:08EB
@@ -3064,11 +3080,12 @@ loc_108f5:
 cs=0x1a2;eip=0x0008f5; 	T(CMP(*(dw*)(raddr(ds,si-0x66F4)), 0x0FFFF));	// 1156 cmp     word ptr [si-66F4h], 0FFFFh ;~ 01A2:08F5
 cs=0x1a2;eip=0x0008fb; 	J(JZ(loc_1092d));	// 1157 jz      short loc_1092D ;~ 01A2:08FB
  // SDL replacement for AIL sub_1C79F + sub_1C769 (mute toggle: stop occupied
- // SFX slot). Slot's [si-0x66F4] holds adlmidi player num (set by sub_177bb).
- // Triggers when user presses 'S' to toggle SFX off.
+ // SFX slot). Slot's [si-0x66F4] holds unique handle from sub_177bb. If that
+ // handle is stale (sound already ended naturally), stop_xmidi_external looks
+ // up via slot_for_handle, finds nothing, no-ops — same as AIL with stale handle.
  {
    dw h = *(dw*)(raddr(ds, si - 0x66F4));
-   if (h != 0xFFFF) stop_xmidi_external((uint8_t)h);
+   if (h != 0xFFFF) stop_xmidi_external(h);
  }
  printf("AIL sub_108c8: stop1\n");
 cs=0x1a2;eip=0x0008fd; 	X(PUSH(si));	// 1158 push    si ;~ 01A2:08FD
@@ -3092,7 +3109,7 @@ cs=0x1a2;eip=0x000930; 	T(CMP(si, 0x0A));	// 1175 cmp     si, 0Ah ;~ 01A2:0930
 cs=0x1a2;eip=0x000933; 	J(JL(loc_108f5));	// 1176 jl      short loc_108F5 ;~ 01A2:0933
 loc_10935:
 	// 4478
-cs=0x1a2;eip=0x000935; 	T(CMP(byte_3167e, 1));	// 1180 cmp     byte_3167E, 1 ;~ 01A2:0935
+cs=0x1a2;eip=0x000935; 	T(CMP((db)(byte_3167e | sdl_spec_get(0x919E)), 1));	// 1180 cmp     byte_3167E, 1 ;~ 01A2:0935
 cs=0x1a2;eip=0x00093a; 	J(JNZ(locret_1097e));	// 1181 jnz     short locret_1097E ;~ 01A2:093A
 cs=0x1a2;eip=0x00093c; 	X(MOV(byte_3167e, 0));	// 1182 mov     byte_3167E, 0 ;~ 01A2:093C
 cs=0x1a2;eip=0x000941; 	X(XOR(*(db*)(((db*)&word_287e2)), 1));	// 1183 xor     byte ptr word_287E2, 1 ;~ 01A2:0941
@@ -3110,12 +3127,11 @@ loc_10959:
 cs=0x1a2;eip=0x000959; 	T(TEST(word_287e2, 0x8000));	// 1195 test    word_287E2, 8000h ;~ 01A2:0959
 cs=0x1a2;eip=0x00095f; 	J(JNZ(locret_1097e));	// 1196 jnz     short locret_1097E ;~ 01A2:095F
  // SDL replacement for AIL sub_1C79F + sub_1C769 (music mute toggle off→on:
- // stop music). Music handle is in play.cpp's dontstop_num — orig stored in
- // ds:0x990C but our SDL sub_176bd doesn't write that DS slot. Use getter.
+ // stop music). Music handle in play.cpp's dontstop_handle (orig stored in
+ // ds:0x990C; our SDL sub_176bd doesn't write that slot — use getter).
  {
-   extern int get_music_handle();
-   int h = get_music_handle();
-   if (h >= 0) stop_xmidi_external((uint8_t)h);
+   uint16_t h = get_music_handle();
+   if (h != 0) stop_xmidi_external(h);
  }
  printf("AIL sub_108c8: stop2\n");
 cs=0x1a2;eip=0x000961; 	X(PUSH(word_31dec));	// 1197 push    word_31DEC ;~ 01A2:0961
@@ -15815,10 +15831,10 @@ sub_176bd:
  printf("AIL sub_176bd: sequence_num: %x FORM_XMID_high: %x state_table_offset: %x\n", ax, bx, si);
 	// 17188
  printf("AIL %x\n", chunk_sizes[(bx) << 4]);
- static int id_music = - 1;
- if (id_music != -1)
+ static uint16_t id_music = 0;
+ if (id_music != 0)
    stop_xmidi_external(id_music);
- id_music = play_xmidi_external(raddr(bx,0), chunk_sizes[(bx) << 4], -1);
+ id_music = (uint16_t)play_xmidi_external(raddr(bx,0), chunk_sizes[(bx) << 4], -1);
  set_dontstop_external(id_music);
 cs=0x1a2;eip=0x0076bb; 	J(RETN(0));	// 17177 retn ;~ 01A2:76BB
 cs=0x1a2;eip=0x0076bd; 	X(PUSHF);	// 17190 pushf ;~ 01A2:76BD
@@ -15944,12 +15960,16 @@ sub_177bb:
  // store SDL handle + seq in first free slot (si=8/6/4/2, addr ds:[si-0x66F4])
  // so sub_1782a / sub_1787f / sub_108c8 mute toggle can stop selectively
  // by handle. Slot tag 0xFFFF = free.
+ // Mute check: orig (eip 0x77BD) does `TEST word_287E4, 0xFFFF; JNZ skip` BEFORE
+ // play. Mirror that here so ALT+S mute (which sets low byte of word_287E4 to 1)
+ // actually blocks new SFX.
+ if (*(dw*)(raddr(ds,0x304)) == 0)
  {
    int sdl_handle = play_xmidi_external(raddr(*(dw*)(raddr(ds,0x2E6D)),0),
                                          chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4], ax);
-   if (sdl_handle >= 0 && *(dw*)(raddr(ds,0x304)) == 0) {
-     // Try slots si=8,6,4,2 for free slot (matches orig sub_177bb scan order
-     // in the dead code below — preserves orig semantics for the slot table).
+   if (sdl_handle > 0) {
+     // Try slots si=8,6,4,2 for free slot (matches orig sub_177bb scan order).
+     // Slot tag 0xFFFF = free; we store unique handle from play_xmidi_external.
      for (int _si = 8; _si > 0; _si -= 2) {
        if (*(dw*)(raddr(ds, _si - 0x66F4)) == 0xFFFF) {
          *(dw*)(raddr(ds, _si - 0x66F4)) = (dw)sdl_handle;
@@ -15957,10 +15977,6 @@ sub_177bb:
          break;
        }
      }
-     // If all slots full: don't track. SFX still plays; can't be selectively
-     // stopped, but plays through to end. Same as orig DOS behavior with full
-     // AIL slot table (orig sub_177bb tries to free a "done" slot via AIL
-     // status check sub_1C7AB — we'd need is_player_active here for parity).
    }
  }
 cs=0x1a2;eip=0x0077b1; 	J(RETN(0));	// 17313 retn ;~ 01A2:77B1
@@ -16053,7 +16069,7 @@ cs=0x1a2;eip=0x007842; 	J(JNZ(loc_17877));	// 17412 jnz     short loc_17877 ;~ 0
  // stop sound by seq doesn't actually stop anything.
  {
    dw h = *(dw*)(raddr(ds, si - 0x66F4));
-   if (h != 0xFFFF) stop_xmidi_external((uint8_t)h);
+   if (h != 0xFFFF) stop_xmidi_external(h);
  }
 cs=0x1a2;eip=0x007844; 	X(PUSHF);	// 17413 pushf ;~ 01A2:7844
 cs=0x1a2;eip=0x007845; 	T(CLI);	// 17414 cli ;~ 01A2:7845
@@ -16103,7 +16119,7 @@ cs=0x1a2;eip=0x007899; 	J(JNZ(loc_178ce));	// 17458 jnz     short loc_178CE ;~ 0
  // seq=ax. Same pattern as sub_1782a — slot's [si-0x66F4] holds adlmidi player num.
  {
    dw h = *(dw*)(raddr(ds, si - 0x66F4));
-   if (h != 0xFFFF) stop_xmidi_external((uint8_t)h);
+   if (h != 0xFFFF) stop_xmidi_external(h);
  }
 cs=0x1a2;eip=0x00789b; 	X(PUSHF);	// 17459 pushf ;~ 01A2:789B
 cs=0x1a2;eip=0x00789c; 	T(CLI);	// 17460 cli ;~ 01A2:789C

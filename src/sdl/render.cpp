@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdio>
 #include <atomic>
+#include <unistd.h>  // _exit
 
 const int SCREEN_SCALE = 4;
 const int SCREEN_WIDTH = 320;
@@ -27,6 +28,45 @@ extern void render_callback(void *);
 extern uint16_t input_keys_v2;
 uint16_t input_keys = 0;
 bool need_quit = false;
+
+// SDL spec-key state (replaces orig int 9 ISR's writes to byte_31669 etc).
+// Game logic ORs sdl_spec_get(off) at byte_316xx CMP/TEST sites.
+//
+// Two key roles need different semantics to mirror orig DOS keyboard ISR:
+//
+// MODIFIERS (ALT, CTRL): sticky — KEYDOWN sets atomic=1, KEYUP sets =0.
+// Snapshot just copies. Stays 1 the whole time the key is held, so a trigger
+// pressed later in the same hold combines correctly (e.g. ALT held, then S
+// pressed → both register simultaneously in same frame).
+//
+// TRIGGERS (S, M, X, F10, DEL): edge — KEYDOWN sets atomic=1; snapshot
+// consumes via exchange(0). Each press produces exactly one game-side
+// toggle, even if user holds the key (no auto-repeat-driven retoggle).
+//
+// Two-stage atomic→snap to avoid orig/v2 desync within a frame: render
+// thread updates atomic; v2_phase_frame_begin snapshots once per frame.
+std::atomic<uint8_t> sdl_spec_state[256] = {};
+static uint8_t sdl_spec_snap[256] = {};
+
+static bool sdl_spec_is_modifier(uint16_t off) {
+    return off == 0x91A4 /* ALT */ || off == 0x9189 /* CTRL */;
+}
+
+uint8_t sdl_spec_get(uint16_t off) {
+    return sdl_spec_snap[off & 0xFF];
+}
+
+void sdl_spec_snapshot_take() {
+    for (int i = 0; i < 256; i++) {
+        // Modifiers: copy. Triggers: exchange-to-0 (consume one press).
+        // Modifier offsets 0x9189 (CTRL low=0x89) and 0x91A4 (ALT low=0xA4).
+        if (i == 0x89 || i == 0xA4) {
+            sdl_spec_snap[i] = sdl_spec_state[i].load(std::memory_order_relaxed);
+        } else {
+            sdl_spec_snap[i] = sdl_spec_state[i].exchange(0, std::memory_order_relaxed);
+        }
+    }
+}
 
 
 unsigned int plane4_to_linear(unsigned int plane, unsigned int offset)
@@ -215,26 +255,44 @@ void updateDraw()
 				   if (event.type == SDL_KEYDOWN) {
 					 input_keys |= key_val;
 					 input_keys_v2 |= key_val;
-					 if (spec_off) {
-					   // Default: m2c::m + 0x19F00 + spec_off = real DS byte. Orig
-					   // sub_108c8 etc read from there.
-					   extern uint8_t* v2_m2c_base;
-					   if (v2_m2c_base) v2_m2c_base[0x19F00 + spec_off] = 1;
-					   // V2_ONLY: also set shadow DS for v2 mute toggle (TBD #73).
-					   extern uint8_t* v2_vm_get_shadow_ds();
-					   uint8_t* sh = v2_vm_get_shadow_ds();
-					   if (sh) sh[spec_off] = 1;
-					 }
+					 // spec_off DS writes removed — they caused races between render
+					 // thread writes to real_ds vs shadow_ds. Orig design: int 9 ISR
+					 // (seg000_6440_proc, dead in m2c port) writes spec bytes on press.
+					 // Game logic reads them (e.g. sub_108c8 reads ds:0x918B for S key).
+					 // Without ISR, spec bytes stay 0 → mute toggles etc don't fire.
+					 // To re-enable: route through atomic + game thread copy at barrier.
 				   } else {
 					 input_keys &= ~key_val;
 					 input_keys_v2 &= ~key_val;
 				   }
+				   // Spec key SDL state. Modifiers: KEYDOWN sets, KEYUP clears.
+				   // Triggers: KEYDOWN sets only (snapshot consumes via exchange).
+				   if (event.type == SDL_KEYDOWN) {
+					 fprintf(stderr, "KEY-DBG sym=%d spec_off=0x%04X repeat=%d\n",
+					         (int)event.key.keysym.sym, spec_off, (int)event.key.repeat);
+				   }
+				   if (spec_off) {
+					 if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+					   sdl_spec_state[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+					 } else if (event.type == SDL_KEYUP && sdl_spec_is_modifier(spec_off)) {
+					   // Modifier release: clear sticky bit so future trigger combos
+					   // don't see ghost-held modifier.
+					   sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
+					 }
+				   }
 				   break;
 
 				 case SDL_QUIT:
-				   need_quit = true;
-				   printf("quitting\n");
-				   //return;
+				   fprintf(stderr, "SDL_QUIT received — _exit\n");
+				   fflush(stderr);
+				   _exit(0);
+				 case SDL_WINDOWEVENT:
+				   if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
+					 fprintf(stderr, "SDL_WINDOWEVENT_CLOSE (windowID=%u) — _exit\n", event.window.windowID);
+					 fflush(stderr);
+					 _exit(0);
+				   }
+				   break;
 			      }
 			   }
 			   //printf("VGA pan: %x %x\n", myDrawInfo->myOffset, myDrawInfo->myPixelOffset);

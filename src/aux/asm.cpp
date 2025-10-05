@@ -456,7 +456,40 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 
 }
 
+#include <execinfo.h>
+#include <exception>
+#include <csignal>
+
+// SIGINT/SIGTERM: m2c game thread loops forever in C++ goto chain — has no
+// need_quit check. SDL render thread sets need_quit on SDL_QUIT but game
+// thread ignores it, so process never exits on Ctrl-C. Force exit.
+static void asm_sigint_handler(int sig) {
+    fprintf(stderr, "\nSignal %d received — exiting\n", sig);
+    _exit(128 + sig);
+}
+
+static void v2_terminate_handler() {
+    fprintf(stderr, "\n=== std::terminate called ===\n");
+    void* bt[40];
+    int n = backtrace(bt, 40);
+    backtrace_symbols_fd(bt, n, fileno(stderr));
+    auto e = std::current_exception();
+    if (e) {
+        try { std::rethrow_exception(e); }
+        catch (const std::exception& ex) { fprintf(stderr, "exception: %s\n", ex.what()); }
+        catch (...) { fprintf(stderr, "unknown exception\n"); }
+    } else {
+        fprintf(stderr, "no active exception\n");
+    }
+    fflush(stderr);
+    std::abort();
+}
+
 int main(int argc, char *argv[]) {
+    std::set_terminate(v2_terminate_handler);
+    signal(SIGINT, asm_sigint_handler);
+    signal(SIGTERM, asm_sigint_handler);
+
     struct m2c::_STATE state;
     struct m2c::_STATE *_state = &state;
 	struct m2c::_STATE render_state;

@@ -21,6 +21,10 @@
 // Access to emulated memory
 extern uint8_t* v2_m2c_base;
 
+// SDL spec-key state (defined in sdl/render.cpp). Game logic ORs this in
+// at byte_31xxx CMP/TEST sites to mirror what orig int 9 ISR would have set.
+extern uint8_t sdl_spec_get(uint16_t off);
+
 // SDL/adlmidi sound API (defined in sdl/play.cpp).
 // In default mode the orig also calls these; in V2_ONLY only v2 calls them.
 extern int  play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
@@ -943,8 +947,8 @@ static void v2_sub_101be(uint8_t* s) {
 static void v2_sub_108c8(uint8_t* s) {
     uint16_t ax = *(uint16_t*)(s + 0x0302) & *(uint16_t*)(s + 0x0304);  // word_287E2 & word_287E4
     if (ax & 0x8000) return;                                              // TEST ax, 8000h; JNZ ret
-    if (s[0x91A4] != 1) return;                                          // CMP byte_31684, 1; JNZ ret
-    if (s[0x918B] == 1) {                                                // CMP byte_3166B, 1; JNZ skip
+    if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) != 1) return;        // CMP byte_31684, 1; JNZ ret
+    if ((uint8_t)(s[0x918B] | sdl_spec_get(0x918B)) == 1) {              // CMP byte_3166B, 1; JNZ skip
         s[0x918B] = 0;                                                   // MOV byte_3166B, 0
         s[0x0304] ^= 1;                                                  // XOR byte ptr word_287E4, 1
         if (s[0x0304] != 0) {                                           // JZ skips stop → do stop when nonzero
@@ -961,7 +965,7 @@ static void v2_sub_108c8(uint8_t* s) {
         }
     }
     // loc_10935: music toggle
-    if (s[0x919E] != 1) return;                                          // CMP byte_3167E, 1; JNZ ret
+    if ((uint8_t)(s[0x919E] | sdl_spec_get(0x919E)) != 1) return;        // CMP byte_3167E, 1; JNZ ret
     s[0x919E] = 0;                                                       // MOV byte_3167E, 0
     s[0x0302] ^= 1;                                                      // XOR byte ptr word_287E2, 1
     if (s[0x0302] != 0) {                                                 // JNZ loc_10959
@@ -15411,28 +15415,28 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // ds:0x302 (word_287E2) & ds:0x304 (word_287E4) bit 15 → skip.
         {
             if (!((*(uint16_t*)(s + 0x302) & *(uint16_t*)(s + 0x304)) & 0x8000)) {
-                // Part 1: crossfade check (byte_31684 ds:0x91A4)
-                if (s[0x91A4] == 1) {
-                    if (s[0x918B] == 1) {
-                        // byte_3166B == 1 → not ready, skip to part 2
-                    } else {
-                        s[0x918B] = 0;   // byte_3166B = 0
-                        s[0x304] ^= 1;   // word_287E4 ^= 1
-                        if (s[0x304] & 1) {
-                            // Toggle set → stop sounds on channel si=2..8
-                            for (uint16_t si_s = 2; (int16_t)si_s < 0x0A; si_s += 2) {
-                                uint16_t h = (uint16_t)(si_s - 0x66F4);
-                                if (*(uint16_t*)(s + h) != 0xFFFF) {
-                                    // sub_1C79F + sub_1C769 — AIL stop/release, skipped
-                                    *(uint16_t*)(s + h) = 0xFFFF;
-                                    *(uint16_t*)(s + (uint16_t)(si_s - 0x66EA)) = 0xFFFF;
-                                }
+                // Part 1: crossfade check (byte_31684 ds:0x91A4 = ALT, byte_3166B ds:0x918B = S)
+                // Orig (eip 0x8DF): CMP byte_3166B, 1; JNZ loc_10935 (skip XOR if !=1).
+                // i.e. XOR fires ONLY when byte_3166B == 1. Previous inline had inverted
+                // branch — toggled DS[0x304] every frame when no key pressed → diverged.
+                if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1 &&
+                    (uint8_t)(s[0x918B] | sdl_spec_get(0x918B)) == 1) {
+                    s[0x918B] = 0;   // byte_3166B = 0
+                    s[0x304] ^= 1;   // word_287E4 ^= 1
+                    if (s[0x304] & 1) {
+                        // Toggle set → stop sounds on channel si=2..8
+                        for (uint16_t si_s = 2; (int16_t)si_s < 0x0A; si_s += 2) {
+                            uint16_t h = (uint16_t)(si_s - 0x66F4);
+                            if (*(uint16_t*)(s + h) != 0xFFFF) {
+                                // sub_1C79F + sub_1C769 — AIL stop/release, skipped
+                                *(uint16_t*)(s + h) = 0xFFFF;
+                                *(uint16_t*)(s + (uint16_t)(si_s - 0x66EA)) = 0xFFFF;
                             }
                         }
                     }
                 }
                 // Part 2: music channel toggle (byte_3167E ds:0x919E)
-                if (s[0x919E] == 1) {
+                if ((uint8_t)(s[0x919E] | sdl_spec_get(0x919E)) == 1) {
                     s[0x919E] = 0;   // byte_3167E = 0
                     s[0x302] ^= 1;   // word_287E2 ^= 1
                     if (!(s[0x302] & 1)) {
@@ -15452,9 +15456,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // sub_10350: level transition check (eip 0x00E4). Exact replica.
         if (*(uint16_t*)(s + 0x218F) == 0) {
             bool trigger = false;
-            if (s[0x91B0] == 1) trigger = true;
-            else if (s[0x91A4] == 1) {
-                if (s[0x9199] == 1 || s[0x917C] == 1) trigger = true;
+            if ((uint8_t)(s[0x91B0] | sdl_spec_get(0x91B0)) == 1) trigger = true;
+            else if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1) {
+                if ((uint8_t)(s[0x9199] | sdl_spec_get(0x9199)) == 1 || s[0x917C] == 1) trigger = true;
             }
             if (trigger) {
                 if (*(uint16_t*)(s + 0x3CC) == 0x8000 || (s[0x25CF] & 8)) {
@@ -15623,6 +15627,10 @@ static void v2_check_117D(const char* where, uint8_t* s, uint8_t* r) {
 void v2_phase_frame_begin(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
+    // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.
+    // In default mode seg000 also takes snapshot at sub_12352 line 5623; both
+    // paths update the same buffer so worst case it's refreshed twice/frame.
+    { extern void sdl_spec_snapshot_take(); sdl_spec_snapshot_take(); }
 #ifdef V2_RENDER_FROM_SHADOW
     v2_vm_in_frame = true;
 #endif
@@ -16715,22 +16723,22 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     // sub_108c8: sound crossfade (eip 0x00E1) — kept in shadow state
     {
         if (!((*(uint16_t*)(s + 0x302) & *(uint16_t*)(s + 0x304)) & 0x8000)) {
-            if (s[0x91A4] == 1) {
-                if (s[0x918B] != 1) {
-                    s[0x918B] = 0;
-                    s[0x304] ^= 1;
-                    if (s[0x304] & 1) {
-                        for (uint16_t si_s = 2; (int16_t)si_s < 0x0A; si_s += 2) {
-                            uint16_t h = (uint16_t)(si_s - 0x66F4);
-                            if (*(uint16_t*)(s + h) != 0xFFFF) {
-                                *(uint16_t*)(s + h) = 0xFFFF;
-                                *(uint16_t*)(s + (uint16_t)(si_s - 0x66EA)) = 0xFFFF;
-                            }
+            // Orig (eip 0x8DF): CMP byte_3166B, 1; JNZ skip. XOR fires only when ==1.
+            if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1 &&
+                (uint8_t)(s[0x918B] | sdl_spec_get(0x918B)) == 1) {
+                s[0x918B] = 0;
+                s[0x304] ^= 1;
+                if (s[0x304] & 1) {
+                    for (uint16_t si_s = 2; (int16_t)si_s < 0x0A; si_s += 2) {
+                        uint16_t h = (uint16_t)(si_s - 0x66F4);
+                        if (*(uint16_t*)(s + h) != 0xFFFF) {
+                            *(uint16_t*)(s + h) = 0xFFFF;
+                            *(uint16_t*)(s + (uint16_t)(si_s - 0x66EA)) = 0xFFFF;
                         }
                     }
                 }
             }
-            if (s[0x919E] == 1) {
+            if ((uint8_t)(s[0x919E] | sdl_spec_get(0x919E)) == 1) {
                 s[0x919E] = 0;
                 s[0x302] ^= 1;
                 if (s[0x302] & 1 && !(*(uint16_t*)(s + 0x302) & 0x8000)) {
@@ -16746,9 +16754,9 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     // sub_10350: level transition check (eip 0x00E4)
     if (*(uint16_t*)(s + 0x218F) == 0) {
         bool trigger = false;
-        if (s[0x91B0] == 1) trigger = true;
-        else if (s[0x91A4] == 1) {
-            if (s[0x9199] == 1 || s[0x917C] == 1) trigger = true;
+        if ((uint8_t)(s[0x91B0] | sdl_spec_get(0x91B0)) == 1) trigger = true;
+        else if ((uint8_t)(s[0x91A4] | sdl_spec_get(0x91A4)) == 1) {
+            if ((uint8_t)(s[0x9199] | sdl_spec_get(0x9199)) == 1 || s[0x917C] == 1) trigger = true;
         }
         if (trigger) {
             if (*(uint16_t*)(s + 0x3CC) == 0x8000 || (s[0x25CF] & 8)) {
@@ -17255,6 +17263,16 @@ void v2_signal_phase(V2Phase phase, uint16_t ds_val) {
 
 void v2_game_thread_start() {
     v2_game_thread = std::thread(v2_game_thread_func);
+    // atexit detach: иначе при exit() из самого v2_game_thread (например
+    // exit(1) в trace_compare на divergence) static destructor видит
+    // joinable thread → std::terminate. Detach снимает joinable bit.
+    static bool atexit_registered = false;
+    if (!atexit_registered) {
+        atexit_registered = true;
+        std::atexit([]() {
+            if (v2_game_thread.joinable()) v2_game_thread.detach();
+        });
+    }
 }
 
 void v2_game_thread_stop() {
@@ -17460,6 +17478,27 @@ int v2_trace_len = 0;
 int orig_trace_len = 0;
 int g_v2_verify_step = 0;
 
+// DS snapshot per trace entry (any opcode). Bounded by FE_SNAP_MAX so memory
+// stays reasonable: 200 * 64KB * 2 = 25.6 MB. trace_compare uses it to dump
+// byte-level diff at the exact opcode where hash diverged (vs end-of-frame
+// DS-DIFF which usually shows 0 due to transient state convergence).
+static constexpr int FE_SNAP_MAX = 200;
+static uint8_t v2_fe_snap_ds[FE_SNAP_MAX][0x10000];
+static uint8_t orig_fe_snap_ds[FE_SNAP_MAX][0x10000];
+static int v2_fe_snap_idx_for_trace[VM_TRACE_MAX];
+static int orig_fe_snap_idx_for_trace[VM_TRACE_MAX];
+static int v2_fe_snap_count = 0;
+static int orig_fe_snap_count = 0;
+
+void v2_vm_trace_clear_fe_snap() {
+    v2_fe_snap_count = 0;
+    orig_fe_snap_count = 0;
+    for (int i = 0; i < VM_TRACE_MAX; i++) {
+        v2_fe_snap_idx_for_trace[i] = -1;
+        orig_fe_snap_idx_for_trace[i] = -1;
+    }
+}
+
 // Extended record_v2 — caller provides ds_hash_before/obj_hash_before snapshots
 // taken at exact moment BEFORE opcode runs (chained reference is unreliable when
 // other threads / phases write to shadow_ds between trace entries).
@@ -17469,6 +17508,12 @@ void v2_vm_trace_record_v2_ext(uint16_t obj, uint16_t step, uint8_t opcode,
                                uint8_t* ds,
                                uint32_t ds_hash_before, uint32_t obj_hash_before) {
     if (v2_trace_len < VM_TRACE_MAX) {
+        // Snapshot DS at every opcode recording time (bounded by FE_SNAP_MAX).
+        if (v2_fe_snap_count < FE_SNAP_MAX) {
+            memcpy(v2_fe_snap_ds[v2_fe_snap_count], ds, 0x10000);
+            v2_fe_snap_idx_for_trace[v2_trace_len] = v2_fe_snap_count;
+            v2_fe_snap_count++;
+        }
         auto& e = v2_trace[v2_trace_len++];
         e.obj = obj; e.step = step; e.opcode = opcode;
         e.pc_before = pc_before; e.pc_after = pc_after;
@@ -17507,6 +17552,12 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
                          uint8_t opcode, uint16_t pc_before, uint16_t acc_before,
                          uint16_t orig_pc_after, uint16_t orig_acc_after) {
     if (orig_trace_len < VM_TRACE_MAX) {
+        // Snapshot orig DS at every opcode recording time (bounded).
+        if (orig_fe_snap_count < FE_SNAP_MAX) {
+            memcpy(orig_fe_snap_ds[orig_fe_snap_count], ds_after, 0x10000);
+            orig_fe_snap_idx_for_trace[orig_trace_len] = orig_fe_snap_count;
+            orig_fe_snap_count++;
+        }
         auto& e = orig_trace[orig_trace_len++];
         e.obj = obj_idx; e.step = (uint16_t)step; e.opcode = opcode;
         e.pc_before = pc_before; e.pc_after = orig_pc_after;
@@ -17632,6 +17683,27 @@ void v2_vm_trace_compare() {
                         }
                     }
                     fprintf(stderr, "  DS-DIFF total=%d bytes\n", diff_count);
+
+                    // Per-opcode snapshot diff: DS bytes at THIS trace point
+                    // (when hashes diverged), not at end of frame.
+                    int v_fe = v2_fe_snap_idx_for_trace[i];
+                    int o_fe = orig_fe_snap_idx_for_trace[i];
+                    if (v_fe >= 0 && o_fe >= 0) {
+                        uint8_t* vds = v2_fe_snap_ds[v_fe];
+                        uint8_t* ods = orig_fe_snap_ds[o_fe];
+                        int snap_diff = 0;
+                        for (uint32_t j = 0; j < 0x10000; j++) {
+                            if (v2_ds_hash_skip(j & ~3u)) continue;
+                            if (ods[j] != vds[j]) {
+                                if (snap_diff < 64) {
+                                    fprintf(stderr, "  FE-SNAP-DIFF[%d]: addr=0x%04X orig=0x%02X v2=0x%02X\n",
+                                        snap_diff, j, ods[j], vds[j]);
+                                }
+                                snap_diff++;
+                            }
+                        }
+                        fprintf(stderr, "  FE-SNAP-DIFF total=%d bytes (at FE marker recording)\n", snap_diff);
+                    }
                 }
                 fflush(stderr);
                 fflush(stdout);
@@ -17695,6 +17767,7 @@ void v2_vm_trace_compare() {
     }
     v2_trace_len = 0;
     orig_trace_len = 0;
+    v2_vm_trace_clear_fe_snap();
 }
 
 // ============================================================================
