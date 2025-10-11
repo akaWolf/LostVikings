@@ -248,6 +248,33 @@ static int v2_v2_anim_cmd_count = 0;  // incremented by v2's anim cmd loop
 
 static bool v2_replay_verify_active = false; // when true, resolve_segment uses real memory
 uint16_t v2_input_snapshot = 0; // snapshot of input_keys taken by seg000 after orig sub_12352
+
+// SDL replacement for orig int 9 ISR's effect on word_30bbe (ds:0x86DE).
+// Original ISR (seg000_6440_proc):
+//   - Normal mode (word_288ac != 0x8000): KEYDOWN OR's per-scancode input bit
+//     into word_30bbe; KEYUP clears it. Game reads word_30bbe in sub_12352.
+//   - Intro mode (word_288ac == 0x8000, eip 0x651F): non-spec key → MOV
+//     word_30bbe = 0xFFFF (any-key edge signal). Movement keys do NOT leak
+//     into game during intro.
+// Our SDL handler doesn't have ISR; this helper applies the equivalent
+// transformation to the OR'd `ax` value at the read point.
+//
+// Called from:
+//   - seg000.cpp sub_12352 at eip 0x2363 (default mode orig executor)
+//   - v2_vm.cpp v2_phase_pre_vm input read (V2_ONLY mode)
+// Both reach the same read site at most once per frame, so the static
+// `prev_intro_keys` evolves consistently within a single binary.
+uint16_t v2_input_intro_mask(uint16_t prev_ax_or, uint16_t word_288ac, uint16_t input) {
+    static uint16_t prev_intro_keys = 0;
+    if (word_288ac != 0x8000) {
+        prev_intro_keys = 0;
+        return prev_ax_or | input;
+    }
+    uint16_t result = prev_ax_or;
+    if (input != prev_intro_keys) result |= 0xFFFF;
+    prev_intro_keys = input;
+    return result;
+}
 static uint16_t v2_word30BBE_snapshot = 0; // snapshot of word_30BBE at barrier sync point
 
 // ============================================================================
@@ -2141,7 +2168,14 @@ static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
           v2_sub_1241e(s, 0x18, si, di); }                          // bottom-middle
     v2_sub_1241e(s, 0x19, si, di);                                   // bottom-right
 
-    // Scroll indicator (if alignment != 6)
+    // Scroll indicator (0x1A/0x1B glyphs).
+    // Cherry-pick 3f2114a: orig at eip 0x23F1 added unconditional `goto loc_12415`
+    // to skip indicator render. Reason: 0x1A/0x1B stays in glyph buffer after
+    // dialog dismissal (loc_12758 cleanup not called for this bubble type) →
+    // sub_1e0c7 redraws it every frame → stale triangle artifact visible in SDL
+    // (race-aware updateDraw catches it; DOSBox occluded by VGA scanout timing).
+    // Mirrors must match — orig real_ds and v2 shadow_ds glyph buffer must agree.
+    // Trade-off: legitimate dialogs lose scroll indicator (acceptable for now).
     if (align != 6) {                                                 // CMP al, 6; JZ loc_12415
         uint16_t ind_di = *(uint16_t*)(s + 0x6E) + *(uint16_t*)(s + 0x3A); // word_2854E + word_2851A
         uint16_t ind_si = *(uint16_t*)(s + 0x6C) + *(uint16_t*)(s + 0x38); // word_2854C + word_28518
@@ -2153,6 +2187,7 @@ static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
         }
         v2_sub_1241e(s, ind_ch, ind_si, ind_di);                    // call sub_1241e
     }
+    (void)align;
 
     // Restore original si, di
     si = *(uint16_t*)(s + 0x6C);                                     // si = word_2854C
@@ -4560,11 +4595,13 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
 #ifdef V2_ONLY
         // V2_ONLY: orig sub_12352 doesn't run, v2_input_snapshot stays stale.
-        // Read input directly from shadow's word_30bbe (set by v2's sub_12d72) +
-        // SDL keyboard state (input_keys, updated by render thread).
+        // Read input directly from shadow's word_30bbe + SDL keyboard via the
+        // same intro-mask helper used by seg000 in default mode (mirrors orig
+        // int 9 ISR effect on word_30bbe).
         extern uint16_t input_keys;
         ax |= *(uint16_t*)(shadow + 0x86DE);  // fake input from v2's sub_12d72
-        ax |= input_keys;                      // SDL keyboard
+        uint16_t w288ac = *(uint16_t*)(shadow + 0x3CC);  // word_288ac
+        ax = v2_input_intro_mask(ax, w288ac, input_keys);
 #else
         // Standard mode (orig still runs): use v2_input_snapshot taken at exact
         // moment orig sub_12352 wrote ax. Avoids divergence with orig's ds:0x3B6.

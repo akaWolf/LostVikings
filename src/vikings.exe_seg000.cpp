@@ -5665,23 +5665,12 @@ cs=0x1a2;eip=0x002360; 	T(MOV(ax, word_30bbc));	// 4616 mov     ax, word_30BBC ;
 loc_12363:
 	// 4751
 cs=0x1a2;eip=0x002363; 	T(OR(ax, word_30bbe));	// 4619 or      ax, word_30BBE ;~ 01A2:2363 — orig fake input (cutscene injection)
-	// SDL input: OR input_keys into ax, but mask movement keys during intro.
-	// Original INT 9 handler (loc_164ca) blocked normal key→word_30bbe mapping
-	// when word_288ac == 0x8000, only allowing special keys through.
-	// Intro/menu mode (word_288ac == 0x8000): set word_30bbe = 0xFFFF on edge
-	// (any key event, once per press). Normal mode: pass individual key bits.
-	// Cherry-pick 3f2114a — fixes intro key press behavior matching orig ISR.
+	// SDL replacement for orig int 9 ISR's word_30bbe update. Helper in v2_vm.cpp
+	// applies normal-mode (OR keys → ax) or intro-mode (any-key edge → 0xFFFF)
+	// effect. Same helper called from v2_phase_pre_vm in V2_ONLY mode.
 	{
-		static uint16_t prev_intro_keys = 0;
-		if (word_288ac != (dw)0x8000) {
-			ax |= input_keys;
-			prev_intro_keys = 0;
-		} else {
-			if (input_keys != prev_intro_keys) {
-				ax |= 0xFFFF;
-			}
-			prev_intro_keys = input_keys;
-		}
+		extern uint16_t v2_input_intro_mask(uint16_t prev_ax_or, uint16_t word_288ac, uint16_t input);
+		ax = v2_input_intro_mask(ax, word_288ac, input_keys);
 	}
 	// V2: snapshot input_keys at the EXACT moment orig reads it — before any race
 	if (myDrawInfo_v2) { extern uint16_t v2_input_snapshot; v2_input_snapshot = ax; }
@@ -5756,13 +5745,8 @@ cs=0x1a2;eip=0x0023eb; 	J(CALL(sub_1241e,0));	// 4696 call    sub_1241E ;~ 01A2:
 cs=0x1a2;eip=0x0023ee; 	X(POP(ax));	// 4697 pop     ax ;~ 01A2:23EE
 cs=0x1a2;eip=0x0023ef; 	T(CMP(al, 6));	// 4698 cmp     al, 6 ;~ 01A2:23EF
 cs=0x1a2;eip=0x0023f1; 	J(JZ(loc_12415));	// 4699 jz      short loc_12415 ;~ 01A2:23F1
-	// Cherry-pick 3f2114a: skip dialog pointer chars (0x1A/0x1B).
-	// Glyph 0x1A is a downward triangle (speech bubble pointer). Stays in text
-	// buffer permanently after dialog dismissal. sub_1e0c7 renders triangle every
-	// frame to game area. Not visible in DOSBox due to VGA buffer read timing
-	// (background redraws cover it before scanout). In SDL the race-aware
-	// updateDraw() captures the stale pixels — skip render to avoid artifact.
-	goto loc_12415;
+	// Cherry-pick 3f2114a goto loc_12415 TEMPORARILY DISABLED to isolate
+	// ds:0x7EFE divergence cause. See task #65.
 cs=0x1a2;eip=0x0023f3; 	T(MOV(di, word_2854e));	// 4700 mov     di, word_2854E ;~ 01A2:23F3
 cs=0x1a2;eip=0x0023f7; 	T(ADD(di, word_2851a));	// 4701 add     di, word_2851A ;~ 01A2:23F7
 cs=0x1a2;eip=0x0023fb; 	T(MOV(si, word_2854c));	// 4702 mov     si, word_2854C ;~ 01A2:23FB

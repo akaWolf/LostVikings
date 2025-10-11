@@ -83,6 +83,7 @@ void sdl_spec_snapshot_take() {
 }
 
 
+
 unsigned int plane4_to_linear(unsigned int plane, unsigned int offset)
 {
   return offset * 4 + plane;
