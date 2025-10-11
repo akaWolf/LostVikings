@@ -1943,7 +1943,7 @@ loc_1001e:
    // std::terminate (no join/detach). Causes "terminate called without an active
    // exception" on SDL_QUIT.
    { extern void v2_game_thread_stop(); v2_game_thread_stop(); }
-   exit(0);
+   SDL_Delay(50); _exit(0);
  }
  // MON pixel monitor — commented (debug, 167 lines/run)
 	// Signal FRAME_BEGIN BEFORE sub_12352 — so v2 compare sees pre-input DS
@@ -2169,7 +2169,7 @@ ret_1a2_135:
  if (need_quit) {
    printf("quitting main thread\n");
    { extern void v2_game_thread_stop(); v2_game_thread_stop(); }
-   exit(0);
+   SDL_Delay(50); _exit(0);
  }
  // REVERT to orig: render_callback (sub_1797b) is called by render thread (render.cpp).
  // Just sleep 2ms while waiting for word_3287c to drop. Render thread DECs it ~60Hz.

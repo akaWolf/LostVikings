@@ -1992,7 +1992,7 @@ static void v2_sub_1DD9C(uint8_t* s) {
                 // Unknown non-zero handler — not implemented, fatal
                 fprintf(stderr, "FATAL: unknown render handler 0x%04X for type %d slot %d flags=%04X\n",
                     handler, sprite_type, di, *(uint16_t*)(s + di + 0x44D));
-                exit(1);
+                extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
             }
             // handler=0 (types 0,3,5,6,7): NOP — no render, no DS writes
         }
@@ -10621,7 +10621,7 @@ static void v2_vm_op_13(V2VM& vm) {
         // closes data file, calls sub_1686F + sub_1292F, then INT 21h 0x4C00 (DOS exit).
         // Used when user selects "Quit" from menu.
         // V2: trigger graceful exit similar to orig behavior.
-        exit(0);
+        extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(0);
     }
 
     // All paths: ADD bx, 3
@@ -12092,7 +12092,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
         default: {
             fprintf(stderr, "FATAL: unimplemented anim cmd 0x%02X (handler=0x%04X) obj=%d pc=%04X\n",
                 cmd, handler, vm.obj, vm.pc);
-            exit(1);
+            extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
     } // end switch
     return true; // default: continue
@@ -13512,11 +13512,11 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
         if (opcode == 0x01) break; // collision VM yield
         if (opcode > 0xD7) {
             fprintf(stderr, "FATAL: collision VM opcode 0x%02X > 0xD7 at pc=%04X obj=%d\n", opcode, vm.pc-1, obj_si);
-            exit(1);
+            extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
         if (!v2_vm_optable[opcode]) {
             fprintf(stderr, "FATAL: unimplemented collision VM opcode 0x%02X at pc=%04X obj=%d\n", opcode, vm.pc-1, obj_si);
-            exit(1);
+            extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
         uint16_t y_pre = (obj_si == 0) ? *(uint16_t*)(shadow + 0x1765) : 0;
         uint16_t pre_w[v2_coll_watch_count];
@@ -13945,11 +13945,11 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 
         if (opcode > 0xD7) {
             fprintf(stderr, "FATAL: VM opcode 0x%02X > 0xD7 at pc=%04X obj=%d\n", opcode, pc_before, obj_idx);
-            exit(1);
+            extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
         if (!v2_vm_optable[opcode]) {
             fprintf(stderr, "FATAL: unimplemented VM opcode 0x%02X at pc=%04X obj=%d\n", opcode, pc_before, obj_idx);
-            exit(1);
+            extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
         // Pre-opcode snapshot for divergence detection (gameplay levels only).
         uint16_t pre_acc = v2_vm_accumulator;
@@ -17727,7 +17727,11 @@ void v2_vm_trace_compare() {
                 }
                 fflush(stderr);
                 fflush(stdout);
-                exit(1);
+                // Tell render threads to stop, give them a tick to finish their
+                // current Mesa call, then _exit to bypass static destructors.
+                // Without this, render thread mid-libgallium SEGVs during shutdown.
+                extern bool need_quit; need_quit = true; SDL_Delay(50);
+                _exit(1);
             }
             total_err++;
             if (!obj_match) break;
@@ -17783,7 +17787,8 @@ void v2_vm_trace_compare() {
         }
         fflush(stderr);
         fflush(stdout);
-        exit(1);
+        extern bool need_quit; need_quit = true; SDL_Delay(50);
+        _exit(1);
     }
     v2_trace_len = 0;
     orig_trace_len = 0;
