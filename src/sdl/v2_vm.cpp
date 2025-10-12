@@ -3726,7 +3726,8 @@ static void v2_sub_17561(uint8_t* s) {
             // INT 21h print string — NOP
             // Decompress chunk 0x215 → sound data segment ds:2E6B
             // For v2: chunk already loaded by v2_sub_12ab8 (sound chunk path)
-            // sub_176BD(ax=0, bx=ds:2E6B, si=0) — play music. AIL, NOP for v2.
+            // Mirror orig sub_176bd(ax=0, bx=ds:2E6B, si=0) — play music
+            v2_sub_176bd_v2(s, *(uint16_t*)(s + 0x2E6B));
             *(uint16_t*)(s + 0xA378) = 1;
         }
     }
@@ -5058,7 +5059,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             v2_sub_1450b(shadow, 4, 4, 4);
         }
         // sub_1047C: stop music + display text
-        // sub_177BB(0) — AIL, no DS writes
+        // Mirror orig sub_1047c eip 0x047C-0x047F: MOV ax, 0; CALL sub_177bb
+        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 0);
         // OUT(0x3C8, 3); OUT(0x3C9, 0x3F×3) — VGA: color 3 to white
         // loc_124A9(ax=2, si=0xF, di=0xC): box + text ("PAUSE" etc)
         v2_sub_12515(shadow, 2);
@@ -5430,7 +5432,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // Then: stop music, set word_28925=0x11, word_28927=1, clear sprite flag, set dirty.
     // Then blocking render loop until unpause — for v2: DS writes only, no blocking.
     if ((shadow[0x25CF] & 1) && (*(uint16_t*)(shadow + 0x3B8) & 0x2000)) {
-        // sub_177bb(0): stop music — AIL, commented
+        // Mirror orig sub_11ba5 loc_11bb7 eip 0x1BB7-0x1BBA: MOV ax, 0; CALL sub_177bb
+        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 0);
         *(uint16_t*)(shadow + 0x0445) = 0x11;   // word_28925 (0x28925 - 0x284E0 = 0x445)
         *(uint16_t*)(shadow + 0x0447) = 1;       // word_28927 (0x28927 - 0x284E0 = 0x447)
         uint16_t di_p = *(uint16_t*)(shadow + 0x3C2);
@@ -5560,15 +5563,18 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     // Special use slot: check item usability
                                     uint16_t item = *(uint16_t*)(shadow + 0x441);
                                     if (shadow[(uint16_t)(item + 0x8592)] == 0) {
-                                        // sub_177BB(3) — sound only
+                                        // Mirror orig sub_11f93 eip 0x1FA9-0x1FAC: MOV ax, 3; CALL sub_177bb
+                                        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 3);
                                         f93_carry = true;
                                     } else {
-                                        // sub_177BB(4) — sound only
+                                        // Mirror orig sub_11f93 loc_11fb1 eip 0x1FB1-0x1FB4: MOV ax, 4; CALL sub_177bb
+                                        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 4);
                                         // sub_1183d(di=0x18, ax=0x17) — VGA only
                                     }
                                 } else {
                                     // Place item into slot
-                                    // sub_177BB(2) — sound only
+                                    // Mirror orig sub_11f93 loc_11fc2 eip 0x1FC2-0x1FC5: MOV ax, 2; CALL sub_177bb
+                                    if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 2);
                                     uint16_t ax = *(uint16_t*)(shadow + 0x441);
                                     *(uint16_t*)(shadow + di + 0x3E4) = ax; // [di+3E4] = item
                                     uint16_t si = *(uint16_t*)(shadow + 0x443);
@@ -5810,7 +5816,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     *(uint16_t*)(shadow + 0x443) = di_b >> 1; // word_28923
                                     *(uint16_t*)(shadow + 0x447) = 0; // word_28927 = browsing
                                     *(uint16_t*)(shadow + 0x445) = 9; // word_28925
-                                    // sub_177BB(2) — sound only
+                                    // Mirror orig sub_121b9 eip 0x21EF-0x21F2: MOV ax, 2; CALL sub_177bb
+                                    if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 2);
                                 }
                             }
                             // sub_120D1
@@ -17180,7 +17187,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 // sub_103CA: blocking level transition UI (text + render loop).
                 // Orig shows "Level Complete" text, waits for button, renders 3 full passes.
                 // DS side effects: sub_165aa rotation (3 calls), text glyphs, sub_1DD9C mode bytes.
-                // sub_177bb(0): stop music — AIL, NOP for v2
+                // Mirror orig sub_103ca eip 0x3CA-0x3CD: MOV ax, 0; CALL sub_177bb (stop music)
+                if (s[0x304] == 0) v2_sub_177bb_v2(s, 0);
                 // sub_103ca: full transition text. Verified with seg000 lines 533-556.
                 // 1. loc_124A9(ax=3, si=0xD, di=0xC): "Level Complete" text
                 {
