@@ -465,6 +465,9 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 // thread ignores it, so process never exits on Ctrl-C. Force exit.
 static void asm_sigint_handler(int sig) {
     fprintf(stderr, "\nSignal %d received — exiting\n", sig);
+    // SFX audit: dump final report before _exit() bypasses atexit().
+    extern void v2_audit_dump_final();
+    v2_audit_dump_final();
     _exit(128 + sig);
 }
 

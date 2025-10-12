@@ -16016,16 +16016,31 @@ sub_177bb:
  // store SDL handle + seq in first free slot (si=8/6/4/2, addr ds:[si-0x66F4])
  // so sub_1782a / sub_1787f / sub_108c8 mute toggle can stop selectively
  // by handle. Slot tag 0xFFFF = free.
+ // AUDIT INFRA: use deterministic handle so v2's shadow_ds[slot] matches
+ // real_ds[slot] without copying. v2_audit_compute_handle hashes (seq, obj,
+ // frame, fire_idx); both orig + v2 compute same handle for same logical op.
  // Mute check: orig (eip 0x77BD) does `TEST word_287E4, 0xFFFF; JNZ skip` BEFORE
  // play. Mirror that here so ALT+S mute (which sets low byte of word_287E4 to 1)
  // actually blocks new SFX.
  if (*(dw*)(raddr(ds,0x304)) == 0)
  {
-   int sdl_handle = play_xmidi_external(raddr(*(dw*)(raddr(ds,0x2E6D)),0),
-                                         chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4], ax);
+   extern int v2_dbg_pre_vm_iter;
+   extern uint16_t v2_audit_compute_handle(uint16_t seq, uint16_t obj, int frame, int fire_idx);
+   extern int v2_audit_orig_next_fire_idx(uint16_t obj);
+   extern void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj);
+   extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
+                                                        uint16_t handle, bool mute);
+   uint16_t obj = *(dw*)(raddr(ds, 0x42));
+   int fire_idx = v2_audit_orig_next_fire_idx(obj);
+   uint16_t handle = v2_audit_compute_handle((uint16_t)ax, obj, v2_dbg_pre_vm_iter, fire_idx);
+   v2_audit_log_sfx(0 /* orig */, (uint16_t)ax, obj);
+   int sdl_handle = play_xmidi_external_with_handle_and_mute(
+                       raddr(*(dw*)(raddr(ds,0x2E6D)),0),
+                       chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4],
+                       ax, handle, false /* not muted - orig plays */);
    if (sdl_handle > 0) {
      // Try slots si=8,6,4,2 for free slot (matches orig sub_177bb scan order).
-     // Slot tag 0xFFFF = free; we store unique handle from play_xmidi_external.
+     // Store deterministic handle so v2 mirrors exactly.
      for (int _si = 8; _si > 0; _si -= 2) {
        if (*(dw*)(raddr(ds, _si - 0x66F4)) == 0xFFFF) {
          *(dw*)(raddr(ds, _si - 0x66F4)) = (dw)sdl_handle;

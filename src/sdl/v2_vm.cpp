@@ -15,7 +15,13 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
+#include <set>
+#include <mutex>
+#include <atomic>
+#include <chrono>
+#include <SDL2/SDL.h>
 #include "render_v2.h"
 
 // Access to emulated memory
@@ -31,6 +37,269 @@ extern int  play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
 extern void stop_xmidi_external();
 extern void stop_xmidi_external(uint16_t handle);
 extern void set_dontstop_external(uint16_t handle);
+
+// ============================================================================
+// SFX AUDIT INFRASTRUCTURE
+// ============================================================================
+// Detects divergences between orig (sub_177bb in seg000) and v2 (v2_vm_op_sound)
+// in SFX playback. In default mode both process same VM bytecode and SHOULD
+// fire the same op_sound calls. Discrepancies indicate v2 is missing code paths.
+//
+// Three layers (all active simultaneously):
+//   L1: per-frame count comparison (cheap, catches frame-level mismatches)
+//   L2: per-event matching by (seq, obj) within timing window (±3 frames)
+//   L3: at-exit unique-seq set comparison + unmatched event detail dump
+//
+// Audio output is hardcoded:
+//   default build  — orig sub_177bb plays via play_xmidi_external;
+//                    v2_sub_177bb_v2 is muted (#ifdef V2_ONLY no-op).
+//   V2_ONLY build  — v2_sub_177bb_v2 plays; orig executor not present.
+// Slot table divergence in shadow vs real DS is already excluded from verify
+// (0x990C..0x991E), so muted v2 doesn't break anything else.
+//
+// Hooks:
+//   - vikings.exe_seg000.cpp orig sub_177bb SDL inline (seq=ax, obj=ds:0x42)
+//   - v2_vm_op_sound (this file) when SFX request fires
+//
+// Periodic check at v2_phase_post_vm end + final dump on atexit.
+// ============================================================================
+
+struct SfxAuditEvent {
+    int frame;          // v2_dbg_pre_vm_iter snapshot
+    uint16_t seq;       // sequence # 0..0xFF
+    uint16_t obj;       // ds:0x42 (current VM object) or 0xFFFF if hardcoded
+    uint8_t source;     // 0 = orig, 1 = v2
+    uint32_t ts_ms;     // SDL_GetTicks at log time
+    bool matched;       // L2 marker
+};
+
+static constexpr size_t V2_AUDIT_RING_SIZE = 2048;
+static SfxAuditEvent g_audit_ring[V2_AUDIT_RING_SIZE];
+static std::atomic<size_t> g_audit_ring_idx{0};  // next slot to write (always increments)
+static std::mutex g_audit_mutex;
+static std::atomic<int> g_audit_orig_frame_count{0};
+static std::atomic<int> g_audit_v2_frame_count{0};
+static std::atomic<int> g_audit_diverges{0};       // total divergences detected
+
+// Deterministic handle generator. Both orig and v2 compute the SAME handle
+// for the same logical op_sound — when v2 mirrors orig perfectly, slot bytes
+// in shadow_ds match real_ds without any data copying. When v2 misses an
+// op_sound (the bug we want to catch), handles for subsequent calls in same
+// frame/obj diverge → verify-hash also catches it.
+//
+// Hash inputs: (seq, obj, frame, fire_idx). fire_idx is the Nth op_sound
+// fired for this obj this frame (per-thread counter, reset on FRAME_BEGIN).
+// Range 1..0xFFFE (0 + 0xFFFF reserved).
+uint16_t v2_audit_compute_handle(uint16_t seq, uint16_t obj, int frame, int fire_idx) {
+    // Mix bits using xorshift-like spread.
+    uint32_t h = (uint32_t)(seq & 0xFF);
+    h ^= ((uint32_t)(obj & 0xFF)) << 8;
+    h ^= ((uint32_t)(frame & 0xFFFF)) << 16;
+    h ^= ((uint32_t)fire_idx) * 0x9E3779B1u;  // golden-ratio mixer
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
+    h ^= h >> 13;
+    uint16_t r = (uint16_t)(h & 0xFFFF);
+    if (r == 0 || r == 0xFFFF) r = 1;  // avoid reserved
+    return r;
+}
+
+// Per-thread per-obj fire counter. Reset on FRAME_BEGIN. Used to disambiguate
+// multiple op_sound calls for same obj in same frame.
+static int g_audit_orig_fire_count[256] = {0};
+static int g_audit_v2_fire_count[256] = {0};
+
+void v2_audit_reset_fire_counters() {
+    for (int i = 0; i < 256; i++) {
+        g_audit_orig_fire_count[i] = 0;
+        g_audit_v2_fire_count[i] = 0;
+    }
+}
+
+// Get next fire_idx for orig source (per-obj) and increment.
+int v2_audit_orig_next_fire_idx(uint16_t obj) {
+    return g_audit_orig_fire_count[obj & 0xFF]++;
+}
+
+// Get next fire_idx for v2 source (per-obj) and increment.
+int v2_audit_v2_next_fire_idx(uint16_t obj) {
+    return g_audit_v2_fire_count[obj & 0xFF]++;
+}
+
+// Push event into ring + bump per-frame counter. Thread-safe (lock).
+void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj) {
+    extern int v2_dbg_pre_vm_iter;
+    SfxAuditEvent e;
+    e.frame = v2_dbg_pre_vm_iter;
+    e.seq = seq & 0xFF;
+    e.obj = obj;
+    e.source = source;
+    e.ts_ms = SDL_GetTicks();
+    e.matched = false;
+
+    {
+        std::lock_guard<std::mutex> g(g_audit_mutex);
+        size_t slot = g_audit_ring_idx.fetch_add(1, std::memory_order_relaxed) % V2_AUDIT_RING_SIZE;
+        g_audit_ring[slot] = e;
+    }
+    if (source == 0) g_audit_orig_frame_count.fetch_add(1, std::memory_order_relaxed);
+    else             g_audit_v2_frame_count.fetch_add(1, std::memory_order_relaxed);
+}
+
+// L1: per-frame count check. Called at v2_phase_post_vm end (frame boundary).
+// On divergence, dumps all SFX events from this frame so user sees which
+// (seq, obj) the orig fired that v2 didn't (and vice versa).
+void v2_audit_check_frame_end() {
+    int orig = g_audit_orig_frame_count.exchange(0, std::memory_order_relaxed);
+    int v2   = g_audit_v2_frame_count.exchange(0, std::memory_order_relaxed);
+    if (orig != v2) {
+        extern int v2_dbg_pre_vm_iter;
+        int cur_frame = v2_dbg_pre_vm_iter;
+        fprintf(stderr, "AUDIT-FRAME-DIVERGE[f%d]: orig=%d v2=%d (delta=%d)\n",
+                cur_frame, orig, v2, orig - v2);
+        // Dump all events from THIS frame (orig and v2 separately).
+        std::lock_guard<std::mutex> g(g_audit_mutex);
+        size_t end = g_audit_ring_idx.load(std::memory_order_relaxed);
+        size_t start = end > V2_AUDIT_RING_SIZE ? end - V2_AUDIT_RING_SIZE : 0;
+        for (size_t i = start; i < end; i++) {
+            SfxAuditEvent& e = g_audit_ring[i % V2_AUDIT_RING_SIZE];
+            if (e.frame != cur_frame) continue;
+            const char* src = e.source == 0 ? "ORIG" : "V2  ";
+            fprintf(stderr, "  [%s] f%d seq=0x%02X obj=0x%02X ts=%ums\n",
+                    src, e.frame, e.seq, e.obj, e.ts_ms);
+        }
+        g_audit_diverges.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+// L2: pairwise match. For each unmatched orig event, find v2 event with same
+// (seq, obj) within ±3 frames and mark both matched. Called periodically
+// (e.g., every 60 frames) and at final dump.
+void v2_audit_match_events() {
+    std::lock_guard<std::mutex> g(g_audit_mutex);
+    size_t end = g_audit_ring_idx.load(std::memory_order_relaxed);
+    size_t start = end > V2_AUDIT_RING_SIZE ? end - V2_AUDIT_RING_SIZE : 0;
+
+    for (size_t i = start; i < end; i++) {
+        SfxAuditEvent& a = g_audit_ring[i % V2_AUDIT_RING_SIZE];
+        if (a.matched) continue;
+        if (a.source != 0) continue;  // pair from orig side
+
+        for (size_t j = start; j < end; j++) {
+            if (i == j) continue;
+            SfxAuditEvent& b = g_audit_ring[j % V2_AUDIT_RING_SIZE];
+            if (b.matched) continue;
+            if (b.source != 1) continue;
+            if (b.seq != a.seq) continue;
+            if (b.obj != a.obj) continue;
+            int df = (b.frame > a.frame) ? b.frame - a.frame : a.frame - b.frame;
+            if (df > 3) continue;
+            a.matched = b.matched = true;
+            break;
+        }
+    }
+}
+
+// L3: final dump on atexit. Unique seq sets, missing/extra summary, unmatched event detail.
+void v2_audit_dump_final() {
+    v2_audit_match_events();  // ensure final pairing pass
+    std::lock_guard<std::mutex> g(g_audit_mutex);
+
+    std::set<uint16_t> orig_seqs, v2_seqs;
+    int orig_total = 0, v2_total = 0;
+    int unmatched_orig = 0, unmatched_v2 = 0;
+
+    size_t end = g_audit_ring_idx.load(std::memory_order_relaxed);
+    size_t start = end > V2_AUDIT_RING_SIZE ? end - V2_AUDIT_RING_SIZE : 0;
+
+    for (size_t i = start; i < end; i++) {
+        SfxAuditEvent& e = g_audit_ring[i % V2_AUDIT_RING_SIZE];
+        if (e.source == 0) {
+            orig_seqs.insert(e.seq); orig_total++;
+            if (!e.matched) unmatched_orig++;
+        } else {
+            v2_seqs.insert(e.seq); v2_total++;
+            if (!e.matched) unmatched_v2++;
+        }
+    }
+
+    fprintf(stderr, "\n========== SFX AUDIT FINAL REPORT ==========\n");
+    fprintf(stderr, "Total events:    orig=%d  v2=%d  delta=%d\n", orig_total, v2_total, orig_total - v2_total);
+    fprintf(stderr, "Unmatched events: orig=%d  v2=%d\n", unmatched_orig, unmatched_v2);
+    fprintf(stderr, "L1 frame-diverges total: %d\n", g_audit_diverges.load());
+
+    fprintf(stderr, "\nOrig unique seqs (%zu): ", orig_seqs.size());
+    for (auto s : orig_seqs) fprintf(stderr, "0x%02X ", s);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "V2 unique seqs   (%zu): ", v2_seqs.size());
+    for (auto s : v2_seqs) fprintf(stderr, "0x%02X ", s);
+    fprintf(stderr, "\n");
+
+    bool any_missing = false;
+    fprintf(stderr, "MISSING in v2 (orig has, v2 doesn't): ");
+    for (auto s : orig_seqs) {
+        if (v2_seqs.find(s) == v2_seqs.end()) {
+            fprintf(stderr, "0x%02X ", s);
+            any_missing = true;
+        }
+    }
+    if (!any_missing) fprintf(stderr, "(none)");
+    fprintf(stderr, "\n");
+
+    bool any_extra = false;
+    fprintf(stderr, "EXTRA in v2 (v2 has, orig doesn't):   ");
+    for (auto s : v2_seqs) {
+        if (orig_seqs.find(s) == orig_seqs.end()) {
+            fprintf(stderr, "0x%02X ", s);
+            any_extra = true;
+        }
+    }
+    if (!any_extra) fprintf(stderr, "(none)");
+    fprintf(stderr, "\n");
+
+    if (unmatched_orig > 0) {
+        fprintf(stderr, "\nUnmatched ORIG events (orig fired, no matching v2 within ±3 frames):\n");
+        int shown = 0;
+        for (size_t i = start; i < end && shown < 30; i++) {
+            SfxAuditEvent& e = g_audit_ring[i % V2_AUDIT_RING_SIZE];
+            if (e.matched || e.source != 0) continue;
+            fprintf(stderr, "  f%d seq=0x%02X obj=0x%02X ts=%ums\n",
+                    e.frame, e.seq, e.obj, e.ts_ms);
+            shown++;
+        }
+        if (unmatched_orig > 30) fprintf(stderr, "  ... (%d more, truncated)\n", unmatched_orig - 30);
+    }
+    if (unmatched_v2 > 0) {
+        fprintf(stderr, "\nUnmatched V2 events (v2 fired, no matching orig within ±3 frames):\n");
+        int shown = 0;
+        for (size_t i = start; i < end && shown < 30; i++) {
+            SfxAuditEvent& e = g_audit_ring[i % V2_AUDIT_RING_SIZE];
+            if (e.matched || e.source != 1) continue;
+            fprintf(stderr, "  f%d seq=0x%02X obj=0x%02X ts=%ums\n",
+                    e.frame, e.seq, e.obj, e.ts_ms);
+            shown++;
+        }
+        if (unmatched_v2 > 30) fprintf(stderr, "  ... (%d more, truncated)\n", unmatched_v2 - 30);
+    }
+    fprintf(stderr, "============================================\n");
+}
+
+// Periodic match — called from frame-end check, every 60 frames.
+static int v2_audit_periodic_counter = 0;
+void v2_audit_periodic() {
+    if (++v2_audit_periodic_counter >= 60) {
+        v2_audit_periodic_counter = 0;
+        v2_audit_match_events();
+    }
+}
+
+// One-time atexit registration.
+struct V2AuditAtexitInit {
+    V2AuditAtexitInit() {
+        atexit(v2_audit_dump_final);
+    }
+};
+static V2AuditAtexitInit g_v2_audit_init;
 
 // ============================================================================
 // V2 VM shadow state — complete copy of DS region used by animation VM.
@@ -147,9 +416,13 @@ static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
 
 // orig sub_177bb SDL inline (vikings.exe_seg000.cpp:15905-15909).
 // Plays SFX/sequence ax_seq from segment ds:0x2E6D (sound bank).
-// Returns adlmidi player num (>=0) or -1 on failure / no-op.
+// Uses deterministic handle from audit infra so DS slot bytes match between
+// orig (real_ds) and v2 (shadow_ds) without copying. In default mode, mute=true
+// so v2 only reserves slot tracking — orig handles real audio output.
+// Returns the deterministic handle.
+extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
+                                                     uint16_t handle, bool mute);
 static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq) {
-#ifdef V2_ONLY
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6D);
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -158,11 +431,21 @@ static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq) {
             ax_seq, bx_seg, (void*)xmidi, size);
         return -1;
     }
-    return play_xmidi_external(xmidi, size, (int)ax_seq);
+    // Compute deterministic handle: same input on orig + v2 → same handle.
+    // obj from VM context (cur_obj = ds[0x42]).
+    extern int v2_dbg_pre_vm_iter;
+    extern uint16_t v2_audit_compute_handle(uint16_t seq, uint16_t obj, int frame, int fire_idx);
+    extern int v2_audit_v2_next_fire_idx(uint16_t obj);
+    uint16_t obj = *(const uint16_t*)(s + 0x42);
+    int fire_idx = v2_audit_v2_next_fire_idx(obj);
+    uint16_t handle = v2_audit_compute_handle(ax_seq, obj, v2_dbg_pre_vm_iter, fire_idx);
+#ifdef V2_ONLY
+    bool mute = false;  // V2_ONLY: v2 is the only player, no mute
 #else
-    (void)s; (void)ax_seq;
-    return -1;
+    bool mute = true;   // default mode: orig plays, v2 mutes (slot tracking only)
 #endif
+    play_xmidi_external_with_handle_and_mute(xmidi, size, (int)ax_seq, handle, mute);
+    return (int)handle;
 }
 
 // orig sub_1782a SDL inline (vikings.exe_seg000.cpp:15976).
@@ -7588,21 +7871,25 @@ static void v2_vm_op_skip3(V2VM& vm) { vm.pc += 3; }
 static void v2_vm_op_sound(V2VM& vm) {
     uint16_t seq = vm.read_u16();
     seq &= 0xFF; // AND ax, 0FFh
+    extern int v2_dbg_pre_vm_iter;
+    extern uint16_t v2_current_level;
+    uint16_t cur_obj = vm.global_r(0x42);
     if (vm.ds_read(0x304) != 0) {
-        fprintf(stderr, "V2-SFX-REQ: seq=%u SKIP (304 muted)\n", seq);
+        fprintf(stderr, "V2-SFX-REQ[f%d lv=%04X obj=%02X]: seq=%u SKIP (304 muted)\n",
+                v2_dbg_pre_vm_iter, v2_current_level, cur_obj, seq);
         return; // sound disabled
     }
-    // Mirror orig SDL inline: play SFX/sequence via adlmidi (V2_ONLY only; default
-    // mode lets orig sub_177bb emit sound).
+    // Audit log: orig has matching v2_audit_log_sfx call in seg000 sub_177bb.
+    v2_audit_log_sfx(1 /* v2 */, seq, cur_obj);
+    // v2_sub_177bb_v2 now uses deterministic handle (computed inside) and applies
+    // mute flag based on V2_ONLY ifdef. Returns the deterministic handle.
     int handle = v2_sub_177bb_v2(v2_vm_shadow_ds, seq);
-    fprintf(stderr, "V2-SFX-REQ: seq=%u handle=%d 2E6D=%04X\n",
-        seq, handle, *(uint16_t*)(v2_vm_shadow_ds + 0x2E6D));
-    // Slot bookkeeping. Verify already excludes 0x990C..0x991E so we can store the
-    // actual adlmidi player num (so op_sound1/op_D7 can call stop_xmidi_external(num)
-    // selectively). Default mode: handle == -1 → write 0xFFFF (no-op).
-    // Mirror orig SDL inline (vikings.exe_seg000.cpp:16022-16028): scan slots
-    // si=8,6,4,2 for FIRST FREE (0xFFFF). Write only if free, then break.
-    // If all occupied, leave them alone (orig SDL also doesn't overwrite).
+    fprintf(stderr, "V2-SFX-REQ[f%d lv=%04X obj=%02X]: seq=%u det_handle=%04X 2E6D=%04X\n",
+        v2_dbg_pre_vm_iter, v2_current_level, cur_obj, seq, (uint16_t)handle,
+        *(uint16_t*)(v2_vm_shadow_ds + 0x2E6D));
+    // Slot bookkeeping. With deterministic handle, shadow_ds[slot] now matches
+    // real_ds[slot] exactly — verify can include 0x990C..0x991E without exclusion.
+    // Mirror orig SDL inline: scan slots si=8,6,4,2 for FIRST FREE (0xFFFF).
     uint16_t hword = (handle >= 0 && handle <= 0xFFFE) ? (uint16_t)handle : 0xFFFF;
     if (hword != 0xFFFF) {
         for (int16_t si = 8; si > 0; si -= 2) {
@@ -15737,6 +16024,10 @@ static void v2_check_117D(const char* where, uint8_t* s, uint8_t* r) {
 }
 void v2_phase_frame_begin(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
+    // SFX audit: reset per-obj fire counters at frame boundary so deterministic
+    // handle computation works correctly. Both orig (main thread) and v2 (game
+    // thread) call v2_audit_*_next_fire_idx — same frame=same starting idx.
+    v2_audit_reset_fire_counters();
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
     // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.
     // In default mode seg000 also takes snapshot at sub_12352 line 5623; both
@@ -16258,6 +16549,10 @@ static void v2_post_vm_field_check() {
 void v2_vm_trace_compare(); // forward decl
 void v2_phase_post_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    // SFX audit L1: per-frame count check (orig vs v2 SFX call counts).
+    // Called at frame boundary (post-VM) — by now both threads have processed VM ops.
+    v2_audit_check_frame_end();
+    v2_audit_periodic();  // L2 match every 60 frames
     extern int v2_dbg_post_vm_iter; v2_dbg_post_vm_iter++;
     extern bool v2_in_phase_post_vm; v2_in_phase_post_vm = true;
     v2_watch_25AD("POST-entry");

@@ -285,60 +285,75 @@ static uint16_t alloc_handle() {
     return h;
 }
 
-int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t len, int seq_num)
+// Generalized play. Either auto-allocates handle (handle_in==0) or uses given.
+// mute=true: reserves slot for tracking but doesn't spawn producer thread / no
+// adl_init / no real playback. Used by v2_sub_177bb_v2 in default mode where
+// orig handles real audio output but v2 still needs slot tracking for DS verify.
+int play_xmidi_with_handle_and_mute(struct ADL_MIDIPlayer** midi_players,
+                                     const void* xmidi, uint32_t len, int seq_num,
+                                     uint16_t handle_in, bool mute)
 {
   int slot = -1;
   uint16_t handle = 0;
   for (int i = 0; i < 100; i++)
   {
-	// Pick any free slot. With decoupled mixer, slot is "free" when both:
-	//   midi_players[i] == nullptr (producer cleared it on exit)
-	//   !player_active[i] (audio callback finished draining ring)
-	// This ensures we don't spawn new producer while old ring still has data.
 	if (midi_players[i] == nullptr && !g_player_active[i].load(std::memory_order_acquire))
 	{
 	  bool stale = need_close[i].load();
 	  need_close[i].store(false);
-	  // Reset decoupled mixer state for this slot.
 	  g_stop_requested[i].store(false, std::memory_order_relaxed);
 	  g_rings[i].reset();
-	  g_producer_alive[i].store(true, std::memory_order_relaxed);
+	  g_producer_alive[i].store(!mute, std::memory_order_relaxed);  // mute → no producer
 	  g_player_active[i].store(true, std::memory_order_release);
-	  // Reset fade state for this slot (no fade in progress for new player).
 	  _sound_fade_volume[i].store(1.0f);
 	  _sound_fade_step[i].store(0.0f);
-	  // Save XMI ptr+len+seq for later reload-on-end (used by audio_callback
-	  // to re-init music when adlmidi reaches end-of-track).
 	  _sound_xmi_buf[i] = xmidi;
 	  _sound_xmi_len[i] = len;
 	  _sound_xmi_seq[i] = seq_num;
-	  // Assign fresh unique handle (mirrors AIL: every play gets a new handle).
-	  handle = alloc_handle();
+	  // Use given handle (deterministic from audit) or auto-allocate.
+	  handle = (handle_in != 0 && handle_in != 0xFFFF) ? handle_in : alloc_handle();
 	  slot_handle[i].store(handle, std::memory_order_relaxed);
-	  std::thread midi_thread(midi_thread_proc, &midi_players[i], xmidi, len, seq_num);
-	  midi_thread.detach();
-	  printf("[%ums] SOUND-PLAY: slot=%d handle=%04X seq=%d len=%u%s\n",
-	         _sound_now_ms(), i, handle, seq_num, len, stale ? " (cleared stale need_close)" : "");
+	  if (!mute) {
+	    std::thread midi_thread(midi_thread_proc, &midi_players[i], xmidi, len, seq_num);
+	    midi_thread.detach();
+	  }
+	  printf("[%ums] SOUND-PLAY%s: slot=%d handle=%04X seq=%d len=%u%s\n",
+	         _sound_now_ms(), mute ? "-MUTE" : "", i, handle, seq_num, len,
+	         stale ? " (cleared stale need_close)" : "");
 	  slot = i;
 	  break;
 	}
   }
   if (slot < 0) {
 	printf("[%ums] SOUND-PLAY-FAIL: no free slot (all 100 occupied!)\n", _sound_now_ms());
-	return 0;  // 0 = no handle, mirrors AIL "play failed"
+	return 0;
   }
   return (int)handle;
 }
 
+int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t len, int seq_num)
+{
+  return play_xmidi_with_handle_and_mute(midi_players, xmidi, len, seq_num, 0, false);
+}
+
 int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num)
 {
-  // Count active slots (logical) BEFORE adding new — uses player_active flag
-  // so it includes slots whose worker hasn't initialized player yet.
   int _active = 0;
   for (int i = 0; i < 100; i++) if (g_player_active[i].load(std::memory_order_acquire)) _active++;
   printf("[%ums] SOUND-REQ: xmidi=%p len=%u seq=%d active_slots=%d\n",
          _sound_now_ms(), xmidi, len, seq_num, _active);
   return play_xmidi(midi_players, xmidi, len, seq_num);
+}
+
+// New API: external handle + mute flag. Used by audit infra.
+int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
+                                              uint16_t handle, bool mute)
+{
+  int _active = 0;
+  for (int i = 0; i < 100; i++) if (g_player_active[i].load(std::memory_order_acquire)) _active++;
+  printf("[%ums] SOUND-REQ%s: xmidi=%p len=%u seq=%d handle=%04X active_slots=%d\n",
+         _sound_now_ms(), mute ? "-MUTE" : "", xmidi, len, seq_num, handle, _active);
+  return play_xmidi_with_handle_and_mute(midi_players, xmidi, len, seq_num, handle, mute);
 }
 
 // Stop a specific player by HANDLE (unique ID from play_xmidi_external).
