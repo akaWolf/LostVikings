@@ -15884,7 +15884,14 @@ sub_176bd:
  if (id_music != 0)
    stop_xmidi_external(id_music);
  id_music = (uint16_t)play_xmidi_external(raddr(bx,0), chunk_sizes[(bx) << 4], -1);
- set_dontstop_external(id_music);
+ if (id_music > 0) {
+   set_dontstop_external(id_music);
+   // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax`. Music call sites use
+   // si=0 → writes ds:0x990C. Required so sub_17912 properly stops music slot 0
+   // when iterating (when ds:0x25B9 != 1). The early RETN below skipped the orig
+   // assembler that did this — adding back inline to match DOS behavior.
+   *(dw*)(raddr(ds, (uint16_t)(si - 0x66F4))) = id_music;
+ }
 cs=0x1a2;eip=0x0076bb; 	J(RETN(0));	// 17177 retn ;~ 01A2:76BB
 cs=0x1a2;eip=0x0076bd; 	X(PUSHF);	// 17190 pushf ;~ 01A2:76BD
 ret_1a2_76be:

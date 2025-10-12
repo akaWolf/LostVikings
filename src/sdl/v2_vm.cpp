@@ -124,14 +124,22 @@ static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out
 // orig sub_176bd SDL inline (vikings.exe_seg000.cpp:15780-15788).
 // Plays MUSIC track from segment bx_seg as default sequence (-1).
 // Maintains v2_id_music to allow stop+set_dontstop on next call (just like orig).
-static void v2_sub_176bd_v2(const uint8_t* s, uint16_t bx_seg) {
+static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
 #ifdef V2_ONLY
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
     if (!xmidi || size == 0) return;
     if (v2_id_music != 0) stop_xmidi_external((uint16_t)v2_id_music);
     v2_id_music = play_xmidi_external(xmidi, size, -1);
-    if (v2_id_music > 0) set_dontstop_external((uint16_t)v2_id_music);
+    if (v2_id_music > 0) {
+        set_dontstop_external((uint16_t)v2_id_music);
+        // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax` with si=0 (music
+        // call site uses si=0). Stores music handle at ds:0x990C (slot 0). This is
+        // what makes sub_17912 stop music properly when iterating slot 0 (when
+        // ds:0x25B9 != 1). SDL wrapper at the top of orig sub_176bd had skipped
+        // this via early RETN — adding back to match DOS behavior.
+        *(uint16_t*)(s + 0x990C) = (uint16_t)v2_id_music;
+    }
 #else
     (void)s; (void)bx_seg;  // default mode: orig sub_176bd handles real playback
 #endif
@@ -145,7 +153,11 @@ static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq) {
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6D);
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
-    if (!xmidi || size == 0) return -1;
+    if (!xmidi || size == 0) {
+        fprintf(stderr, "V2-SFX-FAIL: seq=%u bx_seg=%04X xmidi=%p size=%u (chunk_sizes_by_seg miss?)\n",
+            ax_seq, bx_seg, (void*)xmidi, size);
+        return -1;
+    }
     return play_xmidi_external(xmidi, size, (int)ax_seq);
 #else
     (void)s; (void)ax_seq;
@@ -162,7 +174,7 @@ static void v2_sub_1782a_v2() {
 }
 
 // orig sub_178d6 (vikings.exe_seg000.cpp:16062): if music not muted, replay it.
-static void v2_sub_178d6_v2(const uint8_t* s) {
+static void v2_sub_178d6_v2(uint8_t* s) {
 #ifdef V2_ONLY
     if (*(const uint16_t*)(s + 0x302) != 0) return;  // music muted/off
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6B);
@@ -3526,6 +3538,80 @@ static void v2_startup(uint8_t* s) {
     printf("V2-STARTUP: complete\n");
 }
 
+// sub_1775d: load music track if changed. DS write: ds:0x25AF.
+// Mirror of seg000:15959-15980 (eip 0x775d-0x7790). Decompresses new music chunk
+// into es:di = ds:0x2E6B:0 via sub_10982; v2 writes shadow_sound + (es-snd_base)*16.
+static void v2_sub_1775d_helper(uint8_t* s) {
+    if (*(uint16_t*)(s + 0x302) & 0x8000) return;
+    uint16_t new_track = *(uint16_t*)(s + 0x25B8) & 0xFF;
+    if (new_track == *(uint16_t*)(s + 0x25AF)) return;
+    if (new_track == 0xFFFF) return;
+    *(uint16_t*)(s + 0x25AF) = new_track;
+    uint16_t chunk_table_idx = new_track * 2;
+    uint16_t chunk_rel = *(uint16_t*)(s + (uint16_t)(chunk_table_idx - 0x5C7C));
+    uint16_t chunk_id = chunk_rel + *(uint16_t*)(s + 0x86B8);
+    uint16_t snd_base = *(uint16_t*)(s + 0x992C);
+    uint16_t es_seg   = *(uint16_t*)(s + 0x2E6B);
+    uint32_t off = (uint32_t)((uint16_t)(es_seg - snd_base)) * 16;
+    if (off < V2_SOUND_SHADOW_SIZE) {
+        uint32_t sz = v2_read_chunk(chunk_id, v2_vm_shadow_sound + off,
+                                    V2_SOUND_SHADOW_SIZE - off);
+        v2_chunk_sizes_by_seg[es_seg] = sz;
+    }
+}
+
+// sub_178f1: fade music over 1000ms. Mirror of seg000:16217-16238 (eip 0x78f1-0x7910).
+// Original: PUSHF; CLI; sub_1C7BD(0x3E8, 0, ds:0x990C, ds:0x98E6); POPF
+// AIL_set_sequence_tempo (fade) replaced by SDL fade_music. play.cpp's audio_callback
+// ramps volume per-tick and closes player at 0.
+static void v2_sub_178f1_helper(const uint8_t* s) {
+    if (*(uint16_t*)(s + 0x302) != 0) return;  // music muted/off
+#ifdef V2_ONLY
+    extern void fade_music(int);
+    fade_music(1000);
+#else
+    (void)s;
+#endif
+}
+
+// Music dispatch via off_3285A[ds:[type_byte] & 0xFF] — shared by sub_17749 (reads
+// ds:0x25B7, called at level enter from sub_11080) and sub_1774f (reads ds:0x25B9,
+// called at level exit from loc_10151 transition path).
+//   case 0 → loc_17791: sub_1775d + sub_176bd (load + play)
+//   case 1 → NOP
+//   case 2 → sub_178f1 (fade out)
+//   case 3 → sub_1775d (load only)
+//   case 4 → NOP
+static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
+    uint16_t snd_type = *(uint16_t*)(s + type_byte_offset) & 0xFF;
+    fprintf(stderr, "V2-MUSIC-DISPATCH: off=%04X snd_type=%u 25B7=%02X 25B8=%02X 25B9=%02X 25AF=%04X 302=%04X\n",
+        type_byte_offset, snd_type, s[0x25B7], s[0x25B8], s[0x25B9],
+        *(uint16_t*)(s + 0x25AF), *(uint16_t*)(s + 0x302));
+    switch (snd_type) {
+        case 0:  // loc_17791: sub_1775d + sub_176bd
+            if (*(uint16_t*)(s + 0x302) & 0x8000) break;
+            v2_sub_1775d_helper(s);
+            if (*(uint16_t*)(s + 0x302) == 0) {
+                v2_sub_176bd_v2(s, *(uint16_t*)(s + 0x2E6B));
+            }
+            break;
+        case 1:  // NOP (locret_177b1)
+            break;
+        case 2:  // sub_178f1: AIL fade music
+            v2_sub_178f1_helper(s);
+            break;
+        case 3:  // sub_1775d: music track load only
+            v2_sub_1775d_helper(s);
+            break;
+        case 4:  // NOP (locret_177b1)
+            break;
+        default:
+            printf("V2-WARN: music dispatch unknown type %d (offset=%04X)\n",
+                   snd_type, type_byte_offset);
+            break;
+    }
+}
+
 // sub_11080: master level init — exact replica of original call chain.
 // Called when level changes (from sub_10138 or game start).
 // sub_14207 init: sub_15517 + clear priority + collision.
@@ -3578,17 +3664,27 @@ static void v2_sub_11080(uint8_t* s) {
     // sub_10fa0: palette fade to black
     v2_sub_10fa0(s);
     // sub_17912: stop active sounds, clear sound handle tracking.
-    // sub_17912: stop active sounds.
-    // Original SDL wrapper: stop_xmidi_external();
-    // Only runs if EITHER ds:0x302 OR ds:0x304 is zero. If both non-zero → skip entirely.
-    // stop_xmidi_external(); // SDL wrapper — commented for v2
+    // EXACT replica of orig (vikings.exe_seg000.cpp:16244-16285, eips 0x7912-0x7973):
+    //   if (ds:0x302 != 0 && ds:0x304 != 0) return;  // both muted → ret
+    //   si = (ds:0x25B9 == 1) ? 2 : 0;               // skip slot 0 (music) if 25B9==1
+    //   for si=si_start; si < 0xA; si += 2:
+    //     if [si-66F4] != FFFF:
+    //       AIL_stop_sequence(handle)   ; sub_1C79F → SDL: stop_xmidi_external(handle)
+    //       AIL_release_sequence(handle); sub_1C769 → SDL: same handle, just clear slot
+    //       [si-66F4] = FFFF; [si-66EA] = FFFF
+    // For si_start=0 this STOPS MUSIC TOO (slot 0). Match orig behavior exactly.
     if (*(uint16_t*)(s + 0x302) == 0 || *(uint16_t*)(s + 0x304) == 0) {
         uint16_t si_start = (s[0x25B9] == 1) ? 2 : 0;
         for (uint16_t si2 = si_start; (int16_t)si2 < 0x0A; si2 += 2) {
             uint16_t handle_off = (uint16_t)(si2 - 0x66F4); // wraps to 0x990C+
-            if (*(uint16_t*)(s + handle_off) != 0xFFFF) {
-                // Original AIL: sub_1C79F(handle, driver) + sub_1C769(handle, driver)
-                // SDL wrapper already called above (stop_xmidi_external)
+            uint16_t handle = *(uint16_t*)(s + handle_off);
+            if (handle != 0xFFFF) {
+#ifdef V2_ONLY
+                stop_xmidi_external(handle);
+                // If this was the music slot (slot 0), clear v2_id_music too — the
+                // dontstop_handle is auto-cleared inside stop_xmidi_external when matching.
+                if (si2 == 0 && (int)handle == v2_id_music) v2_id_music = 0;
+#endif
                 *(uint16_t*)(s + handle_off) = 0xFFFF;
                 *(uint16_t*)(s + (uint16_t)(si2 - 0x66EA)) = 0xFFFF;
             }
@@ -3722,85 +3818,8 @@ static void v2_sub_11080(uint8_t* s) {
     v2_sub_113b0(s);
     // sub_113d8: init viewport + scroll from viking position
     v2_sub_113d8(s);
-    // sub_17749: music/sound init. Dispatches via off_3285A[ds:0x25B7 & 0xFF].
-    // Dispatch table (5 entries):
-    //   type 0 → loc_17791 (sub_1775d + sub_176bd)
-    //   type 1 → NOP (locret_177b1)
-    //   type 2 → sub_178f1 (AIL fade sound — no DS writes)
-    //   type 3 → sub_1775d (music track load only)
-    //   type 4 → NOP (locret_177b1)
-    {
-        // sub_1775d: load music track if changed. DS write: ds:0x25AF.
-        // Orig (seg000:15580-15586): es=ds:0x2E6B, di=0, sub_10982 → decompresses music
-        // chunk into sound segment at ds:0x2E6B (which is AFTER chunk 3 in the 0xE47-para
-        // buffer). For v2 this is shadow_sound + (ds:0x2E6B - ds:0x992C) * 16.
-        auto v2_sub_1775d = [&]() {
-            if (*(uint16_t*)(s + 0x302) & 0x8000) return;
-            uint16_t new_track = *(uint16_t*)(s + 0x25B8) & 0xFF;
-            if (new_track == *(uint16_t*)(s + 0x25AF)) return;
-            if (new_track == 0xFFFF) return;
-            *(uint16_t*)(s + 0x25AF) = new_track;
-            uint16_t chunk_table_idx = new_track * 2;
-            uint16_t chunk_rel = *(uint16_t*)(s + (uint16_t)(chunk_table_idx - 0x5C7C));
-            uint16_t chunk_id = chunk_rel + *(uint16_t*)(s + 0x86B8);
-            uint16_t snd_base = *(uint16_t*)(s + 0x992C);
-            uint16_t es_seg   = *(uint16_t*)(s + 0x2E6B);
-            uint32_t off = (uint32_t)((uint16_t)(es_seg - snd_base)) * 16;
-            if (off < V2_SOUND_SHADOW_SIZE) {
-                uint32_t sz = v2_read_chunk(chunk_id, v2_vm_shadow_sound + off,
-                                            V2_SOUND_SHADOW_SIZE - off);
-                // Mirror orig chunk_sizes record (so v2_sub_176bd_v2 can find size).
-                v2_chunk_sizes_by_seg[es_seg] = sz;
-            }
-        };
-
-        // sub_176bd: SDL wrapper invokes adlmidi via play_xmidi_external. Mirrors orig
-        // SDL inline (vikings.exe_seg000.cpp:15780-15788). Defined as global v2_sub_176bd_v2;
-        // here we just call it with bx=ds:0x2E6B (music segment).
-        auto v2_sub_176bd = [&](uint16_t /*si_slot*/) {
-            v2_sub_176bd_v2(s, *(uint16_t*)(s + 0x2E6B));
-        };
-
-        // sub_178f1: fade music over 1000ms.
-        // Original: PUSHF; CLI; sub_1C7BD(0x3E8, 0, ds:0x990C, ds:0x98E6); POPF
-        //   sub_1C7BD: AIL_set_sequence_tempo (fade) — replaced by SDL fade_music.
-        // play.cpp's audio_callback ramps volume per-tick and closes player at 0.
-        auto v2_sub_178f1 = [&]() {
-            if (*(uint16_t*)(s + 0x302) != 0) return;  // music muted/off
-#ifdef V2_ONLY
-            extern void fade_music(int);
-            fade_music(1000);
-#endif
-        };
-
-        uint16_t snd_type = *(uint16_t*)(s + 0x25B7) & 0xFF;
-        switch (snd_type) {
-            case 0: { // loc_17791: sub_1775d + sub_176bd
-                if (!(*(uint16_t*)(s + 0x302) & 0x8000)) {
-                    v2_sub_1775d();
-                    // loc_17791: if ds:0x302 == 0 → also init sound driver via sub_176bd
-                    if (*(uint16_t*)(s + 0x302) == 0) {
-                        // sub_176bd(si=0, ax=0, bx=ds:0x2E6B)
-                        v2_sub_176bd(0);
-                    }
-                }
-                break;
-            }
-            case 1: // NOP (locret_177b1)
-                break;
-            case 2: // sub_178f1: AIL fade sound
-                v2_sub_178f1();
-                break;
-            case 3: // sub_1775d: music track load only
-                v2_sub_1775d();
-                break;
-            case 4: // NOP (locret_177b1)
-                break;
-            default:
-                printf("V2-WARN: sub_17749 unknown dispatch type %d\n", snd_type);
-                break;
-        }
-    }
+    // sub_17749: music/sound init at level enter. Dispatches via off_3285A[ds:0x25B7 & 0xFF].
+    v2_music_dispatch(s, 0x25B7);
     // DEBUG: check FS before and after sub_173c7
     // Also check if GS_TILEDATA matches FS data at 0x960
     if (v2_m2c_base) {
@@ -4975,7 +4994,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             }
             // Original: clear buttons, sub_1774f, INC word_2880F, sub_14207, JMP sub_11080.
             *(uint16_t*)(shadow + 0x0334) = 0;
-            // sub_1774f: palette fade — VGA OUT only, no DS writes needed.
+            // sub_1774f: level-exit music dispatch via off_3285A[ds:0x25B9 & 0xFF].
+            // Same dispatch as sub_17749 but reads ds:0x25B9 (current level's exit_sound)
+            // instead of ds:0x25B7. Typically case 2 (fade) here; sub_11080 will reload
+            // the new level's track via sub_17749 with new ds:0x25B7.
+            v2_music_dispatch(shadow, 0x25B9);
             *(uint16_t*)(shadow + 0x032F) += 1; // INC word_2880F
             // sub_14207: full VM pass (with priority object loop)
             // TRANSITION VERIFY: compare sub-sprite Y before VM, after VM, after sub_11080
@@ -7560,25 +7583,32 @@ static void v2_vm_op_skip3(V2VM& vm) { vm.pc += 3; }
 static void v2_vm_op_sound(V2VM& vm) {
     uint16_t seq = vm.read_u16();
     seq &= 0xFF; // AND ax, 0FFh
-    if (vm.ds_read(0x304) != 0) return; // sound disabled
+    if (vm.ds_read(0x304) != 0) {
+        fprintf(stderr, "V2-SFX-REQ: seq=%u SKIP (304 muted)\n", seq);
+        return; // sound disabled
+    }
     // Mirror orig SDL inline: play SFX/sequence via adlmidi (V2_ONLY only; default
     // mode lets orig sub_177bb emit sound).
     int handle = v2_sub_177bb_v2(v2_vm_shadow_ds, seq);
+    fprintf(stderr, "V2-SFX-REQ: seq=%u handle=%d 2E6D=%04X\n",
+        seq, handle, *(uint16_t*)(v2_vm_shadow_ds + 0x2E6D));
     // Slot bookkeeping. Verify already excludes 0x990C..0x991E so we can store the
     // actual adlmidi player num (so op_sound1/op_D7 can call stop_xmidi_external(num)
     // selectively). Default mode: handle == -1 → write 0xFFFF (no-op).
-    uint16_t hword = (handle >= 0 && handle <= 0xFE) ? (uint16_t)handle : 0xFFFF;
-    for (int16_t si = 8; si > 0; si -= 2) {
-        uint16_t handle_addr = (uint16_t)(si - 0x66F4);
-        uint16_t seq_addr = (uint16_t)(si - 0x66EA);
-        if (vm.ds_read(handle_addr) == 0xFFFF) {
-            vm.ds_write(seq_addr, seq);
-            vm.ds_write(handle_addr, hword);
-            break;
+    // Mirror orig SDL inline (vikings.exe_seg000.cpp:16022-16028): scan slots
+    // si=8,6,4,2 for FIRST FREE (0xFFFF). Write only if free, then break.
+    // If all occupied, leave them alone (orig SDL also doesn't overwrite).
+    uint16_t hword = (handle >= 0 && handle <= 0xFFFE) ? (uint16_t)handle : 0xFFFF;
+    if (hword != 0xFFFF) {
+        for (int16_t si = 8; si > 0; si -= 2) {
+            uint16_t handle_addr = (uint16_t)(si - 0x66F4);
+            uint16_t seq_addr = (uint16_t)(si - 0x66EA);
+            if (vm.ds_read(handle_addr) == 0xFFFF) {
+                vm.ds_write(seq_addr, seq);
+                vm.ds_write(handle_addr, hword);
+                break;
+            }
         }
-        vm.ds_write(seq_addr, seq);
-        vm.ds_write(handle_addr, hword);
-        break;
     }
 }
 

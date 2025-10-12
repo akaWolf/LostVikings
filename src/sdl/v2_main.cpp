@@ -112,7 +112,14 @@ int main(int argc, char* argv[]) {
     uint16_t ds = 0;
     uint32_t frame_target_ms = SDL_GetTicks();
     const uint32_t FRAME_PERIOD_MS = 53;  // ~18.9 FPS — measured orig on Linux
+    // FPS instrumentation: track work time per frame (excluding sleep). Print
+    // running stats every N frames + warn when individual frame exceeds budget.
+    uint32_t fps_window_start_ms = SDL_GetTicks();
+    int      fps_frames_in_window = 0;
+    uint32_t fps_work_total_us = 0;  // sum of work time (no sleep) per window
+    int      fps_slow_frames = 0;    // frames where work > FRAME_PERIOD_MS
     while (!need_quit) {
+        uint32_t frame_start_ms = SDL_GetTicks();
         v2_signal_phase(V2_PHASE_FRAME_BEGIN, ds);
         v2_signal_phase(V2_PHASE_PRE_VM, ds);
         v2_signal_phase(V2_PHASE_VM, ds);
@@ -124,6 +131,31 @@ int main(int argc, char* argv[]) {
         v2_signal_phase(V2_PHASE_RENDER3, ds);
         v2_signal_phase(V2_PHASE_POST_FLIP3, ds);
         v2_signal_phase(V2_PHASE_FRAME_END, ds);
+        uint32_t work_end_ms = SDL_GetTicks();
+        uint32_t work_ms = work_end_ms - frame_start_ms;
+        fps_work_total_us += work_ms * 1000;
+        fps_frames_in_window++;
+        // Per-frame slow-frame warning (any frame whose work alone exceeds budget).
+        if (work_ms > FRAME_PERIOD_MS) {
+            fps_slow_frames++;
+            extern int v2_dbg_pre_vm_iter;
+            fprintf(stderr, "FPS-SLOW: frame_iter=%d work=%ums > budget=%ums\n",
+                    v2_dbg_pre_vm_iter, work_ms, FRAME_PERIOD_MS);
+        }
+        // Window stats every ~2s (fps target × 2s).
+        if (work_end_ms - fps_window_start_ms >= 2000) {
+            float avg_work_ms = (float)fps_work_total_us / (float)fps_frames_in_window / 1000.0f;
+            float effective_fps = 1000.0f * fps_frames_in_window / (float)(work_end_ms - fps_window_start_ms);
+            fprintf(stderr, "FPS-STATS: window=%ums frames=%d avg_work=%.1fms slow=%d "
+                            "effective_fps=%.1f (target=%.1f)\n",
+                    work_end_ms - fps_window_start_ms, fps_frames_in_window,
+                    avg_work_ms, fps_slow_frames, effective_fps,
+                    1000.0f / FRAME_PERIOD_MS);
+            fps_window_start_ms = work_end_ms;
+            fps_frames_in_window = 0;
+            fps_work_total_us = 0;
+            fps_slow_frames = 0;
+        }
 
         // Frame rate limiter: sleep to target 60 FPS.
         frame_target_ms += FRAME_PERIOD_MS;

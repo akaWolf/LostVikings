@@ -74,8 +74,10 @@ static struct ADL_MIDIPlayer    *midi_players[100]; /* Instance of ADLMIDI playe
 
 void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, uint32_t len, int seq_num)
 {
+	  auto _t0 = std::chrono::steady_clock::now();
   	  /* Initialize ADLMIDI */
       auto curr_player = adl_init(MYFREQ);
+	  auto _t1 = std::chrono::steady_clock::now();
 	  printf("player: created %p %p %i\n", curr_player, xmidi, seq_num);
 	  if (!curr_player)
 	  {
@@ -89,6 +91,7 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
 	  adl_setBank(curr_player, 75);
 
 	  adl_setLoopEnabled(curr_player, seq_num == -1 ? 1 : 0);
+	  auto _t2 = std::chrono::steady_clock::now();
 
 	      /* Open the MIDI (or MUS, IMF or CMF) file to play */
 	if (adl_openData(curr_player, xmidi, len) < 0)
@@ -102,12 +105,18 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
 	  if (seq_num != -1)
 		adl_selectSongNum(curr_player, seq_num);
 
+	auto _t3 = std::chrono::steady_clock::now();
 	{
 	  int songs = adl_getSongsCount(curr_player);
 	  double total_sec = adl_totalTimeLength(curr_player);
 	  double loopstart = adl_loopStartTime(curr_player);
-	  printf("[%ums] SOUND-OPEN: player=%p len=%u seq=%d songs=%d total_time=%.2fs loopStart=%.2fs\n",
-	         _sound_now_ms(), (void*)curr_player, len, seq_num, songs, total_sec, loopstart);
+	  double init_us = std::chrono::duration<double, std::micro>(_t1 - _t0).count();
+	  double cfg_us  = std::chrono::duration<double, std::micro>(_t2 - _t1).count();
+	  double open_us = std::chrono::duration<double, std::micro>(_t3 - _t2).count();
+	  printf("[%ums] SOUND-OPEN: player=%p len=%u seq=%d songs=%d total_time=%.2fs loopStart=%.2fs "
+	         "init=%.0fμs cfg=%.0fμs openData=%.0fμs total=%.0fμs\n",
+	         _sound_now_ms(), (void*)curr_player, len, seq_num, songs, total_sec, loopstart,
+	         init_us, cfg_us, open_us, init_us + cfg_us + open_us);
 	}
 		//adl_setTrackOptions(curr_player, seq_num, ADLMIDI_TrackOption_Solo);
 
@@ -175,7 +184,11 @@ int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t
 
 int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num)
 {
-  printf("request to play %p %d %d\n", xmidi, len, seq_num);
+  // Count active slots BEFORE adding new — helps correlate with overrun spikes.
+  int _active = 0;
+  for (int i = 0; i < 100; i++) if (midi_players[i]) _active++;
+  printf("[%ums] SOUND-REQ: xmidi=%p len=%u seq=%d active_slots=%d\n",
+         _sound_now_ms(), xmidi, len, seq_num, _active);
   return play_xmidi(midi_players, xmidi, len, seq_num);
 }
 
@@ -313,6 +326,11 @@ void sound_init()
         return;
     }
 
+	printf("SOUND-INIT: requested freq=%d format=0x%X channels=%d samples=%d\n",
+	       spec.freq, spec.format, spec.channels, spec.samples);
+	printf("SOUND-INIT: obtained  freq=%d format=0x%X channels=%d samples=%d size=%u\n",
+	       obtained.freq, obtained.format, obtained.channels, obtained.samples, obtained.size);
+
 	myFormat = obtained.format;
 
     switch(obtained.format)
@@ -364,6 +382,41 @@ static uint8_t myBuffer[16384];  // cherry-pick 3f2114a
 
 void my_audio_callback(void *argument, Uint8 *stream, int len)
 {
+  // Callback budget = samples_in_buffer / sample_rate. For 1024 samples @44100Hz
+  // = 23.2ms. If we exceed this, audio will glitch (underrun).
+  auto _cb_start = std::chrono::steady_clock::now();
+  static int _cb_call_count = 0;
+  static int _cb_overrun_count = 0;
+  static int _cb_max_slots_seen = 0;
+  _cb_call_count++;
+
+  // DIRECT UNDERRUN MEASUREMENT: gap between callback START times. If audio device
+  // drains buffer faster than callback can refill, gap > expected period = underrun.
+  // Normal: gap ≈ samples / sample_rate. Underrun: gap > 1.5x normal.
+  static auto _cb_last_start = std::chrono::steady_clock::time_point{};
+  static int _cb_underrun_count = 0;
+  static double _cb_underrun_total_ms = 0.0;
+  if (_cb_last_start.time_since_epoch().count() != 0) {
+    double interval_ms = std::chrono::duration<double, std::milli>(_cb_start - _cb_last_start).count();
+    double expected_ms = ((double)len / (double)s_audioFormat.sampleOffset) * 1000.0 / (double)MYFREQ;
+    if (interval_ms > expected_ms * 1.5) {
+      double gap_ms = interval_ms - expected_ms;
+      _cb_underrun_count++;
+      _cb_underrun_total_ms += gap_ms;
+      printf("[%ums] SOUND-UNDERRUN: gap=%.1fms (expected=%.1fms, +%.1fms missing) "
+             "underruns=%d total_silence=%.1fms\n",
+             _sound_now_ms(), interval_ms, expected_ms, gap_ms,
+             _cb_underrun_count, _cb_underrun_total_ms);
+    }
+  }
+  _cb_last_start = _cb_start;
+
+  // Compute callback budget (μs). Frames per callback = len / sampleOffset
+  // (stride per stereo frame). Time available = frames / sample_rate.
+  // For 1024 frames @44100 = ~23.2ms.
+  const double _cb_budget_us = ((double)len / (double)s_audioFormat.sampleOffset) * 1e6 / (double)MYFREQ;
+  const double _cb_warn_us = _cb_budget_us * 0.9;
+
   //printf("size %x\n", len);
   if (len > (int)sizeof(myBuffer)) {
 	printf("SOUND ERROR, len = %d!\n", len);
@@ -371,10 +424,25 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
   }
 
   memset(myBuffer, 0, len);
+
+  // DEBUG: NO_AUDIO_WORK env var — disable all adlmidi sample generation, output
+  // silence. Used to test whether audio CPU is the cause of game FPS drop.
+  static int _no_audio_work = -1;
+  if (_no_audio_work == -1) {
+    _no_audio_work = (getenv("NO_AUDIO_WORK") != nullptr) ? 1 : 0;
+    if (_no_audio_work) printf("[%ums] SOUND-DEBUG: NO_AUDIO_WORK=1 — silence-only mode\n", _sound_now_ms());
+  }
+  if (_no_audio_work) {
+    SDL_memcpy(stream, myBuffer, len);
+    return;
+  }
   // memset(buffer) moved INSIDE the slot loop (cherry-pick 3f2114a) — buffer is
   // reused per slot; without re-zeroing, leftover from previous slot bleeds
   // into next slot's mix.
 
+    // requested_samples = TOTAL samples adlmidi generates across both channels
+    // (adl_play/adl_playFormat sampleCount semantic: combined L+R count).
+    // For stereo S16: len bytes / containerSize (2) = sample slots = frames × 2.
     const int requested_samples = len / s_audioFormat.containerSize;
 
 	struct ADL_MIDIPlayer** midi_players = (struct ADL_MIDIPlayer**)argument;
@@ -400,10 +468,32 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		// returned 0 → all closed prematurely. Music would die after one
 		// adl_playFormat call returned 0 even though track had 28-45 sec left.
 		memset(buffer, 0, len);  // cherry-pick 3f2114a: zero per-slot
+		{
+		auto _slot_start = std::chrono::steady_clock::now();
 		samples_count = adl_playFormat(midi_players[i], requested_samples,
 									   buffer,
 									   buffer + s_audioFormat.containerSize,
 									   &s_audioFormat);
+		auto _slot_end = std::chrono::steady_clock::now();
+		double _slot_us = std::chrono::duration<double, std::micro>(_slot_end - _slot_start).count();
+		// Track max time consumed by any single slot per callback (helps identify
+		// which slot is the CPU hog when overrun happens).
+		static double _slot_worst_us = 0.0;
+		static int _slot_worst_idx = -1;
+		if (_slot_us > _slot_worst_us) { _slot_worst_us = _slot_us; _slot_worst_idx = i; }
+		// PARTIAL FILL DETECTION: if adl_playFormat returns fewer samples than asked,
+		// THE BUFFER IS PARTIALLY EMPTY. Music slot partial = music will skip/click.
+		// Music slot = i == dn_slot. Log every partial fill for music slot, sample for SFX.
+		if (samples_count < requested_samples) {
+		  static int _partial_log_count = 0;
+		  if (i == dn_slot || _partial_log_count++ < 50) {
+		    printf("[%ums] SOUND-PARTIAL: slot=%d (%s) requested=%d got=%d (%.1f%% fill)\n",
+		           _sound_now_ms(), i, (i == dn_slot) ? "MUSIC" : "sfx",
+		           requested_samples, samples_count,
+		           100.0 * samples_count / requested_samples);
+		  }
+		}
+		}
 
 		// First-tick log for each player: when did audio_callback first see
 		// samples from this slot? Helps detect adlmidi init latency. Reset on close.
@@ -445,7 +535,8 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		}
 
 		{
-		  // Mix: samples_count is per-slot return; convert to bytes via container size.
+		  // Mix: samples_count = total samples generated (L+R combined). Bytes
+		  // = samples × containerSize. (NOT × sampleOffset — that double-counts.)
 		  int mix_bytes = samples_count * s_audioFormat.containerSize;
 		  if (mix_bytes > len) mix_bytes = len;
 		  SDL_MixAudioFormat(myBuffer, buffer, myFormat, mix_bytes, volume);
@@ -481,6 +572,44 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 
 	}
 
+	// Peak amplitude detection in mix output — to verify clipping hypothesis.
+	int16_t* samples = (int16_t*)myBuffer;
+	int16_t peak_pos = 0, peak_neg = 0;
+	int clipped_pos = 0, clipped_neg = 0;
+	int sample_count_int16 = len / 2;  // assume int16 stereo
+	for (int s = 0; s < sample_count_int16; s++) {
+	  if (samples[s] > peak_pos) peak_pos = samples[s];
+	  if (samples[s] < peak_neg) peak_neg = samples[s];
+	  if (samples[s] == 32767) clipped_pos++;
+	  if (samples[s] == -32768) clipped_neg++;
+	}
+
 	SDL_memcpy(stream, myBuffer, len);
-	//printf("count = %x\n", count);
+
+	// Total callback time + per-slot worst time. Print detail when count >= 3
+	// (where user reports "lag"). Helps see if specific slot is CPU hog or if
+	// it's a clipping issue (peak at +-32767).
+	auto _cb_end = std::chrono::steady_clock::now();
+	double _cb_us = std::chrono::duration<double, std::micro>(_cb_end - _cb_start).count();
+	if (count > _cb_max_slots_seen) {
+	  _cb_max_slots_seen = count;
+	  printf("[%ums] SOUND-CB-MAX-SLOTS: count=%u (new max)\n", _sound_now_ms(), count);
+	}
+	// When 3+ active slots, log every callback details (clipping + timing).
+	if (count >= 3) {
+	  static int _detail_count = 0;
+	  if (++_detail_count <= 100) {  // first 100 only to avoid log flood
+	    int clip_pct = clipped_pos + clipped_neg;
+	    printf("[%ums] SOUND-CB-DETAIL: slots=%u total=%.0fμs peak=%+d/%d clipped=%d/%d samples\n",
+	           _sound_now_ms(), count, _cb_us, peak_pos, peak_neg,
+	           clip_pct, sample_count_int16);
+	  }
+	}
+	if (_cb_us > _cb_warn_us) {
+	  _cb_overrun_count++;
+	  printf("[%ums] SOUND-CB-OVERRUN: took %.0fμs (budget=%.0fμs, %.1f%%) slots=%u "
+	         "overruns=%d/total=%d\n",
+	         _sound_now_ms(), _cb_us, _cb_budget_us, 100.0 * _cb_us / _cb_budget_us,
+	         count, _cb_overrun_count, _cb_call_count);
+	}
 }
