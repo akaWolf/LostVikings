@@ -11952,13 +11952,24 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             anim_bx += 1;
             return true;
 
-        case 0x77B2: // [2] sub_177b2: PLAY SOUND — 2 bytes
-            // Original: reads byte from anim data → sound slot index
-            // Then calls sub_177bb(ax=slot) which dispatches AIL sound play:
-            //   AIL: sub_176bd(si=slot, ax=seq, bx=ds:0x2E6B) → allocate + start XMIDI sequence
-            // play_xmidi_external(sound_segment, size, sequence_id); — SDL sound, commented
+        case 0x77B2: { // [2] sub_177b2: PLAY SOUND — 2 bytes
+            // Original sub_177b2 (eip 0x77B2):
+            //   MOV ax, es:[bx]   ; read uint16 (2 bytes from anim data)
+            //   ADD bx, 2
+            //   AND ax, 0FFh      ; take low byte = sequence number
+            //   fall-through to sub_177bb → play SFX
+            // Task #85: this was a stub — orig fires SFX from animation (e.g., dinosaur
+            // bite seq=0x50, mouth seq=0x26). Without this, v2 silently drops anim sounds.
+            uint16_t ax_word = *(uint16_t*)(vm.es + anim_bx);
             anim_bx += 2;
+            uint16_t seq = ax_word & 0xFF;
+            if (vm.ds_read(0x304) == 0) {  // mute check (mirror sub_177bb)
+                v2_sub_177bb_v2(vm.shadow, seq);
+                // Audit log: matches orig sub_177bb hook in seg000.cpp.
+                v2_audit_log_sfx(1 /* v2 */, seq, vm.global_r(0x42));
+            }
             return true;
+        }
 
         case 0x31A4: { // [8] sub_131a4: Set sub-sprite X absolute — 2 bytes PER sub-sprite (LOOPS!)
             // Orig sub_131a4 (eip 0x31A4, body at loc_131B5..loc_131DA): do-while pattern.
@@ -14312,6 +14323,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         }
         // Pre-opcode snapshot for divergence detection (gameplay levels only).
         uint16_t pre_acc = v2_vm_accumulator;
+        extern int v2_dbg_pre_vm_iter;
         uint16_t pre_obj_141D = *(uint16_t*)(shadow + obj_idx + 0x141D);
         uint16_t pre_obj_16ED = *(uint16_t*)(shadow + obj_idx + 0x16ED);
         // Snapshot ALL obj's anim_id to detect cutscene-controller writes.
@@ -14321,34 +14333,40 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 
         v2_vm_optable[opcode](vm);
 
-        // MAIN-VM PER-OPCODE TRACE: ALL objects, gameplay level (002B+).
-        // Only print first 3000 entries to avoid flood.
-        if (*(uint16_t*)(shadow + 0x25AD) == 0x002B) {
+        // MAIN-VM PER-OPCODE TRACE: obj=06 — ALL frames in level 002B (#85).
+        // Capture full obj 6 history to find where v2 diverges from orig.
+        if (*(uint16_t*)(shadow + 0x25AD) == 0x002B && obj_idx == 6) {
             static int _mvm = 0;
-            if (++_mvm <= 3000) {
+            if (++_mvm <= 20000) {
                 fprintf(stderr,
-                  "V2-MVM[%d] obj=%02X: op=%02X pc=%04X→%04X acc=%04X→%04X "
-                  "141D=%04X→%04X 16ED=%04X→%04X 32F=%04X 86DE=%04X 3B8=%04X\n",
-                  _mvm, obj_idx, opcode, pc_before, vm.pc,
+                  "V2-MVM[f%d #%d] obj=06: op=%02X pc=%04X→%04X acc=%04X→%04X "
+                  "141D=%04X→%04X 16ED=%04X→%04X 1715=%04X 1585=%04X 132D=%04X 1355=%04X "
+                  "32F=%04X 86DE=%04X 3B8=%04X es=%04X\n",
+                  v2_dbg_pre_vm_iter, _mvm, opcode, pc_before, vm.pc,
                   pre_acc, v2_vm_accumulator,
                   pre_obj_141D, *(uint16_t*)(shadow + obj_idx + 0x141D),
                   pre_obj_16ED, *(uint16_t*)(shadow + obj_idx + 0x16ED),
+                  *(uint16_t*)(shadow + obj_idx + 0x1715),
+                  *(uint16_t*)(shadow + obj_idx + 0x1585),
+                  *(uint16_t*)(shadow + obj_idx + 0x132D),
+                  *(uint16_t*)(shadow + obj_idx + 0x1355),
                   *(uint16_t*)(shadow + 0x32F),
                   *(uint16_t*)(shadow + 0x86DE),
-                  *(uint16_t*)(shadow + 0x3B8));
+                  *(uint16_t*)(shadow + 0x3B8),
+                  vm.es);
             }
-            // CUTSCENE-CONTROLLER trap: detect writes to OTHER obj's 0x16ED.
-            for (int oi = 0; oi < 128; oi++) {
-                uint16_t now = *(uint16_t*)(shadow + (oi*2) + 0x16ED);
-                if (now != pre_all_16ED[oi]) {
-                    static int _cw = 0;
-                    if (++_cw <= 100) {
-                        fprintf(stderr,
-                          "V2-MVM-ANIM-WR[%d]: writer_obj=%02X op=%02X pc=%04X "
-                          "→ target_obj=%02X 16ED: %04X → %04X\n",
-                          _cw, obj_idx, opcode, pc_before,
-                          oi*2, pre_all_16ED[oi], now);
-                    }
+        }
+        // CUTSCENE-CONTROLLER trap: detect writes to obj 6's 0x16ED specifically.
+        if (*(uint16_t*)(shadow + 0x25AD) == 0x002B) {
+            uint16_t now6 = *(uint16_t*)(shadow + 6 + 0x16ED);
+            if (now6 != pre_all_16ED[3]) {  // index 3 = obj 6 (oi*2)
+                static int _cw = 0;
+                if (++_cw <= 1000) {
+                    fprintf(stderr,
+                      "V2-MVM-ANIM-WR-OBJ6[#%d f%d]: writer_obj=%02X op=%02X pc=%04X "
+                      "→ obj6 16ED: %04X → %04X\n",
+                      _cw, v2_dbg_pre_vm_iter, obj_idx, opcode, pc_before,
+                      pre_all_16ED[3], now6);
                 }
             }
         }
@@ -16273,10 +16291,13 @@ void v2_phase_vm(uint16_t ds_val) {
     // sub_14207 init: sub_15517 + clear priority + collision (eip 0x4207-0x4210)
     v2_sub_14207_init(v2_vm_shadow_ds);
 
-    // TEMP: enable obj 0 trace at first diff frame
-    { static int _tf = 0; _tf++;
+    // Task #85: trace obj 6 (dinosaur) for missing op_sound diagnosis.
+    // Bite SFX missed at f1535/f1543, mouth animation at f1173-f1194.
+    // Trace windows around those frames to compare orig vs v2 opcode sequences.
+    { extern int v2_dbg_pre_vm_iter;
       extern uint16_t v2_trace_object;
-      if (_tf >= 40 && _tf <= 45) v2_trace_object = 0;
+      int f = v2_dbg_pre_vm_iter;
+      if ((f >= 1170 && f <= 1200) || (f >= 1530 && f <= 1550)) v2_trace_object = 6;
       else v2_trace_object = 0xFFFF;
     }
 

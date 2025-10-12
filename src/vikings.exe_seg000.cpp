@@ -9484,6 +9484,27 @@ cs=0x1a2;eip=0x0042aa; 	T(AND(si, 0x0FF));	// 8829 and     si, 0FFh ;~ 01A2:42AA
 cs=0x1a2;eip=0x0042ae; 	T(SHL(si, 1));	// 8830 shl     si, 1 ;~ 01A2:42AE
 	{ uint8_t v2_orig_opcode = (uint8_t)(si >> 1); uint16_t v2_pc_before = bx - 1; // before INC, same as v2
 	  uint16_t v2_acc_before = *(dw*)(raddr(ds,0x8A));
+	  // Task #85: orig opcode trace for obj 6 (dinosaur) — ALL frames in level 002B
+	  { extern int v2_dbg_pre_vm_iter;
+	    int f = v2_dbg_pre_vm_iter;
+	    uint16_t cur_obj = *(dw*)(raddr(ds, 0x42));
+	    uint16_t cur_lv = *(dw*)(raddr(ds, 0x25AD));
+	    if (cur_obj == 6 && cur_lv == 0x002B) {
+	      static int _omvm = 0;
+	      if (_omvm++ < 20000) {
+	        uint16_t cur_16ED = *(dw*)(raddr(ds, cur_obj + 0x16ED));
+	        uint16_t cur_141D = *(dw*)(raddr(ds, cur_obj + 0x141D));
+	        uint16_t cur_1715 = *(dw*)(raddr(ds, cur_obj + 0x1715));
+	        uint16_t cur_1585 = *(dw*)(raddr(ds, cur_obj + 0x1585));
+	        uint16_t cur_132D = *(dw*)(raddr(ds, cur_obj + 0x132D));
+	        uint16_t cur_1355 = *(dw*)(raddr(ds, cur_obj + 0x1355));
+	        fprintf(stderr, "ORIG-MVM[f%d obj=06]: op=%02X pc=%04X acc=%04X "
+	                "141D=%04X 16ED=%04X 1715=%04X 1585=%04X 132D=%04X 1355=%04X\n",
+	                f, v2_orig_opcode, v2_pc_before, v2_acc_before,
+	                cur_141D, cur_16ED, cur_1715, cur_1585, cur_132D, cur_1355);
+	      }
+	    }
+	  }
 	// Fine-grained sync: lock only around 64KB memcpy snapshot (the actual race
 	// vs render thread's sub_1797b DEC of word_3287c). Opcode dispatch + replay_verify
 	// run UNLOCKED — they don't race (replay_verify reads its OWN copy v2_ds_before).
@@ -16010,6 +16031,17 @@ cs=0x1a2;eip=0x0077b5; 	T(ADD(bx, 2));	// 17321 add     bx, 2 ;~ 01A2:77B5
 cs=0x1a2;eip=0x0077b8; 	T(AND(ax, 0x0FF));	// 17322 and     ax, 0FFh ;~ 01A2:77B8
 sub_177bb:
  printf("AIL sub_177bb: ail_play_sound: sequence num = %x\n", ax);
+ // Task #85: caller backtrace to find what fires this in orig (esp. for seqs missing in v2).
+ { extern int v2_dbg_pre_vm_iter;
+   if (v2_dbg_pre_vm_iter >= 1165 && v2_dbg_pre_vm_iter <= 1200 || v2_dbg_pre_vm_iter >= 1525 && v2_dbg_pre_vm_iter <= 1555) {
+     void* bt[10]; int n = backtrace(bt, 10);
+     char** syms = backtrace_symbols(bt, n);
+     fprintf(stderr, "ORIG-177BB-CALL[f%d]: ax=%x bx=%x ds:0x42=obj%02X — backtrace:\n",
+             v2_dbg_pre_vm_iter, (int)ax, (int)bx, (int)*(dw*)(raddr(ds,0x42)));
+     for (int i = 0; i < n && i < 6; i++) fprintf(stderr, "  #%d %s\n", i, syms[i]);
+     free(syms);
+   }
+ }
 	// 17329
  printf("AIL %x\n", chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4]);
  // SDL replacement for AIL sub_1C763/77B/781: play SFX sequence ax. Then
