@@ -908,6 +908,11 @@ static void v2_sub_10130(uint8_t* s) {
     }
 }
 
+// (v2_render_callback removed — required reading from m2c which violates
+// "No real data copy" rule. Correct fix: v2 must mirror writes to byte_317DF
+// (eip 0x6869, 0x687A) and byte_128A8 (eip 0x28A9, 0x28F2) in shadow, then
+// v2_render_callback can use pure shadow reads. Pending implementation.)
+
 // sub_101be (seg000): Palette cycling for UI elements.
 // Verified with seg000 lines 2086-2148.
 // Iterates 8 palette channels (si=7 down to 0).

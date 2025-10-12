@@ -3,8 +3,87 @@
 #include <atomic>
 #include <cstdio>
 #include <chrono>
+#include <algorithm>
+#include <cstring>
 
 #include "adlmidi.h"
+
+// ============================================================================
+// DECOUPLED MIXER ARCHITECTURE (per AUDIO_IMPL_ANALYSIS.md Option C)
+// ============================================================================
+// Each slot has:
+//   - SPSC lock-free ring buffer (~46ms ahead capacity)
+//   - Worker thread that continuously fills ring via adl_playFormat
+//   - Audio callback: reads from ring, mixes (cheap memcpy + SDL_MixAudioFormat)
+//
+// Music slot has its OWN worker → SFX CPU spike doesn't starve music.
+// All sounds play (no cap, no stealing) — only constraint is per-slot worker
+// keeping up with sample consumption rate.
+// ============================================================================
+
+// SPSC ring buffer for int16 samples. Single producer (worker thread), single
+// consumer (audio callback). Lock-free via atomic positions.
+// CAPACITY = 8192 int16 = 4096 stereo frames = ~92ms @ 44100Hz. Provides enough
+// headroom to absorb worker thread scheduling jitter.
+template<size_t Capacity>
+class SpscRing {
+    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
+    static constexpr size_t MASK = Capacity - 1;
+    int16_t buffer[Capacity];
+    alignas(64) std::atomic<size_t> write_pos{0};
+    alignas(64) std::atomic<size_t> read_pos{0};
+public:
+    // Producer side: write up to count samples. Returns # actually written.
+    size_t write(const int16_t* data, size_t count) {
+        size_t w = write_pos.load(std::memory_order_relaxed);
+        size_t r = read_pos.load(std::memory_order_acquire);
+        size_t used = w - r;
+        size_t free_space = Capacity - 1 - used;
+        size_t n = (count < free_space) ? count : free_space;
+        for (size_t i = 0; i < n; i++) buffer[(w + i) & MASK] = data[i];
+        write_pos.store(w + n, std::memory_order_release);
+        return n;
+    }
+    // Consumer side: read up to count samples. Returns # actually read.
+    size_t read(int16_t* dest, size_t count) {
+        size_t r = read_pos.load(std::memory_order_relaxed);
+        size_t w = write_pos.load(std::memory_order_acquire);
+        size_t avail = w - r;
+        size_t n = (count < avail) ? count : avail;
+        for (size_t i = 0; i < n; i++) dest[i] = buffer[(r + i) & MASK];
+        read_pos.store(r + n, std::memory_order_release);
+        return n;
+    }
+    // Producer side: free space in samples.
+    size_t free_space() const {
+        size_t w = write_pos.load(std::memory_order_relaxed);
+        size_t r = read_pos.load(std::memory_order_acquire);
+        return Capacity - 1 - (w - r);
+    }
+    // Consumer side: samples available.
+    size_t available() const {
+        size_t r = read_pos.load(std::memory_order_relaxed);
+        size_t w = write_pos.load(std::memory_order_acquire);
+        return w - r;
+    }
+    // Reset to empty (only safe when producer + consumer both idle).
+    void reset() {
+        read_pos.store(0, std::memory_order_relaxed);
+        write_pos.store(0, std::memory_order_relaxed);
+    }
+};
+
+// Per-slot ring buffer (4096 stereo frames = ~92ms ahead).
+static SpscRing<8192> g_rings[100];
+
+// Per-slot state for decoupled mixer:
+//   stop_requested: set by stop_xmidi_external/main thread; worker checks each loop.
+//   producer_alive: true while worker thread running; false after worker exits.
+//   player_active:  true while logical playback active (set by play_xmidi, cleared
+//                   by audio_callback after ring drained AND producer dead).
+static std::atomic<bool> g_stop_requested[100] = {};
+static std::atomic<bool> g_producer_alive[100] = {};
+static std::atomic<bool> g_player_active[100] = {};
 
 // Time-since-program-start in ms — for diagnostic timestamps in sound logs.
 static auto _sound_t0 = std::chrono::steady_clock::now();
@@ -72,63 +151,127 @@ const uint32_t MYFREQ = 44100;
 static struct ADL_MIDIPlayer    *midi_players[100]; /* Instance of ADLMIDI player */
 
 
+// Decoupled mixer producer thread. Owns the ADL_MIDIPlayer for slot `i`.
+// Continuously generates samples via adl_playFormat into per-slot ring buffer.
+// Audio callback consumes from ring asynchronously — never blocks producer.
+//
+// Lifecycle:
+//   1. Init adlmidi + load XMI
+//   2. Publish player into midi_players[i] (signal audio callback can use slot)
+//   3. Loop: generate CHUNK samples → write to ring (with throttle when full)
+//   4. Exit on stop_requested OR adl_playFormat returns 0 (natural end)
+//   5. Close player; clear midi_players[i]; mark producer_alive=false
+// Audio callback drains remaining ring data, then sets player_active=false.
 void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, uint32_t len, int seq_num)
 {
-	  auto _t0 = std::chrono::steady_clock::now();
-  	  /* Initialize ADLMIDI */
-      auto curr_player = adl_init(MYFREQ);
-	  auto _t1 = std::chrono::steady_clock::now();
-	  printf("player: created %p %p %i\n", curr_player, xmidi, seq_num);
-	  if (!curr_player)
-	  {
-		  fprintf(stderr, "Couldn't initialize ADLMIDI: %s\n", adl_errorString());
-		  return;
-	  }
-
-	  adl_switchEmulator(curr_player, ADLMIDI_EMU_NUKED);
-
-	  /* Set using of embedded bank by ID */
-	  adl_setBank(curr_player, 75);
-
-	  adl_setLoopEnabled(curr_player, seq_num == -1 ? 1 : 0);
-	  auto _t2 = std::chrono::steady_clock::now();
-
-	      /* Open the MIDI (or MUS, IMF or CMF) file to play */
-	if (adl_openData(curr_player, xmidi, len) < 0)
-    {
-        fprintf(stderr, "Couldn't open music file: %s\n", adl_errorInfo(curr_player));
-        //SDL_CloseAudio();
-        adl_close(curr_player);
-        return;
+	// Find slot index from midi_player pointer (used for ring/atomic access).
+	int slot = -1;
+	extern struct ADL_MIDIPlayer* midi_players[];
+	for (int i = 0; i < 100; i++) if (&midi_players[i] == midi_player) { slot = i; break; }
+	if (slot < 0) {
+		fprintf(stderr, "midi_thread_proc: BUG — slot not found for player ptr %p\n", (void*)midi_player);
+		g_producer_alive[0].store(false);  // safety
+		return;
 	}
 
-	  if (seq_num != -1)
-		adl_selectSongNum(curr_player, seq_num);
+	auto _t0 = std::chrono::steady_clock::now();
+	auto curr_player = adl_init(MYFREQ);
+	auto _t1 = std::chrono::steady_clock::now();
+	printf("[%ums] SOUND-PRODUCER-START: slot=%d player=%p xmidi=%p seq=%d\n",
+	       _sound_now_ms(), slot, (void*)curr_player, xmidi, seq_num);
+	if (!curr_player) {
+		fprintf(stderr, "Couldn't initialize ADLMIDI: %s\n", adl_errorString());
+		g_producer_alive[slot].store(false, std::memory_order_release);
+		g_player_active[slot].store(false, std::memory_order_release);
+		return;
+	}
+
+	adl_switchEmulator(curr_player, ADLMIDI_EMU_NUKED);
+	adl_setBank(curr_player, 75);
+	adl_setLoopEnabled(curr_player, seq_num == -1 ? 1 : 0);
+	auto _t2 = std::chrono::steady_clock::now();
+
+	if (adl_openData(curr_player, xmidi, len) < 0) {
+		fprintf(stderr, "Couldn't open music file: %s\n", adl_errorInfo(curr_player));
+		adl_close(curr_player);
+		g_producer_alive[slot].store(false, std::memory_order_release);
+		g_player_active[slot].store(false, std::memory_order_release);
+		return;
+	}
+
+	if (seq_num != -1) adl_selectSongNum(curr_player, seq_num);
 
 	auto _t3 = std::chrono::steady_clock::now();
 	{
-	  int songs = adl_getSongsCount(curr_player);
-	  double total_sec = adl_totalTimeLength(curr_player);
-	  double loopstart = adl_loopStartTime(curr_player);
-	  double init_us = std::chrono::duration<double, std::micro>(_t1 - _t0).count();
-	  double cfg_us  = std::chrono::duration<double, std::micro>(_t2 - _t1).count();
-	  double open_us = std::chrono::duration<double, std::micro>(_t3 - _t2).count();
-	  printf("[%ums] SOUND-OPEN: player=%p len=%u seq=%d songs=%d total_time=%.2fs loopStart=%.2fs "
-	         "init=%.0fμs cfg=%.0fμs openData=%.0fμs total=%.0fμs\n",
-	         _sound_now_ms(), (void*)curr_player, len, seq_num, songs, total_sec, loopstart,
-	         init_us, cfg_us, open_us, init_us + cfg_us + open_us);
+		int songs = adl_getSongsCount(curr_player);
+		double total_sec = adl_totalTimeLength(curr_player);
+		double loopstart = adl_loopStartTime(curr_player);
+		double init_us = std::chrono::duration<double, std::micro>(_t1 - _t0).count();
+		double cfg_us  = std::chrono::duration<double, std::micro>(_t2 - _t1).count();
+		double open_us = std::chrono::duration<double, std::micro>(_t3 - _t2).count();
+		printf("[%ums] SOUND-OPEN: slot=%d player=%p len=%u seq=%d songs=%d total_time=%.2fs loopStart=%.2fs "
+		       "init=%.0fμs cfg=%.0fμs openData=%.0fμs total=%.0fμs\n",
+		       _sound_now_ms(), slot, (void*)curr_player, len, seq_num, songs, total_sec, loopstart,
+		       init_us, cfg_us, open_us, init_us + cfg_us + open_us);
 	}
-		//adl_setTrackOptions(curr_player, seq_num, ADLMIDI_TrackOption_Solo);
 
+	// Publish player. Audio callback was checking player_active (set by play_xmidi)
+	// but waited until midi_players[slot] != nullptr to actually consume. Order:
+	// store player ptr last so consumer sees fully-init player.
 	*midi_player = curr_player;
 
-    /* wait until we're don't playing */
-    while (*midi_player && !need_quit)
-    {
-        SDL_Delay(100);
-    }
+	// Producer loop: generate CHUNK samples per iteration. CHUNK chosen to be
+	// small enough to react quickly to stop_requested but large enough to
+	// amortize adl_playFormat overhead. 1024 stereo frames = 2048 int16 samples.
+	constexpr int CHUNK_FRAMES = 1024;
+	constexpr int CHUNK_SAMPLES = CHUNK_FRAMES * 2;  // stereo: 2 int16 per frame
+	int16_t local[CHUNK_SAMPLES];
 
-	printf("player: exiting %p\n", curr_player);
+	while (!g_stop_requested[slot].load(std::memory_order_acquire) && !need_quit) {
+		// Throttle: wait if ring doesn't have room for another chunk.
+		while (g_rings[slot].free_space() < (size_t)CHUNK_SAMPLES) {
+			if (g_stop_requested[slot].load(std::memory_order_acquire) || need_quit) goto exit_loop;
+			std::this_thread::sleep_for(std::chrono::milliseconds(2));
+		}
+
+		// adl_playFormat sampleCount = total samples L+R interleaved (matches
+		// existing audio_callback convention from before refactor).
+		int got = adl_playFormat(curr_player, CHUNK_SAMPLES,
+		                         (Uint8*)local,
+		                         (Uint8*)local + s_audioFormat.containerSize,
+		                         &s_audioFormat);
+		if (got <= 0) {
+			// Sequence ended naturally. For music (seq_num == -1) with loop enabled
+			// adlmidi handles loop internally — got<=0 means truly done. For SFX,
+			// natural end after one play.
+			printf("[%ums] SOUND-PRODUCER-END: slot=%d (natural end, got=%d)\n",
+			       _sound_now_ms(), slot, got);
+			break;
+		}
+
+		// Write to ring. Loop in case worker generated more than ring can take
+		// in one go (shouldn't happen since we checked free_space, but defensive).
+		size_t written = 0;
+		while (written < (size_t)got) {
+			size_t w = g_rings[slot].write(local + written, got - written);
+			written += w;
+			if (written < (size_t)got) {
+				if (g_stop_requested[slot].load(std::memory_order_acquire) || need_quit) goto exit_loop;
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+		}
+	}
+exit_loop:
+
+	printf("[%ums] SOUND-PRODUCER-EXIT: slot=%d stop=%d quit=%d\n",
+	       _sound_now_ms(), slot,
+	       (int)g_stop_requested[slot].load(), (int)need_quit);
+
+	// Cleanup: close player. Audio callback sees midi_players[slot]=nullptr +
+	// producer_alive=false → drains remaining ring → marks player_active=false.
+	*midi_player = nullptr;
+	adl_close(curr_player);
+	g_producer_alive[slot].store(false, std::memory_order_release);
 }
 
 // Returns unique 16-bit handle (1..0xFFFE). 0 = play failed, 0xFFFF reserved.
@@ -148,14 +291,19 @@ int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t
   uint16_t handle = 0;
   for (int i = 0; i < 100; i++)
   {
-	// Pick any free slot (midi_players[i] == nullptr). need_close[i] could still
-	// be true from a recent stop request that the audio callback hasn't processed
-	// yet — we clear it BEFORE spawning the thread so the new player isn't
-	// immediately closed by stale flag.
-	if (midi_players[i] == nullptr)
+	// Pick any free slot. With decoupled mixer, slot is "free" when both:
+	//   midi_players[i] == nullptr (producer cleared it on exit)
+	//   !player_active[i] (audio callback finished draining ring)
+	// This ensures we don't spawn new producer while old ring still has data.
+	if (midi_players[i] == nullptr && !g_player_active[i].load(std::memory_order_acquire))
 	{
 	  bool stale = need_close[i].load();
 	  need_close[i].store(false);
+	  // Reset decoupled mixer state for this slot.
+	  g_stop_requested[i].store(false, std::memory_order_relaxed);
+	  g_rings[i].reset();
+	  g_producer_alive[i].store(true, std::memory_order_relaxed);
+	  g_player_active[i].store(true, std::memory_order_release);
 	  // Reset fade state for this slot (no fade in progress for new player).
 	  _sound_fade_volume[i].store(1.0f);
 	  _sound_fade_step[i].store(0.0f);
@@ -184,9 +332,10 @@ int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t
 
 int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num)
 {
-  // Count active slots BEFORE adding new — helps correlate with overrun spikes.
+  // Count active slots (logical) BEFORE adding new — uses player_active flag
+  // so it includes slots whose worker hasn't initialized player yet.
   int _active = 0;
-  for (int i = 0; i < 100; i++) if (midi_players[i]) _active++;
+  for (int i = 0; i < 100; i++) if (g_player_active[i].load(std::memory_order_acquire)) _active++;
   printf("[%ums] SOUND-REQ: xmidi=%p len=%u seq=%d active_slots=%d\n",
          _sound_now_ms(), xmidi, len, seq_num, _active);
   return play_xmidi(midi_players, xmidi, len, seq_num);
@@ -222,7 +371,7 @@ void stop_all_sfx()
   int dn_slot = slot_for_handle(dn);
   int marked = 0;
   for (int i = 0; i < 100; i++) {
-    if (i != dn_slot && midi_players[i] != nullptr) {
+    if (i != dn_slot && g_player_active[i].load(std::memory_order_acquire)) {
       need_close[i].store(true);
       marked++;
     }
@@ -307,6 +456,10 @@ void sound_init()
 	  _sound_fade_volume[i].store(1.0f);
 	  _sound_fade_step[i].store(0.0f);
 	  slot_handle[i].store(0);
+	  g_stop_requested[i].store(false);
+	  g_producer_alive[i].store(false);
+	  g_player_active[i].store(false);
+	  g_rings[i].reset();
 	}
 
     if(SDL_Init(SDL_INIT_AUDIO) < 0)
@@ -451,73 +604,70 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 	uint8_t volume;
 	uint16_t dn = dontstop_handle.load();
 	int dn_slot = slot_for_handle(dn);
-	int samples_count = 0;
 
+	// DECOUPLED MIXER audio_callback: each slot reads from its SPSC ring buffer
+	// (filled by per-slot worker thread). No adl_playFormat here → callback CPU
+	// is just N × memcpy + SDL_MixAudioFormat = always fast (no overrun).
 	for (int i = 0; i < 100; i++)
 	{
-		if (!midi_players[i])
+		// Skip slots that are truly inactive.
+		if (!g_player_active[i].load(std::memory_order_acquire))
 		  continue;
 
-		// Per-slot async close request from main thread.
-		if (need_close[i].load())
-		  goto close;
+		// Translate legacy need_close flag into stop_requested for producer.
+		// (need_close set by stop_xmidi_external — main thread writes it.)
+		if (need_close[i].load() && !g_stop_requested[i].load()) {
+		  g_stop_requested[i].store(true, std::memory_order_release);
+		}
 
-		// BUG FIX: samples_count must be RESET to requested per-iteration.
-		// Old code reused samples_count across iterations: if first player
-		// returned 0 (track ended), subsequent calls got passed 0 → all
-		// returned 0 → all closed prematurely. Music would die after one
-		// adl_playFormat call returned 0 even though track had 28-45 sec left.
-		memset(buffer, 0, len);  // cherry-pick 3f2114a: zero per-slot
-		{
-		auto _slot_start = std::chrono::steady_clock::now();
-		samples_count = adl_playFormat(midi_players[i], requested_samples,
-									   buffer,
-									   buffer + s_audioFormat.containerSize,
-									   &s_audioFormat);
-		auto _slot_end = std::chrono::steady_clock::now();
-		double _slot_us = std::chrono::duration<double, std::micro>(_slot_end - _slot_start).count();
-		// Track max time consumed by any single slot per callback (helps identify
-		// which slot is the CPU hog when overrun happens).
-		static double _slot_worst_us = 0.0;
-		static int _slot_worst_idx = -1;
-		if (_slot_us > _slot_worst_us) { _slot_worst_us = _slot_us; _slot_worst_idx = i; }
-		// PARTIAL FILL DETECTION: if adl_playFormat returns fewer samples than asked,
-		// THE BUFFER IS PARTIALLY EMPTY. Music slot partial = music will skip/click.
-		// Music slot = i == dn_slot. Log every partial fill for music slot, sample for SFX.
-		if (samples_count < requested_samples) {
+		// Read from ring. May get less than requested if producer behind or done.
+		int got = (int)g_rings[i].read((int16_t*)buffer, requested_samples);
+
+		// First-tick log when ring first delivers data.
+		extern bool _sound_first_tick[100];
+		if (!_sound_first_tick[i] && got > 0) {
+		  _sound_first_tick[i] = true;
+		  printf("[%ums] SOUND-FIRST-TICK: slot=%d samples=%d (decoupled-mixer ready)\n",
+		         _sound_now_ms(), i, got);
+		}
+
+		// SLOT-DRAIN check: if producer dead + ring empty → slot fully done.
+		bool producer_dead = !g_producer_alive[i].load(std::memory_order_acquire);
+		bool ring_empty = (g_rings[i].available() == 0);
+		if (producer_dead && ring_empty) {
+		  // Final cleanup: clear handle, dontstop if music, log close.
+		  const char* reason = need_close[i].load() ? "stop-request" : "natural-end";
+		  printf("[%ums] SOUND-CLOSE: slot=%d handle=%04X reason=%s%s\n",
+		         _sound_now_ms(), i, slot_handle[i].load(), reason,
+		         (i == dn_slot) ? " (was music!)" : "");
+		  need_close[i].store(false);
+		  slot_handle[i].store(0, std::memory_order_relaxed);
+		  extern void _sound_reset_first_tick(int);
+		  _sound_reset_first_tick(i);
+		  if (i == dn_slot) dontstop_handle.store(0);
+		  // Mark slot free LAST — play_xmidi waits on this.
+		  g_player_active[i].store(false, std::memory_order_release);
+		  continue;
+		}
+
+		// PARTIAL FILL DETECTION: producer can't keep up → audible glitch in this slot.
+		if (got < requested_samples) {
 		  static int _partial_log_count = 0;
 		  if (i == dn_slot || _partial_log_count++ < 50) {
 		    printf("[%ums] SOUND-PARTIAL: slot=%d (%s) requested=%d got=%d (%.1f%% fill)\n",
 		           _sound_now_ms(), i, (i == dn_slot) ? "MUSIC" : "sfx",
-		           requested_samples, samples_count,
-		           100.0 * samples_count / requested_samples);
+		           requested_samples, got,
+		           requested_samples > 0 ? 100.0 * got / requested_samples : 0.0);
 		  }
 		}
-		}
 
-		// First-tick log for each player: when did audio_callback first see
-		// samples from this slot? Helps detect adlmidi init latency. Reset on close.
-		extern bool _sound_first_tick[100];
-		if (!_sound_first_tick[i]) {
-		  _sound_first_tick[i] = true;
-		  printf("[%ums] SOUND-FIRST-TICK: slot=%d samples=%d (adlmidi init latency observed)\n",
-		         _sound_now_ms(), i, samples_count);
-		}
-		if (samples_count <= 0) {
-		  printf("[%ums] SOUND-NO-SAMPLES: slot=%d (samples=%d) — closing as natural-end%s\n",
-		         _sound_now_ms(), i, samples_count, (i == dn_slot) ? " (was music)" : "");
-		  _sound_first_tick[i] = false;
-		  goto close;
-		}
+		if (got <= 0) continue;  // nothing to mix this iter (producer not ready yet)
 
-
+		// Per-slot volume + fade.
 		volume = SDL_MIX_MAXVOLUME;
 		if (i == dn_slot)
 		  volume = SDL_MIX_MAXVOLUME * 0.6;
-
 		{
-		  // Fade-out: per-callback decrement of volume scale. When reaches <= 0,
-		  // mark slot for close so audio thread closes it on next iter.
 		  float fade_v = _sound_fade_volume[i].load();
 		  float fade_s = _sound_fade_step[i].load();
 		  if (fade_s > 0.0f) {
@@ -526,7 +676,8 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		      fade_v = 0.0f;
 		      _sound_fade_step[i].store(0.0f);
 		      need_close[i].store(true);
-		      printf("[%ums] SOUND-FADE-DONE: slot=%d → marking need_close\n",
+		      g_stop_requested[i].store(true, std::memory_order_release);
+		      printf("[%ums] SOUND-FADE-DONE: slot=%d → marking stop_requested\n",
 		             _sound_now_ms(), i);
 		    }
 		    _sound_fade_volume[i].store(fade_v);
@@ -534,41 +685,12 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		  }
 		}
 
-		{
-		  // Mix: samples_count = total samples generated (L+R combined). Bytes
-		  // = samples × containerSize. (NOT × sampleOffset — that double-counts.)
-		  int mix_bytes = samples_count * s_audioFormat.containerSize;
-		  if (mix_bytes > len) mix_bytes = len;
-		  SDL_MixAudioFormat(myBuffer, buffer, myFormat, mix_bytes, volume);
-		}
+		// Mix: got = total samples L+R combined; bytes = got × containerSize.
+		int mix_bytes = got * s_audioFormat.containerSize;
+		if (mix_bytes > len) mix_bytes = len;
+		SDL_MixAudioFormat(myBuffer, buffer, myFormat, mix_bytes, volume);
 
 		count++;
-
-		continue;
-
-	close:
-		{
-		  // Why-closing diagnostic: distinguish need_close request from natural end.
-		  const char* reason = need_close[i].load() ? "stop-request" : "natural-end";
-		  printf("[%ums] SOUND-CLOSE: slot=%d handle=%04X player=%p reason=%s%s\n",
-		         _sound_now_ms(), i, slot_handle[i].load(), (void*)midi_players[i], reason,
-		         (i == dn_slot) ? " (was music!)" : "");
-		  adl_close(midi_players[i]);
-		  midi_players[i] = nullptr;
-		  need_close[i].store(false);
-		  // Clear unique handle mapping — any stale handle stored elsewhere
-		  // (in DS slots) will now fail slot_for_handle() lookup → no-op stop.
-		  // This is the core mechanism that makes the unique-handle design
-		  // mirror AIL's "stop with stale handle = no-op" behavior.
-		  slot_handle[i].store(0, std::memory_order_relaxed);
-		  // Reset first-tick diagnostic so next play in this slot re-logs.
-		  extern void _sound_reset_first_tick(int);
-		  _sound_reset_first_tick(i);
-		  // If we just closed the music player, clear dontstop so future stop_all_sfx
-		  // doesn't try to skip a freed slot.
-		  if (i == dn_slot) dontstop_handle.store(0);
-		  continue;
-		}
 
 	}
 
