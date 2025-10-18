@@ -141,6 +141,20 @@ static int slot_for_handle(uint16_t h) {
     return -1;
 }
 
+// Iterate ALL slots matching handle. Multiple slots may share a handle in default
+// mode where orig (real producer) and v2 (muted reservation) both reserve a slot
+// with the same deterministic handle. Operations like stop/fade/set_dontstop must
+// affect all of them; muted slots have no audio so are no-op for audio side.
+template<class Fn>
+static int for_each_slot_with_handle(uint16_t h, Fn&& fn) {
+    if (h == 0 || h == 0xFFFF) return 0;
+    int matched = 0;
+    for (int i = 0; i < 100; i++) {
+        if (slot_handle[i].load(std::memory_order_relaxed) == h) { fn(i); matched++; }
+    }
+    return matched;
+}
+
 void my_audio_callback(void *midi_player, Uint8 *stream, int len);
 
 static Uint8 buffer[16384]; /* Audio buffer (cherry-pick 3f2114a — fix audio glitches) */
@@ -359,34 +373,36 @@ int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, in
 // Stop a specific player by HANDLE (unique ID from play_xmidi_external).
 // Non-blocking: marks slot for close; audio_callback closes asynchronously.
 // Stale handle (slot was reused for another sound) → no-op, mirroring AIL.
+// In default mode, multiple slots may share the same handle (orig real + v2
+// muted reservation). Iterate all matching slots and mark each for close.
 void stop_xmidi_external(uint16_t handle)
 {
   if (handle == 0 || handle == 0xFFFF) return;
-  int slot = slot_for_handle(handle);
-  if (slot < 0) {
-    // Stale handle — sound already ended naturally or was stopped. AIL would
-    // silently no-op here. We log for diagnostics but otherwise do nothing.
+  uint16_t dn = dontstop_handle.load();
+  int marked = for_each_slot_with_handle(handle, [&](int i) {
+    printf("[%ums] SOUND-STOP: handle=%04X slot=%d player=%p (dontstop=%04X)\n",
+           _sound_now_ms(), handle, i, (void*)midi_players[i], dn);
+    need_close[i].store(true);
+  });
+  if (marked == 0) {
     printf("[%ums] SOUND-STOP: handle=%04X stale (no slot) — no-op\n",
            _sound_now_ms(), handle);
     return;
   }
-  uint16_t dn = dontstop_handle.load();
-  printf("[%ums] SOUND-STOP: handle=%04X slot=%d player=%p (dontstop=%04X)\n",
-         _sound_now_ms(), handle, slot, (void*)midi_players[slot], dn);
   if (dn == handle) dontstop_handle.store(0);
-  need_close[slot].store(true);
 }
 
 // Stop ALL non-music SFX. Music (dontstop_handle) is preserved.
 // Non-blocking. Used for mute toggle (sub_108c8 SFX path), sub_1782a / sub_17912
-// "stop all" semantics.
+// "stop all" semantics. Skip ALL slots whose handle matches dontstop_handle
+// (multiple slots may share music handle in default mode).
 void stop_all_sfx()
 {
   uint16_t dn = dontstop_handle.load();
-  int dn_slot = slot_for_handle(dn);
   int marked = 0;
   for (int i = 0; i < 100; i++) {
-    if (i != dn_slot && g_player_active[i].load(std::memory_order_acquire)) {
+    if (g_player_active[i].load(std::memory_order_acquire) &&
+        slot_handle[i].load(std::memory_order_relaxed) != dn) {
       need_close[i].store(true);
       marked++;
     }
@@ -408,8 +424,7 @@ void stop_xmidi_external()
 void fade_music(int duration_ms)
 {
   uint16_t dn = dontstop_handle.load();
-  int slot = slot_for_handle(dn);
-  if (slot < 0) {
+  if (dn == 0 || dn == 0xFFFF) {
     printf("[%ums] SOUND-FADE: no music to fade\n", _sound_now_ms());
     return;
   }
@@ -422,36 +437,52 @@ void fade_music(int duration_ms)
   const float ticks_per_sec = (float)MYFREQ / 64.0f;
   const float total_ticks   = (duration_ms / 1000.0f) * ticks_per_sec;
   const float step          = (total_ticks > 0) ? (1.0f / total_ticks) : 1.0f;
-  _sound_fade_volume[slot].store(1.0f);
-  _sound_fade_step[slot].store(step);
-  printf("[%ums] SOUND-FADE: handle=%04X slot=%d duration=%dms step=%.5f/tick (%.0f ticks)\n",
-         _sound_now_ms(), dn, slot, duration_ms, step, total_ticks);
+  // Iterate ALL slots with this handle (orig real + v2 muted reservation).
+  // Muted slots have no audio so fade params are no-op; real slot fades normally.
+  int faded = for_each_slot_with_handle(dn, [&](int i) {
+    _sound_fade_volume[i].store(1.0f);
+    _sound_fade_step[i].store(step);
+    printf("[%ums] SOUND-FADE: handle=%04X slot=%d duration=%dms step=%.5f/tick (%.0f ticks)\n",
+           _sound_now_ms(), dn, i, duration_ms, step, total_ticks);
+  });
+  if (faded == 0) {
+    printf("[%ums] SOUND-FADE: handle=%04X no slot found\n", _sound_now_ms(), dn);
+  }
 }
 
 // Mark a player as the "music" player by HANDLE. Audio callback scales its
 // volume to 60% and stop_all_sfx skips its slot.
+// Iterate ALL slots matching handle (orig real + v2 muted reservation in default
+// mode). Clear need_close on each so neither the real nor muted slot is closed.
 void set_dontstop_external(uint16_t handle)
 {
   if (handle == 0 || handle == 0xFFFF) return;
-  int slot = slot_for_handle(handle);
-  if (slot < 0) {
+  int marked = for_each_slot_with_handle(handle, [&](int i) {
+    bool was_marked = need_close[i].load();
+    printf("[%ums] SOUND-DONTSTOP: handle=%04X slot=%d player=%p%s\n",
+           _sound_now_ms(), handle, i, (void*)midi_players[i],
+           was_marked ? " (cleared stale need_close — music save)" : "");
+    need_close[i].store(false);
+  });
+  if (marked == 0) {
     printf("[%ums] SOUND-DONTSTOP: handle=%04X stale (no slot) — no-op\n",
            _sound_now_ms(), handle);
     return;
   }
-  bool was_marked = need_close[slot].load();
-  printf("[%ums] SOUND-DONTSTOP: handle=%04X slot=%d player=%p%s\n",
-         _sound_now_ms(), handle, slot, (void*)midi_players[slot],
-         was_marked ? " (cleared stale need_close — music save)" : "");
   dontstop_handle.store(handle);
-  need_close[slot].store(false);
 }
 
 bool is_player_active(uint16_t handle)
 {
-  int slot = slot_for_handle(handle);
-  if (slot < 0) return false;
-  return midi_players[slot] != nullptr && !need_close[slot].load();
+  // Iterate all matching slots; return true if any has a live producer
+  // (midi_players != nullptr means a producer thread exists, ie not muted).
+  // Muted reservation slots have midi_players==nullptr so they're naturally
+  // skipped — only real audio counts as "active".
+  bool any_active = false;
+  for_each_slot_with_handle(handle, [&](int i) {
+    if (midi_players[i] != nullptr && !need_close[i].load()) any_active = true;
+  });
+  return any_active;
 }
 
 // Returns the current music HANDLE (or 0 if none).
@@ -618,16 +649,21 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 	uint8_t count = 0;
 	uint8_t volume;
 	uint16_t dn = dontstop_handle.load();
-	int dn_slot = slot_for_handle(dn);
 
 	// DECOUPLED MIXER audio_callback: each slot reads from its SPSC ring buffer
 	// (filled by per-slot worker thread). No adl_playFormat here → callback CPU
 	// is just N × memcpy + SDL_MixAudioFormat = always fast (no overrun).
+	// In default mode multiple slots may share the music handle (orig real + v2
+	// muted reservation). Music check uses slot_handle[i]==dn so all matching
+	// slots get music treatment.
 	for (int i = 0; i < 100; i++)
 	{
 		// Skip slots that are truly inactive.
 		if (!g_player_active[i].load(std::memory_order_acquire))
 		  continue;
+
+		bool slot_is_music = (dn != 0 && dn != 0xFFFF &&
+		                      slot_handle[i].load(std::memory_order_relaxed) == dn);
 
 		// Translate legacy need_close flag into stop_requested for producer.
 		// (need_close set by stop_xmidi_external — main thread writes it.)
@@ -652,14 +688,27 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		if (producer_dead && ring_empty) {
 		  // Final cleanup: clear handle, dontstop if music, log close.
 		  const char* reason = need_close[i].load() ? "stop-request" : "natural-end";
+		  uint16_t closed_handle = slot_handle[i].load();
 		  printf("[%ums] SOUND-CLOSE: slot=%d handle=%04X reason=%s%s\n",
-		         _sound_now_ms(), i, slot_handle[i].load(), reason,
-		         (i == dn_slot) ? " (was music!)" : "");
+		         _sound_now_ms(), i, closed_handle, reason,
+		         slot_is_music ? " (was music!)" : "");
 		  need_close[i].store(false);
 		  slot_handle[i].store(0, std::memory_order_relaxed);
 		  extern void _sound_reset_first_tick(int);
 		  _sound_reset_first_tick(i);
-		  if (i == dn_slot) dontstop_handle.store(0);
+		  // Clear dontstop only if NO other slot still holds the music handle
+		  // (in default mode, orig + v2 muted may both have it; closing one
+		  // shouldn't drop dontstop while the other is still alive).
+		  if (slot_is_music) {
+		    bool other_holds = false;
+		    for (int k = 0; k < 100; k++) {
+		      if (k == i) continue;
+		      if (slot_handle[k].load(std::memory_order_relaxed) == closed_handle) {
+		        other_holds = true; break;
+		      }
+		    }
+		    if (!other_holds) dontstop_handle.store(0);
+		  }
 		  // Mark slot free LAST — play_xmidi waits on this.
 		  g_player_active[i].store(false, std::memory_order_release);
 		  continue;
@@ -668,9 +717,9 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		// PARTIAL FILL DETECTION: producer can't keep up → audible glitch in this slot.
 		if (got < requested_samples) {
 		  static int _partial_log_count = 0;
-		  if (i == dn_slot || _partial_log_count++ < 50) {
+		  if (slot_is_music || _partial_log_count++ < 50) {
 		    printf("[%ums] SOUND-PARTIAL: slot=%d (%s) requested=%d got=%d (%.1f%% fill)\n",
-		           _sound_now_ms(), i, (i == dn_slot) ? "MUSIC" : "sfx",
+		           _sound_now_ms(), i, slot_is_music ? "MUSIC" : "sfx",
 		           requested_samples, got,
 		           requested_samples > 0 ? 100.0 * got / requested_samples : 0.0);
 		  }
@@ -680,7 +729,7 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 
 		// Per-slot volume + fade.
 		volume = SDL_MIX_MAXVOLUME;
-		if (i == dn_slot)
+		if (slot_is_music)
 		  volume = SDL_MIX_MAXVOLUME * 0.6;
 		{
 		  float fade_v = _sound_fade_volume[i].load();
