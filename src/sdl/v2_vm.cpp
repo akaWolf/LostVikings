@@ -143,16 +143,22 @@ int v2_audit_orig_next_music_idx() { return g_audit_orig_music_count++; }
 int v2_audit_v2_next_music_idx() { return g_audit_v2_music_count++; }
 
 // Compute deterministic music handle. Inputs: bx_seg (segment containing music
-// XMI data) and play_idx (Nth music play). Hash spread similar to SFX handle.
+// XMI data) and play_idx (Nth music play in current frame). Includes frame in
+// hash so consecutive music plays of different XMI but same bx_seg×play_idx do
+// not collide (collision was observed: stop+new-play with same handle caused
+// set_dontstop iterate-all to revive the just-stopped old slot).
 uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx) {
+    extern int v2_dbg_pre_vm_iter;
     uint32_t h = (uint32_t)bx_seg;
     h ^= ((uint32_t)play_idx) * 0x9E3779B1u;
+    h ^= ((uint32_t)v2_dbg_pre_vm_iter & 0xFFFF) << 16;  // frame entropy
     h ^= h >> 16;
     h *= 0x85ebca6b;
     h ^= h >> 13;
     // Music handles in upper half of range to visually distinguish from SFX.
-    uint16_t r = (uint16_t)((h & 0x3FFF) | 0x8000);
-    if (r == 0 || r == 0xFFFF) r = 0x8001;
+    // 15-bit space (0x8000..0xFFFE) for ~32k unique handles to minimize collisions.
+    uint16_t r = (uint16_t)((h & 0x7FFF) | 0x8000);
+    if (r == 0xFFFF) r = 0x8001;
     return r;
 }
 
