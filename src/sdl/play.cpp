@@ -84,6 +84,11 @@ static SpscRing<8192> g_rings[100];
 static std::atomic<bool> g_stop_requested[100] = {};
 static std::atomic<bool> g_producer_alive[100] = {};
 static std::atomic<bool> g_player_active[100] = {};
+// Muted slots: reserved for tracking only (no producer thread, no audio).
+// Used by v2 in default mode for DS verify symmetry. audio_callback skips
+// natural-end SLOT-DRAIN for muted slots — they only close on explicit
+// stop_xmidi_external (need_close=true).
+static std::atomic<bool> g_slot_muted[100] = {};
 
 // Time-since-program-start in ms — for diagnostic timestamps in sound logs.
 static auto _sound_t0 = std::chrono::steady_clock::now();
@@ -318,6 +323,7 @@ int play_xmidi_with_handle_and_mute(struct ADL_MIDIPlayer** midi_players,
 	  g_stop_requested[i].store(false, std::memory_order_relaxed);
 	  g_rings[i].reset();
 	  g_producer_alive[i].store(!mute, std::memory_order_relaxed);  // mute → no producer
+	  g_slot_muted[i].store(mute, std::memory_order_relaxed);
 	  g_player_active[i].store(true, std::memory_order_release);
 	  _sound_fade_volume[i].store(1.0f);
 	  _sound_fade_step[i].store(0.0f);
@@ -682,18 +688,25 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		         _sound_now_ms(), i, got);
 		}
 
-		// SLOT-DRAIN check: if producer dead + ring empty → slot fully done.
+		// SLOT-DRAIN check: real slots close when producer dead + ring empty.
+		// Muted slots have no producer (alive=false from start) but should NOT
+		// auto-close — they exist purely for DS verify tracking and close only
+		// when explicit stop is requested (need_close=true).
 		bool producer_dead = !g_producer_alive[i].load(std::memory_order_acquire);
 		bool ring_empty = (g_rings[i].available() == 0);
-		if (producer_dead && ring_empty) {
+		bool muted = g_slot_muted[i].load(std::memory_order_relaxed);
+		bool should_close = muted ? need_close[i].load()
+		                          : (producer_dead && ring_empty);
+		if (should_close) {
 		  // Final cleanup: clear handle, dontstop if music, log close.
 		  const char* reason = need_close[i].load() ? "stop-request" : "natural-end";
 		  uint16_t closed_handle = slot_handle[i].load();
-		  printf("[%ums] SOUND-CLOSE: slot=%d handle=%04X reason=%s%s\n",
-		         _sound_now_ms(), i, closed_handle, reason,
+		  printf("[%ums] SOUND-CLOSE%s: slot=%d handle=%04X reason=%s%s\n",
+		         _sound_now_ms(), muted ? "-MUTE" : "", i, closed_handle, reason,
 		         slot_is_music ? " (was music!)" : "");
 		  need_close[i].store(false);
 		  slot_handle[i].store(0, std::memory_order_relaxed);
+		  g_slot_muted[i].store(false, std::memory_order_relaxed);
 		  extern void _sound_reset_first_tick(int);
 		  _sound_reset_first_tick(i);
 		  // Clear dontstop only if NO other slot still holds the music handle
