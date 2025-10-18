@@ -15904,7 +15904,18 @@ sub_176bd:
  static uint16_t id_music = 0;
  if (id_music != 0)
    stop_xmidi_external(id_music);
- id_music = (uint16_t)play_xmidi_external(raddr(bx,0), chunk_sizes[(bx) << 4], -1);
+ // Use deterministic music handle so orig (real producer) + v2 (muted reservation)
+ // reserve slots with matching handle → ds:0x990C matches between real and shadow.
+ {
+   extern int v2_audit_orig_next_music_idx();
+   extern uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx);
+   extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
+                                                       uint16_t handle, bool mute);
+   int play_idx = v2_audit_orig_next_music_idx();
+   uint16_t handle = v2_audit_compute_music_handle(bx, play_idx);
+   id_music = (uint16_t)play_xmidi_external_with_handle_and_mute(
+       raddr(bx,0), chunk_sizes[(bx) << 4], -1, handle, false);
+ }
  if (id_music > 0) {
    set_dontstop_external(id_music);
    // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax`. Music call sites use

@@ -109,11 +109,24 @@ uint16_t v2_audit_compute_handle(uint16_t seq, uint16_t obj, int frame, int fire
 static int g_audit_orig_fire_count[256] = {0};
 static int g_audit_v2_fire_count[256] = {0};
 
+// Music play counter (shared concept — only one music plays at a time, no obj).
+// Per-source: orig and v2 each have their own counter. As long as both call
+// sub_176bd the same number of times in the same order, counters stay in sync
+// and produce identical music handles. Used for deterministic music handle so
+// orig (real producer) and v2 (muted reservation in default mode) reserve slots
+// with matching handles → ds:0x990C contains identical value in real and shadow.
+static int g_audit_orig_music_count = 0;
+static int g_audit_v2_music_count = 0;
+
 void v2_audit_reset_fire_counters() {
     for (int i = 0; i < 256; i++) {
         g_audit_orig_fire_count[i] = 0;
         g_audit_v2_fire_count[i] = 0;
     }
+    // Reset music counters too — prevents permanent desync if either side
+    // misses a music play call (bounded to one frame of mismatch).
+    g_audit_orig_music_count = 0;
+    g_audit_v2_music_count = 0;
 }
 
 // Get next fire_idx for orig source (per-obj) and increment.
@@ -124,6 +137,23 @@ int v2_audit_orig_next_fire_idx(uint16_t obj) {
 // Get next fire_idx for v2 source (per-obj) and increment.
 int v2_audit_v2_next_fire_idx(uint16_t obj) {
     return g_audit_v2_fire_count[obj & 0xFF]++;
+}
+
+int v2_audit_orig_next_music_idx() { return g_audit_orig_music_count++; }
+int v2_audit_v2_next_music_idx() { return g_audit_v2_music_count++; }
+
+// Compute deterministic music handle. Inputs: bx_seg (segment containing music
+// XMI data) and play_idx (Nth music play). Hash spread similar to SFX handle.
+uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx) {
+    uint32_t h = (uint32_t)bx_seg;
+    h ^= ((uint32_t)play_idx) * 0x9E3779B1u;
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
+    h ^= h >> 13;
+    // Music handles in upper half of range to visually distinguish from SFX.
+    uint16_t r = (uint16_t)((h & 0x3FFF) | 0x8000);
+    if (r == 0 || r == 0xFFFF) r = 0x8001;
+    return r;
 }
 
 // Push event into ring + bump per-frame counter. Thread-safe (lock).
@@ -390,28 +420,36 @@ static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out
     return v2_vm_shadow_sound + off;
 }
 
-// orig sub_176bd SDL inline (vikings.exe_seg000.cpp:15780-15788).
+// orig sub_176bd SDL inline (vikings.exe_seg000.cpp:15900-15915).
 // Plays MUSIC track from segment bx_seg as default sequence (-1).
-// Maintains v2_id_music to allow stop+set_dontstop on next call (just like orig).
+// Symmetric with sub_177bb pattern: V2_ONLY → real producer; default mode →
+// muted reservation. Both modes use deterministic handle so orig (real) and v2
+// (muted) reserve slots with matching handles → ds:0x990C matches in shadow.
 static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
-#ifdef V2_ONLY
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
     if (!xmidi || size == 0) return;
     if (v2_id_music != 0) stop_xmidi_external((uint16_t)v2_id_music);
-    v2_id_music = play_xmidi_external(xmidi, size, -1);
+    extern int v2_audit_v2_next_music_idx();
+    extern uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx);
+    extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
+                                                        uint16_t handle, bool mute);
+    int play_idx = v2_audit_v2_next_music_idx();
+    uint16_t handle = v2_audit_compute_music_handle(bx_seg, play_idx);
+#ifdef V2_ONLY
+    bool mute = false;
+#else
+    bool mute = true;   // default mode: orig plays, v2 mutes (slot tracking only)
+#endif
+    v2_id_music = play_xmidi_external_with_handle_and_mute(xmidi, size, -1, handle, mute);
     if (v2_id_music > 0) {
         set_dontstop_external((uint16_t)v2_id_music);
         // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax` with si=0 (music
         // call site uses si=0). Stores music handle at ds:0x990C (slot 0). This is
         // what makes sub_17912 stop music properly when iterating slot 0 (when
-        // ds:0x25B9 != 1). SDL wrapper at the top of orig sub_176bd had skipped
-        // this via early RETN — adding back to match DOS behavior.
+        // ds:0x25B9 != 1).
         *(uint16_t*)(s + 0x990C) = (uint16_t)v2_id_music;
     }
-#else
-    (void)s; (void)bx_seg;  // default mode: orig sub_176bd handles real playback
-#endif
 }
 
 // orig sub_177bb SDL inline (vikings.exe_seg000.cpp:15905-15909).
@@ -4628,7 +4666,6 @@ static void v2_sub_11080(uint8_t* s) {
         for (uint32_t i = 0; i < 0x10000 && dc < 20; i += 2) {
             // Skip known exclusions
             if (i == 0xA39C) continue; // word_3287C (VGA interrupt race)
-            if (i >= 0x990C && i <= 0x991E) continue; // AIL sound handles
             if (i == 0x9934) continue; // XMI buffer
             uint16_t rv = *(uint16_t*)(snap + i), sv = *(uint16_t*)(s + i);
             if (rv != sv) {
@@ -5313,7 +5350,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         int fc = 0;
                         for (uint32_t i = 0; i < 0x10000 && fc < 20; i += 2) {
                             uint16_t rv2 = *(uint16_t*)(r + i), sv2 = *(uint16_t*)(shadow + i);
-                            if (rv2 != sv2 && !(i >= 0x990C && i <= 0x991E)) {
+                            if (rv2 != sv2) {
                                 fprintf(stderr, "    DS[%04X]: orig=%04X v2=%04X\n", (uint16_t)i, rv2, sv2);
                                 fc++;
                             }
@@ -8160,12 +8197,13 @@ static void v2_vm_op_D6(V2VM& vm) {
     // sub_178f1 (eip 0x78F1): TEST word_287E2, 0xFFFFh; JNZ ret. If music enabled,
     // call AIL sub_1C7BD with duration 0x3E8 (1000ms) — fade music to silence.
     // SDL replacement: fade_music(1000) — play.cpp's audio_callback ramps volume
-    // and closes player when fade completes.
+    // and closes player when fade completes. Now safe in default mode too:
+    // fade_music iterates ALL slots with music handle (orig real + v2 muted),
+    // setting same fade params — orig's call also sets identical params, so
+    // double-call is idempotent (worst case: fade restarts at 1.0 mid-ramp).
     if (vm.ds_read(0x302) != 0) return;  // music muted/off
-#ifdef V2_ONLY
     extern void fade_music(int);
     fade_music(1000);
-#endif
 }
 
 // 0xD7 (sub_1787f): Sound sequence check + clear slot. 3 bytes consumed.
@@ -14606,7 +14644,6 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
             uint16_t sv = *(uint16_t*)(shadow + i);
             if (rv != sv) {
                 if (i == 0xA39C) continue; // VGA interrupt race
-                if (i >= 0x990C && i <= 0x991E) continue; // sound handles
                 if (ds_diffs < 50) {
                     printf("V2-INIT-DS: 0x%04X: real=%04X shadow=%04X\n", (uint16_t)i, rv, sv);
                 }
@@ -14649,10 +14686,9 @@ void v2_vm_verify_game_loop(uint16_t ds_val) {
             // ds:0x2E5C-0x2E7C (segment pointer table from sub_12ab8)
             // Sound system (v2 doesn't fully replicate AIL):
             // ds:0x2E6A-0x2E70 = sound segment pointers (sub_10E85 normalize results)
-            // ds:0x990C-0x991E = AIL handles/sequences
+            // ds:0x990C-0x991E = AIL handles/sequences — NOW DETERMINISTIC, included
             // ds:0x9934 = XMI buffer (TODO: implement sub_10E85 normalize)
             if (i >= 0x2E6A && i <= 0x2E70) continue;
-            if (i >= 0x990C && i <= 0x991E) continue;
             if (i == 0x9934) continue;
             printf("V2-GAMELOOP[%d]: DS DIFF at 0x%04X: real=0x%04X shadow=0x%04X\n",
                    gl_frame, (uint16_t)i, rv, sv);
@@ -15310,7 +15346,6 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + i);
                 if (rv != sv) {
                     if (i == 0xA39C) continue;
-                    if (i >= 0x990C && i <= 0x991E) continue;
                     if (pvm_diffs == 0)
                         fprintf(stderr, "POSTVM-CMP[f%d]: DS DIFFS:\n", _pvf);
                     fprintf(stderr, "  0x%04X: real=%04X v2=%04X\n", (uint16_t)i, rv, sv);
@@ -16173,7 +16208,6 @@ void v2_phase_pre_vm(uint16_t ds_val) {
             uint16_t sv = *(uint16_t*)(shad + i);
             if (rv != sv) {
                 if (i == 0xA39C) continue; // VGA interrupt race
-                if (i >= 0x990C && i <= 0x991E) continue; // sound handles
                 if (ds_diffs == 0) {
                     fprintf(stderr, "V2-PRE-VM-CMP[f%d]: level=0x%04X DIFFS:\n", pre_vm_frame,
                             *(uint16_t*)(real + 0x25AD));
@@ -16357,7 +16391,7 @@ void v2_phase_vm(uint16_t ds_val) {
           uint8_t* s = v2_vm_shadow_ds;
           int dc = 0;
           for (uint32_t i = 0; i < 0x10000 && dc < 10; i += 2) {
-              if (i == 0xA39C || (i >= 0x990C && i <= 0x991E)) continue;
+              if (i == 0xA39C) continue;
               uint16_t rv = *(uint16_t*)(r + i), sv = *(uint16_t*)(s + i);
               if (rv != sv) {
                   fprintf(stderr, "V2-AFTER-VM[f%d]: DIFF 0x%04X r=%04X s=%04X\n", _pvf, (uint16_t)i, rv, sv);
@@ -17774,7 +17808,8 @@ static uint32_t vm_ds_hash(uint8_t* ds) {
 // (because it stubs those subsystems). Segment-pointer tables now match via
 // DosMemAlloc replay (v2_record_alloc), so they are NOT skipped.
 static bool v2_ds_hash_skip(uint32_t i) {
-    if (i >= 0x990C && i <= 0x9944) return true; // AIL sound handles + driver buffer
+    // ds:0x990C..0x991E (AIL handles/sequences) NOW DETERMINISTIC — included in hash
+    if (i >= 0x9920 && i <= 0x9944) return true; // AIL driver buffer (internal state)
     if (i >= 0x86AC && i <= 0x86B0) return true; // DOS INT 24h vector
     if (i >= 0x8638 && i <= 0x863C) return true; // PRNG seed
     if (i >= 0x98E4 && i <= 0x98EC) return true; // AIL GTL handle (far ptr)
