@@ -16304,8 +16304,6 @@ cs=0x1a2;eip=0x007911; 	J(RETN(0));	// 17528 retn ;~ 01A2:7911
 sub_17912:
  printf("CALLER=sub_17912 (level transition stop):\n");
 	// 17535
- stop_xmidi_external();
-cs=0x1a2;eip=0x007911; 	J(RETN(0));	// 17528 retn ;~ 01A2:7911
 cs=0x1a2;eip=0x007912; 	T(TEST(*(dw*)(raddr(ds,0x302)), 0x0FFFF));	// 17536 test    word ptr ds:302h, 0FFFFh ;~ 01A2:7912
 ret_1a2_7918:
 	// 5878
@@ -16329,12 +16327,17 @@ cs=0x1a2;eip=0x00793a; 	X(PUSH(si));	// 17556 push    si ;~ 01A2:793A
 cs=0x1a2;eip=0x00793b; 	X(PUSH(si));	// 17557 push    si ;~ 01A2:793B
 cs=0x1a2;eip=0x00793c; 	X(PUSH(*(dw*)(raddr(ds,si-0x66F4))));	// 17558 push    word ptr [si-66F4h] ;~ 01A2:793C
 cs=0x1a2;eip=0x007940; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17559 push    word ptr ds:98E6h ;~ 01A2:7940
-cs=0x1a2;eip=0x007944; 	J(CALLF(sub_1c79f,0));	// 17560 call    sub_1C79F ;~ 01A2:7944
+ // SDL replacement for AIL sub_1C79F (stop_sequence): mark slot need_close.
+ // Handle is at ds:[si-0x66F4] (deterministic from v2_audit_compute_handle).
+ { stop_xmidi_external(*(dw*)(raddr(ds, (uint16_t)(si - 0x66F4)))); }
+//cs=0x1a2;eip=0x007944; 	J(CALLF(sub_1c79f,0));	// 17560 call    sub_1C79F ;~ 01A2:7944
 cs=0x1a2;eip=0x007949; 	T(ADD(sp, 4));	// 17561 add     sp, 4 ;~ 01A2:7949
 cs=0x1a2;eip=0x00794c; 	X(POP(si));	// 17562 pop     si ;~ 01A2:794C
 cs=0x1a2;eip=0x00794d; 	X(PUSH(*(dw*)(raddr(ds,si-0x66F4))));	// 17563 push    word ptr [si-66F4h] ;~ 01A2:794D
 cs=0x1a2;eip=0x007951; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17564 push    word ptr ds:98E6h ;~ 01A2:7951
-cs=0x1a2;eip=0x007955; 	J(CALLF(sub_1c769,0));	// 17565 call    sub_1C769 ;~ 01A2:7955
+ // SDL replacement for AIL sub_1C769 (release_sequence): no-op — our stop already
+ // releases the handle (slot_handle[i] auto-cleared after audio_callback closes).
+//cs=0x1a2;eip=0x007955; 	J(CALLF(sub_1c769,0));	// 17565 call    sub_1C769 ;~ 01A2:7955
 cs=0x1a2;eip=0x00795a; 	T(ADD(sp, 4));	// 17566 add     sp, 4 ;~ 01A2:795A
 cs=0x1a2;eip=0x00795d; 	X(POP(si));	// 17567 pop     si ;~ 01A2:795D
 cs=0x1a2;eip=0x00795e; 	X(POPF);	// 17568 popf ;~ 01A2:795E

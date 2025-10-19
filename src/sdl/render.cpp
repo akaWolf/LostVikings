@@ -363,6 +363,10 @@ void updateDraw()
 #ifndef V2_ONLY
 			   render_callback(_state);
 #endif
+			   // Mirror orig render_callback on shadow DS — async DEC of
+			   // shadow[0xA39C] + palette dispatch matches orig's async behavior
+			   // on real_ds, so verify hashes converge on race-prone ds:0x7EFE.
+			   { extern void v2_render_callback(); v2_render_callback(); }
 			   SDL_Delay(15);
 		   }
 		}

@@ -123,10 +123,11 @@ void v2_audit_reset_fire_counters() {
         g_audit_orig_fire_count[i] = 0;
         g_audit_v2_fire_count[i] = 0;
     }
-    // Reset music counters too — prevents permanent desync if either side
-    // misses a music play call (bounded to one frame of mismatch).
-    g_audit_orig_music_count = 0;
-    g_audit_v2_music_count = 0;
+    // NOTE: music counters NOT reset per-frame. In default mode orig and v2
+    // may fire sub_176bd in different frames (timing gap) — per-frame reset
+    // would cause hash divergence. Monotonic counter keeps orig+v2 in sync as
+    // long as both fire the same number of times. Wraparound at 65k calls
+    // is unreachable in practice (~22 days at 30s/track).
 }
 
 // Get next fire_idx for orig source (per-obj) and increment.
@@ -143,20 +144,21 @@ int v2_audit_orig_next_music_idx() { return g_audit_orig_music_count++; }
 int v2_audit_v2_next_music_idx() { return g_audit_v2_music_count++; }
 
 // Compute deterministic music handle. Inputs: bx_seg (segment containing music
-// XMI data) and play_idx (Nth music play in current frame). Includes frame in
-// hash so consecutive music plays of different XMI but same bx_seg×play_idx do
-// not collide (collision was observed: stop+new-play with same handle caused
-// set_dontstop iterate-all to revive the just-stopped old slot).
+// XMI data) and play_idx (monotonic Nth music play counter — never resets).
+// Per-source counter (orig + v2 each track separately) — they stay in sync as
+// long as both fire sub_176bd the same number of times. Monotonic counter alone
+// gives unique handle per call, no frame entropy needed (which was breaking
+// orig+v2 sync in default mode where they may fire in different frames).
+// Revival-on-collision protected by set_dontstop_external safety check (skips
+// slots already marked need_close).
 uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx) {
-    extern int v2_dbg_pre_vm_iter;
     uint32_t h = (uint32_t)bx_seg;
     h ^= ((uint32_t)play_idx) * 0x9E3779B1u;
-    h ^= ((uint32_t)v2_dbg_pre_vm_iter & 0xFFFF) << 16;  // frame entropy
     h ^= h >> 16;
     h *= 0x85ebca6b;
     h ^= h >> 13;
     // Music handles in upper half of range to visually distinguish from SFX.
-    // 15-bit space (0x8000..0xFFFE) for ~32k unique handles to minimize collisions.
+    // 15-bit space (0x8000..0xFFFE) for ~32k unique handles.
     uint16_t r = (uint16_t)((h & 0x7FFF) | 0x8000);
     if (r == 0xFFFF) r = 0x8001;
     return r;
@@ -511,11 +513,34 @@ static void v2_sub_178d6_v2(uint8_t* s) {
 #endif
 }
 
-// orig sub_17912 SDL inline (vikings.exe_seg000.cpp:16105). Stop everything.
-static void v2_sub_17912_v2() {
-#ifdef V2_ONLY
-    stop_xmidi_external();
-#endif
+// orig sub_17912 mirror (vikings.exe_seg000.cpp:16304-16350).
+// Per-slot stop + DS clear. Now matches orig (m2c port previously bypassed
+// the assembly via early RETN; both orig and v2 now execute the per-slot stop).
+//
+// Logic (eips 0x7912-0x7973):
+//   if (ds:0x302 != 0 && ds:0x304 != 0) return;      // both muted → ret
+//   si = (ds:0x25B9 == 1) ? 2 : 0;                    // skip slot 0 (music) if 25B9==1
+//   for si=si_start; si < 0xA; si += 2:
+//     if [si-66F4] != FFFF:
+//       AIL_stop_sequence(handle)   → SDL: stop_xmidi_external(handle)
+//       AIL_release_sequence(handle) → SDL: no-op (stop already releases)
+//       [si-66F4] = FFFF; [si-66EA] = FFFF
+static void v2_sub_17912_v2(uint8_t* s) {
+    if (*(uint16_t*)(s + 0x302) != 0 && *(uint16_t*)(s + 0x304) != 0) return;
+    uint16_t si = (s[0x25B9] == 1) ? 2 : 0;
+    while ((int16_t)si < 0x0A) {
+        uint16_t handle_off = (uint16_t)(si - 0x66F4); // wraps to 0x990C+
+        uint16_t handle = *(uint16_t*)(s + handle_off);
+        if (handle != 0xFFFF) {
+            stop_xmidi_external(handle);
+            // If music slot (si=0), clear v2_id_music — auto-cleared by
+            // stop_xmidi_external when matching dontstop_handle.
+            if (si == 0 && (int)handle == v2_id_music) v2_id_music = 0;
+            *(uint16_t*)(s + handle_off) = 0xFFFF;
+            *(uint16_t*)(s + (uint16_t)(si - 0x66EA)) = 0xFFFF;
+        }
+        si += 2;
+    }
 }
 
 // Shadow chunk buffer segment (ds:0x2E77).
@@ -1209,36 +1234,19 @@ static void v2_sub_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di) {
 // sub_10130 (seg000): VGA vsync wait. Verified with seg000 lines 2020-2031.
 // Original: CMP word_3287C, 1; JGE loop (wait for VGA interrupt to clear flag).
 // DS reads: ds:0xA39C. No DS writes.
-// For v2: no VGA interrupt → flag cleared immediately by v2_sub_16775.
+// Pure spin-wait — palette dispatch + DEC happen in v2_render_callback (async,
+// called from render thread at ~60Hz, matching orig render_callback architecture).
 static void v2_sub_10130(uint8_t* s) {
-    // ======================================================================
-    // VGA VSYNC WAIT (sub_10130, eip 0x0130-0x0137)
-    // ======================================================================
-    // Original: spin wait while word_3287C (ds:0xA39C) >= 1.
-    // VGA retrace interrupt calls sub_1797b: DEC word_3287C + palette dispatch.
-    //
-    // Default mode: barrier sync with original's sub_10130 (sleeps in m2c).
-    //   v2 self-DECs word_3287C after palette dispatch (no extra sleep).
-    // V2_ONLY mode: render_v2 thread DECs shadow[0xA39C] at ~66Hz.
-    //   v2 spin-waits with SDL_Delay until DEC happens → throttles to 60Hz.
-    // ======================================================================
+    extern bool need_quit;
     while ((int16_t)*(uint16_t*)(s + 0xA39C) >= 1) {
-        // sub_1797b: DEC word_3287C + palette dispatch (off_17974[word_303DE])
-        uint16_t pal_mode = *(uint16_t*)(s + 0x7EFE); // word_303DE
-        if (pal_mode == 4) {
-            v2_sub_10fe6(s);       // off_17974[4] = sub_10fe6: full palette write
-        } else if (pal_mode == 2) {
-            v2_sub_10ffc(s);       // off_17974[2] = sub_10ffc: palette animation
-        }
-        // pal_mode == 0: off_17974[0] = nullsub_1 (no-op)
-        *(uint16_t*)(s + 0xA39C) -= 1; // DEC word_3287C — v2 self-DECs
+        if (need_quit) return;
+        SDL_Delay(2);
     }
 }
 
-// (v2_render_callback removed — required reading from m2c which violates
-// "No real data copy" rule. Correct fix: v2 must mirror writes to byte_317DF
-// (eip 0x6869, 0x687A) and byte_128A8 (eip 0x28A9, 0x28F2) in shadow, then
-// v2_render_callback can use pure shadow reads. Pending implementation.)
+// Atomic flag set when shadow DS is initialized — gates v2_render_callback
+// (which runs on render thread) from touching uninitialized shadow.
+static std::atomic<bool> v2_render_cb_enabled{false};
 
 // sub_101be (seg000): Palette cycling for UI elements.
 // Verified with seg000 lines 2086-2148.
@@ -3996,33 +4004,11 @@ static void v2_sub_11080(uint8_t* s) {
 
     // sub_10fa0: palette fade to black
     v2_sub_10fa0(s);
-    // sub_17912: stop active sounds, clear sound handle tracking.
-    // EXACT replica of orig (vikings.exe_seg000.cpp:16244-16285, eips 0x7912-0x7973):
-    //   if (ds:0x302 != 0 && ds:0x304 != 0) return;  // both muted → ret
-    //   si = (ds:0x25B9 == 1) ? 2 : 0;               // skip slot 0 (music) if 25B9==1
-    //   for si=si_start; si < 0xA; si += 2:
-    //     if [si-66F4] != FFFF:
-    //       AIL_stop_sequence(handle)   ; sub_1C79F → SDL: stop_xmidi_external(handle)
-    //       AIL_release_sequence(handle); sub_1C769 → SDL: same handle, just clear slot
-    //       [si-66F4] = FFFF; [si-66EA] = FFFF
-    // For si_start=0 this STOPS MUSIC TOO (slot 0). Match orig behavior exactly.
-    if (*(uint16_t*)(s + 0x302) == 0 || *(uint16_t*)(s + 0x304) == 0) {
-        uint16_t si_start = (s[0x25B9] == 1) ? 2 : 0;
-        for (uint16_t si2 = si_start; (int16_t)si2 < 0x0A; si2 += 2) {
-            uint16_t handle_off = (uint16_t)(si2 - 0x66F4); // wraps to 0x990C+
-            uint16_t handle = *(uint16_t*)(s + handle_off);
-            if (handle != 0xFFFF) {
-#ifdef V2_ONLY
-                stop_xmidi_external(handle);
-                // If this was the music slot (slot 0), clear v2_id_music too — the
-                // dontstop_handle is auto-cleared inside stop_xmidi_external when matching.
-                if (si2 == 0 && (int)handle == v2_id_music) v2_id_music = 0;
-#endif
-                *(uint16_t*)(s + handle_off) = 0xFFFF;
-                *(uint16_t*)(s + (uint16_t)(si2 - 0x66EA)) = 0xFFFF;
-            }
-        }
-    }
+    // sub_17912: stop active sounds + clear DS slots.
+    // 100% mirror of orig (vikings.exe_seg000.cpp:16304-16350) — per-slot SDL
+    // stop_xmidi_external(handle) + DS FFFF clear. Both orig and v2 now execute
+    // the same path (m2c port early-RETN bypass removed in seg000).
+    v2_sub_17912_v2(s);
     // sub_12816: clear UI glyph list
     v2_sub_12816(s);
 
@@ -4874,9 +4860,35 @@ static bool v2_load_exe_ds() {
     }
     v2_vm_acc_base = v2_vm_shadow_ds;
     v2_shadow_initialized = true;
+    v2_render_cb_enabled.store(true, std::memory_order_release);
     printf("V2: loaded ds_static.bin (%zu bytes), ds[0x945A]=%04X\n",
            read, *(uint16_t*)(v2_vm_shadow_ds + 0x945A));
     return true;
+}
+
+// Mirror orig render_callback (sub_1797b at seg000:0x7999) on SHADOW DS.
+// Called from render.cpp render thread at ~60Hz. Does what orig render thread
+// does on real_ds: DECs word_3287c (ds:0xA39C) and dispatches palette via
+// off_17974[word_303DE]. Makes v2 architecturally match orig's async behavior
+// — both have SAME race conditions on ds:0x7EFE so verify hashes converge
+// instead of diverging due to orig clearing async while v2 stays static.
+void v2_render_callback() {
+    if (!v2_render_cb_enabled.load(std::memory_order_acquire)) return;
+    uint8_t* s = v2_vm_shadow_ds;
+    {
+        // Lock briefly during DEC — matches orig (seg000:0x7999 line 16374)
+        extern std::mutex v2_ds_modify_mutex;
+        std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
+        if (*(uint16_t*)(s + 0xA39C) > 0) {
+            *(uint16_t*)(s + 0xA39C) -= 1;
+        }
+    }
+    // Dispatch palette unlocked — matches orig (seg000:0x799d-0x79a1).
+    // off_17974[word_303DE]: 0=nullsub_1, 2=sub_10ffc, 4=sub_10fe6.
+    // sub_10fe6/sub_10ffc clear shadow[0x7EFE] = 0.
+    uint16_t pal_mode = *(uint16_t*)(s + 0x7EFE);
+    if (pal_mode == 4) v2_sub_10fe6(s);
+    else if (pal_mode == 2) v2_sub_10ffc(s);
 }
 
 // Legacy API: copy real DS + segments from original emulator.
