@@ -1323,6 +1323,18 @@ static std::atomic<bool> v2_render_cb_enabled{false};
 static void v2_sub_101be(uint8_t* s) {
     static int _dbg_calls = 0, _dbg_rotations = 0;
     _dbg_calls++;
+    // ROOT-CAUSE diag: snapshot ALL 8 slot counters BEFORE DEC.
+    // Print only when animation is enabled (skip init phase where 2583=0).
+    if (s[0x2583] != 0) {
+        static int _printed = 0;
+        if (_printed < 300) {
+            _printed++;
+            fprintf(stderr, "V2-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                _dbg_calls, s[0x2583],
+                s[0x258C], s[0x258D], s[0x258E], s[0x258F],
+                s[0x2590], s[0x2591], s[0x2592], s[0x2593]);
+        }
+    }
     if (s[0x2583] == 0) {                                           // TEST byte_2AA63, 0FFh; JZ loc_1020b
         if (_dbg_calls % 60 == 1) fprintf(stderr, "V2-101BE[%d]: EARLY-EXIT 2583=0\n", _dbg_calls);
         return;                                                      // early exit — NO word_303DE write
@@ -4982,15 +4994,15 @@ static bool v2_load_exe_ds() {
 void v2_render_callback() {
     if (!v2_render_cb_enabled.load(std::memory_order_acquire)) return;
     uint8_t* s = v2_vm_shadow_ds;
-    {
-        // Lock briefly during DEC — matches orig (seg000:0x7999 line 16374)
-        extern std::mutex v2_ds_modify_mutex;
-        std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
-        if (*(uint16_t*)(s + 0xA39C) > 0) {
-            *(uint16_t*)(s + 0xA39C) -= 1;
-        }
+    // Hold lock around DEC + palette dispatch so game thread snapshots see
+    // consistent shadow[0xA39C, 0x7EFE] state. Without this, snapshot can land
+    // between DEC and dispatch (or between dispatch read and clear), seeing
+    // half-applied state vs orig snapshot.
+    extern std::mutex v2_ds_modify_mutex;
+    std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
+    if (*(uint16_t*)(s + 0xA39C) > 0) {
+        *(uint16_t*)(s + 0xA39C) -= 1;
     }
-    // Dispatch palette unlocked — matches orig (seg000:0x799d-0x79a1).
     // off_17974[word_303DE]: 0=nullsub_1, 2=sub_10ffc, 4=sub_10fe6.
     // sub_10fe6/sub_10ffc clear shadow[0x7EFE] = 0.
     uint16_t pal_mode = *(uint16_t*)(s + 0x7EFE);
@@ -17883,6 +17895,15 @@ void v2_run_viking_switch_loop(uint8_t* shadow) {
     }
 
     // sub_101be: palette animation DEC pass (writes ds:[7EFE] = 2 if loop ran)
+    // ROOT-CAUSE diag: tag this callsite (viking switch loop, mirror of eip 0x0174).
+    { static int _vc = 0; _vc++;
+      if (shadow[0x2583] != 0 && _vc <= 300) {
+        fprintf(stderr, "V2-101BE-VSW[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+            _vc, shadow[0x2583],
+            shadow[0x258C], shadow[0x258D], shadow[0x258E], shadow[0x258F],
+            shadow[0x2590], shadow[0x2591], shadow[0x2592], shadow[0x2593]);
+      }
+    }
     v2_sub_101be(shadow);
 
     // 3× sub-frame. orig (eips 0x0177..0x018C) is asymmetric:
@@ -18355,29 +18376,38 @@ void v2_vm_trace_record_v2_ext(uint16_t obj, uint16_t step, uint8_t opcode,
                                uint8_t* ds,
                                uint32_t ds_hash_before, uint32_t obj_hash_before) {
     if (v2_trace_len < VM_TRACE_MAX) {
-        // Snapshot DS at every opcode recording time (bounded by FE_SNAP_MAX).
+        // Snapshot DS first — single source of truth for hash + FE-snap, so they
+        // can't disagree if render thread mutates `ds` between calls. Lock excludes
+        // v2_render_callback (which writes shadow[0xA39C, 0x7EFE]) during memcpy,
+        // matching the lock that orig replay_verify takes for real_ds snapshot.
+        // Without this, render thread's async clear of shadow[0x7EFE] lands between
+        // orig snapshot (post-clear, =0) and v2 snapshot (pre-clear, =4) → DIFF.
+        extern std::mutex v2_ds_modify_mutex;
+        std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
+        uint8_t* hash_src = ds;
         if (v2_fe_snap_count < FE_SNAP_MAX) {
             memcpy(v2_fe_snap_ds[v2_fe_snap_count], ds, 0x10000);
             v2_fe_snap_idx_for_trace[v2_trace_len] = v2_fe_snap_count;
+            hash_src = v2_fe_snap_ds[v2_fe_snap_count];
             v2_fe_snap_count++;
         }
         auto& e = v2_trace[v2_trace_len++];
         e.obj = obj; e.step = step; e.opcode = opcode;
         e.pc_before = pc_before; e.pc_after = pc_after;
         e.acc_before = acc_before; e.acc_after = acc_after;
-        e.es_seg = *(uint16_t*)(ds + obj + 0x1355);
-        e.flags = *(uint16_t*)(ds + obj + 0x1585);
-        e.x = *(uint16_t*)(ds + obj + 0x173D);
-        e.y = *(uint16_t*)(ds + obj + 0x1765);
-        e.ds_42 = *(uint16_t*)(ds + 0x42);
-        e.ds_8A = *(uint16_t*)(ds + 0x8A);
-        e.ds_6C = *(uint16_t*)(ds + 0x6C);
-        e.ds_334 = *(uint16_t*)(ds + 0x334);
+        e.es_seg = *(uint16_t*)(hash_src + obj + 0x1355);
+        e.flags = *(uint16_t*)(hash_src + obj + 0x1585);
+        e.x = *(uint16_t*)(hash_src + obj + 0x173D);
+        e.y = *(uint16_t*)(hash_src + obj + 0x1765);
+        e.ds_42 = *(uint16_t*)(hash_src + 0x42);
+        e.ds_8A = *(uint16_t*)(hash_src + 0x8A);
+        e.ds_6C = *(uint16_t*)(hash_src + 0x6C);
+        e.ds_334 = *(uint16_t*)(hash_src + 0x334);
         e.ds_hash_before = ds_hash_before;
         e.obj_hash_before = obj_hash_before;
-        e.ds_hash = v2_ds_hash(ds);
-        e.obj_hash = v2_obj_hash(ds, obj);
-        e.es_hash = v2_es_hash(ds, obj);
+        e.ds_hash = v2_ds_hash(hash_src);
+        e.obj_hash = v2_obj_hash(hash_src, obj);
+        e.es_hash = v2_es_hash(hash_src, obj);
         e.fs_hash = v2_fs_hash_shadow();
     }
 }
@@ -18399,24 +18429,32 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
                          uint8_t opcode, uint16_t pc_before, uint16_t acc_before,
                          uint16_t orig_pc_after, uint16_t orig_acc_after) {
     if (orig_trace_len < VM_TRACE_MAX) {
-        // Snapshot orig DS at every opcode recording time (bounded).
+        // Snapshot orig DS first — same race fix as v2 side: render thread can mutate
+        // ds_after (e.g. clear real[0x7EFE] async) between memcpy and v2_ds_hash, so
+        // snap and hash disagree. Use snapshot as single source for both.
+        // Lock excludes orig render_callback (sub_1797b) from mutating real_ds
+        // (0xA39C DEC + 0x7EFE palette dispatch) during memcpy.
+        extern std::mutex v2_ds_modify_mutex;
+        std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
+        uint8_t* hash_src = ds_after;
         if (orig_fe_snap_count < FE_SNAP_MAX) {
             memcpy(orig_fe_snap_ds[orig_fe_snap_count], ds_after, 0x10000);
             orig_fe_snap_idx_for_trace[orig_trace_len] = orig_fe_snap_count;
+            hash_src = orig_fe_snap_ds[orig_fe_snap_count];
             orig_fe_snap_count++;
         }
         auto& e = orig_trace[orig_trace_len++];
         e.obj = obj_idx; e.step = (uint16_t)step; e.opcode = opcode;
         e.pc_before = pc_before; e.pc_after = orig_pc_after;
         e.acc_before = acc_before; e.acc_after = orig_acc_after;
-        e.es_seg = *(uint16_t*)(ds_after + obj_idx + 0x1355);
-        e.flags = *(uint16_t*)(ds_after + obj_idx + 0x1585);
-        e.x = *(uint16_t*)(ds_after + obj_idx + 0x173D);
-        e.y = *(uint16_t*)(ds_after + obj_idx + 0x1765);
-        e.ds_42 = *(uint16_t*)(ds_after + 0x42);
-        e.ds_8A = *(uint16_t*)(ds_after + 0x8A);
-        e.ds_6C = *(uint16_t*)(ds_after + 0x6C);
-        e.ds_334 = *(uint16_t*)(ds_after + 0x334);
+        e.es_seg = *(uint16_t*)(hash_src + obj_idx + 0x1355);
+        e.flags = *(uint16_t*)(hash_src + obj_idx + 0x1585);
+        e.x = *(uint16_t*)(hash_src + obj_idx + 0x173D);
+        e.y = *(uint16_t*)(hash_src + obj_idx + 0x1765);
+        e.ds_42 = *(uint16_t*)(hash_src + 0x42);
+        e.ds_8A = *(uint16_t*)(hash_src + 0x8A);
+        e.ds_6C = *(uint16_t*)(hash_src + 0x6C);
+        e.ds_334 = *(uint16_t*)(hash_src + 0x334);
         // ds_before may be nullptr from in-handler call sites (FE marker / op_0x00 /
         // op_0x0F / op_0x10 — recorded after the handler ran, no pre-snapshot).
         // For these the orig dispatcher does writes between opcodes (ds:0x42 obj index,
@@ -18427,13 +18465,13 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
             e.ds_hash_before = v2_ds_hash(ds_before);
             e.obj_hash_before = v2_obj_hash(ds_before, obj_idx);
         } else {
-            e.ds_hash_before = v2_ds_hash(ds_after);
-            e.obj_hash_before = v2_obj_hash(ds_after, obj_idx);
+            e.ds_hash_before = v2_ds_hash(hash_src);
+            e.obj_hash_before = v2_obj_hash(hash_src, obj_idx);
         }
-        e.ds_hash = v2_ds_hash(ds_after);
-        e.obj_hash = v2_obj_hash(ds_after, obj_idx);
-        e.es_hash = v2_es_hash(ds_after, obj_idx);
-        e.fs_hash = v2_fs_hash(ds_after);
+        e.ds_hash = v2_ds_hash(hash_src);
+        e.obj_hash = v2_obj_hash(hash_src, obj_idx);
+        e.es_hash = v2_es_hash(hash_src, obj_idx);
+        e.fs_hash = v2_fs_hash(hash_src);
     }
 }
 

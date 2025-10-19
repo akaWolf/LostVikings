@@ -2047,6 +2047,17 @@ cs=0x1a2;eip=0x0000ac; 	J(CALL(sub_13c0c,0));	// 92 call    sub_13C0C ;~ 01A2:00
 cs=0x1a2;eip=0x0000af; 	J(CALL(sub_12fd0,0));	// 93 call    sub_12FD0 ;~ 01A2:00AF
 cs=0x1a2;eip=0x0000b2; 	J(CALL(sub_11792,0));	// 94 call    sub_11792 ;~ 01A2:00B2
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
+	// ROOT-CAUSE diag: snapshot orig 0x258C..0x2593 counters BEFORE sub_101be DEC.
+	// Print only when animation enabled (skip 2583=0 init phase).
+	{ static int _oc = 0; _oc++;
+	  uint8_t* r = (uint8_t*)raddr(ds,0);
+	  if (r[0x2583] != 0 && _oc <= 300) {
+		fprintf(stderr, "ORIG-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+			_oc, r[0x2583],
+			r[0x258C], r[0x258D], r[0x258E], r[0x258F],
+			r[0x2590], r[0x2591], r[0x2592], r[0x2593]);
+	  }
+	}
 cs=0x1a2;eip=0x0000b5; 	J(CALL(sub_101be,0));	// 95 call    sub_101BE ;~ 01A2:00B5
 cs=0x1a2;eip=0x0000b8; 	J(CALL(sub_10130,0));	// 96 call    sub_10130 ;~ 01A2:00B8
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(7); /* POST_FLIP2_END */ }
@@ -2220,6 +2231,16 @@ cs=0x1a2;eip=0x000169; 	J(CALL(sub_12352,0));	// 191 call    sub_12352 ;~ 01A2:0
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VIKING_SWITCH_LOOP, ds);
 cs=0x1a2;eip=0x00016c; 	T(TEST(word_28898, 0x0C0C0));	// 192 test    word_28898, 0C0C0h ;~ 01A2:016C
 cs=0x1a2;eip=0x000172; 	J(JNZ(loc_10191));	// 193 jnz     short loc_10191 ;~ 01A2:0172
+	// ROOT-CAUSE diag: snapshot orig counters BEFORE sub_101be DEC (viking switch loop variant).
+	{ static int _oc = 0; _oc++;
+	  uint8_t* r = (uint8_t*)raddr(ds,0);
+	  if (r[0x2583] != 0 && _oc <= 300) {
+		fprintf(stderr, "ORIG-101BE-VSW[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+			_oc, r[0x2583],
+			r[0x258C], r[0x258D], r[0x258E], r[0x258F],
+			r[0x2590], r[0x2591], r[0x2592], r[0x2593]);
+	  }
+	}
 cs=0x1a2;eip=0x000174; 	J(CALL(sub_101be,0));	// 194 call    sub_101BE ;~ 01A2:0174
 cs=0x1a2;eip=0x000177; 	J(CALL(sub_16775,0));	// 195 call    sub_16775 ;~ 01A2:0177
 	if (myDrawInfo_v2) v2_swap_render_buf();
@@ -16378,10 +16399,13 @@ cs=0x1a2;eip=0x007995; 	T(MOV(al, byte_317ce));	// 17611 mov     al, byte_317CE 
  myDrawInfo->myPixelOffset = al / 2;
 myDrawInfo->myOffset = myOffset;
 cs=0x1a2;eip=0x007998; 	R(OUT(dx, al));	// 17612 out     dx, al          ; EGA: palette register: select colors for attribute AL: ;~ 01A2:7998
+	// Hold lock across DEC + palette dispatch so game thread snapshots in
+	// trace_compare see consistent real[0xA39C, 0x7EFE]. Without this, snapshot
+	// can land between DEC and dispatch's clear → real and shadow caught in
+	// half-applied state → fake DS-HASH-AFTER diff.
 	{ extern std::mutex v2_ds_modify_mutex; std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
 cs=0x1a2;eip=0x007999; 	X(DEC(word_3287c));	// 17619 dec     word_3287C ;~ 01A2:7999
 	{ extern std::atomic<int64_t> v2_dbg_word3287c_dec_calls; v2_dbg_word3287c_dec_calls++; }
-	}
 cs=0x1a2;eip=0x00799d; 	T(MOV(bp, word_303de));	// 17620 mov     bp, word_303DE ;~ 01A2:799D
 	cs=seg_offset(seg000);
 	//cs=0x1a2;eip=0x0079a1 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_17974)+bp)));	// 17621 call    cs:off_17974[bp] ;~ 01A2:79A1
@@ -16391,6 +16415,7 @@ cs=0x1a2;eip=0x00799d; 	T(MOV(bp, word_303de));	// 17620 mov     bp, word_303DE 
 	  sub_10ffc(0, _state);
 	if (bp == 4)
 	  sub_10fe6(0, _state);
+	}
 locret_179a6:
 	// 5884
 //cs=0x1a2;eip=0x0079a6; 	J(RETF(0));	// 17625 retf ;~ 01A2:79A6
