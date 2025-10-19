@@ -459,23 +459,34 @@ void fade_music(int duration_ms)
 // Mark a player as the "music" player by HANDLE. Audio callback scales its
 // volume to 60% and stop_all_sfx skips its slot.
 // Iterate ALL slots matching handle (orig real + v2 muted reservation in default
-// mode). Clear need_close on each so neither the real nor muted slot is closed.
+// mode). Clear need_close on slots NOT yet marked for close (preserves explicit
+// stop requests — important when handle collision happens between fading-out
+// old music and new music with same hash).
 void set_dontstop_external(uint16_t handle)
 {
   if (handle == 0 || handle == 0xFFFF) return;
-  int marked = for_each_slot_with_handle(handle, [&](int i) {
-    bool was_marked = need_close[i].load();
-    printf("[%ums] SOUND-DONTSTOP: handle=%04X slot=%d player=%p%s\n",
-           _sound_now_ms(), handle, i, (void*)midi_players[i],
-           was_marked ? " (cleared stale need_close — music save)" : "");
-    need_close[i].store(false);
+  int marked = 0;
+  int skipped_closing = 0;
+  for_each_slot_with_handle(handle, [&](int i) {
+    if (need_close[i].load()) {
+      // Slot already explicitly stopped — don't revive. (Without this, a hash
+      // collision between just-stopped old slot and new play with same handle
+      // would cancel the old stop, leaving the old sound playing forever.)
+      skipped_closing++;
+      printf("[%ums] SOUND-DONTSTOP: handle=%04X slot=%d SKIP (need_close=true)\n",
+             _sound_now_ms(), handle, i);
+      return;
+    }
+    printf("[%ums] SOUND-DONTSTOP: handle=%04X slot=%d player=%p\n",
+           _sound_now_ms(), handle, i, (void*)midi_players[i]);
+    marked++;
   });
-  if (marked == 0) {
+  if (marked == 0 && skipped_closing == 0) {
     printf("[%ums] SOUND-DONTSTOP: handle=%04X stale (no slot) — no-op\n",
            _sound_now_ms(), handle);
     return;
   }
-  dontstop_handle.store(handle);
+  if (marked > 0) dontstop_handle.store(handle);
 }
 
 bool is_player_active(uint16_t handle)
