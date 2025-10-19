@@ -1195,7 +1195,7 @@ void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name);
 static bool v2_frame_active = false; // true between frame_begin and frame_end, false when JMP sub_11080 skips rest
 static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val);
 static void v2_game_loop_post_vm(uint8_t* shadow);
-static void v2_game_loop_post_render(uint8_t* shadow);
+static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue = true);
 static void v2_vm_execute_object(uint8_t* ds, uint16_t si);
 static void v2_run_collision_vm(uint8_t* shadow, uint16_t si);
 static uint32_t v2_ds_hash(uint8_t* ds);
@@ -7342,7 +7342,10 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 
 // Post-RENDER game loop — runs AFTER render (eip 0x0056..0x005C).
 // sub_165aa, sub_16661, sub_1406d.
-static void v2_game_loop_post_render(uint8_t* shadow) {
+static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
+    // include_anim_queue: orig blocks 4 and 6 call sub_165aa+sub_16661+sub_1406d;
+    // orig block 8 (render3, eips 0xBB-0xD8) calls only sub_165aa+sub_16661 (no
+    // sub_1406d). Pass false from v2_phase_render3 to match orig block 8 exactly.
     // sub_165aa: VGA page rotation state machine.
     // Cycles ds:0x92F9 through 0→0x34→0x68→0... based on viewport Y lookup tables.
     // sub_1df6a (dirty rect render) skipped — v2 renders full frames.
@@ -7612,6 +7615,8 @@ static void v2_game_loop_post_render(uint8_t* shadow) {
     //   Writes ds:0x6C = pos_x, ds:0x6E = pos_y, then mutates if in viewport:
     //     ds:0x6C >>= 2, ds:0x6C += 8, ds:0x6E >>= 2 (eips 0x40D6/40DB/40E0).
     //   Calls sub_1689e for visible tile quadrants — rendering is no-op in v2.
+    // SKIP if include_anim_queue=false (orig block 8 doesn't call sub_1406d).
+    if (!include_anim_queue) return;
     // VGA rendering omitted (v2 renders tiles separately). DS scratch writes preserved.
     {
         uint16_t count = *(uint16_t*)(shadow + 0x8734);
@@ -17006,8 +17011,9 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     // PSNAP compare: catches divergence in render2.
     v2_compare_phase_snap(V2_PSNAP_RENDER2_END, "v2_phase_post_flip2");
     uint8_t* s = v2_vm_shadow_ds;
-    // Render callback fires between RENDER2's sub_16775 and here.
-    v2_sub_10130(s);
+    // orig block 7 (eips 0xA9-0xB8): sub_10753 → sub_13c0c → sub_12fd0 →
+    // sub_11792 → sub_101be → sub_10130. v2 mirrors in same order.
+    // (previously v2_sub_10130 was at START — moved to END to match orig).
     // sub_10753: scroll clamp 2 (table 0x2B80)
     {
         auto scroll_lr = [&](int dir, uint16_t amount) {
@@ -17233,6 +17239,13 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             }
         }
     }
+    // sub_101be: palette cycling (eip 0xB5). DECs ds:[si+0x258C] for 8 channels;
+    // when timer→0, rotates palette buffer at 0x8202+ and 0x7F02+, signals
+    // word_303DE=2 (handled by v2_render_callback dispatch to sub_10ffc).
+    // Without this call ds:0x258C..0x2591 diverges from orig — task #65 root.
+    v2_sub_101be(s);
+    // sub_10130: VGA vsync wait (eip 0xB8) — last in POST_FLIP2 block (matches orig).
+    v2_sub_10130(s);
 }
 
 void v2_phase_render3(uint16_t ds_val) {
@@ -17246,8 +17259,9 @@ void v2_phase_render3(uint16_t ds_val) {
     // updated by post_flip2's sub_12fd0 (delta_type2 = 1/3 of remaining delta).
     v2_draw_tiles(v2_current_ds_val);
     v2_draw_sprites(v2_current_ds_val);
-    // sub_165aa + sub_16661
-    v2_game_loop_post_render(v2_vm_shadow_ds);
+    // sub_165aa + sub_16661 (NO sub_1406d — orig block 8 eips 0xC0/0xC3 only,
+    // unlike blocks 4/6 which also call sub_1406d at eip 0x5C/0x91).
+    v2_game_loop_post_render(v2_vm_shadow_ds, /*include_anim_queue=*/false);
     // sub_1DD9C (sprite render)
     v2_sub_1DD9C(v2_vm_shadow_ds);
     // sub_1C8F1 (flagged tiles)
@@ -17264,9 +17278,9 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     // PSNAP compare: catches divergence in render3.
     v2_compare_phase_snap(V2_PSNAP_RENDER3_END, "v2_phase_post_flip3");
     uint8_t* s = v2_vm_shadow_ds;
-    // Render callback (sub_1797b) fires between RENDER3's sub_16775 and here.
-    // v2: dispatch palette synchronously (equivalent of render callback timing).
-    v2_sub_10130(s);
+    // orig block 9 (eips 0xDB-0xE7): word_30c14=0, sub_108c8, sub_10350, sub_1086f.
+    // NO sub_10130 in this block — previously v2 had v2_sub_10130(s) here, removed
+    // for orig parity (orig does NOT call sub_10130 in this phase).
     // word_30C14 = 0 (eip 0x00DB)
     *(uint16_t*)(s + 0x8734) = 0;
     // sub_108c8: sound crossfade (eip 0x00E1). Use the proper v2_sub_108c8 function
@@ -17704,6 +17718,12 @@ static bool v2_phase_complete = true;
 static uint16_t v2_barrier_ds = 0;
 static std::thread v2_game_thread;
 
+// Hang detector: tracks current phase + last progress timestamp
+static std::atomic<int> v2_current_phase{-1};       // phase v2 thread is processing right now
+static std::atomic<uint64_t> v2_last_progress_ms{0}; // last time signal_phase OR phase_complete advanced
+static std::thread v2_hang_detector_thread;
+static std::atomic<bool> v2_hang_detector_quit{false};
+
 static void v2_game_thread_func() {
     while (true) {
         std::unique_lock<std::mutex> lock(v2_barrier_mutex);
@@ -17720,6 +17740,9 @@ static void v2_game_thread_func() {
             "RENDER1", "POST_FLIP1", "RENDER2", "POST_FLIP2",
             "RENDER3", "POST_FLIP3", "FRAME_END"
         };
+        // Track for hang detector
+        v2_current_phase.store(phase, std::memory_order_relaxed);
+        v2_last_progress_ms.store(SDL_GetTicks(), std::memory_order_relaxed);
         switch (phase) {
             case V2_PHASE_FRAME_BEGIN:  v2_phase_frame_begin(ds); break;
             case V2_PHASE_PRE_VM:       v2_phase_pre_vm(ds); break;
@@ -17739,10 +17762,64 @@ static void v2_game_thread_func() {
         if (phase == V2_PHASE_FRAME_END)
             v2_phase_verify_frame++;
 
+        // Phase done — clear current_phase to signal "idle"
+        v2_current_phase.store(-1, std::memory_order_relaxed);
+        v2_last_progress_ms.store(SDL_GetTicks(), std::memory_order_relaxed);
+
         lock.lock();
         v2_pending_phase = -1;
         v2_phase_complete = true;
         v2_cv_done.notify_one();
+    }
+}
+
+// Hang detector — runs on separate thread, checks every 500ms.
+// If v2 thread hasn't progressed for >2 sec while in a phase OR 5 sec while
+// idle (orig hung), prints diagnostic info.
+extern std::atomic<int64_t> v2_dbg_signal_phase_calls;
+extern std::atomic<int64_t> v2_dbg_phase_complete;
+static void v2_hang_detector_func() {
+    static const char* phase_names[] = {
+        "FRAME_BEGIN", "PRE_VM", "VM", "POST_VM",
+        "RENDER1", "POST_FLIP1", "RENDER2", "POST_FLIP2",
+        "RENDER3", "POST_FLIP3", "FRAME_END"
+    };
+    uint64_t last_warn_ms = 0;
+    int64_t last_signal_count = 0;
+    int64_t last_complete_count = 0;
+    while (!v2_hang_detector_quit.load(std::memory_order_acquire)) {
+        SDL_Delay(500);
+        uint64_t now = SDL_GetTicks();
+        int phase = v2_current_phase.load(std::memory_order_relaxed);
+        uint64_t last_prog = v2_last_progress_ms.load(std::memory_order_relaxed);
+        uint64_t elapsed = (now > last_prog) ? (now - last_prog) : 0;
+        int64_t sig = v2_dbg_signal_phase_calls.load();
+        int64_t cmp = v2_dbg_phase_complete.load();
+        bool in_phase = (phase >= 0);
+        bool sig_advancing = (sig != last_signal_count);
+        bool cmp_advancing = (cmp != last_complete_count);
+        last_signal_count = sig;
+        last_complete_count = cmp;
+        // Threshold: 2 sec if v2 stuck in phase, 5 sec if everyone idle (orig stuck)
+        uint64_t threshold = in_phase ? 2000 : 5000;
+        if (elapsed > threshold && (now - last_warn_ms) > 5000) {
+            last_warn_ms = now;
+            const char* phase_name = (phase >= 0 && phase <= 10) ? phase_names[phase] : "IDLE";
+            uint16_t shadow_25AD = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + 0x25AD) : 0xDEAD;
+            uint16_t shadow_25BA = v2_vm_shadow_ds ? v2_vm_shadow_ds[0x25BA] : 0xFF;
+            uint16_t shadow_A39C = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + 0xA39C) : 0xDEAD;
+            uint16_t shadow_218F = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + 0x218F) : 0xDEAD;
+            uint16_t shadow_2B64 = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + 0x2B64) : 0xDEAD;
+            uint16_t shadow_445  = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + 0x445)  : 0xDEAD;
+            fprintf(stderr,
+                "V2-HANG-DETECT[%lums elapsed]: phase=%s sig=%lld cmp=%lld sig_adv=%d cmp_adv=%d "
+                "shadow lvl=%04X mode=%02X 0xA39C(vsync)=%04X 0x218F(cmd_buf_wr)=%04X "
+                "0x2B64(cmd_buf_rd)=%04X 0x445(28925)=%04X\n",
+                (unsigned long)elapsed, phase_name, (long long)sig, (long long)cmp,
+                (int)sig_advancing, (int)cmp_advancing,
+                shadow_25AD, shadow_25BA, shadow_A39C, shadow_218F, shadow_2B64, shadow_445);
+            fflush(stderr);
+        }
     }
 }
 
@@ -17794,6 +17871,7 @@ void v2_signal_phase(V2Phase phase, uint16_t ds_val) {
 
 void v2_game_thread_start() {
     v2_game_thread = std::thread(v2_game_thread_func);
+    v2_hang_detector_thread = std::thread(v2_hang_detector_func);
     // atexit detach: иначе при exit() из самого v2_game_thread (например
     // exit(1) в trace_compare на divergence) static destructor видит
     // joinable thread → std::terminate. Detach снимает joinable bit.
@@ -17801,7 +17879,9 @@ void v2_game_thread_start() {
     if (!atexit_registered) {
         atexit_registered = true;
         std::atexit([]() {
+            v2_hang_detector_quit.store(true, std::memory_order_release);
             if (v2_game_thread.joinable()) v2_game_thread.detach();
+            if (v2_hang_detector_thread.joinable()) v2_hang_detector_thread.detach();
         });
     }
 }
