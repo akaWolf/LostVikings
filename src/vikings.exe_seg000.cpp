@@ -2214,6 +2214,10 @@ cs=0x1a2;eip=0x000164; 	X(AND(word_28814, 0x0FFFB));	// 188 and     word_28814, 
 loc_10169:
 	// 4381
 cs=0x1a2;eip=0x000169; 	J(CALL(sub_12352,0));	// 191 call    sub_12352 ;~ 01A2:0169
+	// V2 barrier: per-iteration sync of viking switch loop. orig sub_12352
+	// just updated v2_input_snapshot atomic; v2 mirror reads same snapshot,
+	// runs identical iteration logic on shadow → both end iter with same DS.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VIKING_SWITCH_LOOP, ds);
 cs=0x1a2;eip=0x00016c; 	T(TEST(word_28898, 0x0C0C0));	// 192 test    word_28898, 0C0C0h ;~ 01A2:016C
 cs=0x1a2;eip=0x000172; 	J(JNZ(loc_10191));	// 193 jnz     short loc_10191 ;~ 01A2:0172
 cs=0x1a2;eip=0x000174; 	J(CALL(sub_101be,0));	// 194 call    sub_101BE ;~ 01A2:0174

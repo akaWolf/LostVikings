@@ -3,6 +3,8 @@
 #include <cassert>
 #include <cstdio>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <unistd.h>  // _exit
 
 const int SCREEN_SCALE = 4;
@@ -367,6 +369,15 @@ void updateDraw()
 			   // shadow[0xA39C] + palette dispatch matches orig's async behavior
 			   // on real_ds, so verify hashes converge on race-prone ds:0x7EFE.
 			   { extern void v2_render_callback(); v2_render_callback(); }
+			   // Increment render-tick counter + notify any waiter (v2 game thread
+			   // waits in v2_phase_post_vm until tick advances, ensuring
+			   // shadow[0x7EFE] palette flag is cleared before trace_compare).
+			   {
+			     extern std::atomic<uint64_t> v2_render_tick;
+			     extern std::condition_variable v2_render_tick_cv;
+			     v2_render_tick.fetch_add(1, std::memory_order_release);
+			     v2_render_tick_cv.notify_all();
+			   }
 			   SDL_Delay(15);
 		   }
 		}

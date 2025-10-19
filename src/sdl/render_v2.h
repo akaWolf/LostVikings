@@ -82,6 +82,17 @@ enum V2Phase {
     V2_PHASE_RENDER3,          // rotation3 + pageflip3 (eip 0x00BB..0x00D8)
     V2_PHASE_POST_FLIP3,       // sub_108c8..sub_10350 (eip 0x00DB..0x00E7)
     V2_PHASE_FRAME_END,        // verify + cleanup
+
+    // === Blocking phases (signaled around orig blocking loops) ===
+    // Each maps 1:1 to specific v2 mirror function. orig signals BEFORE entering
+    // its blocking loop, v2 dispatcher invokes corresponding mirror which has
+    // the FULL blocking loop logic. Both threads spin reading input in parallel,
+    // both exit when input matches. v2_render_buf shows v2's render (with palette
+    // anim, dialog text, etc). In V2_ONLY same mirror functions called inline.
+    V2_PHASE_VIKING_SWITCH_LOOP,  // sub_10138 loc_10169 — viking switch screen
+    V2_PHASE_PAUSE_LOOP,          // sub_11ba5 loc_11c1f — TAB pause
+    V2_PHASE_TRANSITION_TEXT,     // sub_104A1 loc_104C3 — level transition text
+    V2_PHASE_PASSWORD_PROMPT,     // sub_1041c — password input
 };
 extern void v2_signal_phase(V2Phase phase, uint16_t ds_val);  // signal v2 thread + wait
 extern void v2_game_thread_start();   // launch v2 thread (called once at startup)

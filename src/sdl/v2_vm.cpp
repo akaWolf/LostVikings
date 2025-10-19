@@ -19,6 +19,7 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <condition_variable>
 #include <atomic>
 #include <chrono>
 #include <SDL2/SDL.h>
@@ -33,10 +34,10 @@ extern uint8_t sdl_spec_get(uint16_t off);
 
 // SDL/adlmidi sound API (defined in sdl/play.cpp).
 // In default mode the orig also calls these; in V2_ONLY only v2 calls them.
-extern int  play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
-extern void stop_xmidi_external();
-extern void stop_xmidi_external(uint16_t handle);
-extern void set_dontstop_external(uint16_t handle);
+// v2 uses methods on independent v2_pool instance (defined in play.cpp). Same
+// class as orig_pool — only the instance differs. v2_pool is globally_muted in
+// default mode (no audio output) but slot tracking continues for DS verify.
+#include "play.h"
 
 // ============================================================================
 // SFX AUDIT INFRASTRUCTURE
@@ -448,30 +449,32 @@ static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out
 // Symmetric with sub_177bb pattern: V2_ONLY → real producer; default mode →
 // muted reservation. Both modes use deterministic handle so orig (real) and v2
 // (muted) reserve slots with matching handles → ds:0x990C matches in shadow.
-// "Production" impl — no replay knowledge. v2 callers go through fx::play_music.
+// v2 music play: operates on independent v2_pool. No #ifdef V2_ONLY needed —
+// v2_pool is globally_muted in default mode (set in sound_init), so no audio
+// output, but slot tracking continues for DS verify symmetry. In V2_ONLY,
+// v2_pool is unmuted and produces audible audio.
 static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
     if (!xmidi || size == 0) return;
-    if (v2_id_music != 0) stop_xmidi_external((uint16_t)v2_id_music);
+    if (v2_id_music != 0) v2_pool.stop_xmidi((uint16_t)v2_id_music);
     extern int v2_audit_v2_next_music_idx();
     extern uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx);
-    extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
-                                                        uint16_t handle, bool mute);
     int play_idx = v2_audit_v2_next_music_idx();
     uint16_t handle = v2_audit_compute_music_handle(bx_seg, play_idx);
+    // V2_ONLY: v2 is the sole audio producer → mute=false (real playback).
+    // Default mode: orig produces real audio, v2 only reserves slot for DS verify
+    // symmetry → mute=true (no producer thread, no audio output).
 #ifdef V2_ONLY
     bool mute = false;
 #else
-    bool mute = true;   // default mode: orig plays, v2 mutes (slot tracking only)
+    bool mute = true;
 #endif
-    v2_id_music = play_xmidi_external_with_handle_and_mute(xmidi, size, -1, handle, mute);
+    v2_id_music = v2_pool.play_xmidi_external_with_handle_and_mute(xmidi, size, -1, handle, mute);
     if (v2_id_music > 0) {
-        set_dontstop_external((uint16_t)v2_id_music);
+        v2_pool.set_dontstop((uint16_t)v2_id_music);
         // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax` with si=0 (music
-        // call site uses si=0). Stores music handle at ds:0x990C (slot 0). This is
-        // what makes sub_17912 stop music properly when iterating slot 0 (when
-        // ds:0x25B9 != 1).
+        // call site uses si=0). Stores music handle at ds:0x990C (slot 0).
         *(uint16_t*)(s + 0x990C) = (uint16_t)v2_id_music;
     }
 }
@@ -595,9 +598,9 @@ static void v2_sub_17912_v2(uint8_t* s) {
         uint16_t handle_off = (uint16_t)(si - 0x66F4); // wraps to 0x990C+
         uint16_t handle = *(uint16_t*)(s + handle_off);
         if (handle != 0xFFFF) {
-            stop_xmidi_external(handle);
+            v2_pool.stop_xmidi(handle);
             // If music slot (si=0), clear v2_id_music — auto-cleared by
-            // stop_xmidi_external when matching dontstop_handle.
+            // stop_xmidi_external_v2 when matching v2_pool.dontstop_handle.
             if (si == 0 && (int)handle == v2_id_music) v2_id_music = 0;
             *(uint16_t*)(s + handle_off) = 0xFFFF;
             *(uint16_t*)(s + (uint16_t)(si - 0x66EA)) = 0xFFFF;
@@ -1318,7 +1321,10 @@ static std::atomic<bool> v2_render_cb_enabled{false};
 // If counter reaches 0: rotates 3-byte palette entries (sub_10255 shifts up, sub_1020f shifts down).
 // DS writes: DEC [si+0x258C], word_303DE=2, palette buffer rotations at ds:0x8202+ area.
 static void v2_sub_101be(uint8_t* s) {
+    static int _dbg_calls = 0, _dbg_rotations = 0;
+    _dbg_calls++;
     if (s[0x2583] == 0) {                                           // TEST byte_2AA63, 0FFh; JZ loc_1020b
+        if (_dbg_calls % 60 == 1) fprintf(stderr, "V2-101BE[%d]: EARLY-EXIT 2583=0\n", _dbg_calls);
         return;                                                      // early exit — NO word_303DE write
     }
     for (int16_t si = 7; si >= 0; si--) {                           // si=7; DEC si; JNS
@@ -1328,54 +1334,86 @@ static void v2_sub_101be(uint8_t* s) {
         s[si + 0x258C]--;                                           // DEC [si+258Ch]
         if (s[si + 0x258C] != 0) continue;                         // JNZ skip
         // Counter reached 0: rotate palette entries
+        _dbg_rotations++;
+        if (_dbg_rotations <= 20) {
+            uint8_t cur_i = s[si + 0x259C], end_i = s[si + 0x2594];
+            uint16_t addr_82 = cur_i * 3 + 0x8202;
+            uint16_t addr_7f = cur_i * 3 + 0x7F02;
+            fprintf(stderr, "V2-101BE-ROT[%d call=%d si=%d cur=%02X end=%02X path=%s | r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch_before=%02X%02X%02X]\n",
+                _dbg_rotations, _dbg_calls, si, cur_i, end_i,
+                (cur_i < end_i) ? "10255" : "1020F",
+                addr_82, s[addr_82], s[addr_82+1], s[addr_82+2],
+                addr_7f, s[addr_7f], s[addr_7f+1], s[addr_7f+2],
+                s[0x7944], s[0x7945], s[0x7946]);
+        }
         uint8_t cur_idx = s[si + 0x259C];                          // [si+259Ch] = current
         uint8_t end_idx = s[si + 0x2594];                          // [si+2594h] = end
         uint16_t dx_base = 0x8202;                                  // palette buffer base
         if (cur_idx < end_idx) {
             // sub_10255: shift entries DOWN (current < end → rotate left)
+            // orig saves [di], [di+1] to word_309e4 (ds:0x7944), [di+2] to byte_309e6
+            // (ds:0x7946). Mirror these scratch writes for verify clean.
             uint16_t di_addr = (uint16_t)cur_idx * 3 + dx_base;
-            // Save entry at [di_addr]
-            uint16_t saved_w = *(uint16_t*)(s + di_addr);
-            uint8_t saved_b = s[di_addr + 2];
-            // Shift: MOVSB from di+3 to di, count = (end-cur)*3
+            uint8_t saved_lo = s[di_addr];
+            uint8_t saved_hi = s[di_addr + 1];
+            uint8_t saved_b  = s[di_addr + 2];
+            s[0x7944] = saved_lo;            // ds:0x7944 = byte ptr word_309e4 lo
+            s[0x7945] = saved_hi;            // ds:0x7945 = byte ptr word_309e4 hi
+            s[0x7946] = saved_b;             // ds:0x7946 = byte_309e6
             uint16_t count = ((uint16_t)end_idx - (uint16_t)cur_idx) * 3;
             memmove(s + di_addr, s + di_addr + 3, count);
-            // Write saved entry at end
             uint16_t end_addr = di_addr + count;
-            *(uint16_t*)(s + end_addr) = saved_w;
-            s[end_addr + 2] = saved_b;
+            s[end_addr]     = saved_lo;      // mov [di-2] = word_309e4 (orig: write 2 bytes)
+            s[end_addr + 1] = saved_hi;
+            s[end_addr + 2] = saved_b;       // mov [di] = byte_309e6
             // Second rotation with dx=0x7F02
             dx_base = 0x7F02;
             di_addr = (uint16_t)cur_idx * 3 + dx_base;
-            saved_w = *(uint16_t*)(s + di_addr);
-            saved_b = s[di_addr + 2];
+            saved_lo = s[di_addr];
+            saved_hi = s[di_addr + 1];
+            saved_b  = s[di_addr + 2];
+            s[0x7944] = saved_lo;
+            s[0x7945] = saved_hi;
+            s[0x7946] = saved_b;
             count = ((uint16_t)end_idx - (uint16_t)cur_idx) * 3;
             memmove(s + di_addr, s + di_addr + 3, count);
             end_addr = di_addr + count;
-            *(uint16_t*)(s + end_addr) = saved_w;
+            s[end_addr]     = saved_lo;
+            s[end_addr + 1] = saved_hi;
             s[end_addr + 2] = saved_b;
         } else {
             // sub_1020f: shift entries UP (current >= end → rotate right)
+            // orig (line 302-305):
+            //   ax = [di]              ; 16-bit WORD read of [di], [di+1]
+            //   word_309e4 = ax        ; 16-bit WORD write to ds:0x7944, ds:0x7945
+            //   al = [di+2]            ; BYTE read
+            //   byte_309e6 = al        ; BYTE write to ds:0x7946
+            // After REP MOVSB (line 321-324):
+            //   ax = word_309e4        ; 16-bit WORD read
+            //   [di-2] = ax            ; 16-bit WORD write to [di-2], [di-1]
+            //   al = byte_309e6        ; BYTE read
+            //   [di] = al              ; BYTE write
             uint16_t di_addr = (uint16_t)cur_idx * 3 + dx_base;
             uint16_t end_addr = (uint16_t)end_idx * 3 + dx_base;
-            // Save entry at end position
-            uint16_t saved_w = *(uint16_t*)(s + di_addr);
-            uint8_t saved_b = s[di_addr + 2];
-            // Shift: REP MOVSB backwards (STD) from di-1 to di+2
+            uint16_t saved_word = *(uint16_t*)(s + di_addr);     // ax = [di] (WORD)
+            uint8_t  saved_b    = s[di_addr + 2];                // al = [di+2] (BYTE)
+            *(uint16_t*)(s + 0x7944) = saved_word;               // word_309e4 = ax (WORD)
+            s[0x7946] = saved_b;                                 // byte_309e6 = al (BYTE)
             uint16_t count = ((uint16_t)cur_idx - (uint16_t)end_idx) * 3;
-            memmove(s + end_addr + 3, s + end_addr, count);
-            // Write saved entry at start
-            *(uint16_t*)(s + end_addr) = saved_w;
-            s[end_addr + 2] = saved_b;
+            memmove(s + end_addr + 3, s + end_addr, count);     // REP MOVSB backward
+            *(uint16_t*)(s + end_addr)     = saved_word;         // [di-2] = ax (WORD)
+            s[end_addr + 2] = saved_b;                           // [di] = al (BYTE)
             // Second rotation with dx=0x7F02
             dx_base = 0x7F02;
             di_addr = (uint16_t)cur_idx * 3 + dx_base;
             end_addr = (uint16_t)end_idx * 3 + dx_base;
-            saved_w = *(uint16_t*)(s + di_addr);
-            saved_b = s[di_addr + 2];
+            saved_word = *(uint16_t*)(s + di_addr);
+            saved_b    = s[di_addr + 2];
+            *(uint16_t*)(s + 0x7944) = saved_word;
+            s[0x7946] = saved_b;
             count = ((uint16_t)cur_idx - (uint16_t)end_idx) * 3;
             memmove(s + end_addr + 3, s + end_addr, count);
-            *(uint16_t*)(s + end_addr) = saved_w;
+            *(uint16_t*)(s + end_addr)     = saved_word;
             s[end_addr + 2] = saved_b;
         }
     }
@@ -1401,7 +1439,7 @@ static void v2_sub_108c8(uint8_t* s) {
                 uint16_t h_off = (uint16_t)(si - 0x66F4);
                 uint16_t handle = *(uint16_t*)(s + h_off);
                 if (handle != 0xFFFF) {
-                    stop_xmidi_external(handle);  // SDL replacement for AIL sub_1C79F + sub_1C769
+                    v2_pool.stop_xmidi(handle);  // v2_pool — independent from orig
                     *(uint16_t*)(s + h_off) = 0xFFFF;                    // clear handle
                     *(uint16_t*)(s + (uint16_t)(si - 0x66EA)) = 0xFFFF; // clear sequence
                 }
@@ -1416,9 +1454,8 @@ static void v2_sub_108c8(uint8_t* s) {
     if (s[0x0302] != 0) {                                                 // JNZ loc_10959 (music STOP path)
         // loc_10959: music OFF. Skip if bit 15 set.
         if (!(*(uint16_t*)(s + 0x0302) & 0x8000)) {
-            extern uint16_t get_music_handle();
-            uint16_t mh = get_music_handle();
-            if (mh != 0) stop_xmidi_external(mh);  // SDL replacement for AIL sub_1C79F + sub_1C769
+            uint16_t mh = v2_pool.get_music_handle();
+            if (mh != 0) v2_pool.stop_xmidi(mh);  // v2_pool — independent from orig
         }
     } else {                                                              // music ON path
         // sub_176BD(si=0, ax=0, bx=word_2B34B): play music with sequence from ds:0x2E6B
@@ -3964,17 +4001,24 @@ static void v2_sub_1775d_helper(uint8_t* s) {
     }
 }
 
-// sub_178f1: fade music over 1000ms. Mirror of seg000:16217-16238 (eip 0x78f1-0x7910).
-// Original: PUSHF; CLI; sub_1C7BD(0x3E8, 0, ds:0x990C, ds:0x98E6); POPF
-// AIL_set_sequence_tempo (fade) replaced by SDL fade_music. play.cpp's audio_callback
-// ramps volume per-tick and closes player at 0.
+// sub_178f1: fade music over 1000ms. Mirror of seg000:16286-16307 (eip 0x78f1-0x7910).
+// Orig line-by-line:
+//   17515: TEST ds:0x302, 0xFFFF      ; word_287E2 != 0 means music muted/off
+//   17516: JNZ exit
+//   [m2c port]: fade_music(1000)      ; SDL replacement INLINED into orig path
+//   17517-17525: PUSHF; CLI; CALLF sub_1C7BD(0x3E8, 0, ds:0x990C, ds:0x98E6); POPF
+//   17528: RETN
+// IMPORTANT: orig seg000 path ALREADY calls fade_music(1000) at line 16295 (m2c-port
+// addition INLINED into orig path). So in default mode, fade_music runs from orig.
+// v2 mirror MUST NOT also call fade_music — would cause double-fade (volume reset
+// glitch). The #ifdef V2_ONLY guards v2 from calling fade_music when orig also will.
 static void v2_sub_178f1_helper(const uint8_t* s) {
-    if (*(uint16_t*)(s + 0x302) != 0) return;  // music muted/off
+    if (*(uint16_t*)(s + 0x302) != 0) return;  // music muted/off (TEST + JNZ exit)
 #ifdef V2_ONLY
     extern void fade_music(int);
-    fade_music(1000);
+    fade_music(1000);                            // SDL replacement (only when orig path doesn't run)
 #else
-    (void)s;
+    (void)s;  // default mode: orig seg000:16295 already calls fade_music
 #endif
 }
 
@@ -5004,6 +5048,43 @@ static void v2_do_render_and_swap(); // forward decl
 // v2_current_ds_val declared at top (forward declarations section)
 
 
+// Mirror orig sub_10138 loc_10151 transition chain (bits 0/1 path):
+//   1. word_28814 = 0                (mov word_28814, 0)
+//   2. sub_1774f                      (level-exit music dispatch via off_3285A[ds:0x25B9 & 0xFF])
+//   3. INC word_2880F                (frame counter)
+//   4. sub_14207                      (FULL VM pass)
+//   5. JMP sub_11080                  (level loader, never returns to sub_10138)
+// Called from:
+//   - v2_game_loop_pre_vm buttons&3 path (when transition flag set at frame start)
+//   - v2 sub_10138 mirror inside v2_sub_1086f (when transition flag set during cmd loop)
+static void v2_run_transition_chain(uint8_t* shadow) {
+    // 1. word_28814 = 0  (orig line 2206)
+    *(uint16_t*)(shadow + 0x0334) = 0;
+    // 2. sub_1774f: level-exit music dispatch via off_3285A[ds:0x25B9 & 0xFF]
+    v2_music_dispatch(shadow, 0x25B9);
+    // 3. INC word_2880F (ds:0x032F)
+    *(uint16_t*)(shadow + 0x032F) += 1;
+    // 4. sub_14207: full VM pass (with priority object loop)
+    v2_sub_14207_init(shadow);
+    // Re-read ds:0x372 each iteration — VM can create objects (op_14)
+    for (uint16_t si_v = 0; si_v < *(uint16_t*)(shadow + 0x372); si_v += 2) {
+        v2_vm_execute_object(shadow, si_v);
+        uint16_t prio = *(uint16_t*)(shadow + 0x376);
+        if (prio != 0) {
+            for (uint16_t di = 0; (int16_t)di < (int16_t)prio; di++) {
+                uint16_t pobj = *(uint16_t*)(shadow + di + 0x378) & 0xFF;
+                v2_vm_execute_object(shadow, pobj);
+            }
+            *(uint16_t*)(shadow + 0x376) = 0;
+        }
+    }
+    // 5. JMP sub_11080: level loader. Loads new level, clears state, runs sub_12345.
+    v2_sub_11080(shadow);
+    // Update v2_current_level so FRAME_BEGIN doesn't re-run v2_sub_11080.
+    extern uint16_t v2_current_level;
+    v2_current_level = *(uint16_t*)(shadow + 0x25AD);
+}
+
 static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // sub_12352: input processing. Exact replica.
     // ax = 0
@@ -5316,77 +5397,19 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     }
 
     // sub_10138: check word_28814 (DS:0x0334) for button presses.
-    // bit 4: viking switch screen (blocking loop — cannot replicate in v2 frame callback).
-    // bit 1: clear buttons, sub_1774f (palette), INC word_2880F, sub_14207 (VM!), sub_11080 (cycle viking).
-    // bit 2: set word_2AAA9=0x25, then same as bit 1.
+    // bit 4 (mask 0x4): viking switch screen — blocking loop loc_10169.
+    //   Default mode: handled by V2_PHASE_VIKING_SWITCH_LOOP barrier (orig signals
+    //                 per-iter from seg000 loc_10169, v2_run_viking_switch_loop runs
+    //                 same iter on shadow). pre_vm does NOTHING here — if shadow has
+    //                 bit 4 but real doesn't, that's a divergence to surface for fix.
+    //   V2_ONLY: orig not running → no signal. pre_vm currently does nothing for bit 4;
+    //            V2_ONLY viking switch support is a separate task (#108 family).
+    // bit 1 (mask 0x1): transition: clear buttons, sub_1774f, INC, sub_14207, sub_11080.
+    // bit 2 (mask 0x2): set word_2AAA9=0x25, then bit 1 path.
     // No bits set → RETN.
-    // For v2: exact state changes. VM call cannot be nested (v2 runs before original).
-    // sub_11080 viking cycling modifies ds:0x3C2 — done by original, synced via memcpy.
     {
         uint16_t buttons = *(uint16_t*)(shadow + 0x0334);
-        if (buttons & 4) {
-            // bit 4: viking switch screen. Verified with seg000 lines 2054-2074.
-            // Original: AND word_28814, 0xFFFB; then blocking loop:
-            //   sub_12352 → test 0xC0C0 → sub_101be → 3× (sub_16775 + sub_10130 + sub_108c8) → loop
-            // For v2: blocking loop with SDL input + render passes.
-            *(uint16_t*)(shadow + 0x0334) &= 0xFFFB;              // AND word_28814, 0FFFBh
-            // loc_10169: blocking viking switch loop
-            // HYPOTHESIS TEST: cap to 1 iteration to verify if this is causing freeze.
-            int vsw_safety = 1;
-            fprintf(stderr, "V2-VSWITCHLOOP-ENTRY: triggered (was unbounded blocking)\n");
-            while (vsw_safety-- > 0) {
-                // sub_12352: input processing (inside viking switch loop)
-                {
-                    extern uint16_t v2_input_snapshot;
-                    uint16_t ax = 0;
-                    if (*(uint16_t*)(shadow + 0x86DA) != 0)
-                        ax = *(uint16_t*)(shadow + 0x86DC);
-                    ax |= v2_input_snapshot;
-                    *(uint16_t*)(shadow + 0x03B6) = ax;
-                    uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
-                    *(uint16_t*)(shadow + 0x03B8) = (ax ^ prev) & ax;
-                    *(uint16_t*)(shadow + 0x03BA) = ax;
-                }
-                // TEST word_28898, 0xC0C0 — exit condition
-                if (*(uint16_t*)(shadow + 0x3B8) & 0xC0C0) break; // JNZ loc_10191
-                // sub_101be: palette animation cycling. Verified with seg000 lines 224-286.
-                // NOT same as sub_10ffc! sub_101be writes [7EFE]=2, sub_10ffc writes [7EFE]=0.
-                {
-                    if (shadow[0x2583] != 0) { // TEST byte_2AA63, FFh; JZ skip
-                        for (int16_t si = 7; si >= 0; si--) {
-                            uint8_t mask = shadow[(uint16_t)(si - 0x6C44)];
-                            if (!(shadow[0x2583] & mask)) continue;
-                            if (shadow[si + 0x258C] == 0) continue;
-                            shadow[si + 0x258C]--;           // DEC byte [si+258Ch]
-                            if (shadow[si + 0x258C] != 0) continue;
-                            shadow[si + 0x258C] = shadow[si + 0x2584]; // reload
-                            // sub_10255/sub_1020F: VGA palette OUT — commented
-                        }
-                        *(uint16_t*)(shadow + 0x7EFE) = 2;  // MOV word_303DE, 2 (ONLY if loop ran)
-                    }
-                    // if byte_2AA63 == 0: no [7EFE] write (early exit path)
-                }
-                // 3× render passes with sub_16775 + sub_10130 + sub_108c8
-                for (int pass = 0; pass < 3; pass++) {
-                    v2_sub_16775(shadow);                          // sub_16775
-                    v2_sub_10130(shadow); // sub_10130: VGA vsync wait
-                    v2_sub_108c8(shadow); // sub_108c8: audio handler
-                }
-                // v2: render + delay for ~60fps
-                v2_do_render();
-                SDL_Delay(16);
-            }
-            // loc_10191: JMP sub_12352 (final input read after viking switch exit)
-            {
-                extern uint16_t v2_input_snapshot;
-                uint16_t ax = 0;
-                ax |= v2_input_snapshot;
-                *(uint16_t*)(shadow + 0x03B6) = ax;
-                uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
-                *(uint16_t*)(shadow + 0x03B8) = (ax ^ prev) & ax;
-                *(uint16_t*)(shadow + 0x03BA) = ax;
-            }
-        } else if (buttons & 2) {
+        if (buttons & 2) {
             // bit 2: set word_2AAA9=0x25, then fall through to bit 1 processing.
             *(uint16_t*)(shadow + 0x25C9) = 0x25; // word_2AAA9
             // fall through
@@ -5544,11 +5567,14 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
     }
 
-    // sub_11ba5: pause handler. Verified with seg000 lines 4394-4423.
-    // Test byte_2AAAF & 1; if zero → return.
-    // Test word_28898 & 0x2000; if zero → return.
-    // Then: stop music, set word_28925=0x11, word_28927=1, clear sprite flag, set dirty.
-    // Then blocking render loop until unpause — for v2: DS writes only, no blocking.
+    // sub_11ba5: pause handler.
+    //   Default mode: handled by V2_PHASE_PAUSE_LOOP barrier (orig signals from
+    //                 seg000 sub_11ba5, v2_run_pause_loop runs same iter on shadow).
+    //                 pre_vm does NOTHING here.
+    //   V2_ONLY: orig not running → no signal. V2_ONLY pause support is a separate
+    //            task (#109 family) — needs full per-iter mirror, not cap=1 hack.
+#if 0  // Disabled: cap=1/max_iters=1 was a debug stub not present in orig.
+       // V2_ONLY needs full per-iter loop (TODO #109). Default mode uses barrier.
     if ((shadow[0x25CF] & 1) && (*(uint16_t*)(shadow + 0x3B8) & 0x2000)) {
         // Mirror orig sub_11ba5 loc_11bb7 eip 0x1BB7-0x1BBA: MOV ax, 0; CALL sub_177bb
         if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 0);
@@ -6101,6 +6127,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             }
         }
     }
+#endif // Disabled cap=1 pause stub — see #if 0 above
 
     // sub_12e79 → sub_12e84: viking cycling. Verified with seg000 lines 6635-6691.
     // Test byte ds:0x25BA; if 0 → return.
@@ -6226,7 +6253,15 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             }
         } }
     v2_sub_10813_done:
+        ;  // no-op so label isn't at end of compound statement (under #if 0 below)
 
+#if 0
+        // BOGUS: orig sub_1086f is called ONLY at eip 0x00E7 (POST_FLIP3 phase),
+        // NOT in pre_vm. Mirror was duplicating queue processing — caused shadow
+        // read pointer to advance ahead of real, leading to cascade divergences
+        // (shadow[0x334] |= 4 from cmd_type==4 processed before orig caught up,
+        // text buffer 0x96AE-0x96E0 written prematurely, etc).
+        // Correct mirror lives in v2_phase_post_flip3 (line ~17552).
         // sub_1086f: command buffer dispatch — exact replica of original.
         // Original loop: bx=word_2B044; while(bx!=word_2A66F) { clear blink; handler=off_2B086[si];
         //   MOV word_2B044,bx; CALLF sub_1E0C7; CALL sub_12352; CALL sub_10138; JMP loop }
@@ -6404,6 +6439,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             v2_sub_16775(shadow);                                  // CALL sub_16775
             v2_sub_10130(shadow); // sub_10130: VGA vsync wait
         }
+#endif // BOGUS sub_1086f mirror in pre_vm — orig only calls at eip 0x00E7
     }
 
     // sub_1673c: tile scroll management + object spawn/despawn.
@@ -8280,10 +8316,14 @@ static void v2_vm_op_D6(V2VM& vm) {
     // sub_178f1 (eip 0x78F1): TEST word_287E2, 0xFFFFh; JNZ ret. If music enabled,
     // call AIL sub_1C7BD with duration 0x3E8 (1000ms) — fade music to silence.
     // SDL replacement: fade_music(1000) — play.cpp's audio_callback ramps volume
-    // and closes player when fade completes. Now safe in default mode too:
-    // fade_music iterates ALL slots with music handle (orig real + v2 muted),
-    // setting same fade params — orig's call also sets identical params, so
-    // double-call is idempotent (worst case: fade restarts at 1.0 mid-ramp).
+    // and closes player when fade completes.
+    //
+    // ARCHITECTURE NOTE: fade_music currently iterates ALL slots with matching
+    // handle (task #88 design). When orig+v2 both have slots with same handle
+    // (deterministic from audit), double-call resets fade_volume mid-ramp on
+    // orig's audible slot. Proper fix: separate audio API per side (orig vs v2)
+    // so each touches only its own instance. Pending refactor — for now safe
+    // because both sides set IDENTICAL fade params at near-identical time.
     if (vm.ds_read(0x302) != 0) return;  // music muted/off
     extern void fade_music(int);
     fade_music(1000);
@@ -16694,6 +16734,15 @@ static void v2_post_vm_field_check() {
     }
 }
 
+// Render-thread tick counter — incremented by render thread after each
+// (orig+v2) render_callback pair completes. v2_phase_post_vm waits for at
+// least one tick so shadow[0x7EFE] palette flag is cleared before
+// trace_compare. Mirrors how orig main thread's signal_phase blocking gives
+// render thread time to clear real[0x7EFE] before next phase.
+std::atomic<uint64_t> v2_render_tick{0};
+std::condition_variable v2_render_tick_cv;
+std::mutex v2_render_tick_mutex;
+
 void v2_vm_trace_compare(); // forward decl
 void v2_phase_post_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
@@ -16707,6 +16756,22 @@ void v2_phase_post_vm(uint16_t ds_val) {
     v2_watch_334("POST-entry");
     // PSNAP compare: v2 shadow should match orig VM_END (both just finished main VM).
     v2_compare_phase_snap(V2_PSNAP_VM_END, "v2_phase_post_vm");
+    // Wait for one render-thread tick — render thread runs orig render_callback
+    // (clears real[0x7EFE]) + v2_render_callback (clears shadow[0x7EFE]) back-to-back.
+    // Without this wait, v2 game thread (which doesn't block in signal_phase like
+    // orig main does) may run trace_compare before render thread cycles, catching
+    // shadow[0x7EFE]=4 while real was already cleared during orig's prior signal
+    // blocking. Wait ensures both real and shadow are in same post-cycle state.
+    {
+        extern std::atomic<uint64_t> v2_render_tick;
+        extern std::condition_variable v2_render_tick_cv;
+        extern std::mutex v2_render_tick_mutex;
+        uint64_t start_tick = v2_render_tick.load(std::memory_order_acquire);
+        std::unique_lock<std::mutex> lk(v2_render_tick_mutex);
+        v2_render_tick_cv.wait_for(lk, std::chrono::milliseconds(50), [&]{
+            return v2_render_tick.load(std::memory_order_acquire) > start_tick;
+        });
+    }
     // Check 0x077C before and after post_vm
     auto chk = [](const char* fn) {
         if (!v2_vm_real_ds_ptr) return;
@@ -17644,10 +17709,48 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
                 *(uint16_t*)(s + 0x03BA) = ax;
             }
-            // CALL sub_10138: transition check
+            // CALL sub_10138 (orig line 1113): mirror, line-by-line per orig prefix.
+            // Orig sub_10138 (eips 0x0138..0x014A):
+            //   ax = word_28814
+            //   test ax, 4  → JNZ loc_10164    ; bit 2 (mask 4) — VIKING SWITCH (priority 1)
+            //   test ax, 1  → JNZ loc_10151    ; bit 0 (mask 1) — TRANSITION (priority 2)
+            //   test ax, 2  → JNZ loc_1014b    ; bit 1 (mask 2) — SPECIAL TRANS (priority 3)
+            //   retn
+            // loc_10164: AND word_28814, 0FFFBh ; clear bit 2 → fall to loc_10169 spin loop
+            //            loc_10169: spin sub_12352 + sub_101be + render until 0xC0C0 input
+            //            loc_10191: JMP sub_12352 (one final input read) → return.
+            // loc_10151: word_28814 = 0; sub_1774f; INC word_2880F; sub_14207; JMP sub_11080.
+            // loc_1014b: word_2AAA9 = 0x25; fall to loc_10151.
+            //
+            // v2 mirror semantics:
+            //   bit 4: AND ~4 on shadow (matches loc_10164). Spin loc_10169 mirrored
+            //          via V2_PHASE_VIKING_SWITCH_LOOP barrier (signaled per-iter from
+            //          orig main thread inside its own loc_10169). After AND, continue
+            //          sub_1086f loop (matches orig sub_10138 returning normally after
+            //          loc_10191 → JMP sub_12352).
+            //   bit 0/1: orig JMP sub_11080 (level loader, no return). v2 mirrors orig
+            //          state changes (word_28814=0, word_2AAA9=0x25 if bit 1) and breaks
+            //          sub_1086f loop (no return semantics). Full transition runs in
+            //          v2_phase_pre_vm of next frame via the buttons & 3 path.
             {
                 uint16_t btns = *(uint16_t*)(s + 0x0334);
-                if (btns & 0x7) break;
+                if (btns & 4) {                            // test ax, 4; jnz loc_10164
+                    *(uint16_t*)(s + 0x0334) &= 0xFFFB;    // AND word_28814, 0FFFBh
+                    // fall through to next sub_1086f iter (loc_10169 spin handled
+                    // via V2_PHASE_VIKING_SWITCH_LOOP barrier; orig sub_10138 returns
+                    // here after loc_10191 → JMP sub_12352)
+                } else if (btns & 1) {                     // test ax, 1; jnz loc_10151
+                    // orig loc_10151: clear word_28814, sub_1774f, INC, sub_14207, JMP sub_11080
+                    v2_run_transition_chain(s);
+                    break; // sub_11080 → sub_115d2 → JMP sub_12345 → RETN to game loop;
+                           // sub_10138 effectively doesn't return to sub_1086f normally
+                } else if (btns & 2) {                     // test ax, 2; jnz loc_1014b
+                    *(uint16_t*)(s + 0x25C9) = 0x25;       // mov word_2AAA9, 25h (loc_1014b)
+                    // fall through to loc_10151 → full transition chain
+                    v2_run_transition_chain(s);
+                    break;
+                }
+                // else: no bits → retn (continue sub_1086f loop)
             }
         }
         // loc_108a5: clear pointers + page flip + frame sync
@@ -17704,6 +17807,121 @@ void v2_phase_frame_end(uint16_t ds_val) {
 }
 
 // ============================================================================
+// V2 blocking-loop mirror functions
+// ----------------------------------------------------------------------------
+// orig has 4 blocking loops (loc_10169 viking switch, loc_11c1f pause,
+// loc_104c3 transition text, sub_1041c password) which spin reading input
+// until user makes a choice. Each iteration of the orig loop calls one of
+// these mirror functions via v2_signal_phase, so v2 stays in lock-step:
+// each signal = one full iteration of the loop body.
+//
+// Per-iteration sync model:
+//   1. orig calls sub_12352 → updates v2_input_snapshot atomic
+//   2. orig calls v2_signal_phase(LOOP_PHASE) — synchronous, blocks until v2 done
+//   3. v2 mirror reads snapshot, runs its own sub_12352 logic (sets shadow input),
+//      checks exit condition, runs palette+render if not exiting
+//   4. signal returns; orig continues with its own test/palette/render
+//   5. both end the iteration with same DS state → verify clean
+//
+// In V2_ONLY mode there is no orig signaling — the equivalent v2 pre_vm code
+// drives its own spin loop calling these helpers (TODO: wire up V2_ONLY path).
+// ============================================================================
+
+// Forward decls used by mirrors
+static void v2_sub_16775(uint8_t* s);
+static void v2_sub_10130(uint8_t* s);
+static void v2_sub_101be(uint8_t* s);
+static void v2_sub_108c8(uint8_t* s);
+
+// Helper: replicate orig sub_12352 input read into shadow DS.
+// orig sub_12352:
+//   ax = 0
+//   if [86DA] != 0: call sub_12ef8 (replay), ax = [86DC]
+//   ax |= [86DE]                         // accumulated transitions
+//   ax |= input_keys / v2_input_snapshot // SDL keyboard state
+//   ds:[03B6] = ax                       // current input
+//   ds:[03B8] = (ax ^ ds:[03BA]) & ax    // newly pressed (edge-trigger)
+//   ds:[03BA] = ax                       // previous frame
+static void v2_sub_12352_iter(uint8_t* shadow) {
+    extern uint16_t v2_input_snapshot;
+    uint16_t ax = 0;
+    if (*(uint16_t*)(shadow + 0x86DA) != 0)
+        ax = *(uint16_t*)(shadow + 0x86DC);
+    ax |= *(uint16_t*)(shadow + 0x86DE);
+    ax |= v2_input_snapshot;
+    *(uint16_t*)(shadow + 0x03B6) = ax;
+    uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
+    *(uint16_t*)(shadow + 0x03B8) = (ax ^ prev) & ax;
+    *(uint16_t*)(shadow + 0x03BA) = ax;
+}
+
+// V2_PHASE_VIKING_SWITCH_LOOP handler — one iteration of orig sub_10138 loc_10169.
+// orig body (eip 0x0169..0x018F):
+//   sub_12352
+//   test word_28898, 0xC0C0   ; if any bit set → exit loop
+//   jnz loc_10191
+//   sub_101be                  ; palette anim DEC
+//   sub_16775; sub_10130; sub_108c8   ; sub-frame 1
+//   sub_16775; sub_10130; sub_108c8   ; sub-frame 2
+//   sub_16775; sub_10130              ; sub-frame 3 (no sub_108c8 on third)
+//   jmp loc_10169
+//
+// The AND ~4 from loc_10164 is done idempotently here to handle V2_ONLY entry
+// (where pre_vm doesn't pre-clear the bit).
+void v2_run_viking_switch_loop(uint8_t* shadow) {
+    // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
+    *(uint16_t*)(shadow + 0x0334) &= 0xFFFB;
+
+    // sub_12352: input
+    v2_sub_12352_iter(shadow);
+
+    // test word_28898 (DS:0x03B8 = ds_seg + 0x28898 - 0x284E0 = 0x3B8) & 0xC0C0
+    if (*(uint16_t*)(shadow + 0x3B8) & 0xC0C0) {
+        // loc_10191: exit loop. orig does JMP sub_12352 (one more input read).
+        v2_sub_12352_iter(shadow);
+        return;
+    }
+
+    // sub_101be: palette animation DEC pass (writes ds:[7EFE] = 2 if loop ran)
+    v2_sub_101be(shadow);
+
+    // 3× sub-frame. orig (eips 0x0177..0x018C) is asymmetric:
+    //   eip 0x0177 sub_16775, 0x017A sub_10130, 0x017D sub_108c8
+    //   eip 0x0180 sub_16775, 0x0183 sub_10130, 0x0186 sub_108c8
+    //   eip 0x0189 sub_16775, 0x018C sub_10130    (no sub_108c8 in third!)
+    v2_sub_16775(shadow);  // sub-frame 1
+    v2_sub_10130(shadow);
+    v2_sub_108c8(shadow);
+    v2_sub_16775(shadow);  // sub-frame 2
+    v2_sub_10130(shadow);
+    v2_sub_108c8(shadow);
+    v2_sub_16775(shadow);  // sub-frame 3 (audio omitted to match orig)
+    v2_sub_10130(shadow);
+}
+
+// V2_PHASE_PAUSE_LOOP handler — Phase 3 (TODO: full implementation).
+// One iteration of orig sub_11ba5 loc_11c1f pause loop.
+void v2_run_pause_loop(uint8_t* shadow) {
+    // TODO: extract from existing v2_game_loop_pre_vm pause block.
+    // For now, just do input read so v2 doesn't desync.
+    v2_sub_12352_iter(shadow);
+}
+
+// V2_PHASE_TRANSITION_TEXT handler — Phase 4 (TODO).
+// One iteration of orig sub_104A1 loc_104C3 transition text scroll loop.
+void v2_run_transition_text_loop(uint8_t* shadow) {
+    // TODO: implement sub_104A1 mirror.
+    v2_sub_12352_iter(shadow);
+}
+
+// V2_PHASE_PASSWORD_PROMPT handler — Phase 5 (TODO).
+// orig sub_1041c password input.
+void v2_run_password_prompt(uint8_t* shadow) {
+    // TODO: implement sub_1041c mirror.
+    v2_sub_12352_iter(shadow);
+}
+
+// ============================================================================
 // V2 game thread — barrier-synchronized with original game loop.
 // v2 runs in its own thread. seg000 signals each phase via v2_signal_phase().
 // Both threads process the same phase simultaneously on different data.
@@ -17738,8 +17956,17 @@ static void v2_game_thread_func() {
         static const char* phase_names[] = {
             "FRAME_BEGIN", "PRE_VM", "VM", "POST_VM",
             "RENDER1", "POST_FLIP1", "RENDER2", "POST_FLIP2",
-            "RENDER3", "POST_FLIP3", "FRAME_END"
+            "RENDER3", "POST_FLIP3", "FRAME_END",
+            // Blocking phases:
+            "VIKING_SWITCH_LOOP", "PAUSE_LOOP",
+            "TRANSITION_TEXT", "PASSWORD_PROMPT"
         };
+        // Forward decls for blocking phase handlers (defined later in this file)
+        extern void v2_run_viking_switch_loop(uint8_t* shadow);
+        extern void v2_run_pause_loop(uint8_t* shadow);
+        extern void v2_run_transition_text_loop(uint8_t* shadow);
+        extern void v2_run_password_prompt(uint8_t* shadow);
+
         // Track for hang detector
         v2_current_phase.store(phase, std::memory_order_relaxed);
         v2_last_progress_ms.store(SDL_GetTicks(), std::memory_order_relaxed);
@@ -17755,9 +17982,17 @@ static void v2_game_thread_func() {
             case V2_PHASE_RENDER3:      v2_phase_render3(ds); break;
             case V2_PHASE_POST_FLIP3:   v2_phase_post_flip3(ds); break;
             case V2_PHASE_FRAME_END:    v2_phase_frame_end(ds); break;
+            // === Blocking phase handlers ===
+            // Each runs FULL blocking loop in v2 thread, parallel to orig's own
+            // blocking loop. Both spin reading input from shared SDL state, both
+            // exit on same input. Verify clean (input_keys/input_keys_v2 atomic).
+            case V2_PHASE_VIKING_SWITCH_LOOP: v2_run_viking_switch_loop(v2_vm_shadow_ds); break;
+            case V2_PHASE_PAUSE_LOOP:         v2_run_pause_loop(v2_vm_shadow_ds); break;
+            case V2_PHASE_TRANSITION_TEXT:    v2_run_transition_text_loop(v2_vm_shadow_ds); break;
+            case V2_PHASE_PASSWORD_PROMPT:    v2_run_password_prompt(v2_vm_shadow_ds); break;
         }
-        // Universal per-phase DS verify after each phase completes
-        if (phase >= 0 && phase <= 10)
+        // Universal per-phase DS verify after each phase completes (skip blocking phases)
+        if (phase >= 0 && phase <= V2_PHASE_FRAME_END)
             v2_phase_verify(phase_names[phase]);
         if (phase == V2_PHASE_FRAME_END)
             v2_phase_verify_frame++;
