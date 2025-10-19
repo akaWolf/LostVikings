@@ -90,6 +90,9 @@ static std::atomic<int> g_audit_diverges{0};       // total divergences detected
 // Hash inputs: (seq, obj, frame, fire_idx). fire_idx is the Nth op_sound
 // fired for this obj this frame (per-thread counter, reset on FRAME_BEGIN).
 // Range 1..0xFFFE (0 + 0xFFFF reserved).
+// Inputs: seq, obj, frame, fire_idx. Frame entropy works because counter is
+// incremented ONCE per outer frame at FRAME_BEGIN barrier — both orig and v2
+// see same value throughout the entire frame (incl. sub_115d2 sub-frames).
 uint16_t v2_audit_compute_handle(uint16_t seq, uint16_t obj, int frame, int fire_idx) {
     // Mix bits using xorshift-like spread.
     uint32_t h = (uint32_t)(seq & 0xFF);
@@ -119,15 +122,18 @@ static int g_audit_orig_music_count = 0;
 static int g_audit_v2_music_count = 0;
 
 void v2_audit_reset_fire_counters() {
+    // Reset SFX per-obj fire counters at FRAME_BEGIN. Frame entropy (in hash)
+    // disambiguates SFX across frames, so counter only needs to disambiguate
+    // multiple fires within same frame for same obj. Both orig+v2 reset in
+    // same FRAME_BEGIN barrier handler → same starting point.
     for (int i = 0; i < 256; i++) {
         g_audit_orig_fire_count[i] = 0;
         g_audit_v2_fire_count[i] = 0;
     }
-    // NOTE: music counters NOT reset per-frame. In default mode orig and v2
-    // may fire sub_176bd in different frames (timing gap) — per-frame reset
-    // would cause hash divergence. Monotonic counter keeps orig+v2 in sync as
-    // long as both fire the same number of times. Wraparound at 65k calls
-    // is unreachable in practice (~22 days at 30s/track).
+    // NOTE: music counter NOT reset (still monotonic). Music fires once per
+    // track change — counter wrap at 65k calls is unreachable in practice.
+    // Frame entropy not added to music hash because music has no per-obj
+    // fire_idx to disambiguate within a frame; monotonic counter is sufficient.
 }
 
 // Get next fire_idx for orig source (per-obj) and increment.
@@ -164,7 +170,16 @@ uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx) {
     return r;
 }
 
+// True while inside v2_vm_replay_anim_cmd — suppresses side effects from v2
+// handlers via fx:: wrappers. Side-effect impls themselves don't know about
+// this flag — only fx:: wrappers route through it. This keeps verify concerns
+// out of production code (sub_177bb_v2, sub_176bd_v2, etc.).
+thread_local bool v2_in_replay_anim = false;
+
 // Push event into ring + bump per-frame counter. Thread-safe (lock).
+// "Production" impl — no replay knowledge. v2 callers MUST go through
+// fx::log_sfx wrapper. orig SFX callers (vikings.exe_seg000.cpp:16079) call
+// directly with source=0 — they're never in replay context anyway.
 void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj) {
     extern int v2_dbg_pre_vm_iter;
     SfxAuditEvent e;
@@ -433,6 +448,7 @@ static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out
 // Symmetric with sub_177bb pattern: V2_ONLY → real producer; default mode →
 // muted reservation. Both modes use deterministic handle so orig (real) and v2
 // (muted) reserve slots with matching handles → ds:0x990C matches in shadow.
+// "Production" impl — no replay knowledge. v2 callers go through fx::play_music.
 static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -468,6 +484,52 @@ static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
 // Returns the deterministic handle.
 extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
                                                      uint16_t handle, bool mute);
+// "Production" impl — no replay knowledge. v2 callers go through fx::play_sfx.
+static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq);
+// Forward decl — fx::stop_all_sfx wraps this (full impl after fx:: namespace).
+static void v2_sub_17912_v2(uint8_t* s);
+
+// =====================================================================
+// fx:: — single point of replay-aware side-effect dispatch for v2.
+// All v2 code paths that produce side effects (audio, audit, music) MUST
+// route through fx:: wrappers. Side-effect impls (v2_sub_177bb_v2 etc.) have
+// NO replay knowledge — that concern lives only here. Adding a new side
+// effect = add a new fx:: wrapper that gates and delegates to impl.
+//
+// Replay context (v2_in_replay_anim=true) is set by v2_vm_replay_anim_cmd
+// when running v2 handlers for verification. Side effects are skipped because:
+//   - For audio: orig already produces the real audio; replay is for DS
+//     verification only, not a second playback.
+//   - For audit: counters would double-increment, breaking deterministic
+//     handle hashes (caused AUDIT-FRAME-DIVERGE divergence in task #103).
+// =====================================================================
+namespace fx {
+    // Full: play SFX + audit log. Returns deterministic handle (0 if skipped).
+    // Used by op_sound and anim cmd 0x77B2 — sites that mirror orig sub_177bb
+    // directly (orig also fires audit at that site).
+    inline int play_sfx(uint8_t* shadow, uint16_t seq, uint16_t obj) {
+        if (v2_in_replay_anim) return 0;
+        int h = v2_sub_177bb_v2(shadow, seq);
+        v2_audit_log_sfx(1 /* v2 */, seq, obj);
+        return h;
+    }
+    // SFX only — no audit log. Used by mirror call sites (inventory/pause/
+    // transition) where orig calls sub_177bb without injecting audit at that
+    // call site (audit is hooked deeper in orig sub_177bb itself).
+    inline void play_sfx_no_audit(uint8_t* shadow, uint16_t seq) {
+        if (v2_in_replay_anim) return;
+        v2_sub_177bb_v2(shadow, seq);
+    }
+    inline void play_music(uint8_t* shadow, uint16_t bx_seg) {
+        if (v2_in_replay_anim) return;
+        v2_sub_176bd_v2(shadow, bx_seg);
+    }
+    inline void stop_all_sfx(uint8_t* shadow) {
+        if (v2_in_replay_anim) return;
+        v2_sub_17912_v2(shadow);
+    }
+}
+
 static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq) {
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6D);
     uint32_t size = 0;
@@ -507,7 +569,7 @@ static void v2_sub_178d6_v2(uint8_t* s) {
 #ifdef V2_ONLY
     if (*(const uint16_t*)(s + 0x302) != 0) return;  // music muted/off
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6B);
-    v2_sub_176bd_v2(s, bx_seg);
+    fx::play_music(s, bx_seg);
 #else
     (void)s;
 #endif
@@ -525,6 +587,7 @@ static void v2_sub_178d6_v2(uint8_t* s) {
 //       AIL_stop_sequence(handle)   → SDL: stop_xmidi_external(handle)
 //       AIL_release_sequence(handle) → SDL: no-op (stop already releases)
 //       [si-66F4] = FFFF; [si-66EA] = FFFF
+// "Production" impl — no replay knowledge. v2 callers go through fx::stop_all_sfx.
 static void v2_sub_17912_v2(uint8_t* s) {
     if (*(uint16_t*)(s + 0x302) != 0 && *(uint16_t*)(s + 0x304) != 0) return;
     uint16_t si = (s[0x25B9] == 1) ? 2 : 0;
@@ -1362,7 +1425,7 @@ static void v2_sub_108c8(uint8_t* s) {
         // (orig fall-through path at eip 0x947). v2_sub_176bd_v2 handles SDL replacement
         // and updates v2_id_music + dontstop.
         uint16_t bx_seg = *(uint16_t*)(s + 0x2E6B);  // word_2B34B at ds:0x2E6B
-        v2_sub_176bd_v2(s, bx_seg);
+        fx::play_music(s, bx_seg);
     }
 }
 
@@ -3779,7 +3842,7 @@ static void v2_sub_17561(uint8_t* s) {
             // Decompress chunk 0x215 → sound data segment ds:2E6B
             // For v2: chunk already loaded by v2_sub_12ab8 (sound chunk path)
             // Mirror orig sub_176bd(ax=0, bx=ds:2E6B, si=0) — play music
-            v2_sub_176bd_v2(s, *(uint16_t*)(s + 0x2E6B));
+            fx::play_music(s, *(uint16_t*)(s + 0x2E6B));
             *(uint16_t*)(s + 0xA378) = 1;
         }
     }
@@ -3933,7 +3996,7 @@ static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
             if (*(uint16_t*)(s + 0x302) & 0x8000) break;
             v2_sub_1775d_helper(s);
             if (*(uint16_t*)(s + 0x302) == 0) {
-                v2_sub_176bd_v2(s, *(uint16_t*)(s + 0x2E6B));
+                fx::play_music(s, *(uint16_t*)(s + 0x2E6B));
             }
             break;
         case 1:  // NOP (locret_177b1)
@@ -4008,7 +4071,7 @@ static void v2_sub_11080(uint8_t* s) {
     // 100% mirror of orig (vikings.exe_seg000.cpp:16304-16350) — per-slot SDL
     // stop_xmidi_external(handle) + DS FFFF clear. Both orig and v2 now execute
     // the same path (m2c port early-RETN bypass removed in seg000).
-    v2_sub_17912_v2(s);
+    fx::stop_all_sfx(s);
     // sub_12816: clear UI glyph list
     v2_sub_12816(s);
 
@@ -5115,7 +5178,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
         // sub_1047C: stop music + display text
         // Mirror orig sub_1047c eip 0x047C-0x047F: MOV ax, 0; CALL sub_177bb
-        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 0);
+        if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 0);
         // OUT(0x3C8, 3); OUT(0x3C9, 0x3F×3) — VGA: color 3 to white
         // loc_124A9(ax=2, si=0xF, di=0xC): box + text ("PAUSE" etc)
         v2_sub_12515(shadow, 2);
@@ -5488,7 +5551,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // Then blocking render loop until unpause — for v2: DS writes only, no blocking.
     if ((shadow[0x25CF] & 1) && (*(uint16_t*)(shadow + 0x3B8) & 0x2000)) {
         // Mirror orig sub_11ba5 loc_11bb7 eip 0x1BB7-0x1BBA: MOV ax, 0; CALL sub_177bb
-        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 0);
+        if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 0);
         *(uint16_t*)(shadow + 0x0445) = 0x11;   // word_28925 (0x28925 - 0x284E0 = 0x445)
         *(uint16_t*)(shadow + 0x0447) = 1;       // word_28927 (0x28927 - 0x284E0 = 0x447)
         uint16_t di_p = *(uint16_t*)(shadow + 0x3C2);
@@ -5619,17 +5682,17 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     uint16_t item = *(uint16_t*)(shadow + 0x441);
                                     if (shadow[(uint16_t)(item + 0x8592)] == 0) {
                                         // Mirror orig sub_11f93 eip 0x1FA9-0x1FAC: MOV ax, 3; CALL sub_177bb
-                                        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 3);
+                                        if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 3);
                                         f93_carry = true;
                                     } else {
                                         // Mirror orig sub_11f93 loc_11fb1 eip 0x1FB1-0x1FB4: MOV ax, 4; CALL sub_177bb
-                                        if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 4);
+                                        if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 4);
                                         // sub_1183d(di=0x18, ax=0x17) — VGA only
                                     }
                                 } else {
                                     // Place item into slot
                                     // Mirror orig sub_11f93 loc_11fc2 eip 0x1FC2-0x1FC5: MOV ax, 2; CALL sub_177bb
-                                    if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 2);
+                                    if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 2);
                                     uint16_t ax = *(uint16_t*)(shadow + 0x441);
                                     *(uint16_t*)(shadow + di + 0x3E4) = ax; // [di+3E4] = item
                                     uint16_t si = *(uint16_t*)(shadow + 0x443);
@@ -5872,7 +5935,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     *(uint16_t*)(shadow + 0x447) = 0; // word_28927 = browsing
                                     *(uint16_t*)(shadow + 0x445) = 9; // word_28925
                                     // Mirror orig sub_121b9 eip 0x21EF-0x21F2: MOV ax, 2; CALL sub_177bb
-                                    if (shadow[0x304] == 0) v2_sub_177bb_v2(shadow, 2);
+                                    if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 2);
                                 }
                             }
                             // sub_120D1
@@ -7941,11 +8004,8 @@ static void v2_vm_op_sound(V2VM& vm) {
                 v2_dbg_pre_vm_iter, v2_current_level, cur_obj, seq);
         return; // sound disabled
     }
-    // Audit log: orig has matching v2_audit_log_sfx call in seg000 sub_177bb.
-    v2_audit_log_sfx(1 /* v2 */, seq, cur_obj);
-    // v2_sub_177bb_v2 now uses deterministic handle (computed inside) and applies
-    // mute flag based on V2_ONLY ifdef. Returns the deterministic handle.
-    int handle = v2_sub_177bb_v2(v2_vm_shadow_ds, seq);
+    // Route through fx:: — audit log + sfx play, replay-aware gating.
+    int handle = fx::play_sfx(v2_vm_shadow_ds, seq, cur_obj);
     fprintf(stderr, "V2-SFX-REQ[f%d lv=%04X obj=%02X]: seq=%u det_handle=%04X 2E6D=%04X\n",
         v2_dbg_pre_vm_iter, v2_current_level, cur_obj, seq, (uint16_t)handle,
         *(uint16_t*)(v2_vm_shadow_ds + 0x2E6D));
@@ -12027,9 +12087,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             anim_bx += 2;
             uint16_t seq = ax_word & 0xFF;
             if (vm.ds_read(0x304) == 0) {  // mute check (mirror sub_177bb)
-                v2_sub_177bb_v2(vm.shadow, seq);
-                // Audit log: matches orig sub_177bb hook in seg000.cpp.
-                v2_audit_log_sfx(1 /* v2 */, seq, vm.global_r(0x42));
+                fx::play_sfx(vm.shadow, seq, vm.global_r(0x42));
             }
             return true;
         }
@@ -16102,9 +16160,12 @@ static void v2_check_117D(const char* where, uint8_t* s, uint8_t* r) {
 }
 void v2_phase_frame_begin(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
-    // SFX audit: reset per-obj fire counters at frame boundary so deterministic
-    // handle computation works correctly. Both orig (main thread) and v2 (game
-    // thread) call v2_audit_*_next_fire_idx — same frame=same starting idx.
+    // Increment frame counter at FRAME_BEGIN barrier — single sync point both
+    // orig and v2 cross together. Counter stays constant for entire outer
+    // frame (incl. sub_115d2 internal sub-frames where orig doesn't signal
+    // intermediate phases). Both sides read same value at SFX fire moment →
+    // deterministic handle hash with frame entropy works correctly.
+    v2_dbg_pre_vm_iter++;
     v2_audit_reset_fire_counters();
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
     // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.
@@ -16168,7 +16229,9 @@ static void v2_sub_11b0b_per_frame(uint8_t* s) {
 
 void v2_phase_pre_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    extern int v2_dbg_pre_vm_iter; v2_dbg_pre_vm_iter++;
+    // NOTE: counter increment moved to v2_phase_frame_begin (FRAME_BEGIN barrier)
+    // so that orig+v2 see same v2_dbg_pre_vm_iter throughout the entire outer
+    // frame — including sub_115d2 internal sub-frames where orig doesn't signal.
     v2_watch_25AD("PRE-entry");
     v2_watch_334("PRE-entry");
     // PSNAP compare: at v2_phase_pre_vm entry, v2 shadow should match orig's
@@ -17240,7 +17303,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 // Orig shows "Level Complete" text, waits for button, renders 3 full passes.
                 // DS side effects: sub_165aa rotation (3 calls), text glyphs, sub_1DD9C mode bytes.
                 // Mirror orig sub_103ca eip 0x3CA-0x3CD: MOV ax, 0; CALL sub_177bb (stop music)
-                if (s[0x304] == 0) v2_sub_177bb_v2(s, 0);
+                if (s[0x304] == 0) fx::play_sfx_no_audit(s, 0);
                 // sub_103ca: full transition text. Verified with seg000 lines 533-556.
                 // 1. loc_124A9(ax=3, si=0xD, di=0xC): "Level Complete" text
                 {
@@ -18289,8 +18352,13 @@ void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_pt
     uint16_t v2_anim_bx = bx_before;
 
     // Run v2 handler via switch dispatch
-    // (calling the same switch as v2_vm_run_anim_frame but for just one cmd)
+    // (calling the same switch as v2_vm_run_anim_frame but for just one cmd).
+    // Side-effect functions (sfx, music, audit) auto-skip via v2_in_replay_anim
+    // gates inside their impls — see v2_audit_log_sfx / v2_sub_177bb_v2 / etc.
+    bool saved_replay = v2_in_replay_anim;
+    v2_in_replay_anim = true;
     v2_vm_exec_anim_cmd(vm, handler, v2_anim_bx, cmd);
+    v2_in_replay_anim = saved_replay;
 
     // Compare v2 result (anim_replay_shadow) with original's ds_after
     static int anim_diff_count = 0;
