@@ -17675,16 +17675,18 @@ void v2_phase_post_flip3(uint16_t ds_val) {
             } else if (cmd_type == 2) {
                 // off_2B086[2] = loc_12758: full screen text clear. bx += 2.
                 // Exact replica with all render passes (DS side effects).
+                // Each v2_sub_16775 mirrored with v2_swap_render_buf to match orig
+                // m2c port (seg000 line 3106 pattern: CALL sub_16775 + swap).
                 *(uint16_t*)(s + 0x9569) = 1;             // word_31A49 = 1
                 *(uint16_t*)(s + 0x98DC) = 0;             // word_31DBC = 0
                 // Conditional first render pass
                 if (s[0x25CF] & 0xE0) {
-                    v2_sub_16775(s);
+                    v2_sub_16775(s); v2_swap_render_buf();
                     v2_sub_10130(s);
                     v2_sub_1E0C7(s);
                 }
                 // Render pass 1
-                v2_sub_16775(s);
+                v2_sub_16775(s); v2_swap_render_buf();
                 v2_sub_10130(s);
                 v2_sub_1DE05(s);
                 v2_game_loop_post_render(s);              // sub_165aa + sub_16661
@@ -17693,14 +17695,14 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 v2_sub_1E0C7(s);
                 v2_draw_ui(v2_current_ds_val);
                 // Render pass 2
-                v2_sub_16775(s);
+                v2_sub_16775(s); v2_swap_render_buf();
                 v2_sub_10130(s);
                 v2_sub_1DE05(s);
                 v2_game_loop_post_render(s);
                 v2_sub_1DD9C(s);
                 v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
                 // sub_16775 + sub_10130
-                v2_sub_16775(s);
+                v2_sub_16775(s); v2_swap_render_buf();
                 v2_sub_10130(s);
                 // Cleanup
                 *(uint16_t*)(s + 0x9569) = 0;             // word_31A49 = 0
@@ -17715,6 +17717,9 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 bx_read += 2;
             }
             *(uint16_t*)(s + 0x2B64) = bx_read;
+            // Mirror orig sub_1086f eip 0x0898: `v2_draw_ui(ds); CALLF sub_1E0C7`.
+            // No swap here — orig m2c only swaps at sub_16775 sites.
+            v2_draw_ui(v2_current_ds_val);
             v2_sub_1E0C7(s);
             // CALL sub_12352: input processing (inside POST_FLIP3 sub_1086f)
             // Use v2_input_snapshot only — shadow[0x86DE] is not input_keys in m2c port
@@ -17776,7 +17781,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         // loc_108a5: clear pointers + page flip + frame sync
         *(uint16_t*)(s + 0x218F) = 0;                    // MOV word_2A66F, 0
         *(uint16_t*)(s + 0x2B64) = 0;                    // MOV word_2B044, 0
-        v2_sub_16775(s);                                  // CALL sub_16775
+        v2_sub_16775(s); v2_swap_render_buf();            // CALL sub_16775 + swap (orig m2c line 3106)
         v2_sub_10130(s);                                  // sub_10130: VGA vsync wait
     }
 }
