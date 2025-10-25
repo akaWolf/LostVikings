@@ -2090,13 +2090,9 @@ cs=0x1a2;eip=0x0000d8; 	J(CALL(sub_16775,0));	// 111 call    sub_16775 ;~ 01A2:0
 cs=0x1a2;eip=0x0000db; 	X(MOV(word_30c14, 0));	// 112 mov     word_30C14, 0 ;~ 01A2:00DB
 cs=0x1a2;eip=0x0000e1; 	J(CALL(sub_108c8,0));	// 113 call    sub_108C8 ;~ 01A2:00E1
 cs=0x1a2;eip=0x0000e4; 	J(CALL(sub_10350,0));	// 114 call    sub_10350 ;~ 01A2:00E4
-	// Signal v2 mirror to process sub_1086f on shadow BEFORE orig does. This
-	// way orig's m2c-injected `v2_draw_ui(ds)` at eip 0x898 inside sub_1086f
-	// reads the freshly-populated shadow glyph buffer (with dialog text), so
-	// v2_render_buf gets the dialog and v2_swap_render_buf at orig sub_16775
-	// site pushes it to v2_display_buf. Without this, shadow stays empty
-	// during orig's read → v2 window misses dialogs.
-	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PRE_SUB_1086F, ds);
+	// (signal moved INSIDE sub_1086f: per-cmd barrier — see eip 0x894 below.
+	// Old single drain at eip 0xE5 ran ahead of orig viking switch wait loops
+	// → v2 reached final empty glyph buffer while orig was still showing text1)
 cs=0x1a2;eip=0x0000e7; 	J(CALL(sub_1086f,0));	// 115 call    sub_1086F ;~ 01A2:00E7
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(9); /* POST_FLIP3_END */ }
 	{
@@ -2231,7 +2227,14 @@ ret_1a2_135:
  { extern std::atomic<int64_t> v2_dbg_sub10130_spins;
    if (word_3287c >= 1) v2_dbg_sub10130_spins++;
    else v2_dbg_sub10130_spins++; /* track every entry */ }
+ // vsync pacing: orig spec = 16ms (1 frame @ 60Hz). Lowered to 4ms for default
+ // mode speed (≈80 fps game updates, render thread @ ~67Hz still picks up
+ // every other frame → smooth). V2_ONLY keeps original 16ms timing.
+#ifdef V2_ONLY
  std::this_thread::sleep_for(std::chrono::milliseconds(16));
+#else
+ std::this_thread::sleep_for(std::chrono::milliseconds(4));
+#endif
  if (word_3287c >= 1) { sub_1797b(0, _state); }   // DEC + palette dispatch (game thread)
 cs=0x1a2;eip=0x000135; 	J(JGE(sub_10130));	// 156 jge     short sub_10130 ;~ 01A2:0135
  { extern std::atomic<int64_t> v2_dbg_sub10130_exits; v2_dbg_sub10130_exits++; }
@@ -3118,16 +3121,29 @@ sub_1086f:
 cs=0x1a2;eip=0x00086f; 	T(MOV(bx, word_2b044));	// 1101 mov     bx, word_2B044 ;~ 01A2:086F
 ret_1a2_873:
 	// 4472
+	// PER-ITER barrier: signals BEFORE each cmp. v2 mirror runs once per signal:
+	// - if shadow queue non-empty: process ONE cmd (lockstep with orig dispatch below)
+	// - if shadow queue empty: do loc_108a5 cleanup (reset pointers + sub_16775 + sub_10130)
+	// Orig's sub_10138 (after dispatch) may block in viking switch wait — v2 doesn't
+	// progress until next iter. Both threads see same number of signals as cmds + 1.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PRE_SUB_1086F, ds);
 cs=0x1a2;eip=0x000873; 	T(CMP(bx, word_2a66f));	// 1102 cmp     bx, word_2A66F ;~ 01A2:0873
+{ static bool _table_dumped=false; if(!_table_dumped && bx!=word_2a66f) { _table_dumped=true;
+  fprintf(stderr,"ORIG-1086f-TABLE off_2b086 (ds:0x2BA6) entries:\n");
+  for(int i=0;i<16;i++) fprintf(stderr,"  cmd=0x%02X handler_eip=0x%04X\n",i*2,*(dw*)(raddr(ds,0x2BA6+i*2))); } }
 { if(bx!=word_2a66f) { uint16_t cmd=*(dw*)(raddr(ds,bx+0x1DA7));
-  fprintf(stderr,"ORIG-1086f[lv=%04X]: rd=%04X wr=%04X cmd=%d w34=%04X\n",*(dw*)(raddr(ds,0x25AD)),bx,word_2a66f,cmd,*(dw*)(raddr(ds,0x34))); } }
+  fprintf(stderr,"ORIG-1086f[lv=%04X]: rd=%04X wr=%04X cmd=%d w34=%04X | data=",*(dw*)(raddr(ds,0x25AD)),bx,word_2a66f,cmd,*(dw*)(raddr(ds,0x34)));
+  for(int i=0;i<5;i++) fprintf(stderr," %04X",*(dw*)(raddr(ds,bx+0x1DA9+i*2)));
+  fprintf(stderr,"\n"); } }
 cs=0x1a2;eip=0x000877; 	J(JZ(loc_108a5));	// 1103 jz      short loc_108A5 ;~ 01A2:0877
 cs=0x1a2;eip=0x000879; 	T(MOV(si, word_288a2));	// 1104 mov     si, word_288A2 ;~ 01A2:0879
 cs=0x1a2;eip=0x00087d; 	T(MOV(di, *(dw*)(raddr(ds,si+0x1A85))));	// 1105 mov     di, [si+1A85h] ;~ 01A2:087D
 cs=0x1a2;eip=0x000881; 	X(AND(*(dw*)(raddr(ds,di+0x44D)), 0x0DFFF));	// 1106 and     word ptr [di+44Dh], 0DFFFh ;~ 01A2:0881
 cs=0x1a2;eip=0x000887; 	X(MOV(*(raddr(ds,di+0x114D)), 2));	// 1107 mov     byte ptr [di+114Dh], 2 ;~ 01A2:0887
 cs=0x1a2;eip=0x00088c; 	T(MOV(si, *(dw*)(raddr(ds,bx+0x1DA7))));	// 1108 mov     si, [bx+1DA7h] ;~ 01A2:088C
+{ uint16_t bx_before=bx; uint16_t cmd_si=si;
 cs=0x1a2;eip=0x000890; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_2b086)+si)));	// 1109 call    off_2B086[si] ;~ 01A2:0890
+  fprintf(stderr,"ORIG-1086f-CALL: cmd=0x%02X handler=0x%04X bx_before=%04X bx_after=%04X delta=%d\n",cmd_si,*(dw*)(raddr(ds,0x2BA6+cmd_si)),bx_before,bx,(int)((int16_t)bx-(int16_t)bx_before)); }
 cs=0x1a2;eip=0x000894; 	X(MOV(word_2b044, bx));	// 1110 mov     word_2B044, bx ;~ 01A2:0894
 
 cs=0x1a2;eip=0x000898; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 1111 call    sub_1E0C7 ;~ 01A2:0898

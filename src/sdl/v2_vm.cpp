@@ -1312,22 +1312,25 @@ static void v2_sub_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di) {
 // counts → forced 0xA39C / 0x7EFE into v2_ds_hash_skip.
 //
 // Fix: render thread no longer touches DS. v2_sub_10130 (this function)
-// sleeps one vsync (~16ms) and then performs DEC + dispatch on shadow,
-// same as orig sub_10130 m2c does on real. Each game thread mutates its
-// own DS only — orig writes match orig DECs 1:1, v2 mirror writes match
-// v2 mirror DECs 1:1 → snapshots agree byte-for-byte. Game pacing stays
-// ~60 FPS because game code calls sub_10130 at every page-flip site.
+// sleeps one vsync (~16ms) and then calls v2_render_callback, which is
+// the v2 mirror of orig sub_1797b (DEC word_3287c + palette dispatch on
+// shadow). This mirrors orig sub_10130 m2c calling sub_1797b on real.
+// Each game thread mutates its own DS only — orig writes match orig
+// DECs 1:1, v2 mirror writes match v2 mirror DECs 1:1 → snapshots agree
+// byte-for-byte. Game pacing stays ~60 FPS because game code calls
+// sub_10130 at every page-flip site.
 // ============================================================================
+extern void v2_render_callback();  // v2 mirror of sub_1797b (defined below)
 static void v2_sub_10130(uint8_t* s) {
     extern bool need_quit;
     while ((int16_t)*(uint16_t*)(s + 0xA39C) >= 1) {
         if (need_quit) return;
-        SDL_Delay(16);  // one vsync tick
-        // Inline sub_1797b on shadow: DEC word_3287c + palette dispatch.
-        *(uint16_t*)(s + 0xA39C) -= 1;
-        uint16_t pal_mode = *(uint16_t*)(s + 0x7EFE);
-        if (pal_mode == 4) v2_sub_10fe6(s);
-        else if (pal_mode == 2) v2_sub_10ffc(s);
+#ifdef V2_ONLY
+        SDL_Delay(16);                // vsync 60Hz pacing for interactive
+#else
+        SDL_Delay(4);                 // default mode: ~80 fps, faster verify
+#endif
+        v2_render_callback();         // mirrors orig sub_10130 → sub_1797b call
     }
 }
 
@@ -4830,9 +4833,13 @@ static void v2_sub_11080(uint8_t* s) {
         v2_sub_10f03(s); // sub_10f03: palette shading → ds:0x8202
         *(uint16_t*)(s + 0x7EFE) = 4;       // word_303DE = 4 (request palette write)
         *(uint16_t*)(s + 0x7F00) = 0x8202;  // word_303E0
-        // sub_16775: render + palette write + vsync
-        v2_do_render_and_swap();
-        v2_sub_10fe6(s); // sub_10fe6: palette → VGA DAC, word_303DE = 0
+        // Mirror orig sub_10f5d (seg000 eip 0xF7D..0xF80):
+        //   CALL sub_16775 ; page flip (sets shadow[0xA39C]=1)
+        //   CALL sub_10130 ; vsync wait — DECs 0xA39C to 0 AND dispatches palette
+        // Previously used v2_do_render_and_swap + v2_sub_10fe6, which skipped the
+        // DEC, leaving shadow[0xA39C]=1 while orig real[0xA39C]=0 → 1-byte diff.
+        v2_sub_16775(s);
+        v2_sub_10130(s);
     }
     // After fade-in: clear shade, set normal palette mode
     s[0x0342] = 0;
@@ -5087,6 +5094,11 @@ void v2_vm_run_init(uint16_t ds_val) {
            *(uint16_t*)(v2_vm_shadow_ds + 0x2E67), *(uint16_t*)(v2_vm_shadow_ds + 0x2E61),
            *(uint16_t*)(v2_vm_shadow_ds + 0x2E69), *(uint16_t*)(v2_vm_shadow_ds + 0x2E77));
     v2_sub_11080(v2_vm_shadow_ds);
+    // Mirror orig seg000.cpp:1934 eip 0x18 (right after first CALL sub_11080):
+    //   MOV word_3287C, 1   ; arms vsync counter for first main-loop iteration
+    // Without this, shadow[0xA39C]=0 (last sub_10130 in fade-in DECd it) while
+    // real[0xA39C]=1 → 1-byte verify diff at frame 1.
+    *(uint16_t*)(v2_vm_shadow_ds + 0xA39C) = 1;
     printf("V2: v2_sub_11080 complete, level=%d\n", v2_current_level);
 }
 
@@ -5408,7 +5420,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
               else if (shadow[0x9181] != 0) { exit_ax = 0; pw_exit = true; }  // byte_31661 Y
               else if (shadow[0x919D] != 0) { exit_ax = 1; pw_exit = true; }  // byte_3167D N
             }
-            v2_do_render(); SDL_Delay(16);
+            v2_do_render();
+#ifdef V2_ONLY
+            SDL_Delay(16);  // pacing for V2_ONLY interactive; default mode = no pacing
+#endif
         }
         // After loop: sub_12352 (one more input read)
         { extern uint16_t v2_input_snapshot;
@@ -6163,7 +6178,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 
                 // Render + delay for v2 window
                 v2_do_render();
-                SDL_Delay(16);
+#ifdef V2_ONLY
+                SDL_Delay(16);  // pacing for V2_ONLY interactive; default mode = no pacing
+#endif
             }
 
             // sub_12199: exit cleanup. Verified with seg000 lines 4302-4317.
@@ -7848,6 +7865,13 @@ struct V2VM {
                       "V2-ERIK-WR[%d]: addr=%04X(%s) old=%04X new=%04X writer_obj=%02X pc=%04X\n",
                       _ew, addr, fname, *(uint16_t*)(shadow + addr), val, obj, pc);
                 }
+            }
+            // Trap cmd queue write pointer (ds:0x218F = word_2A66F)
+            if (addr == 0x218F && val != *(uint16_t*)(shadow + addr)) {
+                static int _tcq = 0; _tcq++;
+                if (_tcq <= 50) fprintf(stderr,
+                    "V2-CMDQ-WR[%d]: addr=218F old=%04X new=%04X obj=%02X pc=%04X lv=%04X\n",
+                    _tcq, *(uint16_t*)(shadow + addr), val, obj, pc, *(uint16_t*)(shadow + 0x25AD));
             }
             *(uint16_t*)(shadow + addr) = val;
         }
@@ -15486,6 +15510,11 @@ void v2_run_animation_vm(uint16_t ds_val) {
             printf("V2: level change %d → %d, running v2_sub_11080\n",
                    v2_current_level, cur_level);
             v2_sub_11080(v2_vm_shadow_ds);
+            // Mirror orig seg000.cpp:1934 eip 0x18 (right after CALL sub_11080):
+            //   MOV word_3287C, 1   ; arms vsync counter for first main-loop iteration
+            // Without this, shadow[0xA39C]=0 (last sub_10130 in fade-in DECd it) while
+            // real[0xA39C]=1 → 1-byte verify diff at frame 1.
+            *(uint16_t*)(v2_vm_shadow_ds + 0xA39C) = 1;
             v2_current_level = cur_level;
 #ifdef V2_RENDER_FROM_SHADOW
             v2_vm_in_frame = false;
@@ -16176,7 +16205,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         s[0x9181] |= sdl_spec_get(0x9181);  // SDL Y OR-in
                         if (s[0x9181] != 0) break; // byte_31661 Y
                         v2_do_render();
-                        SDL_Delay(16);
+#ifdef V2_ONLY
+                        SDL_Delay(16);  // pacing for V2_ONLY interactive; default mode = no pacing
+#endif
                     }
                     // loc_104f0: post-exit. Verified with seg000 lines 2477-2515.
                     // sub_12352 (final input read)
@@ -17649,12 +17680,27 @@ void v2_phase_post_flip3(uint16_t ds_val) {
             }
         }
     }
-    // sub_1086f mirror moved to v2_run_sub_1086f_mirror (called via
-    // V2_PHASE_PRE_SUB_1086F signal BEFORE orig sub_1086f at eip 0xE7).
-    // Earlier timing lets orig's m2c-injected v2_draw_ui inside sub_1086f
-    // (eip 0x898) read the freshly-populated shadow glyph buffer, so dialogs
-    // render correctly to v2_render_buf. Previously sub_1086f mirror ran
-    // here AFTER orig, so orig's v2_draw_ui saw stale (empty) shadow.
+    // sub_1086f (orig eip 0xE7): drives shadow cmd queue dispatch.
+    // Default mode: per-iter PRE_SUB_1086F barrier fires from orig sub_1086f
+    //   loop top (seg000.cpp eip 0x873), v2 mirror runs one iter at a time.
+    // V2_ONLY: orig main loop doesn't exist → mirror sub_1086f's outer loop
+    //   locally. Each iter calls v2_run_sub_1086f_mirror which does one cmd
+    //   dispatch OR final cleanup (mirrors orig loop+loc_108a5). Viking switch
+    //   wait (bit 4 case) is handled inside v2_run_sub_1086f_mirror under
+    //   #ifdef V2_ONLY (loops v2_run_viking_switch_loop until input).
+#ifdef V2_ONLY
+    {
+        extern void v2_run_sub_1086f_mirror(uint8_t*);  // forward decl (defined below)
+        extern bool need_quit;
+        while (!need_quit) {
+            uint16_t bx_read  = *(uint16_t*)(s + 0x2B64);
+            uint16_t bx_write = *(uint16_t*)(s + 0x218F);
+            bool was_empty = (bx_read == bx_write);
+            v2_run_sub_1086f_mirror(s);  // one cmd dispatch OR cleanup
+            if (was_empty) break;        // cleanup case → exit drain loop
+        }
+    }
+#endif
 }
 
 void v2_phase_frame_end(uint16_t ds_val) {
@@ -17805,126 +17851,152 @@ void v2_run_viking_switch_loop(uint8_t* shadow) {
     v2_sub_10130(shadow);
 }
 
-// V2_PHASE_PRE_SUB_1086F handler — runs v2 mirror of orig sub_1086f BEFORE
-// orig's m2c sub_1086f at eip 0xE7. This way orig's m2c-injected v2_draw_ui
-// (at eip 0x898 inside sub_1086f) reads SHADOW glyph buffer that v2 mirror
-// has already populated. Without this, orig's v2_draw_ui sees stale shadow
-// (still empty) → v2_render_buf misses dialog → v2 window shows no dialog.
-// Body extracted from v2_phase_post_flip3 — same logic, just earlier timing.
+// V2_PHASE_PRE_SUB_1086F handler — processes ONE shadow cmd in lockstep with
+// orig sub_1086f. orig signals AFTER its own dispatch (see seg000.cpp eip 0x894).
+// orig's sub_10138 (called same iter) may block in viking switch wait loop, so
+// v2 only progresses one cmd per signal — keeping v2 in visual sync with orig.
+// When shadow queue is drained (rd==wr), reset both pointers (mirrors orig
+// loc_108a5: word_2A66F=0, word_2B044=0) and do one final swap.
 void v2_run_sub_1086f_mirror(uint8_t* s) {
     uint16_t bx_read = *(uint16_t*)(s + 0x2B64);
     uint16_t bx_write = *(uint16_t*)(s + 0x218F);
-    while (bx_read != bx_write) {
-        uint16_t si_v = *(uint16_t*)(s + 0x3C2);
-        uint16_t di_v = *(uint16_t*)(s + si_v + 0x1A85);
-        *(uint16_t*)(s + di_v + 0x44D) &= 0xDFFF;
-        s[di_v + 0x114D] = 2;
+    if (bx_read == bx_write) {
+        // Drained — orig at loc_108a5: clear pointers + sub_16775 + sub_10130
+        *(uint16_t*)(s + 0x218F) = 0;
+        *(uint16_t*)(s + 0x2B64) = 0;
+        v2_sub_16775(s); v2_swap_render_buf();
+        v2_sub_10130(s);
+        return;
+    }
 
-        uint16_t cmd_type = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA7));
+    // Per-iter prelude: clear blink on viking sprite (orig eip 0x879..0x887)
+    uint16_t si_v = *(uint16_t*)(s + 0x3C2);
+    uint16_t di_v = *(uint16_t*)(s + si_v + 0x1A85);
+    *(uint16_t*)(s + di_v + 0x44D) &= 0xDFFF;
+    s[di_v + 0x114D] = 2;
 
-        if (cmd_type == 0) {
-            uint16_t ax_align = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
-            uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
-            uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
-            uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAF));
-            v2_sub_12529(s, bx_text);
-            v2_sub_12549(s, ax_align);
-            uint16_t save_si = si_pos, save_di = di_pos;
-            v2_sub_12388(s, si_pos, di_pos, (uint8_t)ax_align);
-            v2_loc_124c5(s, save_si + 1, save_di + 1, bx_text);
-            s[0x956B] = 1;
-            bx_read += 0x0A;
-        } else if (cmd_type == 0x0A) {
-            uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
-            uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
-            uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
-            *(uint16_t*)(s + 0x34) = 2;
-            v2_loc_124c5(s, si_pos, di_pos, bx_text);
-            s[0x956B] = 1;
-            bx_read += 0x08;
-        } else if (cmd_type == 6) {
-            uint16_t cx = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
-            cx <<= 1;
-            uint8_t r = (uint8_t)(cx & 0x3E); s[0x7F0B] = r;
-            cx >>= 5;
-            uint8_t g = (uint8_t)(cx & 0x3E); s[0x7F0C] = g;
-            cx >>= 5;
-            uint8_t b = (uint8_t)(cx & 0x3E); s[0x7F0D] = b;
-            bx_read += 4;
-        } else if (cmd_type == 8) {
-            uint8_t ch = (uint8_t)*(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
-            uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
-            uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
-            v2_sub_1241e(s, ch, si_pos, di_pos);
-            s[0x956B] = 1;
-            bx_read += 0x08;
-        } else if (cmd_type == 2) {
-            *(uint16_t*)(s + 0x9569) = 1;
-            *(uint16_t*)(s + 0x98DC) = 0;
-            if (s[0x25CF] & 0xE0) {
-                v2_sub_16775(s); v2_swap_render_buf();
-                v2_sub_10130(s);
-                v2_sub_1E0C7(s);
-            }
+    uint16_t cmd_type = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA7));
+    fprintf(stderr, "V2-1086f[lv=%04X]: rd=%04X wr=%04X cmd=%d\n",
+            *(uint16_t*)(s + 0x25AD), bx_read, bx_write, cmd_type);
+
+    // Dispatch one cmd (handlers verified line-by-line vs orig off_2b086 table)
+    if (cmd_type == 0) {
+        uint16_t ax_align = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
+        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
+        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
+        uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAF));
+        v2_sub_12529(s, bx_text);
+        v2_sub_12549(s, ax_align);
+        uint16_t save_si = si_pos, save_di = di_pos;
+        v2_sub_12388(s, si_pos, di_pos, (uint8_t)ax_align);
+        v2_loc_124c5(s, save_si + 1, save_di + 1, bx_text);
+        s[0x956B] = 1;
+        bx_read += 0x0A;
+    } else if (cmd_type == 0x0A) {
+        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
+        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
+        uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
+        *(uint16_t*)(s + 0x34) = 2;
+        v2_loc_124c5(s, si_pos, di_pos, bx_text);
+        s[0x956B] = 1;
+        bx_read += 0x08;
+    } else if (cmd_type == 6) {
+        uint16_t cx = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
+        cx <<= 1;
+        uint8_t r = (uint8_t)(cx & 0x3E); s[0x7F0B] = r;
+        cx >>= 5;
+        uint8_t g = (uint8_t)(cx & 0x3E); s[0x7F0C] = g;
+        cx >>= 5;
+        uint8_t b = (uint8_t)(cx & 0x3E); s[0x7F0D] = b;
+        bx_read += 4;
+    } else if (cmd_type == 8) {
+        uint8_t ch = (uint8_t)*(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
+        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
+        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
+        v2_sub_1241e(s, ch, si_pos, di_pos);
+        s[0x956B] = 1;
+        bx_read += 0x08;
+    } else if (cmd_type == 2) {
+        *(uint16_t*)(s + 0x9569) = 1;
+        *(uint16_t*)(s + 0x98DC) = 0;
+        if (s[0x25CF] & 0xE0) {
             v2_sub_16775(s); v2_swap_render_buf();
             v2_sub_10130(s);
-            v2_sub_1DE05(s);
-            v2_game_loop_post_render(s);
-            v2_sub_1DD9C(s);
-            v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
             v2_sub_1E0C7(s);
-            v2_draw_ui(v2_current_ds_val);
-            v2_sub_16775(s); v2_swap_render_buf();
-            v2_sub_10130(s);
-            v2_sub_1DE05(s);
-            v2_game_loop_post_render(s);
-            v2_sub_1DD9C(s);
-            v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
-            v2_sub_16775(s); v2_swap_render_buf();
-            v2_sub_10130(s);
-            *(uint16_t*)(s + 0x9569) = 0;
-            s[0x956B] = 0;
-            *(uint16_t*)(s + 0x98DC) = 0;
-            memset(s + 0x956C, 0, 0x1B8 * 2);
-            bx_read += 2;
-        } else if (cmd_type == 4) {
-            *(uint16_t*)(s + 0x0334) |= 4;
-            bx_read += 2;
-        } else {
-            bx_read += 2;
         }
-        *(uint16_t*)(s + 0x2B64) = bx_read;
-        v2_draw_ui(v2_current_ds_val);
+        v2_sub_16775(s); v2_swap_render_buf();
+        v2_sub_10130(s);
+        v2_sub_1DE05(s);
+        v2_game_loop_post_render(s);
+        v2_sub_1DD9C(s);
+        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
         v2_sub_1E0C7(s);
-        {
-            extern uint16_t v2_input_snapshot;
-            uint16_t ax = 0;
-            if (*(uint16_t*)(s + 0x86DA) != 0)
-                ax = *(uint16_t*)(s + 0x86DC);
-            ax |= v2_input_snapshot;
-            *(uint16_t*)(s + 0x03B6) = ax;
-            uint16_t prev = *(uint16_t*)(s + 0x03BA);
-            *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
-            *(uint16_t*)(s + 0x03BA) = ax;
-        }
-        {
-            uint16_t btns = *(uint16_t*)(s + 0x0334);
-            if (btns & 4) {
-                *(uint16_t*)(s + 0x0334) &= 0xFFFB;
-            } else if (btns & 1) {
-                v2_run_transition_chain(s);
-                break;
-            } else if (btns & 2) {
-                *(uint16_t*)(s + 0x25C9) = 0x25;
-                v2_run_transition_chain(s);
-                break;
+        v2_draw_ui(v2_current_ds_val);
+        v2_sub_16775(s); v2_swap_render_buf();
+        v2_sub_10130(s);
+        v2_sub_1DE05(s);
+        v2_game_loop_post_render(s);
+        v2_sub_1DD9C(s);
+        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+        v2_sub_16775(s); v2_swap_render_buf();
+        v2_sub_10130(s);
+        *(uint16_t*)(s + 0x9569) = 0;
+        s[0x956B] = 0;
+        *(uint16_t*)(s + 0x98DC) = 0;
+        memset(s + 0x956C, 0, 0x1B8 * 2);
+        bx_read += 2;
+    } else if (cmd_type == 4) {
+        *(uint16_t*)(s + 0x0334) |= 4;
+        bx_read += 2;
+    } else {
+        bx_read += 2;
+    }
+    // orig eip 0x894: MOV word_2b044, bx — save advanced read pos
+    *(uint16_t*)(s + 0x2B64) = bx_read;
+    // orig eip 0x898: v2_draw_ui + sub_1E0C7 (renders shadow to v2_render_buf)
+    v2_draw_ui(v2_current_ds_val);
+    v2_sub_1E0C7(s);
+    // sub_12352 inline (input snapshot to shadow ds:0x3B6/0x3B8/0x3BA)
+    {
+        extern uint16_t v2_input_snapshot;
+        uint16_t ax = 0;
+        if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
+        ax |= v2_input_snapshot;
+        *(uint16_t*)(s + 0x03B6) = ax;
+        uint16_t prev = *(uint16_t*)(s + 0x03BA);
+        *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
+        *(uint16_t*)(s + 0x03BA) = ax;
+    }
+    // sub_10138 emulation: orig (eip 0x138-0x14A) tests bits 4/1/2 of word_28814:
+    //   bit 4 (val=4) → loc_10164: AND ~4, fall through to loc_10169 viking switch wait
+    //   bit 0 (val=1) → loc_10151: TRANSITION (sub_1774F + sub_14207 + sub_11080)
+    //   bit 1 (val=2) → loc_1014b: word_2AAA9=0x25, fall through to loc_10151
+    // Default mode: orig main thread blocks in loc_10169 inner loop (signaling
+    // V2_PHASE_VIKING_SWITCH_LOOP per iter to v2). v2 mirror just mirrors AND of
+    // bit 2 and waits for next per-iter signal at top of sub_1086f loop.
+    // V2_ONLY mode: orig main thread doesn't exist → v2 mirror must loop the
+    // viking switch wait LOCALLY (mirror of orig loc_10169 looping until input).
+    {
+        uint16_t btns = *(uint16_t*)(s + 0x0334);
+        if (btns & 4) {
+            *(uint16_t*)(s + 0x0334) &= 0xFFFB;
+#ifdef V2_ONLY
+            extern bool need_quit;
+            // Mirror orig loc_10169 inner loop (eips 0x169..0x18F): loops calling
+            // sub_12352+sub_101be+3×(sub_16775+sub_10130+sub_108c8) until input flag
+            // (word_28898 & 0xC0C0) is set by user keypress.
+            while (!need_quit) {
+                v2_run_viking_switch_loop(s);   // one iteration
+                if (*(uint16_t*)(s + 0x3B8) & 0xC0C0) break;  // input received
             }
+#endif
+        } else if (btns & 1) {
+            v2_run_transition_chain(s);
+        } else if (btns & 2) {
+            *(uint16_t*)(s + 0x25C9) = 0x25;
+            v2_run_transition_chain(s);
         }
     }
-    *(uint16_t*)(s + 0x218F) = 0;
-    *(uint16_t*)(s + 0x2B64) = 0;
-    v2_sub_16775(s); v2_swap_render_buf();
-    v2_sub_10130(s);
 }
 
 // V2_PHASE_PAUSE_LOOP handler — Phase 3 (TODO: full implementation).

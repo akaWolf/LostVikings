@@ -42,7 +42,9 @@ bool need_quit = false;
 // gate is moot — always update.
 #ifndef V2_ONLY
 typedef uint16_t dw;
+#ifndef V2_ONLY
 extern dw& word_3287c;
+#endif
 #endif
 
 // SDL spec-key state (replaces orig int 9 ISR's writes to byte_31669 etc).
