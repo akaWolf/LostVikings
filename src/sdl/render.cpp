@@ -362,13 +362,22 @@ void updateDraw()
 			   // render thread at ~60Hz. Without this, game thread sub_10130 sleeps
 			   // 16ms each call (3+ per frame) → severe slowdown.
 			   { extern std::atomic<int64_t> v2_dbg_render_callback_calls; v2_dbg_render_callback_calls++; }
-#ifndef V2_ONLY
-			   render_callback(_state);
-#endif
-			   // Mirror orig render_callback on shadow DS — async DEC of
-			   // shadow[0xA39C] + palette dispatch matches orig's async behavior
-			   // on real_ds, so verify hashes converge on race-prone ds:0x7EFE.
-			   { extern void v2_render_callback(); v2_render_callback(); }
+			   // ============================================================
+			   // Render thread no longer modifies DS. Previously called orig
+			   // render_callback (sub_1797b m2c) and v2_render_callback to
+			   // DEC word_3287c + dispatch palette at ~60Hz, imitating the
+			   // original VGA vsync interrupt. But that asynchronously mutated
+			   // shadow_ds[0xA39C] and shadow_ds[0x7EFE] outside v2 mirror's
+			   // own write paths, racing with game thread snapshots in
+			   // trace_compare → forced these bytes into v2_ds_hash_skip.
+			   //
+			   // New design (see seg000.cpp sub_10130 comment): each game
+			   // thread (orig m2c + v2 mirror) does its own DEC + palette
+			   // dispatch synchronously inside sub_10130, so per-thread writes
+			   // and DECs are 1:1 and snapshots match byte-for-byte. Render
+			   // thread is purely a presenter — it reads SDL framebuffer and
+			   // calls updateDraw, nothing else.
+			   // ============================================================
 			   // Increment render-tick counter + notify any waiter (v2 game thread
 			   // waits in v2_phase_post_vm until tick advances, ensuring
 			   // shadow[0x7EFE] palette flag is cleared before trace_compare).

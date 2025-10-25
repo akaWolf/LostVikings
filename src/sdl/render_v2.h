@@ -93,6 +93,10 @@ enum V2Phase {
     V2_PHASE_PAUSE_LOOP,          // sub_11ba5 loc_11c1f — TAB pause
     V2_PHASE_TRANSITION_TEXT,     // sub_104A1 loc_104C3 — level transition text
     V2_PHASE_PASSWORD_PROMPT,     // sub_1041c — password input
+    V2_PHASE_PRE_SUB_1086F,       // BEFORE orig sub_1086f at eip 0xE7 — v2 mirror
+                                  // processes shadow cmd buffer first so orig's
+                                  // m2c v2_draw_ui inside sub_1086f reads fresh
+                                  // shadow glyph buffer (dialog text).
 };
 extern void v2_signal_phase(V2Phase phase, uint16_t ds_val);  // signal v2 thread + wait
 extern void v2_game_thread_start();   // launch v2 thread (called once at startup)

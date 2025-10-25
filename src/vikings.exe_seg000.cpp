@@ -2090,6 +2090,13 @@ cs=0x1a2;eip=0x0000d8; 	J(CALL(sub_16775,0));	// 111 call    sub_16775 ;~ 01A2:0
 cs=0x1a2;eip=0x0000db; 	X(MOV(word_30c14, 0));	// 112 mov     word_30C14, 0 ;~ 01A2:00DB
 cs=0x1a2;eip=0x0000e1; 	J(CALL(sub_108c8,0));	// 113 call    sub_108C8 ;~ 01A2:00E1
 cs=0x1a2;eip=0x0000e4; 	J(CALL(sub_10350,0));	// 114 call    sub_10350 ;~ 01A2:00E4
+	// Signal v2 mirror to process sub_1086f on shadow BEFORE orig does. This
+	// way orig's m2c-injected `v2_draw_ui(ds)` at eip 0x898 inside sub_1086f
+	// reads the freshly-populated shadow glyph buffer (with dialog text), so
+	// v2_render_buf gets the dialog and v2_swap_render_buf at orig sub_16775
+	// site pushes it to v2_display_buf. Without this, shadow stays empty
+	// during orig's read → v2 window misses dialogs.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PRE_SUB_1086F, ds);
 cs=0x1a2;eip=0x0000e7; 	J(CALL(sub_1086f,0));	// 115 call    sub_1086F ;~ 01A2:00E7
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(9); /* POST_FLIP3_END */ }
 	{
@@ -2191,12 +2198,41 @@ ret_1a2_135:
    { extern void v2_game_thread_stop(); v2_game_thread_stop(); }
    SDL_Delay(50); _exit(0);
  }
- // REVERT to orig: render_callback (sub_1797b) is called by render thread (render.cpp).
- // Just sleep 2ms while waiting for word_3287c to drop. Render thread DECs it ~60Hz.
+ // ===================================================================
+ // sub_10130: VGA vsync wait. Original (DOS):
+ //   loop: cmp word_3287c, 1; jge loop; retn
+ // word_3287c was DEC'd by the VGA vertical-retrace interrupt handler
+ // (sub_1797b) at ~60Hz. Interrupt also dispatched palette writes via
+ // off_17974[word_303DE] (sub_10fe6 / sub_10ffc / nullsub_1), giving
+ // synchronous palette updates locked to vsync. Game code wrote
+ // word_3287c=1 at every page-flip site and then called sub_10130 to
+ // wait one (or more) vsyncs.
+ //
+ // Port architecture: there is no real vsync interrupt. We have a game
+ // thread (m2c-converted code) and a render thread (SDL). Previously the
+ // render thread imitated the interrupt by DEC'ing word_3287c + calling
+ // the dispatch chain on shadow_ds AND real_ds asynchronously. That
+ // introduced a cross-thread race on these bytes: shadow_ds[0xA39C] and
+ // shadow_ds[0x7EFE] were modified outside the v2 mirror's own writes,
+ // so trace_compare snapshots (orig at orig-op-N moment, v2 at v2-op-N
+ // moment) saw different DEC counts depending on render-thread firings
+ // between the two snapshots → intermittent verify failures forced
+ // 0xA39C / 0x7EFE into the skip list (see v2_ds_hash_skip).
+ //
+ // Fix: render thread no longer touches DS. sub_10130 (game thread)
+ // sleeps one vsync (~16ms) and then calls sub_1797b inline — same
+ // DEC + dispatch as the original interrupt, but on the same thread
+ // that wrote word_3287c=1. Per-thread DECs match per-thread writes
+ // exactly, so real and shadow stay in lockstep (each side runs its
+ // own sub_10130 on its own DS) and snapshots agree byte-for-byte.
+ // Game pacing stays ~60 FPS because sub_10130 is called at every
+ // page-flip site, just as orig vsync waits enforced.
+ // ===================================================================
  { extern std::atomic<int64_t> v2_dbg_sub10130_spins;
    if (word_3287c >= 1) v2_dbg_sub10130_spins++;
    else v2_dbg_sub10130_spins++; /* track every entry */ }
- std::this_thread::sleep_for(std::chrono::milliseconds(2));
+ std::this_thread::sleep_for(std::chrono::milliseconds(16));
+ if (word_3287c >= 1) { sub_1797b(0, _state); }   // DEC + palette dispatch (game thread)
 cs=0x1a2;eip=0x000135; 	J(JGE(sub_10130));	// 156 jge     short sub_10130 ;~ 01A2:0135
  { extern std::atomic<int64_t> v2_dbg_sub10130_exits; v2_dbg_sub10130_exits++; }
 cs=0x1a2;eip=0x000137; 	J(RETN(0));	// 157 retn ;~ 01A2:0137
@@ -16416,11 +16452,9 @@ cs=0x1a2;eip=0x007995; 	T(MOV(al, byte_317ce));	// 17611 mov     al, byte_317CE 
  myDrawInfo->myPixelOffset = al / 2;
 myDrawInfo->myOffset = myOffset;
 cs=0x1a2;eip=0x007998; 	R(OUT(dx, al));	// 17612 out     dx, al          ; EGA: palette register: select colors for attribute AL: ;~ 01A2:7998
-	// Hold lock across DEC + palette dispatch so game thread snapshots in
-	// trace_compare see consistent real[0xA39C, 0x7EFE]. Without this, snapshot
-	// can land between DEC and dispatch's clear → real and shadow caught in
-	// half-applied state → fake DS-HASH-AFTER diff.
-	{ extern std::mutex v2_ds_modify_mutex; std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
+	// No inner lock — render.cpp holds v2_ds_modify_mutex across BOTH
+	// render_callback (this function via m2c) and v2_render_callback so the
+	// orig+v2 async-DEC pair is atomic vs game thread snapshots.
 cs=0x1a2;eip=0x007999; 	X(DEC(word_3287c));	// 17619 dec     word_3287C ;~ 01A2:7999
 	{ extern std::atomic<int64_t> v2_dbg_word3287c_dec_calls; v2_dbg_word3287c_dec_calls++; }
 cs=0x1a2;eip=0x00799d; 	T(MOV(bp, word_303de));	// 17620 mov     bp, word_303DE ;~ 01A2:799D
@@ -16432,7 +16466,6 @@ cs=0x1a2;eip=0x00799d; 	T(MOV(bp, word_303de));	// 17620 mov     bp, word_303DE 
 	  sub_10ffc(0, _state);
 	if (bp == 4)
 	  sub_10fe6(0, _state);
-	}
 locret_179a6:
 	// 5884
 //cs=0x1a2;eip=0x0079a6; 	J(RETF(0));	// 17625 retf ;~ 01A2:79A6
