@@ -1323,16 +1323,23 @@ static std::atomic<bool> v2_render_cb_enabled{false};
 static void v2_sub_101be(uint8_t* s) {
     static int _dbg_calls = 0, _dbg_rotations = 0;
     _dbg_calls++;
-    // ROOT-CAUSE diag: snapshot ALL 8 slot counters BEFORE DEC.
-    // Print only when animation is enabled (skip init phase where 2583=0).
+    // ROOT-CAUSE diag: shadow counters + palette state at slot 1 cur_idx.
     if (s[0x2583] != 0) {
         static int _printed = 0;
         if (_printed < 300) {
             _printed++;
-            fprintf(stderr, "V2-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+            uint8_t cur_i = s[1 + 0x259C];
+            uint8_t end_i = s[1 + 0x2594];
+            uint16_t addr_82 = (uint16_t)cur_i * 3 + 0x8202;
+            uint16_t addr_7f = (uint16_t)cur_i * 3 + 0x7F02;
+            fprintf(stderr, "V2-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X | slot1 cur=%02X end=%02X r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch=%02X%02X%02X\n",
                 _dbg_calls, s[0x2583],
                 s[0x258C], s[0x258D], s[0x258E], s[0x258F],
-                s[0x2590], s[0x2591], s[0x2592], s[0x2593]);
+                s[0x2590], s[0x2591], s[0x2592], s[0x2593],
+                cur_i, end_i,
+                addr_82, s[addr_82], s[addr_82+1], s[addr_82+2],
+                addr_7f, s[addr_7f], s[addr_7f+1], s[addr_7f+2],
+                s[0x8504], s[0x8505], s[0x8506]);
         }
     }
     if (s[0x2583] == 0) {                                           // TEST byte_2AA63, 0FFh; JZ loc_1020b
@@ -1356,22 +1363,22 @@ static void v2_sub_101be(uint8_t* s) {
                 (cur_i < end_i) ? "10255" : "1020F",
                 addr_82, s[addr_82], s[addr_82+1], s[addr_82+2],
                 addr_7f, s[addr_7f], s[addr_7f+1], s[addr_7f+2],
-                s[0x7944], s[0x7945], s[0x7946]);
+                s[0x8504], s[0x8505], s[0x8506]);
         }
         uint8_t cur_idx = s[si + 0x259C];                          // [si+259Ch] = current
         uint8_t end_idx = s[si + 0x2594];                          // [si+2594h] = end
         uint16_t dx_base = 0x8202;                                  // palette buffer base
         if (cur_idx < end_idx) {
             // sub_10255: shift entries DOWN (current < end → rotate left)
-            // orig saves [di], [di+1] to word_309e4 (ds:0x7944), [di+2] to byte_309e6
-            // (ds:0x7946). Mirror these scratch writes for verify clean.
+            // orig saves [di], [di+1] to word_309e4 (ds:0x8504), [di+2] to byte_309e6
+            // (ds:0x8506). word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
             uint16_t di_addr = (uint16_t)cur_idx * 3 + dx_base;
             uint8_t saved_lo = s[di_addr];
             uint8_t saved_hi = s[di_addr + 1];
             uint8_t saved_b  = s[di_addr + 2];
-            s[0x7944] = saved_lo;            // ds:0x7944 = byte ptr word_309e4 lo
-            s[0x7945] = saved_hi;            // ds:0x7945 = byte ptr word_309e4 hi
-            s[0x7946] = saved_b;             // ds:0x7946 = byte_309e6
+            s[0x8504] = saved_lo;            // ds:0x8504 = byte ptr word_309e4 lo
+            s[0x8505] = saved_hi;            // ds:0x8505 = byte ptr word_309e4 hi
+            s[0x8506] = saved_b;             // ds:0x8506 = byte_309e6
             uint16_t count = ((uint16_t)end_idx - (uint16_t)cur_idx) * 3;
             memmove(s + di_addr, s + di_addr + 3, count);
             uint16_t end_addr = di_addr + count;
@@ -1384,9 +1391,9 @@ static void v2_sub_101be(uint8_t* s) {
             saved_lo = s[di_addr];
             saved_hi = s[di_addr + 1];
             saved_b  = s[di_addr + 2];
-            s[0x7944] = saved_lo;
-            s[0x7945] = saved_hi;
-            s[0x7946] = saved_b;
+            s[0x8504] = saved_lo;
+            s[0x8505] = saved_hi;
+            s[0x8506] = saved_b;
             count = ((uint16_t)end_idx - (uint16_t)cur_idx) * 3;
             memmove(s + di_addr, s + di_addr + 3, count);
             end_addr = di_addr + count;
@@ -1397,20 +1404,21 @@ static void v2_sub_101be(uint8_t* s) {
             // sub_1020f: shift entries UP (current >= end → rotate right)
             // orig (line 302-305):
             //   ax = [di]              ; 16-bit WORD read of [di], [di+1]
-            //   word_309e4 = ax        ; 16-bit WORD write to ds:0x7944, ds:0x7945
+            //   word_309e4 = ax        ; 16-bit WORD write to ds:0x8504, ds:0x8505
             //   al = [di+2]            ; BYTE read
-            //   byte_309e6 = al        ; BYTE write to ds:0x7946
+            //   byte_309e6 = al        ; BYTE write to ds:0x8506
             // After REP MOVSB (line 321-324):
             //   ax = word_309e4        ; 16-bit WORD read
             //   [di-2] = ax            ; 16-bit WORD write to [di-2], [di-1]
             //   al = byte_309e6        ; BYTE read
             //   [di] = al              ; BYTE write
+            // word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
             uint16_t di_addr = (uint16_t)cur_idx * 3 + dx_base;
             uint16_t end_addr = (uint16_t)end_idx * 3 + dx_base;
             uint16_t saved_word = *(uint16_t*)(s + di_addr);     // ax = [di] (WORD)
             uint8_t  saved_b    = s[di_addr + 2];                // al = [di+2] (BYTE)
-            *(uint16_t*)(s + 0x7944) = saved_word;               // word_309e4 = ax (WORD)
-            s[0x7946] = saved_b;                                 // byte_309e6 = al (BYTE)
+            *(uint16_t*)(s + 0x8504) = saved_word;               // word_309e4 = ax (WORD)
+            s[0x8506] = saved_b;                                 // byte_309e6 = al (BYTE)
             uint16_t count = ((uint16_t)cur_idx - (uint16_t)end_idx) * 3;
             memmove(s + end_addr + 3, s + end_addr, count);     // REP MOVSB backward
             *(uint16_t*)(s + end_addr)     = saved_word;         // [di-2] = ax (WORD)
@@ -1421,8 +1429,8 @@ static void v2_sub_101be(uint8_t* s) {
             end_addr = (uint16_t)end_idx * 3 + dx_base;
             saved_word = *(uint16_t*)(s + di_addr);
             saved_b    = s[di_addr + 2];
-            *(uint16_t*)(s + 0x7944) = saved_word;
-            s[0x7946] = saved_b;
+            *(uint16_t*)(s + 0x8504) = saved_word;
+            s[0x8506] = saved_b;
             count = ((uint16_t)cur_idx - (uint16_t)end_idx) * 3;
             memmove(s + end_addr + 3, s + end_addr, count);
             *(uint16_t*)(s + end_addr)     = saved_word;

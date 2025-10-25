@@ -2047,15 +2047,24 @@ cs=0x1a2;eip=0x0000ac; 	J(CALL(sub_13c0c,0));	// 92 call    sub_13C0C ;~ 01A2:00
 cs=0x1a2;eip=0x0000af; 	J(CALL(sub_12fd0,0));	// 93 call    sub_12FD0 ;~ 01A2:00AF
 cs=0x1a2;eip=0x0000b2; 	J(CALL(sub_11792,0));	// 94 call    sub_11792 ;~ 01A2:00B2
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
-	// ROOT-CAUSE diag: snapshot orig 0x258C..0x2593 counters BEFORE sub_101be DEC.
-	// Print only when animation enabled (skip 2583=0 init phase).
+	// ROOT-CAUSE diag: snapshot orig 0x258C..0x2593 counters + palette buffer
+	// at slot 1's cur_idx (the LAST slot processed in sub_101be rotation, which
+	// writes scratch). Compare with V2 prints to find palette state divergence.
 	{ static int _oc = 0; _oc++;
 	  uint8_t* r = (uint8_t*)raddr(ds,0);
 	  if (r[0x2583] != 0 && _oc <= 300) {
-		fprintf(stderr, "ORIG-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+		uint8_t cur_i = r[1 + 0x259C];   // slot 1's cur_idx
+		uint8_t end_i = r[1 + 0x2594];   // slot 1's end_idx
+		uint16_t addr_82 = (uint16_t)cur_i * 3 + 0x8202;
+		uint16_t addr_7f = (uint16_t)cur_i * 3 + 0x7F02;
+		fprintf(stderr, "ORIG-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X | slot1 cur=%02X end=%02X r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch=%02X%02X%02X\n",
 			_oc, r[0x2583],
 			r[0x258C], r[0x258D], r[0x258E], r[0x258F],
-			r[0x2590], r[0x2591], r[0x2592], r[0x2593]);
+			r[0x2590], r[0x2591], r[0x2592], r[0x2593],
+			cur_i, end_i,
+			addr_82, r[addr_82], r[addr_82+1], r[addr_82+2],
+			addr_7f, r[addr_7f], r[addr_7f+1], r[addr_7f+2],
+			r[0x7944], r[0x7945], r[0x7946]);
 	  }
 	}
 cs=0x1a2;eip=0x0000b5; 	J(CALL(sub_101be,0));	// 95 call    sub_101BE ;~ 01A2:00B5
@@ -2231,14 +2240,22 @@ cs=0x1a2;eip=0x000169; 	J(CALL(sub_12352,0));	// 191 call    sub_12352 ;~ 01A2:0
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VIKING_SWITCH_LOOP, ds);
 cs=0x1a2;eip=0x00016c; 	T(TEST(word_28898, 0x0C0C0));	// 192 test    word_28898, 0C0C0h ;~ 01A2:016C
 cs=0x1a2;eip=0x000172; 	J(JNZ(loc_10191));	// 193 jnz     short loc_10191 ;~ 01A2:0172
-	// ROOT-CAUSE diag: snapshot orig counters BEFORE sub_101be DEC (viking switch loop variant).
+	// ROOT-CAUSE diag: orig counters + palette state at slot 1 cur_idx (VSW variant).
 	{ static int _oc = 0; _oc++;
 	  uint8_t* r = (uint8_t*)raddr(ds,0);
 	  if (r[0x2583] != 0 && _oc <= 300) {
-		fprintf(stderr, "ORIG-101BE-VSW[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+		uint8_t cur_i = r[1 + 0x259C];
+		uint8_t end_i = r[1 + 0x2594];
+		uint16_t addr_82 = (uint16_t)cur_i * 3 + 0x8202;
+		uint16_t addr_7f = (uint16_t)cur_i * 3 + 0x7F02;
+		fprintf(stderr, "ORIG-101BE-VSW[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X | slot1 cur=%02X end=%02X r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch=%02X%02X%02X\n",
 			_oc, r[0x2583],
 			r[0x258C], r[0x258D], r[0x258E], r[0x258F],
-			r[0x2590], r[0x2591], r[0x2592], r[0x2593]);
+			r[0x2590], r[0x2591], r[0x2592], r[0x2593],
+			cur_i, end_i,
+			addr_82, r[addr_82], r[addr_82+1], r[addr_82+2],
+			addr_7f, r[addr_7f], r[addr_7f+1], r[addr_7f+2],
+			r[0x7944], r[0x7945], r[0x7946]);
 	  }
 	}
 cs=0x1a2;eip=0x000174; 	J(CALL(sub_101be,0));	// 194 call    sub_101BE ;~ 01A2:0174
