@@ -11617,15 +11617,19 @@ static void v2_vm_op_CA(V2VM& vm) {
 
 // 0x55 (sub_1466e): acc = sub_12312 (random). 0 bytes consumed.
 // sub_12312: if word_288AC != 0 → alternate XOR path. Else LCG.
-// Both paths read/write game globals outside DS shadow range.
+// All state in DS — XOR seed at 0x0352 (word_28832), LCG seed at 0x8639
+// (dword_30B19 — m2c name encodes linear addr 0x30B19, actual DS offset 0x8639).
+// Both paths read/write SHADOW DS to mirror orig's reads/writes on real DS.
+// Note: 0x8639 is in v2_ds_hash_skip (PRNG seed range 0x8638..0x863C), so
+// shadow can drift from real silently — divergence only catches when acc
+// (LCG result) differs at op_55 boundary. Fix: keep shadow seed in sync by
+// running same LCG on shadow as orig runs on real (started from same
+// init value via ds_static.bin load).
 static void v2_vm_op_55(V2VM& vm) {
-    // word_288AC at DS:0x03CC, word_28832 at DS:0x0352, dword_30B19 at CS:0x30B19.
-
     uint16_t check = *(uint16_t*)(vm.shadow + 0x03CC); // word_288AC
     if (check != 0) {
-        // Alternate XOR random — exact orig sequence.
-        // Original: ax = word_28832; XCHG ah,al; word_28832 = ax; RCL ax,3; XOR word_28832, ax
-        // Both writes go to shadow DS (= match orig DS state for replay verify).
+        // Alternate XOR random — orig: ax=word_28832; XCHG ah,al; word_28832=ax;
+        //                              RCL ax,3; XOR word_28832, ax; acc=ax (rotated)
         uint16_t ax = *(uint16_t*)(vm.shadow + 0x0352);   // ax = word_28832
         ax = (ax >> 8) | (ax << 8);                        // XCHG ah,al
         *(uint16_t*)(vm.shadow + 0x0352) = ax;             // word_28832 = ax
@@ -11634,17 +11638,14 @@ static void v2_vm_op_55(V2VM& vm) {
         *(uint16_t*)(vm.shadow + 0x0352) ^= ax;            // XOR word_28832, ax
         v2_vm_accumulator = ax; // Original returns ax (rotated), NOT the XOR'd memory
     } else {
-        // LCG: own seed copy to avoid corrupting original
-        static uint32_t v2_random_seed = 0;
-        static bool v2_seed_init = false;
-        if (!v2_seed_init) {
-            v2_random_seed = *(uint32_t*)(vm.cs_base + 0x30B19);
-            v2_seed_init = true;
-        }
-        uint64_t tmp = (uint64_t)v2_random_seed * 0x15A4E35;
-        v2_random_seed = (uint32_t)(tmp + 1);
-        // ROR 16 = swap halves
-        uint32_t result = (v2_random_seed >> 16) | (v2_random_seed << 16);
+        // LCG: orig: eax=dword_30b19; edx=0x15A4E35; mul edx; add eax,1;
+        //            dword_30b19=eax; ror eax,16; acc=ax (low half of rotated)
+        // 32-bit LCG on shadow ds:0x8639 (mirrors orig real ds:0x8639).
+        uint32_t seed = *(uint32_t*)(vm.shadow + 0x8639);
+        uint64_t tmp = (uint64_t)seed * 0x15A4E35;
+        seed = (uint32_t)(tmp + 1);
+        *(uint32_t*)(vm.shadow + 0x8639) = seed;
+        uint32_t result = (seed >> 16) | (seed << 16);     // ROR 16 = swap halves
         v2_vm_accumulator = (uint16_t)result;
     }
 }
@@ -18309,7 +18310,9 @@ static bool v2_ds_hash_skip(uint32_t i) {
     // ds:0x990C..0x991E (AIL handles/sequences) NOW DETERMINISTIC — included in hash
     if (i >= 0x9920 && i <= 0x9944) return true; // AIL driver buffer (internal state)
     if (i >= 0x86AC && i <= 0x86B0) return true; // DOS INT 24h vector
-    if (i >= 0x8638 && i <= 0x863C) return true; // PRNG seed
+    // 0x8638..0x863C (PRNG seed dword_30b19) NO LONGER SKIPPED — v2_vm_op_55
+    // LCG path now reads/writes shadow ds:0x8639 (mirrors orig real ds:0x8639),
+    // so seed stays in lockstep when both run same opcode sequence.
     if (i >= 0x98E4 && i <= 0x98EC) return true; // AIL GTL handle (far ptr)
     if (i == 0x9300) return true;                 // VGA mode byte
     // 0xA398..0xA39C (VGA page flip counter) NO LONGER SKIPPED — render thread
