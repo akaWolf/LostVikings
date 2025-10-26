@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
     //    rounds SDL_Delay up to scheduler tick boundary).
     uint16_t ds = 0;
     uint32_t frame_target_ms = SDL_GetTicks();
-    const uint32_t FRAME_PERIOD_MS = 53;  // ~18.9 FPS — measured orig on Linux
+    const uint32_t FRAME_PERIOD_MS = 16;  // ~60 FPS interactive target
     // FPS instrumentation: track work time per frame (excluding sleep). Print
     // running stats every N frames + warn when individual frame exceeds budget.
     uint32_t fps_window_start_ms = SDL_GetTicks();
@@ -120,17 +120,36 @@ int main(int argc, char* argv[]) {
     int      fps_slow_frames = 0;    // frames where work > FRAME_PERIOD_MS
     while (!need_quit) {
         uint32_t frame_start_ms = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_FRAME_BEGIN, ds);
-        v2_signal_phase(V2_PHASE_PRE_VM, ds);
-        v2_signal_phase(V2_PHASE_VM, ds);
-        v2_signal_phase(V2_PHASE_POST_VM, ds);
-        v2_signal_phase(V2_PHASE_RENDER1, ds);
-        v2_signal_phase(V2_PHASE_POST_FLIP1, ds);
-        v2_signal_phase(V2_PHASE_RENDER2, ds);
-        v2_signal_phase(V2_PHASE_POST_FLIP2, ds);
-        v2_signal_phase(V2_PHASE_RENDER3, ds);
-        v2_signal_phase(V2_PHASE_POST_FLIP3, ds);
-        v2_signal_phase(V2_PHASE_FRAME_END, ds);
+        uint32_t phase_ms[11] = {0};
+        uint32_t t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_FRAME_BEGIN, ds);    phase_ms[0] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_PRE_VM, ds);         phase_ms[1] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_VM, ds);             phase_ms[2] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_POST_VM, ds);        phase_ms[3] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_RENDER1, ds);        phase_ms[4] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_POST_FLIP1, ds);     phase_ms[5] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_RENDER2, ds);        phase_ms[6] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_POST_FLIP2, ds);     phase_ms[7] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_RENDER3, ds);        phase_ms[8] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_POST_FLIP3, ds);     phase_ms[9] = SDL_GetTicks() - t;
+        t = SDL_GetTicks();
+        v2_signal_phase(V2_PHASE_FRAME_END, ds);      phase_ms[10] = SDL_GetTicks() - t;
+        // Log per-phase breakdown when frame is slow (>30ms)
+        if (frame_start_ms != 0 && SDL_GetTicks() - frame_start_ms > 30) {
+            fprintf(stderr, "FPS-PHASE: FB=%u PV=%u VM=%u PoV=%u R1=%u PF1=%u R2=%u PF2=%u R3=%u PF3=%u FE=%u total=%u\n",
+                phase_ms[0], phase_ms[1], phase_ms[2], phase_ms[3], phase_ms[4],
+                phase_ms[5], phase_ms[6], phase_ms[7], phase_ms[8], phase_ms[9], phase_ms[10],
+                SDL_GetTicks() - frame_start_ms);
+        }
         uint32_t work_end_ms = SDL_GetTicks();
         uint32_t work_ms = work_end_ms - frame_start_ms;
         fps_work_total_us += work_ms * 1000;

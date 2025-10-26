@@ -679,6 +679,22 @@ static int v2_v2_anim_cmd_count = 0;  // incremented by v2's anim cmd loop
 static bool v2_replay_verify_active = false; // when true, resolve_segment uses real memory
 uint16_t v2_input_snapshot = 0; // snapshot of input_keys taken by seg000 after orig sub_12352
 
+// Unified input read for inline sub_12352 sites. In V2_ONLY: reads live input_keys
+// via v2_input_intro_mask (handles intro mode word_288ac=0x8000). In default mode:
+// reads v2_input_snapshot atomic set by orig sub_12352 (synchronized with orig).
+// Without this helper, V2_ONLY sites read v2_input_snapshot=0 → writes shadow[0x3BA]=0
+// → next viking switch/dialog wait sees fake "newly pressed" → double-press bug.
+static inline uint16_t v2_input_or(uint8_t* shadow, uint16_t ax_prev) {
+#ifdef V2_ONLY
+    extern uint16_t input_keys;
+    extern uint16_t v2_input_intro_mask(uint16_t, uint16_t, uint16_t);
+    uint16_t w288ac = *(uint16_t*)(shadow + 0x3CC);
+    return v2_input_intro_mask(ax_prev, w288ac, input_keys);
+#else
+    return ax_prev | v2_input_snapshot;
+#endif
+}
+
 // SDL replacement for orig int 9 ISR's effect on word_30bbe (ds:0x86DE).
 // Original ISR (seg000_6440_proc):
 //   - Normal mode (word_288ac != 0x8000): KEYDOWN OR's per-scancode input bit
@@ -1328,7 +1344,7 @@ static void v2_sub_10130(uint8_t* s) {
 #ifdef V2_ONLY
         SDL_Delay(16);                // vsync 60Hz pacing for interactive
 #else
-        SDL_Delay(4);                 // default mode: ~80 fps, faster verify
+        SDL_Delay(4);                 // default mode: faster verify
 #endif
         v2_render_callback();         // mirrors orig sub_10130 → sub_1797b call
     }
@@ -5364,10 +5380,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             *(uint16_t*)(shadow + 0xA39C) = 1;
             v2_sub_10130(shadow);
             // sub_12352: input
-            { extern uint16_t v2_input_snapshot;
-              uint16_t ax_i = 0;
+            { uint16_t ax_i = 0;
               if (*(uint16_t*)(shadow + 0x86DA) != 0) ax_i = *(uint16_t*)(shadow + 0x86DC);
-              ax_i |= v2_input_snapshot;
+              ax_i = v2_input_or(shadow, ax_i);
               *(uint16_t*)(shadow + 0x3B6) = ax_i;
               uint16_t prev = *(uint16_t*)(shadow + 0x3BA);
               *(uint16_t*)(shadow + 0x3B8) = (ax_i ^ prev) & ax_i;
@@ -5426,10 +5441,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 #endif
         }
         // After loop: sub_12352 (one more input read)
-        { extern uint16_t v2_input_snapshot;
-          uint16_t ax_i = 0;
+        { uint16_t ax_i = 0;
           if (*(uint16_t*)(shadow + 0x86DA) != 0) ax_i = *(uint16_t*)(shadow + 0x86DC);
-          ax_i |= v2_input_snapshot;
+          ax_i = v2_input_or(shadow, ax_i);
           *(uint16_t*)(shadow + 0x3B6) = ax_i;
           uint16_t prev = *(uint16_t*)(shadow + 0x3BA);
           *(uint16_t*)(shadow + 0x3B8) = (ax_i ^ prev) & ax_i;
@@ -5701,10 +5715,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             while (!pause_exit && max_iters-- > 0) {
                 // sub_12352: input
                 {
-                    extern uint16_t v2_input_snapshot;
                     uint16_t ax = 0;
                     if (*(uint16_t*)(shadow + 0x86DA) != 0) ax = *(uint16_t*)(shadow + 0x86DC);
-                    ax |= v2_input_snapshot;
+                    ax = v2_input_or(shadow, ax);
                     *(uint16_t*)(shadow + 0x03B6) = ax;
                     uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
                     *(uint16_t*)(shadow + 0x03B8) = (ax ^ prev) & ax;
@@ -6486,11 +6499,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 // Original: ax |= word_30BBE (input_keys). In m2c port, input_keys is C++ var.
                 // Use v2_input_snapshot (taken inside orig sub_12352).
                 {
-                    extern uint16_t v2_input_snapshot;
                     uint16_t ax = 0;
                     if (*(uint16_t*)(shadow + 0x86DA) != 0)
                         ax = *(uint16_t*)(shadow + 0x86DC);
-                    ax |= v2_input_snapshot;
+                    ax = v2_input_or(shadow, ax);
                     *(uint16_t*)(shadow + 0x03B6) = ax;
                     uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
                     *(uint16_t*)(shadow + 0x03B8) = (ax ^ prev) & ax;
@@ -14537,8 +14549,16 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         uint16_t pc_before = vm.pc;
         uint16_t acc_before = v2_vm_accumulator; // save BEFORE opcode
         // Snapshot DS hashes BEFORE opcode runs — used for hash-before verify.
+        // Skipped in V2_ONLY: traces are never compared, hashes are pure overhead
+        // (~64KB scan per opcode ≈ 100MB/frame at 1600 ops/frame).
+#ifndef V2_ONLY
         uint32_t ds_hash_before_snap = v2_ds_hash(shadow);
         uint32_t obj_hash_before_snap = v2_obj_hash(shadow, obj_idx);
+#else
+        uint32_t ds_hash_before_snap = 0;
+        uint32_t obj_hash_before_snap = 0;
+#endif
+        (void)ds_hash_before_snap; (void)obj_hash_before_snap;
         uint8_t opcode = vm.read_u8();
         // Dump bytes around 94D7 when we're about to read it
         if (pc_before == 0x94D7) {
@@ -14623,8 +14643,11 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
                 *(uint16_t*)(shadow + obj_idx + 0x1355));
         }
 
-        // Record trace entry for ALL opcodes.
-        // Orig records 0x00, 0x0F, 0x10 via special code added after their POP+RETN handlers.
+#ifndef V2_ONLY
+        // Record trace entry for ALL opcodes — used by trace_compare to find first
+        // divergence between orig and v2. Heavy: 64KB memcpy + 4 hashes per opcode
+        // (~1600 ops/frame ≈ 100MB+hash work/frame). Skipped in V2_ONLY where orig
+        // isn't running and traces are never compared.
         {
         extern void v2_vm_trace_record_v2_ext(uint16_t, uint16_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*, uint32_t, uint32_t);
           extern uint16_t v2_vm_step_per_obj[128];
@@ -14632,6 +14655,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
                                 pc_before, vm.pc, acc_before, v2_vm_accumulator, shadow,
                                 ds_hash_before_snap, obj_hash_before_snap);
         }
+#endif
 
         // Record trace for per-opcode verification
         int& cnt = v2_vm_trace_count[vm.slot];
@@ -16192,10 +16216,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         v2_sub_1DE05(s);
                         // sub_12352: input
                         {
-                            extern uint16_t v2_input_snapshot;
                             uint16_t ax = 0;
                             ax |= *(uint16_t*)(s + 0x86DE);
-                            ax |= v2_input_snapshot;
+                            ax = v2_input_or(s, ax);
                             *(uint16_t*)(s + 0x03B6) = ax;
                             uint16_t prev = *(uint16_t*)(s + 0x03BA);
                             *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
@@ -16213,10 +16236,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // loc_104f0: post-exit. Verified with seg000 lines 2477-2515.
                     // sub_12352 (final input read)
                     {
-                        extern uint16_t v2_input_snapshot;
                         uint16_t ax = 0;
                         ax |= *(uint16_t*)(s + 0x86DE);
-                        ax |= v2_input_snapshot;
+                        ax = v2_input_or(s, ax);
                         *(uint16_t*)(s + 0x03B6) = ax;
                         uint16_t prev = *(uint16_t*)(s + 0x03BA);
                         *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
@@ -16842,12 +16864,15 @@ void v2_phase_post_vm(uint16_t ds_val) {
     v2_watch_334("POST-entry");
     // PSNAP compare: v2 shadow should match orig VM_END (both just finished main VM).
     v2_compare_phase_snap(V2_PSNAP_VM_END, "v2_phase_post_vm");
+#ifndef V2_ONLY
     // Wait for one render-thread tick — render thread runs orig render_callback
     // (clears real[0x7EFE]) + v2_render_callback (clears shadow[0x7EFE]) back-to-back.
     // Without this wait, v2 game thread (which doesn't block in signal_phase like
     // orig main does) may run trace_compare before render thread cycles, catching
     // shadow[0x7EFE]=4 while real was already cleared during orig's prior signal
     // blocking. Wait ensures both real and shadow are in same post-cycle state.
+    // V2_ONLY: render.cpp doesn't run → tick never increments → wait always times
+    // out at full 50ms → 50ms wasted per frame. No verify in V2_ONLY anyway.
     {
         extern std::atomic<uint64_t> v2_render_tick;
         extern std::condition_variable v2_render_tick_cv;
@@ -16858,6 +16883,7 @@ void v2_phase_post_vm(uint16_t ds_val) {
             return v2_render_tick.load(std::memory_order_acquire) > start_tick;
         });
     }
+#endif
     // Check 0x077C before and after post_vm
     auto chk = [](const char* fn) {
         if (!v2_vm_real_ds_ptr) return;
@@ -17606,10 +17632,9 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                         v2_sub_10130(s);                      // call sub_10130
                         // sub_12352: input
                         {
-                            extern uint16_t v2_input_snapshot;
                             uint16_t ax = 0;
                             if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
-                            ax |= v2_input_snapshot;
+                            ax = v2_input_or(s, ax);
                             *(uint16_t*)(s + 0x03B6) = ax;
                             uint16_t prev = *(uint16_t*)(s + 0x03BA);
                             *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
@@ -17632,10 +17657,9 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 }
                 // loc_104F0: post-button read + final input
                 {
-                    extern uint16_t v2_input_snapshot;
                     uint16_t ax = 0;
                     if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
-                    ax |= v2_input_snapshot;
+                    ax = v2_input_or(s, ax);
                     *(uint16_t*)(s + 0x03B6) = ax;
                     uint16_t prev = *(uint16_t*)(s + 0x03BA);
                     *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
@@ -17786,12 +17810,22 @@ static void v2_sub_108c8(uint8_t* s);
 //   ds:[03B8] = (ax ^ ds:[03BA]) & ax    // newly pressed (edge-trigger)
 //   ds:[03BA] = ax                       // previous frame
 static void v2_sub_12352_iter(uint8_t* shadow) {
-    extern uint16_t v2_input_snapshot;
     uint16_t ax = 0;
     if (*(uint16_t*)(shadow + 0x86DA) != 0)
         ax = *(uint16_t*)(shadow + 0x86DC);
     ax |= *(uint16_t*)(shadow + 0x86DE);
+#ifdef V2_ONLY
+    // V2_ONLY: orig sub_12352 doesn't run → v2_input_snapshot stays 0.
+    // Read SDL keyboard state directly via intro-mask helper (same as
+    // v2_game_loop_pre_vm V2_ONLY branch). Without this, viking switch
+    // wait loop never sees keypress → dialog stuck forever.
+    extern uint16_t input_keys;
+    uint16_t w288ac = *(uint16_t*)(shadow + 0x3CC);
+    ax = v2_input_intro_mask(ax, w288ac, input_keys);
+#else
+    extern uint16_t v2_input_snapshot;
     ax |= v2_input_snapshot;
+#endif
     *(uint16_t*)(shadow + 0x03B6) = ax;
     uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
     *(uint16_t*)(shadow + 0x03B8) = (ax ^ prev) & ax;
@@ -17811,7 +17845,11 @@ static void v2_sub_12352_iter(uint8_t* shadow) {
 //
 // The AND ~4 from loc_10164 is done idempotently here to handle V2_ONLY entry
 // (where pre_vm doesn't pre-clear the bit).
-void v2_run_viking_switch_loop(uint8_t* shadow) {
+// Returns true if exit triggered (input flag detected after first sub_12352),
+// false if iteration continued (palette anim + 3 page flips). V2_ONLY outer
+// loop uses the return value — cannot check ds:0x3B8 after return because
+// the loc_10191 second sub_12352 resets it to 0.
+bool v2_run_viking_switch_loop(uint8_t* shadow) {
     // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
     *(uint16_t*)(shadow + 0x0334) &= 0xFFFB;
 
@@ -17822,7 +17860,7 @@ void v2_run_viking_switch_loop(uint8_t* shadow) {
     if (*(uint16_t*)(shadow + 0x3B8) & 0xC0C0) {
         // loc_10191: exit loop. orig does JMP sub_12352 (one more input read).
         v2_sub_12352_iter(shadow);
-        return;
+        return true;   // signal exit
     }
 
     // sub_101be: palette animation DEC pass (writes ds:[7EFE] = 2 if loop ran)
@@ -17850,6 +17888,7 @@ void v2_run_viking_switch_loop(uint8_t* shadow) {
     v2_sub_108c8(shadow);
     v2_sub_16775(shadow); v2_swap_render_buf();  // sub-frame 3 (audio omitted to match orig)
     v2_sub_10130(shadow);
+    return false;  // continue looping
 }
 
 // V2_PHASE_PRE_SUB_1086F handler — processes ONE shadow cmd in lockstep with
@@ -17959,10 +17998,9 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
     v2_sub_1E0C7(s);
     // sub_12352 inline (input snapshot to shadow ds:0x3B6/0x3B8/0x3BA)
     {
-        extern uint16_t v2_input_snapshot;
         uint16_t ax = 0;
         if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
-        ax |= v2_input_snapshot;
+        ax = v2_input_or(s, ax);
         *(uint16_t*)(s + 0x03B6) = ax;
         uint16_t prev = *(uint16_t*)(s + 0x03BA);
         *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
@@ -17985,10 +18023,10 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
             extern bool need_quit;
             // Mirror orig loc_10169 inner loop (eips 0x169..0x18F): loops calling
             // sub_12352+sub_101be+3×(sub_16775+sub_10130+sub_108c8) until input flag
-            // (word_28898 & 0xC0C0) is set by user keypress.
+            // (word_28898 & 0xC0C0) detected. Use return value — function resets
+            // ds:0x3B8 to 0 on exit via second sub_12352, so external check fails.
             while (!need_quit) {
-                v2_run_viking_switch_loop(s);   // one iteration
-                if (*(uint16_t*)(s + 0x3B8) & 0xC0C0) break;  // input received
+                if (v2_run_viking_switch_loop(s)) break;  // input received → exit
             }
 #endif
         } else if (btns & 1) {
@@ -18063,7 +18101,7 @@ static void v2_game_thread_func() {
             "TRANSITION_TEXT", "PASSWORD_PROMPT"
         };
         // Forward decls for blocking phase handlers (defined later in this file)
-        extern void v2_run_viking_switch_loop(uint8_t* shadow);
+        extern bool v2_run_viking_switch_loop(uint8_t* shadow);
         extern void v2_run_pause_loop(uint8_t* shadow);
         extern void v2_run_transition_text_loop(uint8_t* shadow);
         extern void v2_run_password_prompt(uint8_t* shadow);
@@ -18753,6 +18791,7 @@ void v2_vm_trace_compare() {
 void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_ptr,
                            uint16_t obj_idx, uint8_t cmd, uint16_t bx_before, uint16_t bx_after) {
     if (!v2_vm_table_initialized || cmd > 0x1A) return;
+    if (!v2_vm_real_ds_ptr) return;  // V2_ONLY or pre-init — skip replay verify
 
     // Set up temp VM with ds_before state
     static uint8_t anim_replay_shadow[0x10000];
