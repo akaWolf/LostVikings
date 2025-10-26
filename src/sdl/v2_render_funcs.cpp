@@ -160,7 +160,10 @@ void v2_draw_tiles(uint16_t ds_val) {
 
     for (int row_vis = 0; row_vis < 25; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
-        if (row_scrolled >= 64) continue;
+        // Orig sub_16ded has NO row_scrolled bound — just reads LUT and renders
+        // whatever it finds. v2 had `if (row_scrolled >= 64) continue;` hardcoded
+        // limit which clipped tiles on large maps when scrolled past row 64.
+        // Removed: now mirrors orig (LUT read wraps via uint16_t arithmetic).
 
         // Row base from lookup table at ds-0x7098
         uint16_t lut_off = (uint16_t)(row_scrolled * 2u - 0x7098u);
@@ -603,7 +606,9 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 
     for (int row_vis = 0; row_vis < 25; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
-        if (row_scrolled >= 64) continue;
+        // No `row_scrolled >= 64` clamp — orig sub_1c8f1 (flagged-tile render)
+        // doesn't clip rows beyond LUT; v2 hardcode caused tiles missing on
+        // large maps when scrolled past row 64.
 
         uint16_t lut_off = (uint16_t)(row_scrolled * 2u - 0x7098u);
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
