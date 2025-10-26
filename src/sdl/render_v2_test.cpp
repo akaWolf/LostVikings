@@ -25,73 +25,20 @@ void render_callback_v2(void* state)
 
     if (!myDrawInfo_v2) return;
 
-    // Копируем палитру каждый кадр (игра может менять её)
-    if (myDrawInfo) {
-        if (!palette_copied) {
-            int non_black = 0;
-            for (int i = 0; i < 256; i++) {
-                if (myDrawInfo->drawPalette[i].r != 0 ||
-                    myDrawInfo->drawPalette[i].g != 0 ||
-                    myDrawInfo->drawPalette[i].b != 0)
-                    non_black++;
-            }
-            if (non_black > 10) {
-                memcpy(myDrawInfo_v2->drawPalette, myDrawInfo->drawPalette, 256 * sizeof(SDL_Color));
-                palette_copied = true;
-            }
-        } else {
-            memcpy(myDrawInfo_v2->drawPalette, myDrawInfo->drawPalette, 256 * sizeof(SDL_Color));
+    // Read palette from v2_display_palette SNAPSHOT (captured from SHADOW DS
+    // atomically with v2_display_buf at v2_swap_render_buf time). v2 stays
+    // independent from orig per CLAUDE.md (no real→shadow copy), and pixels
+    // + palette stay matched across level transitions.
+    {
+        extern SDL_Color v2_display_palette[256];
+        extern bool v2_display_palette_valid;
+        if (v2_display_palette_valid) {
+            std::lock_guard<std::mutex> lock(v2_display_mutex);
+            memcpy(myDrawInfo_v2->drawPalette, v2_display_palette, 256 * sizeof(SDL_Color));
+            palette_copied = true;
         }
+        // Pre-game (no swap yet) → palette stays zero (window black) until first swap
     }
-#ifdef V2_ONLY
-    else {
-        // V2_ONLY: read palette directly from shadow DS at 0x8202.
-        // Format: 256 × 3 bytes RGB, 6-bit values (shift left 2 to get 8-bit).
-        extern uint8_t* v2_vm_get_shadow_ds();
-        uint8_t* shad = v2_vm_get_shadow_ds();
-        if (shad) {
-            uint8_t* pal = shad + 0x8202;
-            for (int i = 0; i < 256; i++) {
-                myDrawInfo_v2->drawPalette[i].r = pal[i*3 + 0] << 2;
-                myDrawInfo_v2->drawPalette[i].g = pal[i*3 + 1] << 2;
-                myDrawInfo_v2->drawPalette[i].b = pal[i*3 + 2] << 2;
-                myDrawInfo_v2->drawPalette[i].a = 255;
-            }
-            // Volatile VGA DAC override for palette[3] — set by cmd_type=6 (dialog
-            // text bg, per-character color). Orig calls OUT(0x3C9, R/G/B) writing
-            // directly to VGA DAC + stores soft mirror in shadow[0x7F0B/7F0C/7F0D].
-            // Static palette at shadow[0x8202+3*3] never updates → must override here.
-            myDrawInfo_v2->drawPalette[3].r = shad[0x7F0B] << 2;
-            myDrawInfo_v2->drawPalette[3].g = shad[0x7F0C] << 2;
-            myDrawInfo_v2->drawPalette[3].b = shad[0x7F0D] << 2;
-            // Debug: log first few palette entries + display buf state every 60 frames.
-            static int _pal_dbg = 0; _pal_dbg++;
-            if (_pal_dbg <= 3 || _pal_dbg % 120 == 0) {
-                int non_black = 0;
-                for (int i = 0; i < 256; i++)
-                    if (pal[i*3] || pal[i*3+1] || pal[i*3+2]) non_black++;
-                int buf_non_zero = 0;
-                int render_non_zero = 0;
-                int hud_non_zero = 0;
-                extern bool v2_vm_in_frame;
-                {
-                    extern uint8_t v2_display_buf[];
-                    extern uint8_t v2_render_buf[];
-                    extern uint8_t v2_hud_buf[];
-                    for (int i = 0; i < 320*176; i++) {
-                        if (v2_display_buf[i]) buf_non_zero++;
-                        if (v2_render_buf[i]) render_non_zero++;
-                    }
-                    for (int i = 0; i < 320*64; i++)
-                        if (v2_hud_buf[i]) hud_non_zero++;
-                }
-                fprintf(stderr,
-                  "V2-PAL-DBG[%d]: pal_nb=%d display_nz=%d render_nz=%d hud_nz=%d in_frame=%d\n",
-                  _pal_dbg, non_black, buf_non_zero, render_non_zero, hud_non_zero, v2_vm_in_frame ? 1 : 0);
-            }
-        }
-    }
-#endif
 
     (void)state;
 
@@ -106,9 +53,16 @@ void render_callback_v2(void* state)
             memset(sbuf + y * 344 + 320, 0, 24); // padding
         }
     }
-    // Copy HUD (rows 176-239) from v2_hud_buf
-    for (int y = 0; y < 64; y++) {
-        memcpy(sbuf + (176 + y) * 344, v2_hud_buf + y * 320, 320);
-        memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+    // Copy HUD (rows 176-239) from v2_display_hud_buf SNAPSHOT (captured atomically
+    // with v2_display_buf + v2_display_palette at v2_swap_render_buf time). Live
+    // v2_hud_buf without snapshot caused HUD icon flicker on level transitions —
+    // HUD pixels updated mid-frame while palette snapshot was from earlier swap.
+    extern uint8_t v2_display_hud_buf[];
+    {
+        std::lock_guard<std::mutex> lock(v2_display_mutex);
+        for (int y = 0; y < 64; y++) {
+            memcpy(sbuf + (176 + y) * 344, v2_display_hud_buf + y * 320, 320);
+            memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+        }
     }
 }

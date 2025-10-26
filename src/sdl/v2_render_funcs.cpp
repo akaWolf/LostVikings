@@ -56,10 +56,38 @@ void v2_swap_render_buf() {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
-    // Copy current frame to display buffer under lock (render thread reads it)
+    // Atomic snapshot of pixels + HUD + palette under same lock. All 3 must be
+    // captured together — otherwise level-transition updates one before render
+    // thread reads the others → mismatched colors (main artifact: viewport,
+    // HUD icons flicker: HUD pixels rendered with palette from different frame).
     std::lock_guard<std::mutex> lock(v2_display_mutex);
     memcpy(v2_display_buf, v2_render_buf, 320*200);
+    extern uint8_t v2_display_hud_buf[];
+    memcpy(v2_display_hud_buf, v2_hud_buf, 320*64);
+    extern uint8_t* v2_vm_get_shadow_ds();
+    uint8_t* shad = v2_vm_get_shadow_ds();
+    if (shad) {
+        extern SDL_Color v2_display_palette[256];
+        extern bool v2_display_palette_valid;
+        const uint8_t* pal = shad + 0x8202;
+        for (int i = 0; i < 256; i++) {
+            v2_display_palette[i].r = pal[i*3 + 0] << 2;
+            v2_display_palette[i].g = pal[i*3 + 1] << 2;
+            v2_display_palette[i].b = pal[i*3 + 2] << 2;
+            v2_display_palette[i].a = 255;
+        }
+        // Color index 3 mirror from cmd_type=6 (dialog text bg) at shad[0x7F0B..0x7F0D]
+        v2_display_palette[3].r = shad[0x7F0B] << 2;
+        v2_display_palette[3].g = shad[0x7F0C] << 2;
+        v2_display_palette[3].b = shad[0x7F0D] << 2;
+        v2_display_palette_valid = true;
+    }
 }
+
+// Snapshot buffers — captured atomically at v2_swap_render_buf time.
+SDL_Color v2_display_palette[256] = {};
+bool v2_display_palette_valid = false;
+uint8_t v2_display_hud_buf[320*64] = {};
 
 void v2_set_m2c_base(void* base) {
     if (!v2_m2c_base) v2_m2c_base = (uint8_t*)base;
