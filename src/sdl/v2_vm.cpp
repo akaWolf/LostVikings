@@ -489,7 +489,7 @@ static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
 extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
                                                      uint16_t handle, bool mute);
 // "Production" impl — no replay knowledge. v2 callers go through fx::play_sfx.
-static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq);
+static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq);
 // Forward decl — fx::stop_all_sfx wraps this (full impl after fx:: namespace).
 static void v2_sub_17912_v2(uint8_t* s);
 
@@ -534,7 +534,7 @@ namespace fx {
     }
 }
 
-static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq) {
+static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6D);
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -552,31 +552,64 @@ static int v2_sub_177bb_v2(const uint8_t* s, uint16_t ax_seq) {
     int fire_idx = v2_audit_v2_next_fire_idx(obj);
     uint16_t handle = v2_audit_compute_handle(ax_seq, obj, v2_dbg_pre_vm_iter, fire_idx);
 #ifdef V2_ONLY
-    bool mute = false;  // V2_ONLY: v2 is the only player, no mute
+    // V2_ONLY: v2 is the sole audio producer → real playback through v2_pool
+    // (symmetric with v2_sub_176bd_v2 music path).
+    int sdl_handle = v2_pool.play_xmidi_external_with_handle_and_mute(xmidi, size, (int)ax_seq, handle, false);
 #else
-    bool mute = true;   // default mode: orig plays, v2 mutes (slot tracking only)
+    // Default mode: orig plays audible audio via orig_pool (orig sub_177bb SDL
+    // inline). v2 only mirrors DS slot bookkeeping for verify symmetry — no
+    // pool slot needed. Returning deterministic handle directly avoids creating
+    // mute slots in orig_pool that leak `is_handle_active=true` forever
+    // (no natural-end for slots without producer), which previously jammed the
+    // 4-entry DS slot table after ~4 SFX in a level → stop opcodes couldn't
+    // find new SFX (elevator/dialog sounds stuck).
+    (void)xmidi; (void)size;
+    int sdl_handle = (int)handle;
 #endif
-    play_xmidi_external_with_handle_and_mute(xmidi, size, (int)ax_seq, handle, mute);
-    return (int)handle;
+
+    // Mirror orig sub_177bb SDL inline (vikings.exe_seg000.cpp:16179-16202): on
+    // play success, scan slots si=8,6,4,2 for first free (FFFF or stale handle),
+    // store handle+seq. Anim cmd 0x77B2 falls through to sub_177bb in orig so
+    // anim-fired SFX also gets slot bookkeeping; v2 must mirror at production
+    // helper level (not per-call-site) to keep both paths symmetric — without
+    // this, ds:0x9912/0x991C diverges at f175 (FIRST MISMATCH, op_2F).
+    if (sdl_handle > 0 && sdl_handle <= 0xFFFE) {
+        extern bool is_handle_active(uint16_t h);
+        for (int si = 8; si > 0; si -= 2) {
+            uint16_t handle_off = (uint16_t)(si - 0x66F4);
+            uint16_t seq_off    = (uint16_t)(si - 0x66EA);
+            uint16_t cur = *(uint16_t*)(s + handle_off);
+            bool free_slot = (cur == 0xFFFF) || !is_handle_active(cur);
+            if (free_slot) {
+                *(uint16_t*)(s + handle_off) = (uint16_t)sdl_handle;
+                *(uint16_t*)(s + seq_off)    = ax_seq & 0xFF;
+                break;
+            }
+        }
+    }
+    return (int)sdl_handle;
 }
 
 // orig sub_1782a SDL inline (vikings.exe_seg000.cpp:15976).
-// Stops all SFX (music protected via set_dontstop_external).
+// Stops all SFX (music protected by v2_pool.dontstop_handle).
+// Targets v2_pool unconditionally — in default mode this is no-op (v2 doesn't
+// reserve SFX slots in any pool); in V2_ONLY v2_pool holds the real audible
+// SFX slots so this actually stops audio. Orig path's audible audio is stopped
+// by orig sub_1782a SDL inline (targets orig_pool), independent of this.
 static void v2_sub_1782a_v2() {
-#ifdef V2_ONLY
-    stop_xmidi_external();
-#endif
+    v2_pool.stop_all_sfx();
 }
 
 // orig sub_178d6 (vikings.exe_seg000.cpp:16062): if music not muted, replay it.
+// Removed #ifdef V2_ONLY gate — in default mode orig plays music via orig_pool
+// AND writes real_ds[0x990C] = handle. v2 mirror must symmetrically write
+// shadow_ds[0x990C] via fx::play_music → v2_sub_176bd_v2 (which reserves
+// muted slot in v2_pool and writes shadow_ds[0x990C] with deterministic
+// handle). Without this, anim VM op_D5 paths cause DS divergence at 0x990C.
 static void v2_sub_178d6_v2(uint8_t* s) {
-#ifdef V2_ONLY
     if (*(const uint16_t*)(s + 0x302) != 0) return;  // music muted/off
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6B);
     fx::play_music(s, bx_seg);
-#else
-    (void)s;
-#endif
 }
 
 // orig sub_17912 mirror (vikings.exe_seg000.cpp:16304-16350).
@@ -763,16 +796,14 @@ void v2_hw_wp_arm(uint8_t* ptr, const char* label) {
     pe.bp_len = HW_BREAKPOINT_LEN_1;
     pe.disabled = 0;
     pe.sample_period = 1;
-    pe.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_ADDR | PERF_SAMPLE_CALLCHAIN;
+    pe.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_ADDR;
     pe.wakeup_events = 1;
-    pe.exclude_callchain_kernel = 1; // only user-space frames
 
     v2_hw_wp_fd = syscall(__NR_perf_event_open, &pe, 0, -1, -1, 0);
     if (v2_hw_wp_fd < 0) { perror("HW-WP: perf_event_open"); return; }
 
-    // mmap ring buffer: 1 metadata page + 16 data pages (must be 1+2^n pages)
-    // Larger ring tolerates callchain samples (~300B each) between drains.
-    size_t mmap_size = (1 + 16) * 4096;
+    // mmap ring buffer: 1 metadata page + 4 data pages (must match munmap size)
+    size_t mmap_size = (1 + 4) * 4096;
     void* mm = mmap(NULL, mmap_size,
                     PROT_READ | PROT_WRITE, MAP_SHARED, v2_hw_wp_fd, 0);
     if (mm == MAP_FAILED) { perror("HW-WP: mmap"); close(v2_hw_wp_fd); v2_hw_wp_fd = -1; return; }
@@ -832,59 +863,40 @@ void v2_hw_wp_drain() {
         uint64_t hp = off;
         read_modular(hp, &hdr, sizeof(hdr));
 
+        // DIAG: log EVERY record type to see if kernel produces non-SAMPLE
+        // records (LOST, MMAP, THROTTLE, etc) that we may be ignoring.
+        { static int _rec = 0;
+          if (_rec++ < 50)
+              fprintf(stderr, "HW-WP-REC[%d]: type=%u size=%u (tail=%lu head=%lu)\n",
+                  _rec, hdr.type, hdr.size, (unsigned long)tail, (unsigned long)head);
+        }
+        // Safety: if size is 0 (corrupted), break to avoid infinite loop
+        if (hdr.size == 0) {
+            fprintf(stderr, "HW-WP: ABORT — hdr.size=0 (type=%u tail=%lu head=%lu)\n",
+                hdr.type, (unsigned long)tail, (unsigned long)head);
+            break;
+        }
+
         if (hdr.type == PERF_RECORD_SAMPLE) {
-            // Layout (sample_type = IP | ADDR | CALLCHAIN, in canonical order):
-            //   u64 ip; u64 addr; u64 nr; u64 ips[nr];
+            // Layout (sample_type = IP | ADDR, in canonical order):
+            //   u64 ip; u64 addr;
             uint64_t p = (off + sizeof(hdr)) % v2_hw_wp_ring_size;
-            uint64_t ip = 0, addr = 0, nr = 0;
+            uint64_t ip = 0, addr = 0;
             read_modular(p, &ip, sizeof(ip));
             read_modular(p, &addr, sizeof(addr));
-            read_modular(p, &nr, sizeof(nr));
 
             total_samples++;
             uint8_t val = v2_hw_wp_ptr ? *v2_hw_wp_ptr : 0;
-            // Filter: only print on value change OR every 50th sample (to track activity).
-            static uint8_t prev_val = 0xFE; // unlikely initial
-            static int dup_run = 0;
-            bool changed = (val != prev_val);
-            if (!changed) { dup_run++; tail += hdr.size; continue; }
-            if (dup_run > 0) {
-                fprintf(stderr, "  (... %d more samples with same val=0x%02X)\n", dup_run, prev_val);
-                dup_run = 0;
-            }
-            prev_val = val;
             // IP-4 = the actual store instruction on aarch64 (PC has advanced past it)
             uint64_t store_ip = ip - 4;
             Dl_info dli = {};
             dladdr((void*)store_ip, &dli);
             const char* fname = dli.dli_sname ? dli.dli_sname : "??";
             uintptr_t foff = dli.dli_saddr ? (store_ip - (uintptr_t)dli.dli_saddr) : 0;
-            fprintf(stderr, "HW-WP[%d]: %s = 0x%02X  store=0x%lX (%s+0x%lX) data_addr=0x%lX  callchain nr=%lu\n",
+            fprintf(stderr, "HW-WP[%d]: %s = 0x%02X  store=0x%lX (%s+0x%lX) data_addr=0x%lX\n",
                 total_samples, v2_hw_wp_label, val,
                 (unsigned long)store_ip, fname, (unsigned long)foff,
-                (unsigned long)addr, (unsigned long)nr);
-
-            uint64_t print_n = nr > 40 ? 40 : nr;
-            for (uint64_t i = 0; i < print_n; i++) {
-                uint64_t cip = 0;
-                read_modular(p, &cip, sizeof(cip));
-                // Context markers (PERF_CONTEXT_*) live in the top of the u64 range:
-                // PERF_CONTEXT_MAX = (u64)-4095, so any value >= it is a marker.
-                if (cip >= (uint64_t)PERF_CONTEXT_MAX) {
-                    const char* ctx = "CTX";
-                    if (cip == (uint64_t)PERF_CONTEXT_USER)        ctx = "USER";
-                    else if (cip == (uint64_t)PERF_CONTEXT_KERNEL) ctx = "KERNEL";
-                    else if (cip == (uint64_t)PERF_CONTEXT_HV)     ctx = "HV";
-                    fprintf(stderr, "    [%2lu] %s\n", (unsigned long)i, ctx);
-                    continue;
-                }
-                Dl_info cdli = {};
-                dladdr((void*)cip, &cdli);
-                const char* cfname = cdli.dli_sname ? cdli.dli_sname : "??";
-                uintptr_t cfoff = cdli.dli_saddr ? (cip - (uintptr_t)cdli.dli_saddr) : 0;
-                fprintf(stderr, "    [%2lu] 0x%lX  %s+0x%lX\n",
-                    (unsigned long)i, (unsigned long)cip, cfname, (unsigned long)cfoff);
-            }
+                (unsigned long)addr);
 
             // Disable after 200 samples (safety) — enough to capture writers between
             // a few frame transitions without flooding stderr.
@@ -4096,12 +4108,10 @@ static void v2_sub_1775d_helper(uint8_t* s) {
 // glitch). The #ifdef V2_ONLY guards v2 from calling fade_music when orig also will.
 static void v2_sub_178f1_helper(const uint8_t* s) {
     if (*(uint16_t*)(s + 0x302) != 0) return;  // music muted/off (TEST + JNZ exit)
-#ifdef V2_ONLY
-    extern void fade_music(int);
-    fade_music(1000);                            // SDL replacement (only when orig path doesn't run)
-#else
-    (void)s;  // default mode: orig seg000:16295 already calls fade_music
-#endif
+    // Target v2_pool only — orig path's fade_music (in seg000 SDL inline) targets
+    // orig_pool. Per-side pools = no double-fade conflict that the old single-pool
+    // design had (when both touched the same audible slot).
+    v2_pool.fade_music(1000);
 }
 
 // Music dispatch via off_3285A[ds:[type_byte] & 0xFF] — shared by sub_17749 (reads
@@ -7849,6 +7859,15 @@ struct V2VM {
     // DS write: write to shadow if within range (never write to real DS)
     void ds_write(uint16_t addr, uint16_t val) {
         if (addr < V2_VM_SHADOW_SIZE - 1) {
+            // V2-DS302: catch ANY VM write to music/SFX mute flags (ds:0x302/0x304).
+            // PC is anim bytecode offset, obj = current VM object id.
+            if (addr == 0x302 || addr == 0x304) {
+                extern int v2_dbg_pre_vm_iter;
+                fprintf(stderr,
+                  "V2-DS302[f%d]: obj=%02X pc=%04X addr=%04X val=%04X was=%04X\n",
+                  v2_dbg_pre_vm_iter, obj, pc, addr, val,
+                  *(uint16_t*)(shadow + addr));
+            }
             // Trap: watch sub-sprite mode for slots 0x0030-0x0034 + addr-1 spillover
             if (addr >= 0x117C && addr <= 0x1181) {
                 uint16_t old = *(uint16_t*)(shadow + addr);
@@ -8161,30 +8180,13 @@ static void v2_vm_op_sound(V2VM& vm) {
                 v2_dbg_pre_vm_iter, v2_current_level, cur_obj, seq);
         return; // sound disabled
     }
-    // Route through fx:: — audit log + sfx play, replay-aware gating.
+    // Route through fx:: — audit log + sfx play + slot bookkeeping (inside
+    // v2_sub_177bb_v2). Slot writes live in the production helper so both this
+    // VM opcode and anim cmd 0x77B2 inherit symmetric slot bookkeeping.
     int handle = fx::play_sfx(v2_vm_shadow_ds, seq, cur_obj);
     fprintf(stderr, "V2-SFX-REQ[f%d lv=%04X obj=%02X]: seq=%u det_handle=%04X 2E6D=%04X\n",
         v2_dbg_pre_vm_iter, v2_current_level, cur_obj, seq, (uint16_t)handle,
         *(uint16_t*)(v2_vm_shadow_ds + 0x2E6D));
-    // Slot bookkeeping. With deterministic handle, shadow_ds[slot] now matches
-    // real_ds[slot] exactly — verify can include 0x990C..0x991E without exclusion.
-    // Mirror orig SDL inline: scan slots si=8,6,4,2 for FIRST FREE (0xFFFF).
-    uint16_t hword = (handle >= 0 && handle <= 0xFFFE) ? (uint16_t)handle : 0xFFFF;
-    if (hword != 0xFFFF) {
-        // Stale-slot recycling — see orig sub_177bb SDL inline for rationale.
-        extern bool is_handle_active(uint16_t h);
-        for (int16_t si = 8; si > 0; si -= 2) {
-            uint16_t handle_addr = (uint16_t)(si - 0x66F4);
-            uint16_t seq_addr = (uint16_t)(si - 0x66EA);
-            uint16_t cur = vm.ds_read(handle_addr);
-            bool free_slot = (cur == 0xFFFF) || !is_handle_active(cur);
-            if (free_slot) {
-                vm.ds_write(seq_addr, seq);
-                vm.ds_write(handle_addr, hword);
-                break;
-            }
-        }
-    }
 }
 
 // 0x04 (sub_1782a): Stop sound. 1 byte consumed.
@@ -8206,9 +8208,10 @@ static void v2_vm_op_sound1(V2VM& vm) {
     for (int16_t si = 8; si > 0; si -= 2) {
         if (vm.ds_read((uint16_t)(si - 0x66EA)) == param) {
             uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
-#ifdef V2_ONLY
-            if (handle != 0xFFFF) { stop_xmidi_external(handle); stopped_any = true; }
-#endif
+            if (handle != 0xFFFF) {
+                v2_pool.stop_xmidi(handle);
+                stopped_any = true;
+            }
             vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
             vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
         }
@@ -8443,15 +8446,10 @@ static void v2_vm_op_D6(V2VM& vm) {
     // SDL replacement: fade_music(1000) — play.cpp's audio_callback ramps volume
     // and closes player when fade completes.
     //
-    // ARCHITECTURE NOTE: fade_music currently iterates ALL slots with matching
-    // handle (task #88 design). When orig+v2 both have slots with same handle
-    // (deterministic from audit), double-call resets fade_volume mid-ramp on
-    // orig's audible slot. Proper fix: separate audio API per side (orig vs v2)
-    // so each touches only its own instance. Pending refactor — for now safe
-    // because both sides set IDENTICAL fade params at near-identical time.
+    // ARCHITECTURE: targets v2_pool only (per-side pools). Orig path's audible
+    // music fade is invoked separately by orig SDL inline (targets orig_pool).
     if (vm.ds_read(0x302) != 0) return;  // music muted/off
-    extern void fade_music(int);
-    fade_music(1000);
+    v2_pool.fade_music(1000);
 }
 
 // 0xD7 (sub_1787f): Sound sequence check + clear slot. 3 bytes consumed.
@@ -12991,6 +12989,15 @@ static void v2_vm_op_57(V2VM& vm) {
               v2_vm_accumulator,
               *(uint16_t*)(vm.shadow + 0x25AD));
     }
+    // V2-OP57-302: trap writes to music mute flag (sound dispatch sees 0=play, 1=mute).
+    // Anim script in cutscene levels writes 0 here to force-unmute music.
+    if (addr == 0x302 || addr == 0x304) {
+        extern int v2_dbg_pre_vm_iter;
+        fprintf(stderr,
+          "V2-OP57-302[f%d]: obj=%02X pc=%04X addr=%04X val=%04X lvl=%04X — writing music mute\n",
+          v2_dbg_pre_vm_iter, vm.obj, (uint16_t)(vm.pc - 2), addr,
+          v2_vm_accumulator, *(uint16_t*)(vm.shadow + 0x25AD));
+    }
     vm.ds_write(addr, v2_vm_accumulator);
 }
 
@@ -16192,8 +16199,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // INT 21h/49 (free DOS memory), INT 21h/4C (terminate program).
                     // For v2: stop sound + _exit(0) to bypass static destructors
                     // (render thread mid-Mesa would SEGV otherwise).
-                    extern void stop_xmidi_external();
-                    stop_xmidi_external();
+                    orig_pool.stop_all_sfx();
+                    v2_pool.stop_all_sfx();
                     fflush(stdout); fflush(stderr);
                     extern bool need_quit; need_quit = true; SDL_Delay(50);
                     _exit(0);
@@ -16353,8 +16360,37 @@ static void v2_check_117D(const char* where, uint8_t* s, uint8_t* r) {
     uint8_t sv = s[0x117D], rv = r ? r[0x117D] : sv;
     if (sv != rv) fprintf(stderr, "V2-117D[%s]: shadow=%02X real=%02X\n", where, sv, rv);
 }
+// DIAG: polling watch for ds:0x302 divergence. Call from any phase to log
+// changes in real_ds[0x302] or shadow_ds[0x302]. Helper for hunting writer.
+void v2_watch_302(const char* tag) {
+    extern int v2_dbg_pre_vm_iter;
+    static uint16_t prev_r = 0xDEAD, prev_s = 0xDEAD;
+    static bool hw_armed = false;
+    uint16_t r302 = 0xDEAD, s302 = *(uint16_t*)(v2_vm_shadow_ds + 0x302);
+    if (v2_vm_real_ds_ptr) {
+        r302 = *(uint16_t*)(v2_vm_real_ds_ptr + 0x302);
+        // Arm HW watchpoint on real_ds[0x302] LOW BYTE IMMEDIATELY at first call.
+        // Lowered from threshold 170 — divergence may happen any frame after
+        // ALT+M XOR, captured by HW WP samples (IP + callchain).
+        if (!hw_armed) {
+            hw_armed = true;
+            v2_hw_wp_arm(v2_vm_real_ds_ptr + 0x302, "real_ds[0x302]");
+        }
+    }
+    if (r302 != prev_r || s302 != prev_s) {
+        fprintf(stderr, "WATCH-302[f%d %s]: real %04X→%04X  shadow %04X→%04X%s\n",
+            v2_dbg_pre_vm_iter, tag, prev_r, r302, prev_s, s302,
+            (r302 != s302) ? "  *** DIVERGE ***" : "");
+        prev_r = r302; prev_s = s302;
+    }
+    // Drain HW watchpoint samples (logs IP + callchain of every write).
+    v2_hw_wp_drain();
+}
+
 void v2_phase_frame_begin(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
+    (void)ds_val;
+    v2_watch_302("FRAME_BEGIN");
     // Increment frame counter at FRAME_BEGIN barrier — single sync point both
     // orig and v2 cross together. Counter stays constant for entire outer
     // frame (incl. sub_115d2 internal sub-frames where orig doesn't signal
@@ -16424,6 +16460,7 @@ static void v2_sub_11b0b_per_frame(uint8_t* s) {
 
 void v2_phase_pre_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("PRE_VM");
     // NOTE: counter increment moved to v2_phase_frame_begin (FRAME_BEGIN barrier)
     // so that orig+v2 see same v2_dbg_pre_vm_iter throughout the entire outer
     // frame — including sub_115d2 internal sub-frames where orig doesn't signal.
@@ -16434,12 +16471,13 @@ void v2_phase_pre_vm(uint16_t ds_val) {
     v2_compare_phase_snap(V2_PSNAP_FRAME_BEGIN, "v2_phase_pre_vm");
     // Arm HW WP on real_ds[0x8FB8] (row_offset[40] entry) at frame 1.
     // We want to catch the writer that produces orig's value 0x2E20 vs shadow's 0x2D00.
-    { static int _f = 0; _f++;
-      if (_f == 1 && v2_vm_real_ds_ptr) {
-          fprintf(stderr, "HW-WP-PREARM[f%d]: arming real_ds[0x8FB8] (row_offset[40])\n", _f);
-          v2_hw_wp_arm(v2_vm_real_ds_ptr + 0x8FB8, "real_ds[0x8FB8]");
-      }
-    }
+    // DISABLED: v2_watch_302 arms on real_ds[0x302] for music mute investigation.
+    // { static int _f = 0; _f++;
+    //   if (_f == 1 && v2_vm_real_ds_ptr) {
+    //       fprintf(stderr, "HW-WP-PREARM[f%d]: arming real_ds[0x8FB8] (row_offset[40])\n", _f);
+    //       v2_hw_wp_arm(v2_vm_real_ds_ptr + 0x8FB8, "real_ds[0x8FB8]");
+    //   }
+    // }
     // Snapshot ds:0x32F BEFORE pre-VM modifies it (sub_10138 INC)
     v2_pre_vm_32F_snapshot = *(uint16_t*)(v2_vm_shadow_ds + 0x32F);
     v2_game_loop_pre_vm(v2_vm_shadow_ds, ds_val);
@@ -16896,6 +16934,7 @@ std::mutex v2_render_tick_mutex;
 void v2_vm_trace_compare(); // forward decl
 void v2_phase_post_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("POST_VM");
     // SFX audit L1: per-frame count check (orig vs v2 SFX call counts).
     // Called at frame boundary (post-VM) — by now both threads have processed VM ops.
     v2_audit_check_frame_end();
@@ -16950,6 +16989,7 @@ void v2_phase_post_vm(uint16_t ds_val) {
 
 void v2_phase_render1(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("RENDER1");
     // PSNAP compare: v2 shadow should match orig POST_VM_END.
     v2_compare_phase_snap(V2_PSNAP_POST_VM_END, "v2_phase_render1");
     uint8_t* s = v2_vm_shadow_ds;
@@ -17062,6 +17102,7 @@ static uint32_t v2_ds_hash(uint8_t* ds);
 
 void v2_phase_post_flip1(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("POST_FLIP1");
     // PSNAP compare: catches divergence in render1 (sub_1DE05/sub_1DD9C/sub_1c8f1/sub_1e0c7/sub_16775).
     v2_compare_phase_snap(V2_PSNAP_RENDER1_END, "v2_phase_post_flip1");
     uint8_t* s = v2_vm_shadow_ds;
@@ -17200,6 +17241,7 @@ void v2_phase_post_flip1(uint16_t ds_val) {
 
 void v2_phase_render2(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("RENDER2");
     // PSNAP compare: catches divergence in post_flip1 (12e16/15530/10704/12fcb/12d2c).
     v2_compare_phase_snap(V2_PSNAP_POST_FLIP1_END, "v2_phase_render2");
     // Mirrors orig pass 2 (eip 0x0086..0x00A6).
@@ -17227,6 +17269,7 @@ void v2_phase_render2(uint16_t ds_val) {
 
 void v2_phase_post_flip2(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("POST_FLIP2");
     // PSNAP compare: catches divergence in render2.
     v2_compare_phase_snap(V2_PSNAP_RENDER2_END, "v2_phase_post_flip2");
     uint8_t* s = v2_vm_shadow_ds;
@@ -17469,6 +17512,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
 
 void v2_phase_render3(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("RENDER3");
     // PSNAP compare: catches divergence in post_flip2 (10753/13c0c/12fd0/11792/101be).
     v2_compare_phase_snap(V2_PSNAP_POST_FLIP2_END, "v2_phase_render3");
     // Mirrors orig pass 3 (eip 0x00BB..0x00D8).
@@ -17494,6 +17538,7 @@ void v2_phase_render3(uint16_t ds_val) {
 
 void v2_phase_post_flip3(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("POST_FLIP3");
     // PSNAP compare: catches divergence in render3.
     v2_compare_phase_snap(V2_PSNAP_RENDER3_END, "v2_phase_post_flip3");
     uint8_t* s = v2_vm_shadow_ds;
@@ -17522,8 +17567,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 // loc_10E35 path: orig = QUIT to DOS (sub_16546 VGA cleanup +
                 // sub_1754c AIL exit + INT 21h/49 free memory + INT 21h/4C
                 // terminate). For v2: stop sound + _exit(0).
-                extern void stop_xmidi_external();
-                stop_xmidi_external();
+                orig_pool.stop_all_sfx();
+                v2_pool.stop_all_sfx();
                 fflush(stdout); fflush(stderr);
                 extern bool need_quit; need_quit = true; SDL_Delay(50);
                 _exit(0);
@@ -17737,8 +17782,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 // Check word_28814 & 2 → JMP loc_10E35 (QUIT to DOS)
                 if (*(uint16_t*)(s + 0x0334) & 2) {
                     // loc_10E35 = QUIT (same as F10 quit branch above).
-                    extern void stop_xmidi_external();
-                    stop_xmidi_external();
+                    orig_pool.stop_all_sfx();
+                    v2_pool.stop_all_sfx();
                     fflush(stdout); fflush(stderr);
                     extern bool need_quit; need_quit = true; SDL_Delay(50);
                     _exit(0);
@@ -17772,6 +17817,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
 
 void v2_phase_frame_end(uint16_t ds_val) {
     if (!v2_frame_active) return;
+    v2_watch_302("FRAME_END");
     v2_frame_active = false;
     // Per-frame divergence + stuck-state verify (gameplay-level only)
     v2_frame_end_verify();
@@ -17795,8 +17841,12 @@ void v2_phase_frame_end(uint16_t ds_val) {
         if (level < 0x25) {
             uint16_t w286e2 = *(uint16_t*)(s + 0x0202); // word_286E2 (debug build flag)
             if (w286e2 != 0) {
-                s[0x91AB] |= sdl_spec_get(0x91AB);  // SDL F5 OR-in
-                s[0x91AC] |= sdl_spec_get(0x91AC);  // SDL F6 OR-in
+                // Match orig structure (seg000:2159-2183): F5 OR'd first, ONLY if
+                // F5 didn't fire is F6 OR'd inside loc_10121. Previous v2 ORed both
+                // unconditionally → when F5 pressed AND F6 SDL state=1, v2 set
+                // shadow[0x91AC]=1 but orig never touched real[0x91AC] (skipped F6
+                // OR via JNZ from F5 path) → divergence at FIRST MISMATCH.
+                s[0x91AB] |= sdl_spec_get(0x91AB);  // SDL F5 OR-in (orig line 2159)
                 if (s[0x91AB] == 1) { // byte_3168B == 1 (F5: prev level)
                     s[0x91AB] = 0; // SDL port: clear byte (no INT 9 KEYUP path)
                     *(uint16_t*)(s + 0x0334) |= 1; // OR word_28814, 1
@@ -17804,10 +17854,14 @@ void v2_phase_frame_end(uint16_t ds_val) {
                     ax -= 1; // DEC ax
                     if (ax < 0) ax = 0;
                     *(uint16_t*)(s + 0x25C9) = (uint16_t)ax; // MOV word_2AAA9, ax
-                } else if (s[0x91AC] == 1) { // byte_3168C == 1 (F6: next level)
-                    s[0x91AC] = 0; // SDL port: clear byte (no INT 9 KEYUP path)
-                    *(uint16_t*)(s + 0x0334) |= 1; // OR word_28814, 1
-                    // word_2AAA9 already set by VM (next level destination)
+                } else {
+                    // loc_10121: F5 didn't fire → check F6 (orig line 2177)
+                    s[0x91AC] |= sdl_spec_get(0x91AC);  // SDL F6 OR-in
+                    if (s[0x91AC] == 1) { // byte_3168C == 1 (F6: next level)
+                        s[0x91AC] = 0; // SDL port: clear byte (no INT 9 KEYUP path)
+                        *(uint16_t*)(s + 0x0334) |= 1; // OR word_28814, 1
+                        // word_2AAA9 already set by VM (next level destination)
+                    }
                 }
             }
         }
