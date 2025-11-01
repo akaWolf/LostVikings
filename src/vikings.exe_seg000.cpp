@@ -2720,10 +2720,6 @@ cs=0x1a2;eip=0x0004bb; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 650 call    su
 cs=0x1a2;eip=0x0004c0; 	J(CALL(sub_16775,0));	// 651 call    sub_16775 ;~ 01A2:04C0
 loc_104c3:
 	// 4428
-	// V2 barrier: per-iter sync of quit-prompt / transition-text loop
-	// (sub_104a1 loc_104c3). User presses ESC → sub_1041c fires this loop
-	// asking "Quit to DOS?". v2 mirror handles same DS writes.
-	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_TRANSITION_TEXT, ds);
 cs=0x1a2;eip=0x0004c3; 	X(MOV(word_3287c, 1));	// 654 mov     word_3287C, 1 ;~ 01A2:04C3
 cs=0x1a2;eip=0x0004c9; 	J(CALL(sub_10130,0));	// 655 call    sub_10130 ;~ 01A2:04C9
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
@@ -2733,6 +2729,13 @@ cs=0x1a2;eip=0x0004d7; 	J(CALL(sub_10130,0));	// 658 call    sub_10130 ;~ 01A2:0
 cs=0x1a2;eip=0x0004da; 	X(MOV(word_3287c, 1));	// 659 mov     word_3287C, 1 ;~ 01A2:04DA
 cs=0x1a2;eip=0x0004e0; 	J(CALL(sub_10130,0));	// 660 call    sub_10130 ;~ 01A2:04E0
 cs=0x1a2;eip=0x0004e3; 	J(CALL(sub_12352,0));	// 661 call    sub_12352 ;~ 01A2:04E3
+	// V2 barrier: per-iter sync of quit-prompt / transition-text loop
+	// (sub_104a1 loc_104c3). User presses ESC → sub_1041c fires this loop
+	// asking "Quit to DOS?". Signal AFTER sub_12352 so v2 mirror reads
+	// CURRENT iter's v2_input_snapshot (matches VIKING_SWITCH_LOOP pattern).
+	// Previously placed BEFORE sub_12352 → v2 read stale snapshot → off-by-one
+	// in shadow_2889a → spurious F-edge at iter when input changed.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_TRANSITION_TEXT, ds);
 cs=0x1a2;eip=0x0004e6; 	J(CALL(sub_10555,0));	// 662 call    sub_10555 ;~ 01A2:04E6
 cs=0x1a2;eip=0x0004e9; 	J(CALL(sub_105cb,0));	// 663 call    sub_105CB ;~ 01A2:04E9
 cs=0x1a2;eip=0x0004ec; 	J(JC(loc_104f0));	// 664 jb      short loc_104F0 ;~ 01A2:04EC
@@ -4879,11 +4882,11 @@ cs=0x1a2;eip=0x001c19; 	X(MOV(word_28921, ax));	// 3629 mov     word_28921, ax ;
 cs=0x1a2;eip=0x001c1c; 	J(CALL(sub_11f47,0));	// 3630 call    sub_11F47 ;~ 01A2:1C1C
 loc_11c1f:
 	// 4660
-	// V2 barrier: per-iter sync of pause loop (sub_11ba5 inner loop loc_11c1f).
-	// orig sub_12352 just updated v2_input_snapshot; v2 mirror reads same snapshot,
-	// runs identical iter logic on shadow → both end iter with consistent DS.
-	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PAUSE_LOOP, ds);
 cs=0x1a2;eip=0x001c1f; 	J(CALL(sub_12352,0));	// 3633 call    sub_12352 ;~ 01A2:1C1F
+	// V2 barrier: per-iter sync of pause loop (sub_11ba5 inner loop loc_11c1f).
+	// Signal AFTER sub_12352 so v2 mirror reads CURRENT iter's snapshot
+	// (matches VIKING_SWITCH_LOOP pattern). Previously placed BEFORE → stale.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PAUSE_LOOP, ds);
 cs=0x1a2;eip=0x001c22; 	J(CALL(sub_11cbb,0));	// 3634 call    sub_11CBB ;~ 01A2:1C22
 cs=0x1a2;eip=0x001c25; 	X(PUSHF);	// 3635 pushf ;~ 01A2:1C25
 cs=0x1a2;eip=0x001c26; 	J(CALL(sub_11c52,0));	// 3636 call    sub_11C52 ;~ 01A2:1C26

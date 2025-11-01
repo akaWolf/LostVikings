@@ -16403,6 +16403,24 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // In default mode seg000 also takes snapshot at sub_12352 line 5623; both
     // paths update the same buffer so worst case it's refreshed twice/frame.
     { extern void sdl_spec_snapshot_take(); sdl_spec_snapshot_take(); }
+    // Mirror orig int 9 ISR's write to ds:[bx-0x6E94] for ALL scancodes:
+    // orig ISR sets ds:0x916C+sc = 1 on KEYDOWN, = 0 on KEYUP. VM/menu code
+    // (password entry, dialog) polls these bytes per-frame. Without this sync
+    // VM reads 0 → no letters captured. Apply to BOTH real_ds and shadow_ds so
+    // verify stays clean.
+    {
+        extern uint8_t sdl_spec_snap_for_ds(uint16_t low_byte);
+        uint8_t* real_ds = v2_vm_real_ds_ptr;
+        for (int low = 0x6C; low <= 0xEB; low++) {
+            uint8_t state = sdl_spec_snap_for_ds((uint16_t)low);
+            if (real_ds) real_ds[0x9100 + low] = state;
+            v2_vm_shadow_ds[0x9100 + low] = state;
+            if (state) {
+                fprintf(stderr, "KEYSYNC-DS: low=0x%02X (ds:0x%04X) = 1 real_ds=%p shadow_ds=%p\n",
+                        low, 0x9100 + low, (void*)real_ds, (void*)v2_vm_shadow_ds);
+            }
+        }
+    }
 #ifdef V2_RENDER_FROM_SHADOW
     v2_vm_in_frame = true;
 #endif
