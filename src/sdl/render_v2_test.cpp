@@ -52,6 +52,26 @@ void render_callback_v2(void* state)
             memcpy(sbuf + y * 344, src + y * 320, 320);
             memset(sbuf + y * 344 + 320, 0, 24); // padding
         }
+        // F12 PGM dump (v2 path). Clear flag AFTER both orig+v2 saved.
+        extern std::atomic<bool> g_dump_pgm_request;
+        if (g_dump_pgm_request.load(std::memory_order_acquire)) {
+            FILE* f = fopen("/tmp/v2_ladder.ppm", "wb");
+            if (f) {
+                fprintf(f, "P6\n320 176\n255\n");
+                for (int y = 0; y < 176; y++) {
+                    for (int x = 0; x < 320; x++) {
+                        uint8_t c = v2_display_buf[y * 320 + x];
+                        fputc(myDrawInfo_v2->drawPalette[c].r, f);
+                        fputc(myDrawInfo_v2->drawPalette[c].g, f);
+                        fputc(myDrawInfo_v2->drawPalette[c].b, f);
+                    }
+                }
+                fclose(f);
+                fprintf(stderr, "PGM-DUMP: saved /tmp/v2_ladder.ppm\n");
+            }
+            // Clear flag — orig render side might've already saved before this point
+            g_dump_pgm_request.store(false, std::memory_order_release);
+        }
     }
     // Copy HUD (rows 176-239) from v2_display_hud_buf SNAPSHOT (captured atomically
     // with v2_display_buf + v2_display_palette at v2_swap_render_buf time). Live

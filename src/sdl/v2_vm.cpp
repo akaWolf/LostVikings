@@ -18038,25 +18038,66 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
     }
 }
 
-// V2_PHASE_PAUSE_LOOP handler — Phase 3 (TODO: full implementation).
-// One iteration of orig sub_11ba5 loc_11c1f pause loop.
+// sub_11c52 mirror: pause selector blink animation. Orig (eip 0x1c52..0x1c8e):
+//   if word_28927 == 1 → JZ loc_11c8f (alternate path)
+//   else: DEC word_28925; if (word_28925 & 0x0F) ret;
+//        if (word_28925 & 0x10) call sub_1183d(di=word_28923<<1, ax=word_28921);
+//        else call sub_1183d(di=word_28923<<1, ax=0); // hide selector
+//   loc_11c8f: DEC word_28925; if (word_28925 & 0x0F) ret;
+//             same dispatch but +0x16 (different sprite range).
+// v2 mirror: DS writes only (no rendering, since v2 renders independently).
+static void v2_sub_11c52(uint8_t* s) {
+    uint16_t mode = *(uint16_t*)(s + 0x447);    // word_28927
+    if (mode != 1) {
+        // Mode != 1: regular selector blink
+        uint16_t cnt = *(uint16_t*)(s + 0x445) - 1;  // DEC word_28925
+        *(uint16_t*)(s + 0x445) = cnt;
+        // No further DS writes — sub_1183d/sub_120d1 are pure VGA render
+    } else {
+        // Mode == 1: alternate blink path
+        uint16_t cnt = *(uint16_t*)(s + 0x445) - 1;
+        *(uint16_t*)(s + 0x445) = cnt;
+    }
+}
+
+// sub_10555 mirror: quit-prompt selector blink (eip 0x555..0x5CA). Same pattern
+// as sub_11c52 but different sprite range. DS write: DEC word_28925.
+static void v2_sub_10555(uint8_t* s) {
+    uint16_t cnt = *(uint16_t*)(s + 0x445) - 1;
+    *(uint16_t*)(s + 0x445) = cnt;
+}
+
+// V2_PHASE_PAUSE_LOOP handler — Phase 3. One iteration of orig sub_11ba5
+// loc_11c1f pause loop. Orig body (eip 0x1c1f..0x1c4c):
+//   sub_12352 (input) → sub_11cbb (inventory) → PUSHF → sub_11c52 (blink)
+//   → sub_11792 (render) → sub_16775 (page flip) → sub_10130 (vsync)
+//   → sub_108c8 (sound) → ESC check → POPF/JNC loop
+// v2 mirror: sync input + selector blink DS writes. sub_11cbb is complex
+// (200+ lines) — mirror exists in v2_game_loop_pre_vm under #if 0, full
+// per-iter version is TODO. For default mode + simple pause (just blink
+// + ESC exit), this is enough.
 void v2_run_pause_loop(uint8_t* shadow) {
-    // TODO: extract from existing v2_game_loop_pre_vm pause block.
-    // For now, just do input read so v2 doesn't desync.
-    v2_sub_12352_iter(shadow);
+    v2_sub_12352_iter(shadow);                       // input read
+    v2_sub_11c52(shadow);                            // selector blink DEC
+    // TODO: full sub_11cbb mirror (item pickup/category nav). Currently shadow
+    // diverges from real on inventory state when user interacts during pause.
 }
 
-// V2_PHASE_TRANSITION_TEXT handler — Phase 4 (TODO).
-// One iteration of orig sub_104A1 loc_104C3 transition text scroll loop.
+// V2_PHASE_TRANSITION_TEXT handler — Phase 4. One iteration of orig sub_104a1
+// loc_104c3 quit-prompt loop (asks "Quit to DOS?"). Orig body:
+//   sub_10130 × 3 (vsync × 3 sub-frames) → sub_12352 (input) → sub_10555
+//   (selector blink) → sub_105cb (exit check sets carry) → JC exit / loop
+// v2 mirror: input + selector blink.
 void v2_run_transition_text_loop(uint8_t* shadow) {
-    // TODO: implement sub_104A1 mirror.
-    v2_sub_12352_iter(shadow);
+    v2_sub_12352_iter(shadow);                       // input read
+    v2_sub_10555(shadow);                            // selector blink DEC
+    // TODO: full sub_105cb mirror (Y/N keyboard check + carry set).
 }
 
-// V2_PHASE_PASSWORD_PROMPT handler — Phase 5 (TODO).
-// orig sub_1041c password input.
+// V2_PHASE_PASSWORD_PROMPT handler — Phase 5. Stub: sub_1041c is just the
+// TRIGGER (ESC check + jump to sub_104a1). The actual loop is sub_104a1
+// loc_104c3 handled by V2_PHASE_TRANSITION_TEXT above.
 void v2_run_password_prompt(uint8_t* shadow) {
-    // TODO: implement sub_1041c mirror.
     v2_sub_12352_iter(shadow);
 }
 

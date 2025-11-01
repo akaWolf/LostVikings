@@ -30,6 +30,33 @@ extern void render_callback(void *);
 extern uint16_t input_keys_v2;
 uint16_t input_keys = 0;
 bool need_quit = false;
+std::atomic<bool> g_dump_pgm_request{false};  // set by F12 → both render threads dump
+
+// Save 320x176 viewport as PGM file. Includes palette as PAM if available.
+static void save_pgm(const char* path, const uint8_t* buf_320x176_or_344_stride,
+                     int stride, const SDL_Color* palette /*nullable*/) {
+    FILE* f = fopen(path, "wb");
+    if (!f) { fprintf(stderr, "PGM-DUMP: cannot open %s\n", path); return; }
+    if (palette) {
+        // PPM (binary RGB) so colors are visible
+        fprintf(f, "P6\n320 176\n255\n");
+        for (int y = 0; y < 176; y++) {
+            for (int x = 0; x < 320; x++) {
+                uint8_t c = buf_320x176_or_344_stride[y * stride + x];
+                fputc(palette[c].r, f);
+                fputc(palette[c].g, f);
+                fputc(palette[c].b, f);
+            }
+        }
+    } else {
+        // PGM grayscale = raw color indices
+        fprintf(f, "P5\n320 176\n255\n");
+        for (int y = 0; y < 176; y++)
+            fwrite(buf_320x176_or_344_stride + y * stride, 1, 320, f);
+    }
+    fclose(f);
+    fprintf(stderr, "PGM-DUMP: saved %s (%s)\n", path, palette ? "PPM with palette" : "PGM raw");
+}
 
 // Cherry-pick 3f2114a: gate updateDraw() on word_3287c (VSYNC counter).
 // Game thread DECs word_3287c in render_callback (via sub_1797b). When > 0,
@@ -305,6 +332,10 @@ void updateDraw()
 					 case SDLK_3:
 					   spec_off = 0x9170;  // sc 0x04 — viking 3 select
 					   break;
+					 case SDLK_F12:
+					   if (event.type == SDL_KEYDOWN && event.key.repeat == 0)
+						 g_dump_pgm_request.store(true, std::memory_order_release);
+					   break;
 				     default:
 					   key_val = 0;
 					   break;
@@ -353,6 +384,15 @@ void updateDraw()
 			      }
 			   }
 			   //printf("VGA pan: %x %x\n", myDrawInfo->myOffset, myDrawInfo->myPixelOffset);
+			   // F12 PGM dump (orig drawBuffer at current VGA offset)
+			   if (g_dump_pgm_request.load(std::memory_order_acquire)) {
+				 auto cur_offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
+				 // Note: g_dump_pgm_request cleared by v2 side AFTER its dump (so both dump same frame)
+				 save_pgm("/tmp/orig_ladder.ppm",
+				          myDrawInfo->drawBuffer + cur_offset,
+				          RENDER_WIDTH,
+				          myDrawInfo->drawPalette);
+			   }
 			   // Cherry-pick 3f2114a: only update screen when game has finished a
 			   // frame (waits in sub_10130). Prevents race with game thread writes
 			   // (door/dialog artifacts). V2_ONLY: gate disabled (no m2c).
