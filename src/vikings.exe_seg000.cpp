@@ -2146,11 +2146,19 @@ loc_100f7:
 	// 4372
 cs=0x1a2;eip=0x0000f7; 	T(CMP(word_2aa8d, 0x25));	// 122 cmp     word_2AA8D, 25h ; '%' ;~ 01A2:00F7
 cs=0x1a2;eip=0x0000fc; 	J(JGE(loc_1012d));	// 123 jge     short loc_1012D ;~ 01A2:00FC
+	// Re-apply --debug cheat flag every frame — sub_11080 (level reload) clears
+	// word_286E2 to 0 from ds_static.bin, breaking F5/F6 after first transition.
+	// Mirrors the startup write at seg000 main entry; idempotent.
+	{ extern bool g_debug_mode; if (g_debug_mode) *(dw*)(raddr(ds, 0x202)) = 1; }
 cs=0x1a2;eip=0x0000fe; 	T(TEST(word_286e2, 0x0FFFF));	// 124 test    word_286E2, 0FFFFh ;~ 01A2:00FE
 cs=0x1a2;eip=0x000104; 	J(JZ(loc_1012d));	// 125 jz      short loc_1012D ;~ 01A2:0104
 	byte_3168b |= sdl_spec_get(0x91AB);  // SDL F5 (prev level cheat) OR-in
 cs=0x1a2;eip=0x000106; 	T(CMP(byte_3168b, 1));	// 126 cmp     byte_3168B, 1 ;~ 01A2:0106
 cs=0x1a2;eip=0x00010b; 	J(JNZ(loc_10121));	// 127 jnz     short loc_10121 ;~ 01A2:010B
+	// SDL port: orig relied on int 9 ISR clearing byte_3168B on KEYUP; we have
+	// no KEYUP path for this byte, so manually clear here (matches what F4 path
+	// does at eip 0xF1). Without this, F5 keeps firing every frame forever.
+	byte_3168b = 0;
 cs=0x1a2;eip=0x00010d; 	X(OR(word_28814, 1));	// 128 or      word_28814, 1 ;~ 01A2:010D
 cs=0x1a2;eip=0x000112; 	T(MOV(ax, word_2aa8d));	// 129 mov     ax, word_2AA8D ;~ 01A2:0112
 cs=0x1a2;eip=0x000115; 	T(DEC(ax));	// 130 dec     ax ;~ 01A2:0115
@@ -2165,6 +2173,9 @@ loc_10121:
 	byte_3168c |= sdl_spec_get(0x91AC);  // SDL F6 (next level cheat) OR-in
 cs=0x1a2;eip=0x000121; 	T(CMP(byte_3168c, 1));	// 140 cmp     byte_3168C, 1 ;~ 01A2:0121
 cs=0x1a2;eip=0x000126; 	J(JNZ(loc_1012d));	// 141 jnz     short loc_1012D ;~ 01A2:0126
+	// SDL port: same KEYUP-missing fix as F5 path above. Clear byte after fire,
+	// otherwise F6 retriggers on every subsequent main-loop iteration.
+	byte_3168c = 0;
 cs=0x1a2;eip=0x000128; 	X(OR(word_28814, 1));	// 142 or      word_28814, 1 ;~ 01A2:0128
 loc_1012d:
 	// 4375
@@ -16161,17 +16172,39 @@ sub_177bb:
                        raddr(*(dw*)(raddr(ds,0x2E6D)),0),
                        chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4],
                        ax, handle, false /* not muted - orig plays */);
+   bool _stored = false;
+   int _stored_si = -1;
    if (sdl_handle > 0) {
      // Try slots si=8,6,4,2 for free slot (matches orig sub_177bb scan order).
      // Store deterministic handle so v2 mirrors exactly.
+     // Treat slot as free if either:
+     //   - DS handle == 0xFFFF (orig free marker), OR
+     //   - DS handle refers to a sound that already naturally ended (stale).
+     // Without the stale check, the 4-slot DS table fills up forever once 4
+     // ~1.5s SFX have played (they end naturally but DS slot never clears),
+     // then new sub_177bb fails to store, and sub_1782a/1787f stop can't find
+     // the seq → elevator-style SFX never stops audibly.
+     extern bool is_handle_active(uint16_t h);
      for (int _si = 8; _si > 0; _si -= 2) {
-       if (*(dw*)(raddr(ds, _si - 0x66F4)) == 0xFFFF) {
+       uint16_t _cur = *(dw*)(raddr(ds, _si - 0x66F4));
+       bool free_slot = (_cur == 0xFFFF) || !is_handle_active(_cur);
+       if (free_slot) {
          *(dw*)(raddr(ds, _si - 0x66F4)) = (dw)sdl_handle;
          *(dw*)(raddr(ds, _si - 0x66EA)) = ax & 0xFF;
+         _stored = true;
+         _stored_si = _si;
          break;
        }
      }
    }
+   fprintf(stderr, "ORIG-SUB-177BB[f%d obj=%04X]: seq=%u handle=%04X stored=%d si=%d "
+           "slots: 8=(h=%04X,s=%04X) 6=(h=%04X,s=%04X) 4=(h=%04X,s=%04X) 2=(h=%04X,s=%04X)\n",
+           v2_dbg_pre_vm_iter, obj, (uint16_t)(ax & 0xFF), (uint16_t)sdl_handle,
+           _stored ? 1 : 0, _stored_si,
+           *(dw*)(raddr(ds, 8 - 0x66F4)), *(dw*)(raddr(ds, 8 - 0x66EA)),
+           *(dw*)(raddr(ds, 6 - 0x66F4)), *(dw*)(raddr(ds, 6 - 0x66EA)),
+           *(dw*)(raddr(ds, 4 - 0x66F4)), *(dw*)(raddr(ds, 4 - 0x66EA)),
+           *(dw*)(raddr(ds, 2 - 0x66F4)), *(dw*)(raddr(ds, 2 - 0x66EA)));
  }
 cs=0x1a2;eip=0x0077b1; 	J(RETN(0));	// 17313 retn ;~ 01A2:77B1
 cs=0x1a2;eip=0x0077bb; 	X(PUSH(es));	// 17331 push    es ;~ 01A2:77BB
@@ -16242,6 +16275,19 @@ sub_1782a:
  // Replaced unconditional stop_all_sfx() with selective stop by seq below
  // (after AND ax, 0xFF). Slot loop in orig already iterates ds:[si-0x66EA]
  // for matching seq — we hook in there via the AIL sub_1C79F replacement.
+ {
+   extern int v2_dbg_pre_vm_iter;
+   uint16_t _seq = (*(dw*)(raddr(es,bx))) & 0xFF;
+   uint16_t _obj = *(dw*)(raddr(ds, 0x42));
+   uint16_t _304 = *(dw*)(raddr(ds, 0x304));
+   fprintf(stderr, "ORIG-SUB-1782A[f%d obj=%02X]: stop_seq=%u muted_304=%u "
+           "slots: 8=(h=%04X,s=%04X) 6=(h=%04X,s=%04X) 4=(h=%04X,s=%04X) 2=(h=%04X,s=%04X)\n",
+           v2_dbg_pre_vm_iter, _obj, _seq, _304,
+           *(dw*)(raddr(ds, 8 - 0x66F4)), *(dw*)(raddr(ds, 8 - 0x66EA)),
+           *(dw*)(raddr(ds, 6 - 0x66F4)), *(dw*)(raddr(ds, 6 - 0x66EA)),
+           *(dw*)(raddr(ds, 4 - 0x66F4)), *(dw*)(raddr(ds, 4 - 0x66EA)),
+           *(dw*)(raddr(ds, 2 - 0x66F4)), *(dw*)(raddr(ds, 2 - 0x66EA)));
+ }
 	// 17399
 cs=0x1a2;eip=0x00782a; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 17401 mov     ax, es:[bx] ;~ 01A2:782A
 ret_1a2_782d:
@@ -16295,6 +16341,14 @@ cs=0x1a2;eip=0x00787d; 	X(POP(es));	// 17437 pop     es ;~ 01A2:787D
 cs=0x1a2;eip=0x00787e; 	J(RETN(0));	// 17438 retn ;~ 01A2:787E
 sub_1787f:
 	// 17445
+ {
+   extern int v2_dbg_pre_vm_iter;
+   uint16_t _seq = (*(dw*)(raddr(es,bx))) & 0xFF;
+   uint16_t _obj = *(dw*)(raddr(ds, 0x42));
+   uint16_t _304 = *(dw*)(raddr(ds, 0x304));
+   fprintf(stderr, "ORIG-SUB-1787F[f%d obj=%02X]: stop_seq=%u muted_304=%u\n",
+           v2_dbg_pre_vm_iter, _obj, _seq, _304);
+ }
 cs=0x1a2;eip=0x00787f; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 17447 mov     ax, es:[bx] ;~ 01A2:787F
 ret_1a2_7882:
 	// 5870

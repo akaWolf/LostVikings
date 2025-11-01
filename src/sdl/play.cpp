@@ -129,6 +129,23 @@ int AudioPool::play_xmidi_with_handle_and_mute(const void* xmidi, uint32_t len, 
     return (int)handle;
 }
 
+// Returns true if any slot in this pool currently has the given handle and is
+// active (producer running OR mute-slot still tracked). Used by orig sub_177bb's
+// scan to treat stale DS-slot entries (handle of a sound that already
+// naturally ended) as free slots — otherwise the slot table fills up with
+// stale handles, sub_177bb can't store new SFX, and sub_1782a/1787f stop can't
+// find them either (elevator sound bug).
+bool AudioPool::is_handle_active(uint16_t handle) {
+    if (handle == 0 || handle == 0xFFFF) return false;
+    for (int i = 0; i < 100; i++) {
+        if (g_player_active[i].load(std::memory_order_acquire) &&
+            slot_handle[i].load(std::memory_order_relaxed) == handle) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Public: play XMI, auto-allocate handle. Returns handle.
 int AudioPool::play_xmidi_external(const void* xmidi, uint32_t len, int seq_num) {
     int _active = 0;
@@ -430,6 +447,7 @@ void stop_xmidi_external(uint16_t handle) { orig_pool.stop_xmidi(handle); }
 void stop_all_sfx()                        { orig_pool.stop_all_sfx(); }
 void stop_xmidi_external()                 { orig_pool.stop_all_sfx(); }
 void fade_music(int duration_ms)           { orig_pool.fade_music(duration_ms); }
+bool is_handle_active(uint16_t handle)     { return orig_pool.is_handle_active(handle); }
 void set_dontstop_external(uint16_t handle){ orig_pool.set_dontstop(handle); }
 bool is_player_active(uint16_t handle)     { return orig_pool.is_player_active(handle); }
 uint16_t get_music_handle()                { return orig_pool.get_music_handle(); }

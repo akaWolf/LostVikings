@@ -720,6 +720,44 @@ void v2_draw_ui(uint16_t ds_val) {
     // Scan UI element list: 40 columns × 22 rows at ds:0x956C
     uint8_t* ui_list = ds_base + 0x956C;
 
+    // Debug: count non-zero cells and dump row occupancy.
+    {
+        static int _frame = 0; _frame++;
+        static int _last_nz = -1;
+        int nz = 0;
+        uint8_t rows_used[22] = {0};
+        for (int pos = 0; pos < 0x370; pos++) {
+            if (ui_list[pos] != 0) {
+                nz++;
+                int r = pos / 40;
+                if (r < 22) rows_used[r]++;
+            }
+        }
+        if (nz != _last_nz) {
+            extern int v2_dbg_pre_vm_iter;
+            fprintf(stderr, "V2-UI-COUNT[f%d render=%d lvl=%04X]: nz_cells=%d rows: ",
+                v2_dbg_pre_vm_iter, _frame, *(uint16_t*)(ds_base + 0x25AD), nz);
+            for (int r = 0; r < 22; r++)
+                if (rows_used[r]) fprintf(stderr, "r%d=%d ", r, rows_used[r]);
+            fprintf(stderr, "byte_956B=%02X\n", ds_base[0x956B]);
+            // Dump rows with content as ASCII (glyph 0x10..0x3F = printable chars in font)
+            if (nz > 0 && nz < 300) {
+                for (int r = 0; r < 22; r++) {
+                    if (!rows_used[r]) continue;
+                    fprintf(stderr, "  r%02d: '", r);
+                    for (int c = 0; c < 40; c++) {
+                        uint8_t ch = ui_list[r * 40 + c];
+                        if (ch == 0) fputc('.', stderr);
+                        else if (ch >= 0x20 && ch < 0x80) fputc(ch, stderr);
+                        else fprintf(stderr, "\\x%02X", ch);
+                    }
+                    fprintf(stderr, "'\n");
+                }
+            }
+            _last_nz = nz;
+        }
+    }
+
     for (int pos = 0; pos < 0x370; pos++) {
         uint8_t ch = ui_list[pos];
         if (ch == 0) continue;

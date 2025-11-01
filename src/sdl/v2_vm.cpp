@@ -365,6 +365,7 @@ static V2AuditAtexitInit g_v2_audit_init;
 // Covers ds:0x0000 to ds:0x1C00 — all animation fields + globals.
 static const uint32_t V2_VM_SHADOW_SIZE = 0x10000; // Full 64KB DS segment
 static uint8_t v2_vm_shadow_ds[V2_VM_SHADOW_SIZE];
+
 static uint16_t v2_pre_vm_32F_snapshot = 0; // ds:0x32F before pre-VM phase modifies it
 
 // Snapshot of orig DS taken right after orig sub_115d2 completes.
@@ -2644,6 +2645,10 @@ static void v2_sub_12549(uint8_t* s, uint16_t ax) {
 // Uses: word_28514 (width), word_28516 (height), word_28518, word_2851A.
 // Writes: word_2854C, word_2854E, glyph buffer entries.
 static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
+    extern int v2_dbg_pre_vm_iter;
+    fprintf(stderr, "V2-DLG-ADD[f%d]: sub_12388 si=%04X di=%04X align=%02X lvl=%04X w=%u h=%u 956B=%02X\n",
+        v2_dbg_pre_vm_iter, si, di, align, *(uint16_t*)(s + 0x25AD),
+        *(uint16_t*)(s + 0x34), *(uint16_t*)(s + 0x36), s[0x956B]);
     *(uint16_t*)(s + 0x6C) = si;                                     // word_2854C = si
     *(uint16_t*)(s + 0x6E) = di;                                     // word_2854E = di
     uint16_t width = *(uint16_t*)(s + 0x34);                         // word_28514
@@ -2785,6 +2790,9 @@ static void v2_sub_111df(uint8_t* s) {
 
 // sub_12816: clear UI glyph list — byte_31A4B=0, clear 0x1B8 words at ds:0x956C
 static void v2_sub_12816(uint8_t* s) {
+    extern int v2_dbg_pre_vm_iter;
+    fprintf(stderr, "V2-DLG-CLR[f%d]: sub_12816 lvl=%04X 956B_before=%02X\n",
+        v2_dbg_pre_vm_iter, *(uint16_t*)(s + 0x25AD), s[0x956B]);
     s[0x956B] = 0; // byte_31A4B
     memset(s + 0x956C, 0, 0x1B8 * 2); // REP STOSW
 }
@@ -3850,6 +3858,20 @@ static void v2_sub_12ab8(uint8_t* s) {
 
     // Decompress chunk 2 → ds:0x687D (password/level select table)
     v2_read_chunk(2, s + 0x687D, 0x10000 - 0x687D);
+
+    // Debug: dump password table (37 levels × 4 bytes at ds:0x85A5..0x8639).
+    // Orig sub_12829 reads bytes here with mask 0x7F → ASCII.
+    {
+        fprintf(stderr, "V2-PWD-TABLE:\n");
+        for (int lvl = 0; lvl < 37; lvl++) {
+            uint16_t off = 0x85A5 + lvl * 4;
+            char pw[5] = {0};
+            for (int i = 0; i < 4; i++) pw[i] = s[off + i] & 0x7F;
+            fprintf(stderr, "  level %2d (0x%02X): '%c%c%c%c'  raw=%02X %02X %02X %02X\n",
+                lvl, lvl, pw[0], pw[1], pw[2], pw[3],
+                s[off], s[off+1], s[off+2], s[off+3]);
+        }
+    }
 
     // Post-chunk init: "STRT" marker + VGA/rendering constants
     // Original: lines 6454-6478 in seg000 (eip 0x2C12..0x2CA2)
@@ -7459,16 +7481,12 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
     // These run AFTER POST_VM compare in the original too.
 }
 
-// Post-RENDER game loop — runs AFTER render (eip 0x0056..0x005C).
-// sub_165aa, sub_16661, sub_1406d.
-static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
-    // include_anim_queue: orig blocks 4 and 6 call sub_165aa+sub_16661+sub_1406d;
-    // orig block 8 (render3, eips 0xBB-0xD8) calls only sub_165aa+sub_16661 (no
-    // sub_1406d). Pass false from v2_phase_render3 to match orig block 8 exactly.
-    // sub_165aa: VGA page rotation state machine.
-    // Cycles ds:0x92F9 through 0→0x34→0x68→0... based on viewport Y lookup tables.
-    // sub_1df6a (dirty rect render) skipped — v2 renders full frames.
-    {
+// sub_165aa standalone — VGA page rotation state machine.
+// Extracted from v2_game_loop_post_render so callsites that only need sub_165aa
+// (orig loc_12758 eip 0x2782 / 0x27A2 — cmd_type=2 dialog dispatch) can call it
+// directly without the extra sub_16661 (object create/destroy on scroll) that
+// v2_game_loop_post_render also runs. Bit-exact match to orig.
+static void v2_sub_165aa(uint8_t* shadow) {
         static int rot_dbg = 0; rot_dbg++;
         uint16_t ax = *(uint16_t*)(shadow + 0x92F9);
         if (rot_dbg <= 6) {
@@ -7538,7 +7556,15 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
         }
         // ds:0x9568 is cleared by v2_sub_1DD9C (via s[0x9568] = 0 at end of loop)
         // Do NOT clear it here — it must persist until sub_1DD9C reads it.
-    }
+}
+
+// Post-RENDER game loop — runs AFTER render (eip 0x0056..0x005C).
+// sub_165aa, sub_16661, sub_1406d.
+static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
+    // include_anim_queue: orig blocks 4 and 6 call sub_165aa+sub_16661+sub_1406d;
+    // orig block 8 (render3, eips 0xBB-0xD8) calls only sub_165aa+sub_16661 (no
+    // sub_1406d). Pass false from v2_phase_render3 to match orig block 8 exactly.
+    v2_sub_165aa(shadow);
 
     // sub_16661: object create/destroy based on scroll position.
     // Compares scroll tracking (ds:0x92EF/0x92F1) with current scroll (ds:0x257F/0x2581).
@@ -8145,10 +8171,14 @@ static void v2_vm_op_sound(V2VM& vm) {
     // Mirror orig SDL inline: scan slots si=8,6,4,2 for FIRST FREE (0xFFFF).
     uint16_t hword = (handle >= 0 && handle <= 0xFFFE) ? (uint16_t)handle : 0xFFFF;
     if (hword != 0xFFFF) {
+        // Stale-slot recycling — see orig sub_177bb SDL inline for rationale.
+        extern bool is_handle_active(uint16_t h);
         for (int16_t si = 8; si > 0; si -= 2) {
             uint16_t handle_addr = (uint16_t)(si - 0x66F4);
             uint16_t seq_addr = (uint16_t)(si - 0x66EA);
-            if (vm.ds_read(handle_addr) == 0xFFFF) {
+            uint16_t cur = vm.ds_read(handle_addr);
+            bool free_slot = (cur == 0xFFFF) || !is_handle_active(cur);
+            if (free_slot) {
                 vm.ds_write(seq_addr, seq);
                 vm.ds_write(handle_addr, hword);
                 break;
@@ -8163,7 +8193,12 @@ static void v2_vm_op_sound(V2VM& vm) {
 static void v2_vm_op_sound1(V2VM& vm) {
     uint8_t param = vm.read_u8();
     param &= 0xFF;
-    if (vm.ds_read(0x304) != 0) return; // sound disabled
+    extern int v2_dbg_pre_vm_iter;
+    uint16_t cur_obj = vm.global_r(0x42);
+    bool muted = vm.ds_read(0x304) != 0;
+    fprintf(stderr, "V2-OP-04[f%d obj=%02X]: stop_seq=%u muted_304=%d\n",
+            v2_dbg_pre_vm_iter, cur_obj, param, muted ? 1 : 0);
+    if (muted) return; // sound disabled
     // Iterate slots, find ones matching seq=param. For each, selectively stop the
     // adlmidi player by stored handle (set by v2_vm_op_sound), then mark slot free.
     // Falls back to v2_sub_1782a_v2 (stop-all) if no matching slot has a valid handle.
@@ -8428,18 +8463,25 @@ static void v2_vm_op_D6(V2VM& vm) {
 static void v2_vm_op_D7(V2VM& vm) {
     uint8_t seq = vm.es[vm.pc] & 0xFF;
     vm.pc += 3;
-    if (vm.ds_read(0x304) != 0) return;
-    for (int16_t si = 8; si > 0; si -= 2) {
-        if (vm.ds_read((uint16_t)(si - 0x66EA)) == seq) {
-            uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
-#ifdef V2_ONLY
-            if (handle != 0xFFFF) stop_xmidi_external(handle);
-#endif
-            vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
-            vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
-            // Original does NOT break — continues loop to check all slots
+    extern int v2_dbg_pre_vm_iter;
+    uint16_t cur_obj = vm.global_r(0x42);
+    bool muted = vm.ds_read(0x304) != 0;
+    int matched = 0;
+    uint16_t hs[4] = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
+    if (!muted) {
+        for (int16_t si = 8; si > 0; si -= 2) {
+            if (vm.ds_read((uint16_t)(si - 0x66EA)) == seq) {
+                uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
+                hs[matched++] = handle;
+                if (handle != 0xFFFF) v2_pool.stop_xmidi(handle);
+                vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
+                vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
+            }
         }
     }
+    fprintf(stderr, "V2-OP-D7[f%d obj=%02X]: stop_seq=%u muted_304=%d matched=%d h0=%04X h1=%04X h2=%04X h3=%04X\n",
+            v2_dbg_pre_vm_iter, cur_obj, seq, muted ? 1 : 0, matched,
+            hs[0], hs[1], hs[2], hs[3]);
 }
 
 // Viewport check helper (used by 0xCC, 0xCD, 0xCE)
@@ -17746,18 +17788,24 @@ void v2_phase_frame_end(uint16_t ds_val) {
     {
         uint8_t* s = v2_vm_shadow_ds;
         int16_t level = (int16_t)*(uint16_t*)(s + 0x25AD); // word_2AA8D
+        // Ensure shadow word_286E2 stays set in --debug mode after level reloads
+        // (sub_11080 wipes it). Mirrors what orig startup did once at boot.
+        extern bool g_debug_mode;
+        if (g_debug_mode) *(uint16_t*)(s + 0x0202) = 1;
         if (level < 0x25) {
             uint16_t w286e2 = *(uint16_t*)(s + 0x0202); // word_286E2 (debug build flag)
             if (w286e2 != 0) {
                 s[0x91AB] |= sdl_spec_get(0x91AB);  // SDL F5 OR-in
                 s[0x91AC] |= sdl_spec_get(0x91AC);  // SDL F6 OR-in
                 if (s[0x91AB] == 1) { // byte_3168B == 1 (F5: prev level)
+                    s[0x91AB] = 0; // SDL port: clear byte (no INT 9 KEYUP path)
                     *(uint16_t*)(s + 0x0334) |= 1; // OR word_28814, 1
                     int16_t ax = level;
                     ax -= 1; // DEC ax
                     if (ax < 0) ax = 0;
                     *(uint16_t*)(s + 0x25C9) = (uint16_t)ax; // MOV word_2AAA9, ax
                 } else if (s[0x91AC] == 1) { // byte_3168C == 1 (F6: next level)
+                    s[0x91AC] = 0; // SDL port: clear byte (no INT 9 KEYUP path)
                     *(uint16_t*)(s + 0x0334) |= 1; // OR word_28814, 1
                     // word_2AAA9 already set by VM (next level destination)
                 }
@@ -17957,34 +18005,50 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
         s[0x956B] = 1;
         bx_read += 0x08;
     } else if (cmd_type == 2) {
-        *(uint16_t*)(s + 0x9569) = 1;
-        *(uint16_t*)(s + 0x98DC) = 0;
-        if (s[0x25CF] & 0xE0) {
-            v2_sub_16775(s); v2_swap_render_buf();
-            v2_sub_10130(s);
-            v2_sub_1E0C7(s);
+        // off_2B086[2] = loc_12758. Line-by-line mirror of orig (seg000:6304-6355).
+        // Each block annotated with orig eip (01A2:XXXX).
+        *(uint16_t*)(s + 0x9569) = 1;                          // 01A2:2759 mov word_31A49, 1
+        *(uint16_t*)(s + 0x98DC) = 0;                          // 01A2:275F mov word_31DBC, 0
+        if (s[0x25CF] & 0xE0) {                                // 01A2:2765 test byte_2AAAF, 0E0h
+            v2_sub_16775(s); v2_swap_render_buf();             // 01A2:276C sub_16775
+            v2_sub_10130(s);                                   // 01A2:276F sub_10130
+            v2_draw_ui(v2_current_ds_val);                     // m2c port: v2_draw_ui (was inline before sub_1E0C7)
+            v2_sub_1E0C7(s);                                   // 01A2:2772 sub_1E0C7
         }
-        v2_sub_16775(s); v2_swap_render_buf();
-        v2_sub_10130(s);
-        v2_sub_1DE05(s);
-        v2_game_loop_post_render(s);
-        v2_sub_1DD9C(s);
-        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
-        v2_sub_1E0C7(s);
+        // loc_12777 (gameplay path)
+        v2_sub_16775(s); v2_swap_render_buf();                 // 01A2:2777 sub_16775
+        v2_sub_10130(s);                                       // 01A2:277A sub_10130
+        // m2c port: v2_draw_tiles + v2_draw_sprites + v2_draw_ui BEFORE sub_1DE05
+        // (eip 01A2:277D in orig — inline insertion). Without these, v2_render_buf
+        // never gets full clear → dialog text pixels accumulate across cmd dispatches.
+        v2_draw_tiles(v2_current_ds_val);
+        v2_draw_sprites(v2_current_ds_val);
         v2_draw_ui(v2_current_ds_val);
-        v2_sub_16775(s); v2_swap_render_buf();
-        v2_sub_10130(s);
-        v2_sub_1DE05(s);
-        v2_game_loop_post_render(s);
-        v2_sub_1DD9C(s);
-        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
-        v2_sub_16775(s); v2_swap_render_buf();
-        v2_sub_10130(s);
-        *(uint16_t*)(s + 0x9569) = 0;
-        s[0x956B] = 0;
-        *(uint16_t*)(s + 0x98DC) = 0;
-        memset(s + 0x956C, 0, 0x1B8 * 2);
-        bx_read += 2;
+        v2_sub_1DE05(s);                                       // 01A2:277D sub_1DE05
+        v2_sub_165aa(s);                                       // 01A2:2782 sub_165aa (bit-exact, no sub_16661)
+        v2_sub_1DD9C(s);                                       // 01A2:2785 sub_1DD9C
+        v2_draw_flagged_tiles(v2_current_ds_val);              // m2c port: v2_draw_flagged_tiles BEFORE sub_1c8f1
+        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:278D sub_1C8F1(ax=FFFE)
+        v2_draw_ui(v2_current_ds_val);                         // m2c port: v2_draw_ui BEFORE sub_1E0C7
+        v2_sub_1E0C7(s);                                       // 01A2:2792 sub_1E0C7
+        // ---- second sub-frame ----
+        v2_sub_16775(s); v2_swap_render_buf();                 // 01A2:2797 sub_16775
+        v2_sub_10130(s);                                       // 01A2:279A sub_10130
+        v2_draw_tiles(v2_current_ds_val);                      // m2c port: full redraw #2 before sub_1DE05
+        v2_draw_sprites(v2_current_ds_val);
+        v2_draw_ui(v2_current_ds_val);
+        v2_sub_1DE05(s);                                       // 01A2:279D sub_1DE05
+        v2_game_loop_post_render(s);                           // 01A2:27A2 sub_165aa (+ sub_16661)
+        v2_sub_1DD9C(s);                                       // 01A2:27A5 sub_1DD9C
+        v2_draw_flagged_tiles(v2_current_ds_val);              // m2c port: before sub_1c8f1
+        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:27AD sub_1C8F1(ax=FFFE)
+        v2_sub_16775(s); v2_swap_render_buf();                 // 01A2:27B2 sub_16775
+        v2_sub_10130(s);                                       // 01A2:27B5 sub_10130
+        *(uint16_t*)(s + 0x9569) = 0;                          // 01A2:27B8 mov word_31A49, 0
+        s[0x956B] = 0;                                         // 01A2:27BE mov byte_31A4B, 0
+        *(uint16_t*)(s + 0x98DC) = 0;                          // 01A2:27C3 mov word_31DBC, 0
+        memset(s + 0x956C, 0, 0x1B8 * 2);                      // 01A2:27CC..27D4 rep stosw (ax=0, cx=1B8)
+        bx_read += 2;                                          // 01A2:27D7 add bx, 2
     } else if (cmd_type == 4) {
         *(uint16_t*)(s + 0x0334) |= 4;
         bx_read += 2;
@@ -17993,7 +18057,46 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
     }
     // orig eip 0x894: MOV word_2b044, bx — save advanced read pos
     *(uint16_t*)(s + 0x2B64) = bx_read;
-    // orig eip 0x898: v2_draw_ui + sub_1E0C7 (renders shadow to v2_render_buf)
+
+    // ============================================================================
+    // orig eip 0x898: v2_draw_ui + sub_1E0C7 (renders shadow UI to render buffer)
+    //
+    // DIVERGENCE FROM ORIGINAL: extra v2_draw_tiles + v2_draw_sprites calls.
+    //
+    // WHY ORIG WORKS WITHOUT FULL REDRAW HERE:
+    // Lost Vikings uses VGA Mode-X with 3 independent display pages at fixed
+    // memory offsets 0, 0x3400, 0x6800 (256KB VGA memory total). Active page is
+    // selected by CRTC Start Address registers 0x0C/0x0D (written by sub_16775).
+    // Drawing functions target the "current write page" (offset in ds:0x92F9),
+    // sub_165aa cycles the page index between sub-frames.
+    //
+    // Orig dispatch flow:
+    //   cmd_type=2 sub-frame 1: tiles+sprites+UI written to page X, sub_16775
+    //                           displays X → user sees clean frame X
+    //   cmd_type=2 sub-frame 2: same on page Y, sub_16775 displays Y
+    //   (between cmd dispatches): sub_1E0C7 here writes UI to CURRENT write page;
+    //   but display is still showing PREVIOUSLY-set page, and the next sub_16775
+    //   (in next cmd_type=2 or the viking-switch wait loop) selects a different
+    //   page that ALSO has full tiles+sprites from earlier full-redraw passes.
+    //   Result: per-page accumulation is bounded; rotation gives "fresh page"
+    //   appearance because each page was fully redrawn at its last cmd_type=2.
+    //
+    // WHY V2 NEEDS THE EXTRA REDRAW:
+    // v2_render_buf is a SINGLE buffer (320x200, no Mode-X pages). sub_16775 is
+    // a no-op for compositing; v2_swap_render_buf just copies render→display.
+    // So a bare v2_draw_ui here writes glyphs on top of WHATEVER was last left
+    // in v2_render_buf — typically tiles+sprites+previous dialog text from the
+    // last cmd_type=2 render. Box A pixels persist; box B drawn on top; viking-
+    // switch wait swaps the dirty render_buf into display_buf → user sees both.
+    //
+    // The full v2_draw_tiles + v2_draw_sprites pair before v2_draw_ui rebuilds
+    // the buffer from scratch, mimicking the "fresh page" effect orig gets for
+    // free from page rotation. Cost: full redraw per cmd dispatch instead of
+    // only per page-flip in orig, but cmd dispatch rate is bounded and this
+    // path runs only when cmd queue is non-empty.
+    // ============================================================================
+    v2_draw_tiles(v2_current_ds_val);
+    v2_draw_sprites(v2_current_ds_val);
     v2_draw_ui(v2_current_ds_val);
     v2_sub_1E0C7(s);
     // sub_12352 inline (input snapshot to shadow ds:0x3B6/0x3B8/0x3BA)

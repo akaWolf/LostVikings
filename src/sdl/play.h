@@ -167,6 +167,11 @@ public:
     // True if any slot matching handle has live producer (real audio, not muted).
     bool is_player_active(uint16_t handle);
 
+    // True if any slot in this pool tracks `handle` (including mute slots).
+    // Used to detect stale DS slot entries — sub_177bb treats inactive handles
+    // as free, otherwise the 4-entry DS slot table fills up and stops break.
+    bool is_handle_active(uint16_t handle);
+
     // Returns current music handle (or 0).
     uint16_t get_music_handle() { return dontstop_handle.load(); }
 

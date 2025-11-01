@@ -101,6 +101,10 @@ uint8_t sdl_spec_get(uint16_t off) {
     return sdl_spec_snap[off & 0xFF];
 }
 
+// F5/F6 level cheat — handled by orig's existing eip 0x106 check (which reads
+// sdl_spec_snap via the same path as F4/F10/etc.) and v2's mirror in
+// v2_phase_frame_end. No extra wiring needed — both already work like orig DOS.
+
 void sdl_spec_snapshot_take() {
     for (int i = 0; i < 256; i++) {
         // Modifiers: copy. Triggers: exchange-to-0 (consume one press).
@@ -112,6 +116,7 @@ void sdl_spec_snapshot_take() {
         }
     }
 }
+
 
 
 
