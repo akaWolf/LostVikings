@@ -716,6 +716,32 @@ static int v2_v2_anim_cmd_count = 0;  // incremented by v2's anim cmd loop
 static bool v2_replay_verify_active = false; // when true, resolve_segment uses real memory
 uint16_t v2_input_snapshot = 0; // snapshot of input_keys taken by seg000 after orig sub_12352
 
+// Phase 1: render thread directly writes word_30bbe (ds:0x86DE) — mirrors orig
+// DOS INT 9 ISR semantics. Atomic update to:
+//   - real DS (via m2c::m.word_30bbe in render.cpp)
+//   - shadow DS at 0x86DE
+//   - ALL stored phase snapshots at 0x86DE (via v2_patch_all_snaps_input,
+//     defined later — see "Variant D" comment near v2_psnap_ds)
+//
+// Implementation note: v2_patch_all_snaps_input forward-declared here, defined
+// after v2_psnap_ds[] array (line ~6724). Render thread writes are ISR-instant
+// for game thread (sub_12352's `OR ax, word_30bbe` sees update immediately),
+// while snapshot patching keeps verify infrastructure consistent.
+static void v2_patch_all_snaps_input(uint16_t bit, bool press); // fwd decl
+
+extern "C" void v2_shadow_input_or(uint16_t bit) {
+    if (!bit) return;
+    __atomic_or_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[0x86DE]),
+                      bit, __ATOMIC_RELAXED);
+    v2_patch_all_snaps_input(bit, true);
+}
+extern "C" void v2_shadow_input_and_not(uint16_t bit) {
+    if (!bit) return;
+    __atomic_and_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[0x86DE]),
+                      (uint16_t)~bit, __ATOMIC_RELAXED);
+    v2_patch_all_snaps_input(bit, false);
+}
+
 // Unified input read for inline sub_12352 sites. In V2_ONLY: reads live input_keys
 // via v2_input_intro_mask (handles intro mode word_288ac=0x8000). In default mode:
 // reads v2_input_snapshot atomic set by orig sub_12352 (synchronized with orig).
@@ -6708,6 +6734,26 @@ static const char* v2_psnap_names[V2_PSNAP_COUNT] = {
 static uint8_t v2_psnap_ds[V2_PSNAP_COUNT][0x10000];
 static bool    v2_psnap_valid[V2_PSNAP_COUNT] = {0};
 static int     v2_psnap_frame[V2_PSNAP_COUNT] = {0};
+
+// Variant D: render thread patches all stored phase snapshots in lockstep with
+// real+shadow word_30bbe updates. Maintains verify consistency without
+// excluding 0x86DE/0x86DC from snapshot model. Called from v2_shadow_input_or/
+// v2_shadow_input_and_not (defined near top of file).
+//
+// Race notes:
+// - snapshot memcpy in v2_record_orig_phase_snap: large copy (~64KB). If render
+//   thread patches during memcpy, snapshot may have inconsistent 0x86DE byte.
+//   Acceptable because next render write will re-patch and verify only compares
+//   the watched addresses (0x86DC/0x86DE) which we atomic-or.
+// - Per-snap atomic ensures no torn write on the 16-bit value.
+static void v2_patch_all_snaps_input(uint16_t bit, bool press) {
+    for (int i = 0; i < V2_PSNAP_COUNT; i++) {
+        if (!v2_psnap_valid[i]) continue;
+        uint16_t* p_30bbe = reinterpret_cast<uint16_t*>(&v2_psnap_ds[i][0x86DE]);
+        if (press) __atomic_or_fetch(p_30bbe, bit, __ATOMIC_RELAXED);
+        else       __atomic_and_fetch(p_30bbe, (uint16_t)~bit, __ATOMIC_RELAXED);
+    }
+}
 
 // Watch list: every word/byte we want monitored for obj 0 Y drift + sub-sprite
 // allocation pool selector + collision scratch + viewport. Sized for "wide net":
@@ -17798,6 +17844,21 @@ static void v2_sub_108c8(uint8_t* s);
 //   ds:[03B8] = (ax ^ ds:[03BA]) & ax    // newly pressed (edge-trigger)
 //   ds:[03BA] = ax                       // previous frame
 static void v2_sub_12352_iter(uint8_t* shadow) {
+    // Mirror of orig sub_12352 SDL fix: clear shadow word_2889a bits matching
+    // press_snap that we haven't consumed yet this frame. See seg000.cpp
+    // sub_12352 for full rationale. Without this, orig clears its real
+    // word_2889a (forcing edge in real word_28898) but v2 shadow keeps the
+    // sticky word_2889a → shadow word_28898=0 → DS-DIFF at 0x03B8/9.
+    {
+        extern uint16_t sdl_input_press_snap_get();
+        extern uint16_t g_press_snap_consumed_shadow_this_frame;
+        uint16_t snap = sdl_input_press_snap_get();
+        uint16_t fresh_snap = (uint16_t)(snap & ~g_press_snap_consumed_shadow_this_frame);
+        if (fresh_snap) {
+            *(uint16_t*)(shadow + 0x03BA) &= (uint16_t)~fresh_snap;
+            g_press_snap_consumed_shadow_this_frame |= fresh_snap;
+        }
+    }
     uint16_t ax = 0;
     if (*(uint16_t*)(shadow + 0x86DA) != 0)
         ax = *(uint16_t*)(shadow + 0x86DC);
@@ -18608,6 +18669,13 @@ static uint32_t vm_ds_hash(uint8_t* ds) {
 // (because it stubs those subsystems). Segment-pointer tables now match via
 // DosMemAlloc replay (v2_record_alloc), so they are NOT skipped.
 static bool v2_ds_hash_skip(uint32_t i) {
+    // ds:0x86DE word_30bbe (input layer): render thread updates async to mirror
+    // orig DOS INT 9 ISR semantics. Hash records timestamps differ between orig
+    // and v2 trace points — async updates make stored hashes stale even when
+    // byte-level scan shows no diff (Variant D snapshot patching only fixes
+    // snap content, not precomputed hash). Excluded from hash to maintain
+    // verify infrastructure consistency.
+    if (i >= 0x86DC && i <= 0x86DE) return true; // word_30bbc/30bbe input layer
     // ds:0x990C..0x991E (AIL handles/sequences) NOW DETERMINISTIC — included in hash
     if (i >= 0x9920 && i <= 0x9944) return true; // AIL driver buffer (internal state)
     if (i >= 0x86AC && i <= 0x86B0) return true; // DOS INT 24h vector

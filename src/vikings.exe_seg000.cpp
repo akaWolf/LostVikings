@@ -29,6 +29,7 @@ static FILE* data_handle = 0;
   uint32_t myOffset;
 
 extern uint16_t input_keys;
+extern "C" void enter_trace_sub12352();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
 // Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.
 extern uint8_t sdl_spec_get(uint16_t off);
@@ -5800,6 +5801,32 @@ ret_1a2_234b:
 cs=0x1a2;eip=0x00234b; 	X(MOV(word_28898, 0));	// 4602 mov     word_28898, 0 ;~ 01A2:234B
 cs=0x1a2;eip=0x002351; 	J(RETN(0));	// 4603 retn ;~ 01A2:2351
 sub_12352:
+	// SDL INT-9 ISR mirror: clear word_2889a bits matching press_snap bits we
+	// haven't consumed yet this frame. Each KEYDOWN in render thread OR's the
+	// bit into sdl_input_press_edges. At frame_begin sdl_spec_snapshot_take
+	// moves edges → press_snap and resets g_press_snap_consumed_this_frame.
+	// First sub_12352 of frame with a press_snap bit clears the matching
+	// word_2889a bit (so the XOR detects edge=press_snap), then marks consumed
+	// so subsequent sub_12352 calls in the same frame don't re-clear.
+	//
+	// Why needed: orig DOS INT 9 ISR set word_30bbe synchronously and the bit
+	// stayed visible across ~50-100ms (longer than 18 FPS frame). Main
+	// sub_12352 of the press-frame reliably saw word_30bbe with bit. In our
+	// port at ~9 FPS (110ms/frame) a brief 80ms KEYDOWN+KEYUP can land entirely
+	// between two main sub_12352 calls — bit captured by sub_1086f recursion
+	// sub_12352 (sets word_2889a sticky) but VM iter already done for that
+	// frame. Next frame's main sub_12352 then sees word_2889a sticky → edge=0.
+	// This clear restores DOS-equivalent semantics: press_snap presence ⇒ edge.
+	{
+		extern uint16_t sdl_input_press_snap_get();
+		extern uint16_t g_press_snap_consumed_this_frame;
+		uint16_t snap = sdl_input_press_snap_get();
+		uint16_t fresh_snap = (uint16_t)(snap & ~g_press_snap_consumed_this_frame);
+		if (fresh_snap) {
+			word_2889a = (uint16_t)(word_2889a & ~fresh_snap);
+			g_press_snap_consumed_this_frame |= fresh_snap;
+		}
+	}
 	// 4610
 cs=0x1a2;eip=0x002352; 	T(MOV(ax, 0));	// 4612 mov     ax, 0 ;~ 01A2:2352
 ret_1a2_2355:
@@ -5828,6 +5855,10 @@ cs=0x1a2;eip=0x002375; 	X(MOV(word_28898, ax));	// 4624 mov     word_28898, ax ;
 cs=0x1a2;eip=0x002378; 	T(MOV(ax, word_28896));	// 4625 mov     ax, word_28896 ;~ 01A2:2378
 cs=0x1a2;eip=0x00237b; 	X(MOV(word_2889a, ax));	// 4626 mov     word_2889A, ax ;~ 01A2:237B
 //printf("read keys: %x %x %x %x\n", word_28896, word_2889a, word_30bbe, keys);
+	// ENTER missed-press trace: log final state after edge computation.
+	// Self-disarms after N calls; also logs whenever any 0x8000 bit is present
+	// in any input/computed register (catches edge propagation across frames).
+	enter_trace_sub12352();
 	// V2 barrier: signal AFTER orig sub_12352 finished computing word_28896/28898/2889A.
 	// v2 handler runs v2_sub_12352_iter ONCE per orig call → shadow input state tracks
 	// orig 1:1 across ALL call sites (main loop, sub_1086f recursion, VIKING_SWITCH/

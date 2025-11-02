@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <thread>
+#include <vector>
 #include <cassert>
 #include <cstdio>
 #include <atomic>
@@ -30,6 +31,34 @@ extern void render_callback(void *);
 extern uint16_t input_keys_v2;
 uint16_t input_keys = 0;
 bool need_quit = false;
+
+// Phase 1: mirror orig DOS INT 9 ISR semantics — render thread updates
+// word_30bbe (ds:0x86DE) DIRECTLY on KEYDOWN/KEYUP via atomic OR/AND.
+// orig sub_12352 line `OR ax, word_30bbe` reads it natively — same memory
+// path as DOS ISR-updated word_30bbe.
+//
+// Shadow DS also updated atomically. Both stay in lockstep.
+// 0x86DE is excluded from v2 verify (input layer, not VM-managed state;
+// orig snapshot vs live shadow can diverge by render thread timing — this
+// is hardware-async input, conceptually analogous to BIOS keyboard buffer).
+extern "C" void v2_shadow_input_or(uint16_t bit);
+extern "C" void v2_shadow_input_and_not(uint16_t bit);
+#ifndef V2_ONLY
+extern uint16_t& word_30bbe;
+static inline void m2c_input_or(uint16_t bit) {
+    if (!bit) return;
+    __atomic_or_fetch(&word_30bbe, bit, __ATOMIC_RELAXED);
+    v2_shadow_input_or(bit);
+}
+static inline void m2c_input_and_not(uint16_t bit) {
+    if (!bit) return;
+    __atomic_and_fetch(&word_30bbe, (uint16_t)~bit, __ATOMIC_RELAXED);
+    v2_shadow_input_and_not(bit);
+}
+#else
+static inline void m2c_input_or(uint16_t bit) { v2_shadow_input_or(bit); }
+static inline void m2c_input_and_not(uint16_t bit) { v2_shadow_input_and_not(bit); }
+#endif
 std::atomic<bool> g_dump_pgm_request{false};  // set by F12 → both render threads dump
 
 // Save 320x176 viewport as PGM file. Includes palette as PAM if available.
@@ -93,25 +122,75 @@ extern dw& word_3287c;
 std::atomic<uint8_t> sdl_spec_state[256] = {};
 static uint8_t sdl_spec_snap[256] = {};
 
-// Per-frame edge accumulator for input_keys bits. SDL KEYDOWN OR's the bit
-// here in addition to input_keys; the bit STAYS even after KEYUP. At frame
-// begin (sdl_spec_snapshot_take) it's exchanged into sdl_input_press_snap and
-// reset. Game's sub_12352 reads ax = input_keys | snap, so brief presses
-// (KEYDOWN+KEYUP within one render iter) are captured even if input_keys is
-// already cleared by KEYUP before game polls. Mirrors orig DOS ISR semantics
-// where each KEYDOWN sets a bit that persists at least one game frame.
-//
-// **Snap consume-once**: snap is returned ONLY by the FIRST sub_12352 call of
-// a game frame. Subsequent calls (sub_1086f recursion) get snap=0. This
-// prevents the bug where sub_1086f's sub_12352 calls would write
-// word_2889a=0x8000 across the frame, breaking edge calc on the NEXT frame.
+// Edge accumulator: catches brief KEYDOWN+KEYUP within one render iter (race
+// where input_keys cleared before game polls). KEYDOWN OR's bit, snap_take
+// exchanges to snap. snap_get returns snap (used by v2_input_intro_mask for
+// V2_ONLY paths and as backup for transient presses).
 std::atomic<uint16_t> sdl_input_press_edges{0};
 static uint16_t sdl_input_press_snap = 0;
-static bool sdl_input_press_snap_consumed = false;
-uint16_t sdl_input_press_snap_get() {
-    if (sdl_input_press_snap_consumed) return 0;
-    sdl_input_press_snap_consumed = true;
-    return sdl_input_press_snap;
+uint16_t sdl_input_press_snap_get() { return sdl_input_press_snap; }
+
+// SDL INT-9 ISR mirror: tracks which press_snap bits have already had their
+// "force edge" applied this frame. Reset at frame_begin (sdl_spec_snapshot_take).
+// Used by sub_12352 to clear matching word_2889a bits on the first call of
+// the frame so that brief KEYDOWN+KEYUP (which lands between main sub_12352
+// calls due to 9 FPS frame duration > 80ms typical hold) still produces an
+// edge in word_28898. Without this, sub_1086f recursion's sub_12352 sets
+// word_2889a sticky → next frame's main sub_12352 computes edge=0 (false-negative).
+//
+// Two separate flags: orig runs in game thread and consumes via seg000 sub_12352.
+// v2 mirror runs in v2 thread (default mode) or game thread (V2_ONLY) and
+// consumes via v2_sub_12352_iter. Each side must clear ITS OWN word_2889a copy.
+// Sharing one flag would cause v2 mirror to skip its shadow clear (orig already
+// consumed) → DS-DIFF at 0x03B8/9.
+uint16_t g_press_snap_consumed_this_frame = 0;        // orig side (seg000 sub_12352)
+uint16_t g_press_snap_consumed_shadow_this_frame = 0; // v2 side (v2_sub_12352_iter)
+
+// ENTER missed-press investigation: arm a trace on every KEYDOWN sym=13 so
+// sub_12352 logs its inputs and computed edge for the next N calls. The trace
+// captures whether word_30bbe sees the 0x8000 bit and whether word_28898 ever
+// has 0x8000 set after the press. Compare succeeded (#6) vs missed (#9) to
+// determine if it's input race (bit never reached sub_12352) or VM consume
+// race (edge computed but not read by VM at PC=86D0).
+static auto _enter_trace_t0 = std::chrono::steady_clock::now();
+static uint32_t enter_trace_ms_now() {
+    using namespace std::chrono;
+    return (uint32_t)duration_cast<milliseconds>(steady_clock::now() - _enter_trace_t0).count();
+}
+std::atomic<int>      g_enter_trace_arm{0};   // sub_12352 calls remaining to trace
+std::atomic<int>      g_enter_seq{0};         // total Enter KEYDOWNs seen
+std::atomic<uint32_t> g_enter_keydown_ms{0};  // ms of last KEYDOWN Enter
+
+extern uint16_t& word_30bbe;
+extern uint16_t& word_28896;
+extern uint16_t& word_28898;
+extern uint16_t& word_2889a;
+extern uint16_t& word_30bba;
+extern uint16_t& word_30bbc;
+extern uint16_t& word_288ac;
+extern uint16_t& word_2a66f;
+extern uint16_t& word_2b044;
+extern uint16_t& word_287e2;
+extern int       v2_dbg_pre_vm_iter;
+
+// Called from sub_12352 right after word_28898 / word_2889a are set.
+extern "C" void enter_trace_sub12352() {
+    int armed = g_enter_trace_arm.load(std::memory_order_relaxed);
+    bool any_enter_bit = ((word_30bbe | word_28896 | word_28898 | word_2889a | input_keys | sdl_input_press_snap) & 0x8000) != 0;
+    if (armed <= 0 && !any_enter_bit) return;
+    int seq = g_enter_seq.load(std::memory_order_relaxed);
+    uint32_t ms = enter_trace_ms_now();
+    uint32_t dkd = ms - g_enter_keydown_ms.load(std::memory_order_relaxed);
+    fprintf(stderr,
+            "ENTER-TRACE-SUB12352 seq=%d arm=%d t=%ums dkd=%ums "
+            "w30bbe=%04X w28896=%04X w28898=%04X w2889a=%04X input_keys=%04X "
+            "press_snap=%04X w30bba=%04X w30bbc=%04X w288ac=%04X "
+            "queue: rd=%04X wr=%04X | f=%d w287e2=%04X\n",
+            seq, armed, ms, dkd,
+            word_30bbe, word_28896, word_28898, word_2889a, input_keys,
+            sdl_input_press_snap, word_30bba, word_30bbc, word_288ac,
+            word_2b044, word_2a66f, v2_dbg_pre_vm_iter, word_287e2);
+    if (armed > 0) g_enter_trace_arm.fetch_sub(1, std::memory_order_relaxed);
 }
 
 static bool sdl_spec_is_modifier(uint16_t off) {
@@ -136,11 +215,12 @@ void sdl_spec_snapshot_take() {
             sdl_spec_snap[i] = sdl_spec_state[i].exchange(0, std::memory_order_relaxed);
         }
     }
-    // Snapshot input_keys press-edges accumulator: exchange to 0. Game thread
-    // sees the bits at OR'd in v2_input_intro_mask for this frame, then snap
-    // returns to 0 next frame unless new KEYDOWN happens.
     sdl_input_press_snap = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
-    sdl_input_press_snap_consumed = false; // re-arm for first sub_12352 of new frame
+    // Reset per-frame consumed trackers (both orig and v2 sides) so each
+    // side's first sub_12352 of this frame can force-clear word_2889a for
+    // any newly-captured press_snap bits.
+    g_press_snap_consumed_this_frame = 0;
+    g_press_snap_consumed_shadow_this_frame = 0;
 }
 
 
@@ -371,40 +451,48 @@ void updateDraw()
 					   key_val = 0;
 					   break;
 				   }
-				   // Discrete trigger bits (Enter/Space/F=0x8000, ESC=0x1000) are
-				   // NOT stored in input_keys — only in edge accumulator. Reason:
-				   // input_keys persists between KEYDOWN and KEYUP. If KEYDOWN
-				   // happens mid-frame (e.g. during sub_1086f recursion's sub_12352
-				   // calls), input_keys=0x8000 is read by those calls, sets
-				   // word_2889a=0x8000. Next frame's edge calc gets prev=0x8000
-				   // and ax=0x8000 (from snap) → edge=0. Press lost.
-				   //
-				   // Movement keys (LEFT/RIGHT/UP/DOWN/TAB/CTRL/E/S/D=0x100-0x4000,
-				   // 0x20-0x80, 0x200, 0x400, 0x800, 0x2000) use sticky input_keys
-				   // for held-movement detection (orig word_30bbe semantics via ISR).
-				   {
-				   const uint16_t TRIGGER_BITS = (uint16_t)(0x8000 | 0x1000);
-				   uint16_t movement_val = key_val & (uint16_t)~TRIGGER_BITS;
 				   if (event.type == SDL_KEYDOWN) {
-					 input_keys |= movement_val;
-					 input_keys_v2 |= movement_val;
-					 // Edge accumulator: bit STAYS set until frame_begin snapshot
-					 // consumes. Catches brief KEYDOWN+KEYUP-same-iter race where
-					 // input_keys would be cleared before game thread polls.
-					 // Also used for trigger bits (which skip input_keys).
-					 if (key_val) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
-					 // spec_off DS writes removed — they caused races between render
-					 // thread writes to real_ds vs shadow_ds. Orig design: int 9 ISR
-					 // (seg000_6440_proc, dead in m2c port) writes spec bytes on press.
-					 // Game logic reads them (e.g. sub_108c8 reads ds:0x918B for S key).
-					 // Without ISR, spec bytes stay 0 → mute toggles etc don't fire.
-					 // To re-enable: route through atomic + game thread copy at barrier.
+					 input_keys |= key_val;
+					 input_keys_v2 |= key_val;
+					 // Edge accumulator: catches brief KEYDOWN+KEYUP-same-iter race.
+					 // Filter !repeat: only initial press fires the force-edge clear in
+					 // sub_12352. Without this, SDL auto-repeat fires KEYDOWN every ~50ms
+					 // with repeat=1 → edges OR'd every repeat → press_snap=bit every frame
+					 // → sub_12352 clears word_2889a every frame → held key retriggers
+					 // edge every frame (scroll explosion). Held keys are tracked via
+					 // word_30bbe/input_keys (stays set until KEYUP) — edge fires once on
+					 // first press, word_2889a tracks across frames, no re-trigger.
+					 if (key_val && !event.key.repeat) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
+					 // Phase 1 (orig ISR mirror): direct atomic write to word_30bbe
+					 // (real DS) + shadow DS. sub_12352 reads natively.
+					 m2c_input_or(key_val);
+					 // ENTER trace: arm sub_12352 logger for next ~50 calls.
+					 if (event.key.keysym.sym == SDLK_RETURN && !event.key.repeat) {
+						 int seq = g_enter_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+						 uint32_t ms = enter_trace_ms_now();
+						 g_enter_keydown_ms.store(ms, std::memory_order_relaxed);
+						 g_enter_trace_arm.store(50, std::memory_order_relaxed);
+						 fprintf(stderr,
+							 "ENTER-TRACE-KEYDOWN seq=%d t=%ums word_30bbe=%04X (post-OR) "
+							 "input_keys=%04X edges=%04X f=%d\n",
+							 seq, ms, word_30bbe, input_keys,
+							 sdl_input_press_edges.load(std::memory_order_relaxed),
+							 v2_dbg_pre_vm_iter);
+					 }
 				   } else {
-					 input_keys &= ~movement_val;
-					 input_keys_v2 &= ~movement_val;
-					 // Trigger bits never in input_keys, KEYUP no-op for them.
+					 input_keys &= ~key_val;
+					 input_keys_v2 &= ~key_val;
+					 m2c_input_and_not(key_val);
+					 if (event.key.keysym.sym == SDLK_RETURN) {
+						 uint32_t ms = enter_trace_ms_now();
+						 uint32_t dkd = ms - g_enter_keydown_ms.load(std::memory_order_relaxed);
+						 int seq = g_enter_seq.load(std::memory_order_relaxed);
+						 fprintf(stderr,
+							 "ENTER-TRACE-KEYUP seq=%d t=%ums dkd=%ums word_30bbe=%04X "
+							 "(post-AND) input_keys=%04X f=%d\n",
+							 seq, ms, dkd, word_30bbe, input_keys, v2_dbg_pre_vm_iter);
+					 }
 				   }
-				   } // close TRIGGER_BITS scope
 				   // Spec key SDL state. Modifiers: KEYDOWN sets, KEYUP clears.
 				   // Triggers: KEYDOWN sets only (snapshot consumes via exchange).
 				   if (event.type == SDL_KEYDOWN) {
