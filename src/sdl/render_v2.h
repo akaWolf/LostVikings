@@ -91,12 +91,32 @@ enum V2Phase {
     // anim, dialog text, etc). In V2_ONLY same mirror functions called inline.
     V2_PHASE_VIKING_SWITCH_LOOP,  // sub_10138 loc_10169 — viking switch screen
     V2_PHASE_PAUSE_LOOP,          // sub_11ba5 loc_11c1f — TAB pause
-    V2_PHASE_TRANSITION_TEXT,     // sub_104A1 loc_104C3 — level transition text
+    V2_PHASE_TRANSITION_TEXT,     // sub_104A1 loc_104C3 — quit-prompt iter body
     V2_PHASE_PASSWORD_PROMPT,     // sub_1041c — password input
     V2_PHASE_PRE_SUB_1086F,       // BEFORE orig sub_1086f at eip 0xE7 — v2 mirror
                                   // processes shadow cmd buffer first so orig's
                                   // m2c v2_draw_ui inside sub_1086f reads fresh
                                   // shadow glyph buffer (dialog text).
+    V2_PHASE_PW_ENTRY,            // orig signals at sub_104A1 entry (line 2706)
+                                  // BEFORE pre-loop setup (sub_1450b/sub_1047c
+                                  // prelude, palette OUTs). v2 runs equivalent
+                                  // shadow setup so loop iters start aligned.
+    V2_PHASE_PW_EXIT,             // orig signals at sub_104A1 loc_104FF (line 2748)
+                                  // AFTER loop exit + post-loop sub_12352 + word_28814
+                                  // toggle. v2 runs equivalent shadow cleanup
+                                  // (sub_165aa/sub_1DD9C/sub_1C8F1/sub_1E0C7/sub_16775
+                                  // pair + sub_12816 glyph clear).
+    V2_PHASE_INPUT_UPDATE,        // orig signals from INSIDE sub_12352 (after ax is
+                                  // computed and v2_input_snapshot written, before
+                                  // word_28896/28898/2889A get set). v2 handler runs
+                                  // v2_sub_12352_iter ONCE per orig sub_12352 call,
+                                  // so shadow input state tracks orig 1:1 across all
+                                  // call sites (main loop + sub_1086f recursion +
+                                  // VIKING_SWITCH/TRANSITION_TEXT/PAUSE_LOOP iters).
+                                  // Without this signal, orig calls sub_12352 multiple
+                                  // times per frame (sub_1086f recursion etc.) but v2
+                                  // only mirrors at PRE_VM → shadow_28896/2889A lag,
+                                  // PSNAP-DIVERGE at 0x03B6/0x03B8/0x03BA.
 };
 extern void v2_signal_phase(V2Phase phase, uint16_t ds_val);  // signal v2 thread + wait
 extern void v2_game_thread_start();   // launch v2 thread (called once at startup)

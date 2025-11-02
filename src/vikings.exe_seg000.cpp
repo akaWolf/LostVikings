@@ -2705,6 +2705,9 @@ cs=0x1a2;eip=0x00049b; 	T(MOV(di, 0x0F));	// 631 mov     di, 0Fh ;~ 01A2:049B
 cs=0x1a2;eip=0x00049e; 	J(CALL(sub_1265b,0));	// 632 call    sub_1265B ;~ 01A2:049E
 sub_104a1:
 	// 639
+	// V2 barrier: signal pw screen entry — shadow runs v2_pw_pre_loop
+	// (palette + sub_1450b/sub_1047c body + sub_104a1 prelude DS writes).
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PW_ENTRY, ds);
 cs=0x1a2;eip=0x0004a1; 	X(MOV(word_28925, 0x11));	// 640 mov     word_28925, 11h ;~ 01A2:04A1
 cs=0x1a2;eip=0x0004a7; 	X(MOV(word_28923, 1));	// 641 mov     word_28923, 1 ;~ 01A2:04A7
 cs=0x1a2;eip=0x0004ad; 	X(MOV(byte_31a4b, 1));	// 642 mov     byte_31A4B, 1 ;~ 01A2:04AD
@@ -2749,6 +2752,11 @@ cs=0x1a2;eip=0x0004f5; 	T(CMP(ax, 0));	// 672 cmp     ax, 0 ;~ 01A2:04F5
 cs=0x1a2;eip=0x0004f8; 	J(JNZ(loc_104ff));	// 673 jnz     short loc_104FF ;~ 01A2:04F8
 cs=0x1a2;eip=0x0004fa; 	X(OR(word_28814, 2));	// 674 or      word_28814, 2 ;~ 01A2:04FA
 loc_104ff:
+	// V2 barrier: signal pw screen exit — shadow runs v2_pw_post_loop
+	// (post-loop sub_12352 + word_28814 toggle if Y + double render pair
+	// + sub_12816 glyph clear). Fires AFTER orig's loc_104f0 sub_12352
+	// at line 2749, so both threads end with consistent input/word_28814.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PW_EXIT, ds);
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 	// 4430
 cs=0x1a2;eip=0x0004ff; 	X(MOV(word_31a49, 1));	// 677 mov     word_31A49, 1 ;~ 01A2:04FF
@@ -5820,6 +5828,12 @@ cs=0x1a2;eip=0x002375; 	X(MOV(word_28898, ax));	// 4624 mov     word_28898, ax ;
 cs=0x1a2;eip=0x002378; 	T(MOV(ax, word_28896));	// 4625 mov     ax, word_28896 ;~ 01A2:2378
 cs=0x1a2;eip=0x00237b; 	X(MOV(word_2889a, ax));	// 4626 mov     word_2889A, ax ;~ 01A2:237B
 //printf("read keys: %x %x %x %x\n", word_28896, word_2889a, word_30bbe, keys);
+	// V2 barrier: signal AFTER orig sub_12352 finished computing word_28896/28898/2889A.
+	// v2 handler runs v2_sub_12352_iter ONCE per orig call → shadow input state tracks
+	// orig 1:1 across ALL call sites (main loop, sub_1086f recursion, VIKING_SWITCH/
+	// TRANSITION_TEXT/PAUSE_LOOP iters, post-loop). Eliminates off-by-N divergence
+	// from orig calling sub_12352 multiple times per frame while v2 only mirrored once.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_INPUT_UPDATE, ds);
 cs=0x1a2;eip=0x00237e; 	J(RETN(0));	// 4627 retn ;~ 01A2:237E
 sub_1237f:
 	// 4634
@@ -6450,6 +6464,9 @@ cs=0x1a2;eip=0x002826; 	X(	REP STOSW);	// 5348 rep stosw ;~ 01A2:2826
 cs=0x1a2;eip=0x002828; 	J(RETN(0));	// 5349 retn ;~ 01A2:2828
 sub_12829:
 	// 5356
+{ extern int v2_dbg_pre_vm_iter;
+  fprintf(stderr, "ORIG-PWCHECK[f%d]: word_287F0..F6 = %04X %04X %04X %04X (sub_12829 called)\n",
+    v2_dbg_pre_vm_iter, word_287f0, word_287f2, word_287f4, word_287f6); }
 cs=0x1a2;eip=0x002829; 	T(MOV(si, 0));	// 5358 mov     si, 0 ;~ 01A2:2829
 ret_1a2_282c:
 	// 4805
@@ -6487,6 +6504,9 @@ cs=0x1a2;eip=0x002874; 	X(MOV(byte_287e8, 0));	// 5391 mov     byte_287E8, 0 ;~ 
 cs=0x1a2;eip=0x002879; 	J(RETN(0));	// 5392 retn ;~ 01A2:2879
 sub_1287a:
 	// 5399
+{ extern int v2_dbg_pre_vm_iter;
+  fprintf(stderr, "ORIG-PWFILL[f%d]: word_2AA8D=%04X (sub_1287a called: auto-fill pw from level table)\n",
+    v2_dbg_pre_vm_iter, word_2aa8d); }
 cs=0x1a2;eip=0x00287a; 	T(MOV(si, word_2aa8d));	// 5401 mov     si, word_2AA8D ;~ 01A2:287A
 ret_1a2_287e:
 	// 4809
@@ -16251,11 +16271,13 @@ sub_177bb:
      // ~1.5s SFX have played (they end naturally but DS slot never clears),
      // then new sub_177bb fails to store, and sub_1782a/1787f stop can't find
      // the seq → elevator-style SFX never stops audibly.
-     extern bool is_handle_active(uint16_t h);
+     // Only check 0xFFFF (matches orig DOS asm at loc_177ca: CMP
+     // [si-66F4], FFFFh). is_handle_active() check raced with v2 mirror →
+     // DS divergence at f168. Reverted; trade-off documented at
+     // v2_phase_frame_begin TODO.
      for (int _si = 8; _si > 0; _si -= 2) {
        uint16_t _cur = *(dw*)(raddr(ds, _si - 0x66F4));
-       bool free_slot = (_cur == 0xFFFF) || !is_handle_active(_cur);
-       if (free_slot) {
+       if (_cur == 0xFFFF) {
          *(dw*)(raddr(ds, _si - 0x66F4)) = (dw)sdl_handle;
          *(dw*)(raddr(ds, _si - 0x66EA)) = ax & 0xFF;
          _stored = true;

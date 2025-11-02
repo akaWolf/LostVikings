@@ -574,13 +574,16 @@ static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     // helper level (not per-call-site) to keep both paths symmetric — without
     // this, ds:0x9912/0x991C diverges at f175 (FIRST MISMATCH, op_2F).
     if (sdl_handle > 0 && sdl_handle <= 0xFFFE) {
-        extern bool is_handle_active(uint16_t h);
+        // Only check 0xFFFF (matches orig DOS asm at loc_177ca: CMP [si-66F4],
+        // FFFFh). Earlier added is_handle_active() to detect stale handles,
+        // but it raced between orig and v2 threads → DS divergence (f168 was
+        // typical). Reverted to strict orig behavior — see v2_phase_frame_begin
+        // TODO comment for proper stale-slot cleanup design.
         for (int si = 8; si > 0; si -= 2) {
             uint16_t handle_off = (uint16_t)(si - 0x66F4);
             uint16_t seq_off    = (uint16_t)(si - 0x66EA);
             uint16_t cur = *(uint16_t*)(s + handle_off);
-            bool free_slot = (cur == 0xFFFF) || !is_handle_active(cur);
-            if (free_slot) {
+            if (cur == 0xFFFF) {
                 *(uint16_t*)(s + handle_off) = (uint16_t)sdl_handle;
                 *(uint16_t*)(s + seq_off)    = ax_seq & 0xFF;
                 break;
@@ -5202,41 +5205,14 @@ static void v2_run_transition_chain(uint8_t* shadow) {
 static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // sub_12352: input processing. Exact replica.
     // ax = 0
-    // if ds:0x86DA != 0: call sub_12ef8 (replay), ax = ds:0x86DC
-    // ax |= ds:0x86DE (accumulated transitions)
-    // ax |= input_keys_v2 (SDL keyboard state for v2 window)
-    // ds:0x03B6 = ax (current input)
-    // ds:0x03B8 = (ax ^ ds:0x03BA) & ax (newly pressed)
-    // ds:0x03BA = ax (previous frame)
-    {
-        uint16_t ax = 0;
-        if (*(uint16_t*)(shadow + 0x86DA) != 0) {
-            // Replay mode — not implemented in v2
-            ax = *(uint16_t*)(shadow + 0x86DC);
-        }
+    // sub_12352 mirror:
+    // - DEFAULT MODE: orig sub_12352 ran in main thread BEFORE PRE_VM signal,
+    //   fired V2_PHASE_INPUT_UPDATE → v2_run_input_update already called
+    //   v2_sub_12352_iter on shadow. shadow_28896/8/A is current. Skip here.
+    // - V2_ONLY: orig isn't running → no INPUT_UPDATE signal → drive ourselves.
 #ifdef V2_ONLY
-        // V2_ONLY: orig sub_12352 doesn't run, v2_input_snapshot stays stale.
-        // Read input directly from shadow's word_30bbe + SDL keyboard via the
-        // same intro-mask helper used by seg000 in default mode (mirrors orig
-        // int 9 ISR effect on word_30bbe).
-        extern uint16_t input_keys;
-        ax |= *(uint16_t*)(shadow + 0x86DE);  // fake input from v2's sub_12d72
-        uint16_t w288ac = *(uint16_t*)(shadow + 0x3CC);  // word_288ac
-        ax = v2_input_intro_mask(ax, w288ac, input_keys);
-#else
-        // Standard mode (orig still runs): use v2_input_snapshot taken at exact
-        // moment orig sub_12352 wrote ax. Avoids divergence with orig's ds:0x3B6.
-        ax |= v2_input_snapshot;
+    v2_sub_12352_iter(shadow);
 #endif
-        { static int _inp = 0; _inp++; if (_inp <= 20)
-            fprintf(stderr, "V2-INPUT[%d]: 86DE=%04X snapshot=%04X ax=%04X prev=%04X\n",
-                    _inp, *(uint16_t*)(shadow + 0x86DE), v2_input_snapshot, ax,
-                    *(uint16_t*)(shadow + 0x03BA)); }
-        *(uint16_t*)(shadow + 0x03B6) = ax;
-        uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
-        *(uint16_t*)(shadow + 0x03B8) = (ax ^ prev) & ax;
-        *(uint16_t*)(shadow + 0x03BA) = ax;
-    }
 
     // sub_12d72: level transition handler.
     // ds:0x3CC = transition state. If >= 0 → return. If negative → process.
@@ -5358,158 +5334,42 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     }
 
 
-    // sub_1041c: password screen (Start button). Verified with seg000 lines 571-697.
-    if (shadow[0x25BA] != 0 &&                                          // test byte_2AA9A, FFh
-        (*(uint16_t*)(shadow + 0x334) & 3) == 0 &&                     // test word_28814, 3; jnz ret
-        (*(uint16_t*)(shadow + 0x3B8) & 0x1000) &&                     // test word_28898, 1000h
-        *(uint16_t*)(shadow + 0x218F) == 0)                             // test word_2A66F, FFFFh
-    {
-        // OUT(0x3C8, 3); OUT(0x3C9, 0×3) — VGA: set color 3 to black
-        shadow[0x7F0B] = 0; shadow[0x7F0C] = 0; shadow[0x7F0D] = 0;   // palette color 3 = {0,0,0}
-        bool need_save = !(shadow[0x342] | shadow[0x343] | shadow[0x344]); // bytes all zero?
-        if (need_save) {
-            // loc_10469: sub_1450B(4,4,4) before sub_1047C
-            v2_sub_1450b(shadow, 4, 4, 4);
-        }
-        // sub_1047C: stop music + display text
-        // Mirror orig sub_1047c eip 0x047C-0x047F: MOV ax, 0; CALL sub_177bb
-        if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 0);
-        // OUT(0x3C8, 3); OUT(0x3C9, 0x3F×3) — VGA: color 3 to white
-        // loc_124A9(ax=2, si=0xF, di=0xC): box + text ("PAUSE" etc)
-        v2_sub_12515(shadow, 2);
-        { uint16_t bx_t = *(uint16_t*)(shadow + 0x2A);
-          v2_sub_12529(shadow, bx_t);
-          // sub_12549 called at eip=0x24B9 (recovered: E8 8D 00)
-          // ax = height byte from sub_12529; sub_12549 uses it as alignment type
-          uint16_t ax_h = *(uint16_t*)(shadow + 0x36); // word_28516 = height (set by sub_12529)
-          v2_sub_12549(shadow, ax_h);
-          uint16_t si_t = 0x0F, di_t = 0x0C;
-          v2_sub_12388(shadow, si_t, di_t, (uint8_t)ax_h);
-          v2_loc_124c5(shadow, si_t + 1, di_t + 1, bx_t); }
-        // sub_1265B(ax=5, si=0x10, di=0xF): password display
-        v2_sub_12515(shadow, 5);
-        { uint16_t bx_p = *(uint16_t*)(shadow + 0x2A);
-          v2_loc_124c5(shadow, 0x10, 0x0F, bx_p); }
-        // sub_104A1: DS writes + blocking password loop
-        *(uint16_t*)(shadow + 0x445) = 0x11;                            // word_28925
-        *(uint16_t*)(shadow + 0x443) = 1;                               // word_28923 = cursor pos
-        shadow[0x956B] = 1;                                              // byte_31A4B
-        // VGA OUT (palette 3 = 0x3F) — commented
-        // sub_1E0C7 + sub_16775 — render passes (v2 equivalents)
-        v2_sub_1E0C7(shadow);
-        v2_sub_16775(shadow);
-        // loc_104C3: blocking password screen loop
-        uint16_t exit_ax = 0;
-        bool pw_exit = false;
-        int pw_safety = 1; // HYPOTHESIS TEST: was 10000. If freeze gone → this loop is the cause.
-        fprintf(stderr, "V2-PWLOOP-ENTRY: triggered (was 10000-iter blocking)\n");
-        while (!pw_exit && pw_safety-- > 0) {
-            *(uint16_t*)(shadow + 0xA39C) = 1;                          // word_3287C
-            v2_sub_10130(shadow);
-            v2_sub_1DE05(shadow);
-            *(uint16_t*)(shadow + 0xA39C) = 1;
-            v2_sub_10130(shadow);
-            *(uint16_t*)(shadow + 0xA39C) = 1;
-            v2_sub_10130(shadow);
-            // sub_12352: input
-            { uint16_t ax_i = 0;
-              if (*(uint16_t*)(shadow + 0x86DA) != 0) ax_i = *(uint16_t*)(shadow + 0x86DC);
-              ax_i = v2_input_or(shadow, ax_i);
-              *(uint16_t*)(shadow + 0x3B6) = ax_i;
-              uint16_t prev = *(uint16_t*)(shadow + 0x3BA);
-              *(uint16_t*)(shadow + 0x3B8) = (ax_i ^ prev) & ax_i;
-              *(uint16_t*)(shadow + 0x3BA) = ax_i; }
-            // sub_10555: password blink
-            { *(uint16_t*)(shadow + 0x445) -= 1;                        // DEC word_28925
-              if ((*(uint16_t*)(shadow + 0x445) & 0xF) == 0) {
-                  uint16_t si_b, ax_b;
-                  if (*(uint16_t*)(shadow + 0x445) & 0x10) {
-                      si_b = (*(uint16_t*)(shadow + 0x443) != 0) ? 0x15 : 0x10;
-                      ax_b = 6;
-                  } else {
-                      if (*(uint16_t*)(shadow + 0x443) == 0) { si_b = 0x10; ax_b = 5; }
-                      else { si_b = 0x16; ax_b = 4; }
-                  }
-                  v2_sub_12515(shadow, ax_b);
-                  uint16_t bx_b = *(uint16_t*)(shadow + 0x2A);
-                  v2_loc_124c5(shadow, si_b, 0x0F, bx_b);
-                  v2_game_loop_post_render(shadow);                      // sub_165AA
-                  v2_sub_1DD9C(shadow);
-                  v2_sub_1C8F1(shadow, 0xFFFF);
-                  v2_sub_1E0C7(shadow);
-                  v2_sub_16775(shadow);
-              }
-            }
-            // sub_105CB: password exit check
-            { uint16_t ni = *(uint16_t*)(shadow + 0x3B8);
-              if (ni & 0x200) {
-                  if (*(uint16_t*)(shadow + 0x443) != 0) {
-                      *(uint16_t*)(shadow + 0x443) -= 1;                // DEC word_28923
-                      *(uint16_t*)(shadow + 0x445) = 0x11;
-                      v2_sub_12515(shadow, 4);
-                      { uint16_t bx_e = *(uint16_t*)(shadow + 0x2A);
-                        v2_loc_124c5(shadow, 0x16, 0x0F, bx_e); }
-                  }
-              }
-              if (ni & 0x100) {
-                  if (*(uint16_t*)(shadow + 0x443) == 0) {
-                      *(uint16_t*)(shadow + 0x443) += 1;                // INC word_28923
-                      *(uint16_t*)(shadow + 0x445) = 0x11;
-                      v2_sub_12515(shadow, 5);
-                      { uint16_t bx_e = *(uint16_t*)(shadow + 0x2A);
-                        v2_loc_124c5(shadow, 0x10, 0x0F, bx_e); }
-                  }
-              }
-              shadow[0x9181] |= sdl_spec_get(0x9181);  // SDL Y OR-in
-              shadow[0x919D] |= sdl_spec_get(0x919D);  // SDL N OR-in
-              if (ni & 0x8000) { exit_ax = *(uint16_t*)(shadow + 0x443); pw_exit = true; }
-              else if (ni & 0x1000) { exit_ax = 1; pw_exit = true; }
-              else if (shadow[0x9181] != 0) { exit_ax = 0; pw_exit = true; }  // byte_31661 Y
-              else if (shadow[0x919D] != 0) { exit_ax = 1; pw_exit = true; }  // byte_3167D N
-            }
-            v2_do_render();
+    // sub_1041c: password / quit-prompt screen (Start button trigger).
+    //
+    // Default mode: orig signals V2_PHASE_PW_ENTRY → v2_run_pw_entry, each
+    // V2_PHASE_TRANSITION_TEXT iter → v2_run_transition_text_loop, finally
+    // V2_PHASE_PW_EXIT → v2_run_pw_exit. All three call v2_pw_pre_loop /
+    // v2_pw_iter_body / v2_pw_post_loop helpers — same code as V2_ONLY below.
+    //
+    // V2_ONLY: no orig running → no signals. v2 must drive the full pw screen
+    // itself (trigger check → pre-loop → spin iter body → post-loop). Same
+    // helpers, no logic duplication — just structural difference (signal
+    // dispatch vs inline spin).
 #ifdef V2_ONLY
-            SDL_Delay(16);  // pacing for V2_ONLY interactive; default mode = no pacing
-#endif
+    if (shadow[0x25BA] != 0 &&                                  // byte_2AA9A
+        (*(uint16_t*)(shadow + 0x334) & 3) == 0 &&             // word_28814 & 3
+        (*(uint16_t*)(shadow + 0x3B8) & 0x1000) &&             // word_28898 ESC
+        *(uint16_t*)(shadow + 0x218F) == 0)                     // word_2A66F
+    {
+        bool need_save = !(shadow[0x342] | shadow[0x343] | shadow[0x344]);
+        v2_pw_pre_loop(shadow);
+        for (int safety = 10000; safety > 0; safety--) {
+            if (v2_pw_iter_body(shadow)) break;
+            v2_do_render();
+            SDL_Delay(16);  // pacing for V2_ONLY interactive
         }
-        // After loop: sub_12352 (one more input read)
-        { uint16_t ax_i = 0;
-          if (*(uint16_t*)(shadow + 0x86DA) != 0) ax_i = *(uint16_t*)(shadow + 0x86DC);
-          ax_i = v2_input_or(shadow, ax_i);
-          *(uint16_t*)(shadow + 0x3B6) = ax_i;
-          uint16_t prev = *(uint16_t*)(shadow + 0x3BA);
-          *(uint16_t*)(shadow + 0x3B8) = (ax_i ^ prev) & ax_i;
-          *(uint16_t*)(shadow + 0x3BA) = ax_i; }
-        if (exit_ax == 0) *(uint16_t*)(shadow + 0x334) |= 2;           // OR word_28814, 2
-        // loc_104FF: cleanup renders
-        *(uint16_t*)(shadow + 0x9569) = 1;                              // word_31A49 = 1
-        *(uint16_t*)(shadow + 0x98DC) = 0;                              // word_31DBC = 0
-        v2_sub_10130(shadow);
-        v2_sub_1DE05(shadow);
-        v2_game_loop_post_render(shadow);
-        v2_sub_1DD9C(shadow);
-        v2_sub_1C8F1(shadow, 0xFFFE);
-        v2_sub_1E0C7(shadow);
-        v2_sub_16775(shadow);
-        v2_sub_10130(shadow);
-        v2_sub_1DE05(shadow);
-        v2_game_loop_post_render(shadow);
-        v2_sub_1DD9C(shadow);
-        v2_sub_1C8F1(shadow, 0xFFFE);
-        v2_sub_1E0C7(shadow);
-        v2_sub_16775(shadow);
-        *(uint16_t*)(shadow + 0x9569) = 0;                              // word_31A49 = 0
-        v2_sub_12816(shadow);                                            // sub_12816: clear glyph buffer
-        // sub_14590 (only from loc_10469 path)
+        v2_pw_post_loop(shadow);
         if (need_save) {
-            shadow[0x342] = 0; shadow[0x343] = 0; shadow[0x344] = 0;   // clear bytes
-            shadow[0x7EFD] &= 0xFE;                                     // AND byte, FEh
+            // sub_14590 (only from loc_10469 path)
+            shadow[0x342] = 0; shadow[0x343] = 0; shadow[0x344] = 0;
+            shadow[0x7EFD] &= 0xFE;
             if (shadow[0x7EFD] == 0)
-                *(uint16_t*)(shadow + 0x7F00) = 0x7F02;                 // word ptr ds:7F00h
-            *(uint16_t*)(shadow + 0x7EFE) = 4;                          // word ptr ds:7EFEh
-            v2_sub_10e99(shadow);                                        // JMP sub_10E99
+                *(uint16_t*)(shadow + 0x7F00) = 0x7F02;
+            *(uint16_t*)(shadow + 0x7EFE) = 4;
+            v2_sub_10e99(shadow);
         }
     }
+#endif
 
     // sub_10138: check word_28814 (DS:0x0334) for button presses.
     // bit 4 (mask 0x4): viking switch screen — blocking loop loc_10169.
@@ -7866,6 +7726,19 @@ struct V2VM {
                 fprintf(stderr,
                   "V2-DS302[f%d]: obj=%02X pc=%04X addr=%04X val=%04X was=%04X\n",
                   v2_dbg_pre_vm_iter, obj, pc, addr, val,
+                  *(uint16_t*)(shadow + addr));
+            }
+            // V2-PWWRITE: trap VM writes to password chars word_287F0..word_287F6
+            // (ds:0x310..0x316). If lv=password-entry runs and captures keys,
+            // it must store them here before sub_12829 (password check). Used to
+            // verify if lv=0026 is actually password entry mode.
+            if (addr >= 0x310 && addr <= 0x317) {
+                extern int v2_dbg_pre_vm_iter;
+                extern uint16_t v2_current_level;
+                static int _pw_n = 0;
+                if (++_pw_n <= 50) fprintf(stderr,
+                  "V2-PWWRITE[#%d f%d lv=%04X]: obj=%02X pc=%04X addr=%04X val=%04X was=%04X\n",
+                  _pw_n, v2_dbg_pre_vm_iter, v2_current_level, obj, pc, addr, val,
                   *(uint16_t*)(shadow + addr));
             }
             // Trap: watch sub-sprite mode for slots 0x0030-0x0034 + addr-1 spillover
@@ -16403,24 +16276,15 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // In default mode seg000 also takes snapshot at sub_12352 line 5623; both
     // paths update the same buffer so worst case it's refreshed twice/frame.
     { extern void sdl_spec_snapshot_take(); sdl_spec_snapshot_take(); }
-    // Mirror orig int 9 ISR's write to ds:[bx-0x6E94] for ALL scancodes:
-    // orig ISR sets ds:0x916C+sc = 1 on KEYDOWN, = 0 on KEYUP. VM/menu code
-    // (password entry, dialog) polls these bytes per-frame. Without this sync
-    // VM reads 0 → no letters captured. Apply to BOTH real_ds and shadow_ds so
-    // verify stays clean.
-    {
-        extern uint8_t sdl_spec_snap_for_ds(uint16_t low_byte);
-        uint8_t* real_ds = v2_vm_real_ds_ptr;
-        for (int low = 0x6C; low <= 0xEB; low++) {
-            uint8_t state = sdl_spec_snap_for_ds((uint16_t)low);
-            if (real_ds) real_ds[0x9100 + low] = state;
-            v2_vm_shadow_ds[0x9100 + low] = state;
-            if (state) {
-                fprintf(stderr, "KEYSYNC-DS: low=0x%02X (ds:0x%04X) = 1 real_ds=%p shadow_ds=%p\n",
-                        low, 0x9100 + low, (void*)real_ds, (void*)v2_vm_shadow_ds);
-            }
-        }
-    }
+    // TODO: SFX stale-slot cleanup. Orig DOS used AIL ISR callback to clear
+    // the SFX DS slot on natural-end (immediate, interrupt context). Our SDL
+    // port doesn't replicate that. Earlier workaround (is_handle_active in
+    // sub_177bb slot scan) races between orig and v2 threads → DS divergence
+    // (f168 DS-DIFF[0]: addr=0x9910 real=0x57A6 shadow=0xFFFF). Removed the
+    // workaround — slot scan now matches orig DOS asm strictly (only 0xFFFF).
+    // Trade-off: slots fill up after 4 SFX → new SFX silently dropped. To
+    // implement orig-equivalent: audio-thread-side immediate clear with
+    // atomic DS write on producer natural-end.
 #ifdef V2_RENDER_FROM_SHADOW
     v2_vm_in_frame = true;
 #endif
@@ -17973,13 +17837,18 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
     // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
     *(uint16_t*)(shadow + 0x0334) &= 0xFFFB;
 
-    // sub_12352: input
+    // sub_12352 (input): default mode → INPUT_UPDATE signal already updated.
+    // V2_ONLY → drive ourselves.
+#ifdef V2_ONLY
     v2_sub_12352_iter(shadow);
+#endif
 
     // test word_28898 (DS:0x03B8 = ds_seg + 0x28898 - 0x284E0 = 0x3B8) & 0xC0C0
     if (*(uint16_t*)(shadow + 0x3B8) & 0xC0C0) {
         // loc_10191: exit loop. orig does JMP sub_12352 (one more input read).
+#ifdef V2_ONLY
         v2_sub_12352_iter(shadow);
+#endif
         return true;   // signal exit
     }
 
@@ -18252,29 +18121,196 @@ static void v2_sub_10555(uint8_t* s) {
 // per-iter version is TODO. For default mode + simple pause (just blink
 // + ESC exit), this is enough.
 void v2_run_pause_loop(uint8_t* shadow) {
-    v2_sub_12352_iter(shadow);                       // input read
+    // Input read: default mode → INPUT_UPDATE signal already updated.
+    // V2_ONLY → drive ourselves.
+#ifdef V2_ONLY
+    v2_sub_12352_iter(shadow);
+#endif
     v2_sub_11c52(shadow);                            // selector blink DEC
     // TODO: full sub_11cbb mirror (item pickup/category nav). Currently shadow
     // diverges from real on inventory state when user interacts during pause.
 }
 
-// V2_PHASE_TRANSITION_TEXT handler — Phase 4. One iteration of orig sub_104a1
-// loc_104c3 quit-prompt loop (asks "Quit to DOS?"). Orig body:
-//   sub_10130 × 3 (vsync × 3 sub-frames) → sub_12352 (input) → sub_10555
-//   (selector blink) → sub_105cb (exit check sets carry) → JC exit / loop
-// v2 mirror: input + selector blink.
-void v2_run_transition_text_loop(uint8_t* shadow) {
-    v2_sub_12352_iter(shadow);                       // input read
-    v2_sub_10555(shadow);                            // selector blink DEC
-    // TODO: full sub_105cb mirror (Y/N keyboard check + carry set).
+// ============================================================================
+// Password / quit-prompt screen — shared mirror functions.
+//
+// orig flow (sub_1041c → sub_104a1 → loc_104c3 loop → loc_104ff cleanup):
+//   1. sub_1041c trigger checks (Start press) — unchanged in v2
+//   2. PRE-LOOP setup (palette + sub_1450b + sub_1047c body + sub_104a1 prelude
+//      DS writes + first sub_1E0C7 + sub_16775)
+//   3. LOOP body per iter (3× word_3287c=1+sub_10130 + sub_1DE05 + sub_12352
+//      input + sub_10555 selector blink + sub_105cb Y/N exit check)
+//   4. POST-LOOP cleanup (post-loop sub_12352 + word_28814 |= 2 if Y +
+//      double render pass + sub_12816 glyph clear + optional sub_14590)
+//
+// Each step has shared helper. Default mode: orig signals PW_ENTRY (step 2),
+// TRANSITION_TEXT per iter (step 3), PW_EXIT (step 4) and v2 mirrors. V2_ONLY:
+// v2_phase_pre_vm calls all three inline (no orig signals). NO logic
+// duplication — only the dispatch differs (signals vs inline spin).
+// ============================================================================
+
+// Per-iter exit reason captured by v2_pw_iter_body — read by v2_pw_post_loop
+// to decide whether to set word_28814 |= 2 (Y / quit-to-DOS confirmation).
+// v2 game thread is single-threaded, so static is sufficient.
+static uint16_t v2_pw_last_exit_ax = 0;
+static bool v2_pw_last_exit_valid = false;
+
+// Step 2: PRE-LOOP setup. Mirrors sub_1041c's loc_10469 path (sub_1450b +
+// sub_1047c) AND sub_104a1's prelude (DS writes + first render pair).
+// Caller must have already verified shadow trigger conditions.
+static void v2_pw_pre_loop(uint8_t* shadow) {
+    // VGA palette color 3 = (0,0,0) — orig OUTs at sub_1041c eip 0x43D..0x447
+    shadow[0x7F0B] = 0; shadow[0x7F0C] = 0; shadow[0x7F0D] = 0;
+    bool need_save = !(shadow[0x342] | shadow[0x343] | shadow[0x344]);
+    if (need_save) {
+        // loc_10469: sub_1450B(4,4,4) before sub_1047C
+        v2_sub_1450b(shadow, 4, 4, 4);
+    }
+    // sub_1047C: stop music + display text
+    if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 0);
+    // loc_124A9(ax=2, si=0xF, di=0xC): box + text ("PAUSE" / "PASSWORD")
+    v2_sub_12515(shadow, 2);
+    { uint16_t bx_t = *(uint16_t*)(shadow + 0x2A);
+      v2_sub_12529(shadow, bx_t);
+      uint16_t ax_h = *(uint16_t*)(shadow + 0x36);
+      v2_sub_12549(shadow, ax_h);
+      uint16_t si_t = 0x0F, di_t = 0x0C;
+      v2_sub_12388(shadow, si_t, di_t, (uint8_t)ax_h);
+      v2_loc_124c5(shadow, si_t + 1, di_t + 1, bx_t); }
+    // sub_1265B(ax=5, si=0x10, di=0xF): password display
+    v2_sub_12515(shadow, 5);
+    { uint16_t bx_p = *(uint16_t*)(shadow + 0x2A);
+      v2_loc_124c5(shadow, 0x10, 0x0F, bx_p); }
+    // sub_104A1 prelude: DS writes + first render pair
+    *(uint16_t*)(shadow + 0x445) = 0x11;          // word_28925
+    *(uint16_t*)(shadow + 0x443) = 1;             // word_28923 = cursor pos
+    shadow[0x956B] = 1;                            // byte_31A4B
+    v2_sub_1E0C7(shadow);
+    v2_sub_16775(shadow);
+    v2_pw_last_exit_valid = false;
 }
 
-// V2_PHASE_PASSWORD_PROMPT handler — Phase 5. Stub: sub_1041c is just the
-// TRIGGER (ESC check + jump to sub_104a1). The actual loop is sub_104a1
-// loc_104c3 handled by V2_PHASE_TRANSITION_TEXT above.
-void v2_run_password_prompt(uint8_t* shadow) {
+// Step 3: ONE iter body (loc_104c3 per-iter): vsync ×3 + sub_1DE05 + sub_12352
+// input + sub_10555 selector blink + sub_105cb Y/N+arrow handling. Returns
+// true when exit condition met; in that case stores exit_ax in v2_pw_last_exit_ax
+// for v2_pw_post_loop to consume.
+static bool v2_pw_iter_body(uint8_t* shadow) {
+    *(uint16_t*)(shadow + 0xA39C) = 1;            // word_3287C
+    v2_sub_10130(shadow);
+    v2_sub_1DE05(shadow);
+    *(uint16_t*)(shadow + 0xA39C) = 1;
+    v2_sub_10130(shadow);
+    *(uint16_t*)(shadow + 0xA39C) = 1;
+    v2_sub_10130(shadow);
+    // sub_12352 (input): default mode → INPUT_UPDATE signal already updated
+    // shadow_28896/8/A. V2_ONLY → drive ourselves.
+#ifdef V2_ONLY
     v2_sub_12352_iter(shadow);
+#endif
+    // sub_10555: password blink
+    *(uint16_t*)(shadow + 0x445) -= 1;            // DEC word_28925
+    if ((*(uint16_t*)(shadow + 0x445) & 0xF) == 0) {
+        uint16_t si_b, ax_b;
+        if (*(uint16_t*)(shadow + 0x445) & 0x10) {
+            si_b = (*(uint16_t*)(shadow + 0x443) != 0) ? 0x15 : 0x10;
+            ax_b = 6;
+        } else {
+            if (*(uint16_t*)(shadow + 0x443) == 0) { si_b = 0x10; ax_b = 5; }
+            else { si_b = 0x16; ax_b = 4; }
+        }
+        v2_sub_12515(shadow, ax_b);
+        uint16_t bx_b = *(uint16_t*)(shadow + 0x2A);
+        v2_loc_124c5(shadow, si_b, 0x0F, bx_b);
+        v2_game_loop_post_render(shadow);          // sub_165AA
+        v2_sub_1DD9C(shadow);
+        v2_sub_1C8F1(shadow, 0xFFFF);
+        v2_sub_1E0C7(shadow);
+        v2_sub_16775(shadow);
+    }
+    // sub_105CB: password exit check
+    uint16_t ni = *(uint16_t*)(shadow + 0x3B8);
+    if (ni & 0x200) {
+        if (*(uint16_t*)(shadow + 0x443) != 0) {
+            *(uint16_t*)(shadow + 0x443) -= 1;    // DEC word_28923
+            *(uint16_t*)(shadow + 0x445) = 0x11;
+            v2_sub_12515(shadow, 4);
+            uint16_t bx_e = *(uint16_t*)(shadow + 0x2A);
+            v2_loc_124c5(shadow, 0x16, 0x0F, bx_e);
+        }
+    }
+    if (ni & 0x100) {
+        if (*(uint16_t*)(shadow + 0x443) == 0) {
+            *(uint16_t*)(shadow + 0x443) += 1;    // INC word_28923
+            *(uint16_t*)(shadow + 0x445) = 0x11;
+            v2_sub_12515(shadow, 5);
+            uint16_t bx_e = *(uint16_t*)(shadow + 0x2A);
+            v2_loc_124c5(shadow, 0x10, 0x0F, bx_e);
+        }
+    }
+    shadow[0x9181] |= sdl_spec_get(0x9181);        // SDL Y OR-in
+    shadow[0x919D] |= sdl_spec_get(0x919D);        // SDL N OR-in
+    uint16_t exit_ax;
+    bool exit;
+    if (ni & 0x8000) { exit_ax = *(uint16_t*)(shadow + 0x443); exit = true; }
+    else if (ni & 0x1000) { exit_ax = 1; exit = true; }
+    else if (shadow[0x9181] != 0) { exit_ax = 0; exit = true; }
+    else if (shadow[0x919D] != 0) { exit_ax = 1; exit = true; }
+    else { exit_ax = 0; exit = false; }
+    if (exit) {
+        v2_pw_last_exit_ax = exit_ax;
+        v2_pw_last_exit_valid = true;
+    }
+    return exit;
 }
+
+// Step 4: POST-LOOP cleanup. Mirrors loc_104f0 (post-loop sub_12352 + word_28814
+// toggle if Y) and loc_104ff (double render pass + sub_12816 glyph clear).
+// Reads exit_ax stored by v2_pw_iter_body.
+static void v2_pw_post_loop(uint8_t* shadow) {
+    uint16_t exit_ax = v2_pw_last_exit_valid ? v2_pw_last_exit_ax : 1;
+    // After loop: sub_12352 (one more input read).
+    // Default mode → INPUT_UPDATE signal already updated shadow input.
+    // V2_ONLY → drive ourselves.
+#ifdef V2_ONLY
+    v2_sub_12352_iter(shadow);
+#endif
+    if (exit_ax == 0) *(uint16_t*)(shadow + 0x334) |= 2;   // OR word_28814, 2
+    // loc_104FF: cleanup renders
+    *(uint16_t*)(shadow + 0x9569) = 1;            // word_31A49 = 1
+    *(uint16_t*)(shadow + 0x98DC) = 0;            // word_31DBC = 0
+    for (int i = 0; i < 2; i++) {
+        v2_sub_10130(shadow);
+        v2_sub_1DE05(shadow);
+        v2_game_loop_post_render(shadow);
+        v2_sub_1DD9C(shadow);
+        v2_sub_1C8F1(shadow, 0xFFFE);
+        v2_sub_1E0C7(shadow);
+        v2_sub_16775(shadow);
+    }
+    *(uint16_t*)(shadow + 0x9569) = 0;            // word_31A49 = 0
+    v2_sub_12816(shadow);                          // sub_12816: clear glyph buffer
+}
+
+// V2_PHASE_PW_ENTRY signal handler — orig calls just before sub_104a1 prelude.
+void v2_run_pw_entry(uint8_t* shadow) { v2_pw_pre_loop(shadow); }
+
+// V2_PHASE_PW_EXIT signal handler — orig calls at loc_104ff after loop exit.
+void v2_run_pw_exit(uint8_t* shadow) { v2_pw_post_loop(shadow); }
+
+// V2_PHASE_INPUT_UPDATE signal handler — fires from inside orig sub_12352.
+// One call per orig sub_12352 → one v2_sub_12352_iter on shadow → shadow input
+// (word_28896/28898/2889A) tracks orig 1:1 across all call sites.
+void v2_run_input_update(uint8_t* shadow) { v2_sub_12352_iter(shadow); }
+
+// V2_PHASE_TRANSITION_TEXT handler — Phase 4. ONE iter of orig sub_104a1
+// loc_104c3 quit-prompt loop. Discards iter exit return (orig's sub_105cb
+// CF result) — orig's main thread observes it via its own jump; v2's exit
+// signal is V2_PHASE_PW_EXIT below.
+void v2_run_transition_text_loop(uint8_t* shadow) { (void)v2_pw_iter_body(shadow); }
+
+// V2_PHASE_PASSWORD_PROMPT handler — sub_1041c trigger only (no DS writes
+// of its own). Loop body handled by V2_PHASE_TRANSITION_TEXT.
+void v2_run_password_prompt(uint8_t* shadow) { (void)shadow; }
 
 // ============================================================================
 // V2 game thread — barrier-synchronized with original game loop.
@@ -18314,7 +18350,8 @@ static void v2_game_thread_func() {
             "RENDER3", "POST_FLIP3", "FRAME_END",
             // Blocking phases:
             "VIKING_SWITCH_LOOP", "PAUSE_LOOP",
-            "TRANSITION_TEXT", "PASSWORD_PROMPT"
+            "TRANSITION_TEXT", "PASSWORD_PROMPT", "PRE_SUB_1086F",
+            "PW_ENTRY", "PW_EXIT"
         };
         // Forward decls for blocking phase handlers (defined later in this file)
         extern bool v2_run_viking_switch_loop(uint8_t* shadow);
@@ -18322,6 +18359,9 @@ static void v2_game_thread_func() {
         extern void v2_run_transition_text_loop(uint8_t* shadow);
         extern void v2_run_password_prompt(uint8_t* shadow);
         extern void v2_run_sub_1086f_mirror(uint8_t* shadow);
+        extern void v2_run_pw_entry(uint8_t* shadow);
+        extern void v2_run_pw_exit(uint8_t* shadow);
+        extern void v2_run_input_update(uint8_t* shadow);
 
         // Track for hang detector
         v2_current_phase.store(phase, std::memory_order_relaxed);
@@ -18347,6 +18387,9 @@ static void v2_game_thread_func() {
             case V2_PHASE_TRANSITION_TEXT:    v2_run_transition_text_loop(v2_vm_shadow_ds); break;
             case V2_PHASE_PASSWORD_PROMPT:    v2_run_password_prompt(v2_vm_shadow_ds); break;
             case V2_PHASE_PRE_SUB_1086F:      v2_run_sub_1086f_mirror(v2_vm_shadow_ds); break;
+            case V2_PHASE_PW_ENTRY:           v2_run_pw_entry(v2_vm_shadow_ds); break;
+            case V2_PHASE_PW_EXIT:            v2_run_pw_exit(v2_vm_shadow_ds); break;
+            case V2_PHASE_INPUT_UPDATE:       v2_run_input_update(v2_vm_shadow_ds); break;
         }
         // Universal per-phase DS verify after each phase completes (skip blocking phases)
         if (phase >= 0 && phase <= V2_PHASE_FRAME_END)

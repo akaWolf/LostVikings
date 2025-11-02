@@ -101,13 +101,6 @@ uint8_t sdl_spec_get(uint16_t off) {
     return sdl_spec_snap[off & 0xFF];
 }
 
-// Exposed for v2_phase_frame_begin to sync per-scancode key state into ds:0x916C..0x91EB
-// (mirrors orig int 9 ISR's per-scancode write). low_byte is the DS offset's low byte;
-// caller writes the returned byte to ds:[0x9100 + low_byte] in both real and shadow DS.
-uint8_t sdl_spec_snap_for_ds(uint16_t low_byte) {
-    return sdl_spec_snap[low_byte & 0xFF];
-}
-
 // F5/F6 level cheat — handled by orig's existing eip 0x106 check (which reads
 // sdl_spec_snap via the same path as F4/F10/etc.) and v2's mirror in
 // v2_phase_frame_end. No extra wiring needed — both already work like orig DOS.
@@ -268,11 +261,8 @@ void updateDraw()
 					   key_val = 0x400;
 					   break;
 					 case SDLK_SPACE:
-					   key_val = 0x8000;
-					   break;
 					 case SDLK_RETURN:
 					   key_val = 0x8000;
-					   spec_off = 0x9188;  // sc 0x1C — Enter for password entry
 					   break;
 				     case SDLK_LCTRL:
 					 case SDLK_RCTRL:
@@ -284,19 +274,16 @@ void updateDraw()
 					   break;
 					 case SDLK_e:
 					   key_val = 0x40;
-					   spec_off = 0x917E;  // sc 0x12 — password entry
 					   break;
 					 case SDLK_s:
 					   key_val = 0x80;
-					   spec_off = 0x918B;  // sc 0x1F byte_3166b — mute SFX / password entry
+					   spec_off = 0x918B;  // sc 0x1F byte_3166b — mute SFX
 					   break;
 					 case SDLK_d:
 					   key_val = 0x4000;
-					   spec_off = 0x918C;  // sc 0x20 — password entry
 					   break;
 					 case SDLK_f:
 					   key_val = 0x8000;
-					   spec_off = 0x918D;  // sc 0x21 — password entry
 					   break;
 					 case SDLK_ESCAPE:
 					   key_val = 0x1000;
@@ -354,33 +341,6 @@ void updateDraw()
 					   if (event.type == SDL_KEYDOWN && event.key.repeat == 0)
 						 g_dump_pgm_request.store(true, std::memory_order_release);
 					   break;
-					 // Password entry: letters B/C/G/H/I/J/K/L/O/P/T/U/V/W/Z
-					 // (A/D/E/F/M/N/Q/R/S/X/Y handled above with key_val).
-					 // spec_off = ds:0x916C + DOS scancode. Orig int 9 ISR wrote
-					 // [bx-0x6E94] = ds:0x916C+sc on KEYDOWN; password VM polls these.
-					 case SDLK_b: spec_off = 0x919C; break;  // sc 0x30
-					 case SDLK_c: spec_off = 0x919A; break;  // sc 0x2E
-					 case SDLK_g: spec_off = 0x918E; break;  // sc 0x22
-					 case SDLK_h: spec_off = 0x918F; break;  // sc 0x23
-					 case SDLK_i: spec_off = 0x9183; break;  // sc 0x17
-					 case SDLK_j: spec_off = 0x9190; break;  // sc 0x24
-					 case SDLK_k: spec_off = 0x9191; break;  // sc 0x25
-					 case SDLK_l: spec_off = 0x9192; break;  // sc 0x26
-					 case SDLK_o: spec_off = 0x9184; break;  // sc 0x18
-					 case SDLK_p: spec_off = 0x9185; break;  // sc 0x19
-					 case SDLK_t: spec_off = 0x9180; break;  // sc 0x14
-					 case SDLK_u: spec_off = 0x9182; break;  // sc 0x16
-					 case SDLK_v: spec_off = 0x919B; break;  // sc 0x2F
-					 case SDLK_w: spec_off = 0x917D; break;  // sc 0x11
-					 case SDLK_z: spec_off = 0x9198; break;  // sc 0x2C
-					 // Password entry: digits 0/4/5/6/7/8/9 (1/2/3 above).
-					 case SDLK_0: spec_off = 0x9177; break;  // sc 0x0B
-					 case SDLK_4: spec_off = 0x9171; break;  // sc 0x05
-					 case SDLK_5: spec_off = 0x9172; break;  // sc 0x06
-					 case SDLK_6: spec_off = 0x9173; break;  // sc 0x07
-					 case SDLK_7: spec_off = 0x9174; break;  // sc 0x08
-					 case SDLK_8: spec_off = 0x9175; break;  // sc 0x09
-					 case SDLK_9: spec_off = 0x9176; break;  // sc 0x0A
 				     default:
 					   key_val = 0;
 					   break;
