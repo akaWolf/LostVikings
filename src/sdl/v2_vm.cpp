@@ -749,11 +749,15 @@ static inline uint16_t v2_input_or(uint8_t* shadow, uint16_t ax_prev) {
 // `prev_intro_keys` evolves consistently within a single binary.
 uint16_t v2_input_intro_mask(uint16_t prev_ax_or, uint16_t word_288ac, uint16_t input) {
     static uint16_t prev_intro_keys = 0;
+    // OR per-frame press-edge snapshot (catches brief KEYDOWN+KEYUP that would
+    // otherwise leave input=0 due to render-thread event batching race).
+    extern uint16_t sdl_input_press_snap_get();
+    uint16_t press_snap = sdl_input_press_snap_get();
     if (word_288ac != 0x8000) {
         prev_intro_keys = 0;
-        return prev_ax_or | input;
+        return prev_ax_or | input | press_snap;
     }
-    uint16_t result = prev_ax_or;
+    uint16_t result = prev_ax_or | press_snap;
     if (input != prev_intro_keys) result |= 0xFFFF;
     prev_intro_keys = input;
     return result;

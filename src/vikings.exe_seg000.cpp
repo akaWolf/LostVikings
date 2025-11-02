@@ -6464,9 +6464,6 @@ cs=0x1a2;eip=0x002826; 	X(	REP STOSW);	// 5348 rep stosw ;~ 01A2:2826
 cs=0x1a2;eip=0x002828; 	J(RETN(0));	// 5349 retn ;~ 01A2:2828
 sub_12829:
 	// 5356
-{ extern int v2_dbg_pre_vm_iter;
-  fprintf(stderr, "ORIG-PWCHECK[f%d]: word_287F0..F6 = %04X %04X %04X %04X (sub_12829 called)\n",
-    v2_dbg_pre_vm_iter, word_287f0, word_287f2, word_287f4, word_287f6); }
 cs=0x1a2;eip=0x002829; 	T(MOV(si, 0));	// 5358 mov     si, 0 ;~ 01A2:2829
 ret_1a2_282c:
 	// 4805
@@ -6504,9 +6501,6 @@ cs=0x1a2;eip=0x002874; 	X(MOV(byte_287e8, 0));	// 5391 mov     byte_287E8, 0 ;~ 
 cs=0x1a2;eip=0x002879; 	J(RETN(0));	// 5392 retn ;~ 01A2:2879
 sub_1287a:
 	// 5399
-{ extern int v2_dbg_pre_vm_iter;
-  fprintf(stderr, "ORIG-PWFILL[f%d]: word_2AA8D=%04X (sub_1287a called: auto-fill pw from level table)\n",
-    v2_dbg_pre_vm_iter, word_2aa8d); }
 cs=0x1a2;eip=0x00287a; 	T(MOV(si, word_2aa8d));	// 5401 mov     si, word_2AA8D ;~ 01A2:287A
 ret_1a2_287e:
 	// 4809

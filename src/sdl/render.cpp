@@ -93,6 +93,27 @@ extern dw& word_3287c;
 std::atomic<uint8_t> sdl_spec_state[256] = {};
 static uint8_t sdl_spec_snap[256] = {};
 
+// Per-frame edge accumulator for input_keys bits. SDL KEYDOWN OR's the bit
+// here in addition to input_keys; the bit STAYS even after KEYUP. At frame
+// begin (sdl_spec_snapshot_take) it's exchanged into sdl_input_press_snap and
+// reset. Game's sub_12352 reads ax = input_keys | snap, so brief presses
+// (KEYDOWN+KEYUP within one render iter) are captured even if input_keys is
+// already cleared by KEYUP before game polls. Mirrors orig DOS ISR semantics
+// where each KEYDOWN sets a bit that persists at least one game frame.
+//
+// **Snap consume-once**: snap is returned ONLY by the FIRST sub_12352 call of
+// a game frame. Subsequent calls (sub_1086f recursion) get snap=0. This
+// prevents the bug where sub_1086f's sub_12352 calls would write
+// word_2889a=0x8000 across the frame, breaking edge calc on the NEXT frame.
+std::atomic<uint16_t> sdl_input_press_edges{0};
+static uint16_t sdl_input_press_snap = 0;
+static bool sdl_input_press_snap_consumed = false;
+uint16_t sdl_input_press_snap_get() {
+    if (sdl_input_press_snap_consumed) return 0;
+    sdl_input_press_snap_consumed = true;
+    return sdl_input_press_snap;
+}
+
 static bool sdl_spec_is_modifier(uint16_t off) {
     return off == 0x91A4 /* ALT */ || off == 0x9189 /* CTRL */;
 }
@@ -115,6 +136,11 @@ void sdl_spec_snapshot_take() {
             sdl_spec_snap[i] = sdl_spec_state[i].exchange(0, std::memory_order_relaxed);
         }
     }
+    // Snapshot input_keys press-edges accumulator: exchange to 0. Game thread
+    // sees the bits at OR'd in v2_input_intro_mask for this frame, then snap
+    // returns to 0 next frame unless new KEYDOWN happens.
+    sdl_input_press_snap = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
+    sdl_input_press_snap_consumed = false; // re-arm for first sub_12352 of new frame
 }
 
 
@@ -345,9 +371,28 @@ void updateDraw()
 					   key_val = 0;
 					   break;
 				   }
+				   // Discrete trigger bits (Enter/Space/F=0x8000, ESC=0x1000) are
+				   // NOT stored in input_keys — only in edge accumulator. Reason:
+				   // input_keys persists between KEYDOWN and KEYUP. If KEYDOWN
+				   // happens mid-frame (e.g. during sub_1086f recursion's sub_12352
+				   // calls), input_keys=0x8000 is read by those calls, sets
+				   // word_2889a=0x8000. Next frame's edge calc gets prev=0x8000
+				   // and ax=0x8000 (from snap) → edge=0. Press lost.
+				   //
+				   // Movement keys (LEFT/RIGHT/UP/DOWN/TAB/CTRL/E/S/D=0x100-0x4000,
+				   // 0x20-0x80, 0x200, 0x400, 0x800, 0x2000) use sticky input_keys
+				   // for held-movement detection (orig word_30bbe semantics via ISR).
+				   {
+				   const uint16_t TRIGGER_BITS = (uint16_t)(0x8000 | 0x1000);
+				   uint16_t movement_val = key_val & (uint16_t)~TRIGGER_BITS;
 				   if (event.type == SDL_KEYDOWN) {
-					 input_keys |= key_val;
-					 input_keys_v2 |= key_val;
+					 input_keys |= movement_val;
+					 input_keys_v2 |= movement_val;
+					 // Edge accumulator: bit STAYS set until frame_begin snapshot
+					 // consumes. Catches brief KEYDOWN+KEYUP-same-iter race where
+					 // input_keys would be cleared before game thread polls.
+					 // Also used for trigger bits (which skip input_keys).
+					 if (key_val) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
 					 // spec_off DS writes removed — they caused races between render
 					 // thread writes to real_ds vs shadow_ds. Orig design: int 9 ISR
 					 // (seg000_6440_proc, dead in m2c port) writes spec bytes on press.
@@ -355,9 +400,11 @@ void updateDraw()
 					 // Without ISR, spec bytes stay 0 → mute toggles etc don't fire.
 					 // To re-enable: route through atomic + game thread copy at barrier.
 				   } else {
-					 input_keys &= ~key_val;
-					 input_keys_v2 &= ~key_val;
+					 input_keys &= ~movement_val;
+					 input_keys_v2 &= ~movement_val;
+					 // Trigger bits never in input_keys, KEYUP no-op for them.
 				   }
+				   } // close TRIGGER_BITS scope
 				   // Spec key SDL state. Modifiers: KEYDOWN sets, KEYUP clears.
 				   // Triggers: KEYDOWN sets only (snapshot consumes via exchange).
 				   if (event.type == SDL_KEYDOWN) {
