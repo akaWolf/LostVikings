@@ -730,6 +730,13 @@ uint16_t v2_input_snapshot = 0; // snapshot of input_keys taken by seg000 after 
 // while snapshot patching keeps verify infrastructure consistent.
 static void v2_patch_all_snaps_input(uint16_t bit, bool press); // fwd decl
 
+// Render thread reads shadow word_288AC (intro mode flag) without locking —
+// brief read of single uint16_t is atomic on x86. Used by render thread KEYDOWN
+// handler to mirror orig INT9 ISR intro dispatch (eip 0x6458 CMP word_288AC, 0x8000).
+extern "C" uint16_t v2_shadow_word_288ac() {
+    return *(const uint16_t*)(v2_vm_shadow_ds + 0x3CC);
+}
+
 extern "C" void v2_shadow_input_or(uint16_t bit) {
     if (!bit) return;
     __atomic_or_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[0x86DE]),
@@ -826,10 +833,12 @@ extern "C" void v2_mirror_sub_10350_spec_ors() {
 // → next viking switch/dialog wait sees fake "newly pressed" → double-press bug.
 static inline uint16_t v2_input_or(uint8_t* shadow, uint16_t ax_prev) {
 #ifdef V2_ONLY
-    extern uint16_t input_keys;
-    extern uint16_t v2_input_intro_mask(uint16_t, uint16_t, uint16_t);
-    uint16_t w288ac = *(uint16_t*)(shadow + 0x3CC);
-    return v2_input_intro_mask(ax_prev, w288ac, input_keys);
+    // V2_ONLY: render thread keeps shadow[0x86DE] (word_30bbe) updated correctly
+    // for both intro mode (writes 0xFFFF) and normal mode (OR-bit). Read shadow
+    // directly — no input_keys/input mask layer needed. Race-free atomic read.
+    extern uint16_t sdl_input_press_snap_get();
+    uint16_t shadow_30bbe = *(volatile uint16_t*)(shadow + 0x86DE);
+    return ax_prev | shadow_30bbe | sdl_input_press_snap_get();
 #else
     return ax_prev | v2_input_snapshot;
 #endif

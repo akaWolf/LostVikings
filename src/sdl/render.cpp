@@ -43,6 +43,7 @@ bool need_quit = false;
 // is hardware-async input, conceptually analogous to BIOS keyboard buffer).
 extern "C" void v2_shadow_input_or(uint16_t bit);
 extern "C" void v2_shadow_input_and_not(uint16_t bit);
+extern "C" uint16_t v2_shadow_word_288ac();
 #ifndef V2_ONLY
 extern uint16_t& word_30bbe;
 static inline void m2c_input_or(uint16_t bit) {
@@ -523,15 +524,19 @@ void updateDraw()
 					 // keys hit default → MOV word_30bbe, 0xFFFF (intro skip signal).
 					 // Special keys (CTRL/ALT/DEL/F10/X/S/M) set their state byte only,
 					 // NO word_30bbe write. Normal mode: OR key_val into word_30bbe.
+					 uint16_t cur_288ac;
 #ifndef V2_ONLY
 					 extern uint16_t& word_288ac;
-					 bool intro_mode = (word_288ac == 0x8000);
+					 cur_288ac = word_288ac;
 #else
-					 bool intro_mode = false;
+					 cur_288ac = v2_shadow_word_288ac();
 #endif
+					 bool intro_mode = (cur_288ac == 0x8000);
 					 if (intro_mode) {
 						 if (!spec_off && !event.key.repeat) {
 							 // Non-special key in intro → orig writes word_30bbe = 0xFFFF.
+							 // shadow update mirrors. V2_ONLY: v2_input_or now reads shadow
+							 // directly (see v2_vm.cpp), no input_keys overwrite needed.
 #ifndef V2_ONLY
 							 __atomic_store_n(&word_30bbe, (uint16_t)0xFFFF, __ATOMIC_RELAXED);
 #endif
