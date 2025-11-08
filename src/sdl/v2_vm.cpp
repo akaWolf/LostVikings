@@ -19059,8 +19059,9 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
             v2_loc_124c5(shadow, 0x10, 0x0F, bx_e);
         }
     }
-    shadow[0x9181] = sdl_spec_get(0x9181);        // SDL Y — exact orig INT9
-    shadow[0x919D] = sdl_spec_get(0x919D);        // SDL N — exact orig INT9
+    // Y/N: live state read (no snap) — see seg000 sub_105cb note about why.
+    shadow[0x9181] = sdl_spec_state_get(0x9181);  // SDL Y — live atomic
+    shadow[0x919D] = sdl_spec_state_get(0x919D);  // SDL N — live atomic
     uint16_t exit_ax;
     bool exit;
     uint16_t consumed_bit = 0;

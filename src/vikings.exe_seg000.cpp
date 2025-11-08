@@ -34,6 +34,7 @@ extern "C" void v2_mirror_sub_10350_spec_ors();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
 // Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.
 extern uint8_t sdl_spec_get(uint16_t off);
+extern uint8_t sdl_spec_state_get(uint16_t off);  // live atomic state read (race-tolerant for Y/N in dialog)
 extern bool need_quit;
 
 #include <SDL2/SDL.h>
@@ -2915,7 +2916,10 @@ cs=0x1a2;eip=0x00062f; 	T(STC);	// 792 stc ;~ 01A2:062F
 cs=0x1a2;eip=0x000630; 	J(RETN(0));	// 793 retn ;~ 01A2:0630
 loc_10631:
 	// 4440
-	byte_31661 = sdl_spec_get(0x9181);  // SDL Y — exact orig INT9
+	// Y/N read live state, NOT snap — orig sub_104a1 blocking loop doesn't
+	// trigger FRAME_BEGIN so snap won't refresh. Live state catches in-dialog
+	// press immediately. Race with v2 mirror tolerable for brief Y/N taps.
+	byte_31661 = sdl_spec_state_get(0x9181);  // SDL Y — live atomic
 cs=0x1a2;eip=0x000631; 	T(TEST(byte_31661, 0x0FF));	// 797 test    byte_31661, 0FFh ;~ 01A2:0631
 cs=0x1a2;eip=0x000636; 	J(JZ(loc_1063d));	// 798 jz      short loc_1063D ;~ 01A2:0636
 cs=0x1a2;eip=0x000638; 	T(MOV(ax, 0));	// 799 mov     ax, 0 ;~ 01A2:0638
@@ -2923,7 +2927,7 @@ cs=0x1a2;eip=0x00063b; 	T(STC);	// 800 stc ;~ 01A2:063B
 cs=0x1a2;eip=0x00063c; 	J(RETN(0));	// 801 retn ;~ 01A2:063C
 loc_1063d:
 	// 4441
-	byte_3167d = sdl_spec_get(0x919D);  // SDL N — exact orig INT9
+	byte_3167d = sdl_spec_state_get(0x919D);  // SDL N — live atomic (see Y note above)
 cs=0x1a2;eip=0x00063d; 	T(TEST(byte_3167d, 0x0FF));	// 805 test    byte_3167D, 0FFh ;~ 01A2:063D
 cs=0x1a2;eip=0x000642; 	J(JZ(loc_10649));	// 806 jz      short loc_10649 ;~ 01A2:0642
 cs=0x1a2;eip=0x000644; 	T(MOV(ax, 1));	// 807 mov     ax, 1 ;~ 01A2:0644
