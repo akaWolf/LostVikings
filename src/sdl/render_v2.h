@@ -90,6 +90,11 @@ enum V2Phase {
     // both exit when input matches. v2_render_buf shows v2's render (with palette
     // anim, dialog text, etc). In V2_ONLY same mirror functions called inline.
     V2_PHASE_VIKING_SWITCH_LOOP,  // sub_10138 loc_10169 — viking switch screen
+    V2_PHASE_PAUSE_ENTRY,         // sub_11ba5 BEFORE loc_11c1f (eip 0x1bbd..0x1c1c) —
+                                  // sets word_28925=0x11, word_28927=1 (mode=carrying),
+                                  // sprite mode 2, cursor pos, sub_11f47 proximity.
+                                  // Without it, v2 starts pause loop in mode 0 while
+                                  // orig is in mode 1 → diverging item handler paths.
     V2_PHASE_PAUSE_LOOP,          // sub_11ba5 loc_11c1f — TAB pause
     V2_PHASE_TRANSITION_TEXT,     // sub_104A1 loc_104C3 — quit-prompt iter body
     V2_PHASE_PASSWORD_PROMPT,     // sub_1041c — password input

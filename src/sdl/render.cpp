@@ -122,12 +122,20 @@ extern dw& word_3287c;
 std::atomic<uint8_t> sdl_spec_state[256] = {};
 static uint8_t sdl_spec_snap[256] = {};
 
+// Latch: catches brief KEYDOWN+KEYUP between frame_begins. KEYDOWN sets latch=1.
+// snap_take captures (state OR latch) then clears latch. snap stays = 1 for at
+// least one full frame, allowing orig+v2 (race-free at single snap) to detect
+// brief tap that state alone would miss.
+std::atomic<uint8_t> sdl_spec_press_latch[256] = {};
+
 // Edge accumulator: catches brief KEYDOWN+KEYUP within one render iter (race
 // where input_keys cleared before game polls). KEYDOWN OR's bit, snap_take
 // exchanges to snap. snap_get returns snap (used by v2_input_intro_mask for
 // V2_ONLY paths and as backup for transient presses).
 std::atomic<uint16_t> sdl_input_press_edges{0};
-static uint16_t sdl_input_press_snap = 0;
+// Non-static so sub_12352 (seg000.cpp) and v2_sub_12352_iter (v2_vm.cpp) can
+// OR into it directly during per-call drain — see LAYER 1 comments in both.
+uint16_t sdl_input_press_snap = 0;
 uint16_t sdl_input_press_snap_get() { return sdl_input_press_snap; }
 
 // SDL INT-9 ISR mirror: tracks which press_snap bits have already had their
@@ -145,6 +153,29 @@ uint16_t sdl_input_press_snap_get() { return sdl_input_press_snap; }
 // consumed) → DS-DIFF at 0x03B8/9.
 uint16_t g_press_snap_consumed_this_frame = 0;        // orig side (seg000 sub_12352)
 uint16_t g_press_snap_consumed_shadow_this_frame = 0; // v2 side (v2_sub_12352_iter)
+
+// is-first-sub12352 flag: only the FIRST sub_12352 of a frame (main sub_12352
+// at eip 0x001E) should consume snap bits via LAYER 2 (and mark them for snap
+// clear at next frame_begin). Recursion sub_12352 (inside sub_1086f cmd
+// dispatch, sub_104a1 quit-prompt loop, sub_10138 viking-switch loop) still
+// drains edges via LAYER 1 (for word_2889a clear) but skips LAYER 2 so the
+// snap bit persists into NEXT frame's main sub_12352 — that's where VM iter
+// will pick it up. Without this, recursion's LAYER 2 fire would consume snap
+// and next frame's main would get edge=0 → VM iter misses press.
+// Reset to true at frame_begin (sdl_spec_snapshot_take), set to false at end
+// of each sub_12352 call.
+bool g_is_first_sub12352_orig = true;
+bool g_is_first_sub12352_shadow = true;
+
+// Per-sub_12352-call edges drain → captures KEYDOWN events that arrived since
+// last sub_12352 call. Needed for blocking loops (sub_104a1 quit-prompt,
+// sub_10138 viking-switch wait, sub_104A1 transition-text) where many
+// sub_12352 calls fire within a single main game frame without intervening
+// FRAME_BEGIN to refresh press_snap. orig drains in seg000 sub_12352, stashes
+// the value here, and v2_sub_12352_iter reads it (default mode) or drains
+// itself (V2_ONLY). Atomically updated by game thread; v2 thread reads after
+// INPUT_UPDATE signal-handler barrier.
+uint16_t g_last_sub12352_new_keydowns = 0;
 
 // ENTER missed-press investigation: arm a trace on every KEYDOWN sym=13 so
 // sub_12352 logs its inputs and computed edge for the next N calls. The trace
@@ -198,29 +229,54 @@ static bool sdl_spec_is_modifier(uint16_t off) {
 }
 
 uint8_t sdl_spec_get(uint16_t off) {
+    // Read frame-frozen snap so orig+v2 mirror see SAME value (race-free).
+    // snap_take fires at frame_begin AND on first sub_12352 of each pause/dialog
+    // iter (see seg000 sub_12352 entry — added for press timing).
     return sdl_spec_snap[off & 0xFF];
+}
+
+// Direct held-state read (mirrors orig INT9 ISR's byte_316XX semantics:
+// byte=1 between press and release scancodes). Use INSTEAD of sdl_spec_get
+// when caller needs press-during-blocking-loop preservation — sdl_spec_get
+// reads `snap` which is exchange-to-0 at each frame_begin (consumed even
+// when caller doesn't read), so presses occurring during dialog/pause loops
+// are lost. State persists until KEYUP clears it.
+uint8_t sdl_spec_state_get(uint16_t off) {
+    return sdl_spec_state[off & 0xFF].load(std::memory_order_relaxed);
 }
 
 // F5/F6 level cheat — handled by orig's existing eip 0x106 check (which reads
 // sdl_spec_snap via the same path as F4/F10/etc.) and v2's mirror in
 // v2_phase_frame_end. No extra wiring needed — both already work like orig DOS.
 
+// Refresh ONLY sdl_spec_snap (per-scancode held state). DEPRECATED — caused
+// orig+v2 race when state changes between orig main thread read and v2 thread
+// read of same snap. Kept as no-op to avoid breaking callers.
+void sdl_spec_snapshot_refresh_only() {
+    // No-op: snap_take at frame_begin only (race-free).
+}
+
 void sdl_spec_snapshot_take() {
     for (int i = 0; i < 256; i++) {
-        // Modifiers: copy. Triggers: exchange-to-0 (consume one press).
-        // Modifier offsets 0x9189 (CTRL low=0x89) and 0x91A4 (ALT low=0xA4).
-        if (i == 0x89 || i == 0xA4) {
-            sdl_spec_snap[i] = sdl_spec_state[i].load(std::memory_order_relaxed);
-        } else {
-            sdl_spec_snap[i] = sdl_spec_state[i].exchange(0, std::memory_order_relaxed);
-        }
+        // snap = state OR press_latch. Latch catches brief KEYDOWN+KEYUP
+        // between frame_begins (sub-frame taps that state alone misses).
+        // Latch consumed (cleared) after capture so press is visible exactly
+        // one frame, not multiple — matches orig DOS INT9 single-press semantic.
+        uint8_t latch = sdl_spec_press_latch[i].exchange(0, std::memory_order_relaxed);
+        sdl_spec_snap[i] = (uint8_t)(sdl_spec_state[i].load(std::memory_order_relaxed) | latch);
     }
-    sdl_input_press_snap = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
-    // Reset per-frame consumed trackers (both orig and v2 sides) so each
-    // side's first sub_12352 of this frame can force-clear word_2889a for
-    // any newly-captured press_snap bits.
-    g_press_snap_consumed_this_frame = 0;
+    // Snap update with immediate consume clear:
+    //   1. Clear bits that fired as edge in main sub_12352 of the just-finished
+    //      frame (consumed_this_frame is set ONLY by main sub_12352, not by
+    //      recursion — see g_is_first_sub12352_* gating in LAYER 2).
+    //   2. Reset consumed trackers + is-first flags for the new frame.
+    //   3. OR-accumulate any new KEYDOWNs since last drain.
+    sdl_input_press_snap &= (uint16_t)~(g_press_snap_consumed_this_frame | g_press_snap_consumed_shadow_this_frame);
+    g_press_snap_consumed_this_frame        = 0;
     g_press_snap_consumed_shadow_this_frame = 0;
+    g_is_first_sub12352_orig                = true;
+    g_is_first_sub12352_shadow              = true;
+    sdl_input_press_snap |= sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
 }
 
 
@@ -500,11 +556,17 @@ void updateDraw()
 					         (int)event.key.keysym.sym, spec_off, (int)event.key.repeat);
 				   }
 				   if (spec_off) {
+					 // EXACT orig INT9 replication: KEYDOWN scancode → byte_316XX=1,
+					 // KEYUP (release scancode) → byte_316XX=0, for ALL spec keys
+					 // (modifiers + triggers). orig line 14681/14698. Game code clears
+					 // byte=0 after consuming action (e.g. sub_108c8 ALT+M toggle);
+					 // typematic KEYDOWN repeat will re-set byte=1 → consume cycle
+					 // → multi-toggle on hold, matching orig.
 					 if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
 					   sdl_spec_state[spec_off & 0xFF].store(1, std::memory_order_relaxed);
-					 } else if (event.type == SDL_KEYUP && sdl_spec_is_modifier(spec_off)) {
-					   // Modifier release: clear sticky bit so future trigger combos
-					   // don't see ghost-held modifier.
+					   // Latch press so brief tap caught by next snap_take.
+					   sdl_spec_press_latch[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+					 } else if (event.type == SDL_KEYUP) {
 					   sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
 					 }
 				   }

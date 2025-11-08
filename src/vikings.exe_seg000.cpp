@@ -30,6 +30,7 @@ static FILE* data_handle = 0;
 
 extern uint16_t input_keys;
 extern "C" void enter_trace_sub12352();
+extern "C" void v2_mirror_sub_10350_spec_ors();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
 // Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.
 extern uint8_t sdl_spec_get(uint16_t off);
@@ -2138,7 +2139,7 @@ cs=0x1a2;eip=0x0000e7; 	J(CALL(sub_1086f,0));	// 115 call    sub_1086F ;~ 01A2:0
 	  }
 	}
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_FLIP3, ds); v2_signal_phase(V2_PHASE_FRAME_END, ds); }
-	byte_3168a |= sdl_spec_get(0x91AA);  // SDL F4 (INT 3 debug) OR-in
+	byte_3168a = sdl_spec_get(0x91AA);  // SDL F4 — exact orig INT9 (set/clear)
 cs=0x1a2;eip=0x0000ea; 	T(CMP(byte_3168a, 1));	// 116 cmp     byte_3168A, 1 ;~ 01A2:00EA
 cs=0x1a2;eip=0x0000ef; 	J(JNZ(loc_100f7));	// 117 jnz     short loc_100F7 ;~ 01A2:00EF
 cs=0x1a2;eip=0x0000f1; 	X(MOV(byte_3168a, 0));	// 118 mov     byte_3168A, 0 ;~ 01A2:00F1
@@ -2157,7 +2158,7 @@ cs=0x1a2;eip=0x0000f7; 	T(CMP(word_2aa8d, 0x25));	// 122 cmp     word_2AA8D, 25h
 cs=0x1a2;eip=0x0000fc; 	J(JGE(loc_1012d));	// 123 jge     short loc_1012D ;~ 01A2:00FC
 cs=0x1a2;eip=0x0000fe; 	T(TEST(word_286e2, 0x0FFFF));	// 124 test    word_286E2, 0FFFFh ;~ 01A2:00FE
 cs=0x1a2;eip=0x000104; 	J(JZ(loc_1012d));	// 125 jz      short loc_1012D ;~ 01A2:0104
-	byte_3168b |= sdl_spec_get(0x91AB);  // SDL F5 (prev level cheat) OR-in
+	byte_3168b = sdl_spec_get(0x91AB);  // SDL F5 — exact orig INT9
 cs=0x1a2;eip=0x000106; 	T(CMP(byte_3168b, 1));	// 126 cmp     byte_3168B, 1 ;~ 01A2:0106
 cs=0x1a2;eip=0x00010b; 	J(JNZ(loc_10121));	// 127 jnz     short loc_10121 ;~ 01A2:010B
 	// SDL port: orig relied on int 9 ISR clearing byte_3168B on KEYUP; we have
@@ -2175,7 +2176,7 @@ cs=0x1a2;eip=0x00011b; 	X(MOV(word_2aaa9, ax));	// 135 mov     word_2AAA9, ax ;~
 cs=0x1a2;eip=0x00011e; 	J(JMP(loc_1001e));	// 136 jmp     loc_1001E ;~ 01A2:011E
 loc_10121:
 	// 4374
-	byte_3168c |= sdl_spec_get(0x91AC);  // SDL F6 (next level cheat) OR-in
+	byte_3168c = sdl_spec_get(0x91AC);  // SDL F6 — exact orig INT9
 cs=0x1a2;eip=0x000121; 	T(CMP(byte_3168c, 1));	// 140 cmp     byte_3168C, 1 ;~ 01A2:0121
 cs=0x1a2;eip=0x000126; 	J(JNZ(loc_1012d));	// 141 jnz     short loc_1012D ;~ 01A2:0126
 	// SDL port: same KEYUP-missing fix as F5 path above. Clear byte after fire,
@@ -2557,10 +2558,31 @@ cs=0x1a2;eip=0x000350; 	T(TEST(word_2a66f, 0x0FFFF));	// 466 test    word_2A66F,
 ret_1a2_356:
 	// 4416
 cs=0x1a2;eip=0x000356; 	J(JNZ(locret_103c9));	// 467 jnz     short locret_103C9 ;~ 01A2:0356
-	byte_31690 |= sdl_spec_get(0x91B0);  // SDL F10 OR-in
-	byte_31684 |= sdl_spec_get(0x91A4);  // SDL ALT OR-in
-	byte_31679 |= sdl_spec_get(0x9199);  // SDL X OR-in
-	byte_3165c |= sdl_spec_get(0x917C);  // SDL Q OR-in
+	// Held-state mirror via frame-frozen snapshot (sdl_spec_snap). snap is now
+	// COPY of state (not exchange-0) — same value visible to all readers within
+	// a frame, no race with render thread KEYUP. State is cleared on KEYUP for
+	// ALL spec keys (mirrors orig INT9 ISR release scancode at seg000 line 14698)
+	// so snap follows release naturally between frames.
+	byte_31690 = sdl_spec_get(0x91B0);
+	// Diagnostic: log sub_10350 entry past JNZ gate. Fires only when F10 byte
+	// changes (avoid log flood). Helps confirm sub_10350 path active.
+	{ static int _last_b = -1; if ((int)byte_31690 != _last_b) {
+	    _last_b = byte_31690;
+	    fprintf(stderr, "SUB10350-ENTER: byte_31690=%02X w2A66F=%04X w288AC=%04X b2AAAF=%02X\n",
+	        byte_31690, word_2a66f, word_288ac, byte_2aaaf); } }
+	{
+		extern void v2_log_write_ring(uint16_t,uint16_t,uint16_t,bool,const char*);
+		uint8_t _new = sdl_spec_get(0x91A4);
+		v2_log_write_ring(0x91A4, byte_31684, _new, false, "orig:sub_10350");
+		byte_31684 = _new;
+	}
+	byte_31679 = sdl_spec_get(0x9199);
+	byte_3165c = sdl_spec_get(0x917C);
+	// Mirror shadow synchronously so v2_pw_pre_loop (called via PW_ENTRY signal
+	// inside sub_104a1) reads correct shadow[0x91B0/A4/99/7C] to pick F10 vs ESC.
+	if (myDrawInfo_v2) {
+		v2_mirror_sub_10350_spec_ors();
+	}
 cs=0x1a2;eip=0x000358; 	T(CMP(byte_31690, 1));	// 468 cmp     byte_31690, 1 ;~ 01A2:0358
 cs=0x1a2;eip=0x00035d; 	J(JZ(loc_10374));	// 469 jz      short loc_10374 ;~ 01A2:035D
 cs=0x1a2;eip=0x00035f; 	T(CMP(byte_31684, 1));	// 470 cmp     byte_31684, 1 ;~ 01A2:035F
@@ -2877,6 +2899,10 @@ cs=0x1a2;eip=0x000617; 	T(TEST(word_28898, 0x8000));	// 781 test    word_28898, 
 cs=0x1a2;eip=0x00061d; 	J(JZ(loc_10624));	// 782 jz      short loc_10624 ;~ 01A2:061D
 cs=0x1a2;eip=0x00061f; 	T(MOV(ax, word_28923));	// 783 mov     ax, word_28923 ;~ 01A2:061F
 cs=0x1a2;eip=0x000622; 	T(STC);	// 784 stc ;~ 01A2:0622
+	// SDL consume: dialog took Enter edge to exit. Clear sdl_input_press_snap
+	// 0x8000 bit so next frame's main sub_12352 LAYER 2 doesn't re-fire edge
+	// → no spurious viking jump in gameplay frame after dialog exit.
+	{ extern uint16_t sdl_input_press_snap; sdl_input_press_snap = (uint16_t)(sdl_input_press_snap & ~0x8000); }
 cs=0x1a2;eip=0x000623; 	J(RETN(0));	// 785 retn ;~ 01A2:0623
 loc_10624:
 	// 4439
@@ -2884,10 +2910,12 @@ cs=0x1a2;eip=0x000624; 	T(TEST(word_28898, 0x1000));	// 789 test    word_28898, 
 cs=0x1a2;eip=0x00062a; 	J(JZ(loc_10631));	// 790 jz      short loc_10631 ;~ 01A2:062A
 cs=0x1a2;eip=0x00062c; 	T(MOV(ax, 1));	// 791 mov     ax, 1 ;~ 01A2:062C
 cs=0x1a2;eip=0x00062f; 	T(STC);	// 792 stc ;~ 01A2:062F
+	// SDL consume: dialog took ESC edge to exit. Same rationale as Enter above.
+	{ extern uint16_t sdl_input_press_snap; sdl_input_press_snap = (uint16_t)(sdl_input_press_snap & ~0x1000); }
 cs=0x1a2;eip=0x000630; 	J(RETN(0));	// 793 retn ;~ 01A2:0630
 loc_10631:
 	// 4440
-	byte_31661 |= sdl_spec_get(0x9181);  // SDL Y key OR-in (mirrors orig ISR write)
+	byte_31661 = sdl_spec_get(0x9181);  // SDL Y — exact orig INT9
 cs=0x1a2;eip=0x000631; 	T(TEST(byte_31661, 0x0FF));	// 797 test    byte_31661, 0FFh ;~ 01A2:0631
 cs=0x1a2;eip=0x000636; 	J(JZ(loc_1063d));	// 798 jz      short loc_1063D ;~ 01A2:0636
 cs=0x1a2;eip=0x000638; 	T(MOV(ax, 0));	// 799 mov     ax, 0 ;~ 01A2:0638
@@ -2895,7 +2923,7 @@ cs=0x1a2;eip=0x00063b; 	T(STC);	// 800 stc ;~ 01A2:063B
 cs=0x1a2;eip=0x00063c; 	J(RETN(0));	// 801 retn ;~ 01A2:063C
 loc_1063d:
 	// 4441
-	byte_3167d |= sdl_spec_get(0x919D);  // SDL N key OR-in
+	byte_3167d = sdl_spec_get(0x919D);  // SDL N — exact orig INT9
 cs=0x1a2;eip=0x00063d; 	T(TEST(byte_3167d, 0x0FF));	// 805 test    byte_3167D, 0FFh ;~ 01A2:063D
 cs=0x1a2;eip=0x000642; 	J(JZ(loc_10649));	// 806 jz      short loc_10649 ;~ 01A2:0642
 cs=0x1a2;eip=0x000644; 	T(MOV(ax, 1));	// 807 mov     ax, 1 ;~ 01A2:0644
@@ -3204,8 +3232,13 @@ ret_1a2_8cb:
 cs=0x1a2;eip=0x0008cb; 	T(AND(ax, word_287e4));	// 1143 and     ax, word_287E4 ;~ 01A2:08CB
 cs=0x1a2;eip=0x0008cf; 	T(TEST(ax, 0x8000));	// 1144 test    ax, 8000h ;~ 01A2:08CF
 cs=0x1a2;eip=0x0008d2; 	J(JNZ(locret_1097e));	// 1145 jnz     locret_1097E ;~ 01A2:08D2
-	byte_31684 |= sdl_spec_get(0x91A4);  // SDL ALT OR-in
-	byte_3166b |= sdl_spec_get(0x918B);  // SDL S OR-in
+	{
+		extern void v2_log_write_ring(uint16_t,uint16_t,uint16_t,bool,const char*);
+		uint8_t _new = sdl_spec_get(0x91A4);
+		v2_log_write_ring(0x91A4, byte_31684, _new, false, "orig:sub_108c8");
+		byte_31684 = _new;
+	}
+	byte_3166b = sdl_spec_get(0x918B);  // SDL S — exact orig INT9
 cs=0x1a2;eip=0x0008d6; 	T(CMP(byte_31684, 1));	// 1146 cmp     byte_31684, 1 ;~ 01A2:08D6
 cs=0x1a2;eip=0x0008db; 	J(JNZ(locret_1097e));	// 1147 jnz     locret_1097E ;~ 01A2:08DB
 cs=0x1a2;eip=0x0008df; 	T(CMP(byte_3166b, 1));	// 1148 cmp     byte_3166B, 1 ;~ 01A2:08DF
@@ -3248,7 +3281,7 @@ cs=0x1a2;eip=0x000930; 	T(CMP(si, 0x0A));	// 1175 cmp     si, 0Ah ;~ 01A2:0930
 cs=0x1a2;eip=0x000933; 	J(JL(loc_108f5));	// 1176 jl      short loc_108F5 ;~ 01A2:0933
 loc_10935:
 	// 4478
-	byte_3167e |= sdl_spec_get(0x919E);  // SDL M OR-in
+	byte_3167e = sdl_spec_get(0x919E);  // SDL M — exact orig INT9
 cs=0x1a2;eip=0x000935; 	T(CMP(byte_3167e, 1));	// 1180 cmp     byte_3167E, 1 ;~ 01A2:0935
 cs=0x1a2;eip=0x00093a; 	J(JNZ(locret_1097e));	// 1181 jnz     short locret_1097E ;~ 01A2:093A
 cs=0x1a2;eip=0x00093c; 	X(MOV(byte_3167e, 0));	// 1182 mov     byte_3167E, 0 ;~ 01A2:093C
@@ -4889,6 +4922,10 @@ cs=0x1a2;eip=0x001c13; 	T(SHL(si, 1));	// 3627 shl     si, 1 ;~ 01A2:1C13
 cs=0x1a2;eip=0x001c15; 	T(MOV(ax, *(dw*)(raddr(ds,si+0x3E4))));	// 3628 mov     ax, [si+3E4h] ;~ 01A2:1C15
 cs=0x1a2;eip=0x001c19; 	X(MOV(word_28921, ax));	// 3629 mov     word_28921, ax ;~ 01A2:1C19
 cs=0x1a2;eip=0x001c1c; 	J(CALL(sub_11f47,0));	// 3630 call    sub_11F47 ;~ 01A2:1C1C
+	// V2 barrier: pause-entry init (eip 0x1bbd..0x1c1c). Mirrors orig's
+	// pre-loop DS writes (word_28925/27, sprite mode, cursor, sub_11f47)
+	// so v2 enters pause loop in mode 1 (carrying), matching orig.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_PAUSE_ENTRY, ds);
 loc_11c1f:
 	// 4660
 cs=0x1a2;eip=0x001c1f; 	J(CALL(sub_12352,0));	// 3633 call    sub_12352 ;~ 01A2:1C1F
@@ -5801,30 +5838,49 @@ ret_1a2_234b:
 cs=0x1a2;eip=0x00234b; 	X(MOV(word_28898, 0));	// 4602 mov     word_28898, 0 ;~ 01A2:234B
 cs=0x1a2;eip=0x002351; 	J(RETN(0));	// 4603 retn ;~ 01A2:2351
 sub_12352:
-	// SDL INT-9 ISR mirror: clear word_2889a bits matching press_snap bits we
-	// haven't consumed yet this frame. Each KEYDOWN in render thread OR's the
-	// bit into sdl_input_press_edges. At frame_begin sdl_spec_snapshot_take
-	// moves edges → press_snap and resets g_press_snap_consumed_this_frame.
-	// First sub_12352 of frame with a press_snap bit clears the matching
-	// word_2889a bit (so the XOR detects edge=press_snap), then marks consumed
-	// so subsequent sub_12352 calls in the same frame don't re-clear.
+	// NOTE: per-sub_12352 snap refresh REMOVED — caused orig+v2 sub_108c8 race.
+	// orig sub_108c8 (main thread) reads snap at time T. v2_sub_108c8 (v2 thread)
+	// reads snap at time T+400ms when ALT was released between. snap captures
+	// release → orig=1 v2=0 → divergence at ds:0x91A4. snap_take stays at
+	// frame_begin only (sdl_input_press_snap-style) — orig+v2 race-free.
+	// Brief F10 < frame_period taps may be missed (orig DOS catches via INT9 sync).
+	// SDL adapter compensation for async event processing. Orig INT9 ISR was
+	// sync (interrupt context fires between any two instructions). Our render
+	// thread polls SDL events at variable cadence — KEYDOWN may land between
+	// sub_12352 calls without word_30bbe being updated in time. Result: brief
+	// KEYDOWN+KEYUP entirely between game-thread sub_12352 calls would lose
+	// the edge. LAYER 1+2 capture press_edges accumulator to fire force-edge.
 	//
-	// Why needed: orig DOS INT 9 ISR set word_30bbe synchronously and the bit
-	// stayed visible across ~50-100ms (longer than 18 FPS frame). Main
-	// sub_12352 of the press-frame reliably saw word_30bbe with bit. In our
-	// port at ~9 FPS (110ms/frame) a brief 80ms KEYDOWN+KEYUP can land entirely
-	// between two main sub_12352 calls — bit captured by sub_1086f recursion
-	// sub_12352 (sets word_2889a sticky) but VM iter already done for that
-	// frame. Next frame's main sub_12352 then sees word_2889a sticky → edge=0.
-	// This clear restores DOS-equivalent semantics: press_snap presence ⇒ edge.
+	// LAYER 1 (per call): drain edges → clear word_2889a + accumulate to snap.
+	// Edge fires this call (no consume mark — snap propagates to next frame).
+	// LAYER 2 (first sub_12352 of frame): consume snap into edge fire +
+	// mark consumed (so snap_take clears it next frame_begin).
+	// Dialog handlers (sub_105cb / v2_pw_iter_body) explicitly clear snap
+	// bits they consumed via dialog exit (Enter / ESC) to prevent spurious
+	// gameplay edge in frame following dialog close.
 	{
+		extern std::atomic<uint16_t> sdl_input_press_edges;
 		extern uint16_t sdl_input_press_snap_get();
 		extern uint16_t g_press_snap_consumed_this_frame;
-		uint16_t snap = sdl_input_press_snap_get();
-		uint16_t fresh_snap = (uint16_t)(snap & ~g_press_snap_consumed_this_frame);
-		if (fresh_snap) {
-			word_2889a = (uint16_t)(word_2889a & ~fresh_snap);
-			g_press_snap_consumed_this_frame |= fresh_snap;
+		extern uint16_t g_last_sub12352_new_keydowns;
+		extern bool g_is_first_sub12352_orig;
+
+		uint16_t new_kd = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
+		g_last_sub12352_new_keydowns = new_kd;
+		if (new_kd) {
+			word_2889a = (uint16_t)(word_2889a & ~new_kd);
+			extern uint16_t sdl_input_press_snap;
+			sdl_input_press_snap |= new_kd;
+		}
+
+		if (g_is_first_sub12352_orig) {
+			uint16_t snap = sdl_input_press_snap_get();
+			uint16_t fresh_snap = (uint16_t)(snap & ~g_press_snap_consumed_this_frame);
+			if (fresh_snap) {
+				word_2889a = (uint16_t)(word_2889a & ~fresh_snap);
+				g_press_snap_consumed_this_frame |= fresh_snap;
+			}
+			g_is_first_sub12352_orig = false;
 		}
 	}
 	// 4610
@@ -5958,6 +6014,13 @@ cs=0x1a2;eip=0x00241f; 	X(PUSH(di));	// 4729 push    di ;~ 01A2:241F
 cs=0x1a2;eip=0x002420; 	T(SHL(di, 1));	// 4730 shl     di, 1 ;~ 01A2:2420
 cs=0x1a2;eip=0x002422; 	T(ADD(si, *(dw*)(raddr(ds,di-0x6CBA))));	// 4731 add     si, [di-6CBAh] ;~ 01A2:2422
 cs=0x1a2;eip=0x002426; 	X(MOV(*(raddr(ds,si-0x6A94)), al));	// 4732 mov     [si-6A94h], al ;~ 01A2:2426
+	{ uint16_t addr = (uint16_t)(si - 0x6A94);
+	  if (addr >= 0x8200 && addr <= 0x82FF) {
+	    extern int v2_dbg_pre_vm_iter;
+	    fprintf(stderr, "ORIG-1241E-WRITE[f%d]: addr=%04X val=%02X\n",
+	            v2_dbg_pre_vm_iter, addr, (uint8_t)al);
+	  }
+	}
 cs=0x1a2;eip=0x00242a; 	X(POP(di));	// 4733 pop     di ;~ 01A2:242A
 cs=0x1a2;eip=0x00242b; 	X(POP(si));	// 4734 pop     si ;~ 01A2:242B
 cs=0x1a2;eip=0x00242c; 	T(INC(si));	// 4735 inc     si ;~ 01A2:242C
@@ -6093,6 +6156,9 @@ cs=0x1a2;eip=0x00251a; 	T(MOV(ax, seg_offset(seg001)));	// 4894 mov     ax, seg 
 cs=0x1a2;eip=0x00251d; 	T(MOV(es, ax));	// 4895 mov     es, ax ;~ 01A2:251D
 cs=0x1a2;eip=0x00251f; 	T(MOV(ax, *(dw*)(raddr(es,si+0))));	// 4897 mov     ax, es:[si+0] ;~ 01A2:251F
 cs=0x1a2;eip=0x002524; 	X(MOV(word_2850a, ax));	// 4898 mov     word_2850A, ax ;~ 01A2:2524
+	{ extern int v2_dbg_pre_vm_iter;
+	  fprintf(stderr, "ORIG-2850A[f%d]: ax=%04X (write word_2850a in sub_12515)\n",
+	          v2_dbg_pre_vm_iter, (uint16_t)ax); }
 cs=0x1a2;eip=0x002527; 	X(POP(es));	// 4899 pop     es ;~ 01A2:2527
 cs=0x1a2;eip=0x002528; 	J(RETN(0));	// 4901 retn ;~ 01A2:2528
 sub_12529:
@@ -6615,17 +6681,17 @@ cs=0x1a2;eip=0x0028fe; 	R(_INT(0x21));	// 5485 int     21h             ; DOS - P
 cs=0x1a2;eip=0x002900; 	T(STI);	// 5487 sti ;~ 01A2:2900
 loc_12901:
 	// 4814
-	byte_3165f |= sdl_spec_get(0x917F);  // SDL R key OR-in
-	byte_3166a |= sdl_spec_get(0x918A);  // SDL A key OR-in
+	byte_3165f = sdl_spec_get(0x917F);  // SDL R — exact orig INT9
+	byte_3166a = sdl_spec_get(0x918A);  // SDL A — exact orig INT9
 cs=0x1a2;eip=0x002901; 	T(MOV(ah, byte_3165f));	// 5490 mov     ah, byte_3165F ;~ 01A2:2901
 cs=0x1a2;eip=0x002905; 	T(OR(ah, byte_3166a));	// 5491 or      ah, byte_3166A ;~ 01A2:2905
 cs=0x1a2;eip=0x002909; 	J(JNZ(loc_12901));	// 5492 jnz     short loc_12901 ;~ 01A2:2909
 loc_1290b:
 	// 4815
-	byte_3165f |= sdl_spec_get(0x917F);
+	byte_3165f = sdl_spec_get(0x917F);  // SDL R — exact orig INT9
 cs=0x1a2;eip=0x00290b; 	T(TEST(byte_3165f, 0x0FF));	// 5495 test    byte_3165F, 0FFh ;~ 01A2:290B
 cs=0x1a2;eip=0x002910; 	J(JNZ(loc_12923));	// 5496 jnz     short loc_12923 ;~ 01A2:2910
-	byte_3166a |= sdl_spec_get(0x918A);
+	byte_3166a = sdl_spec_get(0x918A);  // SDL A — exact orig INT9
 cs=0x1a2;eip=0x002912; 	T(TEST(byte_3166a, 0x0FF));	// 5497 test    byte_3166A, 0FFh ;~ 01A2:2912
 cs=0x1a2;eip=0x002917; 	J(JZ(loc_1290b));	// 5498 jz      short loc_1290B ;~ 01A2:2917
 cs=0x1a2;eip=0x002919; 	T(CLI);	// 5499 cli ;~ 01A2:2919
