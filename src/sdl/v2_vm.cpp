@@ -863,6 +863,10 @@ uint16_t v2_input_intro_mask(uint16_t prev_ax_or, uint16_t word_288ac, uint16_t 
     // INTRO MODE replication of orig INT9 ISR (eip 0x64CA dispatch + 0x651F
     // default). Orig: ANY keyboard event in intro sets word_30bbe = 0xFFFF
     // unconditionally, sticky until sub_11080 level reload clears it.
+    // Brief tap (KEYDOWN+KEYUP entirely between intro_mask calls) handled
+    // by render thread directly: when word_288AC == 0x8000, KEYDOWN writes
+    // word_30bbe = 0xFFFF synchronously (atomic), matching orig INT9 sync
+    // behavior exactly. See render.cpp KEYDOWN handler.
     if (input != prev_intro_keys) intro_signal_sticky = true;
     prev_intro_keys = input;
     if (intro_signal_sticky) return prev_ax_or | press_snap | 0xFFFF;

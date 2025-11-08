@@ -518,10 +518,33 @@ void updateDraw()
 					 // edge every frame (scroll explosion). Held keys are tracked via
 					 // word_30bbe/input_keys (stays set until KEYUP) — edge fires once on
 					 // first press, word_2889a tracks across frames, no re-trigger.
-					 if (key_val && !event.key.repeat) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
-					 // Phase 1 (orig ISR mirror): direct atomic write to word_30bbe
-					 // (real DS) + shadow DS. sub_12352 reads natively.
-					 m2c_input_or(key_val);
+					 // Mirror orig INT9 ISR (seg000_6440_proc eip 0x6458): if word_288AC
+					 // == 0x8000 (intro mode), KEYDOWN dispatches via loc_164CA. Non-special
+					 // keys hit default → MOV word_30bbe, 0xFFFF (intro skip signal).
+					 // Special keys (CTRL/ALT/DEL/F10/X/S/M) set their state byte only,
+					 // NO word_30bbe write. Normal mode: OR key_val into word_30bbe.
+#ifndef V2_ONLY
+					 extern uint16_t& word_288ac;
+					 bool intro_mode = (word_288ac == 0x8000);
+#else
+					 bool intro_mode = false;
+#endif
+					 if (intro_mode) {
+						 if (!spec_off && !event.key.repeat) {
+							 // Non-special key in intro → orig writes word_30bbe = 0xFFFF.
+#ifndef V2_ONLY
+							 __atomic_store_n(&word_30bbe, (uint16_t)0xFFFF, __ATOMIC_RELAXED);
+#endif
+							 v2_shadow_input_or(0xFFFF);
+							 sdl_input_press_edges.fetch_or(0xFFFF, std::memory_order_relaxed);
+						 }
+						 // Special keys: state byte set below in spec_off block. No word_30bbe OR.
+					 } else {
+						 if (key_val && !event.key.repeat) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
+						 // Phase 1 (orig ISR mirror): direct atomic write to word_30bbe
+						 // (real DS) + shadow DS. sub_12352 reads natively.
+						 m2c_input_or(key_val);
+					 }
 					 // ENTER trace: arm sub_12352 logger for next ~50 calls.
 					 if (event.key.keysym.sym == SDLK_RETURN && !event.key.repeat) {
 						 int seq = g_enter_seq.fetch_add(1, std::memory_order_relaxed) + 1;
