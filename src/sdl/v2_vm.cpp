@@ -5509,7 +5509,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     {
         bool need_save = !(shadow[0x342] | shadow[0x343] | shadow[0x344]);
         v2_pw_pre_loop(shadow);
+        extern bool need_quit;
         for (int safety = 10000; safety > 0; safety--) {
+            if (need_quit) break;                 // Ctrl-C / SIGTERM exits dialog
             if (v2_pw_iter_body(shadow)) break;
             v2_do_render();
             SDL_Delay(16);  // pacing for V2_ONLY interactive
@@ -5709,18 +5711,17 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         // Mirror orig sub_11ba5 entry: clear bit, plays pause SFX, init state, render block.
         *(uint16_t*)(shadow + 0x334) &= 0xFFFB;       // clear word_28814 bit 4 (analog viking switch)
         extern void v2_run_pause_entry(uint8_t*);
-        extern void v2_run_pause_loop(uint8_t*);
+        extern bool v2_run_pause_loop_iter_exit(uint8_t*);
+        extern bool need_quit;
         v2_run_pause_entry(shadow);
-        // Spin loop until exit detected (Tab/select press → cbb_exit → 0x3CC bit 15 set, etc.)
+        // Mirror orig sub_11ba5 loc_11c1f loop: continue while CF clear (no cbb_exit
+        // and no transition+ESC). v2_run_pause_loop_iter_exit returns true on exit
+        // matching orig's CF semantics.
         for (int safety = 10000; safety > 0; safety--) {
-            uint16_t prev_input = *(uint16_t*)(shadow + 0x3B8);
-            v2_run_pause_loop(shadow);
+            if (need_quit) break;                       // Ctrl-C / SIGTERM exits pause
+            if (v2_run_pause_loop_iter_exit(shadow)) break;
             v2_do_render();
             SDL_Delay(16);  // V2_ONLY pacing — interactive
-            // Exit when sub_11cbb returned exit (set 0x445=0x11 + 0x447 reset path)
-            // or word_288AC bit 15 set (transition triggered)
-            if (*(uint16_t*)(shadow + 0x3CC) & 0x8000) break;
-            if ((prev_input & 0x3000) && *(uint16_t*)(shadow + 0x447) == 0) break;
         }
     }
 #endif
@@ -18588,52 +18589,60 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 }
             }
         }
+        // Mode 1 arrow handlers (Left/Right/Up/Down): orig pattern erases OLD
+        // slot BEFORE state change (eip 0x1EEC-0x1EF5: di=word_28923 OLD,
+        // ax=word_28921 OLD, CALL sub_1183d). Without erase, selector frame
+        // stays at old position when cursor moves.
+        auto erase_old_slot = [&]() {
+            uint16_t old_di = *(uint16_t*)(shadow + 0x443) << 1;
+            uint16_t old_ax = *(uint16_t*)(shadow + 0x441);
+            v2_draw_hud_item(v2_current_ds_val, old_di, old_ax);
+        };
         if (new_input & 0x200) {
             uint16_t di_v = *(uint16_t*)(shadow + 0x3C2);
             if (*(uint16_t*)(shadow + di_v + 0x414) & 1) {
+                erase_old_slot();
                 *(uint16_t*)(shadow + di_v + 0x414) &= 0xFFFE;
                 *(uint16_t*)(shadow + 0x443) &= 0xFFFE;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
                 *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
                 *(uint16_t*)(shadow + 0x445) = 0x11;
-                // sub_1183d render new slot
-                v2_draw_hud_item(v2_current_ds_val, bx, *(uint16_t*)(shadow + 0x441));
                 if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
         }
         if (new_input & 0x100) {
             uint16_t di_v = *(uint16_t*)(shadow + 0x3C2);
             if (!(*(uint16_t*)(shadow + di_v + 0x414) & 1)) {
+                erase_old_slot();
                 *(uint16_t*)(shadow + di_v + 0x414) |= 1;
                 *(uint16_t*)(shadow + 0x443) |= 1;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
                 *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
                 *(uint16_t*)(shadow + 0x445) = 0x11;
-                v2_draw_hud_item(v2_current_ds_val, bx, *(uint16_t*)(shadow + 0x441));
                 if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
         }
         if (new_input & 0x800) {
             uint16_t di_v = *(uint16_t*)(shadow + 0x3C2);
             if (*(uint16_t*)(shadow + di_v + 0x414) & 2) {
+                erase_old_slot();
                 *(uint16_t*)(shadow + di_v + 0x414) &= 0xFFFD;
                 *(uint16_t*)(shadow + 0x443) &= 0xFFFD;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
                 *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
                 *(uint16_t*)(shadow + 0x445) = 0x11;
-                v2_draw_hud_item(v2_current_ds_val, bx, *(uint16_t*)(shadow + 0x441));
                 if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
         }
         if (new_input & 0x400) {
             uint16_t di_v = *(uint16_t*)(shadow + 0x3C2);
             if (!(*(uint16_t*)(shadow + di_v + 0x414) & 2)) {
+                erase_old_slot();
                 *(uint16_t*)(shadow + di_v + 0x414) |= 2;
                 *(uint16_t*)(shadow + 0x443) |= 2;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
                 *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
                 *(uint16_t*)(shadow + 0x445) = 0x11;
-                v2_draw_hud_item(v2_current_ds_val, bx, *(uint16_t*)(shadow + 0x441));
                 if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
         }
@@ -18652,10 +18661,17 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 *(uint16_t*)(shadow + 0x445) = 9;
                 if (shadow[0x304] == 0) fx::play_sfx_no_audit(shadow, 2);
             }
-            // sub_120D1
+            // sub_120D1: orig draws all 3 viking selectors UNCONDITIONALLY
+            // after DS prev=cur copy. Without selector redraw, mode 0 blink
+            // (after pickup mode→0) overdraws selector frame via item draw,
+            // and loc_1205B doesn't redraw (prev==cur now). User sees selector
+            // disappear from selected item after F-pickup.
             *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
+            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(shadow + 0x414) << 1);
             *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + 0x416) + 4) << 1);
             *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + 0x418) + 8) << 1);
         }
         if (new_input & 0x3000) {
             *(uint16_t*)(shadow + 0x445) = 0x11;
@@ -18694,25 +18710,68 @@ static void v2_sub_11792(uint8_t* shadow) {
             v2_draw_hud_healthbar(v2_current_ds_val, new_state, (uint16_t)vk, (uint16_t)vk);
         }
     }
-    // sub_12199: item display sync (loop [3E4] vs [3FC]) + render via sub_1183d
-    for (uint16_t di_c = 0; di_c < 0x18; di_c += 2) {
-        uint16_t ax_r = *(uint16_t*)(shadow + di_c + 0x3E4);
-        if (ax_r != *(uint16_t*)(shadow + di_c + 0x3FC)) {
-            *(uint16_t*)(shadow + di_c + 0x3FC) = ax_r;
-            *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-            *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-            *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
-            // sub_12199 calls sub_1183d(di_c, ax_r) — mirror via v2_draw_hud_item
-            v2_draw_hud_item(v2_current_ds_val, di_c, ax_r);
+    // sub_12199: item display sync (loop [3E4] vs [3FC]) + render via sub_1183d.
+    // Orig (eip 0x2199..0x21B8): per slot if [3E4]!=[3FC], copy + sub_1183d + sub_120d1.
+    // sub_120d1 не сохраняет di → "ADD di, 2" продолжает с (word_288F8+8)*2.
+    // Replicate bit-exact: после sub_120d1 di clobbered → set di_c в loop.
+    {
+        int _iter = 0;
+        uint16_t di_c = 0;
+        while (di_c < 0x18) {
+            if (++_iter > 13) break;  // safety
+            uint16_t ax_r = *(uint16_t*)(shadow + di_c + 0x3E4);
+            if (ax_r != *(uint16_t*)(shadow + di_c + 0x3FC)) {
+                *(uint16_t*)(shadow + di_c + 0x3FC) = ax_r;
+                // sub_12199 calls sub_1183d(di_c, ax_r) — mirror via v2_draw_hud_item
+                v2_draw_hud_item(v2_current_ds_val, di_c, ax_r);
+                // sub_120d1 (eip 0x20D1): redraw 3 viking selectors + sync 0x41A/0x41C/0x41E.
+                uint16_t v1 = *(uint16_t*)(shadow + 0x0414);
+                *(uint16_t*)(shadow + 0x041A) = v1;
+                v2_draw_hud_selector(v2_current_ds_val, v1 << 1);
+                uint16_t v2v = *(uint16_t*)(shadow + 0x0416);
+                *(uint16_t*)(shadow + 0x041C) = v2v;
+                v2_draw_hud_selector(v2_current_ds_val, (v2v + 4) << 1);
+                uint16_t v3 = *(uint16_t*)(shadow + 0x0418);
+                *(uint16_t*)(shadow + 0x041E) = v3;
+                v2_draw_hud_selector(v2_current_ds_val, (v3 + 8) << 1);
+                // ORIG BUG: sub_120d1 leaves di = (word_288F8+8)*2 (last call).
+                // sub_12199's ADD di,2 continues from this value. Replicate for byte-identical mirror.
+                di_c = (uint16_t)((v3 + 8) << 1);
+            }
+            di_c += 2;
         }
     }
-    // loc_1205B: selector tracking (seg000 4139-4182)
-    if (*(uint16_t*)(shadow + 0x414) != *(uint16_t*)(shadow + 0x41A))
+    // loc_1205B: selector tracking (seg000 4139-4182) — orig erases OLD slot
+    // (sub_1183d at prev pos with item at slot), updates prev=current, then
+    // draws NEW selector frame (sub_118ad at new pos). v2: mirror via
+    // v2_draw_hud_item (erase) + v2_draw_hud_selector (new frame).
+    // Viking 0: ds:0x414 (cur) vs ds:0x41A (prev), slot di range 0-7.
+    if (*(uint16_t*)(shadow + 0x414) != *(uint16_t*)(shadow + 0x41A)) {
+        uint16_t old_di = *(uint16_t*)(shadow + 0x41A) << 1;
+        uint16_t old_item = *(uint16_t*)(shadow + old_di + 0x3E4);
+        v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
         *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-    if (*(uint16_t*)(shadow + 0x416) != *(uint16_t*)(shadow + 0x41C))
+        uint16_t new_di = *(uint16_t*)(shadow + 0x414) << 1;
+        v2_draw_hud_selector(v2_current_ds_val, new_di);
+    }
+    // Viking 1: ds:0x416 (cur) vs ds:0x41C (prev), slot di range +4 → 8-15.
+    if (*(uint16_t*)(shadow + 0x416) != *(uint16_t*)(shadow + 0x41C)) {
+        uint16_t old_di = (*(uint16_t*)(shadow + 0x41C) + 4) << 1;
+        uint16_t old_item = *(uint16_t*)(shadow + old_di + 0x3E4);
+        v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
         *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-    if (*(uint16_t*)(shadow + 0x418) != *(uint16_t*)(shadow + 0x41E))
+        uint16_t new_di = (*(uint16_t*)(shadow + 0x416) + 4) << 1;
+        v2_draw_hud_selector(v2_current_ds_val, new_di);
+    }
+    // Viking 2: ds:0x418 (cur) vs ds:0x41E (prev), slot di range +8 → 16-23.
+    if (*(uint16_t*)(shadow + 0x418) != *(uint16_t*)(shadow + 0x41E)) {
+        uint16_t old_di = (*(uint16_t*)(shadow + 0x41E) + 8) << 1;
+        uint16_t old_item = *(uint16_t*)(shadow + old_di + 0x3E4);
+        v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
         *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+        uint16_t new_di = (*(uint16_t*)(shadow + 0x418) + 8) << 1;
+        v2_draw_hud_selector(v2_current_ds_val, new_di);
+    }
     // sub_11B0B: portrait/sound tracking sync + portrait render
     for (int vk = 0; vk < 3; vk++) {
         uint16_t port = *(uint16_t*)(shadow + 0x15AD + vk * 2);
@@ -18747,7 +18806,17 @@ static void v2_sub_11c52(uint8_t* s) {
             uint16_t di = *(uint16_t*)(s + 0x443) << 1;
             uint16_t ax = (cnt & 0x10) ? *(uint16_t*)(s + 0x441) : 0;
             v2_draw_hud_item(v2_current_ds_val, di, ax);  // sub_1183d mirror
-            // sub_120d1: selector tracking (already done by sub_11792 mirror)
+            // Mirror orig sub_11c52 eip 0x1C7A/0x1C8B: CALL sub_120d1 AFTER
+            // sub_1183d in BOTH branches (SET/CLEAR). sub_120d1 redraws all 3
+            // viking selectors (orig line 5471-5491) — needed because v2_draw_hud_item
+            // 16x16 overdraws selector frame area. Without this redraw, selector
+            // disappears after first blink phase.
+            *(uint16_t*)(s + 0x41A) = *(uint16_t*)(s + 0x414);
+            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + 0x414) << 1);
+            *(uint16_t*)(s + 0x41C) = *(uint16_t*)(s + 0x416);
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + 0x416) + 4) << 1);
+            *(uint16_t*)(s + 0x41E) = *(uint16_t*)(s + 0x418);
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + 0x418) + 8) << 1);
         }
     } else {
         // Mode 1: alternate blink path (loc_11c8f) — selector mode
@@ -18857,7 +18926,14 @@ void v2_run_pause_entry(uint8_t* shadow) {
 // (200+ lines) — mirror exists in v2_game_loop_pre_vm under #if 0, full
 // per-iter version is TODO. For default mode + simple pause (just blink
 // + ESC exit), this is enough.
+// Returns true if pause loop should EXIT (cbb_exit from sub_11cbb OR transition+ESC).
+// orig sub_11ba5 loc_11c1f exit: CF set by sub_11cbb STC OR (word_288AC&0x8000 AND
+// word_28898&0x1000). JNC loops while CF clear.
+bool v2_run_pause_loop_iter_exit(uint8_t* shadow);
 void v2_run_pause_loop(uint8_t* shadow) {
+    (void)v2_run_pause_loop_iter_exit(shadow);
+}
+bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
     // Input read: default mode → INPUT_UPDATE signal already updated.
     // V2_ONLY → drive ourselves.
 #ifdef V2_ONLY
@@ -18867,7 +18943,7 @@ void v2_run_pause_loop(uint8_t* shadow) {
     //   sub_12352 → sub_11cbb → sub_11c52 → sub_11792 → sub_16775 → sub_10130
     //   → sub_108c8 → sub_12d72 (if word_288AC bit15 set).
     // ALL must be mirrored — orig calls these per-iter, shadow must too or DS diverges.
-    (void)v2_sub_11cbb(shadow);                      // item interaction (ds:0x441-44B)
+    bool cbb_exit = v2_sub_11cbb(shadow);            // item interaction (ds:0x441-44B)
     v2_sub_11c52(shadow);                            // selector blink DEC
     v2_sub_11792(shadow);                            // HUD update: healthbar/item/selector/portrait
     v2_sub_16775(shadow);                            // page flip (sets 0xA39C=1, 0x92EE pan)
@@ -18894,7 +18970,11 @@ void v2_run_pause_loop(uint8_t* shadow) {
                 *(uint16_t*)(shadow + 0x2191) = bx + 4;
             }
         }
+        // orig eip 0x1c40-0x1c4a: TEST word_28898, 0x1000; JZ loc_11c4b; STC.
+        // ESC during transition = exit.
+        if (*(uint16_t*)(shadow + 0x3B8) & 0x1000) cbb_exit = true;
     }
+    return cbb_exit;
 }
 
 // ============================================================================
