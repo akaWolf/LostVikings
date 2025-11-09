@@ -193,6 +193,7 @@ std::atomic<int>      g_enter_trace_arm{0};   // sub_12352 calls remaining to tr
 std::atomic<int>      g_enter_seq{0};         // total Enter KEYDOWNs seen
 std::atomic<uint32_t> g_enter_keydown_ms{0};  // ms of last KEYDOWN Enter
 
+#ifndef V2_ONLY
 extern uint16_t& word_30bbe;
 extern uint16_t& word_28896;
 extern uint16_t& word_28898;
@@ -203,10 +204,12 @@ extern uint16_t& word_288ac;
 extern uint16_t& word_2a66f;
 extern uint16_t& word_2b044;
 extern uint16_t& word_287e2;
+#endif
 extern int       v2_dbg_pre_vm_iter;
 
 // Called from sub_12352 right after word_28898 / word_2889a are set.
 extern "C" void enter_trace_sub12352() {
+#ifndef V2_ONLY
     int armed = g_enter_trace_arm.load(std::memory_order_relaxed);
     bool any_enter_bit = ((word_30bbe | word_28896 | word_28898 | word_2889a | input_keys | sdl_input_press_snap) & 0x8000) != 0;
     if (armed <= 0 && !any_enter_bit) return;
@@ -223,6 +226,7 @@ extern "C" void enter_trace_sub12352() {
             sdl_input_press_snap, word_30bba, word_30bbc, word_288ac,
             word_2b044, word_2a66f, v2_dbg_pre_vm_iter, word_287e2);
     if (armed > 0) g_enter_trace_arm.fetch_sub(1, std::memory_order_relaxed);
+#endif
 }
 
 static bool sdl_spec_is_modifier(uint16_t off) {
@@ -556,12 +560,14 @@ void updateDraw()
 						 uint32_t ms = enter_trace_ms_now();
 						 g_enter_keydown_ms.store(ms, std::memory_order_relaxed);
 						 g_enter_trace_arm.store(50, std::memory_order_relaxed);
+#ifndef V2_ONLY
 						 fprintf(stderr,
 							 "ENTER-TRACE-KEYDOWN seq=%d t=%ums word_30bbe=%04X (post-OR) "
 							 "input_keys=%04X edges=%04X f=%d\n",
 							 seq, ms, word_30bbe, input_keys,
 							 sdl_input_press_edges.load(std::memory_order_relaxed),
 							 v2_dbg_pre_vm_iter);
+#endif
 					 }
 				   } else {
 					 input_keys &= ~key_val;
@@ -571,10 +577,12 @@ void updateDraw()
 						 uint32_t ms = enter_trace_ms_now();
 						 uint32_t dkd = ms - g_enter_keydown_ms.load(std::memory_order_relaxed);
 						 int seq = g_enter_seq.load(std::memory_order_relaxed);
+#ifndef V2_ONLY
 						 fprintf(stderr,
 							 "ENTER-TRACE-KEYUP seq=%d t=%ums dkd=%ums word_30bbe=%04X "
 							 "(post-AND) input_keys=%04X f=%d\n",
 							 seq, ms, dkd, word_30bbe, input_keys, v2_dbg_pre_vm_iter);
+#endif
 					 }
 				   }
 				   // Spec key SDL state. Modifiers: KEYDOWN sets, KEYUP clears.

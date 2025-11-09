@@ -1322,6 +1322,12 @@ static void v2_sub_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
 
 static void v2_do_render_and_swap(); // forward decl for init functions
 static bool v2_load_exe_ds(); // forward decl
+// Forward decls for V2_ONLY-mode pre_vm path (v2_game_loop_pre_vm uses these
+// before their definitions):
+static void v2_sub_12352_iter(uint8_t*); // forward decl (definition ~line 18010)
+static void v2_pw_pre_loop(uint8_t*);    // forward decl (definition ~line 18937)
+static bool v2_pw_iter_body(uint8_t*);   // forward decl (definition ~line 19011)
+static void v2_pw_post_loop(uint8_t*);   // forward decl (definition ~line 19100)
 static void v2_sub_16775(uint8_t* s);
 static void v2_do_render();
 
