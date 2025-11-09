@@ -4338,6 +4338,17 @@ static void v2_sub_11080(uint8_t* s) {
     *(uint16_t*)(s + 0x03C6) = 0; // word_288A6
     *(uint16_t*)(s + 0x86DE) = 0; // word_30BBE
     *(uint16_t*)(s + 0x86DC) = 0; // word_30BBC
+    // Mirror orig sub_11080 word_30bbe clear (eip 0x10E5) on input_keys/input_keys_v2.
+    // These are m2c port SDL adapter held-state trackers — not present in orig DOS,
+    // but used by v2_input_intro_mask. Without this sync, held key across level
+    // transition leaks into v2_sub_12352_iter via input_keys → dialog cmd 4 wait
+    // sees ax=0x8000 → edge fires on first iter → dialog auto-dismiss.
+    {
+        extern uint16_t input_keys;
+        extern uint16_t input_keys_v2;
+        __atomic_store_n(&input_keys, (uint16_t)0, __ATOMIC_RELAXED);
+        __atomic_store_n(&input_keys_v2, (uint16_t)0, __ATOMIC_RELAXED);
+    }
     *(uint16_t*)(s + 0x03B6) = 0; // word_28896
     *(uint16_t*)(s + 0x03B8) = 0; // word_28898
 
@@ -18053,6 +18064,12 @@ static void v2_sub_12352_iter(uint8_t* shadow) {
     // Read SDL keyboard state directly via intro-mask helper (same as
     // v2_game_loop_pre_vm V2_ONLY branch). Without this, viking switch
     // wait loop never sees keypress → dialog stuck forever.
+    //
+    // NOTE: input_keys is held-state tracker (KEYDOWN ORs, KEYUP clears).
+    // v2_sub_11080 clears input_keys/input_keys_v2 in sync with shadow_30bbe
+    // (orig sub_11080 eip 0x10E5 clears word_30bbe). Without that sync, a
+    // held key across level transition would inject stale held state into
+    // dialog cmd 4 wait → instant auto-dismiss. See v2_sub_11080 line 4339.
     extern uint16_t input_keys;
     uint16_t w288ac = *(uint16_t*)(shadow + 0x3CC);
     ax = v2_input_intro_mask(ax, w288ac, input_keys);
@@ -18290,7 +18307,16 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
     v2_draw_sprites(v2_current_ds_val);
     v2_draw_ui(v2_current_ds_val);
     v2_sub_1E0C7(s);
-    // sub_12352 inline (input snapshot to shadow ds:0x3B6/0x3B8/0x3BA)
+    // sub_12352 (orig eip 0x089D inside sub_1086f main loop, after dispatch).
+    // MUST be full v2_sub_12352_iter — drains sdl_input_press_edges + LAYER 1/2
+    // consume. Previously was a simplified inline (ax=v2_input_or; no drain) →
+    // press_edges accumulated until next v2_sub_12352_iter call (e.g., wait loop's
+    // v2_run_viking_switch_loop) which then drained → cleared 0x3BA bit → fired
+    // edge → wait #2 instant exit on stale state. Mirror orig: same drain logic
+    // every sub_12352 call site, no shortcut version.
+#ifdef V2_ONLY
+    v2_sub_12352_iter(s);
+#else
     {
         uint16_t ax = 0;
         if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
@@ -18300,6 +18326,7 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
         *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
         *(uint16_t*)(s + 0x03BA) = ax;
     }
+#endif
     // sub_10138 emulation: orig (eip 0x138-0x14A) tests bits 4/1/2 of word_28814:
     //   bit 4 (val=4) → loc_10164: AND ~4, fall through to loc_10169 viking switch wait
     //   bit 0 (val=1) → loc_10151: TRANSITION (sub_1774F + sub_14207 + sub_11080)
