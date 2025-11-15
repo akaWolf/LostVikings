@@ -1,4 +1,16 @@
+# Build optimization level.
+# Default: -O0 for debug stepping (variables visible, exact call stacks).
+# RELEASE=1: -O2 for performance (inlining, vectorization, loop unrolling).
+# Keep -ggdb3 in both — debug symbols stay for crash backtraces / gdb / perf.
+# -fno-omit-frame-pointer in RELEASE: keep frame pointer for accurate
+#   stack traces (perf record --call-graph dwarf still works without, but
+#   fp-based unwinding is faster + works without DWARF in tight inner loops).
+RELEASE ?= 0
+ifeq ($(RELEASE),1)
+DBG    := -ggdb3 -O2 -fno-omit-frame-pointer
+else
 DBG    := -ggdb3 -O0 #-fsanitize=address
+endif
 SDL    := $(shell pkg-config --cflags --libs sdl2)
 OBJDIR := .obj
 
