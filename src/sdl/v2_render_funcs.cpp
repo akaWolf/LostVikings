@@ -947,7 +947,13 @@ void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
 
-    // Special case: slot 0x18 with item 0 → use item 0x17
+    // Special case: slot 0x18 with item 0 → use item 0x17 (trash icon).
+    // Mirror orig sub_1183d eip 0x183F-0x1849:
+    //   CMP di, 0x18; JNZ loc_1184c
+    //   CMP ax, 0;   JNZ loc_1184c
+    //   MOV ax, 0x17
+    // Blink at trash slot intentionally alternates item icon (SET phase) and
+    // trash icon (CLEAR phase, ax=0 forced to 0x17). Mirror orig exactly.
     uint16_t item_id = item_ax;
     if (slot_di == 0x18 && item_id == 0)
         item_id = 0x17;
