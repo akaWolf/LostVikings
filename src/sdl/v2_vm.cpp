@@ -509,18 +509,17 @@ static void v2_sub_17912_v2(uint8_t* s);
 //     handle hashes (caused AUDIT-FRAME-DIVERGE divergence in task #103).
 // =====================================================================
 namespace fx {
-    // Full: play SFX + audit log. Returns deterministic handle (0 if skipped).
-    // Used by op_sound and anim cmd 0x77B2 — sites that mirror orig sub_177bb
-    // directly (orig also fires audit at that site).
+    // Play SFX. Audit log fires INSIDE v2_sub_177bb_v2 (mirror of orig sub_177bb
+    // internal hook), so both wrappers automatically log. Returns deterministic
+    // handle (0 if skipped via replay context).
     inline int play_sfx(uint8_t* shadow, uint16_t seq, uint16_t obj) {
+        (void)obj; // audit reads obj from ds:0x42 inside v2_sub_177bb_v2
         if (v2_in_replay_anim) return 0;
-        int h = v2_sub_177bb_v2(shadow, seq);
-        v2_audit_log_sfx(1 /* v2 */, seq, obj);
-        return h;
+        return v2_sub_177bb_v2(shadow, seq);
     }
-    // SFX only — no audit log. Used by mirror call sites (inventory/pause/
-    // transition) where orig calls sub_177bb without injecting audit at that
-    // call site (audit is hooked deeper in orig sub_177bb itself).
+    // Backward-compat alias — both wrappers identical now (audit moved into
+    // v2_sub_177bb_v2). Kept distinct name for call-site clarity (inventory/
+    // pause/transition sites historically used _no_audit).
     inline void play_sfx_no_audit(uint8_t* shadow, uint16_t seq) {
         if (v2_in_replay_anim) return;
         v2_sub_177bb_v2(shadow, seq);
@@ -552,6 +551,14 @@ static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     uint16_t obj = *(const uint16_t*)(s + 0x42);
     int fire_idx = v2_audit_v2_next_fire_idx(obj);
     uint16_t handle = v2_audit_compute_handle(ax_seq, obj, v2_dbg_pre_vm_iter, fire_idx);
+    // Audit log: mirror orig sub_177bb internal audit hook (seg000:16352).
+    // Orig logs from inside sub_177bb so all callers (op_sound + pause/inventory/
+    // transition mirror sites) get audited. v2 must do the same here, NOT at
+    // wrapper level (fx::play_sfx vs play_sfx_no_audit), to capture all paths.
+    // Without this, audit shows false "missing in v2" for seq=0x00/0x01 fired
+    // by pause entry / sub_11cbb arrow handlers via play_sfx_no_audit.
+    extern void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj);
+    v2_audit_log_sfx(1 /* v2 */, ax_seq, obj);
 #ifdef V2_ONLY
     // V2_ONLY: v2 is the sole audio producer → real playback through v2_pool
     // (symmetric with v2_sub_176bd_v2 music path).
