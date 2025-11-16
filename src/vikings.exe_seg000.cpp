@@ -1985,16 +1985,21 @@ cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:00
 	if (myDrawInfo_v2) v2_record_orig_post_vm_entry();
 cs=0x1a2;eip=0x00003c; 	J(CALL(sub_1386b,0));	// 58 call    sub_1386B ;~ 01A2:003C
 	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[0] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(0); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(17); /* MAIN_AFTER_1386B */ }
 cs=0x1a2;eip=0x00003f; 	J(CALL(sub_1625d,0));	// 59 call    sub_1625D ;~ 01A2:003F
 	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[1] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(1); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(18); /* MAIN_AFTER_1625D */ }
 cs=0x1a2;eip=0x000042; 	J(CALL(sub_15546,0));	// 60 call    sub_15546 ;~ 01A2:0042
 	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[2] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(2); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(19); /* MAIN_AFTER_15546 */ }
 cs=0x1a2;eip=0x000045; 	J(CALL(sub_13916,0));	// 61 call    sub_13916 ;~ 01A2:0045
 	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[3] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(3); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(20); /* MAIN_AFTER_13916 */ }
 loc_10048:
 	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); }
 cs=0x1a2;eip=0x000048; 	J(CALL(sub_1064b,0));	// 64 call    sub_1064B ;~ 01A2:0048
 	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[4] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(4); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(21); /* MAIN_AFTER_1064B */ }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(3); /* POST_VM_END */ }
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_VM, ds); v2_vm_verify_game_loop(ds); v2_vm_verify_tilemap(ds); v2_vm_verify_all_segments(ds); }
 cs=0x1a2;eip=0x00004b; 	J(CALL(sub_12fc6,0));	// 65 call    sub_12FC6 ;~ 01A2:004B
@@ -4341,14 +4346,19 @@ cs=0x1a2;eip=0x0015d5; 	J(CALL(sub_14207,0));	// 2888 call    sub_14207 ;~ 01A2:
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(10); /* T_SF1_VM_END */ }
 cs=0x1a2;eip=0x0015d8; 	J(CALL(sub_1386b,0));	// 2889 call    sub_1386B ;~ 01A2:15D8
 	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_1386b]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(17); /* MAIN_AFTER_1386B (reused for sub_115d2 SF1) */ }
 cs=0x1a2;eip=0x0015db; 	J(CALL(sub_1625d,0));	// 2890 call    sub_1625D ;~ 01A2:15DB
 	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_1625d]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(18); /* MAIN_AFTER_1625D (reused) */ }
 cs=0x1a2;eip=0x0015de; 	J(CALL(sub_15546,0));	// 2891 call    sub_15546 ;~ 01A2:15DE
 	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_15546]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(19); /* MAIN_AFTER_15546 (reused) */ }
 cs=0x1a2;eip=0x0015e1; 	J(CALL(sub_13916,0));	// 2892 call    sub_13916 ;~ 01A2:15E1
 	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_13916]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(20); /* MAIN_AFTER_13916 (reused) */ }
 cs=0x1a2;eip=0x0015e4; 	J(CALL(sub_1064b,0));	// 2893 call    sub_1064B ;~ 01A2:15E4
 	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_1064b]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
+	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(21); /* MAIN_AFTER_1064B (reused) */ }
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x0015e7; 	J(CALL(sub_12fc6,0));	// 2894 call    sub_12FC6 ;~ 01A2:15E7
 	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_12fc6 (SF1 end)]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
