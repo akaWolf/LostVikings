@@ -11,8 +11,35 @@ DBG    := -ggdb3 -O2 -fno-omit-frame-pointer
 else
 DBG    := -ggdb3 -O0 #-fsanitize=address
 endif
-SDL    := $(shell pkg-config --cflags --libs sdl2)
-OBJDIR := .obj
+
+# WIN=1: cross-compile to Windows x86_64 via mingw-w64.
+# Prereqs (Arch / Arch ARM via AUR — yay/paru):
+#   mingw-w64-gcc, mingw-w64-sdl2, mingw-w64-pkg-config
+# Build:  make clean && make WIN=1 -j$(nproc)  → vikings.exe (statically linked).
+# Linux-only debug code (execinfo backtrace, perf_event_open HW watchpoints,
+# dlfcn/dladdr, sys/mman ring buffer) is compiled out via #ifdef __linux__
+# and replaced with no-op stubs — gameplay unaffected, only platform-native
+# instrumentation is lost.
+WIN ?= 0
+ifeq ($(WIN),1)
+MINGW_TRIPLET ?= x86_64-w64-mingw32
+CC         := $(MINGW_TRIPLET)-gcc
+CXX        := $(MINGW_TRIPLET)-g++
+PKG_CONFIG ?= $(MINGW_TRIPLET)-pkg-config
+SDL        := $(shell $(PKG_CONFIG) --cflags sdl2) $(shell $(PKG_CONFIG) --static --libs sdl2)
+# -static: bundle libgcc/libstdc++/winpthread so the .exe runs without DLLs.
+# Drop Linux-only -rdynamic / -no-pie.
+PLATFORM_LDFLAGS := -static -static-libgcc -static-libstdc++
+EXE_NAME   := vikings.exe
+OBJDIR     := .obj-win
+else
+CC         := gcc
+CXX        := g++
+SDL        := $(shell pkg-config --cflags --libs sdl2)
+PLATFORM_LDFLAGS := -rdynamic -no-pie
+EXE_NAME   := vikings
+OBJDIR     := .obj
+endif
 
 ADL_DEFINES := -DADLMIDI_DISABLE_DOSBOX_EMULATOR \
                -DADLMIDI_DISABLE_OPAL_EMULATOR \
@@ -93,20 +120,20 @@ DEPS     := $(ALL_OBJS:.o=.d)
 
 .PHONY: all clean
 
-all: vikings
+all: $(EXE_NAME)
 
-vikings: $(ALL_OBJS)
-	g++ $(DBG) -rdynamic -no-pie -o $@ $^ $(SDL)
+$(EXE_NAME): $(ALL_OBJS)
+	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) -o $@ $^ $(SDL)
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	g++ -c $(CXXFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
+	$(CXX) -c $(CXXFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
 
 $(OBJDIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	gcc -c $(CFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
+	$(CC) -c $(CFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
 
 clean:
-	rm -rf $(OBJDIR) vikings
+	rm -rf .obj .obj-win vikings vikings.exe
 
 -include $(DEPS)

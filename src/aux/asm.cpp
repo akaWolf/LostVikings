@@ -456,7 +456,9 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 
 }
 
+#ifdef __linux__
 #include <execinfo.h>
+#endif
 #include <exception>
 #include <csignal>
 
@@ -473,9 +475,13 @@ static void asm_sigint_handler(int sig) {
 
 static void v2_terminate_handler() {
     fprintf(stderr, "\n=== std::terminate called ===\n");
+#ifdef __linux__
     void* bt[40];
     int n = backtrace(bt, 40);
     backtrace_symbols_fd(bt, n, fileno(stderr));
+#else
+    fprintf(stderr, "(backtrace unavailable on this platform)\n");
+#endif
     auto e = std::current_exception();
     if (e) {
         try { std::rethrow_exception(e); }

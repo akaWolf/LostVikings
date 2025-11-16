@@ -6,7 +6,9 @@
 
                 #include "vikings.exe.h"
  #include <unistd.h>
+#ifdef __linux__
 #include <execinfo.h>
+#endif
 #include <thread>
 #include <mutex>
 #include <atomic>
@@ -16316,6 +16318,7 @@ cs=0x1a2;eip=0x0077b8; 	T(AND(ax, 0x0FF));	// 17322 and     ax, 0FFh ;~ 01A2:77B
 sub_177bb:
  printf("AIL sub_177bb: ail_play_sound: sequence num = %x\n", ax);
  // Task #85: caller backtrace to find what fires this in orig (esp. for seqs missing in v2).
+#ifdef __linux__
  { extern int v2_dbg_pre_vm_iter;
    if (v2_dbg_pre_vm_iter >= 1165 && v2_dbg_pre_vm_iter <= 1200 || v2_dbg_pre_vm_iter >= 1525 && v2_dbg_pre_vm_iter <= 1555) {
      void* bt[10]; int n = backtrace(bt, 10);
@@ -16326,6 +16329,7 @@ sub_177bb:
      free(syms);
    }
  }
+#endif
 	// 17329
  printf("AIL %x\n", chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4]);
  // SDL replacement for AIL sub_1C763/77B/781: play SFX sequence ax. Then
