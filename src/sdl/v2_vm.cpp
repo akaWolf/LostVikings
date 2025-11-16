@@ -892,7 +892,11 @@ static uint16_t v2_word30BBE_snapshot = 0; // snapshot of word_30BBE at barrier 
 
 // ============================================================================
 // HW watchpoint via perf_event_open — catches ALL writes including memset/spillover
+// Linux-only: requires perf_event_open syscall + linux/perf_event ABI. On other
+// platforms (Windows mingw cross-build) the v2_hw_wp_* entry points become
+// no-op stubs so callers in vikings.exe_seg000.cpp / seg003.cpp still link.
 // ============================================================================
+#ifdef __linux__
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -1050,6 +1054,12 @@ void v2_hw_wp_arm_ds(uint16_t offset) {
     snprintf(label, sizeof(label), "shadow:0x%04X", offset);
     v2_hw_wp_arm(v2_vm_shadow_ds + offset, label);
 }
+
+#else  // !__linux__ — no-op stubs for non-Linux platforms (e.g. mingw Windows build)
+void v2_hw_wp_arm(uint8_t* /*ptr*/, const char* /*label*/) {}
+void v2_hw_wp_drain() {}
+void v2_hw_wp_arm_ds(uint16_t /*offset*/) {}
+#endif  // __linux__
 
 
 // Forward declarations
@@ -16495,15 +16505,49 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // In default mode seg000 also takes snapshot at sub_12352 line 5623; both
     // paths update the same buffer so worst case it's refreshed twice/frame.
     { extern void sdl_spec_snapshot_take(); sdl_spec_snapshot_take(); }
-    // TODO: SFX stale-slot cleanup. Orig DOS used AIL ISR callback to clear
-    // the SFX DS slot on natural-end (immediate, interrupt context). Our SDL
-    // port doesn't replicate that. Earlier workaround (is_handle_active in
-    // sub_177bb slot scan) races between orig and v2 threads → DS divergence
-    // (f168 DS-DIFF[0]: addr=0x9910 real=0x57A6 shadow=0xFFFF). Removed the
-    // workaround — slot scan now matches orig DOS asm strictly (only 0xFFFF).
-    // Trade-off: slots fill up after 4 SFX → new SFX silently dropped. To
-    // implement orig-equivalent: audio-thread-side immediate clear with
-    // atomic DS write on producer natural-end.
+    // SFX stale-slot cleanup (fix #126 elevator sound regression).
+    //
+    // Orig DOS used AIL ISR callback to clear DS slot on natural-end immediately.
+    // Our SDL port doesn't have that, so DS slot stays stale after audio ends
+    // naturally. Then orig sub_177bb scan for free slot (cur==0xFFFF) finds NONE
+    // — new SFX plays but handle isn't stored. Subsequent sub_1782a/1787f stop
+    // by seq can't find matching slot → no-op → elevator/platform sound never
+    // explicitly stops (only natural-ends after 1-2s, then immediately re-fired
+    // by next animation tick = perceived as continuous loop).
+    //
+    // Earlier fix put is_handle_active() check inside sub_177bb scan loop, but
+    // that raced between orig main thread and v2 mirror thread (both call
+    // sub_177bb in parallel, see different pool states → different slot choices
+    // → DS-DIFF at 0x9910). Reverted.
+    //
+    // Fix done HERE at FRAME_BEGIN sync point: orig main thread is blocked on
+    // v2_signal_phase, no race possible. Both real_ds and shadow_ds updated
+    // with same is_handle_active result → byte-identical mirror preserved.
+    {
+        extern AudioPool orig_pool, v2_pool;  // declared in play.cpp
+        static const uint16_t slot_h_off[4] = {0x990E, 0x9910, 0x9912, 0x9914};
+        static const uint16_t slot_s_off[4] = {0x9918, 0x991A, 0x991C, 0x991E};
+        auto clear_stale = [&](uint8_t* ds, AudioPool& pool) {
+            if (!ds) return;
+            for (int i = 0; i < 4; i++) {
+                uint16_t h = *(uint16_t*)(ds + slot_h_off[i]);
+                if (h != 0xFFFF && !pool.is_handle_active(h)) {
+                    *(uint16_t*)(ds + slot_h_off[i]) = 0xFFFF;
+                    *(uint16_t*)(ds + slot_s_off[i]) = 0xFFFF;
+                }
+            }
+        };
+#ifdef V2_ONLY
+        // V2_ONLY: v2_pool is real audio source for SFX → shadow tracks v2_pool.
+        clear_stale(v2_vm_shadow_ds, v2_pool);
+#else
+        // Default: orig_pool drives real audio. shadow stores same deterministic
+        // handle as real_ds via v2_sub_177bb_v2 (no v2_pool slot in default mode).
+        // Both shadow and real consult orig_pool for stale check → identical clears.
+        clear_stale(v2_vm_shadow_ds, orig_pool);
+        clear_stale(v2_vm_real_ds_ptr, orig_pool);
+#endif
+    }
 #ifdef V2_RENDER_FROM_SHADOW
     v2_vm_in_frame = true;
 #endif
