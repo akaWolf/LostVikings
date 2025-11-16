@@ -17629,8 +17629,12 @@ void v2_phase_render3(uint16_t ds_val) {
 void v2_phase_post_flip3(uint16_t ds_val) {
     if (!v2_frame_active) return;
     v2_watch_302("POST_FLIP3");
-    // PSNAP compare: catches divergence in render3.
-    v2_compare_phase_snap(V2_PSNAP_RENDER3_END, "v2_phase_post_flip3");
+    // PSNAP compare MOVED to end of body (line ~17929) — see comment below.
+    // Previously compared RENDER3_END here, but produced false-positive PSNAP-DIVERGE
+    // because v2 PRE_SUB_1086F barriers (cmd dispatch) fired BETWEEN orig RENDER3_END
+    // snap and orig POST_FLIP3 signal, leaving v2 shadow ahead of snap by cmd dispatch
+    // effects (ds:0x117D sub-sprite mode bytes, ds:0x34/0x956A/B dialog cmd state,
+    // ds:0x98DC etc). Task #115 + task #124 — both manifest as same architectural issue.
     uint8_t* s = v2_vm_shadow_ds;
     // orig block 9 (eips 0xDB-0xE7): word_30c14=0, sub_108c8, sub_10350, sub_1086f.
     // NO sub_10130 in this block — previously v2 had v2_sub_10130(s) here, removed
@@ -17927,6 +17931,27 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         }
     }
 #endif
+    // PSNAP compare at END of body — fixes task #115/#124.
+    //
+    // Orig timeline:
+    //   eip 0x00D8: sub_16775 → snap RENDER3_END (idx 8) captured here
+    //   eip 0x00DB: word_30C14 = 0
+    //   eip 0x00E1: sub_108c8
+    //   eip 0x00E4: sub_10350
+    //   eip 0x00E7: sub_1086f (CMD DISPATCH, fires PRE_SUB_1086F barriers per iter)
+    //   line 2097: snap POST_FLIP3_END (idx 9) captured here
+    //   line 2142: signal POST_FLIP3 fires
+    //
+    // v2 timeline:
+    //   v2_phase_render3 (RENDER3 signal handler) — runs pass 3 render
+    //   PRE_SUB_1086F barriers (fired by orig during sub_1086f) — v2 mirrors per cmd
+    //   v2_phase_post_flip3 ENTRY (POST_FLIP3 signal handler) — body runs:
+    //     word_30C14 = 0, sub_108c8 mirror, sub_10350 mirror (PART A/B V2_ONLY only),
+    //     V2_ONLY drain loop (skipped in default mode — orig drove via barriers).
+    //
+    // After body completes, v2 shadow = orig state at orig line 2097 (POST_FLIP3_END snap).
+    // Compare here, NOT at body entry (where shadow != either snap cleanly).
+    v2_compare_phase_snap(V2_PSNAP_POST_FLIP3_END, "v2_phase_post_flip3 (end)");
 }
 
 void v2_phase_frame_end(uint16_t ds_val) {
