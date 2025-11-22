@@ -1977,28 +1977,23 @@ cs=0x1a2;eip=0x000036; 	J(CALL(sub_1673c,0));	// 56 call    sub_1673C ;~ 01A2:00
 cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:0039
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(2); /* VM_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VM, ds);
-	extern uint16_t v2_orig_obj0_Y_after[5];
-	extern uint16_t v2_orig_obj0_Y_before;
 	extern void v2_record_orig_post_vm_hash(int idx);
-	extern void v2_record_orig_post_vm_entry();
-	if (myDrawInfo_v2) v2_orig_obj0_Y_before = *(uint16_t*)(raddr(ds, 0x1765));
-	if (myDrawInfo_v2) v2_record_orig_post_vm_entry();
 cs=0x1a2;eip=0x00003c; 	J(CALL(sub_1386b,0));	// 58 call    sub_1386B ;~ 01A2:003C
-	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[0] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(0); }
+	if (myDrawInfo_v2) v2_record_orig_post_vm_hash(0);
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(17); /* MAIN_AFTER_1386B */ }
 cs=0x1a2;eip=0x00003f; 	J(CALL(sub_1625d,0));	// 59 call    sub_1625D ;~ 01A2:003F
-	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[1] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(1); }
+	if (myDrawInfo_v2) v2_record_orig_post_vm_hash(1);
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(18); /* MAIN_AFTER_1625D */ }
 cs=0x1a2;eip=0x000042; 	J(CALL(sub_15546,0));	// 60 call    sub_15546 ;~ 01A2:0042
-	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[2] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(2); }
+	if (myDrawInfo_v2) v2_record_orig_post_vm_hash(2);
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(19); /* MAIN_AFTER_15546 */ }
 cs=0x1a2;eip=0x000045; 	J(CALL(sub_13916,0));	// 61 call    sub_13916 ;~ 01A2:0045
-	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[3] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(3); }
+	if (myDrawInfo_v2) v2_record_orig_post_vm_hash(3);
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(20); /* MAIN_AFTER_13916 */ }
 loc_10048:
 	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); }
 cs=0x1a2;eip=0x000048; 	J(CALL(sub_1064b,0));	// 64 call    sub_1064B ;~ 01A2:0048
-	if (myDrawInfo_v2) { v2_orig_obj0_Y_after[4] = *(uint16_t*)(raddr(ds, 0x1765)); v2_record_orig_post_vm_hash(4); }
+	if (myDrawInfo_v2) v2_record_orig_post_vm_hash(4);
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(21); /* MAIN_AFTER_1064B */ }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(3); /* POST_VM_END */ }
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_POST_VM, ds); v2_vm_verify_game_loop(ds); v2_vm_verify_tilemap(ds); v2_vm_verify_all_segments(ds); }

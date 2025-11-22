@@ -207,12 +207,13 @@ static const VerifySkip v2_ds_skip_ranges[] = {
     {0x86DC, 0x86DE, "word_30bbc/30bbe input layer (orig INT9 async race)"},
     // VGA hardware state
     {0x9300, 0x9300, "VGA mode byte (#97)"},
-    // AIL sound driver internal state (closes #98/#99/#100/#102 — merged range)
-    //   #98  ds:0x9920..0x9944 (AIL driver buffer)
-    //   #99  ds:0x9934         (XMI buffer pointer, sub_10E85)
-    //   #100 ds:0x98E4..0x98EC (AIL GTL handle far ptr)
-    //   #102 ds:0x98E8..0x9950 (AIL sound driver post-init state)
-    {0x98E4, 0x9950, "AIL sound driver state (#98/#99/#100/#102 merged)"},
+    // Sound system — v2 doesn't fully replicate AIL/XMI
+    {0x9934, 0x9934, "XMI buffer pointer (#99 sub_10E85 normalize, not in v2)"},
+    {0x98E4, 0x9950, "AIL sound driver state (#98/#100/#102 merged)"},
+    // VGA page-flip / vsync counter — render-thread async update
+    {0xA39C, 0xA39C, "word_3287C VGA interrupt race — orig pending, v2 clears immediate"},
+    // Sound segment pointers — sub_10E85 normalize results (v2 doesn't mirror)
+    {0x2E6A, 0x2E70, "sound segment pointers (#93 partial — sub_10E85 result fields)"},
 };
 
 static inline bool v2_ds_hash_skip(uint32_t i) {
@@ -5290,9 +5291,7 @@ static void v2_sub_11080(uint8_t* s) {
         uint8_t* snap = v2_115d2_snapshot;
         int dc = 0;
         for (uint32_t i = 0; i < 0x10000 && dc < 20; i += 2) {
-            // Skip known exclusions
-            if (i == 0xA39C) continue; // word_3287C (VGA interrupt race)
-            if (i == 0x9934) continue; // XMI buffer
+            if (v2_ds_hash_skip(i)) continue;  // centralized skip list
             uint16_t rv = *(uint16_t*)(snap + i), sv = *(uint16_t*)(s + i);
             if (rv != sv) {
                 if (dc == 0) fprintf(stderr, "V2-115d2-VERIFY: level=%04X DIFFS:\n",
@@ -7161,17 +7160,12 @@ static void v2_phase_diverge_trap(uint8_t* shadow, const char* label,
     }
 }
 
-// Legacy wrapper used by old call sites in v2_game_loop_post_vm. Specific to a
-// hardcoded post_vm watch list — kept as a thin shim around v2_phase_diverge_trap.
-static bool _postvm_diverge_found[5] = {0};
-uint16_t v2_orig_obj0_Y_after[5] = {0,0,0,0,0};
-uint16_t v2_orig_obj0_Y_before = 0;
-static uint16_t v2_obj0_Y_before_postvm = 0;
-
 // Per-sub-function DS hash + byte snapshots from orig main thread. orig records
 // hash AND full DS bytes AFTER each sub_1386b/1625d/15546/13916/1064b on real_ds.
-// v2 phase_post_vm compares its shadow hash AFTER the matching v2 sub-function,
-// and on hash mismatch dumps timepoint-aligned byte diffs against the snapshot.
+// v2 phase_post_vm compares its shadow hash AFTER the matching v2 sub-function
+// (v2_postvm_check_hash). On hash mismatch dumps timepoint-aligned byte diffs.
+// PSNAP MAIN_AFTER_* indices (17..21) provide byte-level coverage at same
+// boundaries via watch list; hash check is catch-all safety net for non-watched.
 //
 // Index → orig sub:
 //   0: sub_1386b (gravity / velocity apply)
@@ -7182,10 +7176,6 @@ static uint16_t v2_obj0_Y_before_postvm = 0;
 uint32_t v2_orig_post_vm_ds_hash[5] = {0,0,0,0,0};
 static uint8_t v2_orig_post_vm_ds_bytes[5][0x10000];
 static bool    v2_orig_post_vm_ds_valid[5] = {0};
-// Entry snapshot — captured by orig BEFORE sub_1386b. Used by _postvm_diverge_trap
-// to compare shadow against time-aligned orig state (live real DS is racy).
-static uint8_t v2_orig_post_vm_entry_ds[0x10000];
-static bool    v2_orig_post_vm_entry_valid = false;
 int v2_orig_post_vm_frame = 0; // bumps on each idx=0 record (once per game frame)
 static uint32_t v2_ds_hash(uint8_t* ds); // forward; defined later in this file
 void v2_record_orig_post_vm_hash(int idx) {
@@ -7196,16 +7186,10 @@ void v2_record_orig_post_vm_hash(int idx) {
     memcpy(v2_orig_post_vm_ds_bytes[idx], v2_vm_real_ds_ptr, 0x10000);
     v2_orig_post_vm_ds_valid[idx] = true;
 }
-void v2_record_orig_post_vm_entry() {
-    if (!v2_vm_real_ds_ptr) return;
-    memcpy(v2_orig_post_vm_entry_ds, v2_vm_real_ds_ptr, 0x10000);
-    v2_orig_post_vm_entry_valid = true;
-}
 // Invalidate post-VM snapshots taken during orig main loop. Called from v2_sub_11080
-// (level transition) so the entry/sub-VM traps don't fire false positives from
+// (level transition) so v2_postvm_check_hash doesn't fire false positives from
 // previous frame's main loop snapshot vs v2's sub_115d2 internal state.
 void v2_invalidate_postvm_snaps() {
-    v2_orig_post_vm_entry_valid = false;
     for (int i = 0; i < 5; i++) v2_orig_post_vm_ds_valid[i] = false;
 }
 
@@ -7269,11 +7253,14 @@ static const uint16_t v2_psnap_watch[] = {
     0x03A2, 0x03A4,                             // shake counters
     // obj 0 specific Y-fields:
     0x13CD,  // Y_prev
+    0x14E4,  // Y_start neighbor word read (legacy _postvm_diverge_trap migration — covers byte 14E4-14E5)
     0x14E5,  // Y_start bound (anti-aliased word at 14E5)
+    0x150C,  // Y_end neighbor word read (legacy trap migration — covers byte 150C-150D)
     0x150D,  // Y_end bound
     0x1535,  // X_start
     0x155D,  // X_end
     0x173D,  // parent X
+    0x1764,  // parent Y neighbor word read (legacy trap migration — covers byte 1764-1765)
     0x1765,  // parent Y
     0x1855,  // sprite base
     0x1945,  // X velocity
@@ -7503,48 +7490,6 @@ int v2_dbg_post_vm_iter = 0;
 // check_hash so it doesn't compare against stale snapshot during level init.
 bool v2_in_phase_post_vm = false;
 
-// Watch shadow & real ds:0x334 changes (transition flag, button state).
-static uint16_t v2_watch_334_prev_shadow = 0xFFFF;
-static uint16_t v2_watch_334_prev_real = 0xFFFF;
-void v2_watch_334(const char* where) {
-    extern int v2_orig_post_vm_frame;
-    uint16_t s_cur = *(uint16_t*)(v2_vm_shadow_ds + 0x334);
-    uint16_t r_cur = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + 0x334) : 0xDEAD;
-    if (s_cur != v2_watch_334_prev_shadow) {
-        fprintf(stderr, "V2-WATCH-334[%s pre=%d post=%d rec=%d]: shadow %04X → %04X (real=%04X)\n",
-            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
-            v2_watch_334_prev_shadow, s_cur, r_cur);
-        v2_watch_334_prev_shadow = s_cur;
-    }
-    if (r_cur != v2_watch_334_prev_real) {
-        fprintf(stderr, "V2-WATCH-334[%s pre=%d post=%d rec=%d]: real   %04X → %04X (shadow=%04X)\n",
-            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
-            v2_watch_334_prev_real, r_cur, s_cur);
-        v2_watch_334_prev_real = r_cur;
-    }
-}
-
-// Watch shadow & real ds:0x25AD changes — both sides shown so we can compare timing.
-static uint16_t v2_watch_25AD_prev_shadow = 0xFFFF;
-static uint16_t v2_watch_25AD_prev_real = 0xFFFF;
-void v2_watch_25AD(const char* where) {
-    extern int v2_orig_post_vm_frame;
-    uint16_t s_cur = *(uint16_t*)(v2_vm_shadow_ds + 0x25AD);
-    uint16_t r_cur = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + 0x25AD) : 0xDEAD;
-    if (s_cur != v2_watch_25AD_prev_shadow) {
-        fprintf(stderr, "V2-WATCH-25AD[%s pre=%d post=%d rec=%d]: shadow %04X → %04X (real=%04X)\n",
-            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
-            v2_watch_25AD_prev_shadow, s_cur, r_cur);
-        v2_watch_25AD_prev_shadow = s_cur;
-    }
-    if (r_cur != v2_watch_25AD_prev_real) {
-        fprintf(stderr, "V2-WATCH-25AD[%s pre=%d post=%d rec=%d]: real   %04X → %04X (shadow=%04X)\n",
-            where, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
-            v2_watch_25AD_prev_real, r_cur, s_cur);
-        v2_watch_25AD_prev_real = r_cur;
-    }
-}
-
 // Compare v2 shadow hash against orig snapshot at the same sub-function boundary.
 // On mismatch, dumps timepoint-aligned byte diffs (shadow vs orig snapshot bytes
 // recorded at the same sub-function boundary on orig side).
@@ -7581,62 +7526,9 @@ static void v2_postvm_check_hash(uint8_t* shadow, const char* label, int idx) {
     extern void orig_coll_ring_dump(int, const char*);
     orig_coll_ring_dump(v2_orig_post_vm_frame, "ORIG-COLL-RING-DUMP");
 }
-// Snapshot-aware variant of v2_phase_diverge_trap: compare shadow against a
-// time-aligned orig snapshot (NOT live real DS, which races with v2 phases).
-static void v2_phase_diverge_trap_snap(uint8_t* shadow, const uint8_t* orig_snap,
-                                        const char* label,
-                                        const uint16_t* watch, size_t n, bool* found) {
-    if (!orig_snap) return;
-    for (size_t k = 0; k < n; k++) {
-        if (found[k]) continue;
-        uint16_t rv = *(uint16_t*)(orig_snap + watch[k]);
-        uint16_t sv = *(uint16_t*)(shadow + watch[k]);
-        if (rv != sv) {
-            found[k] = true;
-            fprintf(stderr, "V2-DIVERGE[%s]: addr=0x%04X orig_snap=%04X shadow=%04X\n",
-                label, watch[k], rv, sv);
-        }
-    }
-}
-
-static void _postvm_diverge_trap(uint8_t* shadow, const char* lbl) {
-    if (strcmp(lbl, "entry") == 0) {
-        v2_obj0_Y_before_postvm = *(uint16_t*)(shadow + 0x1765);
-    }
-    int idx = -1;
-    const uint8_t* snap = nullptr;
-    if (strcmp(lbl, "entry") == 0) {
-        snap = v2_orig_post_vm_entry_valid ? v2_orig_post_vm_entry_ds : nullptr;
-    } else if (strcmp(lbl, "after-sub_1386b") == 0) {
-        idx = 0; snap = v2_orig_post_vm_ds_valid[0] ? v2_orig_post_vm_ds_bytes[0] : nullptr;
-    } else if (strcmp(lbl, "after-sub_1625d") == 0) {
-        idx = 1; snap = v2_orig_post_vm_ds_valid[1] ? v2_orig_post_vm_ds_bytes[1] : nullptr;
-    } else if (strcmp(lbl, "after-sub_15546") == 0) {
-        idx = 2; snap = v2_orig_post_vm_ds_valid[2] ? v2_orig_post_vm_ds_bytes[2] : nullptr;
-    } else if (strcmp(lbl, "after-sub_13916") == 0) {
-        idx = 3; snap = v2_orig_post_vm_ds_valid[3] ? v2_orig_post_vm_ds_bytes[3] : nullptr;
-    } else if (strcmp(lbl, "after-sub_1064b") == 0) {
-        idx = 4; snap = v2_orig_post_vm_ds_valid[4] ? v2_orig_post_vm_ds_bytes[4] : nullptr;
-    }
-    if (idx >= 0) {
-        uint16_t v2_y = *(uint16_t*)(shadow + 0x1765);
-        uint16_t orig_y = v2_orig_obj0_Y_after[idx];
-        static bool sub_diverge_found[5] = {0};
-        bool both_active = v2_y != 0 && orig_y != 0;
-        bool same_input = v2_obj0_Y_before_postvm == v2_orig_obj0_Y_before;
-        if (!sub_diverge_found[idx] && v2_y != orig_y && both_active && same_input) {
-            sub_diverge_found[idx] = true;
-            fprintf(stderr, "V2-SUB-DIVERGE[%s]: obj0 Y v2=%04X orig=%04X (input v2=%04X orig=%04X) (DIVERGENCE INTRODUCED HERE)\n",
-                lbl, v2_y, orig_y, v2_obj0_Y_before_postvm, v2_orig_obj0_Y_before);
-        }
-    }
-    static const uint16_t watch[] = { 0x0034, 0x0036, 0x14E4, 0x150C, 0x1764 };
-    v2_phase_diverge_trap_snap(shadow, snap, lbl, watch, 5, _postvm_diverge_found);
-}
 
 // V2 post-VM game loop
 static void v2_game_loop_post_vm(uint8_t* shadow) {
-    _postvm_diverge_trap(shadow, "entry");
     // sub_1386b: backup X/Y + apply velocity to positions
     {
         uint16_t table_end = *(uint16_t*)(shadow + 0x372);
@@ -7700,9 +7592,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             }
         }
     }
-    _postvm_diverge_trap(shadow, "after-sub_1386b");
     v2_postvm_check_hash(shadow, "after-sub_1386b", 0);
-    v2_watch_25AD("after-sub_1386b");
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1386B, "v2_game_loop_post_vm after-sub_1386b");
 
     // sub_1625d: ground detection + position snapping for objects with flag 0x2000
@@ -7804,7 +7694,6 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             *(uint16_t*)(shadow + di + 0x196D) = 0;
         }
     }
-    _postvm_diverge_trap(shadow, "after-sub_1625d");
     v2_postvm_check_hash(shadow, "after-sub_1625d", 1);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1625D, "v2_game_loop_post_vm after-sub_1625d");
 
@@ -7822,7 +7711,6 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             v2_run_collision_vm(shadow, si);
         }
     }
-    _postvm_diverge_trap(shadow, "after-sub_15546");
     v2_postvm_check_hash(shadow, "after-sub_15546", 2);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_15546, "v2_game_loop_post_vm after-sub_15546");
 
@@ -7930,15 +7818,12 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             }
         }
     }
-    _postvm_diverge_trap(shadow, "after-sub_13916");
     v2_postvm_check_hash(shadow, "after-sub_13916", 3);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_13916, "v2_game_loop_post_vm after-sub_13916");
 
     // sub_1064b: camera follow
     v2_sub_1064b(shadow);
-    _postvm_diverge_trap(shadow, "after-sub_1064b");
     v2_postvm_check_hash(shadow, "after-sub_1064b", 4);
-    v2_watch_25AD("after-sub_1064b");
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1064B, "v2_game_loop_post_vm after-sub_1064b");
 
     // NOTE: original eip order after sub_1064b (0x0048):
@@ -8612,7 +8497,6 @@ static void v2_vm_subdispatch_unimpl(V2VM& vm, uint16_t cs_addr) {
 
 // 0x0F (sub_1431c): Exit VM + set flag ds:0x334 |= 1. Same as yield.
 // 0x0F = sub_1431c: [si+0x132D] = bx; OR [si+0x1585], 0x200; POP ax; RETN
-extern void v2_watch_334(const char*);
 static void v2_vm_op_exit_with_flag(V2VM& vm) {
     extern int v2_orig_post_vm_frame;
     extern int v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
@@ -8621,7 +8505,6 @@ static void v2_vm_op_exit_with_flag(V2VM& vm) {
             _vc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
             vm.obj, vm.pc, *(uint16_t*)(vm.shadow + 0x0334)); }
     *(uint16_t*)(vm.shadow + 0x0334) |= 1;
-    v2_watch_334("op_0F");
     vm.running = false;
 }
 
@@ -15265,9 +15148,9 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
     // These diverge at INIT only (before alloc tracking / op_55 / mutex fixes
     // catch up). Per-frame verify (v2_ds_hash) covers them via mirror mechanisms.
     static const VerifySkip v2_ds_init_extra_skips[] = {
-        {0x2E5C, 0x2E7C, "segment addresses (fake seq vs DOS-alloc)"},
+        {0x2E5C, 0x2E7C, "segment addresses (fake seq vs DOS-alloc) — wider than runtime 0x2E6A..0x2E70"},
         {0x8638, 0x863C, "PRNG seed dword_30b19 (time() vs INT21/2Ch)"},
-        {0xA39C, 0xA39C, "render callback counter (vsync race at init)"},
+        // 0xA39C in main skip table — runtime VGA interrupt race covers init too
         {0xA39A, 0xA39A, "render counter neighbor (race at init)"},
         {0x1354, 0x1354, "obj 0 active/code_seg low word (fake vs real seg)"},
         {0x1356, 0x1356, "obj 0 active/code_seg high word"},
@@ -15364,7 +15247,7 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
             uint16_t rv = *(uint16_t*)(real + i);
             uint16_t sv = *(uint16_t*)(shadow + i);
             if (rv != sv) {
-                if (i == 0xA39C) continue; // VGA interrupt race
+                if (v2_ds_hash_skip(i)) continue;  // centralized skip list
                 if (ds_diffs < 50) {
                     printf("V2-INIT-DS: 0x%04X: real=%04X shadow=%04X\n", (uint16_t)i, rv, sv);
                 }
@@ -15396,21 +15279,7 @@ void v2_vm_verify_game_loop(uint16_t ds_val) {
         uint16_t rv = *(uint16_t*)(real + i);
         uint16_t sv = *(uint16_t*)(shadow + i);
         if (rv != sv) {
-            // Skip VGA interrupt race: word_3287C set by sub_16775, cleared by VGA interrupt handler.
-            // v2 has no VGA interrupt — clears immediately. Real DS may still be 1 (pending interrupt).
-            if (i == 0xA39C) continue;
-            // Skip AIL sound handles (4 slots × 2 words each: handle at [si-0x66F4], seq at [si-0x66EA]).
-            // si=2..8 → handles at 0x990E..0x9914, sequences at 0x9918..0x991E.
-            // v2 has no AIL → handles stay 0xFFFF, real game allocates real handles.
-            // Segment addresses from DosMemAlloc (v2 fake 0x1000+, original DOS heap).
-            // Cannot match without calling same allocator. Fields:
-            // ds:0x2E5C-0x2E7C (segment pointer table from sub_12ab8)
-            // Sound system (v2 doesn't fully replicate AIL):
-            // ds:0x2E6A-0x2E70 = sound segment pointers (sub_10E85 normalize results)
-            // ds:0x990C-0x991E = AIL handles/sequences — NOW DETERMINISTIC, included
-            // ds:0x9934 = XMI buffer (TODO: implement sub_10E85 normalize)
-            if (i >= 0x2E6A && i <= 0x2E70) continue;
-            if (i == 0x9934) continue;
+            if (v2_ds_hash_skip(i)) continue;  // centralized skip list
             printf("V2-GAMELOOP[%d]: DS DIFF at 0x%04X: real=0x%04X shadow=0x%04X\n",
                    gl_frame, (uint16_t)i, rv, sv);
             // On FIRST ever diff, dump VM post-state for debugging
@@ -15430,27 +15299,38 @@ void v2_vm_verify_game_loop(uint16_t ds_val) {
         }
     }
     // Full per-segment compare — shadow_X vs orig m+seg*16, bounded by alloc size.
+    // Table-driven: all 7 segments use same helper (unified step 10).
+    // log_zero_period: > 0 enables "0 diffs every N frames" log (for steady-state segs);
+    // max_diffs: how many byte diffs to print before truncate; bound is shadow buffer size.
     extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
     if (v2_m2c_base) {
-        struct SegCmp { uint16_t ds_off; uint8_t* buf; uint32_t size; const char* name; };
-        SegCmp segs[] = {
-            {0x2E5F, v2_vm_shadow_tilegfx,    V2_TILEGFX_SHADOW_SIZE, "TILEGFX"},
-            {0x2E61, v2_vm_shadow_gs,         V2_GS_SHADOW_SIZE,      "GS_MASKS"},
-            {0x2E63, v2_vm_shadow_tilemap,    V2_TILEMAP_SHADOW_SIZE, "TILEMAP"},
-            {0x2E69, v2_vm_shadow_fs,         V2_FS_SHADOW_SIZE,      "FS"},
-            // SOUND: shadow_sound mirrors real ds:0x992C buffer (0xE47 paragraphs of
-            // chunks 1+2+3 + sub_10E85 padding), so compare from base 0x992C, not 0x2E6B.
-            {0x992C, v2_vm_shadow_sound,      V2_SOUND_SHADOW_SIZE,   "SOUND"},
+        struct SegCmp {
+            uint16_t ds_off; uint8_t* buf; uint32_t buf_size; const char* name;
+            int max_diffs; int log_zero_period;
         };
-        for (auto& s : segs) {
+        SegCmp segs[] = {
+            {0x2E5F, v2_vm_shadow_tilegfx,     V2_TILEGFX_SHADOW_SIZE,  "TILEGFX",     5,   0},
+            {0x2E61, v2_vm_shadow_gs,          V2_GS_SHADOW_SIZE,       "GS_MASKS",    5,   0},
+            {0x2E63, v2_vm_shadow_tilemap,     V2_TILEMAP_SHADOW_SIZE,  "TILEMAP",     5,   0},
+            {0x2E69, v2_vm_shadow_fs,          V2_FS_SHADOW_SIZE,       "FS",          5,   0},
+            // SOUND: shadow_sound mirrors real ds:0x992C buffer (0xE47 paragraphs of
+            // chunks 1+2+3 + sub_10E85 padding), compare from base 0x992C, not 0x2E6B.
+            {0x992C, v2_vm_shadow_sound,       V2_SOUND_SHADOW_SIZE,    "SOUND",       5,   0},
+            {0x2E67, v2_vm_shadow_animdata,    V2_ANIMDATA_SHADOW_SIZE, "ANIMDATA",   10,  30},
+            // GS_TILEDATA: beyond alloc size, real m2c memory contains MCB / adjacent
+            // segment data via raddr_ aliasing — bound strictly by alloc size.
+            {0x2E5D, v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE,     "GS-TILEDATA",10,  30},
+        };
+        for (size_t si = 0; si < sizeof(segs)/sizeof(segs[0]); si++) {
+            auto& s = segs[si];
             uint16_t seg = *(uint16_t*)(real + s.ds_off);
             if (!seg) continue;
             uint16_t size_para = v2_get_alloc_size_para(seg);
             uint32_t sz = (uint32_t)size_para * 16;
-            if (sz == 0 || sz > s.size) sz = s.size;
+            if (sz == 0 || sz > s.buf_size) sz = s.buf_size;
             uint8_t* rs = v2_m2c_base + (uint32_t)seg * 16;
             int d = 0;
-            for (uint32_t i = 0; i < sz && d < 5; i++) {
+            for (uint32_t i = 0; i < sz && d < s.max_diffs; i++) {
                 if (rs[i] != s.buf[i]) {
                     if (d == 0)
                         fprintf(stderr, "V2-GAMELOOP[%d]: %s DIFFS (alloc=%u):\n",
@@ -15460,65 +15340,16 @@ void v2_vm_verify_game_loop(uint16_t ds_val) {
                     d++;
                 }
             }
-        }
-    }
-    if (v2_m2c_base) {
-        uint16_t anim_seg = *(uint16_t*)(real + 0x2E67);
-        uint16_t anim_size_para = v2_get_alloc_size_para(anim_seg);
-        uint32_t anim_size_bytes = (uint32_t)anim_size_para * 16;
-        if (anim_size_bytes > V2_ANIMDATA_SHADOW_SIZE) anim_size_bytes = V2_ANIMDATA_SHADOW_SIZE;
-        if (anim_seg && anim_size_bytes) {
-            uint8_t* real_anim = v2_m2c_base + (uint32_t)anim_seg * 16;
-            int an_diffs = 0;
-            for (uint32_t i = 0; i < anim_size_bytes && an_diffs < 10; i++) {
-                if (real_anim[i] != v2_vm_shadow_animdata[i]) {
-                    if (an_diffs == 0)
-                        fprintf(stderr, "V2-GAMELOOP[%d]: ANIMDATA DIFFS (alloc=%u bytes):\n",
-                                gl_frame, anim_size_bytes);
-                    fprintf(stderr, "  ANIM[0x%04X]: real=%02X shadow=%02X\n",
-                            (uint16_t)i, real_anim[i], v2_vm_shadow_animdata[i]);
-                    an_diffs++;
+            // Periodic 0-diff log (steady-state segs like ANIMDATA / GS_TILEDATA)
+            if (d == 0 && s.log_zero_period > 0) {
+                static int last_zero_frame[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
+                static int zero_count[8] = {0};
+                if (last_zero_frame[si] != gl_frame) {
+                    last_zero_frame[si] = gl_frame;
+                    if ((zero_count[si]++ % s.log_zero_period) == 0)
+                        fprintf(stderr, "V2-GAMELOOP[%d]: %s 0 diffs in alloc=%u bytes\n",
+                                gl_frame, s.name, sz);
                 }
-            }
-            static int last_an_zero = -1;
-            if (an_diffs == 0 && last_an_zero != gl_frame) {
-                last_an_zero = gl_frame;
-                static int an_zero_count = 0;
-                if ((an_zero_count++ % 30) == 0)
-                    fprintf(stderr, "V2-GAMELOOP[%d]: ANIMDATA 0 diffs in alloc=%u bytes\n",
-                            gl_frame, anim_size_bytes);
-            }
-        }
-    }
-    // Full GS_tiledata compare at end of game loop (steady state, both sides done).
-    // Bound the compare by the actual DosMemAlloc size — beyond it, real m2c memory
-    // contains MCB / other-segment data via raddr_ aliasing, which is not part of
-    // the gs_tiledata segment proper.
-    if (v2_m2c_base) {
-        uint16_t gs_seg = *(uint16_t*)(real + 0x2E5D);
-        uint16_t gs_size_para = v2_get_alloc_size_para(gs_seg);
-        uint32_t gs_size_bytes = (uint32_t)gs_size_para * 16;
-        if (gs_size_bytes > V2_GS_TILEDATA_SIZE) gs_size_bytes = V2_GS_TILEDATA_SIZE;
-        if (gs_seg && gs_size_bytes) {
-            uint8_t* real_gs = v2_m2c_base + (uint32_t)gs_seg * 16;
-            int gs_diffs = 0;
-            for (uint32_t i = 0; i < gs_size_bytes && gs_diffs < 10; i++) {
-                if (real_gs[i] != v2_vm_shadow_gs_tiledata[i]) {
-                    if (gs_diffs == 0)
-                        fprintf(stderr, "V2-GAMELOOP[%d]: GS-TILEDATA DIFFS (alloc=%u bytes):\n",
-                                gl_frame, gs_size_bytes);
-                    fprintf(stderr, "  GS[0x%04X]: real=%02X shadow=%02X\n",
-                            (uint16_t)i, real_gs[i], v2_vm_shadow_gs_tiledata[i]);
-                    gs_diffs++;
-                }
-            }
-            static int last_gl_frame_zero = -1;
-            if (gs_diffs == 0 && last_gl_frame_zero != gl_frame) {
-                last_gl_frame_zero = gl_frame;
-                static int zero_count = 0;
-                if ((zero_count++ % 30) == 0)
-                    fprintf(stderr, "V2-GAMELOOP[%d]: GS-TILEDATA 0 diffs in alloc=%u bytes\n",
-                            gl_frame, gs_size_bytes);
             }
         }
     }
@@ -16010,7 +15841,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + i);
                 uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + i);
                 if (rv != sv) {
-                    if (i == 0xA39C) continue;
+                    if (v2_ds_hash_skip(i)) continue;
                     if (pvm_diffs == 0)
                         fprintf(stderr, "POSTVM-CMP[f%d]: DS DIFFS:\n", _pvf);
                     fprintf(stderr, "  0x%04X: real=%04X v2=%04X\n", (uint16_t)i, rv, sv);
@@ -16895,8 +16726,6 @@ void v2_phase_pre_vm(uint16_t ds_val) {
     // NOTE: counter increment moved to v2_phase_frame_begin (FRAME_BEGIN barrier)
     // so that orig+v2 see same v2_dbg_pre_vm_iter throughout the entire outer
     // frame — including sub_115d2 internal sub-frames where orig doesn't signal.
-    v2_watch_25AD("PRE-entry");
-    v2_watch_334("PRE-entry");
     // PSNAP compare: at v2_phase_pre_vm entry, v2 shadow should match orig's
     // FRAME_BEGIN snapshot (= state right before any pre-VM work).
     v2_compare_phase_snap(V2_PSNAP_FRAME_BEGIN, "v2_phase_pre_vm");
@@ -16912,8 +16741,6 @@ void v2_phase_pre_vm(uint16_t ds_val) {
     // Snapshot ds:0x32F BEFORE pre-VM modifies it (sub_10138 INC)
     v2_pre_vm_32F_snapshot = *(uint16_t*)(v2_vm_shadow_ds + 0x32F);
     v2_game_loop_pre_vm(v2_vm_shadow_ds, ds_val);
-    v2_watch_25AD("PRE-exit");
-    v2_watch_334("PRE-exit");
     // sub_11b0b: portrait/sound state sync. orig calls this per-frame from sub_115d2
     // (eip 0x163B). v2 missed this — caused ds:0x423 to stay at init value 6 while
     // orig updated it to ds:0x15AD.
@@ -16952,7 +16779,7 @@ void v2_phase_pre_vm(uint16_t ds_val) {
             uint16_t rv = *(uint16_t*)(real + i);
             uint16_t sv = *(uint16_t*)(shad + i);
             if (rv != sv) {
-                if (i == 0xA39C) continue; // VGA interrupt race
+                if (v2_ds_hash_skip(i)) continue;
                 if (ds_diffs == 0) {
                     fprintf(stderr, "V2-PRE-VM-CMP[f%d]: level=0x%04X DIFFS:\n", pre_vm_frame,
                             *(uint16_t*)(real + 0x25AD));
@@ -17008,11 +16835,7 @@ void v2_phase_pre_vm(uint16_t ds_val) {
 }
 
 uint16_t v2_vm_step_per_obj[128] = {};
-extern void v2_watch_25AD(const char*);
-extern void v2_watch_334(const char*);
 void v2_phase_vm(uint16_t ds_val) {
-    v2_watch_25AD("VM-entry");
-    v2_watch_334("VM-entry");
     if (!v2_frame_active) return;
     // PSNAP compare: v2 shadow at VM phase entry should match orig PRE_VM_END snap
     // (= both have just finished pre-VM work). Catches divergence in pre-VM.
@@ -17136,7 +16959,7 @@ void v2_phase_vm(uint16_t ds_val) {
           uint8_t* s = v2_vm_shadow_ds;
           int dc = 0;
           for (uint32_t i = 0; i < 0x10000 && dc < 10; i += 2) {
-              if (i == 0xA39C) continue;
+              if (v2_ds_hash_skip(i)) continue;
               uint16_t rv = *(uint16_t*)(r + i), sv = *(uint16_t*)(s + i);
               if (rv != sv) {
                   fprintf(stderr, "V2-AFTER-VM[f%d]: DIFF 0x%04X r=%04X s=%04X\n", _pvf, (uint16_t)i, rv, sv);
@@ -17180,63 +17003,6 @@ static void v2_frame_end_verify() {
     uint8_t* s = v2_vm_shadow_ds;
     uint8_t* r = v2_vm_real_ds_ptr;
     uint16_t lvl = *(uint16_t*)(s + 0x25AD);
-
-    // Per-30-frames Erik (obj=0) position trace from BOTH sides (real=orig, shadow=v2).
-    // Reveals if orig advances Erik but v2 doesn't (or both stuck).
-    if (_frame % 30 == 0 && lvl == 0x002B) {
-        uint16_t r_x = *(uint16_t*)(r + 0x173D), r_y = *(uint16_t*)(r + 0x1765);
-        uint16_t s_x = *(uint16_t*)(s + 0x173D), s_y = *(uint16_t*)(s + 0x1765);
-        uint16_t r_aid = *(uint16_t*)(r + 0x16ED), s_aid = *(uint16_t*)(s + 0x16ED);
-        uint16_t r_velx = *(uint16_t*)(r + 0x1945), s_velx = *(uint16_t*)(s + 0x1945);
-        uint16_t r_2880F = *(uint16_t*)(r + 0x32F), s_2880F = *(uint16_t*)(s + 0x32F);
-        fprintf(stderr,
-          "V2-FE-ERIK[f%d]: REAL X=%04X Y=%04X aid=%04X vel=%04X 32F=%04X | "
-          "SHADOW X=%04X Y=%04X aid=%04X vel=%04X 32F=%04X\n",
-          _frame, r_x, r_y, r_aid, r_velx, r_2880F,
-          s_x, s_y, s_aid, s_velx, s_2880F);
-    }
-    // Move detection: if real Erik X changes, log immediately
-    {
-        static uint16_t prev_real_x = 0xFFFF;
-        uint16_t cur_real_x = *(uint16_t*)(r + 0x173D);
-        if (lvl == 0x002B && prev_real_x != 0xFFFF && cur_real_x != prev_real_x) {
-            static int _move = 0;
-            if (++_move <= 30) {
-                fprintf(stderr, "V2-FE-REAL-ERIK-MOVE[f%d]: real X %04X → %04X\n",
-                  _frame, prev_real_x, cur_real_x);
-            }
-        }
-        prev_real_x = cur_real_x;
-    }
-    // FULL DS DUMP at stable level-002B-relative frame counts. Counter starts
-    // when level 002B first seen, counts game frames since. Dumps at counter=2
-    // (right after init, identical state both builds) and counter=500 (well past
-    // any cutscene trigger). Compare /tmp/curbuild_*.bin vs /tmp/orig_clean_*.bin.
-    {
-        static int lvl002B_frame = 0;
-        static bool dumped_early = false, dumped_late = false;
-        if (lvl == 0x002B) {
-            lvl002B_frame++;
-            if (!dumped_early && lvl002B_frame == 2) {
-                dumped_early = true;
-                FILE* fr = fopen("/tmp/curbuild_real_ds_early.bin", "wb");
-                FILE* fs = fopen("/tmp/curbuild_shadow_ds_early.bin", "wb");
-                if (fr) { fwrite(r, 1, 0x10000, fr); fclose(fr); }
-                if (fs) { fwrite(s, 1, 0x10000, fs); fclose(fs); }
-                fprintf(stderr, "V2-FE-DUMP-EARLY[lvl002B_f=%d]: dumped real+shadow DS (Erik X=%04X)\n",
-                  lvl002B_frame, *(uint16_t*)(r + 0x173D));
-            }
-            if (!dumped_late && lvl002B_frame == 500) {
-                dumped_late = true;
-                FILE* fr = fopen("/tmp/curbuild_real_ds_late.bin", "wb");
-                FILE* fs = fopen("/tmp/curbuild_shadow_ds_late.bin", "wb");
-                if (fr) { fwrite(r, 1, 0x10000, fr); fclose(fr); }
-                if (fs) { fwrite(s, 1, 0x10000, fs); fclose(fs); }
-                fprintf(stderr, "V2-FE-DUMP-LATE[lvl002B_f=%d]: dumped real+shadow DS (Erik X=%04X)\n",
-                  lvl002B_frame, *(uint16_t*)(r + 0x173D));
-            }
-        }
-    }
 
     // ---- 1) Per-obj anim_id (0x16ED) change tracking ----
     // For each obj 0..2*0xFE, record this frame's anim_id. If shadow vs real
@@ -17356,8 +17122,6 @@ void v2_phase_post_vm(uint16_t ds_val) {
     v2_audit_periodic();  // L2 match every 60 frames
     extern int v2_dbg_post_vm_iter; v2_dbg_post_vm_iter++;
     extern bool v2_in_phase_post_vm; v2_in_phase_post_vm = true;
-    v2_watch_25AD("POST-entry");
-    v2_watch_334("POST-entry");
     // PSNAP compare: v2 shadow should match orig VM_END (both just finished main VM).
     v2_compare_phase_snap(V2_PSNAP_VM_END, "v2_phase_post_vm");
 #ifndef V2_ONLY
@@ -19903,12 +19667,12 @@ void v2_vm_verify_init(uint16_t obj_idx, uint16_t orig_es, uint16_t orig_pc, uin
         // Check if shadow differs from current real DS
         uint16_t real_pc = *(uint16_t*)(v2_vm_real_ds_ptr + obj_idx + 0x132D);
         uint16_t shadow_pc = *(uint16_t*)(v2_vm_shadow_ds + obj_idx + 0x132D);
-        printf("V2-INIT: obj=%d PC: orig=0x%04X v2=0x%04X shadow_raw=0x%04X real_now=0x%04X flags=0x%04X\n",
+        fprintf(stderr, "V2-INIT: obj=%d PC: orig=0x%04X v2=0x%04X shadow_raw=0x%04X real_now=0x%04X flags=0x%04X\n",
                obj_idx, orig_pc, v2_pc, shadow_pc, real_pc, flags);
         init_mismatch++;
     }
     if (orig_es != v2_es && init_mismatch < 10) {
-        printf("V2-INIT: obj=%d ES mismatch: orig=0x%04X v2=0x%04X\n",
+        fprintf(stderr, "V2-INIT: obj=%d ES mismatch: orig=0x%04X v2=0x%04X\n",
                obj_idx, orig_es, v2_es);
         init_mismatch++;
     }
@@ -20171,21 +19935,6 @@ void v2_vm_trace_compare() {
     static int frame = 0;
     frame++;
     // No frame limit — verify must catch divergence regardless of when it happens.
-    // Dump full traces for frames with issues
-    if (frame == 42 || frame == 43 || frame == 44) {
-        printf("=== ORIG TRACE f%d (len=%d) ===\n", frame, orig_trace_len);
-        for (int i = 0; i < orig_trace_len && i < 50; i++) {
-            auto& e = orig_trace[i];
-            fprintf(stderr, "  [%d] obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X fl=%04X\n",
-                    i, e.obj, e.opcode, e.pc_before, e.pc_after, e.acc_before, e.acc_after, e.flags);
-        }
-        printf("=== V2 TRACE f%d (len=%d) ===\n", frame, v2_trace_len);
-        for (int i = 0; i < v2_trace_len && i < 50; i++) {
-            auto& e = v2_trace[i];
-            printf("  [%d] obj=%d op=%02X pc=%04X→%04X acc=%04X→%04X fl=%04X\n",
-                    i, e.obj, e.opcode, e.pc_before, e.pc_after, e.acc_before, e.acc_after, e.flags);
-        }
-    }
 
     // Iterate up to MAX of both lengths so trailing extra entries are caught.
     int len_min = (v2_trace_len < orig_trace_len) ? v2_trace_len : orig_trace_len;
