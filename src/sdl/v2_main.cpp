@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include "v2_input_recorder.h"
 #include <csignal>
 
 extern bool need_quit;
@@ -76,10 +77,16 @@ bool g_debug_mode = false;
 int main(int argc, char* argv[]) {
     printf("V2_ONLY: starting standalone v2 build (no m2c)\n");
 
+    const char* record_input = nullptr;
+    const char* replay_input = nullptr;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             g_debug_mode = true;
             fprintf(stderr, "[v2_main] --debug enabled: F4/F5/F6 cheats active\n");
+        } else if (strncmp(argv[i], "--record-input=", 15) == 0) {
+            record_input = argv[i] + 15;
+        } else if (strncmp(argv[i], "--replay-input=", 15) == 0) {
+            replay_input = argv[i] + 15;
         }
     }
 
@@ -90,6 +97,9 @@ int main(int argc, char* argv[]) {
     // Init SDL window + sound (only v2 window — orig render not needed since m2c disabled)
     render_init_v2(nullptr);
     sound_init();
+
+    // Input record/replay (V2_ONLY only). File format is SDL-independent.
+    v2_input_recorder_init(record_input, replay_input);
 
     // Load baked static EXE data, then point v2 base at it.
     v2_load_static_data();

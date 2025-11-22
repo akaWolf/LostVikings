@@ -3,6 +3,7 @@
 #include <vector>
 #include <cassert>
 #include <cstdio>
+#include "v2_input_recorder.h"
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -404,7 +405,7 @@ void updateDraw()
 		   while (!need_quit)
 			{
 			   SDL_Event event;
-			   while (SDL_PollEvent(&event) > 0) {
+			   while (v2_input_poll_event(&event) > 0) {
 				 // Per-event scope: declared INSIDE while so they reset on each
 				 // event. Previously key_val leaked from previous keydown, so
 				 // pressing a spec-only key (Q/R/Y/A/N/M/X/ALT/F10/DEL/F4-F6/1-3)

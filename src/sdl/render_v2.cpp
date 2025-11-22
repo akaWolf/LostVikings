@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstdio>
+#include "v2_input_recorder.h"
 #include <unistd.h>  // _exit
 
 // ============================================================================
@@ -132,9 +133,10 @@ void render_thread_proc_v2(void* _state)
     {
 #ifdef V2_ONLY
       // V2_ONLY: orig window hidden, no event handler there → handle events here.
+      // v2_input_poll_event = drop-in SDL_PollEvent wrapper for record/replay.
       extern uint16_t input_keys, input_keys_v2;
       SDL_Event event;
-      while (SDL_PollEvent(&event) > 0) {
+      while (v2_input_poll_event(&event) > 0) {
           switch (event.type) {
           case SDL_QUIT:
               need_quit = true;

@@ -73,7 +73,8 @@ CXX_SRCS := \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
-  src/sdl/v2_vm.cpp
+  src/sdl/v2_vm.cpp \
+  src/sdl/v2_input_recorder.cpp
 else
 CXX_SRCS := \
   src/vikings.exe.cpp \
@@ -90,7 +91,8 @@ CXX_SRCS := \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
-  src/sdl/v2_vm.cpp
+  src/sdl/v2_vm.cpp \
+  src/sdl/v2_input_recorder.cpp
 endif
 
 # Common adlmidi sources (always compiled)

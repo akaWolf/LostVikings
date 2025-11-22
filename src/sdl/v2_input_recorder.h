@@ -1,0 +1,38 @@
+#pragma once
+#include <SDL2/SDL.h>
+
+// V2_ONLY input record/replay. Drop-in wrapper for SDL_PollEvent.
+//
+// - Record mode (--record-input=<file>): keyboard events from SDL_PollEvent
+//   are also logged to file with relative timestamps.
+// - Replay mode (--replay-input=<file>): real keyboard events from SDL are
+//   IGNORED entirely. Keyboard events come from the recorded file at the
+//   recorded timestamps. Non-keyboard events (SDL_QUIT, SDL_WINDOWEVENT)
+//   still flow through SDL_PollEvent so window can be closed normally.
+// - Disabled mode (neither flag): pure SDL_PollEvent pass-through.
+//
+// File format (one event per line, frame-based for deterministic replay):
+//   <frame_number> KD <ACTION>
+//   <frame_number> KU <ACTION>
+// frame_number = v2_dbg_pre_vm_iter at event time. Replay injects event when
+// current frame counter reaches that value → bit-by-bit reproducibility
+// regardless of system clock / FPS variance.
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Initialize: pass record_file != NULL for record mode, replay_file != NULL
+// for replay mode. Both NULL = pass-through. Mutually exclusive.
+void v2_input_recorder_init(const char* record_file, const char* replay_file);
+
+// Drop-in replacement for SDL_PollEvent(&e). Returns 1 if event filled, 0 if
+// no event pending. Behaviour depends on mode (see header comment).
+int v2_input_poll_event(SDL_Event* e);
+
+// Cleanup.
+void v2_input_recorder_shutdown(void);
+
+#ifdef __cplusplus
+}
+#endif
