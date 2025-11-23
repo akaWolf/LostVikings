@@ -17770,7 +17770,19 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         s[0x917C] = sdl_spec_get(0x917C);
 #endif
 #ifdef V2_ONLY
-        // PART B (V2_ONLY only): detect F10/ALT+X/ALT+Q and drive quit-prompt
+        // PART B (V2_ONLY only): detect F10/ALT+X/ALT+Q and drive quit-prompt.
+        //
+        // Orig flow (seg000:2589-2634):
+        //   F10=1 OR (ALT+X) OR (ALT+Q) → loc_10374 →
+        //     if word_288AC==0x8000 || byte_2AAAF&8: loc_10E35 (QUIT to DOS)
+        //     else: loc_10389 → sub_103ca → sub_104a1 (password screen) →
+        //           post-loop check word_28814 & 2 → if set, loc_10E35.
+        //
+        // V2 has canonical helpers v2_pw_pre_loop / v2_pw_iter_body /
+        // v2_pw_post_loop that mirror sub_103ca + sub_104a1. ESC path at
+        // line ~5850 uses them correctly. F10 path MUST use same — earlier
+        // inline impl had broken loop body (no render calls) → menu invisible,
+        // music_play looped (field-reported bug).
         bool trigger = false;
         if (s[0x91B0] == 1) trigger = true;
         else if (s[0x91A4] == 1) {
@@ -17778,234 +17790,52 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         }
         if (trigger) {
             if (*(uint16_t*)(s + 0x3CC) == 0x8000 || (s[0x25CF] & 8)) {
-                // loc_10E35 path: orig = QUIT to DOS (sub_16546 VGA cleanup +
-                // sub_1754c AIL exit + INT 21h/49 free memory + INT 21h/4C
-                // terminate). For v2: stop sound + _exit(0).
+                // loc_10E35: direct QUIT to DOS (orig: sub_16546 VGA cleanup +
+                // sub_1754c AIL exit + INT 21h/4C). v2: stop sound + _exit(0).
                 orig_pool.stop_all_sfx();
                 v2_pool.stop_all_sfx();
                 fflush(stdout); fflush(stderr);
                 extern bool need_quit; need_quit = true; SDL_Delay(50);
                 _exit(0);
             } else {
-                // loc_10389 path: palette clear → sub_103CA (blocking transition UI) → sub_11080
-                // OUT(0x3C8, 3); OUT(0x3C9, 0,0,0); — VGA palette write, commented
-                s[0x7F0B] = 0; s[0x7F0C] = 0; s[0x7F0D] = 0;
-
-                // sub_103CA: blocking level transition UI (text + render loop).
-                // Orig shows "Level Complete" text, waits for button, renders 3 full passes.
-                // DS side effects: sub_165aa rotation (3 calls), text glyphs, sub_1DD9C mode bytes.
-                // Mirror orig sub_103ca eip 0x3CA-0x3CD: MOV ax, 0; CALL sub_177bb (stop music)
-                if (s[0x304] == 0) fx::play_sfx_no_audit(s, 0);
-                // sub_103ca: full transition text. Verified with seg000 lines 533-556.
-                // 1. loc_124A9(ax=3, si=0xD, di=0xC): "Level Complete" text
-                {
-                    uint16_t si_t1 = 0x0D, di_t1 = 0x0C;
-                    v2_sub_12515(s, 3);                         // sub_12515(ax=3)
-                    uint16_t bx_t1 = *(uint16_t*)(s + 0x2A);
-                    // sub_12529: read text dimensions → ds:0x34, ds:0x36
-                    v2_sub_12529(s, bx_t1);
-                    // sub_12388: text box border drawing. Verified with seg000 lines 4649-4702.
-                    // Draws border using glyphs 0x12-0x19 via sub_1241e.
-                    // Entry: si=column, di=row. Uses ds:0x34 (width), ds:0x36 (height).
-                    {
-                        *(uint16_t*)(s + 0x6C) = si_t1; // MOV word_2854C, si
-                        *(uint16_t*)(s + 0x6E) = di_t1; // MOV word_2854E, di
-                        uint16_t w = *(uint16_t*)(s + 0x34); // word_28514
-                        uint16_t h = *(uint16_t*)(s + 0x36); // word_28516
-                        // Top row: corner + edge×(w-2) + corner
-                        v2_sub_1241e(s, 0x12, si_t1, di_t1);
-                        for (uint16_t c = 0; c < w - 2; c++) v2_sub_1241e(s, 0x13, si_t1, di_t1);
-                        v2_sub_1241e(s, 0x14, si_t1, di_t1);
-                        si_t1 = *(uint16_t*)(s + 0x6C); di_t1++;
-                        // Middle rows: left + spaces×(w-2) + right
-                        for (uint16_t r = 0; r < h - 2; r++) {
-                            v2_sub_1241e(s, 0x15, si_t1, di_t1);
-                            for (uint16_t c = 0; c < w - 2; c++) v2_sub_1241e(s, 0x20, si_t1, di_t1);
-                            v2_sub_1241e(s, 0x16, si_t1, di_t1);
-                            si_t1 = *(uint16_t*)(s + 0x6C); di_t1++;
-                        }
-                        // Bottom row: corner + edge×(w-2) + corner
-                        v2_sub_1241e(s, 0x17, si_t1, di_t1);
-                        for (uint16_t c = 0; c < w - 2; c++) v2_sub_1241e(s, 0x18, si_t1, di_t1);
-                        v2_sub_1241e(s, 0x19, si_t1, di_t1);
-                    }
-                    // INC di; INC si (loc_124A9 post-processing)
-                    di_t1++;
-                    si_t1++;
-                    // loc_124C5 text render for "Level Complete"
-                    if (v2_m2c_base) {
-                        uint8_t* seg001_1 = v2_m2c_base + 0x9480;
-                        *(uint16_t*)(s + 0x6C) = si_t1;
-                        uint16_t cx1 = *(uint16_t*)(s + 0x34) - 2;
-                        while (true) {
-                            uint8_t ch = seg001_1[bx_t1];
-                            if (ch == 0) break;
-                            if (ch == 0x0D) {
-                                if (cx1 != 0) { while (cx1 > 0) { v2_sub_1241e(s, 0x20, si_t1, di_t1); cx1--; } }
-                                cx1 = *(uint16_t*)(s + 0x34) - 2; di_t1++; si_t1 = *(uint16_t*)(s + 0x6C);
-                                ch = seg001_1[bx_t1]; if (ch == 0) break; bx_t1++;
-                            } else {
-                                v2_sub_1241e(s, ch, si_t1, di_t1); bx_t1++; cx1--;
-                            }
-                        }
-                    }
+                // loc_10389 path: password screen via canonical helpers.
+                // v2_pw_pre_loop detects F10 path internally via shadow
+                // [0x91B0/A4/99/7C] (line 19178-19180), runs sub_103ca setup
+                // (palette clear, text/glyphs draw, password chars, prelude).
+                bool need_save = !(s[0x342] | s[0x343] | s[0x344]);
+                v2_pw_pre_loop(s);
+                extern bool need_quit;
+                for (int safety = 10000; safety > 0; safety--) {
+                    if (need_quit) break;
+                    if (v2_pw_iter_body(s)) break;
+                    v2_do_render();
+                    SDL_Delay(16);
                 }
-                // 2. sub_1265b(ax=5, si=0x10, di=0xF): password label text
-                {
-                    uint16_t si_col = 0x10;
-                    uint16_t di_row = 0x0F;
-                    v2_sub_12515(s, 5);                         // sub_12515(ax=5)
-                    uint16_t bx_txt = *(uint16_t*)(s + 0x2A);
-                    if (v2_m2c_base) {
-                        uint8_t* seg001 = v2_m2c_base + 0x9480;
-                        *(uint16_t*)(s + 0x6C) = si_col; // MOV word_2854C, si
-                        uint16_t cx_width = *(uint16_t*)(s + 0x34) - 2;
-                        while (true) {
-                            // loc_124D8: al = es:[bx]
-                            uint8_t ch = seg001[bx_txt];
-                            if (ch == 0) break;              // JZ loc_12509 (end)
-                            if (ch == 0x0D) {                // newline
-                                // JCXZ loc_124EC — if cx==0, skip padding
-                                if (cx_width != 0) {
-                                    // loc_124E5: pad with spaces; LOOP
-                                    while (cx_width > 0) {
-                                        v2_sub_1241e(s, 0x20, si_col, di_row);
-                                        cx_width--;
-                                    }
-                                }
-                                // loc_124EC: cx = word_28514 - 2; INC di; si = word_2854C
-                                cx_width = *(uint16_t*)(s + 0x34) - 2;
-                                di_row++;
-                                si_col = *(uint16_t*)(s + 0x6C);
-                                // Read next char: al = es:[bx]; CMP 0; JZ end; INC bx; JMP loop
-                                // This SKIPS one char after newline (the 0x0A in CRLF)
-                                ch = seg001[bx_txt];
-                                if (ch == 0) break;
-                                bx_txt++; // INC bx (skip the char after 0x0D)
-                            } else {
-                                // loc_12502: CALL sub_1241e; INC bx; DEC cx
-                                v2_sub_1241e(s, ch, si_col, di_row);
-                                bx_txt++;
-                                cx_width--;
-                            }
-                        }
-                    }
+                v2_pw_post_loop(s);
+                if (need_save) {
+                    // sub_14590: orig JMP from loc_103b7 eip 0x3C6 (F10 path
+                    // where sub_1450b ran). Clear palette transform + restore
+                    // default via sub_10e99. Same as ESC path at line 5867.
+                    s[0x342] = 0; s[0x343] = 0; s[0x344] = 0;
+                    s[0x7EFD] &= 0xFE;
+                    if (s[0x7EFD] == 0)
+                        *(uint16_t*)(s + 0x7F00) = 0x7F02;
+                    *(uint16_t*)(s + 0x7EFE) = 4;
+                    v2_sub_10e99(s);
                 }
-                // 3. Password characters: si=0x12, di=0x11, 4× sub_1241e with ds:0x310..0x316
-                {
-                    uint16_t si_pw = 0x12, di_pw = 0x11;
-                    v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + 0x0310), si_pw, di_pw); // word_287F0
-                    v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + 0x0312), si_pw, di_pw); // word_287F2
-                    v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + 0x0314), si_pw, di_pw); // word_287F4
-                    v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + 0x0316), si_pw, di_pw); // word_287F6
-                }
-
-                // sub_104A1: blocking render loop (eip 0x04A1..0x0554).
-                // Verified with seg000 lines 2491-2564.
-                // word_28925=0x11, word_28923=1, byte_31A4B=1.
-                // VGA: set color 3 to white (OUT 0x3C8/0x3C9). Commented.
-                // sub_1E0C7 + sub_16775.
-                // Loop (loc_104C3): word_3287C=1, sub_10130, sub_1DE05,
-                //   word_3287C=1, sub_10130, word_3287C=1, sub_10130,
-                //   sub_12352, sub_10555, sub_105CB. If carry → exit.
-                // sub_10555: DEC word_28925; if (word_28925 & 0xF) != 0 → return (no carry).
-                //   else: if word_28925 & 0x10 → blink text (MOV si, 0x10 or 0x15),
-                //         else → hide text. sub_105CB checks blink state → JB (carry) exits loop.
-                *(uint16_t*)(s + 0x0445) = 0x11;  // word_28925
-                *(uint16_t*)(s + 0x0443) = 1;      // word_28923
-                s[0x956B] = 1;                      // byte_31A4B
-                // OUT(0x3C8, 3); OUT(0x3C9, 0x3F, 0x3F, 0x3F); — VGA palette, commented
-                v2_sub_1E0C7(s);
-                v2_sub_16775(s);
-                // Blocking loop (loc_104C3): exact replica of orig.
-                // NO sub_16775 inside loop. NO sub_165aa inside loop.
-                // Verified with seg000 lines 2507-2521 (eip 0x04C3..0x04EE).
-                {
-                    bool loop_exit = false;
-                    while (!loop_exit) {
-                        // loc_104C3:
-                        *(uint16_t*)(s + 0xA39C) = 1;       // mov word_3287C, 1
-                        v2_sub_10130(s);                      // call sub_10130
-                        v2_sub_1DE05(s);                      // call sub_1DE05
-                        *(uint16_t*)(s + 0xA39C) = 1;       // mov word_3287C, 1
-                        v2_sub_10130(s);                      // call sub_10130
-                        *(uint16_t*)(s + 0xA39C) = 1;       // mov word_3287C, 1
-                        v2_sub_10130(s);                      // call sub_10130
-                        // sub_12352: input
-                        {
-                            uint16_t ax = 0;
-                            if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
-                            ax = v2_input_or(s, ax);
-                            *(uint16_t*)(s + 0x03B6) = ax;
-                            uint16_t prev = *(uint16_t*)(s + 0x03BA);
-                            *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
-                            *(uint16_t*)(s + 0x03BA) = ax;
-                        }
-                        // sub_10555: DEC word_28925, check & 0xF
-                        *(uint16_t*)(s + 0x0445) -= 1;       // dec word_28925
-                        if (*(uint16_t*)(s + 0x0445) & 0xF)  // test word_28925, 0Fh
-                            continue;                          // jnz → loop (no carry)
-                        // sub_10555 continues: test word_28925, 0x10
-                        if (*(uint16_t*)(s + 0x0445) & 0x10) {
-                            // Blink text visible path (si=0x10 or 0x15)
-                            // sub_105CB: eventually returns no-carry → continue loop
-                        } else {
-                            // Hide text path (loc_10598)
-                            // sub_105CB: returns carry → exit loop
-                            loop_exit = true;
-                        }
-                    }
-                }
-                // loc_104F0: post-button read + final input
-                {
-                    uint16_t ax = 0;
-                    if (*(uint16_t*)(s + 0x86DA) != 0) ax = *(uint16_t*)(s + 0x86DC);
-                    ax = v2_input_or(s, ax);
-                    *(uint16_t*)(s + 0x03B6) = ax;
-                    uint16_t prev = *(uint16_t*)(s + 0x03BA);
-                    *(uint16_t*)(s + 0x03B8) = (ax ^ prev) & ax;
-                    *(uint16_t*)(s + 0x03BA) = ax;
-                }
-
-                // Post-button: 3 full render passes with sub_165aa rotation
-                *(uint16_t*)(s + 0x9569) = 1;      // word_31A49
-                *(uint16_t*)(s + 0x98DC) = 0;       // word_31DBC
-                // Render pass 1 (eip 0x050B-0x0528): sub_10130, sub_1DE05, sub_165aa,
-                //   sub_1DD9C, sub_1C8F1, sub_1E0C7, sub_16775
-                v2_sub_10130(s);
-                v2_sub_1DE05(s);
-                v2_game_loop_post_render(s);         // includes sub_165aa
-                v2_sub_1DD9C(s);
-                v2_sub_1C8F1(s, 0xFFFE);
-                v2_sub_1E0C7(s);
-                v2_sub_16775(s);
-                // Render pass 2 (eip 0x052B-0x0548): sub_10130, sub_1DE05, sub_165aa,
-                //   sub_1DD9C, sub_1C8F1, sub_1E0C7, sub_16775
-                v2_sub_10130(s);
-                v2_sub_1DE05(s);
-                v2_game_loop_post_render(s);         // includes sub_165aa
-                v2_sub_1DD9C(s);
-                v2_sub_1C8F1(s, 0xFFFE);
-                v2_sub_1E0C7(s);
-                v2_sub_16775(s);
-                // Cleanup
-                *(uint16_t*)(s + 0x9569) = 0;       // word_31A49
-                s[0x956B] = 0;                       // byte_31A4B
-                *(uint16_t*)(s + 0x98DC) = 0;        // word_31DBC
-                memset(s + 0x956C, 0, 0x1B8 * 2);   // clear glyph buffer
-                // Check word_28814 & 2 → JMP loc_10E35 (QUIT to DOS)
+                // Post-loop: check word_28814 & 2 → loc_10E35 (Y in quit prompt
+                // sets this bit → "Quit to DOS").
                 if (*(uint16_t*)(s + 0x0334) & 2) {
-                    // loc_10E35 = QUIT (same as F10 quit branch above).
                     orig_pool.stop_all_sfx();
                     v2_pool.stop_all_sfx();
                     fflush(stdout); fflush(stderr);
-                    extern bool need_quit; need_quit = true; SDL_Delay(50);
+                    need_quit = true; SDL_Delay(50);
                     _exit(0);
                 }
-                // else: RETN — continue gameplay (UI was just a popup that returned).
+                // else: continue gameplay (user pressed N — return to game).
             }
         }
-#endif  // V2_ONLY closes PART B (F10 detection + inline rendering)
+#endif  // V2_ONLY closes PART B (F10 → canonical pw helpers)
     }  // closes if (*(uint16_t*)(s + 0x218F) == 0) — gating for spec ORs and PART B
     // sub_1086f (orig eip 0xE7): drives shadow cmd queue dispatch.
     // Default mode: per-iter PRE_SUB_1086F barrier fires from orig sub_1086f

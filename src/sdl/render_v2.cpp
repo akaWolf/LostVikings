@@ -187,10 +187,16 @@ void render_thread_proc_v2(void* _state)
               }
               if (spec_off) {
                   extern std::atomic<uint8_t> sdl_spec_state[256];
+                  extern std::atomic<uint8_t> sdl_spec_press_latch[256];
+                  // EXACT orig INT9 replication: KEYDOWN scancode → byte_316XX=1,
+                  // KEYUP (release scancode) → byte_316XX=0, for ALL spec keys.
+                  // Matches render.cpp behavior. Without clear on KEYUP, F10/X/Q
+                  // etc. stay 1 forever → triggers re-fire every iter (e.g.,
+                  // F10 menu reopens immediately after N dismissal).
                   if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
                       sdl_spec_state[spec_off & 0xFF].store(1, std::memory_order_relaxed);
-                  } else if (event.type == SDL_KEYUP && (spec_off == 0x91A4 || spec_off == 0x9189)) {
-                      // Modifiers (ALT, CTRL): clear on release.
+                      sdl_spec_press_latch[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+                  } else if (event.type == SDL_KEYUP) {
                       sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
                   }
               }
