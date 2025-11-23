@@ -79,6 +79,7 @@ int main(int argc, char* argv[]) {
 
     const char* record_input = nullptr;
     const char* replay_input = nullptr;
+    bool strict_replay = false;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             g_debug_mode = true;
@@ -87,6 +88,8 @@ int main(int argc, char* argv[]) {
             record_input = argv[i] + 15;
         } else if (strncmp(argv[i], "--replay-input=", 15) == 0) {
             replay_input = argv[i] + 15;
+        } else if (strcmp(argv[i], "--replay-strict") == 0) {
+            strict_replay = true;
         }
     }
 
@@ -99,7 +102,7 @@ int main(int argc, char* argv[]) {
     sound_init();
 
     // Input record/replay (V2_ONLY only). File format is SDL-independent.
-    v2_input_recorder_init(record_input, replay_input);
+    v2_input_recorder_init(record_input, replay_input, strict_replay ? 1 : 0);
 
     // Load baked static EXE data, then point v2 base at it.
     v2_load_static_data();

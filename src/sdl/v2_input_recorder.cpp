@@ -24,6 +24,7 @@ enum Mode { MODE_DISABLED, MODE_RECORD, MODE_REPLAY };
 
 Mode g_mode = MODE_DISABLED;
 FILE* g_record_file = nullptr;
+bool g_strict_replay = false;  // true = ignore real keyboard even after queue exhausted
 
 // SDL-independent action codes ↔ SDL_Keycode mapping. ONE table for both
 // directions. ANY future input source can replay by mapping action → its event.
@@ -125,7 +126,8 @@ bool dequeue_due_replay(SDL_Event* out) {
 
 } // namespace
 
-extern "C" void v2_input_recorder_init(const char* record_file, const char* replay_file) {
+extern "C" void v2_input_recorder_init(const char* record_file, const char* replay_file, int strict_replay) {
+    g_strict_replay = (strict_replay != 0);
     bool have_rec = (record_file && record_file[0]);
     bool have_rep = (replay_file && replay_file[0]);
     if (have_rec && have_rep) {
@@ -149,8 +151,9 @@ extern "C" void v2_input_recorder_init(const char* record_file, const char* repl
         parse_replay_file(replay_file);
         if (!g_replay_queue.empty()) {
             g_mode = MODE_REPLAY;
-            fprintf(stderr, "v2_input_recorder: REPLAY mode from '%s' (%zu events)\n",
-                    replay_file, g_replay_queue.size());
+            fprintf(stderr, "v2_input_recorder: REPLAY mode from '%s' (%zu events, %s after exhaustion)\n",
+                    replay_file, g_replay_queue.size(),
+                    g_strict_replay ? "STRICT: ignore real keyboard" : "live keyboard takes over");
         }
     }
 }
@@ -159,13 +162,19 @@ extern "C" int v2_input_poll_event(SDL_Event* e) {
     if (!e) return 0;
 
     if (g_mode == MODE_REPLAY) {
-        // Replay drives keyboard fully — real SDL keyboard ignored.
         if (dequeue_due_replay(e)) return 1;
-        while (SDL_PollEvent(e)) {
-            if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) continue;
-            return 1;  // pass through window/quit events
+        // Queue not yet exhausted, or strict mode → still ignore real keyboard
+        bool keyboard_locked = g_strict_replay ||
+                               (g_replay_pos < g_replay_queue.size());
+        if (keyboard_locked) {
+            while (SDL_PollEvent(e)) {
+                if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) continue;
+                return 1;  // pass through window/quit events
+            }
+            return 0;
         }
-        return 0;
+        // Queue exhausted + not strict → live keyboard takeover
+        return SDL_PollEvent(e);
     }
 
     // Record / disabled: pure SDL pass-through; log keyboard in record mode.

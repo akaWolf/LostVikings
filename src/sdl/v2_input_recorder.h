@@ -24,7 +24,10 @@ extern "C" {
 
 // Initialize: pass record_file != NULL for record mode, replay_file != NULL
 // for replay mode. Both NULL = pass-through. Mutually exclusive.
-void v2_input_recorder_init(const char* record_file, const char* replay_file);
+// strict_replay: in replay mode, after queue exhausted, behavior:
+//   false (default): real keyboard takes over → user can continue interactively
+//   true (--replay-strict): keep ignoring real keyboard forever (for headless/CI)
+void v2_input_recorder_init(const char* record_file, const char* replay_file, int strict_replay);
 
 // Drop-in replacement for SDL_PollEvent(&e). Returns 1 if event filled, 0 if
 // no event pending. Behaviour depends on mode (see header comment).
