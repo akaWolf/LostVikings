@@ -17,12 +17,14 @@
 #include <atomic>
 #include "headless_dump.h"
 #include "../v2_input_recorder.h"
+#include "../v2_keymap.h"
 
 extern int v2_dbg_pre_vm_iter;
 
 // Globals controlling headless behavior (referenced from verify hooks etc.)
 const char* g_headless_replay_input = nullptr;
 const char* g_headless_dump_dir = nullptr;
+const char* g_headless_keymap = nullptr;
 int g_headless_max_frames = 10000;
 int g_headless_seed = 0;
 std::atomic<int> g_headless_replay_exhausted_frame{-1};  // frame when queue ran out
@@ -37,6 +39,8 @@ void headless_parse_cli(int argc, char* argv[]) {
             g_headless_max_frames = atoi(argv[i] + 13);
         } else if (strncmp(argv[i], "--seed=", 7) == 0) {
             g_headless_seed = atoi(argv[i] + 7);
+        } else if (strncmp(argv[i], "--keymap=", 9) == 0) {
+            g_headless_keymap = argv[i] + 9;
         }
     }
 }
@@ -58,6 +62,9 @@ void headless_init(int argc, char* argv[]) {
     // Init dump system + signal handler
     headless_dump_init(g_headless_dump_dir);
     headless_install_sigsegv_handler();
+
+    // Keymap before recorder (recorder consults v2_keymap for action lookup).
+    v2_keymap_load(g_headless_keymap);
 
     // Init input recorder — strict mode (CI: no human input ever)
     v2_input_recorder_init(nullptr, g_headless_replay_input, /*strict=*/1);

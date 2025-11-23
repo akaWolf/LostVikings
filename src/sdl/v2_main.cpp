@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "v2_input_recorder.h"
+#include "v2_keymap.h"
 #include <csignal>
 
 extern bool need_quit;
@@ -79,6 +80,7 @@ int main(int argc, char* argv[]) {
 
     const char* record_input = nullptr;
     const char* replay_input = nullptr;
+    const char* keymap_path  = nullptr;
     bool strict_replay = false;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
@@ -90,8 +92,13 @@ int main(int argc, char* argv[]) {
             replay_input = argv[i] + 15;
         } else if (strcmp(argv[i], "--replay-strict") == 0) {
             strict_replay = true;
+        } else if (strncmp(argv[i], "--keymap=", 9) == 0) {
+            keymap_path = argv[i] + 9;
         }
     }
+
+    // Load keymap before recorder init (recorder consults v2_keymap).
+    v2_keymap_load(keymap_path);
 
     // SIGINT (Ctrl-C) → graceful shutdown.
     signal(SIGINT, sigint_handler);

@@ -9,6 +9,7 @@
 // can parse same files.
 
 #include "v2_input_recorder.h"
+#include "v2_keymap.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -26,31 +27,11 @@ Mode g_mode = MODE_DISABLED;
 FILE* g_record_file = nullptr;
 bool g_strict_replay = false;  // true = ignore real keyboard even after queue exhausted
 
-// SDL-independent action codes ↔ SDL_Keycode mapping. ONE table for both
-// directions. ANY future input source can replay by mapping action → its event.
-struct ActionMap { const char* name; SDL_Keycode sdl_key; };
-const ActionMap g_actions[] = {
-    {"LEFT",    SDLK_LEFT},   {"RIGHT",  SDLK_RIGHT},  {"UP",     SDLK_UP},
-    {"DOWN",    SDLK_DOWN},   {"SPACE",  SDLK_SPACE},  {"RETURN", SDLK_RETURN},
-    {"LCTRL",   SDLK_LCTRL},  {"RCTRL",  SDLK_RCTRL},  {"TAB",    SDLK_TAB},
-    {"E",       SDLK_e},      {"S",      SDLK_s},      {"D",      SDLK_d},
-    {"F",       SDLK_f},      {"ESC",    SDLK_ESCAPE}, {"M",      SDLK_m},
-    {"X",       SDLK_x},      {"LALT",   SDLK_LALT},   {"RALT",   SDLK_RALT},
-    {"F10",     SDLK_F10},    {"DEL",    SDLK_DELETE}, {"Q",      SDLK_q},
-    {"R",       SDLK_r},      {"Y",      SDLK_y},      {"A",      SDLK_a},
-    {"N",       SDLK_n},      {"F4",     SDLK_F4},     {"F5",     SDLK_F5},
-    {"F6",      SDLK_F6},     {"1",      SDLK_1},      {"2",      SDLK_2},
-    {"3",       SDLK_3},      {"F12",    SDLK_F12},
-};
-
-const char* sdl_key_to_action(SDL_Keycode k) {
-    for (const auto& a : g_actions) if (a.sdl_key == k) return a.name;
-    return nullptr;
-}
-SDL_Keycode action_to_sdl_key(const char* name) {
-    for (const auto& a : g_actions) if (strcmp(a.name, name) == 0) return a.sdl_key;
-    return SDLK_UNKNOWN;
-}
+// Action ↔ SDL_Keycode mapping is sourced from v2_keymap (runtime cfg).
+// Recorder writes the action NAME — replay can resurrect the same logical
+// action even if the user's physical binding changes between runs.
+inline const char* sdl_key_to_action(SDL_Keycode k) { return v2_keymap_sdl_to_action(k); }
+inline SDL_Keycode action_to_sdl_key(const char* n) { return v2_keymap_action_to_sdl(n); }
 
 struct ReplayEvent {
     int      frame;  // v2_dbg_pre_vm_iter at record time

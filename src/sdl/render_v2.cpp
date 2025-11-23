@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdio>
 #include "v2_input_recorder.h"
+#include "v2_keymap.h"
 #include <unistd.h>  // _exit
 
 // ============================================================================
@@ -147,39 +148,7 @@ void render_thread_proc_v2(void* _state)
           case SDL_KEYUP: {
               uint16_t key_val = 0;
               uint16_t spec_off = 0;
-              switch (event.key.keysym.sym) {
-                case SDLK_LEFT:   key_val = 0x200; break;
-                case SDLK_RIGHT:  key_val = 0x100; break;
-                case SDLK_UP:     key_val = 0x800; break;
-                case SDLK_DOWN:   key_val = 0x400; break;
-                case SDLK_SPACE:
-                case SDLK_RETURN: key_val = 0x8000; break;
-                case SDLK_LCTRL:
-                case SDLK_RCTRL:  key_val = 0x20;   spec_off = 0x9189; break;  // CTRL → byte_31669
-                case SDLK_TAB:    key_val = 0x2000; break;
-                case SDLK_e:      key_val = 0x40; break;
-                case SDLK_s:      key_val = 0x80;   spec_off = 0x918B; break;  // mute SFX
-                case SDLK_d:      key_val = 0x4000; break;
-                case SDLK_f:      key_val = 0x8000; break;
-                case SDLK_ESCAPE: key_val = 0x1000; break;
-                case SDLK_m:      spec_off = 0x919E; break;  // mute music
-                case SDLK_x:      spec_off = 0x9199; break;
-                case SDLK_LALT:
-                case SDLK_RALT:   spec_off = 0x91A4; break;
-                case SDLK_F10:    spec_off = 0x91B0; break;
-                case SDLK_DELETE: spec_off = 0x91BF; break;
-                case SDLK_q:      spec_off = 0x917C; break;  // sc 0x10 — ALT+Q reset
-                case SDLK_r:      spec_off = 0x917F; break;  // sc 0x13
-                case SDLK_y:      spec_off = 0x9181; break;  // sc 0x15 yes
-                case SDLK_a:      spec_off = 0x918A; break;  // sc 0x1E
-                case SDLK_n:      spec_off = 0x919D; break;  // sc 0x31 no
-                case SDLK_F4:     spec_off = 0x91AA; break;  // sc 0x3E INT 3 debug
-                case SDLK_F5:     spec_off = 0x91AB; break;  // sc 0x3F prev level
-                case SDLK_F6:     spec_off = 0x91AC; break;  // sc 0x40 next level
-                case SDLK_1:      spec_off = 0x916E; break;  // sc 0x02 viking 1
-                case SDLK_2:      spec_off = 0x916F; break;  // sc 0x03 viking 2
-                case SDLK_3:      spec_off = 0x9170; break;  // sc 0x04 viking 3
-              }
+              v2_keymap_lookup_sdl(event.key.keysym.sym, &key_val, &spec_off);
               if (event.type == SDL_KEYDOWN) {
                   input_keys |= key_val; input_keys_v2 |= key_val;
               } else {

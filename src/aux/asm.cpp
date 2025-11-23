@@ -520,12 +520,26 @@ int main(int argc, char *argv[]) {
     headless_init(argc, argv);
 #endif
 
+#ifndef HEADLESS
+    // HEADLESS path loads keymap inside headless_init above.
+    const char* keymap_path = nullptr;
+#endif
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             g_debug_mode = true;
             fprintf(stderr, "[main] --debug enabled: F4 (INT 3), F5 (prev level), F6 (next level) cheats active\n");
         }
+#ifndef HEADLESS
+        else if (strncmp(argv[i], "--keymap=", 9) == 0) {
+            keymap_path = argv[i] + 9;
+        }
+#endif
     }
+
+#ifndef HEADLESS
+    extern void v2_keymap_load(const char* path);
+    v2_keymap_load(keymap_path);
+#endif
 
     struct m2c::_STATE state;
     struct m2c::_STATE *_state = &state;
