@@ -72,6 +72,16 @@ int headless_check_exit(void) {
     if (v2_dbg_pre_vm_iter >= g_headless_max_frames) {
         fprintf(stderr, "HEADLESS: max-frames=%d reached, exiting cleanly\n",
                 g_headless_max_frames);
+        // Final reports: SFX audit + opcode coverage + PSNAP summary +
+        // render-diff summary (non-critical render divergences accumulated).
+        extern void v2_audit_dump_final();
+        extern void v2_dump_opcode_coverage();
+        extern void v2_dump_psnap_summary();
+        extern void headless_dump_render_diff_summary();
+        v2_audit_dump_final();
+        v2_dump_opcode_coverage();
+        v2_dump_psnap_summary();
+        headless_dump_render_diff_summary();
         fflush(stdout); fflush(stderr);
         _exit(0);
     }

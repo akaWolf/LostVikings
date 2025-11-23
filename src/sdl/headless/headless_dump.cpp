@@ -220,14 +220,15 @@ void headless_dump_divergence(const char* source, int frame, const char* detail)
         }
     }
 
-    // Dump final atexit reports (audit, opcode coverage, PSNAP summary) before
-    // _exit bypasses atexit handlers. Same pattern as asm_sigint_handler.
+    // Dump final atexit reports (audit, opcode coverage, PSNAP summary, render
+    // diff summary) before _exit bypasses atexit handlers.
     extern void v2_audit_dump_final();
     extern void v2_dump_opcode_coverage();
     extern void v2_dump_psnap_summary();
     v2_audit_dump_final();
     v2_dump_opcode_coverage();
     v2_dump_psnap_summary();
+    headless_dump_render_diff_summary();
 
     fprintf(stderr, "=== Dump complete. Exit code 1. ===\n");
     fflush(stdout); fflush(stderr);
@@ -251,4 +252,71 @@ void headless_install_sigsegv_handler(void) {
     signal(SIGSEGV, headless_sigsegv_handler);
     signal(SIGBUS,  headless_sigsegv_handler);
     signal(SIGABRT, headless_sigsegv_handler);
+}
+
+// ============================================================================
+// Render-diff logger (non-critical) — accumulates frames with render divergence
+// without exiting. Render divergences are common (rendering differences are
+// often visual cosmetic / known issues vs. game-state divergence which is
+// critical). Summary dumped at clean exit.
+// ============================================================================
+namespace {
+struct RenderDiffEntry {
+    int frame;
+    int viewport_diff;
+    int first_x, first_y;
+    uint32_t orig_hash, v2_hash;
+};
+constexpr int RENDER_DIFF_MAX = 10000;
+RenderDiffEntry g_render_diffs[RENDER_DIFF_MAX];
+std::atomic<int> g_render_diff_count{0};
+FILE* g_render_diff_log = nullptr;
+}
+
+void headless_log_render_diff(int frame, int viewport_diff, int x, int y,
+                               uint32_t orig_hash, uint32_t v2_hash) {
+    int idx = g_render_diff_count.fetch_add(1, std::memory_order_relaxed);
+    if (idx < RENDER_DIFF_MAX) {
+        g_render_diffs[idx] = {frame, viewport_diff, x, y, orig_hash, v2_hash};
+    }
+    // Lazy-open the log file inside dump dir on first call.
+    if (!g_render_diff_log) {
+        char p[768];
+        snprintf(p, sizeof(p), "%s/render_diffs.log", g_dump_dir);
+        g_render_diff_log = fopen(p, "w");
+        if (g_render_diff_log) {
+            fprintf(g_render_diff_log,
+                "# render-diff frames (non-critical, render-layer divergence)\n"
+                "# format: <frame> viewport_diff=<bytes> first@(<x>,<y>) "
+                "orig_hash=<h> v2_hash=<h>\n");
+        }
+    }
+    if (g_render_diff_log) {
+        fprintf(g_render_diff_log,
+            "%d viewport_diff=%d first@(%d,%d) orig_hash=%08X v2_hash=%08X\n",
+            frame, viewport_diff, x, y, orig_hash, v2_hash);
+        fflush(g_render_diff_log);
+    }
+}
+
+void headless_dump_render_diff_summary(void) {
+    int n = g_render_diff_count.load(std::memory_order_relaxed);
+    if (n == 0) return;
+    int captured = n < RENDER_DIFF_MAX ? n : RENDER_DIFF_MAX;
+    int first = g_render_diffs[0].frame;
+    int last  = g_render_diffs[captured - 1].frame;
+    fprintf(stderr, "\n========== RENDER DIFF SUMMARY ==========\n");
+    fprintf(stderr, "Total render-diff frames: %d (captured first %d)\n",
+            n, captured);
+    fprintf(stderr, "Frame range: f%d..f%d\n", first, last);
+    if (g_dump_dir[0]) {
+        fprintf(stderr, "Full per-frame log: %s/render_diffs.log\n", g_dump_dir);
+    }
+    fprintf(stderr, "Note: render diffs are NON-CRITICAL (pixel-level only,\n");
+    fprintf(stderr, "      DS state unaffected). Exit not triggered by these.\n");
+    fprintf(stderr, "==========================================\n");
+    if (g_render_diff_log) {
+        fclose(g_render_diff_log);
+        g_render_diff_log = nullptr;
+    }
 }

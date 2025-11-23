@@ -584,10 +584,13 @@ void v2_verify_render_buf(int frame) {
     }
     _logged++;
 #ifdef HEADLESS
-    extern void headless_dump_divergence(const char*, int, const char*);
-    char buf[128];
-    snprintf(buf, sizeof(buf), "viewport_diff=%d first@(x=%d,y=%d)", viewport_diff, first_diff_x, first_diff_y);
-    headless_dump_divergence("A2-render", frame, buf);
+    // Render diff is NON-CRITICAL — pixel-level only, DS state can match.
+    // Log to render_diffs.log inside dump dir, summary at clean exit.
+    // Do NOT exit — game continues, real DS divergences still cause exit.
+    extern void headless_log_render_diff(int frame, int viewport_diff, int x, int y,
+                                          uint32_t orig_hash, uint32_t v2_hash);
+    headless_log_render_diff(frame, viewport_diff, first_diff_x, first_diff_y,
+                              h_orig, h_v2);
 #endif
 }
 

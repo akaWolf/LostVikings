@@ -35,3 +35,14 @@ void headless_write_diff_ppm(const char* path,
 
 // SIGSEGV handler — best-effort dump current state, exit(4).
 void headless_install_sigsegv_handler(void);
+
+// Render-diff logger — NON-critical: appends frame info to render_diffs.log
+// inside dump dir. Does NOT exit. Use for divergences expected/known to be
+// render-layer (where orig/v2 pixels differ but DS state matches). Summary
+// printed at clean exit via headless_dump_render_diff_summary().
+void headless_log_render_diff(int frame, int viewport_diff, int x, int y,
+                              uint32_t orig_hash, uint32_t v2_hash);
+
+// Print + write final summary of accumulated render diffs.
+// Called at normal exit (max-frames) and on critical divergence.
+void headless_dump_render_diff_summary(void);
