@@ -257,6 +257,12 @@ void v2_audit_check_frame_end() {
         int cur_frame = v2_dbg_pre_vm_iter;
         fprintf(stderr, "AUDIT-FRAME-DIVERGE[f%d]: orig=%d v2=%d (delta=%d)\n",
                 cur_frame, orig, v2, orig - v2);
+#ifdef HEADLESS
+        extern void headless_dump_divergence(const char*, int, const char*);
+        char buf[128];
+        snprintf(buf, sizeof(buf), "orig=%d v2=%d (delta=%d)", orig, v2, orig - v2);
+        headless_dump_divergence("audit", cur_frame, buf);
+#endif
         // Dump all events from THIS frame (orig and v2 separately).
         std::lock_guard<std::mutex> g(g_audit_mutex);
         size_t end = g_audit_ring_idx.load(std::memory_order_relaxed);
@@ -577,6 +583,12 @@ void v2_verify_render_buf(int frame) {
                 frame, viewport_diff, first_diff_x, first_diff_y, h_orig, h_v2, page_offset);
     }
     _logged++;
+#ifdef HEADLESS
+    extern void headless_dump_divergence(const char*, int, const char*);
+    char buf[128];
+    snprintf(buf, sizeof(buf), "viewport_diff=%d first@(x=%d,y=%d)", viewport_diff, first_diff_x, first_diff_y);
+    headless_dump_divergence("A2-render", frame, buf);
+#endif
 }
 
 // Symmetry verify: orig + v2 DS slot tables must show identical staleness pattern
@@ -597,6 +609,12 @@ void v2_verify_audio_slots_symmetry(uint8_t* real_ds, uint8_t* shadow_ds, int fr
                 _logged[i] = true;
                 fprintf(stderr, "V2-AUDIO-ASYMMETRY[f%d]: slot=%d real(h=%04X,s=%04X) != shadow(h=%04X,s=%04X)\n",
                     frame, i, r_h, r_s, s_h, s_s);
+#ifdef HEADLESS
+                extern void headless_dump_divergence(const char*, int, const char*);
+                char buf[128];
+                snprintf(buf, sizeof(buf), "slot=%d real(h=%04X,s=%04X) shadow(h=%04X,s=%04X)", i, r_h, r_s, s_h, s_s);
+                headless_dump_divergence("audio-sym", frame, buf);
+#endif
             }
         }
     }
@@ -7459,6 +7477,13 @@ void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name) {
             }
             fprintf(stderr, "  addr=0x%04X orig_snap=%04X shadow=%04X (diff=%+d)\n",
                 addr, snap_v, shadow_v, (int16_t)(shadow_v - snap_v));
+#ifdef HEADLESS
+            extern void headless_dump_divergence(const char*, int, const char*);
+            char buf[200];
+            snprintf(buf, sizeof(buf), "phase=%s addr=0x%04X orig=%04X v2=%04X (diff=%+d)",
+                v2_psnap_names[prev_phase_idx], addr, snap_v, shadow_v, (int16_t)(shadow_v - snap_v));
+            headless_dump_divergence("PSNAP", v2_psnap_frame[prev_phase_idx], buf);
+#endif
         }
     }
     if (any_diff_this_call) v2_psnap_diverge_count[prev_phase_idx]++;
@@ -15094,6 +15119,11 @@ uint8_t* v2_vm_get_shadow_ds() {
     return v2_vm_shadow_ds;
 }
 
+// Accessor for real DS pointer (orig m2c DS) — used by headless dump etc.
+uint8_t* v2_vm_get_real_ds() {
+    return v2_vm_real_ds_ptr;
+}
+
 uint8_t* v2_vm_get_shadow_tilemap() {
     return v2_vm_shadow_tilemap;
 }
@@ -15293,6 +15323,13 @@ void v2_vm_verify_game_loop(uint16_t ds_val) {
                     fprintf(stderr, "  DS[%04X]: real=%04X shadow=%04X\n", a,
                         *(uint16_t*)(real + a), *(uint16_t*)(shadow + a));
                 }
+#ifdef HEADLESS
+                extern void headless_dump_divergence(const char*, int, const char*);
+                char buf[160];
+                snprintf(buf, sizeof(buf), "addr=0x%04X real=%04X v2=%04X (level=0x%04X)",
+                    (uint16_t)i, rv, sv, *(uint16_t*)(shadow + 0x25AD));
+                headless_dump_divergence("gameloop", gl_frame, buf);
+#endif
               }
             }
             gl_err++;
@@ -17726,6 +17763,11 @@ void v2_phase_render3(uint16_t ds_val) {
 void v2_phase_post_flip3(uint16_t ds_val) {
     if (!v2_frame_active) return;
     v2_watch_302("POST_FLIP3");
+#ifdef HEADLESS
+    // HEADLESS: enforce --max-frames timeout. Exit cleanly when reached.
+    extern int headless_check_exit(void);
+    headless_check_exit();
+#endif
     // PSNAP compare MOVED to end of body (line ~17929) — see comment below.
     // Previously compared RENDER3_END here, but produced false-positive PSNAP-DIVERGE
     // because v2 PRE_SUB_1086F barriers (cmd dispatch) fired BETWEEN orig RENDER3_END
@@ -19868,6 +19910,13 @@ void v2_vm_trace_compare() {
                 }
                 fflush(stderr);
                 fflush(stdout);
+#ifdef HEADLESS
+                extern void headless_dump_divergence(const char*, int, const char*);
+                char buf[160];
+                snprintf(buf, sizeof(buf), "frame=%d index=%d (orig_len=%d v2_len=%d) why=%s",
+                    frame, i, orig_trace_len, v2_trace_len, why);
+                headless_dump_divergence("trace", frame, buf);
+#endif
                 // Tell render threads to stop, give them a tick to finish their
                 // current Mesa call, then _exit to bypass static destructors.
                 // Without this, render thread mid-libgallium SEGVs during shutdown.
@@ -19928,6 +19977,13 @@ void v2_vm_trace_compare() {
         }
         fflush(stderr);
         fflush(stdout);
+#ifdef HEADLESS
+        extern void headless_dump_divergence(const char*, int, const char*);
+        char buf[160];
+        snprintf(buf, sizeof(buf), "length mismatch: orig_len=%d v2_len=%d",
+            orig_trace_len, v2_trace_len);
+        headless_dump_divergence("trace-len", frame, buf);
+#endif
         extern bool need_quit; need_quit = true; SDL_Delay(50);
         _exit(1);
     }

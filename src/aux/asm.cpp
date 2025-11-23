@@ -11,6 +11,10 @@
 extern void render_init(void *);
 extern void render_init_v2(void *);
 extern void sound_init();
+#ifdef HEADLESS
+extern void headless_init(int argc, char* argv[]);
+extern int  headless_check_exit(void);
+#endif
 
 bool from_callf=false;
 
@@ -509,6 +513,12 @@ int main(int argc, char *argv[]) {
     std::set_terminate(v2_terminate_handler);
     signal(SIGINT, asm_sigint_handler);
     signal(SIGTERM, asm_sigint_handler);
+
+#ifdef HEADLESS
+    // HEADLESS init must run BEFORE any SDL call (sets SDL_VIDEODRIVER=dummy)
+    // and BEFORE m2c::init (installs SIGSEGV handler, parses --replay-input).
+    headless_init(argc, argv);
+#endif
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {

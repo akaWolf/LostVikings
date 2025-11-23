@@ -61,6 +61,16 @@ V2_DEFINES := -DV2_RENDER_FROM_SHADOW
 ifdef V2_ONLY
 V2_DEFINES += -DV2_ONLY
 endif
+# HEADLESS: automated test build. Default mode (orig + v2 mirror), no SDL
+# window, no audio device, no adlmidi link. Input from --replay-input, render
+# to in-memory buffer (verified via A2), exit on first divergence with PPM dump.
+# Designed for CI / fuzz testing. Mutually exclusive with V2_ONLY.
+# Enable: `HEADLESS=1 make -j$(nproc)` → vikings_headless binary.
+ifdef HEADLESS
+V2_DEFINES += -DHEADLESS
+EXE_NAME := vikings_headless
+OBJDIR := .obj-headless
+endif
 
 CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
@@ -92,16 +102,31 @@ CXX_SRCS := \
   src/aux/asm.cpp \
   src/aux/memmgr.cpp \
   src/aux/shadowstack.cpp \
-  src/sdl/play.cpp \
   src/sdl/render.cpp \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
   src/sdl/v2_vm.cpp \
   src/sdl/v2_input_recorder.cpp
+# play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
+ifndef HEADLESS
+CXX_SRCS += src/sdl/play.cpp
+endif
 endif
 
-# Common adlmidi sources (always compiled)
+# adlmidi sources — excluded in HEADLESS (no real audio playback, audit infra
+# uses deterministic handles from v2_audit_compute_handle, no synthesis needed).
+ifdef HEADLESS
+ADL_SRCS :=
+C_SRCS := \
+  src/rendering/seg003_implementation.c \
+  src/rendering/seg003_sdl_adapter.c
+# HEADLESS extras: dump helpers + AudioPool stubs + headless main
+CXX_SRCS += \
+  src/sdl/headless/headless_main.cpp \
+  src/sdl/headless/headless_dump.cpp \
+  src/sdl/headless/headless_audio_stub.cpp
+else
 ADL_SRCS := \
   src/adlmidi/src/adlmidi.cpp \
   src/adlmidi/src/adlmidi_load.cpp \
@@ -119,6 +144,7 @@ C_SRCS := \
   src/adlmidi/src/wopl/wopl_file.c \
   src/adlmidi/src/chips/nuked/nukedopl3_174.c \
   src/adlmidi/src/chips/nuked/nukedopl3.c
+endif
 
 CXX_SRCS += $(ADL_SRCS)
 CXX_OBJS := $(patsubst %.cpp, $(OBJDIR)/%.o, $(CXX_SRCS))
@@ -142,6 +168,6 @@ $(OBJDIR)/%.o: %.c
 	$(CC) -c $(CFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
 
 clean:
-	rm -rf .obj .obj-win vikings vikings.exe
+	rm -rf .obj .obj-win .obj-headless vikings vikings.exe vikings_headless
 
 -include $(DEPS)
