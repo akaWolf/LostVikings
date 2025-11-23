@@ -26,16 +26,22 @@ MINGW_TRIPLET ?= x86_64-w64-mingw32
 CC         := $(MINGW_TRIPLET)-gcc
 CXX        := $(MINGW_TRIPLET)-g++
 PKG_CONFIG ?= $(MINGW_TRIPLET)-pkg-config
-SDL        := $(shell $(PKG_CONFIG) --cflags sdl2) $(shell $(PKG_CONFIG) --static --libs sdl2)
-# -static: bundle libgcc/libstdc++/winpthread so the .exe runs without DLLs.
+SDL        := $(shell $(PKG_CONFIG) --cflags --libs sdl2)
+# -D_WIN32_WINNT=0x0601: required by mingw 13+ thread library (mcfgthread) for
+# std::thread / std::mutex — Win7 ABI is the minimum.
+# -static-libgcc/-libstdc++: bundle C++ runtime so the .exe needs only SDL2.dll
+# at runtime, not a full mingw redist. (Full -static would need libSDL2.a which
+# Nix's pkgsCross.mingwW64.SDL2 does not provide — only the import lib.)
 # Drop Linux-only -rdynamic / -no-pie.
-PLATFORM_LDFLAGS := -static -static-libgcc -static-libstdc++
+PLATFORM_DEFINES := -D_WIN32_WINNT=0x0601
+PLATFORM_LDFLAGS := -static-libgcc -static-libstdc++
 EXE_NAME   := vikings.exe
 OBJDIR     := .obj-win
 else
 CC         := gcc
 CXX        := g++
 SDL        := $(shell pkg-config --cflags --libs sdl2)
+PLATFORM_DEFINES :=
 PLATFORM_LDFLAGS := -rdynamic -no-pie
 EXE_NAME   := vikings
 OBJDIR     := .obj
@@ -56,8 +62,8 @@ ifdef V2_ONLY
 V2_DEFINES += -DV2_ONLY
 endif
 
-CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES)
-CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES)
+CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
+CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 
 ifdef V2_ONLY
 # V2_ONLY: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.
