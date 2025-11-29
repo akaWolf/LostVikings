@@ -171,6 +171,11 @@ bool parse_line(const char* line_in, KeyMapEntry* out, std::string* action_str) 
 
 } // namespace
 
+void v2_keymap_load_defaults(void) {
+    load_defaults();
+    fprintf(stderr, "v2_keymap: loaded %zu built-in default entries\n", g_map.size());
+}
+
 void v2_keymap_load(const char* path) {
     // NULL/empty path → try standard location ./vikings_keymap.cfg, then fall
     // back to built-in defaults. Explicit path → require it to exist.

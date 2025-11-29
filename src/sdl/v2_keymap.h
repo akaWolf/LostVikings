@@ -22,6 +22,10 @@ struct KeyMapEntry {
 // Logs to stderr on parse errors (skips bad lines).
 void v2_keymap_load(const char* path);
 
+// Explicitly load the built-in defaults, discarding any current entries.
+// Use when restoring without touching the filesystem (e.g. "Reset" button).
+void v2_keymap_load_defaults(void);
+
 // Look up by physical key. Returns true if mapped; out args set to bitmask /
 // spec offset (either may be 0). Multiple bindings for same SDLK use first.
 bool v2_keymap_lookup_sdl(SDL_Keycode key, uint16_t* out_key_val, uint16_t* out_spec_off);

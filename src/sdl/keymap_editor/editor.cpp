@@ -164,11 +164,7 @@ void action_reload() {
 }
 
 void action_reset() {
-    // Force defaults: temp-rename file or just call load with a path we know
-    // doesn't exist. Simpler: load with explicit empty path → falls back to
-    // ./vikings_keymap.cfg; but we want defaults. Trick: pass a non-existent
-    // explicit path so the loader fails out and uses built-ins.
-    v2_keymap_load("/dev/null/nonexistent.cfg");
+    v2_keymap_load_defaults();
     pull_from_keymap();
     g_dirty = true;
     for (auto& r : g_rows) r.modified = true;
