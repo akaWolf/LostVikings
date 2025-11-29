@@ -154,9 +154,28 @@ C_OBJS   := $(patsubst %.c,   $(OBJDIR)/%.o, $(C_SRCS))
 ALL_OBJS := $(CXX_OBJS) $(C_OBJS)
 DEPS     := $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean
+.PHONY: all clean keymap_editor
 
 all: $(EXE_NAME)
+
+# Standalone keymap editor — links ONLY against SDL2 + v2_keymap.cpp. No m2c,
+# no adlmidi, no game logic. Independent of HEADLESS / V2_ONLY toggles.
+KEYMAP_EDITOR_OBJDIR := .obj-keymap-editor
+KEYMAP_EDITOR_SRCS := \
+  src/sdl/v2_keymap.cpp \
+  src/sdl/keymap_editor/editor.cpp
+KEYMAP_EDITOR_OBJS := $(patsubst %.cpp, $(KEYMAP_EDITOR_OBJDIR)/%.o, $(KEYMAP_EDITOR_SRCS))
+
+keymap_editor: vikings_keymap_editor
+
+vikings_keymap_editor: $(KEYMAP_EDITOR_OBJS)
+	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) -o $@ $^ $(SDL)
+
+$(KEYMAP_EDITOR_OBJDIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) -c $(SDL) $(DBG) -MMD -MP -o $@ $<
+
+-include $(KEYMAP_EDITOR_OBJS:.o=.d)
 
 $(EXE_NAME): $(ALL_OBJS)
 	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) -o $@ $^ $(SDL)
@@ -170,6 +189,6 @@ $(OBJDIR)/%.o: %.c
 	$(CC) -c $(CFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
 
 clean:
-	rm -rf .obj .obj-win .obj-headless vikings vikings.exe vikings_headless
+	rm -rf .obj .obj-win .obj-headless .obj-keymap-editor vikings vikings.exe vikings_headless vikings_keymap_editor
 
 -include $(DEPS)

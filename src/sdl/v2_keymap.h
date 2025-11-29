@@ -32,3 +32,18 @@ const char* v2_keymap_sdl_to_action(SDL_Keycode key);
 // Action name → canonical SDLK (first binding with that name).
 // SDLK_UNKNOWN if action unknown. Used by replay to synthesize events.
 SDL_Keycode v2_keymap_action_to_sdl(const char* action);
+
+// === Editor support ===
+// Read-only access to the currently loaded entries.
+// Returned pointer is valid until the next v2_keymap_load call.
+const KeyMapEntry* v2_keymap_entries(size_t* out_count);
+
+// Write entries back to a .cfg file. Generates a header comment, then one
+// line per entry. Returns true on success. Note: any comments / blank
+// lines the user added to the source file are NOT preserved.
+bool v2_keymap_save(const char* path, const KeyMapEntry* entries, size_t count);
+
+// SDLK → cfg-token string (e.g. SDLK_LEFT → "LEFT", SDLK_a → "a").
+// Returns "?" for keys without a stable cfg representation.
+// Result is owned by the implementation — copy if you need to keep it.
+const char* v2_keymap_sdl_key_token(SDL_Keycode key);
