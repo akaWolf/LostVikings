@@ -189,9 +189,11 @@ void asm2C_OUT(int16_t address, int data,_STATE* _state) {
 }
 
 int8_t asm2C_IN(int16_t address,_STATE* _state) {
+	return 0;  // FIX: Return value required on ARM
 }
 
 uint16_t asm2C_INW(uint16_t address,_STATE* _state) {
+	return 0;  // FIX: Return value required on ARM
 }
 
 bool is_little_endian_real_check() {
