@@ -3,6 +3,9 @@
 #include <cassert>
 #include <cstdio>
 
+typedef uint16_t dw;
+extern dw& word_3287c;
+
 const int SCREEN_SCALE = 4;
 const int SCREEN_WIDTH = 320;
 const int SCREEN_HEIGHT = 240;
@@ -52,14 +55,11 @@ void setPalette(uint8_t color, uint8_t r, uint8_t g, uint8_t b)
 void updateDraw()
  {
    auto offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
+   constexpr int VGA_MEM_SIZE = 65536 * 4;
    //printf("VGA pan: %x\n", offset);
   for (int i = 0; i < 176 * RENDER_WIDTH; i++)
   {
-	//myDrawInfo->myOffset=0x5be8;
-	//myDrawInfo->myOffset=0xa1c8;
-	//myDrawInfo->myOffset=0x66a8;
-	//myDrawInfo->myOffset=0;
-	auto color = myDrawInfo->drawBuffer[offset + i];
+	auto color = myDrawInfo->drawBuffer[(offset + i) % VGA_MEM_SIZE];
 	auto sdl_color = myDrawInfo->drawPalette[color];
 	tempDrawBuffer[i + 0 * RENDER_WIDTH] = SDL_MapRGBA(myFormat, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
   }
@@ -167,8 +167,11 @@ void updateDraw()
 			      }
 			   }
 			   //printf("VGA pan: %x %x\n", myDrawInfo->myOffset, myDrawInfo->myPixelOffset);
-			   updateDraw();
-			   //SDL_Delay(20);
+			   // FIX: only read drawBuffer when game has finished a frame and is
+			   // waiting in sub_10130. Prevents (?) race condition where updateDraw()
+			   // reads the buffer while the game thread is writing (door/dialog artifacts).
+			   if (word_3287c > 0)
+				   updateDraw();
 			   render_callback(_state);
 			   //std::this_thread::sleep_for(std::chrono::milliseconds(15));
 			   SDL_Delay(15);

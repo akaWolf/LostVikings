@@ -11,7 +11,7 @@ static int dontstop_num = -1;
 
 void my_audio_callback(void *midi_player, Uint8 *stream, int len);
 
-static Uint8 buffer[8192]; /* Audio buffer */
+static Uint8 buffer[16384]; /* Audio buffer */
 static struct ADLMIDI_AudioFormat s_audioFormat;
 static SDL_AudioFormat myFormat;
 const uint32_t MYFREQ = 44100;
@@ -64,19 +64,17 @@ void midi_thread_proc(struct ADL_MIDIPlayer** midi_player, const void* xmidi, ui
 int play_xmidi(struct ADL_MIDIPlayer** midi_players, const void* xmidi, uint32_t len, int seq_num)
 {
   int num = -1;
+	need_stop = false;
   	for (int i = 0; i < 100; i++)
 	{
 	  if (midi_players[i] == nullptr)
 	  {
 		std::thread midi_thread(midi_thread_proc, &midi_players[i], xmidi, len, seq_num);
 		midi_thread.detach();
-		//SDL_Delay(10);
 		num = i;
 		break;
 	  }
 	}
-
-	need_stop = false;
 
 	return num;
 }
@@ -139,7 +137,7 @@ void sound_init()
     spec.freq = MYFREQ;
     spec.format = AUDIO_S16SYS;
     spec.channels = 2;
-    spec.samples = 64;
+    spec.samples = 1024;
 
     spec.callback = my_audio_callback;
     spec.userdata = midi_players;
@@ -197,20 +195,19 @@ void sound_init()
     //SDL_CloseAudio();
 }
 
-static uint8_t myBuffer[0x2000];
+static uint8_t myBuffer[16384];
 
 void my_audio_callback(void *argument, Uint8 *stream, int len)
 {
   //printf("size %x\n", len);
-  if (len > 0x2000) {
+  if (len > (int)sizeof(myBuffer)) {
 	printf("SOUND ERROR, len = %d!\n", len);
-	len = 0x2000;
+	len = sizeof(myBuffer);
   }
 
   memset(myBuffer, 0, len);
-  memset(buffer, 0, len);
 
-    int samples_count = len / s_audioFormat.containerSize;
+    const int total_samples = len / s_audioFormat.containerSize;
 
 	struct ADL_MIDIPlayer** midi_players = (struct ADL_MIDIPlayer**)argument;
 
@@ -230,19 +227,22 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
 		  goto close;
 		}
 
-		samples_count = adl_playFormat(midi_players[i], samples_count,
+		{
+		  memset(buffer, 0, len);
+		  int got_samples = adl_playFormat(midi_players[i], total_samples,
 									   buffer,
 									   buffer + s_audioFormat.containerSize,
 									   &s_audioFormat);
 
-		if(samples_count <= 0)
-		  goto close;
+		  if(got_samples <= 0)
+		    goto close;
 
-		volume = SDL_MIX_MAXVOLUME;
-		if (i == dontstop_num)
-		  volume = SDL_MIX_MAXVOLUME * 0.6;
+		  volume = SDL_MIX_MAXVOLUME;
+		  if (i == dontstop_num)
+		    volume = SDL_MIX_MAXVOLUME * 0.6;
 
-		SDL_MixAudioFormat(myBuffer, buffer, myFormat, samples_count * s_audioFormat.containerSize, volume);
+		  SDL_MixAudioFormat(myBuffer, buffer, myFormat, got_samples * s_audioFormat.containerSize, volume);
+		}
 
 		count++;
 

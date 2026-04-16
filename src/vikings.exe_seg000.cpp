@@ -2187,6 +2187,9 @@ cs=0x1a2;eip=0x000336; 	X(MOV(word_2aaa9, 0x27));	// 441 mov     word_2AAA9, 27h
 loc_1033c:
 	// 4413
 cs=0x1a2;eip=0x00033c; 	X(MOV(word_288ac, 0));	// 444 mov     word_288AC, 0 ;~ 01A2:033C
+	// TODO: original bug — word_288ac = 0 skips music reload in sub_116e3
+	// when skipping intro scenes. Needs more careful fix that doesn't
+	// cause sub_116e3 to read the level table out of intro context.
 cs=0x1a2;eip=0x000342; 	J(JMP(loc_1034a));	// 445 jmp     short loc_1034A ;~ 01A2:0342
 loc_10344:
 	// 4414
@@ -2229,6 +2232,7 @@ cs=0x1a2;eip=0x000390; 	T(MOV(ax, 0));	// 495 mov     ax, 0 ;~ 01A2:0390
 cs=0x1a2;eip=0x000393; 	R(OUT(dx, al));	// 496 out     dx, al ;~ 01A2:0393
 cs=0x1a2;eip=0x000394; 	R(OUT(dx, al));	// 497 out     dx, al ;~ 01A2:0394
 cs=0x1a2;eip=0x000395; 	R(OUT(dx, al));	// 498 out     dx, al ;~ 01A2:0395
+	setPalette(3, 0, 0, 0); // SDL: mirror VGA DAC OUT above
 cs=0x1a2;eip=0x000396; 	X(MOV(*(db*)(((db*)&word_303eb)), al));	// 499 mov     byte ptr word_303EB, al ;~ 01A2:0396
 cs=0x1a2;eip=0x000399; 	X(MOV(*(db*)(((db*)&word_303eb)), 0));	// 500 mov     byte ptr word_303EB, 0 ;~ 01A2:0399
 cs=0x1a2;eip=0x00039e; 	X(MOV(*(db*)(((db*)&word_303eb)+1), 0));	// 501 mov     byte ptr word_303EB+1, 0 ;~ 01A2:039E
@@ -2304,6 +2308,7 @@ cs=0x1a2;eip=0x000442; 	T(MOV(ax, 0));	// 584 mov     ax, 0 ;~ 01A2:0442
 cs=0x1a2;eip=0x000445; 	R(OUT(dx, al));	// 585 out     dx, al ;~ 01A2:0445
 cs=0x1a2;eip=0x000446; 	R(OUT(dx, al));	// 586 out     dx, al ;~ 01A2:0446
 cs=0x1a2;eip=0x000447; 	R(OUT(dx, al));	// 587 out     dx, al ;~ 01A2:0447
+	setPalette(3, 0, 0, 0); // SDL: mirror the VGA DAC OUT above
 cs=0x1a2;eip=0x000448; 	X(MOV(*(db*)(((db*)&word_303eb)), al));	// 588 mov     byte ptr word_303EB, al ;~ 01A2:0448
 cs=0x1a2;eip=0x00044b; 	X(MOV(*(db*)(((db*)&word_303eb)), 0));	// 589 mov     byte ptr word_303EB, 0 ;~ 01A2:044B
 cs=0x1a2;eip=0x000450; 	X(MOV(*(db*)(((db*)&word_303eb)+1), 0));	// 590 mov     byte ptr word_303EB+1, 0 ;~ 01A2:0450
@@ -5155,7 +5160,24 @@ cs=0x1a2;eip=0x002360; 	T(MOV(ax, word_30bbc));	// 4616 mov     ax, word_30BBC ;
 loc_12363:
 	// 4751
 cs=0x1a2;eip=0x002363; 	T(OR(ax, word_30bbe));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
-cs=0x1a2;eip=0x002363; 	T(OR(ax, input_keys));	// 4619 or      ax, word_30BBE ;~ 01A2:2363
+	// SDL input: OR input_keys into ax, but mask movement keys during intro.
+	// Original INT 9 handler (loc_164ca) blocked normal key→word_30bbe mapping
+	// when word_288ac == 0x8000, only allowing special keys through.
+	// Intro mode (word_288ac == 0x8000): original INT 9 handler at loc_164ca
+	// set word_30bbe = 0xFFFF on any key event (edge-triggered, once per press/release).
+	// Normal mode: pass individual key bits from SDL.
+	{
+		static uint16_t prev_intro_keys = 0;
+		if (word_288ac != (dw)0x8000) {
+			ax |= input_keys;
+			prev_intro_keys = 0;
+		} else {
+			if (input_keys != prev_intro_keys) {
+				ax |= 0xFFFF;
+			}
+			prev_intro_keys = input_keys;
+		}
+	}
 cs=0x1a2;eip=0x002367; 	X(MOV(word_28896, ax));	// 4620 mov     word_28896, ax ;~ 01A2:2367
 cs=0x1a2;eip=0x00236a; 	T(MOV(ax, word_28896));	// 4621 mov     ax, word_28896 ;~ 01A2:236A
 cs=0x1a2;eip=0x00236d; 	T(XOR(ax, word_2889a));	// 4622 xor     ax, word_2889A ;~ 01A2:236D
@@ -5227,6 +5249,16 @@ cs=0x1a2;eip=0x0023eb; 	J(CALL(sub_1241e,0));	// 4696 call    sub_1241E ;~ 01A2:
 cs=0x1a2;eip=0x0023ee; 	X(POP(ax));	// 4697 pop     ax ;~ 01A2:23EE
 cs=0x1a2;eip=0x0023ef; 	T(CMP(al, 6));	// 4698 cmp     al, 6 ;~ 01A2:23EF
 cs=0x1a2;eip=0x0023f1; 	J(JZ(loc_12415));	// 4699 jz      short loc_12415 ;~ 01A2:23F1
+	// FIX: skip dialog pointer chars (0x1A/0x1B).
+	// Glyph 0x1A is a real downward triangle (speech bubble pointer):
+	//   plane 0-3 row 0 mask=0xFF data=03 03 03 03 03 03 02 02 (full width)
+	//   plane 0-3 row 1 masks=F4/F0/F0/FA (narrowing triangle)
+	// The char stays in the text buffer permanently after dialog dismissal
+	// (loc_12758 cleanup not called for this bubble type). sub_1e0c7 renders
+	// the triangle every frame to the game area. Not visible in DOSBox due to
+	// VGA buffer read timing (background redraws cover it before scanout).
+	// In SDL the race-condition-aware updateDraw() captures the stale pixels.
+	goto loc_12415;
 cs=0x1a2;eip=0x0023f3; 	T(MOV(di, word_2854e));	// 4700 mov     di, word_2854E ;~ 01A2:23F3
 cs=0x1a2;eip=0x0023f7; 	T(ADD(di, word_2851a));	// 4701 add     di, word_2851A ;~ 01A2:23F7
 cs=0x1a2;eip=0x0023fb; 	T(MOV(si, word_2854c));	// 4702 mov     si, word_2854C ;~ 01A2:23FB
@@ -5755,6 +5787,11 @@ cs=0x1a2;eip=0x00280c; 	T(MOV(ax, 0x3E));	// 5331 mov     ax, 3Eh ; '>' ;~ 01A2:
 cs=0x1a2;eip=0x00280f; 	T(AND(ax, cx));	// 5332 and     ax, cx ;~ 01A2:280F
 cs=0x1a2;eip=0x002811; 	R(OUT(dx, al));	// 5333 out     dx, al ;~ 01A2:2811
 cs=0x1a2;eip=0x002812; 	X(MOV(byte_303ed, al));	// 5334 mov     byte_303ED, al ;~ 01A2:2812
+	// SDL: mirror VGA DAC writes above — set color 3 from software copy
+	setPalette(3,
+		*(db*)(((db*)&word_303eb)) << 2,
+		*(db*)(((db*)&word_303eb)+1) << 2,
+		byte_303ed << 2);
 cs=0x1a2;eip=0x002815; 	J(RETN(0));	// 5335 retn ;~ 01A2:2815
 sub_12816:
 	// 5340
