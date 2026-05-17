@@ -26,7 +26,22 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential libsdl2-dev pkg-config
 
-      - name: Build (RELEASE=1 STATIC=1)
+      # HEADLESS build first so the smoke test can run before we touch the
+      # release artifact. .obj-headless and .obj are separate trees, so the
+      # subsequent default build does not need a `make clean` in between.
+      - name: Build HEADLESS variant
+        run: HEADLESS=1 make RELEASE=1 STATIC=1 -j$(nproc)
+
+      - name: Smoke test (init-only, no DATA.DAT)
+        # DATA.DAT is the copyrighted 1992 asset file and is NOT in the repo,
+        # so the game exits gracefully right after init ("AIL sub_1754c: exit",
+        # al=0). The test still verifies: binary boots, SDL dummy video/audio
+        # work, replay parser handles empty.inp, headless dump dir is created,
+        # no segfault during init. Full-gameplay tests need DATA.DAT and a
+        # private storage mechanism (Actions cache or self-hosted runner).
+        run: ./tests/smoke.sh
+
+      - name: Build release vikings (RELEASE=1 STATIC=1)
         run: make RELEASE=1 STATIC=1 -j$(nproc)
 
       - name: Build keymap editor
