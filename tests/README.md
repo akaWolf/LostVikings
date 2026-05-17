@@ -98,38 +98,44 @@ Frame `0` = before any sub_12352 input call has run.
 
 ## Recording New Scenarios
 
-Use V2_ONLY visible window to record manually:
+Record in **default mode** (orig + v2 mirror), so the replay reproduces
+bit-for-bit under headless verify. Requires `DATA.DAT` in the repo root.
+See `replays/SCENARIOS.md` for the scenario table.
 
 ```bash
-# 1. Build V2_ONLY (interactive mode with window)
-V2_ONLY=1 make -j$(nproc)
+# 1. Build default mode (orig + v2 mirror)
+make -j$(nproc)
 
-# 2. Record your gameplay session
-./vikings --debug --record-input=tests/replays/my_scenario.inp
+# 2. Record — play the scenario, then quit (Alt+X or close window)
+./tests/record.sh my_scenario
+#   → writes replays/my_scenario.inp  + replays/my_scenario.frames
 
-# 3. Play through the scenario you want to capture
-# (intro skip, level walkthrough, dialog trigger, etc.)
-# Press Ctrl-C when done
-
-# 4. Verify replay works in headless
+# 3. Verify it replays clean under headless
 HEADLESS=1 RELEASE=1 make -j$(nproc)
-./vikings_headless --replay-input=tests/replays/my_scenario.inp
+./tests/scenarios.sh
 # Exit 0 = OK, Exit 1 = divergence found (good — bug to investigate!)
 
-# 5. Add to scenarios suite (auto-picked up by scenarios.sh)
-git add tests/replays/my_scenario.inp
+# 4. Commit (auto-picked up by scenarios.sh)
+git add tests/replays/my_scenario.inp tests/replays/my_scenario.frames
 ```
 
-**Recommended scenario library**:
+`record.sh` runs default-mode `vikings --record-input=...`. The recorder
+is also available directly (`./vikings --record-input=<f>`), plus with
+`--debug` if the scenario needs the F4/F5/F6 cheats. V2_ONLY mode
+(`v2_main.cpp`) records too, but only covers v2-implemented paths — use
+default mode for full gameplay capture.
+
+**Recommended scenario library** (full list + what each exercises in
+`replays/SCENARIOS.md`):
 - `empty.inp` — no input baseline ✓ (exists)
-- `boot_to_level0.inp` — skip intro to gameplay
-- `level0_walkthrough.inp` — full first level
-- `dialog_advance.inp` — open + scroll + dismiss dialog
-- `viking_switch.inp` — switch vikings 1/2/3
-- `pause_unpause.inp` — pause loop entry/exit
-- `f10_menu.inp` — F10 → menu → N back to game
-- `item_pickup.inp` — pickup + transfer items
-- `level_transition.inp` — complete level → next level load
+- `level0_walk` — walk/scroll the opening level
+- `viking_switch` — cycle vikings 1/2/3
+- `pause` — F10 pause loop entry/exit
+- `inventory` — Tab inventory nav + pickup
+- `dialog` — open + scroll + dismiss dialog
+- `jump_fall` — gravity / collision
+- `item_use` — per-viking action
+- `level_transition` — complete level → next level load
 
 ---
 
