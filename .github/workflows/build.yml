@@ -1,0 +1,160 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Lower default token to read; release job opts in to write.
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux x86_64 (release, static C++ runtime)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libsdl2-dev pkg-config
+
+      - name: Build (RELEASE=1 STATIC=1)
+        run: make RELEASE=1 STATIC=1 -j$(nproc)
+
+      - name: Build keymap editor
+        run: make keymap_editor STATIC=1
+
+      - name: Verify static linkage of C++ runtime
+        run: |
+          if ldd vikings | grep -E 'libstdc\+\+|libgcc_s'; then
+            echo "ERROR: libgcc/libstdc++ are dynamically linked"; exit 1
+          fi
+          echo "OK: libgcc/libstdc++ not in ldd output (statically linked)"
+          ldd vikings | head
+
+      - name: Package
+        run: |
+          mkdir -p dist/vikings-linux-x86_64
+          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-x86_64/
+          [ -f README.md ] && cp README.md dist/vikings-linux-x86_64/
+          tar -czf vikings-linux-x86_64.tar.gz -C dist vikings-linux-x86_64
+          ls -lh vikings-linux-x86_64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vikings-linux-x86_64
+          path: vikings-linux-x86_64.tar.gz
+          retention-days: 30
+
+  windows:
+    name: Windows x86_64 (mingw-w64 cross-compile)
+    runs-on: ubuntu-latest
+    env:
+      SDL2_VERSION: 2.30.10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install mingw-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mingw-w64 mingw-w64-tools pkg-config wget unzip
+
+      - name: Fetch SDL2 mingw devel package
+        run: |
+          cd /tmp
+          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
+          tar -xzf "SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
+          sudo mv "SDL2-${SDL2_VERSION}" /opt/sdl2-mingw
+
+      - name: Build (WIN=1 RELEASE=1)
+        env:
+          PKG_CONFIG_PATH: /opt/sdl2-mingw/x86_64-w64-mingw32/lib/pkgconfig
+        run: make WIN=1 RELEASE=1 -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p dist/vikings-windows-x86_64
+          cp vikings.exe vikings_keymap.cfg dist/vikings-windows-x86_64/
+          cp /opt/sdl2-mingw/x86_64-w64-mingw32/bin/SDL2.dll dist/vikings-windows-x86_64/
+          [ -f README.md ] && cp README.md dist/vikings-windows-x86_64/
+          cd dist && zip -r ../vikings-windows-x86_64.zip vikings-windows-x86_64
+          ls -lh ../vikings-windows-x86_64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vikings-windows-x86_64
+          path: vikings-windows-x86_64.zip
+          retention-days: 30
+
+  release:
+    # Auto-release on every push to master and on tag pushes.
+    # Tag push (v*)     → stable release named after the tag (Latest on Releases page).
+    # master commit     → pre-release named build-<run>-<short sha> (does not displace Latest).
+    # Skipped for PR / feature branches.
+    name: Publish GitHub release
+    needs: [linux, windows]
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vikings-linux-x86_64
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vikings-windows-x86_64
+
+      - name: Compute release metadata
+        id: rel
+        run: |
+          set -e
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "tag=$TAG"             >> "$GITHUB_OUTPUT"
+            echo "name=$TAG"            >> "$GITHUB_OUTPUT"
+            echo "prerelease=false"     >> "$GITHUB_OUTPUT"
+          else
+            SHORT="${GITHUB_SHA:0:8}"
+            echo "tag=build-${{ github.run_number }}-$SHORT" >> "$GITHUB_OUTPUT"
+            echo "name=Build ${{ github.run_number }} ($SHORT)" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true"      >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ steps.rel.outputs.tag }}
+          name:       ${{ steps.rel.outputs.name }}
+          prerelease: ${{ steps.rel.outputs.prerelease }}
+          body: |
+            Auto-build from commit ${{ github.sha }}.
+
+            Assets:
+            - `vikings-linux-x86_64.tar.gz` — Linux x86_64 (RELEASE, static C++ runtime)
+            - `vikings-windows-x86_64.zip`  — Windows x86_64 (mingw-w64, SDL2 bundled)
+
+            Both bundles contain the game binary, `vikings_keymap.cfg`, and
+            (for Linux) the standalone `vikings_keymap_editor`.
+
+            Game asset `DATA.DAT` is not redistributed and must be supplied
+            by the user (original 1992 Lost Vikings shipping data file).
+          files: |
+            vikings-linux-x86_64.tar.gz
+            vikings-windows-x86_64.zip

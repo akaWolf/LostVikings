@@ -47,6 +47,14 @@ EXE_NAME   := vikings
 OBJDIR     := .obj
 endif
 
+# STATIC=1: link libgcc + libstdc++ statically — binary runs on any glibc-compat
+# Linux without matching toolchain versions. SDL2 stays dynamic (must be present
+# on the target). Idempotent on WIN=1 (already includes the same flags).
+STATIC ?= 0
+ifeq ($(STATIC),1)
+  PLATFORM_LDFLAGS += -static-libgcc -static-libstdc++
+endif
+
 ADL_DEFINES := -DADLMIDI_DISABLE_DOSBOX_EMULATOR \
                -DADLMIDI_DISABLE_OPAL_EMULATOR \
                -DADLMIDI_DISABLE_JAVA_EMULATOR
