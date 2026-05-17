@@ -9,6 +9,9 @@ bytecode-for-bytecode, frame-for-frame.
 
 [![Build](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml/badge.svg)](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml)
 
+![Intro](imgs/intro.png)
+![Level 1](imgs/level_1.png)
+
 > ⚠️ Requires the copyrighted `DATA.DAT` from a legal copy of the original
 > game. All build modes need it — `DATA.DAT` holds the game content
 > (levels, sprites, audio); the bundled `*_static.bin` files only replace
