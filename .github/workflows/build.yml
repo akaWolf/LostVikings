@@ -32,13 +32,40 @@ jobs:
       - name: Build HEADLESS variant
         run: HEADLESS=1 make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
 
-      - name: Smoke test (init-only, no DATA.DAT)
-        # DATA.DAT is the copyrighted 1992 asset file and is NOT in the repo,
-        # so the game exits gracefully right after init ("AIL sub_1754c: exit",
-        # al=0). The test still verifies: binary boots, SDL dummy video/audio
-        # work, replay parser handles empty.inp, headless dump dir is created,
-        # no segfault during init. Full-gameplay tests need DATA.DAT and a
-        # private storage mechanism (Actions cache or self-hosted runner).
+      # Optional gameplay-test asset fetch.
+      # DATA.DAT is the copyrighted 1992 asset file — NOT in the repo. If a
+      # private URL is configured in the DATA_DAT_URL repo secret, fetch it
+      # here so the smoke test exercises real gameplay instead of just init.
+      # Without the secret, the test still runs but exits right after init
+      # ("AIL sub_1754c: exit", al=0) — that still catches segfault, link
+      # errors, SDL dummy driver bugs and replay-parser regressions.
+      #
+      # Setup:
+      #   gh secret set DATA_DAT_URL --body 'https://user:pass@host/DATA.DAT'
+      # The secret value is masked in logs by GitHub Actions automatically.
+      - name: Cache DATA.DAT
+        id: data_cache
+        uses: actions/cache@v4
+        with:
+          path: DATA.DAT
+          key: datafile-v1
+
+      - name: Fetch DATA.DAT (cache miss only)
+        if: steps.data_cache.outputs.cache-hit != 'true'
+        env:
+          DATA_DAT_URL: ${{ secrets.DATA_DAT_URL }}
+        run: |
+          if [ -z "$DATA_DAT_URL" ]; then
+            echo "DATA_DAT_URL secret not set — smoke will run init-only"
+            exit 0
+          fi
+          curl --fail --silent --show-error --location \
+               --output DATA.DAT "$DATA_DAT_URL"
+          echo "Fetched DATA.DAT:"
+          ls -lh DATA.DAT
+          sha256sum DATA.DAT
+
+      - name: Smoke test
         run: ./tests/smoke.sh
 
       - name: Build release vikings (RELEASE=1 STATIC=1 SDL_STATIC=1)
