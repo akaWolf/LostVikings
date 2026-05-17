@@ -30,7 +30,7 @@ jobs:
       # release artifact. .obj-headless and .obj are separate trees, so the
       # subsequent default build does not need a `make clean` in between.
       - name: Build HEADLESS variant
-        run: HEADLESS=1 make RELEASE=1 STATIC=1 -j$(nproc)
+        run: HEADLESS=1 make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
 
       - name: Smoke test (init-only, no DATA.DAT)
         # DATA.DAT is the copyrighted 1992 asset file and is NOT in the repo,
@@ -41,18 +41,18 @@ jobs:
         # private storage mechanism (Actions cache or self-hosted runner).
         run: ./tests/smoke.sh
 
-      - name: Build release vikings (RELEASE=1 STATIC=1)
-        run: make RELEASE=1 STATIC=1 -j$(nproc)
+      - name: Build release vikings (RELEASE=1 STATIC=1 SDL_STATIC=1)
+        run: make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
 
       - name: Build keymap editor
-        run: make keymap_editor STATIC=1
+        run: make keymap_editor STATIC=1 SDL_STATIC=1
 
-      - name: Verify static linkage of C++ runtime
+      - name: Verify static linkage (C++ runtime + SDL2)
         run: |
-          if ldd vikings | grep -E 'libstdc\+\+|libgcc_s'; then
-            echo "ERROR: libgcc/libstdc++ are dynamically linked"; exit 1
+          if ldd vikings | grep -E 'libstdc\+\+|libgcc_s|libSDL2'; then
+            echo "ERROR: libgcc/libstdc++/libSDL2 are dynamically linked"; exit 1
           fi
-          echo "OK: libgcc/libstdc++ not in ldd output (statically linked)"
+          echo "OK: C++ runtime and SDL2 both statically linked"
           ldd vikings | head
 
       - name: Package
@@ -97,14 +97,14 @@ jobs:
           sudo cp -r "SDL2-${SDL2_VERSION}/x86_64-w64-mingw32/." /usr/x86_64-w64-mingw32/
           x86_64-w64-mingw32-pkg-config --modversion sdl2
 
-      - name: Build (WIN=1 RELEASE=1)
-        run: make WIN=1 RELEASE=1 -j$(nproc)
+      - name: Build (WIN=1 RELEASE=1 SDL_STATIC=1)
+        run: make WIN=1 RELEASE=1 SDL_STATIC=1 -j$(nproc)
 
       - name: Package
+        # SDL2 is fully static here, no SDL2.dll alongside the exe.
         run: |
           mkdir -p dist/vikings-windows-x86_64
           cp vikings.exe vikings_keymap.cfg dist/vikings-windows-x86_64/
-          cp /usr/x86_64-w64-mingw32/bin/SDL2.dll dist/vikings-windows-x86_64/
           [ -f README.md ] && cp README.md dist/vikings-windows-x86_64/
           cd dist && zip -r ../vikings-windows-x86_64.zip vikings-windows-x86_64
           ls -lh ../vikings-windows-x86_64.zip

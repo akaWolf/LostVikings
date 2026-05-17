@@ -22,6 +22,10 @@
 #include <condition_variable>
 #include <atomic>
 #include <chrono>
+#ifndef _WIN32
+#include <unistd.h>   // _exit, close, syscall — some libcs pull these in
+                      // transitively, Ubuntu's does not.
+#endif
 #include <algorithm>
 #include <SDL2/SDL.h>
 #include "render_v2.h"

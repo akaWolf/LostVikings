@@ -48,11 +48,31 @@ OBJDIR     := .obj
 endif
 
 # STATIC=1: link libgcc + libstdc++ statically — binary runs on any glibc-compat
-# Linux without matching toolchain versions. SDL2 stays dynamic (must be present
-# on the target). Idempotent on WIN=1 (already includes the same flags).
+# Linux without matching toolchain versions. Idempotent on WIN=1 (already
+# includes the same flags).
 STATIC ?= 0
 ifeq ($(STATIC),1)
   PLATFORM_LDFLAGS += -static-libgcc -static-libstdc++
+endif
+
+# SDL_STATIC=1: link SDL2 statically via `pkg-config --static` — binary no
+# longer needs libSDL2 at runtime. Requires libSDL2.a (Ubuntu's libsdl2-dev
+# and SDL2 mingw-devel ship it; some distros split it into a separate -static
+# package). On Linux, system audio/video runtime libs (X11, ALSA, dbus, ...)
+# are still loaded dynamically by SDL2 itself.
+SDL_STATIC ?= 0
+ifeq ($(SDL_STATIC),1)
+  # PKG_CONFIG is set in the WIN=1 block; default for native Linux build.
+  PKG_CONFIG ?= pkg-config
+  SDL := $(shell $(PKG_CONFIG) --cflags --libs --static sdl2)
+  ifeq ($(WIN),1)
+    # SDL2main on Windows expects the user to define SDL_main(); we have a
+    # plain main() instead (in asm.cpp / v2_main.cpp / headless_main.cpp).
+    # Strip -lSDL2main from pkg-config output and tell SDL.h not to rename
+    # main via SDL_MAIN_HANDLED so the program's main() is the real entry.
+    SDL := $(filter-out -lSDL2main,$(SDL))
+    PLATFORM_DEFINES += -DSDL_MAIN_HANDLED
+  endif
 endif
 
 ADL_DEFINES := -DADLMIDI_DISABLE_DOSBOX_EMULATOR \
