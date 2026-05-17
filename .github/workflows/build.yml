@@ -149,6 +149,96 @@ jobs:
           path: vikings-windows-x86_64.zip
           retention-days: 30
 
+  linux-v2only:
+    name: Linux x86_64 V2_ONLY (release, static)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libsdl2-dev pkg-config
+
+      - name: Build (V2_ONLY=1 RELEASE=1 STATIC=1 SDL_STATIC=1)
+        run: V2_ONLY=1 make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
+
+      - name: Build keymap editor
+        run: make keymap_editor STATIC=1 SDL_STATIC=1
+
+      - name: Verify static linkage (C++ runtime + SDL2)
+        run: |
+          if ldd vikings | grep -E 'libstdc\+\+|libgcc_s|libSDL2'; then
+            echo "ERROR: libgcc/libstdc++/libSDL2 are dynamically linked"; exit 1
+          fi
+          echo "OK: V2_ONLY binary, C++ runtime and SDL2 statically linked"
+          ldd vikings | head
+
+      - name: Package
+        # V2_ONLY needs exe_static.bin (for text/menu) + ds_static.bin (for VM
+        # shadow). DATA.DAT is NOT required in this mode.
+        run: |
+          mkdir -p dist/vikings-linux-x86_64-v2only
+          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-x86_64-v2only/
+          cp ds_static.bin exe_static.bin dist/vikings-linux-x86_64-v2only/
+          [ -f README.md ] && cp README.md dist/vikings-linux-x86_64-v2only/
+          tar -czf vikings-linux-x86_64-v2only.tar.gz -C dist vikings-linux-x86_64-v2only
+          ls -lh vikings-linux-x86_64-v2only.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vikings-linux-x86_64-v2only
+          path: vikings-linux-x86_64-v2only.tar.gz
+          retention-days: 30
+
+  windows-v2only:
+    name: Windows x86_64 V2_ONLY (mingw-w64 cross-compile)
+    runs-on: ubuntu-latest
+    env:
+      SDL2_VERSION: 2.30.10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install mingw-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mingw-w64 mingw-w64-tools pkg-config wget unzip
+
+      - name: Install SDL2 mingw devel into mingw sysroot
+        run: |
+          cd /tmp
+          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
+          tar -xzf "SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
+          sudo cp -r "SDL2-${SDL2_VERSION}/x86_64-w64-mingw32/." /usr/x86_64-w64-mingw32/
+          x86_64-w64-mingw32-pkg-config --modversion sdl2
+
+      - name: Build (V2_ONLY=1 WIN=1 RELEASE=1 SDL_STATIC=1)
+        run: V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 -j$(nproc)
+
+      - name: Build keymap editor
+        run: make keymap_editor WIN=1 RELEASE=1 SDL_STATIC=1
+
+      - name: Package
+        run: |
+          mkdir -p dist/vikings-windows-x86_64-v2only
+          cp vikings.exe vikings_keymap_editor.exe vikings_keymap.cfg dist/vikings-windows-x86_64-v2only/
+          cp ds_static.bin exe_static.bin dist/vikings-windows-x86_64-v2only/
+          [ -f README.md ] && cp README.md dist/vikings-windows-x86_64-v2only/
+          cd dist && zip -r ../vikings-windows-x86_64-v2only.zip vikings-windows-x86_64-v2only
+          ls -lh ../vikings-windows-x86_64-v2only.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vikings-windows-x86_64-v2only
+          path: vikings-windows-x86_64-v2only.zip
+          retention-days: 30
+
   release:
     # Auto-release on every push (any branch) and on tag pushes.
     # Tag push (v*)  → stable release named after the tag (becomes "Latest").
@@ -156,7 +246,7 @@ jobs:
     #                  branch name in the body. Does not displace "Latest".
     # Skipped for PR events to avoid review-time spam.
     name: Publish GitHub release
-    needs: [linux, windows]
+    needs: [linux, windows, linux-v2only, windows-v2only]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -171,6 +261,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: vikings-windows-x86_64
+
+      - name: Download Linux V2_ONLY artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vikings-linux-x86_64-v2only
+
+      - name: Download Windows V2_ONLY artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vikings-windows-x86_64-v2only
 
       - name: Compute release metadata
         id: rel
@@ -199,14 +299,23 @@ jobs:
             Auto-build from commit ${{ github.sha }}.
 
             Assets:
-            - `vikings-linux-x86_64.tar.gz` — Linux x86_64 (RELEASE, static C++ runtime)
-            - `vikings-windows-x86_64.zip`  — Windows x86_64 (mingw-w64, SDL2 bundled)
+            - `vikings-linux-x86_64.tar.gz`        — Linux x86_64, **default mode** (orig + v2 mirror, needs DATA.DAT)
+            - `vikings-windows-x86_64.zip`         — Windows x86_64, default mode
+            - `vikings-linux-x86_64-v2only.tar.gz` — Linux x86_64, **V2_ONLY** (standalone v2 build, no DATA.DAT needed)
+            - `vikings-windows-x86_64-v2only.zip`  — Windows x86_64, V2_ONLY
 
-            Both bundles contain the game binary, `vikings_keymap.cfg`, and
-            (for Linux) the standalone `vikings_keymap_editor`.
+            All bundles contain `vikings`/`vikings.exe`, `vikings_keymap_editor`,
+            `vikings_keymap.cfg`, `ds_static.bin` and `exe_static.bin`. SDL2 and
+            the C++ runtime are statically linked — no extra DLLs/.so required.
 
-            Game asset `DATA.DAT` is not redistributed and must be supplied
-            by the user (original 1992 Lost Vikings shipping data file).
+            **Default mode** requires the copyrighted `DATA.DAT` from a legal
+            copy of the 1992 Lost Vikings (e.g. the GOG release). It is not
+            redistributed here.
+
+            **V2_ONLY mode** runs from the bundled `*_static.bin` snapshots
+            and does not need DATA.DAT.
           files: |
             vikings-linux-x86_64.tar.gz
             vikings-windows-x86_64.zip
+            vikings-linux-x86_64-v2only.tar.gz
+            vikings-windows-x86_64-v2only.zip
