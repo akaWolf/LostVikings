@@ -80,7 +80,7 @@ jobs:
             echo "ERROR: libgcc/libstdc++/libSDL2 are dynamically linked"; exit 1
           fi
           echo "OK: C++ runtime and SDL2 both statically linked"
-          ldd vikings | head
+          ldd vikings
 
       - name: Package
         run: |
@@ -175,11 +175,12 @@ jobs:
             echo "ERROR: libgcc/libstdc++/libSDL2 are dynamically linked"; exit 1
           fi
           echo "OK: V2_ONLY binary, C++ runtime and SDL2 statically linked"
-          ldd vikings | head
+          ldd vikings
 
       - name: Package
-        # V2_ONLY needs exe_static.bin (for text/menu) + ds_static.bin (for VM
-        # shadow). DATA.DAT is NOT required in this mode.
+        # V2_ONLY needs ds_static.bin + exe_static.bin at startup (static EXE
+        # image that default mode reconstructs from m2c initialisers).
+        # DATA.DAT (game assets) is still required — user supplies it.
         run: |
           mkdir -p dist/vikings-linux-x86_64-v2only
           cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-x86_64-v2only/
@@ -299,21 +300,20 @@ jobs:
             Auto-build from commit ${{ github.sha }}.
 
             Assets:
-            - `vikings-linux-x86_64.tar.gz`        — Linux x86_64, **default mode** (orig + v2 mirror, needs DATA.DAT)
+            - `vikings-linux-x86_64.tar.gz`        — Linux x86_64, **default mode** (orig + v2 mirror)
             - `vikings-windows-x86_64.zip`         — Windows x86_64, default mode
-            - `vikings-linux-x86_64-v2only.tar.gz` — Linux x86_64, **V2_ONLY** (standalone v2 build, no DATA.DAT needed)
+            - `vikings-linux-x86_64-v2only.tar.gz` — Linux x86_64, **V2_ONLY** (standalone v2 build)
             - `vikings-windows-x86_64-v2only.zip`  — Windows x86_64, V2_ONLY
 
             All bundles contain `vikings`/`vikings.exe`, `vikings_keymap_editor`,
             `vikings_keymap.cfg`, `ds_static.bin` and `exe_static.bin`. SDL2 and
             the C++ runtime are statically linked — no extra DLLs/.so required.
 
-            **Default mode** requires the copyrighted `DATA.DAT` from a legal
-            copy of the 1992 Lost Vikings (e.g. the GOG release). It is not
-            redistributed here.
-
-            **V2_ONLY mode** runs from the bundled `*_static.bin` snapshots
-            and does not need DATA.DAT.
+            All modes require the copyrighted `DATA.DAT` from a legal copy of
+            the 1992 Lost Vikings (e.g. the GOG release). It is not
+            redistributed here. The bundled `*_static.bin` files hold the
+            static EXE image (initial DS / text / tables) which V2_ONLY loads
+            in place of m2c's C++ initialisers, not the game content.
           files: |
             vikings-linux-x86_64.tar.gz
             vikings-windows-x86_64.zip

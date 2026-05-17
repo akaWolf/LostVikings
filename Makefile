@@ -217,7 +217,7 @@ $(KEYMAP_EDITOR_EXE): $(KEYMAP_EDITOR_OBJS)
 
 $(KEYMAP_EDITOR_OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) -c $(SDL) $(DBG) -MMD -MP -o $@ $<
+	$(CXX) -c $(SDL) $(DBG) $(PLATFORM_DEFINES) -MMD -MP -o $@ $<
 
 -include $(KEYMAP_EDITOR_OBJS:.o=.d)
 

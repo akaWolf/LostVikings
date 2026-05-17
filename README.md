@@ -2,16 +2,17 @@
 
 A native Linux / Windows port of the 1992 DOS game **The Lost Vikings**
 (Silicon & Synapse / Interplay). Built by feeding the original 16-bit MS-DOS
-executable through the [m2c](https://github.com/lewa-j/m2c) decompiler and
-wrapping the resulting C++ in an SDL2 shell. A parallel **v2 mirror** is
-being grown alongside the m2c-decompiled code with the goal of fully
-replacing the original VM bytecode-for-bytecode, frame-for-frame.
+executable through an m2c decompiler and wrapping the resulting C++ in an
+SDL2 shell. A parallel **v2 mirror** is being grown alongside the
+m2c-decompiled code with the goal of fully replacing the original VM
+bytecode-for-bytecode, frame-for-frame.
 
 [![Build](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml/badge.svg)](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml)
 
 > ⚠️ Requires the copyrighted `DATA.DAT` from a legal copy of the original
-> game (default mode). The V2_ONLY build mode is self-contained and does
-> not need `DATA.DAT`.
+> game. All build modes need it — `DATA.DAT` holds the game content
+> (levels, sprites, audio); the bundled `*_static.bin` files only replace
+> the static EXE image, not the game assets.
 
 ---
 
@@ -19,12 +20,14 @@ replacing the original VM bytecode-for-bytecode, frame-for-frame.
 
 Every push to any branch produces a GitHub Release with four artifacts:
 
-| File | Platform | Mode | Notes |
-| --- | --- | --- | --- |
-| `vikings-linux-x86_64.tar.gz`        | Linux x86_64   | default | needs `DATA.DAT` |
-| `vikings-windows-x86_64.zip`         | Windows x86_64 | default | needs `DATA.DAT` |
-| `vikings-linux-x86_64-v2only.tar.gz` | Linux x86_64   | V2_ONLY | self-contained |
-| `vikings-windows-x86_64-v2only.zip`  | Windows x86_64 | V2_ONLY | self-contained |
+| File | Platform | Mode |
+| --- | --- | --- |
+| `vikings-linux-x86_64.tar.gz`        | Linux x86_64   | default (orig + v2 mirror) |
+| `vikings-windows-x86_64.zip`         | Windows x86_64 | default |
+| `vikings-linux-x86_64-v2only.tar.gz` | Linux x86_64   | V2_ONLY (standalone v2) |
+| `vikings-windows-x86_64-v2only.zip`  | Windows x86_64 | V2_ONLY |
+
+All four bundles need `DATA.DAT` supplied separately (see below).
 
 Each archive contains:
 
@@ -43,9 +46,9 @@ Get the latest from the [Releases page](https://github.com/akaWolf/LostVikings/r
 
 ## DATA.DAT
 
-`DATA.DAT` is the original 1992 asset file (levels, sprites, audio). It is
-copyrighted and **not redistributed** with this project. To run the
-default-mode build you need a legal copy:
+`DATA.DAT` is the original 1992 asset file (levels, sprites, audio). It
+is copyrighted and **not redistributed** with this project. To run any
+build you need a legal copy:
 
 - **GOG** sells the game (cheapest legal route). After install,
   `DATA.DAT` lives in the install dir.
@@ -54,9 +57,13 @@ default-mode build you need a legal copy:
 
 Place `DATA.DAT` next to the `vikings` binary and launch.
 
-The **V2_ONLY** build does not read `DATA.DAT` — it boots from the bundled
-`ds_static.bin` / `exe_static.bin` snapshots — but level data coverage is
-still limited; treat V2_ONLY as the in-progress reimplementation.
+The bundled `ds_static.bin` / `exe_static.bin` snapshots are not a
+DATA.DAT substitute — they hold the static EXE image (initial DS, the
+seg001 text/menu data, lookup tables). Default mode reconstructs this
+from `m2c::m[]` populated by C++ static initialisers; V2_ONLY skips
+m2c entirely and loads it from the snapshot files at startup. Game
+content (levels, sprites, sound) still comes from `DATA.DAT` in both
+modes.
 
 ---
 
@@ -139,8 +146,10 @@ development mode.
 ### V2_ONLY mode
 
 Builds only the v2 reimplementation. m2c-decompiled sources are excluded
-from the build entirely. Faster compile, smaller binary, no `DATA.DAT`
-needed. Useful for fast iteration on the v2 code path and as the
+from the build entirely. Faster compile, roughly half the binary size.
+Still needs `DATA.DAT` for game content; the bundled `*_static.bin`
+files supply the static EXE image that default mode gets from m2c's C++
+initialisers. Useful for fast iteration on the v2 code path and as the
 eventual delivery vehicle once feature parity is complete.
 
 ### HEADLESS mode
