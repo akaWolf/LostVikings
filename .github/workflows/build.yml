@@ -116,15 +116,14 @@ jobs:
           retention-days: 30
 
   release:
-    # Auto-release on every push to master and on tag pushes.
-    # Tag push (v*)     → stable release named after the tag (Latest on Releases page).
-    # master commit     → pre-release named build-<run>-<short sha> (does not displace Latest).
-    # Skipped for PR / feature branches.
+    # Auto-release on every push (any branch) and on tag pushes.
+    # Tag push (v*)  → stable release named after the tag (becomes "Latest").
+    # Branch commit  → pre-release named build-<run>-<short sha> with the
+    #                  branch name in the body. Does not displace "Latest".
+    # Skipped for PR events to avoid review-time spam.
     name: Publish GitHub release
     needs: [linux, windows]
-    if: >-
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -150,8 +149,9 @@ jobs:
             echo "prerelease=false"     >> "$GITHUB_OUTPUT"
           else
             SHORT="${GITHUB_SHA:0:8}"
+            BRANCH="${GITHUB_REF#refs/heads/}"
             echo "tag=build-${{ github.run_number }}-$SHORT" >> "$GITHUB_OUTPUT"
-            echo "name=Build ${{ github.run_number }} ($SHORT)" >> "$GITHUB_OUTPUT"
+            echo "name=Build ${{ github.run_number }} ($BRANCH @ $SHORT)" >> "$GITHUB_OUTPUT"
             echo "prerelease=true"      >> "$GITHUB_OUTPUT"
           fi
 
