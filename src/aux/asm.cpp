@@ -512,6 +512,11 @@ static void v2_terminate_handler() {
 // 0xFFFFh; JZ skip — so any non-zero value enables.
 bool g_debug_mode = false;
 
+#ifndef HEADLESS
+extern void v2_keymap_load(const char* path);
+extern "C" void v2_input_recorder_init(const char*, const char*, int);
+#endif
+
 int main(int argc, char *argv[]) {
     std::set_terminate(v2_terminate_handler);
     signal(SIGINT, asm_sigint_handler);
@@ -524,8 +529,11 @@ int main(int argc, char *argv[]) {
 #endif
 
 #ifndef HEADLESS
-    // HEADLESS path loads keymap inside headless_init above.
-    const char* keymap_path = nullptr;
+    // HEADLESS path loads keymap + recorder inside headless_init above.
+    const char* keymap_path  = nullptr;
+    const char* record_input = nullptr;
+    const char* replay_input = nullptr;
+    bool        strict_replay = false;
 #endif
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
@@ -536,12 +544,25 @@ int main(int argc, char *argv[]) {
         else if (strncmp(argv[i], "--keymap=", 9) == 0) {
             keymap_path = argv[i] + 9;
         }
+        else if (strncmp(argv[i], "--record-input=", 15) == 0) {
+            record_input = argv[i] + 15;
+        }
+        else if (strncmp(argv[i], "--replay-input=", 15) == 0) {
+            replay_input = argv[i] + 15;
+        }
+        else if (strcmp(argv[i], "--replay-strict") == 0) {
+            strict_replay = true;
+        }
 #endif
     }
 
 #ifndef HEADLESS
-    extern void v2_keymap_load(const char* path);
     v2_keymap_load(keymap_path);
+    // Input record/replay (default mode). render.cpp's event loop already
+    // routes through v2_input_poll_event, so init alone enables it. Recording
+    // here captures full m2c gameplay; the resulting .inp replays bit-for-bit
+    // in vikings_headless (same asm.cpp code path).
+    v2_input_recorder_init(record_input, replay_input, strict_replay ? 1 : 0);
 #endif
 
     struct m2c::_STATE state;

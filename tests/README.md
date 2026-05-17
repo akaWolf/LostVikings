@@ -19,7 +19,11 @@ HEADLESS=1 make -j$(nproc)
 ./tests/smoke.sh
 # → PASS: smoke test ...  OR  FAIL: divergence detected (dump path printed)
 
-# 3. Run all curated scenarios
+# 3. Record a curated scenario (default mode, needs DATA.DAT) — see SCENARIOS.md
+make -j$(nproc)
+./tests/record.sh level0_walk     # play, then quit (Alt+X). Writes replays/level0_walk.inp
+
+# 4. Run all curated scenarios under headless verify
 ./tests/scenarios.sh
 # → PASS/FAIL per replay file
 

@@ -19,9 +19,14 @@ for inp in tests/replays/*.inp; do
     mkdir -p "$DUMP_DIR"
     LOG="$DUMP_DIR/run.log"
 
+    # Per-scenario frame budget: tests/replays/<name>.frames if present
+    # (written by record.sh = last recorded frame + tail), else default.
+    FRAMES=10000
+    [ -f "tests/replays/${name}.frames" ] && FRAMES=$(cat "tests/replays/${name}.frames")
+
     if ./vikings_headless \
         --replay-input="$inp" \
-        --max-frames=10000 \
+        --max-frames="$FRAMES" \
         --dump-dir="$DUMP_DIR" \
         > "$LOG" 2>&1; then
         echo "PASS: $name"
