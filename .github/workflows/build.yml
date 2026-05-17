@@ -59,6 +59,8 @@ jobs:
         run: |
           mkdir -p dist/vikings-linux-x86_64
           cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-x86_64/
+          # Static DS / EXE blobs needed at runtime by the v2 mirror.
+          cp ds_static.bin exe_static.bin dist/vikings-linux-x86_64/
           [ -f README.md ] && cp README.md dist/vikings-linux-x86_64/
           tar -czf vikings-linux-x86_64.tar.gz -C dist vikings-linux-x86_64
           ls -lh vikings-linux-x86_64.tar.gz
@@ -100,11 +102,16 @@ jobs:
       - name: Build (WIN=1 RELEASE=1 SDL_STATIC=1)
         run: make WIN=1 RELEASE=1 SDL_STATIC=1 -j$(nproc)
 
+      - name: Build keymap editor
+        run: make keymap_editor WIN=1 RELEASE=1 SDL_STATIC=1
+
       - name: Package
         # SDL2 is fully static here, no SDL2.dll alongside the exe.
         run: |
           mkdir -p dist/vikings-windows-x86_64
-          cp vikings.exe vikings_keymap.cfg dist/vikings-windows-x86_64/
+          cp vikings.exe vikings_keymap_editor.exe vikings_keymap.cfg dist/vikings-windows-x86_64/
+          # Static DS / EXE blobs needed at runtime by the v2 mirror.
+          cp ds_static.bin exe_static.bin dist/vikings-windows-x86_64/
           [ -f README.md ] && cp README.md dist/vikings-windows-x86_64/
           cd dist && zip -r ../vikings-windows-x86_64.zip vikings-windows-x86_64
           ls -lh ../vikings-windows-x86_64.zip

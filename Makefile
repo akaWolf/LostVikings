@@ -206,9 +206,13 @@ KEYMAP_EDITOR_SRCS := \
   src/sdl/keymap_editor/editor.cpp
 KEYMAP_EDITOR_OBJS := $(patsubst %.cpp, $(KEYMAP_EDITOR_OBJDIR)/%.o, $(KEYMAP_EDITOR_SRCS))
 
-keymap_editor: vikings_keymap_editor
+# Editor binary name picks up .exe under WIN=1 so the same target works for
+# both native Linux and mingw cross-compile.
+KEYMAP_EDITOR_EXE := vikings_keymap_editor$(if $(filter 1,$(WIN)),.exe,)
 
-vikings_keymap_editor: $(KEYMAP_EDITOR_OBJS)
+keymap_editor: $(KEYMAP_EDITOR_EXE)
+
+$(KEYMAP_EDITOR_EXE): $(KEYMAP_EDITOR_OBJS)
 	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) -o $@ $^ $(SDL)
 
 $(KEYMAP_EDITOR_OBJDIR)/%.o: %.cpp
@@ -229,6 +233,6 @@ $(OBJDIR)/%.o: %.c
 	$(CC) -c $(CFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
 
 clean:
-	rm -rf .obj .obj-win .obj-headless .obj-keymap-editor vikings vikings.exe vikings_headless vikings_keymap_editor
+	rm -rf .obj .obj-win .obj-headless .obj-keymap-editor vikings vikings.exe vikings_headless vikings_keymap_editor vikings_keymap_editor.exe
 
 -include $(DEPS)
