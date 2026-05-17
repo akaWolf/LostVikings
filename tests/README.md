@@ -12,7 +12,7 @@ runs orig (ground truth) + v2 (mirror) in parallel, ловит divergences,
 
 ```bash
 # 1. Build headless binary (default mode without SDL display / MIDI)
-HEADLESS=1 make -j$(nproc)
+HEADLESS=1 RELEASE=1 make -j$(nproc)
 # → produces vikings_headless (~8.6MB)
 
 # 2. Run smoke test (1 sec, basic sanity)
@@ -112,7 +112,7 @@ V2_ONLY=1 make -j$(nproc)
 # Press Ctrl-C when done
 
 # 4. Verify replay works in headless
-HEADLESS=1 make -j$(nproc)
+HEADLESS=1 RELEASE=1 make -j$(nproc)
 ./vikings_headless --replay-input=tests/replays/my_scenario.inp
 # Exit 0 = OK, Exit 1 = divergence found (good — bug to investigate!)
 
@@ -344,7 +344,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y libsdl2-dev
-      - run: HEADLESS=1 make -j$(nproc)
+      - run: HEADLESS=1 RELEASE=1 make -j$(nproc)
       - run: ./tests/smoke.sh
 
   scenarios:
@@ -354,7 +354,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y libsdl2-dev
-      - run: HEADLESS=1 make -j$(nproc)
+      - run: HEADLESS=1 RELEASE=1 make -j$(nproc)
       - run: ./tests/scenarios.sh
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -368,7 +368,7 @@ jobs:
 ```bash
 # .git/hooks/pre-commit
 #!/bin/bash
-HEADLESS=1 make -j$(nproc) > /dev/null 2>&1 || { echo "Build broken"; exit 1; }
+HEADLESS=1 RELEASE=1 make -j$(nproc) > /dev/null 2>&1 || { echo "Build broken"; exit 1; }
 ./tests/smoke.sh || { echo "Smoke test failed — see /tmp/headless_smoke_*/run.log"; exit 1; }
 ```
 
@@ -403,7 +403,7 @@ with shell exit code. See `HEADLESS_MODE_ANALYSIS.md` §3.2 for full formalism.
 
 ## Troubleshooting
 
-**`vikings_headless: command not found`** → не собран. `HEADLESS=1 make -j$(nproc)`.
+**`vikings_headless: command not found`** → не собран. `HEADLESS=1 RELEASE=1 make -j$(nproc)`.
 
 **`--replay-input is REQUIRED`** → headless всегда нужен replay file. Use `empty.inp` для smoke.
 

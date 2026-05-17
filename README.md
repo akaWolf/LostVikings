@@ -162,7 +162,7 @@ deterministically from a replay file and exits with code `1` on the
 first verify divergence. Built for CI and reproducible bug hunting:
 
 ```sh
-HEADLESS=1 make -j$(nproc)
+HEADLESS=1 RELEASE=1 make -j$(nproc)
 ./vikings_headless --replay-input=tests/replays/empty.inp --max-frames=200
 ```
 
@@ -240,7 +240,7 @@ config format is documented inline at the top of that file.
 ## Testing
 
 ```sh
-HEADLESS=1 make -j$(nproc)
+HEADLESS=1 RELEASE=1 make -j$(nproc)
 
 ./tests/smoke.sh                              # 200-frame baseline (empty.inp)
 ./tests/scenarios.sh                          # all replays in tests/replays/

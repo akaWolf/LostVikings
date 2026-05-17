@@ -19,7 +19,7 @@ make -j$(nproc)                       # default build (orig + v2 mirror)
 Then verify it replays clean:
 
 ```sh
-HEADLESS=1 make -j$(nproc)
+HEADLESS=1 RELEASE=1 make -j$(nproc)
 ./tests/scenarios.sh                  # runs every replays/*.inp, reports PASS/FAIL
 ```
 
