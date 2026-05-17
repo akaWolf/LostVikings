@@ -463,6 +463,9 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 #ifdef __linux__
 #include <execinfo.h>
 #endif
+#ifndef _WIN32
+#include <unistd.h>   // _exit
+#endif
 #include <exception>
 #include <csignal>
 

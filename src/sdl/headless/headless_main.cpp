@@ -15,6 +15,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
+#ifndef _WIN32
+#include <unistd.h>   // _exit
+#endif
 #include "headless_dump.h"
 #include "../v2_input_recorder.h"
 #include "../v2_keymap.h"
