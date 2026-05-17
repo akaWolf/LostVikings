@@ -65,6 +65,11 @@ ifeq ($(SDL_STATIC),1)
   # PKG_CONFIG is set in the WIN=1 block; default for native Linux build.
   PKG_CONFIG ?= pkg-config
   SDL := $(shell $(PKG_CONFIG) --cflags --libs --static sdl2)
+  # `pkg-config --static` lists transitive deps as -l, but gcc still picks
+  # libSDL2.so over libSDL2.a (and on mingw, libSDL2.dll.a over libSDL2.a).
+  # Replace -lSDL2 with -l:libSDL2.a to force the static archive specifically
+  # — system libs (X11, ALSA, mingw32, ...) keep their default lookup.
+  SDL := $(patsubst -lSDL2,-l:libSDL2.a,$(SDL))
   ifeq ($(WIN),1)
     # SDL2main on Windows expects the user to define SDL_main(); we have a
     # plain main() instead (in asm.cpp / v2_main.cpp / headless_main.cpp).
