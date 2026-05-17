@@ -73,10 +73,15 @@ ifeq ($(SDL_STATIC),1)
   ifeq ($(WIN),1)
     # SDL2main on Windows expects the user to define SDL_main(); we have a
     # plain main() instead (in asm.cpp / v2_main.cpp / headless_main.cpp).
-    # Strip -lSDL2main + -mwindows from pkg-config output, tell SDL.h not to
-    # rename main via SDL_MAIN_HANDLED, and force console subsystem with
-    # -mconsole so mingw's startup looks for main() instead of WinMain().
-    SDL := $(filter-out -lSDL2main -mwindows,$(SDL))
+    # Strip from pkg-config output:
+    #   -lSDL2main      — SDL2main library (would also call SDL_main)
+    #   -mwindows       — GUI subsystem flag (mingw startup would expect WinMain)
+    #   -Dmain=SDL_main — mingw sdl2.pc injects this in Cflags, which renames
+    #                     our main() to SDL_main BEFORE the source sees
+    #                     SDL_MAIN_HANDLED. Must be filtered too.
+    # Then add -DSDL_MAIN_HANDLED (so SDL.h does not rename main inside source)
+    # and -mconsole (so mingw startup expects plain main()).
+    SDL := $(filter-out -lSDL2main -mwindows -Dmain=SDL_main,$(SDL))
     PLATFORM_DEFINES += -DSDL_MAIN_HANDLED
     PLATFORM_LDFLAGS += -mconsole
   endif
