@@ -379,8 +379,11 @@ void updateDraw()
 	// drawBuffer mirror but orig window itself is unused.
 	uint32_t _window_flags = SDL_WINDOW_HIDDEN;
 #else
-	uint32_t _window_flags = SDL_WINDOW_SHOWN;
+	uint32_t _window_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
 #endif
+	// Nearest-neighbor scaling so pixel art stays crisp at any non-integer
+	// scale. SDL's default is already "0" (nearest); pin it explicitly.
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
 	// Позиционируем в левый верхний угол
 	myWindow = SDL_CreateWindow( "FFFF", 0, 0, SCREEN_WIDTH * SCREEN_SCALE, SCREEN_HEIGHT * SCREEN_SCALE, _window_flags );
 		if( myWindow == NULL )
@@ -396,6 +399,8 @@ void updateDraw()
 			  //    X86_REGREF
 
 			myRenderer = SDL_CreateRenderer(myWindow, -1, SDL_RENDERER_ACCELERATED);
+			// Keep 4:3 aspect at any window size — SDL letterboxes when needed.
+			SDL_RenderSetLogicalSize(myRenderer, SCREEN_WIDTH, SCREEN_HEIGHT);
 
 			myTexture = SDL_CreateTexture(myRenderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, RENDER_WIDTH, RENDER_HEIGHT);
 
@@ -415,6 +420,15 @@ void updateDraw()
 				 switch (event.type) {
 				 case SDL_KEYDOWN:
 				 case SDL_KEYUP:
+				   // F11 = toggle desktop fullscreen on this window (not a
+				   // game input, handled before keymap switch).
+				   if (event.type == SDL_KEYDOWN && !event.key.repeat &&
+				       event.key.keysym.sym == SDLK_F11) {
+				       Uint32 wf = SDL_GetWindowFlags(myWindow);
+				       SDL_SetWindowFullscreen(myWindow,
+				           (wf & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+				       break;
+				   }
 				   switch( event.key.keysym.sym ){
 					 case SDLK_LEFT:
 					   key_val = 0x200;

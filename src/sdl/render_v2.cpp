@@ -107,14 +107,18 @@ void render_thread_proc_v2(void* _state)
     pos_y = 670;
   }
   
-  // Создаем второе окно в правом нижнем углу
-  myWindow_v2 = SDL_CreateWindow( 
-    "Lost Vikings - Test Renderer V2", 
+  // Nearest-neighbor scaling so pixel art stays crisp at any window size
+  // (also the SDL default, but pin it explicitly for portability).
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+
+  // Создаем второе окно в правом нижнем углу (resizable, fullscreen via F11).
+  myWindow_v2 = SDL_CreateWindow(
+    "Lost Vikings - Test Renderer V2",
     pos_x, pos_y,
     window_width, window_height,
-    SDL_WINDOW_SHOWN 
+    SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
   );
-  
+
   if( myWindow_v2 == NULL )
   {
     printf( "Window v2 could not be created! SDL_Error: %s\n", SDL_GetError() );
@@ -124,6 +128,10 @@ void render_thread_proc_v2(void* _state)
     printf("render_v2: Window created successfully!\n");
     printf("render_v2: Creating renderer...\n");
     myRenderer_v2 = SDL_CreateRenderer(myWindow_v2, -1, SDL_RENDERER_ACCELERATED);
+    // Logical size keeps 4:3 aspect (320x240) regardless of window dimensions —
+    // SDL letterboxes the texture with black bars when the window's aspect
+    // differs from the logical one.
+    SDL_RenderSetLogicalSize(myRenderer_v2, SCREEN_WIDTH_V2, SCREEN_HEIGHT_V2);
     myTexture_v2 = SDL_CreateTexture(myRenderer_v2, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, RENDER_WIDTH_V2, RENDER_HEIGHT_V2);
     myFormat_v2 = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
@@ -146,6 +154,15 @@ void render_thread_proc_v2(void* _state)
               break;
           case SDL_KEYDOWN:
           case SDL_KEYUP: {
+              // F11 = toggle desktop-fullscreen (handled before keymap so it
+              // never reaches game-input mapping).
+              if (event.type == SDL_KEYDOWN && !event.key.repeat &&
+                  event.key.keysym.sym == SDLK_F11) {
+                  Uint32 wf = SDL_GetWindowFlags(myWindow_v2);
+                  SDL_SetWindowFullscreen(myWindow_v2,
+                      (wf & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+                  break;
+              }
               uint16_t key_val = 0;
               uint16_t spec_off = 0;
               v2_keymap_lookup_sdl(event.key.keysym.sym, &key_val, &spec_off);
