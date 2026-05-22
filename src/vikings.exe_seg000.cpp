@@ -1974,6 +1974,7 @@ cs=0x1a2;eip=0x000036; 	J(CALL(sub_1673c,0));	// 56 call    sub_1673C ;~ 01A2:00
 	if (myDrawInfo_v2) { v2_signal_phase(V2_PHASE_PRE_VM, ds); }
 	// Reset orig trace before main VM (discard init sub_115d2 entries)
 	{ extern int orig_trace_len; orig_trace_len = 0; }
+	{ extern int orig_coll_trace_len; orig_coll_trace_len = 0; }  // #175
 cs=0x1a2;eip=0x000039; 	J(CALL(sub_14207,0));	// 57 call    sub_14207 ;~ 01A2:0039
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(2); /* VM_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_VM, ds);
@@ -12722,6 +12723,10 @@ cs=0x1a2;eip=0x005591; 	J(CALL(__dispatch_call,*(dw*)(((db*)&off_30cac)+si)));	/
 	                                orig_coll_op, orig_coll_pc, orig_coll_pre[wi], cur);
 	        }
 	    }
+	    // #175: collision-VM trace coverage — record this orig collision opcode for
+	    // index-by-index compare against v2 (v2_vm_coll_trace_compare). pc_after=bx.
+	    { extern void v2_coll_trace_record_orig(uint16_t, uint8_t, uint16_t, uint16_t, uint8_t*);
+	      v2_coll_trace_record_orig(orig_coll_obj, orig_coll_op, orig_coll_pc, (uint16_t)bx, (uint8_t*)raddr(ds,0)); }
 	    orig_coll_active = 0;
 	}
 cs=0x1a2;eip=0x005595; 	J(JMP(loc_15582));	// 12691 jmp     short loc_15582 ;~ 01A2:5595

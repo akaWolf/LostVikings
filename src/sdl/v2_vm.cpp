@@ -14589,6 +14589,14 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
         for (int wi = 0; wi < v2_coll_watch_count; wi++)
             pre_w[wi] = *(uint16_t*)(shadow + v2_coll_watch_addrs[wi]);
         v2_vm_optable[opcode](vm);
+#ifndef V2_ONLY
+        // #175: collision-VM trace coverage — record every collision opcode for
+        // index-by-index compare against orig (v2_vm_coll_trace_compare).
+        {
+            extern void v2_coll_trace_record_v2(uint16_t, uint8_t, uint16_t, uint16_t, uint8_t*);
+            v2_coll_trace_record_v2(obj_si, opcode, pc_before, vm.pc, shadow);
+        }
+#endif
         for (int wi = 0; wi < v2_coll_watch_count; wi++) {
             uint16_t post_w = *(uint16_t*)(shadow + v2_coll_watch_addrs[wi]);
             if (post_w != pre_w[wi]) {
@@ -16911,6 +16919,7 @@ void v2_phase_vm(uint16_t ds_val) {
     if (_vm_frame <= 2) fprintf(stderr, "V2-VM-START[%d]: trace_len_before_reset=%d table_end=%04X\n",
                                 _vm_frame, v2_trace_len, *(uint16_t*)(v2_vm_shadow_ds + 0x372));
     v2_trace_len = 0;
+    extern int v2_coll_trace_len; v2_coll_trace_len = 0;  // #175
 
     // Moved to v2_phase_pre_vm
     // Pre-VM DS compare removed from here
@@ -17200,6 +17209,13 @@ void v2_phase_post_vm(uint16_t ds_val) {
     chk("PVM-entry");
     v2_game_loop_post_vm(v2_vm_shadow_ds);
     chk("PVM-post-postvm");
+#ifndef V2_ONLY
+    // #175: collision-VM trace compare — placed AFTER v2_game_loop_post_vm,
+    // because v2's collision VM (v2_run_collision_vm) runs inside it. orig's
+    // collision ran earlier (before the post-VM barrier), so both traces are
+    // populated here. First mismatch pinpoints the diverging collision op.
+    { extern void v2_vm_coll_trace_compare(); v2_vm_coll_trace_compare(); }
+#endif
     v2_vm_verify_subsprites(ds_val);
     v2_vm_verify_fs(ds_val);
 #ifndef V2_ONLY
@@ -19679,6 +19695,100 @@ static VMTraceEntry orig_trace[VM_TRACE_MAX];
 int v2_trace_len = 0;
 int orig_trace_len = 0;
 int g_v2_verify_step = 0;
+
+// ============================================================================
+// Collision-VM trace coverage (#175).
+// The anim-VM trace (above) does not cover the collision VM (sub_15569), a
+// separate bytecode interpreter. Collision-VM divergences therefore slip past
+// trace_compare and only surface far downstream (PSNAP / frame-end). This is
+// an independent trace pair recorded per collision opcode on BOTH sides,
+// compared by index, exiting on the FIRST divergence — pinpointing the exact
+// op+obj+pc that diverges inside the collision VM.
+//
+// Focused hash: object-table region [0x1300,0x1C80) + scratch [0x30,0x90)
+// where collision writes land — ~28x cheaper than the full 64KB hash, run
+// once per collision opcode (thousands/frame).
+struct CollTraceEntry {
+    uint16_t obj;
+    uint8_t  opcode;
+    uint16_t pc_before;
+    uint16_t pc_after;
+    uint32_t hash;        // focused DS hash AFTER opcode
+};
+static const int COLL_TRACE_MAX = 40000;
+static CollTraceEntry v2_coll_trace[COLL_TRACE_MAX];
+static CollTraceEntry orig_coll_trace[COLL_TRACE_MAX];
+int v2_coll_trace_len = 0;
+int orig_coll_trace_len = 0;
+
+static uint32_t v2_coll_focus_hash(uint8_t* ds) {
+    uint32_t h = 2166136261u;
+    for (uint16_t a = 0x30; a < 0x90; a++)   h = (h ^ ds[a]) * 16777619u;
+    for (uint32_t a = 0x1300; a < 0x1C80; a++) h = (h ^ ds[a]) * 16777619u;
+    return h;
+}
+
+// v2 side — called from v2_run_collision_vm after each opcode.
+void v2_coll_trace_record_v2(uint16_t obj, uint8_t opcode, uint16_t pc_before,
+                             uint16_t pc_after, uint8_t* ds) {
+    if (v2_coll_trace_len >= COLL_TRACE_MAX) return;
+    auto& e = v2_coll_trace[v2_coll_trace_len++];
+    e.obj = obj; e.opcode = opcode; e.pc_before = pc_before;
+    e.pc_after = pc_after; e.hash = v2_coll_focus_hash(ds);
+}
+
+// orig side — called from sub_15569 dispatcher (seg000) after each opcode.
+void v2_coll_trace_record_orig(uint16_t obj, uint8_t opcode, uint16_t pc_before,
+                               uint16_t pc_after, uint8_t* ds) {
+    if (orig_coll_trace_len >= COLL_TRACE_MAX) return;
+    auto& e = orig_coll_trace[orig_coll_trace_len++];
+    e.obj = obj; e.opcode = opcode; e.pc_before = pc_before;
+    e.pc_after = pc_after; e.hash = v2_coll_focus_hash(ds);
+}
+
+// Compare collision traces by index — first mismatch pinpoints the diverging
+// collision op. Called at POST_VM next to v2_vm_trace_compare.
+void v2_vm_coll_trace_compare() {
+    int len = (v2_coll_trace_len < orig_coll_trace_len) ? v2_coll_trace_len : orig_coll_trace_len;
+    static bool reported = false;
+    for (int i = 0; i < len && !reported; i++) {
+        auto& v = v2_coll_trace[i];
+        auto& o = orig_coll_trace[i];
+        if (v.obj != o.obj || v.opcode != o.opcode ||
+            v.pc_before != o.pc_before || v.pc_after != o.pc_after || v.hash != o.hash) {
+            reported = true;
+            extern int v2_dbg_pre_vm_iter;
+            fprintf(stderr,
+                "V2-COLL-TRACE: FIRST MISMATCH f=%d idx=%d/%d\n"
+                "  orig: obj=%04X op=%02X pc=%04X->%04X hash=%08X\n"
+                "  v2  : obj=%04X op=%02X pc=%04X->%04X hash=%08X\n",
+                v2_dbg_pre_vm_iter, i, len,
+                o.obj, o.opcode, o.pc_before, o.pc_after, o.hash,
+                v.obj, v.opcode, v.pc_before, v.pc_after, v.hash);
+            // Context: a few preceding ops to see where they were still in lockstep.
+            int from = i >= 4 ? i - 4 : 0;
+            for (int j = from; j <= i; j++) {
+                fprintf(stderr, "    [%d] orig obj=%04X op=%02X pc=%04X->%04X h=%08X | v2 obj=%04X op=%02X pc=%04X->%04X h=%08X\n",
+                    j, orig_coll_trace[j].obj, orig_coll_trace[j].opcode, orig_coll_trace[j].pc_before, orig_coll_trace[j].pc_after, orig_coll_trace[j].hash,
+                    v2_coll_trace[j].obj, v2_coll_trace[j].opcode, v2_coll_trace[j].pc_before, v2_coll_trace[j].pc_after, v2_coll_trace[j].hash);
+            }
+#ifdef HEADLESS
+            extern void headless_dump_divergence(const char*, int, const char*);
+            char buf[200];
+            snprintf(buf, sizeof(buf), "collision-VM op diverge: orig obj=%04X op=%02X pc=%04X | v2 obj=%04X op=%02X pc=%04X",
+                o.obj, o.opcode, o.pc_before, v.obj, v.opcode, v.pc_before);
+            headless_dump_divergence("coll-trace", v2_dbg_pre_vm_iter, buf);
+#endif
+        }
+    }
+    if (!reported && v2_coll_trace_len != orig_coll_trace_len) {
+        extern int v2_dbg_pre_vm_iter;
+        fprintf(stderr, "V2-COLL-TRACE: length mismatch f=%d v2=%d orig=%d (prefix matched)\n",
+            v2_dbg_pre_vm_iter, v2_coll_trace_len, orig_coll_trace_len);
+    }
+    // Lengths reset at each side's frame start (mirrors anim trace lifecycle):
+    // v2_coll_trace_len at v2 frame begin, orig_coll_trace_len at orig frame begin.
+}
 
 // DS snapshot per trace entry (any opcode). Bounded by FE_SNAP_MAX so memory
 // stays reasonable: 200 * 64KB * 2 = 25.6 MB. trace_compare uses it to dump
