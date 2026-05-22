@@ -1785,6 +1785,10 @@ static void v2_sub_10130(uint8_t* s) {
         if (need_quit) return;
 #ifdef V2_ONLY
         SDL_Delay(16);                // vsync 60Hz pacing for interactive
+#elif defined(HEADLESS)
+        // headless: no display → spin without pacing (render thread decrements
+        // 0xA39C fast). Tiny yield to avoid starving the render thread.
+        SDL_Delay(0);
 #else
         SDL_Delay(4);                 // default mode: faster verify
 #endif

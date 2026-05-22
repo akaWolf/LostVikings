@@ -682,7 +682,11 @@ void updateDraw()
 			     v2_render_tick.fetch_add(1, std::memory_order_release);
 			     v2_render_tick_cv.notify_all();
 			   }
+#ifdef HEADLESS
+			   SDL_Delay(0);   // headless: no display → no vsync pacing, run flat out
+#else
 			   SDL_Delay(15);
+#endif
 		   }
 		}
 
