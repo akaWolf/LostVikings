@@ -18090,10 +18090,6 @@ static void v2_sub_12352_iter(uint8_t* shadow) {
             g_is_first_sub12352_shadow = false;
         }
     }
-    uint16_t ax = 0;
-    if (*(uint16_t*)(shadow + 0x86DA) != 0)
-        ax = *(uint16_t*)(shadow + 0x86DC);
-    ax |= *(uint16_t*)(shadow + 0x86DE);
 #ifdef V2_ONLY
     // V2_ONLY: orig sub_12352 doesn't run → v2_input_snapshot stays 0.
     // Read SDL keyboard state directly via intro-mask helper (same as
@@ -18105,12 +18101,30 @@ static void v2_sub_12352_iter(uint8_t* shadow) {
     // (orig sub_11080 eip 0x10E5 clears word_30bbe). Without that sync, a
     // held key across level transition would inject stale held state into
     // dialog cmd 4 wait → instant auto-dismiss. See v2_sub_11080 line 4339.
+    uint16_t ax = 0;
+    if (*(uint16_t*)(shadow + 0x86DA) != 0)
+        ax = *(uint16_t*)(shadow + 0x86DC);
+    ax |= *(uint16_t*)(shadow + 0x86DE);
     extern uint16_t input_keys;
     uint16_t w288ac = *(uint16_t*)(shadow + 0x3CC);
     ax = v2_input_intro_mask(ax, w288ac, input_keys);
 #else
+    // Default mode: orig sub_12352 already folded the replay word (word_30bbc /
+    // 0x86DC), word_30bbe (0x86DE) and intro_mask(input_keys) into its final ax
+    // and latched it verbatim into v2_input_snapshot (seg000 eip 0x2367, the
+    // instruction right before `MOV word_28896, ax`). So v2_input_snapshot IS
+    // orig's word_28896 — use it directly.
+    //
+    // The previous code re-derived ax from shadow[0x86DA/DC/DE] and only THEN
+    // OR'd v2_input_snapshot. That re-read word_30bbe (0x86DE), which the render
+    // thread updates asynchronously on each SDL/replay KEYDOWN. A key edge (e.g.
+    // 0x8000 Enter) landing between orig's latch and v2's read made v2's 0x03B6
+    // carry a bit orig's didn't — an intermittent current_input divergence
+    // (#83/#105 input-layer race; surfaced as a flaky intro.inp PSNAP fail at
+    // PRE_VM_END). word_30bbe is already inside v2_input_snapshot, so the re-read
+    // was both redundant and racy.
     extern uint16_t v2_input_snapshot;
-    ax |= v2_input_snapshot;
+    uint16_t ax = v2_input_snapshot;
 #endif
     *(uint16_t*)(shadow + 0x03B6) = ax;
     uint16_t prev = *(uint16_t*)(shadow + 0x03BA);
