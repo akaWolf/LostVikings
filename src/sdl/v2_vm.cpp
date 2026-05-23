@@ -14127,14 +14127,28 @@ static void v2_vm_op_33(V2VM& vm) {
 // 0x1A (sub_1559c): PUSH ds:0x372, set 6, collision_155d6, POP, branch
 // helper consumes 1 byte; on no collision: skip 2 more; on collision: call-jump
 static void v2_vm_op_1A(V2VM& vm) {
+    // orig sub_1559c (eip 0x559c): PUSH ds:0x372; MOV ds:0x372, 6 — temporarily
+    // limit the collision_155d6 AABB scan to the 3 viking objects (si < 6); POP
+    // ds:0x372 after. Without this, v2 scanned the full object table and found
+    // spurious overlaps with non-viking objects (#175: obj 0x14 bounce got an
+    // extra 0x13F5 bit at f2622, flipping its velocity reversal at f2623).
+    uint16_t saved_372 = vm.ds_read(0x372);
+    vm.ds_write(0x372, 6);
     bool collision = v2_vm_collision_check_155d6(vm);
+    vm.ds_write(0x372, saved_372);
     vm.ds_write(0x38E, vm.ds_read(0x38E) + 2); // ALWAYS increment
     if (collision) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
 
 // 0x1D (sub_15686): collision_156c0 + ds:0x38E += 2
 static void v2_vm_op_1D(V2VM& vm) {
+    // orig sub_15686 (eip 0x5686): PUSH ds:0x372; MOV ds:0x372, 6 — same
+    // viking-only scan limit as op_1A (sub_1559c); POP ds:0x372 after.
+    // (op_38/sub_156aa calls collision_156c0 WITHOUT this limit — see v2_vm_op_38.)
+    uint16_t saved_372 = vm.ds_read(0x372);
+    vm.ds_write(0x372, 6);
     bool collision = v2_vm_collision_check_156c0(vm);
+    vm.ds_write(0x372, saved_372);
     vm.ds_write(0x38E, vm.ds_read(0x38E) + 2); // ALWAYS increment
     if (collision) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
