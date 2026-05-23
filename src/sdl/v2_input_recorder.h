@@ -33,6 +33,13 @@ void v2_input_recorder_init(const char* record_file, const char* replay_file, in
 // no event pending. Behaviour depends on mode (see header comment).
 int v2_input_poll_event(SDL_Event* e);
 
+// RECORD mode only: flush pending key edges (captured by the render thread) to
+// the file, tagged with the CURRENT game frame. Call from the game thread at the
+// point input is read (sub_12352) so the recorded frame == the frame the game
+// observes the input on — required for deadlock-free replay through blocking
+// wait-loops that poll input without advancing the frame counter (#180).
+void v2_input_record_drain(void);
+
 // Cleanup.
 void v2_input_recorder_shutdown(void);
 

@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <mutex>
 
 // v2 game frame counter, defined in v2_vm.cpp; bumped in v2_phase_frame_begin.
 extern int v2_dbg_pre_vm_iter;
@@ -41,6 +42,22 @@ struct ReplayEvent {
 std::vector<ReplayEvent> g_replay_queue;
 size_t g_replay_pos = 0;
 bool g_replay_exhausted_logged = false;
+
+// RECORD mode: the render thread captures SDL key edges into this pending queue
+// (action + kind only — NO frame tag). The game thread drains it inside
+// sub_12352 (v2_input_record_drain) and writes each event tagged with the frame
+// the game ACTUALLY reads input on (v2_dbg_pre_vm_iter at that sub_12352 call).
+//
+// Why not tag on the render thread: the render thread observes v2_dbg_pre_vm_iter
+// asynchronously, so a key pressed inside a blocking wait-loop (which polls input
+// but doesn't advance the frame counter) could be logged a frame LATE — after the
+// loop already got the input and the main loop bumped the counter. That made the
+// recorded frame one ahead of where the game reads it, so on replay the
+// frame-gated event never became due while the loop sat on the frozen counter →
+// deadlock (#180). Tagging at the game-thread read makes record == replay.
+struct PendingRec { const char* action; uint8_t kind; }; // kind 0=KD 1=KU
+std::vector<PendingRec> g_pending_record;
+std::mutex g_pending_mutex;
 
 void parse_replay_file(const char* path) {
     FILE* f = fopen(path, "r");
@@ -77,10 +94,11 @@ void log_keyboard_event(const SDL_Event* e) {
     if (e->type == SDL_KEYDOWN && e->key.repeat) return;  // skip typematic
     const char* action = sdl_key_to_action(e->key.keysym.sym);
     if (!action) return;  // unmapped key — don't record (won't affect game)
-    int frame = v2_dbg_pre_vm_iter;
-    const char* k = (e->type == SDL_KEYDOWN) ? "KD" : "KU";
-    fprintf(g_record_file, "%d %s %s\n", frame, k, action);
-    fflush(g_record_file);
+    // Don't write here (render thread): only capture the action + edge into the
+    // pending queue. The game thread tags it with the read-frame in
+    // v2_input_record_drain (called from sub_12352). See g_pending_record note.
+    std::lock_guard<std::mutex> lk(g_pending_mutex);
+    g_pending_record.push_back({action, (uint8_t)(e->type == SDL_KEYDOWN ? 0 : 1)});
 }
 
 bool dequeue_due_replay(SDL_Event* out) {
@@ -93,7 +111,8 @@ bool dequeue_due_replay(SDL_Event* out) {
         return false;
     }
     const ReplayEvent& e = g_replay_queue[g_replay_pos];
-    if (e.frame > v2_dbg_pre_vm_iter) return false;  // not yet — wait
+    if (e.frame > v2_dbg_pre_vm_iter)
+        return false;  // event gated to a future frame — not due yet
     SDL_zerop(out);
     out->type = (e.kind == 0) ? SDL_KEYDOWN : SDL_KEYUP;
     out->key.keysym.sym = e.keycode;
@@ -164,8 +183,25 @@ extern "C" int v2_input_poll_event(SDL_Event* e) {
     return 1;
 }
 
+// RECORD mode: called from the game thread inside sub_12352 (the point the game
+// reads input). Writes every pending key edge captured by the render thread,
+// tagged with the CURRENT game-loop frame (v2_dbg_pre_vm_iter) — i.e. the frame
+// the game actually observes the input on, so the recording replays without the
+// wait-loop frame-gating deadlock (#180). No-op outside RECORD mode.
+extern "C" void v2_input_record_drain(void) {
+    if (g_mode != MODE_RECORD || !g_record_file) return;
+    std::lock_guard<std::mutex> lk(g_pending_mutex);
+    if (g_pending_record.empty()) return;
+    for (const auto& p : g_pending_record)
+        fprintf(g_record_file, "%d %s %s\n", v2_dbg_pre_vm_iter,
+                p.kind == 0 ? "KD" : "KU", p.action);
+    fflush(g_record_file);
+    g_pending_record.clear();
+}
+
 extern "C" void v2_input_recorder_shutdown(void) {
     if (g_record_file) {
+        v2_input_record_drain();  // flush any key edges captured but not yet written
         // Persist the frame the recording session actually ended on, so the
         // replay can run for exactly the same number of frames (run to the last
         // frame reached during recording — not the last input event, not an

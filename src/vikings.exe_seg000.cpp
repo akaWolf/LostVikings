@@ -32,6 +32,7 @@ static FILE* data_handle = 0;
 
 extern uint16_t input_keys;
 extern "C" void enter_trace_sub12352();
+extern "C" void v2_input_record_drain(void);  // #180: flush recorded key edges at game read-frame
 extern "C" void v2_mirror_sub_10350_spec_ors();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
 // Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.
@@ -5927,6 +5928,11 @@ cs=0x1a2;eip=0x00237b; 	X(MOV(word_2889a, ax));	// 4626 mov     word_2889A, ax ;
 	// Self-disarms after N calls; also logs whenever any 0x8000 bit is present
 	// in any input/computed register (catches edge propagation across frames).
 	enter_trace_sub12352();
+	// #180: RECORD mode — write any key edges the render thread captured, tagged
+	// with THIS frame (the frame the game reads input on). Keeps recorded frames
+	// == game read-frames so blocking wait-loops replay without the frame-gating
+	// deadlock. No-op outside record mode.
+	v2_input_record_drain();
 	// V2 barrier: signal AFTER orig sub_12352 finished computing word_28896/28898/2889A.
 	// v2 handler runs v2_sub_12352_iter ONCE per orig call → shadow input state tracks
 	// orig 1:1 across ALL call sites (main loop, sub_1086f recursion, VIKING_SWITCH/
