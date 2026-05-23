@@ -41,11 +41,17 @@ echo "Play now. Quit (Alt+X / close window) when done."
 if [ -f "$OUT" ]; then
     EVENTS=$(grep -cvE '^#|^$' "$OUT")
     LASTF=$(grep -vE '^#|^$' "$OUT" | tail -1 | awk '{print $1}')
-    echo "Saved $OUT — $EVENTS events, last frame ${LASTF:-0}."
-    # Drop a frame-budget hint so scenarios.sh runs just past the recording.
-    if [ -n "$LASTF" ]; then
-        echo $(( LASTF + 120 )) > "tests/replays/${NAME}.frames"
-        echo "Wrote tests/replays/${NAME}.frames = $((LASTF + 120))"
+    # The replay must run for exactly as many frames as the recording session
+    # did — to the LAST FRAME REACHED during recording, so verify covers the
+    # whole session (incl. frames after the final input). The recorder writes
+    # that as "# end-frame N" on clean shutdown. Prefer it; if a hard kill
+    # skipped shutdown, fall back to the last input frame (NO arbitrary tail).
+    ENDF=$(grep -E '^# end-frame ' "$OUT" | tail -1 | awk '{print $3}')
+    FRAMES="${ENDF:-$LASTF}"
+    echo "Saved $OUT — $EVENTS events, last input frame ${LASTF:-0}, recording end-frame ${ENDF:-<hard kill, none>}."
+    if [ -n "$FRAMES" ]; then
+        echo "$FRAMES" > "tests/replays/${NAME}.frames"
+        echo "Wrote tests/replays/${NAME}.frames = $FRAMES"
     fi
 else
     echo "No file produced — did the game start?"
