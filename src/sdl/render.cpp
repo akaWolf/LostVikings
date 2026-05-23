@@ -365,7 +365,9 @@ void updateDraw()
   std::thread render_thread;
   void render_thread_proc(void* _state)
   {
-	myDrawInfo = (myDrawInfoS *)calloc(1, sizeof(myDrawInfoS));
+	// myDrawInfo is allocated in render_init() on the game thread BEFORE this
+	// detached thread starts (#179) — it was calloc'd here, which raced the game
+	// thread's first drawPixel under heavy parallel startup → NULL deref @ f0.
 	assert(myDrawInfo);
 
 	printf("render: Starting initialization...\n");
@@ -694,6 +696,15 @@ void updateDraw()
 
 void render_init(void* state)
 {
+    // Allocate myDrawInfo synchronously on the game thread BEFORE spawning the
+    // detached render thread. The game thread writes myDrawInfo->drawBuffer via
+    // drawPixel from frame 0; previously the render thread calloc'd it async, so
+    // under heavy parallel startup (CI fuzz oversubscribing cores) the first
+    // drawPixel could run before the thread was scheduled → NULL deref @ f0 (#179).
+    if (!myDrawInfo) {
+        myDrawInfo = (myDrawInfoS *)calloc(1, sizeof(myDrawInfoS));
+        assert(myDrawInfo);
+    }
     render_thread = std::thread(render_thread_proc, state);
 	render_thread.detach();
 }

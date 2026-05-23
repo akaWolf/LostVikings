@@ -68,7 +68,11 @@ std::thread render_thread_v2;
 
 void render_thread_proc_v2(void* _state)
 {
-  myDrawInfo_v2 = (myDrawInfoS_v2 *)calloc(1, sizeof(myDrawInfoS_v2));
+  // myDrawInfo_v2 is allocated in render_init_v2() on the game thread BEFORE this
+  // detached thread starts (#179). It doubles as the "v2 mirror enabled" gate
+  // (`if (myDrawInfo_v2)` throughout seg000); calloc'ing it here raced both the
+  // game thread's first drawPixel (NULL deref @ f0) AND v2 activation timing
+  // (under load v2 could fail to start → false-pass with no verification).
   assert(myDrawInfo_v2);
 
   // Задержка чтобы первое окно успело инициализироваться
@@ -205,6 +209,14 @@ void render_thread_proc_v2(void* _state)
 
 void render_init_v2(void* state)
 {
+  // Allocate myDrawInfo_v2 synchronously on the game thread BEFORE spawning the
+  // detached v2 render thread — it gates the entire v2 mirror and is written via
+  // drawPixel from frame 0. Async calloc in the thread raced startup under heavy
+  // parallel load → NULL deref @ f0 / nondeterministic v2 activation (#179).
+  if (!myDrawInfo_v2) {
+    myDrawInfo_v2 = (myDrawInfoS_v2 *)calloc(1, sizeof(myDrawInfoS_v2));
+    assert(myDrawInfo_v2);
+  }
   render_thread_v2 = std::thread(render_thread_proc_v2, state);
   render_thread_v2.detach();
 }
