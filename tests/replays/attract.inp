@@ -1,0 +1,21 @@
+# Lost Vikings v2 input recording — frame-based, action names SDL-independent
+# Format: <frame> <KD|KU> <ACTION>  (frame = v2_dbg_pre_vm_iter)
+56 KU 1
+1272 KU X
+1272 KU Y
+1272 KU Y
+1272 KU Y
+1273 KU DEL
+1273 KU DEL
+1288 KU X
+1602 KU E
+1602 KU E
+1602 KU E
+1602 KU E
+1602 KU E
+1602 KU E
+1602 KU F
+1602 KU F
+1602 KU F
+1602 KU F
+1602 KU F

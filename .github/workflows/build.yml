@@ -68,6 +68,15 @@ jobs:
       - name: Smoke test
         run: ./tests/smoke.sh
 
+      # Curated gameplay replays (tests/replays/*.inp) verified bit-for-bit
+      # against the original (orig vs v2 mirror) under HEADLESS. Each replay runs
+      # for exactly its recorded session length (tests/replays/<name>.frames).
+      # Needs real DATA.DAT — skipped on forks/PRs where the secret is absent.
+      # Runs the replays in parallel across the runner's cores (JOBS=nproc).
+      - name: Scenario replays
+        if: hashFiles('DATA.DAT') != ''
+        run: ./tests/scenarios.sh
+
       - name: Build release vikings (RELEASE=1 STATIC=1 SDL_STATIC=1)
         run: make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
 
