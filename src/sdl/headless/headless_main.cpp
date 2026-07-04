@@ -23,6 +23,7 @@
 #include "../v2_keymap.h"
 
 extern int v2_dbg_pre_vm_iter;
+extern "C" void v2_fntest_report(void);  // FN-TEST summary (FNTEST env); _exit() skips atexit
 
 // Globals controlling headless behavior (referenced from verify hooks etc.)
 const char* g_headless_replay_input = nullptr;
@@ -92,6 +93,7 @@ int headless_check_exit(void) {
         v2_dump_opcode_coverage();
         v2_dump_psnap_summary();
         headless_dump_render_diff_summary();
+        v2_fntest_report();
         fflush(stdout); fflush(stderr);
         _exit(0);
     }

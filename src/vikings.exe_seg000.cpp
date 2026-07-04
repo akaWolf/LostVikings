@@ -33,6 +33,11 @@ static FILE* data_handle = 0;
 extern uint16_t input_keys;
 extern "C" void enter_trace_sub12352();
 extern "C" void v2_input_record_drain(void);  // #180: flush recorded key edges at game read-frame
+// FN-TEST Mode A hooks (FN_TEST_ANALYSIS.md): entry captures {DS, regs}, each
+// RETN captures the golden DS and runs the v2 rewrite on a scratch copy.
+extern "C" void v2_fntest_pre(int id, const uint8_t* ds_base, uint16_t ax, uint16_t bx,
+                              uint16_t cx, uint16_t dx, uint16_t si, uint16_t di, uint16_t bp);
+extern "C" void v2_fntest_post(int id, const uint8_t* ds_base);
 extern "C" void v2_mirror_sub_10350_spec_ors();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
 // Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.
@@ -13267,6 +13272,8 @@ cs=0x1a2;eip=0x00596b; 	X(MOV(*(dw*)(raddr(ds,di+0x19BD)), 0));	// 13328 mov    
 cs=0x1a2;eip=0x005971; 	J(RETN(0));	// 13329 retn ;~ 01A2:5971
 sub_15972:
 	// 13336
+	// FN-TEST hook (Phase 0): capture ds_in + entry regs; goldens taken at each RETN below.
+	v2_fntest_pre(0 /*FT_SUB_15972*/, (const uint8_t*)raddr(ds,0), ax, bx, cx, dx, si, di, bp);
 	if (myDrawInfo_v2 && di == 0) {
 		static int _o15972 = 0; if (++_o15972 <= 30)
 			fprintf(stderr, "ORIG-15972[%d]: di=0 ax=%04X(s=%d) Y=%04X Y_end=%04X Y_start=%04X\n",
@@ -13295,6 +13302,7 @@ loc_15996:
 cs=0x1a2;eip=0x005996; 	X(SUB(*(dw*)(raddr(ds,di+0x1765)), dx));	// 13356 sub     [di+1765h], dx ;~ 01A2:5996
 cs=0x1a2;eip=0x00599a; 	X(SUB(*(dw*)(raddr(ds,di+0x14E5)), dx));	// 13357 sub     [di+14E5h], dx ;~ 01A2:599A
 cs=0x1a2;eip=0x00599e; 	X(MOV(*(dw*)(raddr(ds,di+0x19E5)), 0));	// 13358 mov     word ptr [di+19E5h], 0 ;~ 01A2:599E
+	v2_fntest_post(0 /*FT_SUB_15972*/, (const uint8_t*)raddr(ds,0));  // FN-TEST: golden at RETN (ax<=0 path)
 cs=0x1a2;eip=0x0059a4; 	J(RETN(0));	// 13359 retn ;~ 01A2:59A4
 loc_159a5:
 	// 5555
@@ -13307,6 +13315,7 @@ cs=0x1a2;eip=0x0059b3; 	T(SUB(dx, *(dw*)(raddr(ds,di+0x14E5))));	// 13368 sub   
 cs=0x1a2;eip=0x0059b7; 	X(SUB(*(dw*)(raddr(ds,di+0x1765)), dx));	// 13369 sub     [di+1765h], dx ;~ 01A2:59B7
 cs=0x1a2;eip=0x0059bb; 	X(SUB(*(dw*)(raddr(ds,di+0x150D)), dx));	// 13370 sub     [di+150Dh], dx ;~ 01A2:59BB
 cs=0x1a2;eip=0x0059bf; 	X(MOV(*(dw*)(raddr(ds,di+0x19E5)), 0));	// 13371 mov     word ptr [di+19E5h], 0 ;~ 01A2:59BF
+	v2_fntest_post(0 /*FT_SUB_15972*/, (const uint8_t*)raddr(ds,0));  // FN-TEST: golden at RETN (ax>0 path)
 cs=0x1a2;eip=0x0059c5; 	J(RETN(0));	// 13372 retn ;~ 01A2:59C5
 sub_159c6:
 	// 13379

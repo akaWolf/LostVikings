@@ -10338,6 +10338,24 @@ static void v2_vm_sub_15972(V2VM& vm, int16_t ax, uint16_t di) {
     vm.ds_write(di + 0x19E5, 0);
 }
 
+// ============================================================================
+// FN-TEST exports (FN_TEST_ANALYSIS.md Phase 0) — thin C wrappers so the
+// fn-test module (v2_fn_test.cpp) can invoke file-static v2 functions and the
+// static skip table. Test-only entry points; NOT used by the live mirror.
+// The V2VM built here points BOTH ds and shadow at the test scratch buffer:
+// sub_15972 touches only DS fields (all < shadow size), no es/cs access.
+// ============================================================================
+extern "C" void v2_fntest_call_sub_15972(uint8_t* test_shadow, uint16_t ax, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    v2_vm_sub_15972(vm, (int16_t)ax, di);
+}
+extern "C" int v2_fntest_ds_skip(uint32_t addr) {
+    return v2_ds_hash_skip(addr) ? 1 : 0;
+}
+
 // sub_161a1: bounding box check for sub_1614E. di=self, si=target.
 // Returns true (carry) if collision.
 static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si) {
