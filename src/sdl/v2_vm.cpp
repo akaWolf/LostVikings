@@ -18149,7 +18149,30 @@ static void v2_sub_12352_iter(uint8_t* shadow) {
 // false if iteration continued (palette anim + 3 page flips). V2_ONLY outer
 // loop uses the return value — cannot check ds:0x3B8 after return because
 // the loc_10191 second sub_12352 resets it to 0.
+// #180: one "tick" per blocking wait-loop iteration. (1) Advance the game-loop
+// frame counter — the main loop bumps v2_dbg_pre_vm_iter once per frame in
+// v2_phase_frame_begin, but blocking loops (viking-switch / pause / quit-prompt)
+// never reach FRAME_BEGIN so it froze there. The input recorder tags key edges
+// with this counter (at the game read-frame) and the replay gates events by it; a
+// frozen counter meant a key recorded inside a wait-loop was tagged at a frame the
+// replay's frozen counter never reached → deadlock, AND multi-step menu sequences
+// (e.g. ALT+X opens the Yes/No quit prompt, then ENTER confirms) collapsed onto one
+// frame so the steps couldn't be replayed apart. (2) HEADLESS: enforce --max-frames
+// here too, so a wait-loop that has run out of replay input still terminates at the
+// budget instead of spinning forever (the main-loop max-frames check is never
+// reached while blocked). Called by BOTH the default-mode phase handlers and the
+// V2_ONLY inline spins → record and replay step through menus with identical
+// per-iteration counts.
+static inline void v2_blocking_loop_tick() {
+    v2_dbg_pre_vm_iter++;
+#ifdef HEADLESS
+    extern int headless_check_exit(void);
+    headless_check_exit();
+#endif
+}
+
 bool v2_run_viking_switch_loop(uint8_t* shadow) {
+    v2_blocking_loop_tick();
     // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
     *(uint16_t*)(shadow + 0x0334) &= 0xFFFB;
 
@@ -19010,6 +19033,7 @@ void v2_run_pause_loop(uint8_t* shadow) {
     (void)v2_run_pause_loop_iter_exit(shadow);
 }
 bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
+    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     // Input read: default mode → INPUT_UPDATE signal already updated.
     // V2_ONLY → drive ourselves.
 #ifdef V2_ONLY
@@ -19173,6 +19197,7 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
 static bool v2_pw_iter_body(uint8_t* shadow) {
     extern uint16_t v2_current_ds_val;
     extern void v2_swap_render_buf();
+    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     *(uint16_t*)(shadow + 0xA39C) = 1;            // word_3287C
     v2_sub_10130(shadow);
     // m2c-inline at orig line 2746: v2_draw_tiles/sprites/ui before sub_1DE05
