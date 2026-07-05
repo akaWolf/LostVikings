@@ -52,8 +52,10 @@ hoisting чтений ds:0x2E73/[si+0x1855], которые orig перечит�
 ## Очередь (класс A — DS-чистые, из коллизионно-скроллового кластера)
 
 - sub_13d68, sub_13dd6, sub_13e15, sub_13c0c (collision/snap семейство — проверить сегментные зависимости tilemap)
-- sub_1064b (camera clamp), sub_10704 / sub_10753 (scroll clamp)
+- sub_10704 / sub_10753 (scroll clamp — проверить, leaf ли; v2-лямбды scroll_*2 чистые)
 - sub_101be (palette DEC pass), sub_105cb (exit-check: + CF/регистры)
+- sub_1064b (camera) — НЕ leaf: дерево sub_17496/1746c/174e9 → spawn →
+  sub_13809 → ES-сегмент anim (нужна ES-инфраструктура = первый шаг класса B)
 - sub_1584e-цепочка — после аудита сегментных зависимостей (tilemap через
   сегменты = класс B-механика: тест-образы сегментов)
 
