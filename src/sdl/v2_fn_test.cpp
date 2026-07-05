@@ -39,12 +39,14 @@ extern "C" void     v2_fntest_snap_game_ds(uint8_t* out64k);
 extern "C" void*    v2_fntest_orig_fnptr(int id);
 extern "C" bool     v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs);
 extern "C" int      v2_fntest_call_sub_161a1(uint8_t* test_shadow, uint16_t di, uint16_t si);
+extern "C" void     v2_fntest_call_sub_15da8(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di);
+extern "C" void     v2_fntest_call_sub_15d6b(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di);
 
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
 
 namespace {
 
-enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_COUNT };
+enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B = 3, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -57,7 +59,7 @@ struct FtSlot {
 };
 
 FtSlot      g_slot[FT_COUNT];
-const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1" };
+const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d6b" };
 
 uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
@@ -451,6 +453,108 @@ int ft_selftest_sub_161a1() {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// sub_15da8 (Y) / sub_15d6b (X): post-collision position snap twins.
+// Contract (verified line-by-line, orig eips 0x5DA8-0x5DE4 / 0x5D6B-0x5DA7):
+//   reads  ax (0 = snap negative / !0 = snap positive), si (partner), di (self),
+//          Y twin: [di+0x150D],[si+0x14E5] (ax==0) or [si+0x150D],[di+0x14E5] (ax!=0)
+//          X twin: [di+0x155D],[si+0x1535] (ax==0) or [si+0x155D],[di+0x1535] (ax!=0)
+//   writes 3 self fields (pos, span_lo, span_hi) -= or += delta; clears the
+//          fractional accumulator: [di+0x19E5] (Y) / [di+0x19BD] (X).
+// Parameterized runner: field offsets differ, logic is identical.
+struct FtSnapLayout {
+    FtId id; uint16_t pos, lo, hi, clr;
+    void (*v2call)(uint8_t*, uint16_t, uint16_t, uint16_t);
+};
+const FtSnapLayout FT_SNAP_Y = { FT_SUB_15DA8, 0x1765, 0x14E5, 0x150D, 0x19E5, v2_fntest_call_sub_15da8 };
+const FtSnapLayout FT_SNAP_X = { FT_SUB_15D6B, 0x173D, 0x1535, 0x155D, 0x19BD, v2_fntest_call_sub_15d6b };
+
+bool ft_synth_case_snap(const FtSnapLayout& L, uint16_t ax, uint16_t di, uint16_t si,
+                        uint16_t d_pos, uint16_t d_lo, uint16_t d_hi,
+                        uint16_t s_lo, uint16_t s_hi,
+                        const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, (uint16_t)(di + L.pos), d_pos);
+    ft_wr16(g_synth_in, (uint16_t)(di + L.lo),  d_lo);
+    ft_wr16(g_synth_in, (uint16_t)(di + L.hi),  d_hi);
+    ft_wr16(g_synth_in, (uint16_t)(si + L.lo),  s_lo);
+    ft_wr16(g_synth_in, (uint16_t)(si + L.hi),  s_hi);
+    ft_wr16(g_synth_in, (uint16_t)(di + L.clr), 0xAAAA);   // canary: must be cleared
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { ax, 0, 0, 0, si, di, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(L.id), g_synth_orig, regs);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    L.v2call(g_scratch, ax, si, di);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X) | "
+                    "ax=%04X di=%04X si=%04X dPos=%04X dLo=%04X dHi=%04X sLo=%04X sHi=%04X\n",
+                    g_name[L.id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    ax, di, si, d_pos, d_lo, d_hi, s_lo, s_hi);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_snap(const FtSnapLayout& L, uint32_t fuzz_seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+
+    // --- Group 1: branch grid — ax zero/non-zero variants × field boundaries
+    static const uint16_t AXS[] = { 0x0000, 0x0001, 0x0002, 0x7FFF, 0x8000, 0xFFFF };
+    static const uint16_t FS[][5] = {   // {d_pos, d_lo, d_hi, s_lo, s_hi}
+        { 0x0100, 0x00F0, 0x0110, 0x0105, 0x0130 },  // overlap: delta small positive
+        { 0x0100, 0x00F0, 0x0110, 0x0110, 0x0130 },  // delta == 1 (equality border)
+        { 0x0100, 0x00F0, 0x0110, 0x0111, 0x0130 },  // delta == 0
+        { 0x0100, 0x00F0, 0x0110, 0x0120, 0x0130 },  // negative delta (wraps)
+        { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 },  // all zero
+        { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF },  // all max (INC wrap)
+        { 0x8000, 0x7FFF, 0x8001, 0x7FFF, 0x8000 },  // sign borders
+    };
+    static const uint16_t DISI[][2] = { {0,2}, {2,0}, {0,0x26}, {4,4} };
+    for (uint16_t ax : AXS)
+        for (auto& f : FS)
+            for (auto& p : DISI)
+                ft_synth_case_snap(L, ax, p[0], p[1], f[0], f[1], f[2], f[3], f[4],
+                                   "grid", grid, diff_budget);
+
+    // --- Group 2: exhaustive sweep of the delta source operand in each branch
+    for (uint32_t v = 0; v <= 0xFFFF; v++)   // ax==0: delta = [di+hi] - [si+lo] + 1
+        ft_synth_case_snap(L, 0, 0, 2, 0x0100, 0x00F0, (uint16_t)v, 0x0105, 0x0130,
+                           "exh-dHi", exh, diff_budget);
+    for (uint32_t v = 0; v <= 0xFFFF; v++)   // ax!=0: delta = [si+hi] - [di+lo] + 1
+        ft_synth_case_snap(L, 1, 0, 2, 0x0100, 0x00F0, 0x0110, 0x0105, (uint16_t)v,
+                           "exh-sHi", exh, diff_budget);
+
+    // --- Group 3: seeded fuzz over the full contract
+    FtRng rng(fuzz_seed);
+    for (int i = 0; i < 20000; i++) {
+        uint16_t di = (uint16_t)((rng.next() % 20) * 2);
+        uint16_t si = (uint16_t)((rng.next() % 20) * 2);
+        ft_synth_case_snap(L, rng.w(), di, si, rng.w(), rng.w(), rng.w(), rng.w(), rng.w(),
+                           "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exhaustive %ld/%ld, "
+        "fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[L.id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases,
+        grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -473,6 +577,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     bool all = (strcmp(env, "all") == 0);
     if (all || strstr(env, "sub_15972")) { matched = true; rc |= ft_selftest_sub_15972(); }
     if (all || strstr(env, "sub_161a1")) { matched = true; rc |= ft_selftest_sub_161a1(); }
+    if (all || strstr(env, "sub_15da8")) { matched = true; rc |= ft_selftest_snap(FT_SNAP_Y, 0x5DA80001); }
+    if (all || strstr(env, "sub_15d6b")) { matched = true; rc |= ft_selftest_snap(FT_SNAP_X, 0x5D6B0001); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

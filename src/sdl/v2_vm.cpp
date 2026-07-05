@@ -10366,6 +10366,23 @@ extern "C" int v2_fntest_call_sub_161a1(uint8_t* test_shadow, uint16_t di, uint1
     vm.obj = di;
     return v2_vm_sub_161a1(vm, di, si) ? 1 : 0;
 }
+// sub_15DA8 / sub_15d6b: Y/X snap after object collision (defined below).
+static void v2_vm_sub_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di);
+static void v2_vm_sub_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di);
+extern "C" void v2_fntest_call_sub_15da8(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    v2_vm_sub_15DA8(vm, (int16_t)ax, si, di);
+}
+extern "C" void v2_fntest_call_sub_15d6b(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    v2_vm_sub_15d6b(vm, (int16_t)ax, si, di);
+}
 
 // sub_161a1: bounding box check for sub_1614E. di=self, si=target.
 // Returns true (carry) if collision.
