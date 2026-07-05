@@ -45,6 +45,11 @@ extern "C" int      v2_fntest_call_sub_13d68(uint8_t* test_shadow, uint16_t si);
 extern "C" void     v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si);
 extern "C" void     v2_fntest_call_sub_13e15(uint8_t* test_shadow, uint16_t si);
 extern "C" void     v2_fntest_call_sub_13c0c(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_1064b(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_10704(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_10753(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_17496(uint8_t* test_shadow, uint16_t si_speed);
+extern "C" void     v2_fntest_call_sub_1746c(uint8_t* test_shadow, uint16_t si_speed);
 
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
 
@@ -52,7 +57,8 @@ namespace {
 
 enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B = 3,
             FT_SUB_13D68 = 4, FT_SUB_13DD6 = 5, FT_SUB_13E15 = 6, FT_SUB_13C0C = 7,
-            FT_COUNT };
+            FT_SUB_1064B = 8, FT_SUB_10704 = 9, FT_SUB_10753 = 10,
+            FT_SUB_17496 = 11, FT_SUB_1746C = 12, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -66,7 +72,9 @@ struct FtSlot {
 
 FtSlot      g_slot[FT_COUNT];
 const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d6b",
-                                 "sub_13d68", "sub_13dd6", "sub_13e15", "sub_13c0c" };
+                                 "sub_13d68", "sub_13dd6", "sub_13e15", "sub_13c0c",
+                                 "sub_1064b", "sub_10704", "sub_10753",
+                                 "sub_17496", "sub_1746c" };
 
 uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
@@ -849,6 +857,195 @@ int ft_selftest_sub_13c0c() {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// Camera/scroll cluster. Shared DS layout of one case:
+//   vp ds:0x44/0x46, gates ds:0x394/0x396, limits ds:0x25A4/0x25A6,
+//   outputs ds:0x257F/0x2581 (vp>>3) and ds:0x34E/0x350 (delta) — canaried.
+// sub_17496/sub_1746c take the speed in SI (io_regs[4] for the oracle).
+// sub_10704/10753 read pending amounts ds:0x3D8/0x3DA/0x3DE/0x3DC and a speed
+// table at 0x2B82/0x2B80; sub_1064b computes the amounts from the active
+// viking's position and uses table 0x2B84 (movers covered transitively).
+void ft_cam_base(uint16_t vpx, uint16_t vpy, uint16_t gx, uint16_t gy,
+                 uint16_t limx, uint16_t limy)
+{
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x44, vpx);   ft_wr16(g_synth_in, 0x46, vpy);
+    ft_wr16(g_synth_in, 0x394, gx);   ft_wr16(g_synth_in, 0x396, gy);
+    ft_wr16(g_synth_in, 0x25A4, limx); ft_wr16(g_synth_in, 0x25A6, limy);
+    ft_wr16(g_synth_in, 0x257F, 0xBBBB); ft_wr16(g_synth_in, 0x2581, 0xBBBB);
+    ft_wr16(g_synth_in, 0x34E, 0xBBBB);  ft_wr16(g_synth_in, 0x350, 0xBBBB);
+}
+
+bool ft_cam_run(FtId id, uint16_t si_reg, const char* group,
+                FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, si_reg, 0, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    switch (id) {
+    case FT_SUB_1064B: v2_fntest_call_sub_1064b(g_scratch); break;
+    case FT_SUB_10704: v2_fntest_call_sub_10704(g_scratch); break;
+    case FT_SUB_10753: v2_fntest_call_sub_10753(g_scratch); break;
+    case FT_SUB_17496: v2_fntest_call_sub_17496(g_scratch, si_reg); break;
+    case FT_SUB_1746C: v2_fntest_call_sub_1746c(g_scratch, si_reg); break;
+    default: break;
+    }
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X) si=%04X\n",
+                    g_name[id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a], si_reg);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_mover(FtId id, uint32_t fuzz_seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    static const uint16_t VPS[]  = { 0, 1, 0xF, 0x10, 0x100, 0x7FF0, 0x7FFF, 0x8000, 0xFFF0, 0xFFFF };
+    static const uint16_t SPDS[] = { 0, 1, 2, 8, 0x10, 0x7FFF, 0x8000, 0xFFFF };
+    static const uint16_t LIMS[] = { 0, 0x100, 0x7FFF, 0x8000, 0xFFFF };
+    for (uint16_t vp : VPS) for (uint16_t sp : SPDS) for (uint16_t lim : LIMS) {
+        ft_cam_base(vp, vp, 0, 0, lim, lim);
+        ft_cam_run(id, sp, "grid", grid, diff_budget);
+    }
+    // gate set → mover must be a no-op (canaries stay)
+    ft_cam_base(0x100, 0x100, 1, 1, 0x1000, 0x1000);
+    ft_cam_run(id, 8, "grid", grid, diff_budget);
+    // exhaustive speed sweep at two viewport positions
+    for (uint32_t sp = 0; sp <= 0xFFFF; sp++) {
+        ft_cam_base(0x0100, 0x0100, 0, 0, 0x2000, 0x2000);
+        ft_cam_run(id, (uint16_t)sp, "exh-speed", exh, diff_budget);
+    }
+    // exhaustive viewport sweep at fixed speed
+    for (uint32_t vp = 0; vp <= 0xFFFF; vp++) {
+        ft_cam_base((uint16_t)vp, (uint16_t)vp, 0, 0, 0x8000, 0x8000);
+        ft_cam_run(id, 8, "exh-vp", exh, diff_budget);
+    }
+    FtRng rng(fuzz_seed);
+    for (int i = 0; i < 20000; i++) {
+        ft_cam_base(rng.w(), rng.w(), (uint16_t)(rng.next() & 1), (uint16_t)(rng.next() & 1),
+                    rng.w(), rng.w());
+        ft_cam_run(id, rng.w(), "fuzz", fuzz, diff_budget);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exhaustive %ld/%ld, fuzz %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+int ft_selftest_scroll_apply(FtId id, uint16_t table_off, uint32_t fuzz_seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    // Speed table entries for amounts 0..0x10 (and negative-wrapped indices in
+    // fuzz reach arbitrary DS bytes — same for both sides by construction).
+    auto fill_table = [&](uint16_t base_val) {
+        for (uint16_t a = 0; a <= 0x10; a++)
+            ft_wr16(g_synth_in, (uint16_t)(a * 2 + table_off), (uint16_t)(base_val + a));
+    };
+    static const uint16_t AMTS[] = { 0, 1, 2, 0x10, 0x7FFF, 0x8000, 0xFFFF };
+    // All priority combos: left vs right (left wins), up vs down (up wins).
+    for (uint16_t l : AMTS) for (uint16_t r : AMTS) {
+        ft_cam_base(0x0400, 0x0400, 0, 0, 0x2000, 0x2000);
+        fill_table(3);
+        ft_wr16(g_synth_in, 0x3D8, l); ft_wr16(g_synth_in, 0x3DA, r);
+        ft_wr16(g_synth_in, 0x3DE, (uint16_t)(l ^ 1)); ft_wr16(g_synth_in, 0x3DC, r);
+        ft_cam_run(id, 0, "grid", grid, diff_budget);
+    }
+    FtRng rng(fuzz_seed);
+    for (int i = 0; i < 30000; i++) {
+        ft_cam_base(rng.w(), rng.w(), (uint16_t)(rng.next() & 1), (uint16_t)(rng.next() & 1),
+                    rng.w(), rng.w());
+        fill_table(rng.w());
+        // amounts mostly in-range (table hits), occasionally wild (wrapped index)
+        auto amt = [&]() -> uint16_t {
+            uint32_t x = rng.next();
+            return (x & 0xF0) ? (uint16_t)(x & 0x1F) : rng.w();
+        };
+        ft_wr16(g_synth_in, 0x3D8, amt()); ft_wr16(g_synth_in, 0x3DA, amt());
+        ft_wr16(g_synth_in, 0x3DE, amt()); ft_wr16(g_synth_in, 0x3DC, amt());
+        ft_cam_run(id, 0, "fuzz", fuzz, diff_budget);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+int ft_selftest_sub_1064b() {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    // One case: viking di=0 at (ox,oy), viewport at (vpx,vpy), table 0x2B84
+    // filled 1..0x11, pending-amount fields canaried (function zeroes them).
+    auto build = [&](uint16_t vpx, uint16_t vpy, uint16_t ox, uint16_t oy) {
+        ft_cam_base(vpx, vpy, 0, 0, 0x4000, 0x4000);
+        ft_wr16(g_synth_in, 0x3C2, 0);                       // active viking slot 0
+        ft_wr16(g_synth_in, 0x173D, ox);
+        ft_wr16(g_synth_in, 0x1765, oy);
+        for (uint16_t a = 0; a <= 0x10; a++)
+            ft_wr16(g_synth_in, (uint16_t)(a * 2 + 0x2B84), (uint16_t)(a + 1));
+        ft_wr16(g_synth_in, 0x3D8, 0xBBBB); ft_wr16(g_synth_in, 0x3DA, 0xBBBB);
+        ft_wr16(g_synth_in, 0x3DE, 0xBBBB); ft_wr16(g_synth_in, 0x3DC, 0xBBBB);
+    };
+    // Directed: dead zone, both follow directions, clamp corners, overflow zone.
+    static const uint16_t POS[] = { 0, 0x40, 0x90, 0xA0, 0xB0, 0x100, 0x7FF0,
+                                    0x7FFF, 0x8000, 0x8080, 0xFFF0, 0xFFFF };
+    for (uint16_t vp : POS) for (uint16_t obj : POS) {
+        build(vp, 0x0200, obj, 0x0230);   // X varies, Y in dead zone
+        ft_cam_run(FT_SUB_1064B, 0, "grid", grid, diff_budget);
+        build(0x0200, vp, 0x0290, obj);   // Y varies, X in dead zone
+        ft_cam_run(FT_SUB_1064B, 0, "grid", grid, diff_budget);
+    }
+    // Exhaustive: each axis coordinate swept fully, the other held mid-range.
+    for (uint32_t v = 0; v <= 0xFFFF; v++) {
+        build((uint16_t)v, 0x0200, 0x0290, 0x0230);
+        ft_cam_run(FT_SUB_1064B, 0, "exh-vpx", exh, diff_budget);
+    }
+    for (uint32_t v = 0; v <= 0xFFFF; v++) {
+        build(0x0200, 0x0200, (uint16_t)v, 0x0230);
+        ft_cam_run(FT_SUB_1064B, 0, "exh-objx", exh, diff_budget);
+    }
+    for (uint32_t v = 0; v <= 0xFFFF; v++) {
+        build(0x0200, (uint16_t)v, 0x0290, 0x0230);
+        ft_cam_run(FT_SUB_1064B, 0, "exh-vpy", exh, diff_budget);
+    }
+    for (uint32_t v = 0; v <= 0xFFFF; v++) {
+        build(0x0200, 0x0200, 0x0290, (uint16_t)v);
+        ft_cam_run(FT_SUB_1064B, 0, "exh-objy", exh, diff_budget);
+    }
+    FtRng rng(0x1064B001);
+    for (int i = 0; i < 20000; i++) {
+        build(rng.w(), rng.w(), rng.w(), rng.w());
+        uint16_t di = (uint16_t)((rng.next() % 3) * 2);      // slots 0/2/4
+        ft_wr16(g_synth_in, 0x3C2, di);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x173D), rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), rng.w());
+        ft_cam_run(FT_SUB_1064B, 0, "fuzz", fuzz, diff_budget);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_1064b]: grid %ld/%ld, exhaustive %ld/%ld, fuzz %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -877,6 +1074,11 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_13dd6")) { matched = true; rc |= ft_selftest_1345init(FT_SUB_13DD6, 0x13DD6001); }
     if (all || strstr(env, "sub_13e15")) { matched = true; rc |= ft_selftest_1345init(FT_SUB_13E15, 0x13E15001); }
     if (all || strstr(env, "sub_13c0c")) { matched = true; rc |= ft_selftest_sub_13c0c(); }
+    if (all || strstr(env, "sub_17496")) { matched = true; rc |= ft_selftest_mover(FT_SUB_17496, 0x17496001); }
+    if (all || strstr(env, "sub_1746c")) { matched = true; rc |= ft_selftest_mover(FT_SUB_1746C, 0x1746C001); }
+    if (all || strstr(env, "sub_10704")) { matched = true; rc |= ft_selftest_scroll_apply(FT_SUB_10704, 0x2B82, 0x10704001); }
+    if (all || strstr(env, "sub_10753")) { matched = true; rc |= ft_selftest_scroll_apply(FT_SUB_10753, 0x2B80, 0x10753001); }
+    if (all || strstr(env, "sub_1064b")) { matched = true; rc |= ft_selftest_sub_1064b(); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

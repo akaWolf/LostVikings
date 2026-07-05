@@ -3876,6 +3876,8 @@ transition:
 static void v2_load_level(uint8_t* shadow); // forward decl
 static void v2_load_template(uint8_t* shadow);
 static void v2_load_level_data(uint8_t* shadow);
+static void v2_sub_10704(uint8_t* s);   // scroll clamp (defined after the movers)
+static void v2_sub_10753(uint8_t* s);
 
 // ============================================================================
 // sub_13d68 / sub_13dd6 / sub_13e15 — sub-sprite slot allocation family.
@@ -5126,62 +5128,10 @@ static void v2_sub_11080(uint8_t* s) {
                 v2_run_collision_vm(s, si2);
             }
         }
-        // sub_10704: scroll clamp — lookup at ds:[si*2 + 0x2B82]
+        // sub_10704: scroll clamp — consolidated into v2_sub_10704
+        // (v2_scroll_apply + the v2_sub_17496 mover family; lambdas removed)
         {
-            auto scroll_left = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x394) != 0) return;
-                int16_t ax = (int16_t)*(uint16_t*)(s + 0x44) - (int16_t)amount;
-                if (ax < 0) ax = 0;
-                uint16_t dx = *(uint16_t*)(s + 0x44) - (uint16_t)ax;
-                *(uint16_t*)(s + 0x44) = (uint16_t)ax;
-                *(uint16_t*)(s + 0x257F) = (uint16_t)ax >> 3;
-                *(uint16_t*)(s + 0x34E) = dx;
-            };
-            auto scroll_right = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x394) != 0) return;
-                uint16_t ax = *(uint16_t*)(s + 0x44) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A4);
-                if (ax >= limit) ax = limit;
-                uint16_t dx = ax - *(uint16_t*)(s + 0x44);
-                *(uint16_t*)(s + 0x44) = ax;
-                *(uint16_t*)(s + 0x257F) = ax >> 3;
-                *(uint16_t*)(s + 0x34E) = dx;
-            };
-            auto scroll_up = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x396) != 0) return;
-                int16_t ax = (int16_t)*(uint16_t*)(s + 0x46) - (int16_t)amount;
-                if (ax < 0) ax = 0;
-                uint16_t dx = *(uint16_t*)(s + 0x46) - (uint16_t)ax;
-                *(uint16_t*)(s + 0x46) = (uint16_t)ax;
-                *(uint16_t*)(s + 0x2581) = (uint16_t)ax >> 3;
-                *(uint16_t*)(s + 0x350) = dx;
-            };
-            auto scroll_down = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x396) != 0) return;
-                uint16_t ax = *(uint16_t*)(s + 0x46) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A6);
-                if (ax >= limit) ax = limit;
-                uint16_t dx = ax - *(uint16_t*)(s + 0x46);
-                *(uint16_t*)(s + 0x46) = ax;
-                *(uint16_t*)(s + 0x2581) = ax >> 3;
-                *(uint16_t*)(s + 0x350) = dx;
-            };
-            auto do_scroll = [&](uint16_t table_off) {
-                uint16_t v;
-                v = *(uint16_t*)(s + 0x3D8);
-                if (v != 0) { scroll_left(*(uint16_t*)(s + v * 2 + table_off)); }
-                else {
-                    v = *(uint16_t*)(s + 0x3DA);
-                    if (v != 0) scroll_right(*(uint16_t*)(s + v * 2 + table_off));
-                }
-                v = *(uint16_t*)(s + 0x3DE);
-                if (v != 0) { scroll_up(*(uint16_t*)(s + v * 2 + table_off)); }
-                else {
-                    v = *(uint16_t*)(s + 0x3DC);
-                    if (v != 0) scroll_down(*(uint16_t*)(s + v * 2 + table_off));
-                }
-            };
-            do_scroll(0x2B82); // sub_10704
+            v2_sub_10704(s);
             // sub_12fcb: sub-sprite position delta type 1
             {
                 // sub_122c0: delta type 1 = |d|/3 with round up if remainder >= 2
@@ -5228,7 +5178,7 @@ static void v2_sub_11080(uint8_t* s) {
             // PSNAP compare: after PF3 (eip 0x162F = end of SF2).
             v2_compare_phase_snap(V2_PSNAP_T_SF2_PF_END, "v2_sub_115d2 SF2 post-PF");
             // sub_10753: scroll clamp 2 — lookup at ds:[si*2 + 0x2B80]
-            do_scroll(0x2B80); // sub_10753
+            v2_sub_10753(s); // sub_10753 (consolidated)
 
             // sub_13c0c: viewport bounds update + object visibility marking.
             // Consolidated: this was one of two correct inline copies while
@@ -7103,55 +7053,83 @@ static void v2_loc_174bf(uint8_t* s, int16_t si_speed) {
     *(uint16_t*)(s + 0x350) = (uint16_t)dx;
 }
 
-// sub_1064b: Camera follow — moves viewport to track active viking.
-// Speed table at ds:0x2B84 maps delta (0-16) to scroll speed.
+// sub_10704 / sub_10753 (orig eips 0x704-0x752 / 0x753-0x7A1): apply the
+// pending per-axis scroll amounts through a speed table. X: 0x3D8 (left) wins
+// over 0x3DA (right); Y: 0x3DE (up) wins over 0x3DC (down). Speed lookup =
+// ds:[amount*2 + table] (0x2B82 for sub_10704, 0x2B80 for sub_10753).
+// Consolidated from three inline lambda copies (sub_115d2 zone x2 call sites,
+// POST_FLIP1 zone, POST_FLIP2 zone); covered by FNSELFTEST.
+static void v2_scroll_apply(uint8_t* s, uint16_t table_off) {
+    uint16_t v = *(uint16_t*)(s + 0x3D8);
+    if (v != 0) v2_sub_17496(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+    else {
+        v = *(uint16_t*)(s + 0x3DA);
+        if (v != 0) v2_sub_1746c(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+    }
+    v = *(uint16_t*)(s + 0x3DE);
+    if (v != 0) v2_loc_174e9(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+    else {
+        v = *(uint16_t*)(s + 0x3DC);
+        if (v != 0) v2_loc_174bf(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+    }
+}
+static void v2_sub_10704(uint8_t* s) { v2_scroll_apply(s, 0x2B82); }
+static void v2_sub_10753(uint8_t* s) { v2_scroll_apply(s, 0x2B80); }
+
+// sub_1064b (orig eips 0x64B-0x702): camera follow — compute per-axis scroll
+// amounts toward the active viking and move the viewport via the speed table
+// at ds:0x2B84.
+// FLAG MODEL (same class FNSELFTEST caught in sub_13c0c): every branch here
+// is ADD/SUB (16-bit wrap, flags dropped) then SUB + JLE — i.e. the SIGNED
+// COMPARE of the last SUB's OPERANDS, while the stored amount is the wrapped
+// difference itself. The old code compared the sign of the difference, which
+// diverges when the subtraction overflows.
 static void v2_sub_1064b(uint8_t* s) {
     *(uint16_t*)(s + 0x34E) = 0; // word_2882E
     *(uint16_t*)(s + 0x350) = 0; // word_28830
-    *(uint16_t*)(s + 0x34E) = 0; // word_2882E (scroll delta X) — cleared first
-    *(uint16_t*)(s + 0x350) = 0; // word_28830 (scroll delta Y) — cleared first
     *(uint16_t*)(s + 0x3D8) = 0; // word_288B8
     *(uint16_t*)(s + 0x3DA) = 0; // word_288BA
     *(uint16_t*)(s + 0x3DE) = 0; // word_288BE
     *(uint16_t*)(s + 0x3DC) = 0; // word_288BC
 
     uint16_t di = *(uint16_t*)(s + 0x3C2); // active viking
-    uint16_t vp_x = *(uint16_t*)(s + 0x44);
-    uint16_t vp_y = *(uint16_t*)(s + 0x46);
-    uint16_t obj_x = *(uint16_t*)(s + di + 0x173D);
-    uint16_t obj_y = *(uint16_t*)(s + di + 0x1765);
 
-    // X camera follow
-    int16_t dx_left = (int16_t)(vp_x + 0x90) - (int16_t)obj_x;
-    if (dx_left > 0) {
-        if (dx_left > 0x10) dx_left = 0x10;
-        *(uint16_t*)(s + 0x3D8) = (uint16_t)dx_left;
-        int16_t speed = *(int16_t*)(s + (uint16_t)(dx_left * 2 + 0x2B84));
-        v2_sub_17496(s, speed);
-    } else {
-        int16_t dx_right = (int16_t)obj_x - (int16_t)vp_x - 0xB0;
-        if (dx_right > 0) {
-            if (dx_right > 0x10) dx_right = 0x10;
-            *(uint16_t*)(s + 0x3DA) = (uint16_t)dx_right;
-            int16_t speed = *(int16_t*)(s + (uint16_t)(dx_right * 2 + 0x2B84));
-            v2_sub_1746c(s, speed);
+    // X (orig eips 0x66F-0x6B8)
+    {
+        uint16_t sum = (uint16_t)(*(uint16_t*)(s + 0x44) + 0x90);
+        uint16_t obj = *(uint16_t*)(s + (uint16_t)(di + 0x173D));
+        if ((int16_t)sum > (int16_t)obj) {                 // JLE not taken
+            uint16_t amt = (uint16_t)(sum - obj);          // wrapped SUB value
+            if ((int16_t)amt >= (int16_t)0x10) amt = 0x10; // CMP si,10h; JL
+            *(uint16_t*)(s + 0x3D8) = amt;
+            v2_sub_17496(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+        } else {                                           // loc_10698
+            uint16_t diff = (uint16_t)(obj - *(uint16_t*)(s + 0x44));
+            if ((int16_t)diff > (int16_t)0xB0) {           // SUB si,0B0h; JLE
+                uint16_t amt = (uint16_t)(diff - 0xB0);
+                if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
+                *(uint16_t*)(s + 0x3DA) = amt;
+                v2_sub_1746c(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+            }
         }
     }
-
-    // Y camera follow
-    int16_t dy_up = (int16_t)(vp_y + 0x50) - (int16_t)obj_y;
-    if (dy_up > 0) {
-        if (dy_up > 0x10) dy_up = 0x10;
-        *(uint16_t*)(s + 0x3DE) = (uint16_t)dy_up;
-        int16_t speed = *(int16_t*)(s + (uint16_t)(dy_up * 2 + 0x2B84));
-        v2_loc_174e9(s, speed);
-    } else {
-        int16_t dy_down = (int16_t)obj_y - (int16_t)vp_y - 0x60;
-        if (dy_down > 0) {
-            if (dy_down > 0x10) dy_down = 0x10;
-            *(uint16_t*)(s + 0x3DC) = (uint16_t)dy_down;
-            int16_t speed = *(int16_t*)(s + (uint16_t)(dy_down * 2 + 0x2B84));
-            v2_loc_174bf(s, speed);
+    // Y (orig eips 0x6BB-0x702; up/down are tail-jumps into the movers)
+    {
+        uint16_t sum = (uint16_t)(*(uint16_t*)(s + 0x46) + 0x50);
+        uint16_t obj = *(uint16_t*)(s + (uint16_t)(di + 0x1765));
+        if ((int16_t)sum > (int16_t)obj) {
+            uint16_t amt = (uint16_t)(sum - obj);
+            if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
+            *(uint16_t*)(s + 0x3DE) = amt;
+            v2_loc_174e9(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+        } else {
+            uint16_t diff = (uint16_t)(obj - *(uint16_t*)(s + 0x46));
+            if ((int16_t)diff > (int16_t)0x60) {
+                uint16_t amt = (uint16_t)(diff - 0x60);
+                if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
+                *(uint16_t*)(s + 0x3DC) = amt;
+                v2_loc_174bf(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+            }
         }
     }
 }
@@ -10341,6 +10319,22 @@ extern "C" int v2_fntest_call_sub_13d68(uint8_t* test_shadow, uint16_t si) {
 }
 extern "C" void v2_fntest_call_sub_13c0c(uint8_t* test_shadow) {
     v2_sub_13c0c(test_shadow);
+}
+// Camera/scroll cluster (functions defined near v2_sub_1064b above).
+extern "C" void v2_fntest_call_sub_1064b(uint8_t* test_shadow) {
+    v2_sub_1064b(test_shadow);
+}
+extern "C" void v2_fntest_call_sub_10704(uint8_t* test_shadow) {
+    v2_sub_10704(test_shadow);
+}
+extern "C" void v2_fntest_call_sub_10753(uint8_t* test_shadow) {
+    v2_sub_10753(test_shadow);
+}
+extern "C" void v2_fntest_call_sub_17496(uint8_t* test_shadow, uint16_t si_speed) {
+    v2_sub_17496(test_shadow, (int16_t)si_speed);
+}
+extern "C" void v2_fntest_call_sub_1746c(uint8_t* test_shadow, uint16_t si_speed) {
+    v2_sub_1746c(test_shadow, (int16_t)si_speed);
 }
 extern "C" void v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si) {
     v2_sub_13dd6(test_shadow, si);
@@ -16001,66 +15995,10 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // DS writes: ds:0x44/0x46, ds:0x257F/0x2581, ds:0x34E/0x350
         // VGA OUT: CRTC start address (0x3D4) — commented for v2
         {
-            // Helper: 4 scroll directions
-            auto scroll_left = [&](uint16_t amount) { // sub_17496
-                if (*(uint16_t*)(s + 0x394) != 0) return;
-                int16_t ax = (int16_t)*(uint16_t*)(s + 0x44) - (int16_t)amount;
-                if (ax < 0) ax = 0;
-                uint16_t dx = *(uint16_t*)(s + 0x44) - (uint16_t)ax;
-                *(uint16_t*)(s + 0x44) = (uint16_t)ax;
-                *(uint16_t*)(s + 0x257F) = (uint16_t)ax >> 3;
-                *(uint16_t*)(s + 0x34E) = dx;
-                // No VGA OUT in sub_17496 — CRTC programming is in sub_16775
-            };
-            auto scroll_right = [&](uint16_t amount) { // sub_1746c
-                if (*(uint16_t*)(s + 0x394) != 0) return;
-                uint16_t ax = *(uint16_t*)(s + 0x44) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A4);
-                if (ax >= limit) ax = limit;
-                uint16_t dx = ax - *(uint16_t*)(s + 0x44);
-                *(uint16_t*)(s + 0x44) = ax;
-                *(uint16_t*)(s + 0x257F) = ax >> 3;
-                *(uint16_t*)(s + 0x34E) = dx;
-                // No VGA OUT here — CRTC programming is in sub_16775
-            };
-            auto scroll_up = [&](uint16_t amount) { // loc_174E9
-                if (*(uint16_t*)(s + 0x396) != 0) return;
-                int16_t ax = (int16_t)*(uint16_t*)(s + 0x46) - (int16_t)amount;
-                if (ax < 0) ax = 0;
-                uint16_t dx = *(uint16_t*)(s + 0x46) - (uint16_t)ax;
-                *(uint16_t*)(s + 0x46) = (uint16_t)ax;
-                *(uint16_t*)(s + 0x2581) = (uint16_t)ax >> 3;
-                *(uint16_t*)(s + 0x350) = dx;
-                // No VGA OUT here — CRTC programming is in sub_16775
-            };
-            auto scroll_down = [&](uint16_t amount) { // loc_174BF
-                if (*(uint16_t*)(s + 0x396) != 0) return;
-                uint16_t ax = *(uint16_t*)(s + 0x46) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A6);
-                if (ax >= limit) ax = limit;
-                uint16_t dx = ax - *(uint16_t*)(s + 0x46);
-                *(uint16_t*)(s + 0x46) = ax;
-                *(uint16_t*)(s + 0x2581) = ax >> 3;
-                *(uint16_t*)(s + 0x350) = dx;
-                // No VGA OUT here — CRTC programming is in sub_16775
-            };
-            // sub_10704: lookup table at ds:[si*2+0x2B82]
-            auto do_scroll = [&](uint16_t table_off) {
-                uint16_t v;
-                v = *(uint16_t*)(s + 0x3D8); // word_288B8 (scroll left speed)
-                if (v != 0) { scroll_left(*(uint16_t*)(s + v * 2 + table_off)); }
-                else {
-                    v = *(uint16_t*)(s + 0x3DA); // word_288BA (scroll right speed)
-                    if (v != 0) scroll_right(*(uint16_t*)(s + v * 2 + table_off));
-                }
-                v = *(uint16_t*)(s + 0x3DE); // word_288BE (scroll up speed)
-                if (v != 0) { scroll_up(*(uint16_t*)(s + v * 2 + table_off)); }
-                else {
-                    v = *(uint16_t*)(s + 0x3DC); // word_288BC (scroll down speed)
-                    if (v != 0) scroll_down(*(uint16_t*)(s + v * 2 + table_off));
-                }
-            };
-            do_scroll(0x2B82); // sub_10704 (eip 0x007A)
+            // sub_10704 (eip 0x007A): consolidated into v2_sub_10704
+            // (v2_scroll_apply + v2_sub_17496 mover family; lambdas removed).
+            // No VGA OUT in the movers — CRTC programming is in sub_16775.
+            v2_sub_10704(s);
         }
 
         // sub_12fcb (eip 0x007D): per-object sub-sprite position update type 2.
@@ -16155,54 +16093,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
         v2_sub_16775(s);
 
         // ====== POST-FLIP 2 (eip 0x00A9..0x00B8) ======
-        // sub_10753 (eip 0x00A9): scroll clamp 2 — same as sub_10704 but table at 0x2B80
-        {
-            auto scroll_left2 = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x394) != 0) return;
-                int16_t ax = (int16_t)*(uint16_t*)(s + 0x44) - (int16_t)amount;
-                if (ax < 0) ax = 0;
-                uint16_t dx = *(uint16_t*)(s + 0x44) - (uint16_t)ax;
-                *(uint16_t*)(s + 0x44) = (uint16_t)ax;
-                *(uint16_t*)(s + 0x257F) = (uint16_t)ax >> 3;
-                *(uint16_t*)(s + 0x34E) = dx;
-            };
-            auto scroll_right2 = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x394) != 0) return;
-                uint16_t ax = *(uint16_t*)(s + 0x44) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A4);
-                if (ax >= limit) ax = limit;
-                uint16_t dx = ax - *(uint16_t*)(s + 0x44);
-                *(uint16_t*)(s + 0x44) = ax;
-                *(uint16_t*)(s + 0x257F) = ax >> 3;
-                *(uint16_t*)(s + 0x34E) = dx;
-            };
-            auto scroll_up2 = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x396) != 0) return;
-                int16_t ax = (int16_t)*(uint16_t*)(s + 0x46) - (int16_t)amount;
-                if (ax < 0) ax = 0;
-                uint16_t dx = *(uint16_t*)(s + 0x46) - (uint16_t)ax;
-                *(uint16_t*)(s + 0x46) = (uint16_t)ax;
-                *(uint16_t*)(s + 0x2581) = (uint16_t)ax >> 3;
-                *(uint16_t*)(s + 0x350) = dx;
-            };
-            auto scroll_down2 = [&](uint16_t amount) {
-                if (*(uint16_t*)(s + 0x396) != 0) return;
-                uint16_t ax = *(uint16_t*)(s + 0x46) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A6);
-                if (ax >= limit) ax = limit;
-                uint16_t dx = ax - *(uint16_t*)(s + 0x46);
-                *(uint16_t*)(s + 0x46) = ax;
-                *(uint16_t*)(s + 0x2581) = ax >> 3;
-                *(uint16_t*)(s + 0x350) = dx;
-            };
-            uint16_t v;
-            v = *(uint16_t*)(s + 0x3D8);
-            if (v != 0) scroll_left2(*(uint16_t*)(s + v * 2 + 0x2B80));
-            else { v = *(uint16_t*)(s + 0x3DA); if (v != 0) scroll_right2(*(uint16_t*)(s + v * 2 + 0x2B80)); }
-            v = *(uint16_t*)(s + 0x3DE);
-            if (v != 0) scroll_up2(*(uint16_t*)(s + v * 2 + 0x2B80));
-            else { v = *(uint16_t*)(s + 0x3DC); if (v != 0) scroll_down2(*(uint16_t*)(s + v * 2 + 0x2B80)); }
-        }
+        // sub_10753 (eip 0x00A9): scroll clamp 2 — consolidated into
+        // v2_sub_10753 (v2_scroll_apply, table 0x2B80; lambdas removed).
+        v2_sub_10753(s);
 
         // sub_13c0c (eip 0x00AC): viewport bounds update + object visibility
         // marking. Consolidated: was the second correct inline copy while
@@ -17515,55 +17408,13 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     // orig block 7 (eips 0xA9-0xB8): sub_10753 → sub_13c0c → sub_12fd0 →
     // sub_11792 → sub_101be → sub_10130. v2 mirrors in same order.
     // (previously v2_sub_10130 was at START — moved to END to match orig).
-    // sub_10753: scroll clamp 2 (table 0x2B80)
-    {
-        auto scroll_lr = [&](int dir, uint16_t amount) {
-            if (*(uint16_t*)(s + 0x394) != 0) return;
-            int16_t ax;
-            if (dir < 0) { ax = (int16_t)*(uint16_t*)(s + 0x44) - (int16_t)amount; if (ax < 0) ax = 0; }
-            else { ax = *(uint16_t*)(s + 0x44) + amount; uint16_t l = *(uint16_t*)(s + 0x25A4); if ((uint16_t)ax >= l) ax = l; }
-            uint16_t dx = (dir < 0) ? (*(uint16_t*)(s + 0x44) - (uint16_t)ax) : ((uint16_t)ax - *(uint16_t*)(s + 0x44));
-            *(uint16_t*)(s + 0x44) = (uint16_t)ax; *(uint16_t*)(s + 0x257F) = (uint16_t)ax >> 3; *(uint16_t*)(s + 0x34E) = dx;
-        };
-        auto scroll_ud = [&](int dir, uint16_t amount) {
-            if (*(uint16_t*)(s + 0x396) != 0) return;
-            int16_t ax;
-            if (dir < 0) { ax = (int16_t)*(uint16_t*)(s + 0x46) - (int16_t)amount; if (ax < 0) ax = 0; }
-            else { ax = *(uint16_t*)(s + 0x46) + amount; uint16_t l = *(uint16_t*)(s + 0x25A6); if ((uint16_t)ax >= l) ax = l; }
-            uint16_t dx = (dir < 0) ? (*(uint16_t*)(s + 0x46) - (uint16_t)ax) : ((uint16_t)ax - *(uint16_t*)(s + 0x46));
-            *(uint16_t*)(s + 0x46) = (uint16_t)ax; *(uint16_t*)(s + 0x2581) = (uint16_t)ax >> 3; *(uint16_t*)(s + 0x350) = dx;
-        };
-        uint16_t v;
-        v = *(uint16_t*)(s + 0x3D8);
-        if (v != 0) scroll_lr(-1, *(uint16_t*)(s + v * 2 + 0x2B80));
-        else { v = *(uint16_t*)(s + 0x3DA); if (v != 0) scroll_lr(1, *(uint16_t*)(s + v * 2 + 0x2B80)); }
-        v = *(uint16_t*)(s + 0x3DE);
-        if (v != 0) scroll_ud(-1, *(uint16_t*)(s + v * 2 + 0x2B80));
-        else { v = *(uint16_t*)(s + 0x3DC); if (v != 0) scroll_ud(1, *(uint16_t*)(s + v * 2 + 0x2B80)); }
-    }
-    // sub_13c0c: viewport bounds
-    {
-        uint16_t ax_x = *(uint16_t*)(s + 0x44) - 0x10;
-        if ((int16_t)ax_x >= 0) *(uint16_t*)(s + 0x34) = ax_x; else *(uint16_t*)(s + 0x34) = 0;
-        *(uint16_t*)(s + 0x36) = ax_x + 0x160;
-        uint16_t ax_y = *(uint16_t*)(s + 0x46) - 0x10;
-        if ((int16_t)ax_y < 0) ax_y = 0;
-        *(uint16_t*)(s + 0x38) = ax_y;
-        *(uint16_t*)(s + 0x3A) = ax_y + 0xD0;
-        uint16_t te = *(uint16_t*)(s + 0x372);
-        for (uint16_t si_v = 6; (int16_t)si_v < (int16_t)te; si_v += 2) {
-            if (*(uint16_t*)(s + si_v + 0x1355) == 0) continue;
-            if (*(uint16_t*)(s + si_v + 0x1585) & 0x800) continue;
-            uint16_t ox = *(uint16_t*)(s + si_v + 0x173D), oy = *(uint16_t*)(s + si_v + 0x1765);
-            uint16_t obx = *(uint16_t*)(s + si_v + 0x14BD), oby = *(uint16_t*)(s + si_v + 0x1495);
-            bool outside = false;
-            if ((int16_t)(ox + obx - *(uint16_t*)(s + 0x34)) < 0) outside = true;
-            else if ((int16_t)(ox - obx - *(uint16_t*)(s + 0x36)) >= 0) outside = true;
-            else if ((int16_t)(oy + oby - *(uint16_t*)(s + 0x38)) < 0) outside = true;
-            else if ((int16_t)(oy - oby - *(uint16_t*)(s + 0x3A)) >= 0) outside = true;
-            if (outside) *(uint16_t*)(s + si_v + 0x1585) |= 0x200;
-        }
-    }
+    // sub_10753: scroll clamp 2 — consolidated into v2_sub_10753
+    // (v2_scroll_apply, table 0x2B80; lambdas removed).
+    v2_sub_10753(s);
+    // sub_13c0c: viewport bounds — consolidated (this was a FOURTH copy, and
+    // like the others it carried the sign-of-difference JL/JGE model; the
+    // single v2_sub_13c0c has the corrected operand-compare semantics).
+    v2_sub_13c0c(s);
     // sub_12fd0: sub-sprite update type 3
     {
         auto delta_type2 = [](int16_t d) -> int16_t {
