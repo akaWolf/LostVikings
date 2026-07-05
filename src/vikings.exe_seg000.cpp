@@ -38,6 +38,68 @@ extern "C" void v2_input_record_drain(void);  // #180: flush recorded key edges 
 extern "C" void v2_fntest_pre(int id, const uint8_t* ds_base, uint16_t ax, uint16_t bx,
                               uint16_t cx, uint16_t dx, uint16_t si, uint16_t di, uint16_t bp);
 extern "C" void v2_fntest_post(int id, const uint8_t* ds_base);
+
+// ============================================================================
+// FN-TEST synthetic-diff (SYNTHETIC_DIFF_ANALYSIS.md): isolated orig calls.
+// v2_fntest_orig_isolated() runs ONE orig near-function completely outside the
+// game loop: the caller-supplied 64KB DS image is copied into the REAL game DS
+// area inside m2c::m (whose prior content is saved/restored around the call,
+// so a live game process is not disturbed), a private _STATE is built whose
+// emulated stack top sits at STACK_SIZE/2 (x86 stack grows DOWN: far below the
+// live game's frames near STACK_SIZE, far above the unused bottom), and the
+// function is entered through the port's own m2c::CALL_ — the same recursive
+// native-call machinery every in-game CALL uses (shadow-stack call mark, push
+// of the return ip, wrapper invocation, StackPop handling). The callee's final
+// RETN pops it symmetrically and the group returns; the (modified) DS is then
+// copied out. Game-thread only (selftest runs before init; xcheck runs inside
+// the barrier pause where the v2 thread is idle).
+// ============================================================================
+extern "C" uint32_t v2_fntest_game_ds_linear(void) {
+    // word_28896 lives at DS:0x3B6 — recover the game DS base from its C++
+    // address inside m2c::m (static, known at link time; no game needed).
+    return (uint32_t)((db*)&word_28896 - (db*)&m2c::m) - 0x3B6;
+}
+
+extern "C" void v2_fntest_snap_game_ds(uint8_t* out64k) {
+    memcpy(out64k, (db*)&m2c::m + v2_fntest_game_ds_linear(), 0x10000);
+}
+
+// Registry of orig near-function entry points, id-indexed (mirrors the FtId
+// enum in v2_fn_test.cpp). One line per tested function.
+extern "C" void* v2_fntest_orig_fnptr(int id) {
+    switch (id) {
+    case 0: return (void*)&sub_15972;
+    default: return 0;
+    }
+}
+
+extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image,
+        uint16_t in_ax, uint16_t in_bx, uint16_t in_cx, uint16_t in_dx,
+        uint16_t in_si, uint16_t in_di, uint16_t in_bp)
+{
+    static uint8_t saved_ds[0x10000];   // game-thread only — static is fine
+    const uint32_t ds_lin = v2_fntest_game_ds_linear();
+    db* const ds_ptr = (db*)&m2c::m + ds_lin;
+
+    memcpy(saved_ds, ds_ptr, 0x10000);
+    memcpy(ds_ptr, ds_image, 0x10000);
+
+    struct m2c::_STATE st{};
+    struct m2c::_STATE* _state = &st;
+    X86_REGREF
+    cs = 0x1a2;
+    ds = es = (dw)(ds_lin >> 4);
+    ss = seg_offset(m2c::stack);
+    esp = 0; sp = (dw)(STACK_SIZE / 2);
+    ax = in_ax; bx = in_bx; cx = in_cx; dx = in_dx;
+    si = in_si; di = in_di; bp = in_bp;
+
+    bool ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
+
+    memcpy(ds_image, ds_ptr, 0x10000);
+    memcpy(ds_ptr, saved_ds, 0x10000);
+    return ok;
+}
 extern "C" void v2_mirror_sub_10350_spec_ors();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
 // Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.

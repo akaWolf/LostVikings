@@ -31,6 +31,15 @@ extern "C" void v2_fntest_call_sub_15972(uint8_t* test_shadow, uint16_t ax, uint
 extern "C" int  v2_fntest_ds_skip(uint32_t addr);
 extern "C" void v2_fntest_report(void);  // defined below; fwd for atexit registration
 
+// Exports from vikings.exe_seg000.cpp: isolated orig-function execution
+// (SYNTHETIC_DIFF_ANALYSIS.md). No game/SDL/threads required.
+extern "C" uint32_t v2_fntest_game_ds_linear(void);
+extern "C" void     v2_fntest_snap_game_ds(uint8_t* out64k);
+extern "C" void*    v2_fntest_orig_fnptr(int id);
+extern "C" bool     v2_fntest_orig_isolated(void* fn, uint8_t* ds_image,
+        uint16_t ax, uint16_t bx, uint16_t cx, uint16_t dx,
+        uint16_t si, uint16_t di, uint16_t bp);
+
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
 
 namespace {
@@ -53,6 +62,13 @@ const char* g_name[FT_COUNT] = { "sub_15972" };
 uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
 bool    g_any_enabled = false;
+
+// Synthetic-diff buffers (selftest + xcheck). Game-thread only.
+uint8_t g_synth_base[0x10000];   // pristine game DS image (static EXE data)
+uint8_t g_synth_in[0x10000];     // constructed case input
+uint8_t g_synth_orig[0x10000];   // isolated-orig output (the oracle)
+long    g_xchk_ok[FT_COUNT]      = {};
+long    g_xchk_diverge[FT_COUNT] = {};
 
 void ft_run_v2(FtId id, uint8_t* shadow, const FtRegs& r) {
     switch (id) {
@@ -91,6 +107,10 @@ extern "C" void v2_fntest_report(void) {
         fprintf(stderr, "FNTEST-SUMMARY[%s]: calls=%ld pass=%ld fail=%ld%s\n",
                 g_name[i], g_slot[i].calls, g_slot[i].pass, g_slot[i].fail,
                 g_slot[i].fail ? "  <<< DIVERGENCE" : "");
+        if (g_xchk_ok[i] || g_xchk_diverge[i])
+            fprintf(stderr, "FNTEST-XCHECK-SUMMARY[%s]: ok=%ld diverge=%ld%s\n",
+                    g_name[i], g_xchk_ok[i], g_xchk_diverge[i],
+                    g_xchk_diverge[i] ? "  <<< ORACLE BROKEN" : "");
     }
 }
 
@@ -140,4 +160,186 @@ extern "C" void v2_fntest_post(int id, const uint8_t* ds_base)
     } else {
         s.pass++;
     }
+
+    // Oracle cross-check (env FNTEST_XCHECK): the isolated orig call on the
+    // captured live input must reproduce the live orig output byte-for-byte.
+    // Validates the whole isolation machinery (state/stack/trap/DS mapping)
+    // against ground truth. Diagnostic mode: the render thread may async-write
+    // the input word (ds:0x86DE) while game DS is temporarily swapped — that
+    // address is in the verify skip table, so no false diffs; a lost input
+    // edge during the swap window is theoretically possible, so keep XCHECK
+    // off in precision replay runs.
+    static int xchk = -1;
+    if (xchk < 0) xchk = getenv("FNTEST_XCHECK") ? 1 : 0;
+    if (xchk) {
+        void* fn = v2_fntest_orig_fnptr(id);
+        if (fn) {
+            s.enabled = false;   // guard: hooks inside the function re-enter
+            memcpy(g_synth_orig, s.ds_in, sizeof(g_synth_orig));
+            v2_fntest_orig_isolated(fn, g_synth_orig,
+                s.regs.ax, s.regs.bx, s.regs.cx, s.regs.dx,
+                s.regs.si, s.regs.di, s.regs.bp);
+            s.enabled = true;
+            long xd = 0;
+            for (uint32_t a = 0; a < 0x10000; a++) {
+                if (g_synth_orig[a] == ds_base[a]) continue;
+                if (v2_fntest_ds_skip(a)) continue;
+                if (xd < 8)
+                    fprintf(stderr, "FNTEST-XCHECK-DIVERGE[%s call=%ld]: addr=%04X "
+                            "live=%02X isolated=%02X\n",
+                            g_name[id], s.calls, a, ds_base[a], g_synth_orig[a]);
+                xd++;
+            }
+            if (xd) g_xchk_diverge[id]++; else g_xchk_ok[id]++;
+        }
+    }
+}
+
+// ============================================================================
+// Synthetic-diff selftest (SYNTHETIC_DIFF_ANALYSIS.md, S0).
+// Env: FNSELFTEST=sub_15972|all — run BEFORE game init (no SDL/threads/game),
+// then exit with 0 (all pass) / 1 (divergence). Inputs are GENERATED (branch
+// grid, boundaries, exhaustive 16-bit sweep, seeded fuzz); the oracle is the
+// isolated orig function itself — no hand-written expectations anywhere.
+// ============================================================================
+namespace {
+
+// Deterministic PRNG (fixed seed per group) — reproducible fuzz cases.
+struct FtRng {
+    uint32_t s;
+    explicit FtRng(uint32_t seed) : s(seed) {}
+    uint32_t next() { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return s; }
+    uint16_t w() { return (uint16_t)(next() & 0xFFFF); }
+};
+
+inline void ft_wr16(uint8_t* p, uint32_t off, uint16_t v) {
+    p[off] = (uint8_t)(v & 0xFF); p[off + 1] = (uint8_t)(v >> 8);
+}
+
+struct FtSynthStats { long cases = 0, pass = 0, fail = 0; };
+
+// One sub_15972 case: build input from the pristine base, run isolated orig
+// (oracle) and v2 on identical copies, byte-compare full DS.
+// Contract (verified line-by-line against orig eips 0x5972-0x59C5):
+//   reads  ax, di, DS[di+0x150D](Y_end), DS[di+0x14E5](Y_start), DS[di+0x1765](Y)
+//   writes DS[di+0x150D], DS[di+0x14E5], DS[di+0x1765], DS[di+0x19E5]=0
+// The canary 0xAAAA pre-filled at di+0x19E5 proves BOTH sides clear it.
+bool ft_synth_case_15972(uint16_t ax, uint16_t di,
+                         uint16_t y, uint16_t y_end, uint16_t y_start,
+                         const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), y);
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x150D), y_end);
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x14E5), y_start);
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x19E5), 0xAAAA);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_15972), g_synth_orig,
+                            ax, 0, 0, 0, 0, di, 0);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    v2_fntest_call_sub_15972(g_scratch, ax, di);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_15972 %s]: addr=%04X orig=%02X v2=%02X "
+                    "(in=%02X) | ax=%04X di=%04X y=%04X y_end=%04X y_start=%04X\n",
+                    group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    ax, di, y, y_end, y_start);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_sub_15972() {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;   // cap detailed prints; counters keep totals
+
+    // --- Group 1: branch × boundary grid ---------------------------------
+    // ax: both signs of every branch (ax<0 low-byte masked path, ax==0 snap,
+    //     ax>0 snap-up), sign borders, byte borders, wrap.
+    static const uint16_t AXS[] = { 0x0000, 0x0001, 0x0002, 0x000F, 0x0010,
+                                    0x7FFF, 0x8000, 0x8001, 0xFF00, 0xFF01,
+                                    0xFFF0, 0xFFFF };
+    static const uint16_t DIS[] = { 0x0000, 0x0002, 0x0026 };
+    static const uint16_t YSETS[][3] = {   // {y, y_end, y_start}
+        { 0x0000, 0x0000, 0x0000 },
+        { 0xFFFF, 0xFFFF, 0xFFFF },
+        { 0x0124, 0x0131, 0x0116 },        // real values from attract f468
+        { 0x0010, 0x000F, 0x0011 },        // tile-boundary cluster
+        { 0x1FF0, 0x1FEF, 0x1FF1 },
+        { 0x8000, 0x7FFF, 0x8001 },        // sign border
+        { 0x0001, 0x0010, 0xFFF0 },        // wrap candidates
+        { 0x0124, 0x0130, 0x0116 },        // y_end exactly on tile boundary
+    };
+    for (uint16_t ax : AXS)
+        for (uint16_t di : DIS)
+            for (auto& ys : YSETS)
+                ft_synth_case_15972(ax, di, ys[0], ys[1], ys[2],
+                                    "grid", grid, diff_budget);
+
+    // --- Group 2: exhaustive 16-bit sweep of ax (all three branches fully) --
+    static const uint16_t EXH_YSETS[][3] = {
+        { 0x0124, 0x0131, 0x0116 },
+        { 0x0010, 0x000F, 0x0011 },
+        { 0xFFFF, 0x0000, 0x8000 },
+        { 0x4000, 0x3FF0, 0x4010 },
+    };
+    for (uint32_t ax = 0; ax <= 0xFFFF; ax++)
+        for (auto& ys : EXH_YSETS)
+            ft_synth_case_15972((uint16_t)ax, 0, ys[0], ys[1], ys[2],
+                                "exhaustive", exh, diff_budget);
+
+    // --- Group 3: seeded fuzz over all contract fields ---------------------
+    FtRng rng(0xC0FFEE01);
+    for (int i = 0; i < 20000; i++) {
+        uint16_t di = (uint16_t)((rng.next() % 20) * 2);   // object slots 0..0x26
+        ft_synth_case_15972(rng.w(), di, rng.w(), rng.w(), rng.w(),
+                            "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_15972]: grid %ld/%ld, exhaustive %ld/%ld, "
+        "fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases,
+        grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+} // namespace
+
+// Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
+// Returns -1 when FNSELFTEST is not set (normal game startup continues),
+// else the process exit code (0 = all pass, 1 = divergence).
+extern "C" int v2_fntest_selftest_env(void) {
+    const char* env = getenv("FNSELFTEST");
+    if (!env || !env[0]) return -1;
+
+    uint32_t ds_lin = v2_fntest_game_ds_linear();
+    if (ds_lin & 0xF) {
+        fprintf(stderr, "FNSELFTEST: game DS base 0x%X not paragraph-aligned — abort\n", ds_lin);
+        return 1;
+    }
+    fprintf(stderr, "FNSELFTEST: game DS at linear 0x%X (seg 0x%X), oracle = isolated m2c orig\n",
+            ds_lin, ds_lin >> 4);
+    v2_fntest_snap_game_ds(g_synth_base);
+
+    int rc = 0; bool matched = false;
+    bool all = (strcmp(env, "all") == 0);
+    if (all || strstr(env, "sub_15972")) { matched = true; rc |= ft_selftest_sub_15972(); }
+    if (!matched) {
+        fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
+        return 1;
+    }
+    return rc;
 }

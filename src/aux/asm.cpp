@@ -472,6 +472,8 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 // SIGINT/SIGTERM: m2c game thread loops forever in C++ goto chain — has no
 // need_quit check. SDL render thread sets need_quit on SDL_QUIT but game
 // thread ignores it, so process never exits on Ctrl-C. Force exit.
+extern "C" int v2_fntest_selftest_env(void);  // v2_fn_test.cpp (FNSELFTEST env)
+
 static void asm_sigint_handler(int sig) {
     fprintf(stderr, "\nSignal %d received — exiting\n", sig);
     // Final reports: dump before _exit() bypasses atexit().
@@ -521,6 +523,16 @@ int main(int argc, char *argv[]) {
     std::set_terminate(v2_terminate_handler);
     signal(SIGINT, asm_sigint_handler);
     signal(SIGTERM, asm_sigint_handler);
+
+    // FN-TEST synthetic-diff selftest (SYNTHETIC_DIFF_ANALYSIS.md): env
+    // FNSELFTEST=<fn|all> runs isolated orig<->v2 differential tests on
+    // generated inputs and exits — no game, no SDL, no threads. The static
+    // EXE image in m2c::m is already populated (global Initializer ran
+    // before main); m2c::init is intentionally NOT called here.
+    {
+        int _ft_rc = v2_fntest_selftest_env();
+        if (_ft_rc >= 0) return _ft_rc;
+    }
 
 #ifdef HEADLESS
     // HEADLESS init must run BEFORE any SDL call (sets SDL_VIDEODRIVER=dummy)
