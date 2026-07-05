@@ -81,6 +81,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 10: return (void*)&sub_10753;
     case 11: return (void*)&sub_17496;
     case 12: return (void*)&sub_1746c;
+    case 13: return (void*)&sub_101be;
     default: return 0;
     }
 }
@@ -97,7 +98,12 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     memcpy(saved_ds, ds_ptr, 0x10000);
     memcpy(ds_ptr, ds_image, 0x10000);
 
-    struct m2c::_STATE st{};
+    // NB: _STATE has a user ctor that only sets call_source, so `st{}` does
+    // NOT zero the members — flags (incl. DF!) would be stack garbage. That
+    // made the oracle's first REP MOVSB run backward (caught by the
+    // sub_101be selftest). memset gives the canonical all-clear entry state.
+    struct m2c::_STATE st;
+    memset(&st, 0, sizeof(st));
     struct m2c::_STATE* _state = &st;
     X86_REGREF
     cs = 0x1a2;

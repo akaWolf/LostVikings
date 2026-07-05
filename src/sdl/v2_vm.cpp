@@ -10336,6 +10336,9 @@ extern "C" void v2_fntest_call_sub_17496(uint8_t* test_shadow, uint16_t si_speed
 extern "C" void v2_fntest_call_sub_1746c(uint8_t* test_shadow, uint16_t si_speed) {
     v2_sub_1746c(test_shadow, (int16_t)si_speed);
 }
+extern "C" void v2_fntest_call_sub_101be(uint8_t* test_shadow) {
+    v2_sub_101be(test_shadow);
+}
 extern "C" void v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si) {
     v2_sub_13dd6(test_shadow, si);
 }

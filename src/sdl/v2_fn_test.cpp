@@ -50,6 +50,7 @@ extern "C" void     v2_fntest_call_sub_10704(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_10753(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_17496(uint8_t* test_shadow, uint16_t si_speed);
 extern "C" void     v2_fntest_call_sub_1746c(uint8_t* test_shadow, uint16_t si_speed);
+extern "C" void     v2_fntest_call_sub_101be(uint8_t* test_shadow);
 
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
 
@@ -58,7 +59,7 @@ namespace {
 enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B = 3,
             FT_SUB_13D68 = 4, FT_SUB_13DD6 = 5, FT_SUB_13E15 = 6, FT_SUB_13C0C = 7,
             FT_SUB_1064B = 8, FT_SUB_10704 = 9, FT_SUB_10753 = 10,
-            FT_SUB_17496 = 11, FT_SUB_1746C = 12, FT_COUNT };
+            FT_SUB_17496 = 11, FT_SUB_1746C = 12, FT_SUB_101BE = 13, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -74,7 +75,7 @@ FtSlot      g_slot[FT_COUNT];
 const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d6b",
                                  "sub_13d68", "sub_13dd6", "sub_13e15", "sub_13c0c",
                                  "sub_1064b", "sub_10704", "sub_10753",
-                                 "sub_17496", "sub_1746c" };
+                                 "sub_17496", "sub_1746c", "sub_101be" };
 
 uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
@@ -1046,6 +1047,107 @@ int ft_selftest_sub_1064b() {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// sub_101be: palette-animation timers + table rotation.
+// Contract (verified line-by-line, orig eips 0x1BE-0x20E + callees sub_10255
+// eips 0x255-0x2xx / sub_1020f 0x20F-0x254):
+//   reads  mask ds:0x2583; per channel si=7..0: enable byte at
+//          (uint16_t)(si-0x6C44) (= 0x93BC+si), timer [si+0x258C],
+//          cur [si+0x259C], end [si+0x2594]; palette tables 0x8202/0x7F02
+//   writes timer DEC; on 0: rotates BOTH tables' entry ranges (3-byte RGB,
+//          REP MOVSB up/down by cur<=>end), scratch ds:0x8504-0x8506; after a
+//          full non-early-exit pass: ds:0x7EFE = 2. Canaries on scratch+7EFE.
+bool ft_synth_case_101be(uint16_t mask, const uint8_t* en8, const uint8_t* tm8,
+                         const uint8_t* cur8, const uint8_t* end8, uint32_t tbl_seed,
+                         const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    g_synth_in[0x2583] = (uint8_t)mask;
+    for (int i = 0; i < 8; i++) {
+        g_synth_in[(uint16_t)(i - 0x6C44)] = en8[i];
+        g_synth_in[(uint16_t)(i + 0x258C)] = tm8[i];
+        g_synth_in[(uint16_t)(i + 0x259C)] = cur8[i];
+        g_synth_in[(uint16_t)(i + 0x2594)] = end8[i];
+    }
+    FtRng trng(tbl_seed);
+    for (uint32_t off = 0; off < 0x300; off++) {        // 256 entries x 3 bytes
+        g_synth_in[(uint16_t)(0x8202 + off)] = (uint8_t)trng.next();
+        g_synth_in[(uint16_t)(0x7F02 + off)] = (uint8_t)trng.next();
+    }
+    ft_wr16(g_synth_in, 0x8504, 0xBBBB);
+    g_synth_in[0x8506] = 0xBB;
+    ft_wr16(g_synth_in, 0x7EFE, 0xBBBB);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_101BE), g_synth_orig, regs);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    v2_fntest_call_sub_101be(g_scratch);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_101be %s]: addr=%04X orig=%02X v2=%02X (in=%02X) "
+                    "| mask=%02X cur0=%02X end0=%02X tm0=%02X\n",
+                    group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    (uint8_t)mask, cur8[0], end8[0], tm8[0]);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_sub_101be() {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    uint8_t en[8], tm[8], cur[8], end[8];
+
+    // Directed: mask off / mask-vs-enable misses / timer chains / rotation
+    // both directions on every channel simultaneously.
+    static const uint8_t MASKS[] = { 0x00, 0x01, 0x80, 0xFF };
+    for (uint8_t m : MASKS) {
+        for (int i = 0; i < 8; i++) { en[i] = (uint8_t)(1 << i); tm[i] = (uint8_t)(i % 3); }
+        for (int i = 0; i < 8; i++) { cur[i] = (uint8_t)(0x10 + i); end[i] = (uint8_t)(0x14 - i); }
+        ft_synth_case_101be(m, en, tm, cur, end, 0xA1000000u + m, "grid", grid, diff_budget);
+        for (int i = 0; i < 8; i++) { en[i] = 0xFF; tm[i] = 1; }        // all fire
+        ft_synth_case_101be(m, en, tm, cur, end, 0xA2000000u + m, "grid", grid, diff_budget);
+        for (int i = 0; i < 8; i++) tm[i] = 0;                          // all zero timers
+        ft_synth_case_101be(m, en, tm, cur, end, 0xA3000000u + m, "grid", grid, diff_budget);
+    }
+
+    // Exhaustive: channel 0 cur x end full 256x256 (timer=1, fires each case).
+    for (uint32_t c = 0; c <= 0xFF; c++) for (uint32_t e = 0; e <= 0xFF; e++) {
+        for (int i = 0; i < 8; i++) { en[i] = 0; tm[i] = 0; cur[i] = 0; end[i] = 0; }
+        en[0] = 0x01; tm[0] = 1; cur[0] = (uint8_t)c; end[0] = (uint8_t)e;
+        ft_synth_case_101be(0x01, en, tm, cur, end, 0xE0000000u | (c << 8) | e,
+                            "exh-curXend", exh, diff_budget);
+    }
+
+    FtRng rng(0x101BE001);
+    for (int i = 0; i < 20000; i++) {
+        uint16_t m = (uint16_t)(rng.next() & 0xFF);
+        for (int k = 0; k < 8; k++) {
+            en[k] = (uint8_t)rng.next(); tm[k] = (uint8_t)(rng.next() & 3);
+            cur[k] = (uint8_t)rng.next(); end[k] = (uint8_t)rng.next();
+        }
+        ft_synth_case_101be(m, en, tm, cur, end, rng.next(), "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_101be]: grid %ld/%ld, exhaustive %ld/%ld, fuzz %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -1079,6 +1181,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10704")) { matched = true; rc |= ft_selftest_scroll_apply(FT_SUB_10704, 0x2B82, 0x10704001); }
     if (all || strstr(env, "sub_10753")) { matched = true; rc |= ft_selftest_scroll_apply(FT_SUB_10753, 0x2B80, 0x10753001); }
     if (all || strstr(env, "sub_1064b")) { matched = true; rc |= ft_selftest_sub_1064b(); }
+    if (all || strstr(env, "sub_101be")) { matched = true; rc |= ft_selftest_sub_101be(); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;
