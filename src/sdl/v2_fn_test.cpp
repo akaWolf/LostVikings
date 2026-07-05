@@ -33,18 +33,18 @@ extern "C" void v2_fntest_report(void);  // defined below; fwd for atexit regist
 
 // Exports from vikings.exe_seg000.cpp: isolated orig-function execution
 // (SYNTHETIC_DIFF_ANALYSIS.md). No game/SDL/threads required.
+// io_regs[8]: in/out ax,bx,cx,dx,si,di,bp + [7]=CF on exit.
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 extern "C" void     v2_fntest_snap_game_ds(uint8_t* out64k);
 extern "C" void*    v2_fntest_orig_fnptr(int id);
-extern "C" bool     v2_fntest_orig_isolated(void* fn, uint8_t* ds_image,
-        uint16_t ax, uint16_t bx, uint16_t cx, uint16_t dx,
-        uint16_t si, uint16_t di, uint16_t bp);
+extern "C" bool     v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs);
+extern "C" int      v2_fntest_call_sub_161a1(uint8_t* test_shadow, uint16_t di, uint16_t si);
 
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
 
 namespace {
 
-enum FtId { FT_SUB_15972 = 0, FT_COUNT };
+enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -57,7 +57,7 @@ struct FtSlot {
 };
 
 FtSlot      g_slot[FT_COUNT];
-const char* g_name[FT_COUNT] = { "sub_15972" };
+const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1" };
 
 uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
@@ -176,9 +176,9 @@ extern "C" void v2_fntest_post(int id, const uint8_t* ds_base)
         if (fn) {
             s.enabled = false;   // guard: hooks inside the function re-enter
             memcpy(g_synth_orig, s.ds_in, sizeof(g_synth_orig));
-            v2_fntest_orig_isolated(fn, g_synth_orig,
-                s.regs.ax, s.regs.bx, s.regs.cx, s.regs.dx,
-                s.regs.si, s.regs.di, s.regs.bp);
+            uint16_t xregs[8] = { s.regs.ax, s.regs.bx, s.regs.cx, s.regs.dx,
+                                  s.regs.si, s.regs.di, s.regs.bp, 0 };
+            v2_fntest_orig_isolated(fn, g_synth_orig, xregs);
             s.enabled = true;
             long xd = 0;
             for (uint32_t a = 0; a < 0x10000; a++) {
@@ -236,8 +236,8 @@ bool ft_synth_case_15972(uint16_t ax, uint16_t di,
     ft_wr16(g_synth_in, (uint16_t)(di + 0x19E5), 0xAAAA);
 
     memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
-    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_15972), g_synth_orig,
-                            ax, 0, 0, 0, 0, di, 0);
+    uint16_t regs[8] = { ax, 0, 0, 0, 0, di, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_15972), g_synth_orig, regs);
 
     memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
     v2_fntest_call_sub_15972(g_scratch, ax, di);
@@ -316,6 +316,141 @@ int ft_selftest_sub_15972() {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// One sub_161a1 case (bbox check, di=self si=target).
+// Contract (verified line-by-line against orig eips 0x61A1-0x6234):
+//   reads  di, si, DS[di+0x1535/0x155D/0x150D/0x1765/0x13CD],
+//                  DS[si+0x1535/0x155D/0x14E5/0x1765/0x13CD]
+//   writes ds:0x32/0x34/0x36 (scratch — only on paths past the X-overlap
+//          rejects; canary 0xBBBB proves path-exact write behavior)
+//   returns CF: STC = collision, CLC = no. Register outputs beyond CF are not
+//   part of the v2 contract (v2 mirrors register effects inline at callers).
+struct Ft161a1Fields {
+    uint16_t di_x_lo, di_x_hi;    // [di+0x1535], [di+0x155D]
+    uint16_t si_x_lo, si_x_hi;    // [si+0x1535], [si+0x155D]
+    uint16_t di_y_end, di_y, di_yc;   // [di+0x150D], [di+0x1765], [di+0x13CD]
+    uint16_t si_y_st, si_y, si_yc;    // [si+0x14E5], [si+0x1765], [si+0x13CD]
+};
+
+bool ft_synth_case_161a1(uint16_t di, uint16_t si, const Ft161a1Fields& f,
+                         const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x1535), f.di_x_lo);
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x155D), f.di_x_hi);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1535), f.si_x_lo);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x155D), f.si_x_hi);
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x150D), f.di_y_end);
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), f.di_y);
+    ft_wr16(g_synth_in, (uint16_t)(di + 0x13CD), f.di_yc);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x14E5), f.si_y_st);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1765), f.si_y);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x13CD), f.si_yc);
+    ft_wr16(g_synth_in, 0x32, 0xBBBB);   // scratch canaries: written only on
+    ft_wr16(g_synth_in, 0x34, 0xBBBB);   // post-X-overlap paths — path-exact
+    ft_wr16(g_synth_in, 0x36, 0xBBBB);   // behavior must match
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, si, di, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_161A1), g_synth_orig, regs);
+    int cf_orig = (int)regs[7];
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    int cf_v2 = v2_fntest_call_sub_161a1(g_scratch, di, si);
+
+    long diffs = 0;
+    if (cf_orig != cf_v2) diffs++;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        diffs++;
+    }
+    if (diffs && diff_budget > 0) {
+        diff_budget--;
+        fprintf(stderr, "FNSELFTEST-DIFF[sub_161a1 %s]: cf orig=%d v2=%d | di=%04X si=%04X "
+                "dX=[%04X,%04X] sX=[%04X,%04X] dY={%04X,%04X,%04X} sY={%04X,%04X,%04X}\n",
+                group, cf_orig, cf_v2, di, si, f.di_x_lo, f.di_x_hi, f.si_x_lo, f.si_x_hi,
+                f.di_y_end, f.di_y, f.di_yc, f.si_y_st, f.si_y, f.si_yc);
+        for (uint32_t a = 0, shown = 0; a < 0x10000 && shown < 4; a++) {
+            if (g_scratch[a] == g_synth_orig[a] || v2_fntest_ds_skip(a)) continue;
+            fprintf(stderr, "  addr=%04X orig=%02X v2=%02X (in=%02X)\n",
+                    a, g_synth_orig[a], g_scratch[a], g_synth_in[a]);
+            shown++;
+        }
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_sub_161a1() {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+
+    // --- Group 1: X-overlap configs × Y branch/boundary sets ---------------
+    // X configs: overlap, reject#1 (JGE false), reject#2 (JL true), and both
+    // EQUALITY borders of those signed compares.
+    struct XCfg { uint16_t dlo, dhi, slo, shi; };
+    static const XCfg XC[] = {
+        { 0x0100, 0x0120, 0x0110, 0x0130 },  // overlap
+        { 0x0100, 0x0100, 0x0110, 0x0130 },  // reject#1: [di+155D] < [si+1535]
+        { 0x0100, 0x0120, 0x0110, 0x00F0 },  // reject#2: [si+155D] < [di+1535]
+        { 0x0100, 0x0110, 0x0110, 0x0130 },  // border: [di+155D] == [si+1535] (JGE taken)
+        { 0x0100, 0x0120, 0x0110, 0x0100 },  // border: [si+155D] == [di+1535] (JL not taken)
+    };
+    // Y sets aimed at each signed compare/clamp border in the tail.
+    static const uint16_t YS[][6] = {   // {di_y_end, di_y, di_yc, si_y_st, si_y, si_yc}
+        { 0x8000, 0x0010, 0x0010, 0x0100, 0x0100, 0x0100 },  // y_end<0 clamp
+        { 0x0050, 0x0060, 0x0010, 0x0100, 0x0100, 0x0100 },  // adj_y == 0 (JG false)
+        { 0x0050, 0x0060, 0x0011, 0x0100, 0x0100, 0x0100 },  // adj_y == 1 (JG true)
+        { 0x0100, 0x0080, 0x0000, 0x0100, 0x0100, 0x0100 },  // adj_y >= ds32 path
+        { 0x0020, 0x0100, 0x0000, 0x0100, 0x0100, 0x0100 },  // adj_y < ds32 path
+        { 0x0100, 0x0100, 0x0100, 0x0200, 0x0100, 0x0050 },  // target_adj < si_y_st
+        { 0x0100, 0x0100, 0x0100, 0x0200, 0x0050, 0x0050 },  // target_adj == si_y_st (JGE)
+        { 0x0100, 0x0100, 0x0100, 0x0200, 0x0040, 0x0050 },  // target_adj > si_y_st
+        { 0x7FFF, 0x8000, 0x0001, 0x7FFF, 0x8000, 0x0001 },  // signed extremes
+        { 0x0100, 0x0000, 0x0000, 0x0100, 0x0000, 0x0000 },  // equal mid-values
+    };
+    static const uint16_t DISI[][2] = { {0,2}, {2,0}, {0,0x26}, {4,4} };
+    for (auto& xc : XC)
+        for (auto& ys : YS)
+            for (auto& p : DISI) {
+                Ft161a1Fields f = { xc.dlo, xc.dhi, xc.slo, xc.shi,
+                                    ys[0], ys[1], ys[2], ys[3], ys[4], ys[5] };
+                ft_synth_case_161a1(p[0], p[1], f, "grid", grid, diff_budget);
+            }
+
+    // --- Group 2: exhaustive sweeps of the two hottest compare operands ----
+    for (uint32_t v = 0; v <= 0xFFFF; v++) {   // [si+14E5]: in 3 signed compares
+        Ft161a1Fields f = { 0x0100, 0x0120, 0x0110, 0x0130,
+                            0x0100, 0x0080, 0x0020, (uint16_t)v, 0x0100, 0x0150 };
+        ft_synth_case_161a1(0, 2, f, "exh-siYst", exh, diff_budget);
+    }
+    for (uint32_t v = 0; v <= 0xFFFF; v++) {   // [di+150D]: clamp + adj_y source
+        Ft161a1Fields f = { 0x0100, 0x0120, 0x0110, 0x0130,
+                            (uint16_t)v, 0x0080, 0x0020, 0x0100, 0x0100, 0x0150 };
+        ft_synth_case_161a1(0, 2, f, "exh-diYend", exh, diff_budget);
+    }
+
+    // --- Group 3: seeded fuzz over the full contract ------------------------
+    FtRng rng(0xB0B0CA71);
+    for (int i = 0; i < 30000; i++) {
+        uint16_t di = (uint16_t)((rng.next() % 20) * 2);
+        uint16_t si = (uint16_t)((rng.next() % 20) * 2);
+        Ft161a1Fields f = { rng.w(), rng.w(), rng.w(), rng.w(),
+                            rng.w(), rng.w(), rng.w(), rng.w(), rng.w(), rng.w() };
+        ft_synth_case_161a1(di, si, f, "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_161a1]: grid %ld/%ld, exhaustive %ld/%ld, "
+        "fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases,
+        grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -337,6 +472,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     int rc = 0; bool matched = false;
     bool all = (strcmp(env, "all") == 0);
     if (all || strstr(env, "sub_15972")) { matched = true; rc |= ft_selftest_sub_15972(); }
+    if (all || strstr(env, "sub_161a1")) { matched = true; rc |= ft_selftest_sub_161a1(); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

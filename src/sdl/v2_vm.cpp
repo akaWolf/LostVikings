@@ -10355,6 +10355,17 @@ extern "C" void v2_fntest_call_sub_15972(uint8_t* test_shadow, uint16_t ax, uint
 extern "C" int v2_fntest_ds_skip(uint32_t addr) {
     return v2_ds_hash_skip(addr) ? 1 : 0;
 }
+// sub_161a1 bbox check: returns carry (1 = collision). Defined below
+// (v2_vm_sub_161a1 follows sub_15972 in this file); declared here so all
+// fn-test wrappers stay in one block.
+static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si);
+extern "C" int v2_fntest_call_sub_161a1(uint8_t* test_shadow, uint16_t di, uint16_t si) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    return v2_vm_sub_161a1(vm, di, si) ? 1 : 0;
+}
 
 // sub_161a1: bounding box check for sub_1614E. di=self, si=target.
 // Returns true (carry) if collision.

@@ -69,13 +69,15 @@ extern "C" void v2_fntest_snap_game_ds(uint8_t* out64k) {
 extern "C" void* v2_fntest_orig_fnptr(int id) {
     switch (id) {
     case 0: return (void*)&sub_15972;
+    case 1: return (void*)&sub_161a1;
     default: return 0;
     }
 }
 
-extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image,
-        uint16_t in_ax, uint16_t in_bx, uint16_t in_cx, uint16_t in_dx,
-        uint16_t in_si, uint16_t in_di, uint16_t in_bp)
+// io_regs[8]: [0]=ax [1]=bx [2]=cx [3]=dx [4]=si [5]=di [6]=bp — read as the
+// entry register state, overwritten with the exit state; [7] = CF on exit
+// (entry value ignored; flags start cleared like a fresh _STATE).
+extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs)
 {
     static uint8_t saved_ds[0x10000];   // game-thread only — static is fine
     const uint32_t ds_lin = v2_fntest_game_ds_linear();
@@ -91,10 +93,14 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image,
     ds = es = (dw)(ds_lin >> 4);
     ss = seg_offset(m2c::stack);
     esp = 0; sp = (dw)(STACK_SIZE / 2);
-    ax = in_ax; bx = in_bx; cx = in_cx; dx = in_dx;
-    si = in_si; di = in_di; bp = in_bp;
+    ax = io_regs[0]; bx = io_regs[1]; cx = io_regs[2]; dx = io_regs[3];
+    si = io_regs[4]; di = io_regs[5]; bp = io_regs[6];
 
     bool ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
+
+    io_regs[0] = ax; io_regs[1] = bx; io_regs[2] = cx; io_regs[3] = dx;
+    io_regs[4] = si; io_regs[5] = di; io_regs[6] = bp;
+    io_regs[7] = st.CF ? 1 : 0;
 
     memcpy(ds_image, ds_ptr, 0x10000);
     memcpy(ds_ptr, saved_ds, 0x10000);
