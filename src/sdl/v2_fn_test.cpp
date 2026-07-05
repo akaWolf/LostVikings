@@ -44,13 +44,15 @@ extern "C" void     v2_fntest_call_sub_15d6b(uint8_t* test_shadow, uint16_t ax, 
 extern "C" int      v2_fntest_call_sub_13d68(uint8_t* test_shadow, uint16_t si);
 extern "C" void     v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si);
 extern "C" void     v2_fntest_call_sub_13e15(uint8_t* test_shadow, uint16_t si);
+extern "C" void     v2_fntest_call_sub_13c0c(uint8_t* test_shadow);
 
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
 
 namespace {
 
 enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B = 3,
-            FT_SUB_13D68 = 4, FT_SUB_13DD6 = 5, FT_SUB_13E15 = 6, FT_COUNT };
+            FT_SUB_13D68 = 4, FT_SUB_13DD6 = 5, FT_SUB_13E15 = 6, FT_SUB_13C0C = 7,
+            FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -64,7 +66,7 @@ struct FtSlot {
 
 FtSlot      g_slot[FT_COUNT];
 const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d6b",
-                                 "sub_13d68", "sub_13dd6", "sub_13e15" };
+                                 "sub_13d68", "sub_13dd6", "sub_13e15", "sub_13c0c" };
 
 uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
@@ -744,6 +746,109 @@ int ft_selftest_1345init(FtId id, uint32_t fuzz_seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// sub_13c0c: viewport despawn bounds + offscreen marking.
+// Contract (verified line-by-line, orig eips 0x3C0C-0x3C92):
+//   reads  ds:0x44/0x46 (viewport), ds:0x372 (table end), and per object
+//          si=6..te: [si+0x1355] alive, [si+0x1585] flags (0x800 = permanent),
+//          [si+0x173D/0x14BD] X/half-width, [si+0x1765/0x1495] Y/half-height
+//   writes ds:0x34 = clamp0(vp_x-0x10); ds:0x36 = RAW(vp_x-0x10)+0x160 (X ax
+//          stays unclamped!); ds:0x38 = clamp0(vp_y-0x10); ds:0x3A =
+//          CLAMPED+0xD0 (Y ax IS clamped — the asymmetry that was wrong in
+//          the dead v2 function); OR [si+0x1585] |= 0x200 for objects outside.
+struct FtCullObj { uint16_t alive, flags, x, hw, y, hh; };
+
+bool ft_synth_case_13c0c(uint16_t vpx, uint16_t vpy,
+                         const FtCullObj* objs, int n_objs,
+                         const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x44, vpx);
+    ft_wr16(g_synth_in, 0x46, vpy);
+    ft_wr16(g_synth_in, 0x372, (uint16_t)(6 + n_objs * 2));
+    for (int i = 0; i < n_objs; i++) {
+        uint16_t si = (uint16_t)(6 + i * 2);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x1355), objs[i].alive);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), objs[i].flags);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x173D), objs[i].x);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x14BD), objs[i].hw);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x1765), objs[i].y);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x1495), objs[i].hh);
+    }
+    ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
+    ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_13C0C), g_synth_orig, regs);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    v2_fntest_call_sub_13c0c(g_scratch);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_13c0c %s]: addr=%04X orig=%02X v2=%02X (in=%02X) "
+                    "| vpx=%04X vpy=%04X n=%d\n",
+                    group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a], vpx, vpy, n_objs);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_sub_13c0c() {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+
+    // Objects sitting exactly on each bound for a mid-screen viewport, plus
+    // dead / permanent(0x800) / already-0x200 ones.
+    static const FtCullObj OBJS_MID[] = {
+        { 1, 0x0000, 0x0100, 0x10, 0x0100, 0x10 },  // inside
+        { 1, 0x0000, 0x0000, 0x00, 0x0100, 0x10 },  // left of ds:0x34
+        { 1, 0x0000, 0x7FFF, 0x00, 0x0100, 0x10 },  // right of ds:0x36
+        { 1, 0x0000, 0x0100, 0x10, 0x0000, 0x00 },  // above ds:0x38
+        { 1, 0x0000, 0x0100, 0x10, 0x7FFF, 0x00 },  // below ds:0x3A
+        { 0, 0x0000, 0x0000, 0x00, 0x0000, 0x00 },  // dead — skipped
+        { 1, 0x0800, 0x0000, 0x00, 0x0000, 0x00 },  // permanent — skipped
+        { 1, 0x0200, 0x0100, 0x10, 0x0100, 0x10 },  // already marked, inside
+    };
+    static const uint16_t VPS[] = { 0x0000, 0x000F, 0x0010, 0x0011, 0x0100,
+                                    0x8000, 0xFFF0, 0xFFFF };
+    for (uint16_t vx : VPS)
+        for (uint16_t vy : VPS)
+            ft_synth_case_13c0c(vx, vy, OBJS_MID, 8, "grid", grid, diff_budget);
+
+    // Exhaustive sweeps of both viewport axes (the Y-clamp asymmetry corner
+    // lives entirely in vpy < 0x10 / negative territory).
+    for (uint32_t v = 0; v <= 0xFFFF; v++)
+        ft_synth_case_13c0c(0x0100, (uint16_t)v, OBJS_MID, 5, "exh-vpy", exh, diff_budget);
+    for (uint32_t v = 0; v <= 0xFFFF; v++)
+        ft_synth_case_13c0c((uint16_t)v, 0x0100, OBJS_MID, 5, "exh-vpx", exh, diff_budget);
+
+    FtRng rng(0x13C0C001);
+    FtCullObj fo[16];
+    for (int i = 0; i < 20000; i++) {
+        int n = (int)(rng.next() % 16);
+        for (int k = 0; k < n; k++)
+            fo[k] = { (uint16_t)(rng.next() & 1), rng.w(), rng.w(), rng.w(), rng.w(), rng.w() };
+        ft_synth_case_13c0c(rng.w(), rng.w(), fo, n, "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_13c0c]: grid %ld/%ld, exhaustive %ld/%ld, fuzz %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -771,6 +876,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_13d68")) { matched = true; rc |= ft_selftest_sub_13d68(); }
     if (all || strstr(env, "sub_13dd6")) { matched = true; rc |= ft_selftest_1345init(FT_SUB_13DD6, 0x13DD6001); }
     if (all || strstr(env, "sub_13e15")) { matched = true; rc |= ft_selftest_1345init(FT_SUB_13E15, 0x13E15001); }
+    if (all || strstr(env, "sub_13c0c")) { matched = true; rc |= ft_selftest_sub_13c0c(); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

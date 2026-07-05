@@ -3464,27 +3464,45 @@ static void v2_sub_13ba5(uint8_t* s) {
 // Iterates objects si=6..table_end, sets flag 0x200 for those outside bounds.
 // Called from POST_FLIP2 pass and sub_115d2 init.
 static void v2_sub_13c0c(uint8_t* s) {
-    // Set X bounds: SUB ax, 10h; JGE (signed >= 0)
-    uint16_t ax_raw = *(uint16_t*)(s + 0x44) - 0x10;
-    int16_t ax = (int16_t)ax_raw;
-    *(uint16_t*)(s + 0x34) = (ax >= 0) ? ax_raw : 0; // JGE: signed comparison
+    // FLAG-MODEL NOTE (found by FNSELFTEST, 33837 diverging synthetic cases):
+    // JL/JGE are SF^OF — the signed comparison of the LAST SUB/CMP's two
+    // OPERANDS — not "sign of the difference". Modelling them as
+    // (int16_t)(a-b) < 0 breaks whenever the subtraction overflows (e.g.
+    // 0x8000-0x10, or 0x7FFF-(negative bound)). Both former inline copies and
+    // the old dead function had that wrong model; live replays never reach
+    // the overflow region, which is why it stayed hidden. JNS is SF only, so
+    // for it the sign-of-result model IS correct.
+    //
+    // X (orig eips 0x3C0F-0x3C22): SUB ax,10h; JGE == (int16)vp_x >= 0x10.
+    // ds:0x34 = clamped-to-0, but ax itself stays UNCLAMPED (the negative
+    // branch jumps past the store only) -> ds:0x36 = RAW ax + 0x160.
+    uint16_t vpx = *(uint16_t*)(s + 0x44);
+    uint16_t ax_raw = (uint16_t)(vpx - 0x10);
+    *(uint16_t*)(s + 0x34) = ((int16_t)vpx >= (int16_t)0x10) ? ax_raw : 0;
     *(uint16_t*)(s + 0x36) = (uint16_t)(ax_raw + 0x160); // uses ORIGINAL ax
-    // Set Y bounds: SUB ax, 10h; JNS (sign flag = bit 15 of result)
-    ax_raw = *(uint16_t*)(s + 0x46) - 0x10;
-    *(uint16_t*)(s + 0x38) = (ax_raw & 0x8000) ? 0 : ax_raw; // JNS: bit 15 clear
+    // Y (orig eips 0x3C25-0x3C36): SUB ax,10h; JNS (= bit15 of the RESULT);
+    // MOV ax,0 — here ax IS clamped, so BOTH ds:0x38 and ds:0x3A derive from
+    // the clamped value (the old dead function derived 0x3A from raw).
+    ax_raw = (uint16_t)(*(uint16_t*)(s + 0x46) - 0x10);
+    if (ax_raw & 0x8000) ax_raw = 0;             // JNS taken = bit15 clear
+    *(uint16_t*)(s + 0x38) = ax_raw;
     *(uint16_t*)(s + 0x3A) = (uint16_t)(ax_raw + 0xD0);
-    // Despawn loop: si=6..table_end
+    // Despawn loop (orig eips 0x3C3C-0x3C90), si=6..table_end. Each check is
+    // ADD/SUB (16-bit wrap, flags discarded) then SUB bound + JL/JGE — i.e. a
+    // SIGNED COMPARE of the wrapped sum against the bound read from memory.
     uint16_t te = *(uint16_t*)(s + 0x372);
     for (uint16_t si = 6; (int16_t)si < (int16_t)te; si += 2) {
         if (*(uint16_t*)(s + si + 0x1355) == 0) continue;           // dead slot
         if (*(uint16_t*)(s + si + 0x1585) & 0x800) continue;        // permanent object
+        uint16_t x  = *(uint16_t*)(s + si + 0x173D);
+        uint16_t hw = *(uint16_t*)(s + si + 0x14BD);
+        uint16_t y  = *(uint16_t*)(s + si + 0x1765);
+        uint16_t hh = *(uint16_t*)(s + si + 0x1495);
         bool outside = false;
-        // X bounds check
-        if ((int16_t)(*(uint16_t*)(s+si+0x173D) + *(uint16_t*)(s+si+0x14BD) - *(uint16_t*)(s+0x34)) < 0) outside = true;
-        else if ((int16_t)(*(uint16_t*)(s+si+0x173D) - *(uint16_t*)(s+si+0x14BD) - *(uint16_t*)(s+0x36)) >= 0) outside = true;
-        // Y bounds check
-        else if ((int16_t)(*(uint16_t*)(s+si+0x1765) + *(uint16_t*)(s+si+0x1495) - *(uint16_t*)(s+0x38)) < 0) outside = true;
-        else if ((int16_t)(*(uint16_t*)(s+si+0x1765) - *(uint16_t*)(s+si+0x1495) - *(uint16_t*)(s+0x3A)) >= 0) outside = true;
+        if      ((int16_t)(uint16_t)(x + hw) <  (int16_t)*(uint16_t*)(s + 0x34)) outside = true;
+        else if ((int16_t)(uint16_t)(x - hw) >= (int16_t)*(uint16_t*)(s + 0x36)) outside = true;
+        else if ((int16_t)(uint16_t)(y + hh) <  (int16_t)*(uint16_t*)(s + 0x38)) outside = true;
+        else if ((int16_t)(uint16_t)(y - hh) >= (int16_t)*(uint16_t*)(s + 0x3A)) outside = true;
         if (outside) *(uint16_t*)(s + si + 0x1585) |= 0x200;        // mark for despawn
     }
 }
@@ -5212,39 +5230,11 @@ static void v2_sub_11080(uint8_t* s) {
             // sub_10753: scroll clamp 2 — lookup at ds:[si*2 + 0x2B80]
             do_scroll(0x2B80); // sub_10753
 
-            // sub_13c0c: viewport bounds update + object visibility marking
-            // X: ax = vp_x - 0x10. If ax < 0: ds:0x34 = 0 (clamped), but ax stays unclamped.
-            //    ds:0x36 = ax + 0x160 (uses UNCLAMPED ax, NOT ds:0x34!)
-            // Y: ax = vp_y - 0x10. If ax < 0: ax = 0 (ax IS clamped).
-            //    ds:0x38 = ax, ds:0x3A = ax + 0xD0 (uses clamped ax)
-            {
-                uint16_t ax_x = *(uint16_t*)(s + 0x44) - 0x10; // wrapping sub
-                if ((int16_t)ax_x >= 0)
-                    *(uint16_t*)(s + 0x34) = ax_x;
-                else
-                    *(uint16_t*)(s + 0x34) = 0;
-                *(uint16_t*)(s + 0x36) = ax_x + 0x160; // UNCLAMPED ax!
-                uint16_t ax_y = *(uint16_t*)(s + 0x46) - 0x10;
-                if ((int16_t)ax_y < 0) ax_y = 0; // Y: ax itself is clamped (JNS; MOV ax,0)
-                *(uint16_t*)(s + 0x38) = ax_y;
-                *(uint16_t*)(s + 0x3A) = ax_y + 0xD0;
-                uint16_t te = *(uint16_t*)(s + 0x372);
-                for (uint16_t si_v = 6; (int16_t)si_v < (int16_t)te; si_v += 2) {
-                    if (*(uint16_t*)(s + si_v + 0x1355) == 0) continue;
-                    if (*(uint16_t*)(s + si_v + 0x1585) & 0x800) continue;
-                    uint16_t ox = *(uint16_t*)(s + si_v + 0x173D);
-                    uint16_t oy = *(uint16_t*)(s + si_v + 0x1765);
-                    uint16_t obx = *(uint16_t*)(s + si_v + 0x14BD);
-                    uint16_t oby = *(uint16_t*)(s + si_v + 0x1495);
-                    bool outside = false;
-                    if ((int16_t)(ox + obx - *(uint16_t*)(s + 0x34)) < 0) outside = true;
-                    else if ((int16_t)(ox - obx - *(uint16_t*)(s + 0x36)) >= 0) outside = true;
-                    else if ((int16_t)(oy + oby - *(uint16_t*)(s + 0x38)) < 0) outside = true;
-                    else if ((int16_t)(oy - oby - *(uint16_t*)(s + 0x3A)) >= 0) outside = true;
-                    if (outside)
-                        *(uint16_t*)(s + si_v + 0x1585) |= 0x200;
-                }
-            }
+            // sub_13c0c: viewport bounds update + object visibility marking.
+            // Consolidated: this was one of two correct inline copies while
+            // v2_sub_13c0c itself was dead code with a Y-clamp bug (0x3A from
+            // raw). Single implementation now, covered by FNSELFTEST.
+            v2_sub_13c0c(s);
             // sub_12fd0: sub-sprite position delta type 2
             {
                 auto delta_type2 = [](int16_t d) -> int16_t {
@@ -10348,6 +10338,9 @@ extern "C" void v2_fntest_call_sub_15d6b(uint8_t* test_shadow, uint16_t ax, uint
 // sub_13d68 family: extracted raw-shadow helpers (defined before v2_sub_13809).
 extern "C" int v2_fntest_call_sub_13d68(uint8_t* test_shadow, uint16_t si) {
     return v2_sub_13d68(test_shadow, si) ? 1 : 0;
+}
+extern "C" void v2_fntest_call_sub_13c0c(uint8_t* test_shadow) {
+    v2_sub_13c0c(test_shadow);
 }
 extern "C" void v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si) {
     v2_sub_13dd6(test_shadow, si);
@@ -16211,40 +16204,11 @@ void v2_run_animation_vm(uint16_t ds_val) {
             else { v = *(uint16_t*)(s + 0x3DC); if (v != 0) scroll_down2(*(uint16_t*)(s + v * 2 + 0x2B80)); }
         }
 
-        // sub_13c0c (eip 0x00AC): viewport bounds update + object visibility marking
-        // Sets ds:0x34/0x36/0x38/0x3A from viewport position (ds:0x44/0x46).
-        // sub_13c0c exact: X uses unclamped ax for ds:0x36, Y clamps ax for ds:0x3A
-        {
-            uint16_t ax_x = *(uint16_t*)(s + 0x44) - 0x10;
-            if ((int16_t)ax_x >= 0)
-                *(uint16_t*)(s + 0x34) = ax_x;
-            else
-                *(uint16_t*)(s + 0x34) = 0;
-            *(uint16_t*)(s + 0x36) = ax_x + 0x160; // unclamped ax
-            uint16_t ax_y = *(uint16_t*)(s + 0x46) - 0x10;
-            if ((int16_t)ax_y < 0) ax_y = 0;
-            *(uint16_t*)(s + 0x38) = ax_y;
-            *(uint16_t*)(s + 0x3A) = ax_y + 0xD0;
-            // Object visibility check — mark out-of-viewport objects with flag 0x200
-            // Original: OR [si+1585h], 200h for objects outside viewport bounds.
-            // Flag 0x200 triggers animation VM re-evaluation.
-            uint16_t te = *(uint16_t*)(s + 0x372);
-            for (uint16_t si_v = 6; (int16_t)si_v < (int16_t)te; si_v += 2) {
-                if (*(uint16_t*)(s + si_v + 0x1355) == 0) continue;
-                if (*(uint16_t*)(s + si_v + 0x1585) & 0x800) continue; // permanent → skip
-                uint16_t ox = *(uint16_t*)(s + si_v + 0x173D);
-                uint16_t oy = *(uint16_t*)(s + si_v + 0x1765);
-                uint16_t obx = *(uint16_t*)(s + si_v + 0x14BD);
-                uint16_t oby = *(uint16_t*)(s + si_v + 0x1495);
-                bool outside = false;
-                if ((int16_t)(ox + obx - *(uint16_t*)(s + 0x34)) < 0) outside = true;
-                else if ((int16_t)(ox - obx - *(uint16_t*)(s + 0x36)) >= 0) outside = true;
-                else if ((int16_t)(oy + oby - *(uint16_t*)(s + 0x38)) < 0) outside = true;
-                else if ((int16_t)(oy - oby - *(uint16_t*)(s + 0x3A)) >= 0) outside = true;
-                if (outside)
-                    *(uint16_t*)(s + si_v + 0x1585) |= 0x200; // mark for animation update
-            }
-        }
+        // sub_13c0c (eip 0x00AC): viewport bounds update + object visibility
+        // marking. Consolidated: was the second correct inline copy while
+        // v2_sub_13c0c itself was dead code with a Y-clamp bug. Single
+        // implementation now, covered by FNSELFTEST.
+        v2_sub_13c0c(s);
 
         // sub_12fd0(bx=4): HUD viking 3 sub-sprite update (eip 0x00AF)
         {
