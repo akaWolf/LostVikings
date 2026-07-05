@@ -41,12 +41,16 @@ extern "C" bool     v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_
 extern "C" int      v2_fntest_call_sub_161a1(uint8_t* test_shadow, uint16_t di, uint16_t si);
 extern "C" void     v2_fntest_call_sub_15da8(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di);
 extern "C" void     v2_fntest_call_sub_15d6b(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di);
+extern "C" int      v2_fntest_call_sub_13d68(uint8_t* test_shadow, uint16_t si);
+extern "C" void     v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si);
+extern "C" void     v2_fntest_call_sub_13e15(uint8_t* test_shadow, uint16_t si);
 
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
 
 namespace {
 
-enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B = 3, FT_COUNT };
+enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B = 3,
+            FT_SUB_13D68 = 4, FT_SUB_13DD6 = 5, FT_SUB_13E15 = 6, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -59,7 +63,8 @@ struct FtSlot {
 };
 
 FtSlot      g_slot[FT_COUNT];
-const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d6b" };
+const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d6b",
+                                 "sub_13d68", "sub_13dd6", "sub_13e15" };
 
 uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
@@ -555,6 +560,190 @@ int ft_selftest_snap(const FtSnapLayout& L, uint32_t fuzz_seed) {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// sub_13d68: sub-sprite pool scan. Input: si ([si+0x1AD5] = run length),
+// ds:0x374 (pool select), pool occupancy = [d+0x44D]/[d+0x114D] word pairs
+// for d in [0,0x100). Output: CF + ds:0x32 (limit), ds:0x3A/0x38 (candidate
+// start/end — written per candidate, 0xBBBB canaries verify).
+// occ128[d>>1] bits: 1 -> [d+0x44D]=0x8000, 2 -> [d+0x114D]=0x204.
+bool ft_synth_case_13d68(uint16_t mode, uint16_t si, uint16_t count,
+                         const uint8_t* occ128,
+                         const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x374, mode);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1AD5), count);
+    for (uint16_t d = 0; d < 0x100; d += 2) {
+        uint8_t o = occ128[d >> 1];
+        if (o & 1) ft_wr16(g_synth_in, (uint16_t)(d + 0x44D),  0x8000);
+        if (o & 2) ft_wr16(g_synth_in, (uint16_t)(d + 0x114D), 0x204);
+    }
+    ft_wr16(g_synth_in, 0x32, 0xBBBB);
+    ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+    ft_wr16(g_synth_in, 0x38, 0xBBBB);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, si, 0, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_13D68), g_synth_orig, regs);
+    int cf_orig = (int)regs[7];
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    int cf_v2 = v2_fntest_call_sub_13d68(g_scratch, si);
+
+    long diffs = (cf_orig != cf_v2) ? 1 : 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        diffs++;
+    }
+    if (diffs && diff_budget > 0) {
+        diff_budget--;
+        fprintf(stderr, "FNSELFTEST-DIFF[sub_13d68 %s]: cf orig=%d v2=%d | mode=%04X si=%04X count=%04X\n",
+                group, cf_orig, cf_v2, mode, si, count);
+        for (uint32_t a = 0, shown = 0; a < 0x10000 && shown < 4; a++) {
+            if (g_scratch[a] == g_synth_orig[a] || v2_fntest_ds_skip(a)) continue;
+            fprintf(stderr, "  addr=%04X orig=%02X v2=%02X (in=%02X)\n",
+                    a, g_synth_orig[a], g_scratch[a], g_synth_in[a]);
+            shown++;
+        }
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_sub_13d68() {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    uint8_t occ[128];
+    static const uint16_t MODES[] = { 0, 1, 2, 0x8000 };   // else-branch twice
+    static const uint16_t SIS[]   = { 0x0000, 0x0028 };
+
+    for (uint16_t mode : MODES) for (uint16_t si : SIS) {
+        // all free — first candidate wins
+        memset(occ, 0, sizeof(occ));
+        static const uint16_t COUNTS[] = { 0, 1, 2, 6, 0x30, 0x7FFF };
+        for (uint16_t c : COUNTS)
+            ft_synth_case_13d68(mode, si, c, occ, "grid", grid, diff_budget);
+        // all occupied (via 0x44D) — immediate STC path
+        memset(occ, 1, sizeof(occ));
+        ft_synth_case_13d68(mode, si, 2, occ, "grid", grid, diff_budget);
+        // all occupied via 0x114D only — OR semantics
+        memset(occ, 2, sizeof(occ));
+        ft_synth_case_13d68(mode, si, 2, occ, "grid", grid, diff_budget);
+        // hole of exactly count-1 then a hole of count (restart + 3A/38 rewrite)
+        memset(occ, 1, sizeof(occ));
+        for (int d = 0x10; d < 0x16; d += 2) occ[d >> 1] = 0;   // 3-slot hole
+        for (int d = 0x40; d < 0x48; d += 2) occ[d >> 1] = 0;   // 4-slot hole
+        ft_synth_case_13d68(mode, si, 4, occ, "grid", grid, diff_budget);
+        // free run touching the pool limit exactly (JZ limit border)
+        memset(occ, 1, sizeof(occ));
+        {
+            uint16_t lim = (mode == 0) ? 0x100 : (mode == 1 ? 0x50 : 0x30);
+            for (int d = lim - 8; d < lim; d += 2) occ[d >> 1] = 0;
+            ft_synth_case_13d68(mode, si, 4, occ, "grid", grid, diff_budget);  // fits exactly
+            ft_synth_case_13d68(mode, si, 5, occ, "grid", grid, diff_budget);  // overruns -> STC
+        }
+    }
+
+    FtRng rng(0x13D68001);
+    for (int i = 0; i < 40000; i++) {
+        uint16_t mode = (uint16_t)(rng.next() % 3);
+        uint16_t si = (uint16_t)((rng.next() % 20) * 2);
+        uint16_t count = (uint16_t)(rng.next() & 0x3F);
+        if ((rng.next() & 0xFF) == 0) count = rng.w();          // rare wild counts
+        for (int d = 0; d < 128; d++) occ[d] = (uint8_t)(rng.next() & 3);
+        ft_synth_case_13d68(mode, si, count, occ, "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_13d68]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// sub_13dd6 / sub_13e15: slot-range init loops (do-while, signed JL bottom
+// test — an inverted/empty range still writes ONE slot). sub_13dd6 re-reads
+// ds:0x2E73 and [si+0x1855] every iteration: directed alias cases make the
+// loop overwrite its own sources, which catches hoisted-read rewrites.
+bool ft_synth_case_1345init(FtId id, uint16_t si, uint16_t start, uint16_t end,
+                            uint16_t flags, uint16_t spr_base, uint16_t spr_seg,
+                            const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1A85), start);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1AAD), end);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), flags);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1855), spr_base);
+    ft_wr16(g_synth_in, 0x2E73, spr_seg);
+    // Pre-fill [d+0x44D] pattern so sub_13e15's OR has varied prior bits.
+    for (uint16_t d = start, n = 0; n < 8; d += 2, n++)
+        ft_wr16(g_synth_in, (uint16_t)(d + 0x44D), (uint16_t)(0x1110 * n));
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, si, 0, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    if (id == FT_SUB_13DD6) v2_fntest_call_sub_13dd6(g_scratch, si);
+    else                    v2_fntest_call_sub_13e15(g_scratch, si);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X) | "
+                    "si=%04X start=%04X end=%04X flags=%04X base=%04X seg=%04X\n",
+                    g_name[id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    si, start, end, flags, spr_base, spr_seg);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_1345init(FtId id, uint32_t fuzz_seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    static const uint16_t FLAGS[] = { 0x0000, 0x0001, 0x00CE, 0x00CF, 0xFFFF, 0x8001 };
+
+    for (uint16_t fl : FLAGS) {
+        // normal ranges incl. single-slot
+        ft_synth_case_1345init(id, 0, 0x48, 0x50, fl, 0x1234, 0x5678, "grid", grid, diff_budget);
+        ft_synth_case_1345init(id, 0, 0x48, 0x4A, fl, 0x1234, 0x5678, "grid", grid, diff_budget);
+        // EMPTY and INVERTED ranges: orig do-while still writes one slot
+        ft_synth_case_1345init(id, 0, 0x48, 0x48, fl, 0x1234, 0x5678, "grid", grid, diff_budget);
+        ft_synth_case_1345init(id, 0, 0x50, 0x30, fl, 0x1234, 0x5678, "grid", grid, diff_budget);
+        // alias: range covers si+0x1855 (write [d+0x84D] hits the spr_base source)
+        ft_synth_case_1345init(id, 0, 0x1000, 0x1020, fl, 0x1234, 0x5678, "grid", grid, diff_budget);
+        // alias: range covers ds:0x2E73 (write [d+0x54D]=0 zeroes the seg source)
+        ft_synth_case_1345init(id, 0, 0x2920, 0x2940, fl, 0x1234, 0x5678, "grid", grid, diff_budget);
+        // signed-border range ends
+        ft_synth_case_1345init(id, 0, 0x7FF0, 0x8000, fl, 0x1234, 0x5678, "grid", grid, diff_budget);
+    }
+
+    FtRng rng(fuzz_seed);
+    for (int i = 0; i < 30000; i++) {
+        uint16_t si = (uint16_t)((rng.next() % 20) * 2);
+        uint16_t start = rng.w();
+        uint16_t end = (uint16_t)(start + (rng.next() & 0x3F) * 2);
+        ft_synth_case_1345init(id, si, start, end, rng.w(), rng.w(), rng.w(),
+                               "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -579,6 +768,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_161a1")) { matched = true; rc |= ft_selftest_sub_161a1(); }
     if (all || strstr(env, "sub_15da8")) { matched = true; rc |= ft_selftest_snap(FT_SNAP_Y, 0x5DA80001); }
     if (all || strstr(env, "sub_15d6b")) { matched = true; rc |= ft_selftest_snap(FT_SNAP_X, 0x5D6B0001); }
+    if (all || strstr(env, "sub_13d68")) { matched = true; rc |= ft_selftest_sub_13d68(); }
+    if (all || strstr(env, "sub_13dd6")) { matched = true; rc |= ft_selftest_1345init(FT_SUB_13DD6, 0x13DD6001); }
+    if (all || strstr(env, "sub_13e15")) { matched = true; rc |= ft_selftest_1345init(FT_SUB_13E15, 0x13E15001); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

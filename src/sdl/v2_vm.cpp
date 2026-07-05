@@ -3859,6 +3859,91 @@ static void v2_load_level(uint8_t* shadow); // forward decl
 static void v2_load_template(uint8_t* shadow);
 static void v2_load_level_data(uint8_t* shadow);
 
+// ============================================================================
+// sub_13d68 / sub_13dd6 / sub_13e15 — sub-sprite slot allocation family.
+// Extracted from the two divergent inline copies (v2_sub_13809 and
+// v2_vm_op_14, task #176 drift) and rewritten line-by-line against the orig
+// asm; both former inline sites now call these. Covered by FNSELFTEST
+// (synthetic differential vs the isolated orig oracle).
+// ============================================================================
+
+// sub_13d68 (orig eips 0x3D68-0x3DD5): scan the sub-sprite pool for a
+// contiguous run of [si+0x1AD5] free slots ((|[di+0x44D]|[di+0x114D]) == 0).
+// Pool by ds:0x374: >=2 -> [0,0x30), 1 -> [0x30,0x50), 0 -> [0x48,0x100).
+// Writes ds:0x32 = pool limit; ds:0x3A = candidate start and ds:0x38 =
+// candidate end at EVERY loc_13daa entry (also on later-failed candidates).
+// Returns CF: true = no space (STC). The caller copies ds:0x3A/0x38 into
+// [si+0x1A85]/[si+0x1AAD] on success (orig sub_13809 eips 0x3839-0x3843).
+static bool v2_sub_13d68(uint8_t* s, uint16_t si) {
+    uint16_t di, lim;
+    uint16_t ds374 = *(uint16_t*)(s + 0x374);
+    if (ds374 == 0)      { di = 0x48; lim = 0x100; }   // loc_13d8c
+    else if (ds374 == 1) { di = 0x30; lim = 0x50;  }   // loc_13d81
+    else                 { di = 0;    lim = 0x30;  }
+    *(uint16_t*)(s + 0x32) = lim;
+    for (;;) {
+        // loc_13d95: slot check runs BEFORE the limit compare (orig order:
+        // test slot, advance, JL back) — the start slot is always tested.
+        while ((*(uint16_t*)(s + (uint16_t)(di + 0x44D)) |
+                *(uint16_t*)(s + (uint16_t)(di + 0x114D))) != 0) {
+            di += 2;
+            if ((int16_t)di >= (int16_t)lim) return true;   // loc_13da8: STC
+        }
+        // loc_13daa: record candidate start/end unconditionally.
+        *(uint16_t*)(s + 0x3A) = di;
+        uint16_t end = (uint16_t)(*(uint16_t*)(s + (uint16_t)(si + 0x1AD5)) * 2 + di);
+        *(uint16_t*)(s + 0x38) = end;
+        // loc_13db9: verify the run is contiguous. Both exits compare for
+        // EQUALITY (JZ), exactly like orig — not >=.
+        for (;;) {
+            di += 2;
+            if (di == end) return false;                    // loc_13dd4: CLC
+            if (di == *(uint16_t*)(s + 0x32)) return true;  // loc_13da8: STC
+            if ((*(uint16_t*)(s + (uint16_t)(di + 0x44D)) |
+                 *(uint16_t*)(s + (uint16_t)(di + 0x114D))) == 0) continue;
+            break;   // occupied -> jmp loc_13d95 (restart full scan from here)
+        }
+    }
+}
+
+// sub_13dd6 (orig eips 0x3DD6-0x3E14): init the allocated slots
+// [si+0x1A85 .. si+0x1AAD). do-while like orig (first write unconditional,
+// signed JL bottom test). ds:0x2E73 and [si+0x1855] are re-read EVERY
+// iteration exactly like orig — the loop's own writes can alias them at
+// out-of-pool di values, so hoisting would diverge.
+static void v2_sub_13dd6(uint8_t* s, uint16_t si) {
+    uint16_t ax = (uint16_t)(((*(uint16_t*)(s + (uint16_t)(si + 0x1585)) & 0xCE) << 3) | 0x8000);
+    uint16_t cx = *(uint16_t*)(s + (uint16_t)(si + 0x1AAD));
+    uint16_t di = *(uint16_t*)(s + (uint16_t)(si + 0x1A85));
+    do {
+        *(uint16_t*)(s + (uint16_t)(di + 0x44D))  = ax;
+        *(uint16_t*)(s + (uint16_t)(di + 0x54D))  = 0;
+        *(uint16_t*)(s + (uint16_t)(di + 0x114D)) = 0x204;
+        *(uint16_t*)(s + (uint16_t)(di + 0x94D))  = *(uint16_t*)(s + 0x2E73);
+        *(uint16_t*)(s + (uint16_t)(di + 0x84D))  = *(uint16_t*)(s + (uint16_t)(si + 0x1855));
+        di += 2;
+    } while ((int16_t)di < (int16_t)cx);
+}
+
+// sub_13e15 (orig eips 0x3E15-0x3E51): per-slot size/type init. bp = 2*(flags
+// bit0), constant across the loop. do-while like orig (first slot always
+// written, signed JL bottom test).
+static void v2_sub_13e15(uint8_t* s, uint16_t si) {
+    uint16_t bp = (uint16_t)((*(uint16_t*)(s + (uint16_t)(si + 0x1585)) & 1) << 1);
+    uint16_t cx = *(uint16_t*)(s + (uint16_t)(si + 0x1AAD));
+    uint16_t di = *(uint16_t*)(s + (uint16_t)(si + 0x1A85));
+    do {
+        if (bp != 0) {           // loc_13e26 taken path: 16x16
+            *(uint16_t*)(s + (uint16_t)(di + 0x0C4D)) = 0x20;
+            *(uint16_t*)(s + (uint16_t)(di + 0x44D)) |= 2;
+        } else {                 // loc_13e3f: 8x8
+            *(uint16_t*)(s + (uint16_t)(di + 0x0C4D)) = 8;
+            *(uint16_t*)(s + (uint16_t)(di + 0x44D)) |= 1;
+        }
+        di += 2;
+    } while ((int16_t)di < (int16_t)cx);
+}
+
 // sub_13809: shared object creation function.
 // ax = code_seg_idx, di_spawn = spawn index (0xFFFF for non-spawn), si_anim = animation flags.
 // pos_x/pos_y = world position. Returns true if created, false if failed.
@@ -3958,70 +4043,21 @@ static bool v2_sub_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
     }
     *(uint16_t*)(s + new_si + 0x14BD) = (uint16_t)off_val;
     *(uint16_t*)(s + new_si + 0x1495) = *(uint16_t*)(s + 0x3E2);
-    // sub_13d68 + sub_13dd6 + sub_13e15: sub-sprite allocation + init
+    // sub_13d68 + sub_13dd6 + sub_13e15: sub-sprite allocation + init.
+    // Extracted shared functions (see definitions above) — this used to be an
+    // inline copy that drifted from the op_14 one (task #176): pre-tested
+    // loops instead of orig's do-while, hoisted per-iteration reads.
     if (*(uint16_t*)(s + new_si + 0x1AD5) != 0) {
-        uint16_t pool_flag = *(uint16_t*)(s + 0x374);
-        uint16_t ss_start, ss_limit;
-        if (pool_flag == 0) { ss_start = 0x48; ss_limit = 0x100; }
-        else if (pool_flag == 1) { ss_start = 0x30; ss_limit = 0x50; }
-        else { ss_start = 0; ss_limit = 0x30; }
-        // Original sub_13d68 writes pool limit to ds:0x32
-        *(uint16_t*)(s + 0x32) = ss_limit;
-        uint16_t ss_count = *(uint16_t*)(s + new_si + 0x1AD5);
-        bool ss_found = false;
-        uint16_t ss_di = ss_start;
-        while ((int16_t)ss_di < (int16_t)ss_limit) {
-            if ((*(uint16_t*)(s + ss_di + 0x44D) | *(uint16_t*)(s + ss_di + 0x114D)) != 0) {
-                ss_di += 2; continue;
-            }
-            uint16_t ss_first = ss_di;
-            uint16_t ss_end_need = ss_di + ss_count * 2;
-            // Original sub_13d68 writes to ds:0x3A and ds:0x38
-            *(uint16_t*)(s + 0x3A) = ss_first;
-            *(uint16_t*)(s + 0x38) = ss_end_need;
-            bool block_ok = true;
-            ss_di += 2;
-            while (ss_di != ss_end_need) {
-                if (ss_di == ss_limit) {
-                    // loc_13da8 → STC → sub_13809 loc_13860: clear slot before return
-                    *(uint16_t*)(s + new_si + 0x1355) = 0;
-                    return false;
-                }
-                if ((*(uint16_t*)(s + ss_di + 0x44D) | *(uint16_t*)(s + ss_di + 0x114D)) != 0) {
-                    block_ok = false; break;
-                }
-                ss_di += 2;
-            }
-            if (block_ok) {
-                // sub_13809 copies ds:0x3A → [si+1A85h], ds:0x38 → [si+1AADh]
-                *(uint16_t*)(s + new_si + 0x1A85) = *(uint16_t*)(s + 0x3A);
-                *(uint16_t*)(s + new_si + 0x1AAD) = *(uint16_t*)(s + 0x38);
-                ss_found = true; break;
-            }
+        if (v2_sub_13d68(s, new_si)) {
+            // JC loc_13860: no space — clear slot, creation fails.
+            *(uint16_t*)(s + new_si + 0x1355) = 0;
+            return false;
         }
-        if (!ss_found) { *(uint16_t*)(s + new_si + 0x1355) = 0; return false; }
-        // sub_13dd6: init sub-sprite flags
-        uint16_t flags_init = (*(uint16_t*)(s + new_si + 0x1585) & 0xCE) << 3;
-        flags_init |= 0x8000;
-        uint16_t ss_end2 = *(uint16_t*)(s + new_si + 0x1AAD);
-        for (uint16_t sdi = *(uint16_t*)(s + new_si + 0x1A85); (int16_t)sdi < (int16_t)ss_end2; sdi += 2) {
-            *(uint16_t*)(s + sdi + 0x44D) = flags_init;
-            *(uint16_t*)(s + sdi + 0x54D) = 0;
-            *(uint16_t*)(s + sdi + 0x114D) = 0x204;
-            *(uint16_t*)(s + sdi + 0x94D) = *(uint16_t*)(s + 0x2E73);
-            *(uint16_t*)(s + sdi + 0x84D) = *(uint16_t*)(s + new_si + 0x1855);
-        }
-        // sub_13e15: sub-sprite sizes
-        uint16_t bp_type = (*(uint16_t*)(s + new_si + 0x1585) & 1) << 1;
-        for (uint16_t sdi = *(uint16_t*)(s + new_si + 0x1A85); (int16_t)sdi < (int16_t)ss_end2; sdi += 2) {
-            if (bp_type != 0) {
-                *(uint16_t*)(s + sdi + 0x0C4D) = 0x20;
-                *(uint16_t*)(s + sdi + 0x44D) |= 2;
-            } else {
-                *(uint16_t*)(s + sdi + 0x0C4D) = 8;
-                *(uint16_t*)(s + sdi + 0x44D) |= 1;
-            }
-        }
+        // orig sub_13809 eips 0x3839-0x3843: ds:0x3A/0x38 -> [si+1A85]/[si+1AAD]
+        *(uint16_t*)(s + new_si + 0x1A85) = *(uint16_t*)(s + 0x3A);
+        *(uint16_t*)(s + new_si + 0x1AAD) = *(uint16_t*)(s + 0x38);
+        v2_sub_13dd6(s, new_si);
+        v2_sub_13e15(s, new_si);
     }
     // Update table end
     if ((int16_t)new_si >= (int16_t)*(uint16_t*)(s + 0x372)) {
@@ -9802,97 +9838,23 @@ static void v2_vm_op_14(V2VM& vm) {
         vm.ds_write(si_slot + 0x1495, vm.ds_read(0x3E2)); // [si+1495h] = ds:3E2h
     }
 
-    // sub_13d68: allocate sub-sprites. Exact replica of original algorithm.
+    // sub_13d68 + sub_13dd6 + sub_13e15: sub-sprite allocation + init.
+    // Extracted shared functions (defined before v2_sub_13809) — this used to
+    // be the second inline copy (task #176 drift); both sites now share the
+    // line-by-line-verified implementations. They operate on the shadow
+    // directly (same bytes vm.ds_write would touch; no watched addresses in
+    // their write set).
     if (vm.ds_read(si_slot + 0x1AD5) != 0) {
-        // Determine search range based on ds:0x374
-        uint16_t di_alloc, limit_32;
-        uint16_t ds374 = vm.ds_read(0x374);
-        if (ds374 == 0) {
-            di_alloc = 0x48; limit_32 = 0x100;
-        } else if (ds374 == 1) {
-            di_alloc = 0x30; limit_32 = 0x50;
-        } else {
-            di_alloc = 0; limit_32 = 0x30;
-        }
-        // Orig sub_13d68 (eips 0x3D79/0x3D84/0x3D8F): MOV ds:32h, limit_32.
-        vm.ds_write(0x32, limit_32);
-
-        // Phase 1 (loc_13d95): Find first free slot.
-        // Orig writes ds:0x3A=di_found and ds:0x38=end_needed at EVERY loc_13daa entry
-        // (per phase-1 success), not just on final success. Mirror that so failure-path
-        // scratch state matches orig.
-        uint16_t di_found = 0xFFFF;
-        uint16_t need_count = vm.ds_read(si_slot + 0x1AD5);
-        while (true) {
-            // loc_13d95: check [di+44D] | [di+114D]
-            if ((vm.ds_read(di_alloc + 0x44D) | vm.ds_read(di_alloc + 0x114D)) == 0) {
-                // loc_13daa: write ds:0x3A and ds:0x38 unconditionally (orig eip 0x3DAA/0x3DB6)
-                uint16_t start = di_alloc;
-                uint16_t end_needed = start + need_count * 2;
-                vm.ds_write(0x3A, start);
-                vm.ds_write(0x38, end_needed);
-
-                // Phase 3 (loc_13db9): verify contiguous
-                di_alloc += 2;
-                bool ok = true;
-                while (di_alloc != end_needed) {
-                    if (di_alloc == limit_32) { ok = false; break; } // hit limit → FAIL
-                    if ((vm.ds_read(di_alloc + 0x44D) | vm.ds_read(di_alloc + 0x114D)) != 0) {
-                        // Not free → restart search from THIS occupied slot (JMP loc_13d95)
-                        ok = false;
-                        goto restart_search;
-                    }
-                    di_alloc += 2; // free → continue checking
-                }
-                if (ok) {
-                    di_found = start;
-                    break; // SUCCESS
-                }
-            }
-        restart_search:
-            di_alloc += 2;
-            if ((int16_t)di_alloc >= (int16_t)limit_32) break; // past limit → FAIL
-        }
-
-        if (di_found == 0xFFFF) {
-            // Allocation failed — destroy object
+        if (v2_sub_13d68(vm.shadow, si_slot)) {
+            // JC → destroy: allocation failed.
             vm.ds_write(si_slot + 0x1355, 0);
             return;
         }
-
-        uint16_t end_needed = di_found + need_count * 2;
-        vm.ds_write(si_slot + 0x1A85, di_found);
-        vm.ds_write(si_slot + 0x1AAD, end_needed);
-
-        // sub_13dd6: initialize sub-sprite base fields
-        {
-            uint16_t flags_init = (vm.ds_read(si_slot + 0x1585) & 0xCE) << 3;
-            flags_init |= 0x8000;
-            uint16_t spr_seg = vm.ds_read(0x2E73);
-            uint16_t spr_base = vm.ds_read(si_slot + 0x1855);
-            uint16_t cx_end = vm.ds_read(si_slot + 0x1AAD);
-            for (uint16_t d = vm.ds_read(si_slot + 0x1A85); (int16_t)d < (int16_t)cx_end; d += 2) {
-                vm.ds_write(d + 0x44D, flags_init);
-                vm.ds_write(d + 0x54D, 0);
-                vm.ds_write(d + 0x114D, 0x204);
-                vm.ds_write(d + 0x94D, spr_seg);
-                vm.ds_write(d + 0x84D, spr_base);
-            }
-        }
-        // sub_13e15: set sprite type (8x8 or 16x16) based on flags bit 0
-        {
-            uint16_t bp_type = (vm.ds_read(si_slot + 0x1585) & 1) << 1;
-            uint16_t cx_end = vm.ds_read(si_slot + 0x1AAD);
-            for (uint16_t d = vm.ds_read(si_slot + 0x1A85); (int16_t)d < (int16_t)cx_end; d += 2) {
-                if (bp_type != 0) {
-                    vm.ds_write(d + 0x0C4D, 0x20);  // 16x16
-                    vm.ds_write(d + 0x44D, vm.ds_read(d + 0x44D) | 2);
-                } else {
-                    vm.ds_write(d + 0x0C4D, 8);     // 8x8
-                    vm.ds_write(d + 0x44D, vm.ds_read(d + 0x44D) | 1);
-                }
-            }
-        }
+        // orig sub_13809 eips 0x3839-0x3843: ds:0x3A/0x38 -> [si+1A85]/[si+1AAD]
+        vm.ds_write(si_slot + 0x1A85, vm.ds_read(0x3A));
+        vm.ds_write(si_slot + 0x1AAD, vm.ds_read(0x38));
+        v2_sub_13dd6(vm.shadow, si_slot);
+        v2_sub_13e15(vm.shadow, si_slot);
     }
 
     // Adjust ds:0x372 (max active object) if needed
@@ -10382,6 +10344,16 @@ extern "C" void v2_fntest_call_sub_15d6b(uint8_t* test_shadow, uint16_t ax, uint
     vm.shadow = test_shadow;
     vm.obj = di;
     v2_vm_sub_15d6b(vm, (int16_t)ax, si, di);
+}
+// sub_13d68 family: extracted raw-shadow helpers (defined before v2_sub_13809).
+extern "C" int v2_fntest_call_sub_13d68(uint8_t* test_shadow, uint16_t si) {
+    return v2_sub_13d68(test_shadow, si) ? 1 : 0;
+}
+extern "C" void v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si) {
+    v2_sub_13dd6(test_shadow, si);
+}
+extern "C" void v2_fntest_call_sub_13e15(uint8_t* test_shadow, uint16_t si) {
+    v2_sub_13e15(test_shadow, si);
 }
 
 // sub_161a1: bounding box check for sub_1614E. di=self, si=target.

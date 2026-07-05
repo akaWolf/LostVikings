@@ -72,6 +72,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 1: return (void*)&sub_161a1;
     case 2: return (void*)&sub_15da8;
     case 3: return (void*)&sub_15d6b;
+    case 4: return (void*)&sub_13d68;
+    case 5: return (void*)&sub_13dd6;
+    case 6: return (void*)&sub_13e15;
     default: return 0;
     }
 }
