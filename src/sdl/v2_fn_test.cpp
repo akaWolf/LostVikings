@@ -54,6 +54,9 @@ extern "C" void     v2_fntest_call_sub_101be(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_vm_exec(uint8_t* test_shadow, uint16_t si);
 extern "C" void     v2_fntest_call_sub_10255(uint8_t* test_shadow, uint16_t si, uint16_t dx);
 extern "C" void     v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, uint16_t dx);
+extern "C" void     v2_fntest_call_sub_12fc6(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_12fcb(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_12fd0(uint8_t* test_shadow);
 extern "C" long     v2_fntest_ret_mismatches(void);
 extern "C" void*    v2_fntest_m2c_base(void);
 extern void         v2_set_m2c_base(void* base);   // v2 resolve fallback target
@@ -80,7 +83,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_13D68 = 4, FT_SUB_13DD6 = 5, FT_SUB_13E15 = 6, FT_SUB_13C0C = 7,
             FT_SUB_1064B = 8, FT_SUB_10704 = 9, FT_SUB_10753 = 10,
             FT_SUB_17496 = 11, FT_SUB_1746C = 12, FT_SUB_101BE = 13,
-            FT_SUB_1424C = 14, FT_SUB_10255 = 15, FT_SUB_1020F = 16, FT_COUNT };
+            FT_SUB_1424C = 14, FT_SUB_10255 = 15, FT_SUB_1020F = 16,
+            FT_SUB_12FC6 = 17, FT_SUB_12FCB = 18, FT_SUB_12FD0 = 19, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -97,7 +101,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_13d68", "sub_13dd6", "sub_13e15", "sub_13c0c",
                                  "sub_1064b", "sub_10704", "sub_10753",
                                  "sub_17496", "sub_1746c", "sub_101be",
-                                 "sub_1424c", "sub_10255", "sub_1020f" };
+                                 "sub_1424c", "sub_10255", "sub_1020f",
+                                 "sub_12fc6", "sub_12fcb", "sub_12fd0" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -1295,6 +1300,150 @@ int ft_selftest_palrot(FtId id) {
 }
 
 // ---------------------------------------------------------------------------
+// sub_12fc6 / sub_12fcb / sub_12fd0 <-> v2_sub_12fc6/12fcb/12fd0 (sub-sprite
+// catch-up passes; delta fns sub_1227e/sub_122c0/sub_122f3 via off_30BC0).
+// Contract: walk objects [ds:372h]-2 down to 0 — DO-WHILE: with [372h]==0 the
+// first call still runs with di=0xFFFE (gates then read wrapped addresses).
+// Per object (sub_12fe5): gates [di+1355h]!=0, [di+1AD5h]!=0; deltas from
+// [1765]-[13CD] (Y) and [173D]-[13A5] (X) through the type's delta fn;
+// (tx|ty)==0 → skip; else DO-WHILE over slots [1A85..1AAD): [64D]+=tx,
+// [74D]+=ty, [114D]=0x202.
+
+struct FtDeltaObj {
+    uint16_t alive, count;          // [1355], [1AD5]
+    uint16_t x, xs, y, ys;          // [173D], [13A5], [1765], [13CD]
+    uint16_t sa, se;                // [1A85], [1AAD]
+};
+
+bool ft_synth_case_deltafam(FtId id, uint16_t obj_top, const FtDeltaObj* objs, int n_objs,
+                            uint32_t bg_seed, const char* group,
+                            FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x372, obj_top);
+    for (int i = 0; i < n_objs; i++) {
+        uint16_t di = (uint16_t)(i * 2);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1355), objs[i].alive);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1AD5), objs[i].count);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x173D), objs[i].x);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x13A5), objs[i].xs);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), objs[i].y);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x13CD), objs[i].ys);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1A85), objs[i].sa);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1AAD), objs[i].se);
+    }
+    // Slot-area background noise so += effects are visible on any slot.
+    FtRng bg(bg_seed);
+    for (uint32_t a = 0; a < 0x100; a += 2) {
+        ft_wr16(g_synth_in, (uint16_t)(a + 0x64D), bg.w());
+        ft_wr16(g_synth_in, (uint16_t)(a + 0x74D), bg.w());
+        ft_wr16(g_synth_in, (uint16_t)(a + 0x114D), bg.w());
+    }
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+    if (ft_ub_marks() != esc0) {
+        st.cases--;
+        fprintf(stderr, "FNSELFTEST-UB[%s %s]: top=%04X escaped\n", g_name[id], group, obj_top);
+        return true;
+    }
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    if (id == FT_SUB_12FC6)      v2_fntest_call_sub_12fc6(g_scratch);
+    else if (id == FT_SUB_12FCB) v2_fntest_call_sub_12fcb(g_scratch);
+    else                         v2_fntest_call_sub_12fd0(g_scratch);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X) "
+                    "| top=%04X o0={x=%04X xs=%04X y=%04X ys=%04X sa=%04X se=%04X}\n",
+                    g_name[id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    obj_top, n_objs ? objs[0].x : 0, n_objs ? objs[0].xs : 0,
+                    n_objs ? objs[0].y : 0, n_objs ? objs[0].ys : 0,
+                    n_objs ? objs[0].sa : 0, n_objs ? objs[0].se : 0);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_deltafam(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+
+    // Directed: delta boundaries on one object, incl. the IDIV edge d=-0x8000
+    // (orig negative branch divides 0:|d| with DX=0, not CWD) and the empty/
+    // inverted slot ranges (slot loop is a DO-WHILE).
+    static const uint16_t DX[] = { 0, 1, 2, 3, 4, 5, 6, 0xFFFF, 0xFFFE, 0xFFFD,
+                                   0xFFFC, 0xFFFB, 0x7FFF, 0x8000, 0x8001 };
+    for (uint16_t dxv : DX) for (uint16_t dyv : DX) {
+        FtDeltaObj o = { 1, 1, (uint16_t)(0x100 + dxv), 0x100, (uint16_t)(0x200 + dyv), 0x200,
+                         0x48, 0x4C };
+        ft_synth_case_deltafam(id, 2, &o, 1, seed ^ (dxv << 16) ^ dyv, "grid", grid, diff_budget);
+    }
+    {   // empty range (sa==se), inverted range (sa>se), count==0 gate, dead obj
+        FtDeltaObj o1 = { 1, 1, 0x105, 0x100, 0x200, 0x200, 0x48, 0x48 };
+        ft_synth_case_deltafam(id, 2, &o1, 1, seed + 1, "grid", grid, diff_budget);
+        FtDeltaObj o2 = { 1, 1, 0x105, 0x100, 0x200, 0x200, 0x4C, 0x48 };
+        ft_synth_case_deltafam(id, 2, &o2, 1, seed + 2, "grid", grid, diff_budget);
+        FtDeltaObj o3 = { 1, 0, 0x105, 0x100, 0x200, 0x200, 0x48, 0x4C };
+        ft_synth_case_deltafam(id, 2, &o3, 1, seed + 3, "grid", grid, diff_budget);
+        FtDeltaObj o4 = { 0, 1, 0x105, 0x100, 0x200, 0x200, 0x48, 0x4C };
+        ft_synth_case_deltafam(id, 2, &o4, 1, seed + 4, "grid", grid, diff_budget);
+        // top==0: orig object walk is a DO-WHILE — one call with di=0xFFFE
+        FtDeltaObj o5 = { 1, 1, 0x105, 0x100, 0x200, 0x200, 0x48, 0x4C };
+        ft_synth_case_deltafam(id, 0, &o5, 1, seed + 5, "grid", grid, diff_budget);
+        // three objects with different deltas
+        FtDeltaObj m3[3] = {
+            { 1, 1, 0x109, 0x100, 0x1F9, 0x200, 0x48, 0x4C },
+            { 0, 1, 0x120, 0x100, 0x220, 0x200, 0x50, 0x54 },
+            { 1, 2, 0x0FD, 0x100, 0x203, 0x200, 0x58, 0x5E },
+        };
+        ft_synth_case_deltafam(id, 6, m3, 3, seed + 6, "grid", grid, diff_budget);
+    }
+
+    // Exhaustive X-delta sweep (all 65536 values of [173D] against xs=0x8000
+    // fixed midpoint) on one object — full coverage of both IDIV branches.
+    for (uint32_t xv = 0; xv <= 0xFFFF; xv++) {
+        FtDeltaObj o = { 1, 1, (uint16_t)xv, 0x8000, 0x200, 0x200, 0x48, 0x4C };
+        ft_synth_case_deltafam(id, 2, &o, 1, seed ^ 0xE0000000u ^ xv, "exh", exh, diff_budget);
+    }
+
+    FtRng rng(seed);
+    for (int i = 0; i < 15000; i++) {
+        FtDeltaObj os[3];
+        int n = 1 + (int)(rng.next() % 3);
+        for (int k = 0; k < n; k++) {
+            os[k].alive = rng.next() & 1;
+            os[k].count = (uint16_t)(rng.next() & 3);
+            os[k].x = rng.w(); os[k].xs = rng.w();
+            os[k].y = rng.w(); os[k].ys = rng.w();
+            uint16_t sa = (uint16_t)((rng.next() % 0x60) & ~1u);
+            os[k].sa = sa;
+            os[k].se = (uint16_t)((sa + ((rng.next() % 5) * 2)) & ~1u);
+            if ((rng.next() & 7) == 0) { uint16_t t = os[k].sa; os[k].sa = os[k].se; os[k].se = t; }
+        }
+        ft_synth_case_deltafam(id, (uint16_t)(n * 2), os, n, rng.next(), "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exhaustive %ld/%ld, fuzz %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // Class B: per-object VM exec (sub_1424c <-> v2_vm_execute_object).
 // Unit: ONE object whose bytecode lives in a scratch code segment inside
 // m2c::m at TESTSEG (linear TESTSEG*16 — heap area, free in the selftest
@@ -1647,6 +1796,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_1424c") || strstr(env, "vmops")) { matched = true; rc |= ft_selftest_vmops(); }
     if (all || strstr(env, "sub_10255")) { matched = true; rc |= ft_selftest_palrot(FT_SUB_10255); }
     if (all || strstr(env, "sub_1020f")) { matched = true; rc |= ft_selftest_palrot(FT_SUB_1020F); }
+    if (all || strstr(env, "sub_12fc6")) { matched = true; rc |= ft_selftest_deltafam(FT_SUB_12FC6, 0x12FC6001u); }
+    if (all || strstr(env, "sub_12fcb")) { matched = true; rc |= ft_selftest_deltafam(FT_SUB_12FCB, 0x12FCB001u); }
+    if (all || strstr(env, "sub_12fd0")) { matched = true; rc |= ft_selftest_deltafam(FT_SUB_12FD0, 0x12FD0001u); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

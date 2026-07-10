@@ -4666,6 +4666,88 @@ static void v2_subsprite_delta_apply(uint8_t* s, uint16_t di, uint16_t tx, uint1
     } while ((int16_t)si < (int16_t)cx);                     // CMP si,cx / JL
 }
 
+// Delta functions off_30BC0[0/2/4] — sub-sprite catch-up per frame.
+// Exact IDIV model: the NEGATIVE branch sets DX=0 manually (no CWD!), so the
+// dividend is 0:|d| — at d=-0x8000, NEG leaves 0x8000 and 0x00008000/3 =
+// +10922 r 2 (a C-level `-d` on int16 would overflow instead).
+
+// sub_1227e (type 0, bx=0): reduce d by 2/3|d| (round the reduction up at r>=2).
+static int16_t v2_delta_1227e(int16_t d) {
+    if (d < 0) {                                        // JGE loc_122A5
+        uint16_t a = (uint16_t)(0 - (uint16_t)d);       // NEG ax
+        uint16_t q = (uint16_t)((uint32_t)a / 3);       // DX=0; IDIV bx(3)
+        uint16_t r = (uint16_t)((uint32_t)a % 3);
+        uint16_t red = (uint16_t)(q << 1);              // SHL ax,1 → bx
+        if ((int16_t)r >= 2) red++;                     // CMP dx,2 / JGE → INC bx
+        return (int16_t)((uint16_t)d + red);            // ADD ax, bx (ax = original d)
+    }
+    int16_t q = (int16_t)(d / 3), r = (int16_t)(d % 3); // CWD; IDIV bx(3)
+    uint16_t red = (uint16_t)((uint16_t)q << 1);
+    if (r >= 2) red++;
+    return (int16_t)((uint16_t)d - red);                // SUB ax, bx
+}
+
+// sub_122c0 (type 1, bx=2): |d|/3 rounded up at r>=2, sign restored.
+static int16_t v2_delta_122c0(int16_t d) {
+    if (d < 0) {
+        uint16_t a = (uint16_t)(0 - (uint16_t)d);
+        uint16_t q = (uint16_t)((uint32_t)a / 3);
+        uint16_t r = (uint16_t)((uint32_t)a % 3);
+        if ((int16_t)r >= 2) q++;                       // loc_122DB: INC ax
+        return (int16_t)(0 - q);                        // NEG ax
+    }
+    int16_t q = (int16_t)(d / 3), r = (int16_t)(d % 3);
+    if (r >= 2) q++;                                    // loc_122EF: INC ax
+    return q;
+}
+
+// sub_122f3 (type 2, bx=4): |d|/3 truncated, sign restored.
+static int16_t v2_delta_122f3(int16_t d) {
+    if (d < 0) {
+        uint16_t a = (uint16_t)(0 - (uint16_t)d);
+        uint16_t q = (uint16_t)((uint32_t)a / 3);
+        return (int16_t)(0 - q);                        // NEG ax
+    }
+    return (int16_t)(d / 3);                            // CWD; IDIV
+}
+
+// sub_12fe5: per-object sub-sprite catch-up. Gates ([di+1355h]!=0,
+// [di+1AD5h]!=0, (tx|ty)!=0) then the DO-WHILE slot loop
+// (v2_subsprite_delta_apply). Orig computes the Y delta FIRST (through
+// off_30BC0[bx] → dx), then the X delta (→ ax kept in ax).
+static void v2_sub_12fe5(uint8_t* s, uint16_t di, int type) {
+    if (*(uint16_t*)(s + (uint16_t)(di + 0x1355)) == 0) return;
+    if (*(uint16_t*)(s + (uint16_t)(di + 0x1AD5)) == 0) return;
+    int16_t dy = (int16_t)(*(uint16_t*)(s + (uint16_t)(di + 0x1765))
+                         - *(uint16_t*)(s + (uint16_t)(di + 0x13CD)));
+    int16_t dx = (int16_t)(*(uint16_t*)(s + (uint16_t)(di + 0x173D))
+                         - *(uint16_t*)(s + (uint16_t)(di + 0x13A5)));
+    int16_t ty, tx;
+    switch (type) {
+    case 0:  ty = v2_delta_1227e(dy); tx = v2_delta_1227e(dx); break;
+    case 1:  ty = v2_delta_122c0(dy); tx = v2_delta_122c0(dx); break;
+    default: ty = v2_delta_122f3(dy); tx = v2_delta_122f3(dx); break;
+    }
+    if (((uint16_t)tx | (uint16_t)ty) == 0) return;     // OR cx,dx / JZ
+    v2_subsprite_delta_apply(s, di, (uint16_t)tx, (uint16_t)ty);
+}
+
+// sub_12fc6 / sub_12fcb / sub_12fd0 (loc_12FD5): walk objects from
+// [ds:372h]-2 down to 0 (MOV di,[372h]; SUB di,2; loop: CALL sub_12fe5;
+// SUB di,2; JNS loop). The FIRST call happens unconditionally — with
+// [ds:372h]==0 orig still calls sub_12fe5 once with di=0xFFFE (its gates
+// then read wrapped addresses). DO-WHILE, not a pre-test loop.
+static void v2_sub_12fc6_family(uint8_t* s, int type) {
+    int16_t di = (int16_t)(*(uint16_t*)(s + 0x372) - 2);
+    do {
+        v2_sub_12fe5(s, (uint16_t)di, type);
+        di -= 2;                                        // SUB di,2 / JNS
+    } while (di >= 0);
+}
+static void v2_sub_12fc6(uint8_t* s) { v2_sub_12fc6_family(s, 0); }
+static void v2_sub_12fcb(uint8_t* s) { v2_sub_12fc6_family(s, 1); }
+static void v2_sub_12fd0(uint8_t* s) { v2_sub_12fc6_family(s, 2); }
+
 static void v2_sub_14207_init(uint8_t* ds) {
     // sub_15517 (eip 0x5517-0x552F): clear X/Y velocity for all objects
     for (int16_t si = (int16_t)*(uint16_t*)(ds + 0x372) - 2; si >= 0; si -= 2) {
@@ -5047,24 +5129,7 @@ static void v2_sub_11080(uint8_t* s) {
         // sub_12fc6: sub-sprite position delta type 0
         // MUST be called — updates sub-sprite X/Y from world position deltas.
         // Exact same function as in game loop RENDER1 phase.
-        {
-            auto delta_type0 = [](int16_t d) -> int16_t {
-                if (d == 0) return 0;
-                int16_t a = (d < 0) ? -d : d;
-                int16_t q = a / 3, r = a % 3;
-                int16_t red = q * 2 + (r >= 2 ? 1 : 0);
-                return (d < 0) ? (d + red) : (d - red);
-            };
-            for (int16_t di2 = (int16_t)*(uint16_t*)(s + 0x372) - 2; di2 >= 0; di2 -= 2) {
-                if (*(uint16_t*)(s + di2 + 0x1355) == 0) continue;
-                if (*(uint16_t*)(s + di2 + 0x1AD5) == 0) continue;
-                int16_t dy = (int16_t)(*(uint16_t*)(s + di2 + 0x1765) - *(uint16_t*)(s + di2 + 0x13CD));
-                int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
-                int16_t ty = delta_type0(dy), tx = delta_type0(dx_v);
-                if (tx == 0 && ty == 0) continue;
-                v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
-            }
-        }
+        v2_sub_12fc6(s);
         slot2e_trace("SF1-post-12fc6");
         // PSNAP compare: v2 has finished SF1 post-VM (sub_1386b..sub_1064b + sub_12fc6).
         // Should match orig snap[T_SF1_POSTVM_END] at eip 0x15E7.
@@ -5128,27 +5193,7 @@ static void v2_sub_11080(uint8_t* s) {
         {
             v2_sub_10704(s);
             // sub_12fcb: sub-sprite position delta type 1
-            {
-                // sub_122c0: delta type 1 = |d|/3 with round up if remainder >= 2
-                // Original: IDIV 3 → quotient. If remainder >= 2: INC quotient.
-                // Returns quotient (NOT d - quotient!)
-                auto delta_type1 = [](int16_t d) -> int16_t {
-                    if (d == 0) return 0;
-                    int16_t a = (d < 0) ? -d : d;
-                    int16_t q = a / 3, r = a % 3;
-                    if (r >= 2) q++;
-                    return (d < 0) ? -q : q;
-                };
-                for (int16_t di2 = (int16_t)*(uint16_t*)(s + 0x372) - 2; di2 >= 0; di2 -= 2) {
-                    if (*(uint16_t*)(s + di2 + 0x1355) == 0) continue;
-                    if (*(uint16_t*)(s + di2 + 0x1AD5) == 0) continue;
-                    int16_t dy = (int16_t)(*(uint16_t*)(s + di2 + 0x1765) - *(uint16_t*)(s + di2 + 0x13CD));
-                    int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
-                    int16_t ty = delta_type1(dy), tx = delta_type1(dx_v);
-                    if (tx == 0 && ty == 0) continue;
-                    v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
-                }
-            }
+            v2_sub_12fcb(s);
             v2_sub_10130(s); // sub_10130: VGA vsync wait
             v2_sub_10130(s);
             v2_sub_1DE05(s);
@@ -5176,23 +5221,7 @@ static void v2_sub_11080(uint8_t* s) {
             // raw). Single implementation now, covered by FNSELFTEST.
             v2_sub_13c0c(s);
             // sub_12fd0: sub-sprite position delta type 2
-            {
-                auto delta_type2 = [](int16_t d) -> int16_t {
-                    if (d == 0) return 0;
-                    int16_t a = (d < 0) ? -d : d;
-                    int16_t q = a / 3;
-                    return (d < 0) ? -(int16_t)q : q;
-                };
-                for (int16_t di3 = (int16_t)*(uint16_t*)(s + 0x372) - 2; di3 >= 0; di3 -= 2) {
-                    if (*(uint16_t*)(s + di3 + 0x1355) == 0) continue;
-                    if (*(uint16_t*)(s + di3 + 0x1AD5) == 0) continue;
-                    int16_t dy = (int16_t)(*(uint16_t*)(s + di3 + 0x1765) - *(uint16_t*)(s + di3 + 0x13CD));
-                    int16_t dx_v = (int16_t)(*(uint16_t*)(s + di3 + 0x173D) - *(uint16_t*)(s + di3 + 0x13A5));
-                    int16_t ty = delta_type2(dy), tx = delta_type2(dx_v);
-                    if (tx == 0 && ty == 0) continue;
-                    v2_subsprite_delta_apply(s, (uint16_t)di3, (uint16_t)tx, (uint16_t)ty);
-                }
-            }
+            v2_sub_12fd0(s);
             // sub_11792: HUD full update (original: sub_120ff, sub_12199, loc_1205b, sub_11B0B)
             if ((s[0x25CF] & 1) && *(uint16_t*)(s + 0x25AD) != 0x2C) {
                 // sub_120ff: healthbar state tracking (3 vikings)
@@ -10375,6 +10404,9 @@ extern "C" void v2_fntest_call_sub_10255(uint8_t* test_shadow, uint16_t si, uint
 extern "C" void v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, uint16_t dx) {
     v2_sub_1020f(test_shadow, si, dx);
 }
+extern "C" void v2_fntest_call_sub_12fc6(uint8_t* test_shadow) { v2_sub_12fc6(test_shadow); }
+extern "C" void v2_fntest_call_sub_12fcb(uint8_t* test_shadow) { v2_sub_12fcb(test_shadow); }
+extern "C" void v2_fntest_call_sub_12fd0(uint8_t* test_shadow) { v2_sub_12fd0(test_shadow); }
 // Class-B: per-object VM exec (v2_vm_execute_object, fwd-declared at top).
 // v2_vm_accumulator is a file-scope global carried across opcodes — reset it
 // so each synthetic case starts from the canonical zero accumulator.
@@ -16049,55 +16081,11 @@ void v2_run_animation_vm(uint16_t ds_val) {
             v2_sub_10704(s);
         }
 
-        // sub_12fcb (eip 0x007D): per-object sub-sprite position update type 2.
-        // sub_12fc6/sub_12fcb/sub_12fd0: per-object sub-sprite position update.
-        // off_30BC0 dispatch: sub_1227e(bx=0), sub_122c0(bx=2), sub_122f3(bx=4)
-        // All compute delta/3 with different rounding. Apply to all sub-sprites.
-        {
-            // Delta transform functions (exact replicas of sub_1227e/sub_122c0/sub_122f3)
-            auto delta_type0 = [](int16_t d) -> int16_t { // sub_1227e: delta - (|d|/3)*2 ± round
-                if (d == 0) return 0;
-                int16_t a = (d < 0) ? -d : d;
-                int16_t q = a / 3, r = a % 3;
-                int16_t red = q * 2 + (r >= 2 ? 1 : 0);
-                return (d < 0) ? (d + red) : (d - red);
-            };
-            auto delta_type1 = [](int16_t d) -> int16_t { // sub_122c0: d/3 with round
-                if (d == 0) return 0;
-                int16_t a = (d < 0) ? -d : d;
-                int16_t q = a / 3, r = a % 3;
-                int16_t res = q + (r >= 2 ? 1 : 0);
-                return (d < 0) ? -res : res;
-            };
-            auto delta_type2 = [](int16_t d) -> int16_t { // sub_122f3: d/3 WITHOUT rounding
-                if (d == 0) return 0;
-                int16_t a = (d < 0) ? -d : d;
-                int16_t q = a / 3;
-                return (d < 0) ? -(int16_t)q : q;
-            };
-
-            // sub_12fe5: per-object sub-sprite update
-            auto sub_12fe5 = [&](uint16_t di_obj, int bx_type) {
-                if (*(uint16_t*)(s + di_obj + 0x1355) == 0) return;
-                if (*(uint16_t*)(s + di_obj + 0x1AD5) == 0) return;
-                int16_t dy = (int16_t)(*(uint16_t*)(s + di_obj + 0x1765) - *(uint16_t*)(s + di_obj + 0x13CD));
-                int16_t dx_val = (int16_t)(*(uint16_t*)(s + di_obj + 0x173D) - *(uint16_t*)(s + di_obj + 0x13A5));
-                int16_t ty, tx;
-                if (bx_type == 0) { ty = delta_type0(dy); tx = delta_type0(dx_val); }
-                else { ty = delta_type1(dy); tx = delta_type1(dx_val); }
-                if (tx == 0 && ty == 0) return;
-                v2_subsprite_delta_apply(s, (uint16_t)di_obj, (uint16_t)tx, (uint16_t)ty);
-            };
-
-            // sub_12fc6(bx=0): already called in POST-VM as sub_12fc6 viking 1
-            // Called at eip 0x004B, which IS in our v2_game_loop_post_vm.
-            // sub_12fcb(bx=2): viking 2 — called at eip 0x007D (post-flip 1)
-            {
-                uint16_t te = *(uint16_t*)(s + 0x372);
-                for (int16_t di2 = te - 2; di2 >= 0; di2 -= 2)
-                    sub_12fe5(di2, 2);
-            }
-        }
+        // sub_12fcb (eip 0x007D): per-object sub-sprite position update, delta
+        // type 1 (bx=2 → sub_122c0). Consolidated into v2_sub_12fcb (exact
+        // delta fns + object DO-WHILE + slot DO-WHILE).
+        // sub_12fc6(bx=0) is already called in POST-VM (v2_game_loop_post_vm).
+        v2_sub_12fcb(s);
         // sub_12d2c: invincibility/flash timer (called from eip 0x0080)
         // Timer 1: DEC ds:0x3A2, if nonzero XOR ds:0x39E with ds:0x39A; if zero ds:0x39E=0
         // Timer 2: DEC ds:0x3A4, if nonzero XOR ds:0x3A0 with ds:0x39C; if zero ds:0x3A0=0
@@ -16146,26 +16134,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // implementation now, covered by FNSELFTEST.
         v2_sub_13c0c(s);
 
-        // sub_12fd0(bx=4): HUD viking 3 sub-sprite update (eip 0x00AF)
-        {
-            // sub_122f3: simple d/3 WITHOUT rounding (unlike sub_122c0 which rounds up at rem>=2)
-            auto delta_type2 = [](int16_t d) -> int16_t {
-                if (d == 0) return 0;
-                int16_t a = (d < 0) ? -d : d;
-                int16_t q = a / 3;
-                return (d < 0) ? -(int16_t)q : q;
-            };
-            uint16_t te = *(uint16_t*)(s + 0x372);
-            for (int16_t di3 = te - 2; di3 >= 0; di3 -= 2) {
-                if (*(uint16_t*)(s + di3 + 0x1355) == 0) continue;
-                if (*(uint16_t*)(s + di3 + 0x1AD5) == 0) continue;
-                int16_t dy = (int16_t)(*(uint16_t*)(s + di3 + 0x1765) - *(uint16_t*)(s + di3 + 0x13CD));
-                int16_t dx_v = (int16_t)(*(uint16_t*)(s + di3 + 0x173D) - *(uint16_t*)(s + di3 + 0x13A5));
-                int16_t ty = delta_type2(dy), tx = delta_type2(dx_v);
-                if (tx == 0 && ty == 0) continue;
-                v2_subsprite_delta_apply(s, (uint16_t)di3, (uint16_t)tx, (uint16_t)ty);
-            }
-        }
+        // sub_12fd0(bx=4): sub-sprite update, delta type 2 (eip 0x00AF) —
+        // consolidated into v2_sub_12fd0.
+        v2_sub_12fd0(s);
 
         // sub_11792: HUD full update (if flag &1 and level != 0x2C)
         // Calls sub_120ff (healthbar), sub_12199 (items), loc_1205b (?), sub_11b0b (portrait)
@@ -17191,27 +17162,9 @@ void v2_phase_render1(uint16_t ds_val) {
         chk077C("R1-entry", snap4);
     }
 
-    // sub_12fc6(bx=0): sub-sprite position update type 0 (eip 0x004B)
-    // Uses delta_type0: d - (|d|/3)*2 ± round (keeps 1/3 of delta)
-    {
-        auto delta_type0 = [](int16_t d) -> int16_t {
-            if (d == 0) return 0;
-            int16_t a = (d < 0) ? -d : d;
-            int16_t q = a / 3, r = a % 3;
-            int16_t red = q * 2 + (r >= 2 ? 1 : 0);
-            return (d < 0) ? (d + red) : (d - red);
-        };
-        uint16_t te = *(uint16_t*)(s + 0x372);
-        for (int16_t di2 = te - 2; di2 >= 0; di2 -= 2) {
-            if (*(uint16_t*)(s + di2 + 0x1355) == 0) continue;
-            if (*(uint16_t*)(s + di2 + 0x1AD5) == 0) continue;
-            int16_t dy = (int16_t)(*(uint16_t*)(s + di2 + 0x1765) - *(uint16_t*)(s + di2 + 0x13CD));
-            int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
-            int16_t ty = delta_type0(dy), tx = delta_type0(dx_v);
-            if (tx == 0 && ty == 0) continue;
-            v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
-        }
-    }
+    // sub_12fc6(bx=0): sub-sprite position update type 0 (eip 0x004B) —
+    // consolidated into v2_sub_12fc6 (exact sub_1227e + object/slot do-while).
+    v2_sub_12fc6(s);
 
     // sub_10130: VGA vsync wait (eip 0x004E)
     v2_sub_10130(s);
@@ -17340,26 +17293,8 @@ void v2_phase_post_flip1(uint16_t ds_val) {
         if (v != 0) scroll_ud(-1, *(uint16_t*)(s + v * 2 + 0x2B82));
         else { v = *(uint16_t*)(s + 0x3DC); if (v != 0) scroll_ud(1, *(uint16_t*)(s + v * 2 + 0x2B82)); }
     }
-    // sub_12fcb: sub-sprite position update type 2
-    {
-        auto delta_type1 = [](int16_t d) -> int16_t {
-            if (d == 0) return 0;
-            int16_t a = (d < 0) ? -d : d;
-            int16_t q = a / 3, r = a % 3;
-            int16_t res = q + (r >= 2 ? 1 : 0);
-            return (d < 0) ? -res : res;
-        };
-        uint16_t te = *(uint16_t*)(s + 0x372);
-        for (int16_t di2 = te - 2; di2 >= 0; di2 -= 2) {
-            if (*(uint16_t*)(s + di2 + 0x1355) == 0) continue;
-            if (*(uint16_t*)(s + di2 + 0x1AD5) == 0) continue;
-            int16_t dy = (int16_t)(*(uint16_t*)(s + di2 + 0x1765) - *(uint16_t*)(s + di2 + 0x13CD));
-            int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
-            int16_t ty = delta_type1(dy), tx = delta_type1(dx_v);
-            if (tx == 0 && ty == 0) continue;
-            v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
-        }
-    }
+    // sub_12fcb: sub-sprite position update, delta type 1 — consolidated.
+    v2_sub_12fcb(s);
     // sub_12d2c: invincibility timer
     if (*(uint16_t*)(s + 0x3A2) != 0) {
         *(uint16_t*)(s + 0x3A2) -= 1;
@@ -17443,25 +17378,8 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     // like the others it carried the sign-of-difference JL/JGE model; the
     // single v2_sub_13c0c has the corrected operand-compare semantics).
     v2_sub_13c0c(s);
-    // sub_12fd0: sub-sprite update type 3
-    {
-        auto delta_type2 = [](int16_t d) -> int16_t {
-            if (d == 0) return 0;
-            int16_t a = (d < 0) ? -d : d;
-            int16_t q = a / 3;
-            return (d < 0) ? -(int16_t)q : q;
-        };
-        uint16_t te = *(uint16_t*)(s + 0x372);
-        for (int16_t di3 = te - 2; di3 >= 0; di3 -= 2) {
-            if (*(uint16_t*)(s + di3 + 0x1355) == 0) continue;
-            if (*(uint16_t*)(s + di3 + 0x1AD5) == 0) continue;
-            int16_t dy = (int16_t)(*(uint16_t*)(s + di3 + 0x1765) - *(uint16_t*)(s + di3 + 0x13CD));
-            int16_t dx_v = (int16_t)(*(uint16_t*)(s + di3 + 0x173D) - *(uint16_t*)(s + di3 + 0x13A5));
-            int16_t ty = delta_type2(dy), tx = delta_type2(dx_v);
-            if (tx == 0 && ty == 0) continue;
-            v2_subsprite_delta_apply(s, (uint16_t)di3, (uint16_t)tx, (uint16_t)ty);
-        }
-    }
+    // sub_12fd0: sub-sprite update, delta type 2 — consolidated.
+    v2_sub_12fd0(s);
     // sub_11792: HUD update — orig calls sub_120FF + sub_12199 + loc_1205B + sub_11B0B.
     // Previously v2 only had sub_120FF (healthbar). Missing sub_12199 caused ds:0x3FC
     // to never sync with ds:0x3E4 after item pickup → ITEM-TRAP divergence at frame ~393.

@@ -85,6 +85,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 14: return (void*)&sub_1424c;   // per-object VM exec (class B unit)
     case 15: return (void*)&sub_10255;   // palette entry rotate fwd (REP MOVSB up)
     case 16: return (void*)&sub_1020f;   // palette entry rotate back (STD REP MOVSB)
+    case 17: return (void*)&sub_12fc6;   // sub-sprite delta pass, type 0 (sub_1227e)
+    case 18: return (void*)&sub_12fcb;   // sub-sprite delta pass, type 1 (sub_122c0)
+    case 19: return (void*)&sub_12fd0;   // sub-sprite delta pass, type 2 (sub_122f3)
     default: return 0;
     }
 }
