@@ -82,20 +82,65 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 11: return (void*)&sub_17496;
     case 12: return (void*)&sub_1746c;
     case 13: return (void*)&sub_101be;
+    case 14: return (void*)&sub_1424c;   // per-object VM exec (class B unit)
+    case 15: return (void*)&sub_10255;   // palette entry rotate fwd (REP MOVSB up)
+    case 16: return (void*)&sub_1020f;   // palette entry rotate back (STD REP MOVSB)
     default: return 0;
     }
 }
 
+// Class-B (VM opcode) selftests need a scratch code segment inside m2c::m for
+// the oracle's ES and matching v2 reads (v2_resolve_segment falls back to
+// v2_m2c_base + seg*16 for unknown segments). Expose the base pointer.
+extern "C" void* v2_fntest_m2c_base(void) { return (void*)&m2c::m; }
+
+// Shadow-stack ret-mismatch counter: POP-through-frame orig-UB paths that
+// happen to land on valid case labels "survive" without an escape — the
+// runners treat a bump here the same as an escape (orig-UB, not comparable).
+extern "C" long v2_fntest_ret_mismatches(void) { return m2c::shadow_stack.m_fntest_ret_mismatch; }
+
 // io_regs[8]: [0]=ax [1]=bx [2]=cx [3]=dx [4]=si [5]=di [6]=bp — read as the
 // entry register state, overwritten with the exit state; [7] = CF on exit
 // (entry value ignored; flags start cleared like a fresh _STATE).
+extern "C" int  v2_fntest_isolated_active;   // defined in v2_fn_test.cpp
+extern "C" long v2_fntest_start_escapes;     // ditto; ++ in start: guard below
+extern "C" int  v2_fntest_watchdog_enable;   // ditto; =1 only in the selftest process
+
+// Watchdog: some orig-UB inputs make a runaway dispatch land on a VALID case
+// of foreign code that then spins forever (e.g. a vsync wait loop). SIGALRM +
+// siglongjmp aborts the hung CALL_; the shadow stack is reset afterwards.
+// Enabled only when v2_fntest_watchdog_enable (single-threaded selftest).
+#include <setjmp.h>
+#include <signal.h>
+#include <sys/time.h>
+static sigjmp_buf v2_fntest_hang_jb;
+// One handler for hang (SIGALRM) and hard faults (SIGSEGV/SIGBUS — e.g. a
+// runaway recursive CALL_ chain overflowing the host C++ stack in <500ms,
+// faster than the alarm). Faults outside an isolated call re-raise default
+// (real host bug → normal crash); SIGSEGV on an exhausted stack requires the
+// sigaltstack installed below.
+static void v2_fntest_fault(int sig) {
+    extern int v2_fntest_isolated_active;
+    if (sig != SIGALRM && !v2_fntest_isolated_active) { signal(sig, SIG_DFL); return; }
+    siglongjmp(v2_fntest_hang_jb, sig == SIGALRM ? 1 : 2);
+}
+static void v2_fntest_set_alarm_ms(long ms) {
+    struct itimerval it;
+    it.it_interval.tv_sec = 0; it.it_interval.tv_usec = 0;
+    it.it_value.tv_sec = ms / 1000; it.it_value.tv_usec = (ms % 1000) * 1000;
+    setitimer(ITIMER_REAL, &it, nullptr);
+}
+
 extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs)
 {
-    static uint8_t saved_ds[0x10000];   // game-thread only — static is fine
+    // +0x10 tail: a WORD access at offset 0xFFFF reaches linear ds+0x10000
+    // (the port reads/writes linearly, no 8086 wrap) — keep those bytes
+    // saved/restored too so successive cases stay deterministic.
+    static uint8_t saved_ds[0x10010];   // game-thread only — static is fine
     const uint32_t ds_lin = v2_fntest_game_ds_linear();
     db* const ds_ptr = (db*)&m2c::m + ds_lin;
 
-    memcpy(saved_ds, ds_ptr, 0x10000);
+    memcpy(saved_ds, ds_ptr, 0x10010);
     memcpy(ds_ptr, ds_image, 0x10000);
 
     // NB: _STATE has a user ctor that only sets call_source, so `st{}` does
@@ -113,14 +158,74 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     ax = io_regs[0]; bx = io_regs[1]; cx = io_regs[2]; dx = io_regs[3];
     si = io_regs[4]; di = io_regs[5]; bp = io_regs[6];
 
-    bool ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
+    // Escape cushion: double-POP exit opcodes (VM op 0x15 class) pop through
+    // the CALL_ frame; these trap words route the runaway RETN into
+    // fntest_ret_trap instead of a bogus dispatch into start:.
+    {
+        m2c::MWORDSIZE _trap = 0xFFF0;
+        PUSH(_trap); PUSH(_trap); PUSH(_trap);
+    }
+    // Make the CALL_ frame's own return word a trap too: CALL_ pushes
+    // return_addr = ip, so a runaway RETN that pops THIS frame's slot (the
+    // op 0x15 zero-arg case: locret_15504 RETNs into PUSH(si)'s value, then
+    // the next RETN eats our frame) dispatches to 0x01A2FFF0 →
+    // fntest_ret_trap instead of 0x01A20000 → start:. The normal native
+    // return path never dispatches on this value.
+    ip = 0xFFF0;
+    v2_fntest_isolated_active = 1;
+    // Stack-balance canary: a clean native return leaves sp exactly here.
+    // POP-through-frame orig-UB paths that happen to pop a native-marked
+    // word (e.g. off_30C98 mode-6 inside sub_15470: POP eats the isolator
+    // CALL_ frame and RETN "returns" early with no escape marker) leave sp
+    // off-balance — count that as an orig-UB escape.
+    m2c::MWORDSIZE sp_ref = sp;
+    bool ok;
+    if (v2_fntest_watchdog_enable) {
+        static bool sig_ready = false;
+        if (!sig_ready) {
+            static uint8_t altstk[262144];   // SIGSEGV on exhausted stack needs an alt stack
+            stack_t sst;
+            memset(&sst, 0, sizeof(sst));
+            sst.ss_sp = altstk; sst.ss_size = sizeof(altstk); sst.ss_flags = 0;
+            sigaltstack(&sst, nullptr);
+            sig_ready = true;
+        }
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = v2_fntest_fault;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGALRM, &sa, nullptr);
+        sa.sa_flags = SA_ONSTACK;
+        sigaction(SIGSEGV, &sa, nullptr);
+        sigaction(SIGBUS, &sa, nullptr);
+        // assert(0) paths (e.g. interpret_unknown_callf on a garbage indirect
+        // CALL target) abort() — treat like any other orig-UB escape.
+        sigaction(SIGABRT, &sa, nullptr);
+        if (sigsetjmp(v2_fntest_hang_jb, 1) == 0) {
+            v2_fntest_set_alarm_ms(500);
+            ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
+            v2_fntest_set_alarm_ms(0);
+        } else {
+            // hung (1) or faulted (2) call aborted mid-flight: count as an
+            // escape (runner marks the case orig-UB) and clean the abandoned
+            // shadow frames
+            v2_fntest_set_alarm_ms(0);
+            ok = false;
+            v2_fntest_start_escapes++;
+            m2c::shadow_stack.reset_for_fntest();
+        }
+    } else {
+        ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
+    }
+    if (sp != sp_ref) { v2_fntest_start_escapes++; ok = false; }
+    v2_fntest_isolated_active = 0;
 
     io_regs[0] = ax; io_regs[1] = bx; io_regs[2] = cx; io_regs[3] = dx;
     io_regs[4] = si; io_regs[5] = di; io_regs[6] = bp;
     io_regs[7] = st.CF ? 1 : 0;
 
     memcpy(ds_image, ds_ptr, 0x10000);
-    memcpy(ds_ptr, saved_ds, 0x10000);
+    memcpy(ds_ptr, saved_ds, 0x10010);
     return ok;
 }
 extern "C" void v2_mirror_sub_10350_spec_ors();
@@ -1944,6 +2049,12 @@ cs=0x1a2;eip=0x000d93; 	J(CALL(sub_10dba,0));	// 1788 call    sub_10DBA ;~ 01A2:
     _group1:
     _begin:
 start:
+    // FN-TEST guard: some synthetic inputs hit orig-UB paths that dispatch
+    // through a zero word (e.g. VM op 0x15 arg&7==0 → locret_15504 RETNs
+    // into PUSH(si)'s value 0 → __disp=0x01A20000 → here). In isolated mode
+    // count the escape and bail out of the group instead of re-running
+    // start:. Game startup (v2_fntest_isolated_active==0) is unaffected.
+    if (v2_fntest_isolated_active) { v2_fntest_start_escapes++; return true; }
 	{
 	  printf("__start__\n");
 	  //setPalette(0, 0, 0, 0);
@@ -16958,6 +17069,17 @@ cs=0x1a2;eip=0x007a58; 	T(NOP);	// 17779 nop ;~ 01A2:7A58
 cs=0x1a2;eip=0x007a59; 	J(LOOP(loc_17a4f));	// 17780 loop    loc_17A4F ;~ 01A2:7A59
 cs=0x1a2;eip=0x007a5b; 	J(RETN(0));	// 17781 retn ;~ 01A2:7A5B
 
+fntest_ret_trap:
+    // FN-TEST escape trap: isolated calls keep a cushion of 0xFFF0 words under
+    // the CALL_ frame AND set ip=0xFFF0 before CALL_ (so the frame's own
+    // return word is a trap value too). Opcode handlers of the double-POP
+    // exit class (e.g. VM op 0x15) pop THROUGH the caller frame; the next
+    // RETN then dispatches here (case 0x01A2FFF0 below) instead of running
+    // off into start:. eip=0xFFF0 keeps CALL_'s return_addr==ip post-check
+    // happy on this path.
+    eip = 0xFFF0;
+    return true;
+
     assert(0);
     __dispatch_call:
 #ifdef DOSBOX_CUSTOM
@@ -18945,6 +19067,14 @@ cs=0x1a2;eip=0x007a5b; 	J(RETN(0));	// 17781 retn ;~ 01A2:7A5B
         case m2c::ksub_1797b: 	goto sub_1797b;
         case m2c::ksub_179a8: 	goto sub_179a8;
         case m2c::ksub_179fb: 	goto sub_179fb;
-        default: m2c::log_error("Don't know how to jump to 0x%x. See " __FILE__ " line %d\n", __disp, __LINE__);m2c::stackDump(); abort();
+        case 0x01A2FFF0: 	goto fntest_ret_trap;  // FN-TEST escape trap (see label)
+        default:
+            // FN-TEST guard: orig-UB inputs make runaway RETNs pop garbage
+            // (e.g. a PUSH(si) value) and dispatch to addresses with no case.
+            // In isolated mode count it as an escape and bail out of the
+            // group; the runner marks the case orig-UB. Game mode aborts as
+            // before.
+            if (v2_fntest_isolated_active) { v2_fntest_start_escapes++; eip = 0xFFF0; return true; }
+            m2c::log_error("Don't know how to jump to 0x%x. See " __FILE__ " line %d\n", __disp, __LINE__);m2c::stackDump(); abort();
     };
 }

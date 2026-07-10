@@ -244,6 +244,18 @@ uint16_t& Z = *(uint16_t *)& e##Z ;
         bool needtoskipcalls();
         size_t getneedtoskipcallndclean(){int ret = m_needtoskipcall; m_needtoskipcall = 0; return ret;}
         void noneedreturn(){--m_needtoskipcall;}
+        // FN-TEST only: after a watchdog siglongjmp aborts a hung isolated
+        // call, the shadow stack holds abandoned frames. Restore the fresh
+        // construction state so the next isolated CALL_ starts clean.
+        void reset_for_fntest() {
+            m_ss.clear(); m_current = 0; m_itiscall = false; m_itisret = false;
+            m_deep = 1; m_currentdeep = 0; m_needtoskipcall = 0;
+        }
+        // FN-TEST only: RETN popping a word that no native CALL pushed
+        // (POP-through-frame orig-UB paths, e.g. off_30C98 modes 5-7). The
+        // runaway may still land on a valid case label and "survive", so the
+        // escape counter alone can't flag these — this one does.
+        long m_fntest_ret_mismatch = 0;
     };
 
     extern ShadowStack shadow_stack;
@@ -1646,6 +1658,7 @@ struct StackPop
         int skip = shadow_stack.getneedtoskipcallndclean();
         if (!ret) {
             log_error("Warning. Return address wasn't created by native CALL (found %x)\n", ip);
+            shadow_stack.m_fntest_ret_mismatch++;   // fn-test UB marker (see ShadowStack)
 	}
 #endif
         esp += i;
@@ -1738,6 +1751,7 @@ throw StackPop(skip);
 	  label(_i, _state);
  if(return_addr != ip&& ((dw)(ip - return_addr)) > 5 ) {
   log_error("~~Return address not equal to call addr %x %x\n",return_addr,ip);
+  shadow_stack.m_fntest_ret_mismatch++;   // fn-test UB marker (see ShadowStack)
 return false;
  }
         }

@@ -51,15 +51,36 @@ extern "C" void     v2_fntest_call_sub_10753(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_17496(uint8_t* test_shadow, uint16_t si_speed);
 extern "C" void     v2_fntest_call_sub_1746c(uint8_t* test_shadow, uint16_t si_speed);
 extern "C" void     v2_fntest_call_sub_101be(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_vm_exec(uint8_t* test_shadow, uint16_t si);
+extern "C" void     v2_fntest_call_sub_10255(uint8_t* test_shadow, uint16_t si, uint16_t dx);
+extern "C" void     v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, uint16_t dx);
+extern "C" long     v2_fntest_ret_mismatches(void);
+extern "C" void*    v2_fntest_m2c_base(void);
+extern void         v2_set_m2c_base(void* base);   // v2 resolve fallback target
 
 extern int v2_dbg_pre_vm_iter;  // game frame counter — context for FAIL logs
+
+// Shared with the orig side (seg000): isolated-mode flag + start:-escape
+// counter. Some synthetic inputs hit orig-UB paths (e.g. VM op 0x15 with
+// arg&7==0 dispatches to locret_15504, a bare RETN that pops PUSH(si)'s
+// value as a return address → __disp 0x01A20000 → start:). The start: and
+// dispatcher-default guards bail out of the group and bump the counter; the
+// hang watchdog (SIGALRM in v2_fntest_orig_isolated) bumps it too. Runners
+// treat a bumped counter as "orig-UB input — not a comparable case".
+extern "C" {
+int  v2_fntest_isolated_active = 0;
+long v2_fntest_start_escapes = 0;
+int  v2_fntest_watchdog_enable = 0;   // =1 in the selftest process only
+int  v2_fntest_vm_soft = 0;           // 1: v2 VM FATALs become soft aborts; 2: one fired
+}
 
 namespace {
 
 enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B = 3,
             FT_SUB_13D68 = 4, FT_SUB_13DD6 = 5, FT_SUB_13E15 = 6, FT_SUB_13C0C = 7,
             FT_SUB_1064B = 8, FT_SUB_10704 = 9, FT_SUB_10753 = 10,
-            FT_SUB_17496 = 11, FT_SUB_1746C = 12, FT_SUB_101BE = 13, FT_COUNT };
+            FT_SUB_17496 = 11, FT_SUB_1746C = 12, FT_SUB_101BE = 13,
+            FT_SUB_1424C = 14, FT_SUB_10255 = 15, FT_SUB_1020F = 16, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -75,18 +96,33 @@ FtSlot      g_slot[FT_COUNT];
 const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d6b",
                                  "sub_13d68", "sub_13dd6", "sub_13e15", "sub_13c0c",
                                  "sub_1064b", "sub_10704", "sub_10753",
-                                 "sub_17496", "sub_1746c", "sub_101be" };
+                                 "sub_17496", "sub_1746c", "sub_101be",
+                                 "sub_1424c", "sub_10255", "sub_1020f" };
 
-uint8_t g_scratch[0x10000];   // v2 executes here; never the live shadow
+// Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
+// 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
+// real m2c::m (no 8086 segment wrap in the port). The tail is filled with
+// those same real bytes before each case so both sides read identical
+// out-of-window values; the tail itself is never diffed.
+uint8_t g_scratch[0x10010];   // v2 executes here; never the live shadow
 bool    g_init_done   = false;
 bool    g_any_enabled = false;
 
 // Synthetic-diff buffers (selftest + xcheck). Game-thread only.
-uint8_t g_synth_base[0x10000];   // pristine game DS image (static EXE data)
-uint8_t g_synth_in[0x10000];     // constructed case input
-uint8_t g_synth_orig[0x10000];   // isolated-orig output (the oracle)
+uint8_t g_synth_base[0x10010];   // pristine game DS image (static EXE data) + tail
+uint8_t g_synth_in[0x10010];     // constructed case input
+uint8_t g_synth_orig[0x10010];   // isolated-orig output (the oracle)
+
+void ft_fill_tail(uint8_t* buf) {
+    memcpy(buf + 0x10000,
+           (uint8_t*)v2_fntest_m2c_base() + v2_fntest_game_ds_linear() + 0x10000, 0x10);
+}
 long    g_xchk_ok[FT_COUNT]      = {};
 long    g_xchk_diverge[FT_COUNT] = {};
+
+// Combined orig-UB marker: start:/default-guard escapes + shadow-stack ret
+// mismatches (POP-through-frame paths that survive on a valid case label).
+long ft_ub_marks() { return v2_fntest_start_escapes + v2_fntest_ret_mismatches(); }
 
 void ft_run_v2(FtId id, uint8_t* shadow, const FtRegs& r) {
     switch (id) {
@@ -1148,6 +1184,430 @@ int ft_selftest_sub_101be() {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// sub_10255 / sub_1020f <-> v2_sub_10255 / v2_sub_1020f (palette entry
+// rotates, the two callees of sub_101be — registered as standalone units).
+// Contract: si = slot (byte fields [si+0x259C]=cur, [si+0x2594]=end),
+// dx = table base. Both REP MOVSB with a WRAPPED uint16 count, so the
+// "wrong-order" half-plane (10255: end<cur, 1020f: cur<end) is orig-UB-ish
+// but fully deterministic memory-wise (64KB wrap) — compared exactly.
+
+bool ft_synth_case_palrot(FtId id, uint16_t si, uint16_t dx,
+                          uint8_t cur, uint8_t endi, uint32_t tbl_seed,
+                          const char* group, FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    g_synth_in[(uint16_t)(si + 0x259C)] = cur;
+    g_synth_in[(uint16_t)(si + 0x2594)] = endi;
+    FtRng trng(tbl_seed);
+    for (uint32_t off = 0; off < 0x300; off++) {        // 256 entries x 3 bytes
+        g_synth_in[(uint16_t)(0x8202 + off)] = (uint8_t)trng.next();
+        g_synth_in[(uint16_t)(0x7F02 + off)] = (uint8_t)trng.next();
+    }
+    ft_wr16(g_synth_in, 0x8504, 0xBBBB);                // scratch statics canary
+    g_synth_in[0x8506] = 0xBB;
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, dx, si, 0, 0, 0 };
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+    if (ft_ub_marks() != esc0) {
+        st.cases--;                                      // not comparable (unexpected here)
+        fprintf(stderr, "FNSELFTEST-UB[%s %s]: si=%u dx=%04X cur=%02X end=%02X escaped\n",
+                g_name[id], group, si, dx, cur, endi);
+        return true;
+    }
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    if (id == FT_SUB_10255) v2_fntest_call_sub_10255(g_scratch, si, dx);
+    else                    v2_fntest_call_sub_1020f(g_scratch, si, dx);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X) "
+                    "| si=%u dx=%04X cur=%02X end=%02X\n",
+                    g_name[id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    si, dx, cur, endi);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_palrot(FtId id) {
+    FtSynthStats exh, wrap, fuzz;
+    long diff_budget = 24;
+    const bool fwd = (id == FT_SUB_10255);   // 10255: valid half-plane cur<=end
+
+    // Exhaustive valid half-plane at si=0, dx=0x8202 (game base).
+    for (uint32_t c = 0; c <= 0xFF; c++) for (uint32_t e = 0; e <= 0xFF; e++) {
+        if (fwd ? (c > e) : (c < e)) continue;
+        ft_synth_case_palrot(id, 0, 0x8202, (uint8_t)c, (uint8_t)e,
+                             0xC0000000u | (c << 8) | e, "exh", exh, diff_budget);
+    }
+    // Slot addressing: si=0..7 over a small cur/end grid, both game bases.
+    for (uint16_t si = 0; si < 8; si++)
+        for (uint32_t c = 0; c <= 0xF0; c += 0x3C) for (uint32_t e = 0; e <= 0xF0; e += 0x3C) {
+            if (fwd ? (c > e) : (c < e)) continue;
+            ft_synth_case_palrot(id, si, 0x7F02, (uint8_t)c, (uint8_t)e,
+                                 0xC1000000u | (si << 16) | (c << 8) | e, "exh", exh, diff_budget);
+        }
+
+    // Wrong-order half-plane (wrapped REP MOVSB count) — sampled diagonals.
+    static const uint8_t DELTA[] = { 1, 2, 3, 5, 17, 85, 255 };
+    for (uint8_t d : DELTA) for (uint32_t c = 0; c <= 0xF0; c += 0x10) {
+        uint8_t cur = (uint8_t)c, endi;
+        if (fwd) endi = (uint8_t)(cur - d);   // end<cur → wrapped count for 10255
+        else     endi = (uint8_t)(cur + d);   // cur<end → wrapped count for 1020f
+        ft_synth_case_palrot(id, (uint16_t)(c & 7), 0x8202, cur, endi,
+                             0xC2000000u | (d << 8) | c, "wrap", wrap, diff_budget);
+    }
+    // Base-address wrap: dx near segment end / zero.
+    static const uint16_t DXS[] = { 0x0000, 0xFF00, 0xFFFD };
+    for (uint16_t dxv : DXS) for (uint32_t c = 0; c <= 0xFF; c += 0x33) {
+        uint8_t cur = (uint8_t)c, endi = (uint8_t)(fwd ? (uint8_t)(c + 9) : (uint8_t)(c - 9));
+        ft_synth_case_palrot(id, 3, dxv, cur, endi,
+                             0xC3000000u | ((uint32_t)dxv << 8) | c, "wrap", wrap, diff_budget);
+    }
+
+    // Fuzz: random everything (both game bases).
+    FtRng rng(fwd ? 0x10255001u : 0x1020F001u);
+    for (int i = 0; i < 5000; i++) {
+        uint16_t si = (uint16_t)(rng.next() & 7);
+        uint16_t dxv = (rng.next() & 1) ? 0x8202 : 0x7F02;
+        ft_synth_case_palrot(id, si, dxv, (uint8_t)rng.next(), (uint8_t)rng.next(),
+                             rng.next(), "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: exhaustive %ld/%ld, wrap %ld/%ld, fuzz %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        g_name[id], exh.pass, exh.cases, wrap.pass, wrap.cases, fuzz.pass, fuzz.cases,
+        exh.cases + wrap.cases + fuzz.cases, exh.fail + wrap.fail + fuzz.fail,
+        (exh.fail + wrap.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (exh.fail + wrap.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Class B: per-object VM exec (sub_1424c <-> v2_vm_execute_object).
+// Unit: ONE object whose bytecode lives in a scratch code segment inside
+// m2c::m at TESTSEG (linear TESTSEG*16 — heap area, free in the selftest
+// process). The oracle reads it via es=[si+0x1355]=TESTSEG; v2 reads the SAME
+// bytes via v2_resolve_segment's fallback (all shadow segment fields in
+// ds:0x2E5C.. are zeroed in the case input, v2_set_m2c_base points at m2c::m).
+// Bytecode layout: a 0x00 (yield) carpet with [op][args...] planted at PC —
+// any argument mis-consumption or forward jump lands on yield immediately,
+// identically on both sides. The ES zone is snapshotted/compared/restored
+// around each side, since both physically share it.
+// Known first-iteration limits: the accumulator is compared only through its
+// DS effects (both sides start at 0: memset'ed oracle state / explicit v2
+// reset); anim-update path (flags&0x200 / ds:0x32F) is exercised with the
+// anim header zone also inside the carpet segment.
+// TESTSEG placement: m2c::m layout is [static EXE image ~0x243B0][stack 64KB
+// @~0x243B0][heap ~1MB]. The oracle's emulated stack pushes land at
+// stack_base+sp (sp starts at STACK_SIZE/2) — segment 0x2A00 overlapped that,
+// so oracle pushes trashed the code zone. 0x4000 (linear 0x40000..0x50000)
+// sits safely inside the heap, which is untouched in the selftest process
+// (no m2c::init / DOS allocs there).
+// The zone is the FULL 64KB segment: control-flow opcodes jump anywhere in
+// it (uint16 PC), and both sides must read/write identical bytes.
+const uint16_t FT_VM_TESTSEG = 0x4000;
+const uint32_t FT_VM_ZONE = 0x10000;        // full 64KB code segment
+const uint16_t FT_VM_PC = 0x0100;
+
+uint8_t g_vm_es_in[FT_VM_ZONE], g_vm_es_orig[FT_VM_ZONE];
+
+struct FtVmObj { uint16_t flags, anim, timer, x, y, yvel, ystart, yend; };
+
+long g_vmop_ub = 0;   // vmop cases skipped as orig-UB
+
+bool ft_synth_case_vmop(uint8_t op, const uint8_t* args, int n_args,
+                        const FtVmObj& o, uint32_t bg_seed,
+                        const char* group, FtSynthStats& st, long& diff_budget,
+                        long* op_fail)
+{
+    st.cases++;
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* zone = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    const uint16_t si = 6;   // object slot under test
+
+    // Build DS input
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x372, (uint16_t)(si + 2));
+    for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0); // no shadow segs
+    ft_wr16(g_synth_in, 0x32F, 0);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1355), FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x132D), FT_VM_PC);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), o.flags);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x16ED), o.anim);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1715), o.timer);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x173D), o.x);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1765), o.y);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x196D), o.yvel);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x14E5), o.ystart);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x150D), o.yend);
+    // Light background noise over misc object fields (deterministic)
+    FtRng bg(bg_seed);
+    static const uint16_t OF[] = { 0x1305, 0x13CD, 0x1495, 0x14BD, 0x1535, 0x155D,
+                                   0x1855, 0x18AD, 0x1995, 0x19E5, 0x1AD5 };
+    for (uint16_t f : OF) ft_wr16(g_synth_in, (uint16_t)(si + f), bg.w());
+
+    // Build the code zone: yield carpet + [op][args] at PC
+    memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
+    g_vm_es_in[FT_VM_PC] = op;
+    for (int i = 0; i < n_args; i++) g_vm_es_in[FT_VM_PC + 1 + i] = args[i];
+
+    // --- oracle ---
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, si, 0, 0, 0 };
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1424C), g_synth_orig, regs);
+    if (ft_ub_marks() != esc0) {
+        // orig-UB input: the oracle escaped through start: (see guard there).
+        // Real bytecode never reaches these paths — skip, don't compare.
+        g_vmop_ub++;
+        st.cases--;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        return true;
+    }
+    memcpy(g_vm_es_orig, zone, FT_VM_ZONE);
+
+    // --- v2 (same zone, restored to the input first) ---
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    v2_fntest_call_vm_exec(g_scratch, si);
+    if (v2_fntest_vm_soft == 2) {
+        // v2 hit a VM FATAL (op>0xD7 / unimplemented) on a case the oracle
+        // completed — that's a divergence in its own right.
+        fprintf(stderr, "FNSELFTEST-DIFF[sub_1424c %s]: op=%02X v2 SOFT-FAULT (VM FATAL path)\n",
+                group, op);
+        v2_fntest_vm_soft = 0;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        st.fail++; if (op_fail) op_fail[op]++;
+        return false;
+    }
+    v2_fntest_vm_soft = 0;
+
+    static long op_print[256];   // per-opcode diff-print quota (readable full map)
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (op_print[op] < 10) {
+            op_print[op]++;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_1424c %s]: op=%02X addr=%04X orig=%02X v2=%02X (in=%02X) args=%02X%02X%02X%02X\n",
+                    group, op, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    n_args > 0 ? args[0] : 0, n_args > 1 ? args[1] : 0,
+                    n_args > 2 ? args[2] : 0, n_args > 3 ? args[3] : 0);
+        }
+        diffs++;
+    }
+    for (uint32_t a = 0; a < FT_VM_ZONE; a++) {
+        if (zone[a] == g_vm_es_orig[a]) continue;
+        if (op_print[op] < 10) {
+            op_print[op]++;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_1424c %s]: op=%02X ES+%04X orig=%02X v2=%02X (in=%02X)\n",
+                    group, op, a, g_vm_es_orig[a], zone[a], g_vm_es_in[a]);
+        }
+        diffs++;
+    }
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);   // leave the zone clean
+
+    if (diffs) { st.fail++; if (op_fail) op_fail[op]++; return false; }
+    st.pass++; return true;
+}
+
+// Oracle-driven argument-length probe: run [op][0x00 carpet]; with zero args
+// every non-consumed byte is a yield, so the final saved PC ([si+0x132D])
+// reveals how many bytes the opcode consumed. len = final_pc - (PC+1);
+// -1 -> terminal (op yielded/exited itself), 0..16 -> data op, else CTRL
+// (jump/dispatch landed elsewhere in the carpet — arg fuzz unsafe for it).
+// NOTE: bytes above 0xD7 are FORBIDDEN anywhere reachable: orig dispatches
+// through a 0xD8-entry table and reads garbage beyond it (jumps into start:).
+const int FT_VMOP_ESCAPED = -1000;   // probe attempt hit an orig-UB escape
+
+// One oracle probe with a FULL 16-byte arg vector. Returns the DATA length
+// consumed (final saved PC tells: carpet yield saves PC past itself, so
+// d = final - (PC+1) - 1), or -1 terminal, -2 control-flow, FT_VMOP_ESCAPED.
+int ft_vmop_probe_vec(uint8_t op, const FtVmObj& o, const uint8_t* args16) {
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* zone = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    const uint16_t si = 6;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x372, (uint16_t)(si + 2));
+    for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+    ft_wr16(g_synth_in, 0x32F, 0);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1355), FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x132D), FT_VM_PC);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), o.flags);
+    ft_wr16(g_synth_in, (uint16_t)(si + 0x16ED), o.anim);
+    memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
+    g_vm_es_in[FT_VM_PC] = op;
+    for (int i = 0; i < 16; i++) g_vm_es_in[FT_VM_PC + 1 + i] = args16[i];
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, si, 0, 0, 0 };
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1424C), g_synth_orig, regs);
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+    if (ft_ub_marks() != esc0) return FT_VMOP_ESCAPED;
+    uint16_t fin = (uint16_t)(g_synth_orig[(uint16_t)(si + 0x132D)]
+                 | (g_synth_orig[(uint16_t)(si + 0x132D + 1)] << 8));
+    int len = (int)fin - (int)(FT_VM_PC + 1);
+    if (len == -1) return -1;              // terminal
+    if (len == 0) return 0;                // op saved PC right after itself
+    if (len >= 1 && len <= 17) return len - 1;  // data bytes (carpet yield adds 1)
+    return -2;                             // control-flow / non-local PC
+}
+
+// Per-opcode generation plan, self-calibrated against the oracle:
+// - base: the first arg vector that completes without an orig-UB escape.
+//   V0 = all zero (off_30C98 channels 0,0 = literals). Ops whose zero path
+//   dies (sub_154bf setters: channel 0 is a bare-RETN table overlap) get
+//   V1..V3 with 0x09 (channels 1,1) planted at the plausible mode spots.
+// - data_len: consumption measured ON THE BASE VECTOR.
+// - mode_mask: positions whose value changes consumption (flipping a byte to
+//   a different channel pair changes how many bytes the getters eat) — these
+//   are mode bytes; sweep/fuzz keep them at base values, and dedicated
+//   channel variations exercise them within the DEFINED channel sets
+//   (off_30C98: 0-4; overlap channels 5-7 are the POP-through class, modeled
+//   separately — see the channels-5/7 task).
+struct FtOpPlan {
+    int     data_len;      // -1 terminal, -2 ctrl, -3 UB-with-all-bases, >=0 data
+    uint8_t base[16];
+    uint16_t mode_mask;
+};
+
+void ft_vmop_make_plan(uint8_t op, const FtVmObj& o, FtOpPlan& p) {
+    static const uint8_t V0[16] = { 0 };
+    static const uint8_t V1[16] = { 0x09 };
+    static const uint8_t V2[16] = { 0x09, 0x09 };
+    static const uint8_t V3[16] = { 0x09, 0x00, 0x00, 0x09 };
+    const uint8_t* BASES[4] = { V0, V1, V2, V3 };
+    p.data_len = -3; p.mode_mask = 0;
+    memset(p.base, 0, sizeof(p.base));
+    for (const uint8_t* bv : BASES) {
+        int len = ft_vmop_probe_vec(op, o, bv);
+        if (len == FT_VMOP_ESCAPED) continue;
+        p.data_len = len;
+        memcpy(p.base, bv, 16);
+        break;
+    }
+    if (p.data_len < 0) return;            // terminal(-1)/ctrl(-2)/UB(-3): no scan
+    // Mode scan: flip each in-range byte to a different channel pair and see
+    // if consumption changes (or the path escapes) — that marks a mode byte.
+    uint8_t v[16];
+    for (int k = 0; k < p.data_len && k < 16; k++) {
+        memcpy(v, p.base, 16);
+        v[k] = (p.base[k] == 0x09) ? 0x12 : 0x09;   // (1,1)<->(2,2) channel pairs
+        int len = ft_vmop_probe_vec(op, o, v);
+        if (len != p.data_len) p.mode_mask |= (uint16_t)(1u << k);
+    }
+}
+
+int ft_selftest_vmops() {
+    FtSynthStats sweep, fuzz;
+    long diff_budget = 32;
+    static long op_fail[256];
+    memset(op_fail, 0, sizeof(op_fail));
+    v2_set_m2c_base(v2_fntest_m2c_base());
+
+    const FtVmObj BASE = { 0x8000, 0, 0, 0x0120, 0x0140, 0, 0x0130, 0x0150 };
+
+    // Phase 1: per-opcode plan (base vector + data length + mode positions).
+    static FtOpPlan plan[0xD8];
+    for (int op = 0; op <= 0xD7; op++) ft_vmop_make_plan((uint8_t)op, BASE, plan[op]);
+    {
+        char buf[1024]; int n = 0;
+        for (int op = 0; op <= 0xD7 && n < 1000; op++)
+            if (plan[op].data_len == -2) n += snprintf(buf + n, sizeof(buf) - (size_t)n, " %02X", op);
+        fprintf(stderr, "FNSELFTEST-VMOP-CTRL:%s\n", n ? buf : " (none)");
+        n = 0;
+        for (int op = 0; op <= 0xD7 && n < 1000; op++)
+            if (plan[op].data_len == -3) n += snprintf(buf + n, sizeof(buf) - (size_t)n, " %02X", op);
+        fprintf(stderr, "FNSELFTEST-VMOP-UBPROBE:%s\n", n ? buf : " (none)");
+        n = 0;
+        for (int op = 0; op <= 0xD7 && n < 1000; op++)
+            if (plan[op].data_len >= 0 && plan[op].mode_mask)
+                n += snprintf(buf + n, sizeof(buf) - (size_t)n, " %02X:%X", op, plan[op].mode_mask);
+        fprintf(stderr, "FNSELFTEST-VMOP-MODE:%s\n", n ? buf : " (none)");
+    }
+
+    // Phase 2: sweep. Base case for every comparable opcode; PAT variations
+    // on NON-mode data positions (mode bytes stay at base so consumption is
+    // stable); channel variations (defined channels only) on mode positions
+    // with zeroed data.
+    static const uint8_t PAT[4] = { 0x11, 0xFF, 0x80, 0x27 };
+    static const uint8_t CHAN[8] = { 0x00, 0x01, 0x02, 0x03, 0x04,   // (c,0)
+                                     0x09, 0x1B, 0x24 };             // (1,1) (3,3) (4,4)
+    uint8_t a[16];
+    for (int op = 0; op <= 0xD7; op++) {
+        const FtOpPlan& pl = plan[op];
+        if (pl.data_len < 0 && pl.data_len != -1) continue;  // ctrl/UB: not comparable
+        memcpy(a, pl.base, 16);
+        ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
+                           0xB0000000u | (op << 8), "sweep", sweep, diff_budget, op_fail);
+        if (pl.data_len <= 0) continue;
+        for (auto ptn : PAT) {                       // data-position patterns
+            memcpy(a, pl.base, 16);
+            for (int k = 0; k < pl.data_len; k++)
+                if (!(pl.mode_mask & (1u << k))) a[k] = ptn;
+            ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
+                               0xB1000000u | (op << 8) | ptn, "sweep", sweep, diff_budget, op_fail);
+        }
+        for (int k = 0; k < pl.data_len; k++) {      // mode-position channel combos
+            if (!(pl.mode_mask & (1u << k))) continue;
+            for (auto ch : CHAN) {
+                memcpy(a, pl.base, 16);
+                for (int j = k; j < 16; j++) a[j] = 0;   // zero data past the mode byte
+                a[k] = ch;
+                ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
+                                   0xB2000000u | (op << 12) | (k << 8) | ch,
+                                   "sweep", sweep, diff_budget, op_fail);
+            }
+        }
+    }
+
+    // Phase 3: fuzz — random data on NON-mode positions (mode bytes stay at
+    // base so consumption is exact), random object fields (anim-update flag
+    // 0x200 kept off; crafted anim headers are a later iteration).
+    FtRng rng(0x1424C001);
+    for (int i = 0; i < 20000; i++) {
+        uint8_t op = (uint8_t)(rng.next() % 0xD8);
+        const FtOpPlan& pl = plan[op];
+        if (pl.data_len < 0) { i--; continue; }    // terminal/ctrl/UB skip
+        memcpy(a, pl.base, 16);
+        for (int k = 0; k < pl.data_len; k++)
+            if (!(pl.mode_mask & (1u << k))) a[k] = (uint8_t)rng.next();
+        FtVmObj o = { (uint16_t)(rng.w() & (uint16_t)~0x0200), rng.w(), rng.w(),
+                      rng.w(), rng.w(), rng.w(), rng.w(), rng.w() };
+        ft_synth_case_vmop(op, a, 16, o, rng.next(), "fuzz", fuzz, diff_budget, op_fail);
+    }
+
+    long bad_ops = 0;
+    for (int op = 0; op < 256; op++) {
+        if (!op_fail[op]) continue;
+        bad_ops++;
+        fprintf(stderr, "FNSELFTEST-VMOP-FAIL: op=%02X len=%d mode=%X fails=%ld\n",
+                op, op < 0xD8 ? plan[op].data_len : -9,
+                op < 0xD8 ? plan[op].mode_mask : 0, op_fail[op]);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_1424c]: sweep %ld/%ld, fuzz %ld/%ld — total cases=%ld "
+        "fail=%ld, failing opcodes=%ld, orig-UB skipped=%ld%s\n",
+        sweep.pass, sweep.cases, fuzz.pass, fuzz.cases,
+        sweep.cases + fuzz.cases, sweep.fail + fuzz.fail, bad_ops, g_vmop_ub,
+        (sweep.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (sweep.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -1164,7 +1624,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     }
     fprintf(stderr, "FNSELFTEST: game DS at linear 0x%X (seg 0x%X), oracle = isolated m2c orig\n",
             ds_lin, ds_lin >> 4);
+    v2_fntest_watchdog_enable = 1;   // single-threaded here: hang watchdog is safe
     v2_fntest_snap_game_ds(g_synth_base);
+    ft_fill_tail(g_synth_base);      // out-of-window WORD reads at 0xFFFF (see tail note)
 
     int rc = 0; bool matched = false;
     bool all = (strcmp(env, "all") == 0);
@@ -1182,6 +1644,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10753")) { matched = true; rc |= ft_selftest_scroll_apply(FT_SUB_10753, 0x2B80, 0x10753001); }
     if (all || strstr(env, "sub_1064b")) { matched = true; rc |= ft_selftest_sub_1064b(); }
     if (all || strstr(env, "sub_101be")) { matched = true; rc |= ft_selftest_sub_101be(); }
+    if (all || strstr(env, "sub_1424c") || strstr(env, "vmops")) { matched = true; rc |= ft_selftest_vmops(); }
+    if (all || strstr(env, "sub_10255")) { matched = true; rc |= ft_selftest_palrot(FT_SUB_10255); }
+    if (all || strstr(env, "sub_1020f")) { matched = true; rc |= ft_selftest_palrot(FT_SUB_1020F); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

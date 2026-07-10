@@ -2,6 +2,9 @@
 
 #include <exception>
 #include <string>
+#include <csignal>
+
+extern "C" int v2_fntest_isolated_active;   // v2_fn_test.cpp; see fntest_trap_or_exit
 
 #include <sys/time.h>
 
@@ -276,6 +279,15 @@ void asm2C_init() {
 }
 
 
+// FN-TEST: synthetic orig-UB inputs can drive INT 21h into terminate (4Ch)
+// or MCB-corruption exits. Inside an isolated oracle call raise SIGABRT
+// instead — the fn-test watchdog traps it and scores the case as an escape;
+// outside fn-test this behaves exactly like the plain exit below.
+static void fntest_trap_or_exit(int code) {
+	if (::v2_fntest_isolated_active) raise(SIGABRT);
+	exit(code);
+}
+
 void asm2C_INT(struct _STATE* _state, int a) {
 X86_REGREF
 	static FILE * file;
@@ -297,7 +309,7 @@ X86_REGREF
       {
         DosMemLargest(&bx);
         if (DosMemCheck() != SUCCESS)
-           {log_error("MCB chain corrupted\n");exit(1);}
+           {log_error("MCB chain corrupted\n");fntest_trap_or_exit(1);}
            AFFECT_CF(1);
            return;
       }
@@ -314,7 +326,7 @@ X86_REGREF
       if ((rc = DosMemFree(es - 1)) < SUCCESS)
       {
         if (DosMemCheck() != SUCCESS)
-           {log_error("MCB chain corrupted\n");exit(1);}
+           {log_error("MCB chain corrupted\n");fntest_trap_or_exit(1);}
            AFFECT_CF(1);
       }
 	AFFECT_CF(rc!=SUCCESS);
@@ -324,12 +336,12 @@ X86_REGREF
       /* Set memory block size */
 		    case 0x4a:
         if (DosMemCheck() != SUCCESS)
-           {log_error("before 4a: MCB chain corrupted\n");exit(1);}
+           {log_error("before 4a: MCB chain corrupted\n");fntest_trap_or_exit(1);}
 
       if ((rc = DosMemChange(es, bx, &bx)) < 0)
       {
         if (DosMemCheck() != SUCCESS)
-           {log_error("after 4a: MCB chain corrupted\n");exit(1);}
+           {log_error("after 4a: MCB chain corrupted\n");fntest_trap_or_exit(1);}
            AFFECT_CF(1);
       }
       ax = es; /* Undocumented MS-DOS behaviour expected by BRUN45! */
@@ -338,6 +350,7 @@ X86_REGREF
       break;
 		case 0x4c:
 		{
+			if (::v2_fntest_isolated_active) raise(SIGABRT);  // fn-test: DOS terminate = escape
 			stackDump(_state);
 			jumpToBackGround = 1;
 			executionFinished = 1;

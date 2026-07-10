@@ -1800,6 +1800,49 @@ static void v2_sub_10130(uint8_t* s) {
 // (which runs on render thread) from touching uninitialized shadow.
 static std::atomic<bool> v2_render_cb_enabled{false};
 
+// sub_10255 (seg000 eip 0x0255-0x02AC): rotate one 3-byte palette entry from
+// cur=[si+0x259C] to end=[si+0x2594] inside the table at ds:dx. The entry at
+// cur*3+dx is saved to word_309e4/byte_309e6 (ds:0x8504-0x8506), the block
+// between them shifts down 3 bytes (REP MOVSB forward, DF=0, cx = end*3 -
+// cur*3 wrapped uint16), the saved entry lands at end*3+dx. The byte loop IS
+// the REP MOVSB model: 16-bit pointer wrap included, so orig-UB inputs
+// (end < cur → huge wrapped count) replicate exactly too.
+static void v2_sub_10255(uint8_t* s, uint16_t si, uint16_t dx) {
+    uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // AL = [si+259Ch]
+    uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // AL = [si+2594h]
+    uint16_t di = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // ax=cur*3; di=ax+dx
+    s[0x8504] = s[di];                                         // byte ptr word_309E4   = [di]
+    s[0x8505] = s[(uint16_t)(di + 1)];                         // byte ptr word_309E4+1 = [di+1]
+    s[0x8506] = s[(uint16_t)(di + 2)];                         // byte_309E6            = [di+2]
+    uint16_t cx = (uint16_t)((uint16_t)((uint16_t)endi * 3 + dx) - di); // cx = end*3+dx - di
+    uint16_t src = (uint16_t)(di + 3);                         // si = di+3
+    while (cx--) { s[di] = s[src]; di++; src++; }              // REP MOVSB (DF=0)
+    s[di] = s[0x8504];                                         // [di]   = word_309E4 lo
+    s[(uint16_t)(di + 1)] = s[0x8505];                         // [di+1] = word_309E4 hi
+    s[(uint16_t)(di + 2)] = s[0x8506];                         // [di+2] = byte_309E6
+}
+
+// sub_1020f (seg000 eip 0x020F-0x0254): the inverse rotate — entry at
+// cur*3+dx saved (WORD read [di] → word_309e4, byte [di+2] → byte_309e6),
+// block shifts up 3 bytes backwards (STD; REP MOVSB with cx = (cur-end)*3
+// wrapped, si=di-1, di=di+2), then the saved entry is written at [di-2]
+// (WORD) / [di] (byte) where di ended at end*3+dx+2.
+static void v2_sub_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
+    uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // movzx ax, [si+259Ch]
+    uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // movzx ax, [si+2594h]
+    uint16_t di0 = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // di=cur*3+dx
+    s[0x8504] = s[di0];                                        // word_309E4 = [di] (WORD, LE)
+    s[0x8505] = s[(uint16_t)(di0 + 1)];
+    s[0x8506] = s[(uint16_t)(di0 + 2)];                        // byte_309E6 = [di+2]
+    uint16_t cx = (uint16_t)((uint16_t)((uint16_t)cur - (uint16_t)endi) * 3); // cx=(cur-end)*3
+    uint16_t sp = (uint16_t)(di0 - 1);                         // si = di-1
+    uint16_t dp = (uint16_t)(di0 + 2);                         // di = di+2
+    while (cx--) { s[dp] = s[sp]; dp--; sp--; }                // STD; REP MOVSB; CLD
+    s[(uint16_t)(dp - 2)] = s[0x8504];                         // [di-2] = word_309E4 (WORD, LE)
+    s[(uint16_t)(dp - 1)] = s[0x8505];
+    s[dp] = s[0x8506];                                         // [di] = byte_309E6
+}
+
 // sub_101be (seg000): Palette cycling for UI elements.
 // Verified with seg000 lines 2086-2148.
 // Iterates 8 palette channels (si=7 down to 0).
@@ -1853,74 +1896,15 @@ static void v2_sub_101be(uint8_t* s) {
         }
         uint8_t cur_idx = s[si + 0x259C];                          // [si+259Ch] = current
         uint8_t end_idx = s[si + 0x2594];                          // [si+2594h] = end
-        uint16_t dx_base = 0x8202;                                  // palette buffer base
+        // word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
         if (cur_idx < end_idx) {
-            // sub_10255: shift entries DOWN (current < end → rotate left)
-            // orig saves [di], [di+1] to word_309e4 (ds:0x8504), [di+2] to byte_309e6
-            // (ds:0x8506). word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
-            uint16_t di_addr = (uint16_t)cur_idx * 3 + dx_base;
-            uint8_t saved_lo = s[di_addr];
-            uint8_t saved_hi = s[di_addr + 1];
-            uint8_t saved_b  = s[di_addr + 2];
-            s[0x8504] = saved_lo;            // ds:0x8504 = byte ptr word_309e4 lo
-            s[0x8505] = saved_hi;            // ds:0x8505 = byte ptr word_309e4 hi
-            s[0x8506] = saved_b;             // ds:0x8506 = byte_309e6
-            uint16_t count = ((uint16_t)end_idx - (uint16_t)cur_idx) * 3;
-            memmove(s + di_addr, s + di_addr + 3, count);
-            uint16_t end_addr = di_addr + count;
-            s[end_addr]     = saved_lo;      // mov [di-2] = word_309e4 (orig: write 2 bytes)
-            s[end_addr + 1] = saved_hi;
-            s[end_addr + 2] = saved_b;       // mov [di] = byte_309e6
-            // Second rotation with dx=0x7F02
-            dx_base = 0x7F02;
-            di_addr = (uint16_t)cur_idx * 3 + dx_base;
-            saved_lo = s[di_addr];
-            saved_hi = s[di_addr + 1];
-            saved_b  = s[di_addr + 2];
-            s[0x8504] = saved_lo;
-            s[0x8505] = saved_hi;
-            s[0x8506] = saved_b;
-            count = ((uint16_t)end_idx - (uint16_t)cur_idx) * 3;
-            memmove(s + di_addr, s + di_addr + 3, count);
-            end_addr = di_addr + count;
-            s[end_addr]     = saved_lo;
-            s[end_addr + 1] = saved_hi;
-            s[end_addr + 2] = saved_b;
+            // orig: mov dx,8202h; call sub_10255; mov dx,7F02h; call sub_10255
+            v2_sub_10255(s, (uint16_t)si, 0x8202);
+            v2_sub_10255(s, (uint16_t)si, 0x7F02);
         } else {
-            // sub_1020f: shift entries UP (current >= end → rotate right)
-            // orig (line 302-305):
-            //   ax = [di]              ; 16-bit WORD read of [di], [di+1]
-            //   word_309e4 = ax        ; 16-bit WORD write to ds:0x8504, ds:0x8505
-            //   al = [di+2]            ; BYTE read
-            //   byte_309e6 = al        ; BYTE write to ds:0x8506
-            // After REP MOVSB (line 321-324):
-            //   ax = word_309e4        ; 16-bit WORD read
-            //   [di-2] = ax            ; 16-bit WORD write to [di-2], [di-1]
-            //   al = byte_309e6        ; BYTE read
-            //   [di] = al              ; BYTE write
-            // word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
-            uint16_t di_addr = (uint16_t)cur_idx * 3 + dx_base;
-            uint16_t end_addr = (uint16_t)end_idx * 3 + dx_base;
-            uint16_t saved_word = *(uint16_t*)(s + di_addr);     // ax = [di] (WORD)
-            uint8_t  saved_b    = s[di_addr + 2];                // al = [di+2] (BYTE)
-            *(uint16_t*)(s + 0x8504) = saved_word;               // word_309e4 = ax (WORD)
-            s[0x8506] = saved_b;                                 // byte_309e6 = al (BYTE)
-            uint16_t count = ((uint16_t)cur_idx - (uint16_t)end_idx) * 3;
-            memmove(s + end_addr + 3, s + end_addr, count);     // REP MOVSB backward
-            *(uint16_t*)(s + end_addr)     = saved_word;         // [di-2] = ax (WORD)
-            s[end_addr + 2] = saved_b;                           // [di] = al (BYTE)
-            // Second rotation with dx=0x7F02
-            dx_base = 0x7F02;
-            di_addr = (uint16_t)cur_idx * 3 + dx_base;
-            end_addr = (uint16_t)end_idx * 3 + dx_base;
-            saved_word = *(uint16_t*)(s + di_addr);
-            saved_b    = s[di_addr + 2];
-            *(uint16_t*)(s + 0x8504) = saved_word;
-            s[0x8506] = saved_b;
-            count = ((uint16_t)cur_idx - (uint16_t)end_idx) * 3;
-            memmove(s + end_addr + 3, s + end_addr, count);
-            *(uint16_t*)(s + end_addr)     = saved_word;
-            s[end_addr + 2] = saved_b;
+            // orig: mov dx,8202h; call sub_1020F; mov dx,7F02h; call sub_1020F
+            v2_sub_1020f(s, (uint16_t)si, 0x8202);
+            v2_sub_1020f(s, (uint16_t)si, 0x7F02);
         }
     }
     *(uint16_t*)(s + 0x7EFE) = 2;                                  // word_303DE = 2
@@ -4666,6 +4650,22 @@ static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
 // Called when level changes (from sub_10138 or game start).
 // sub_14207 init: sub_15517 + clear priority + collision.
 // Exact replica of eip 0x4207-0x4210. Called at start of every VM pass.
+// sub_12fe5 sub-sprite loop body (orig loc_1301B): apply the per-frame
+// position delta to every sub-sprite of object di. The orig loop is a
+// DO-WHILE (body, then ADD si,2 / CMP si,cx / JL) — it runs at least once
+// even if [di+1A85h] >= [di+1AADh]. Callers replicate the gates
+// ([di+1355h]!=0, [di+1AD5h]!=0, (tx|ty)!=0) before calling.
+static void v2_subsprite_delta_apply(uint8_t* s, uint16_t di, uint16_t tx, uint16_t ty) {
+    uint16_t cx = *(uint16_t*)(s + di + 0x1AAD);
+    uint16_t si = *(uint16_t*)(s + di + 0x1A85);
+    do {
+        *(uint16_t*)(s + (uint16_t)(si + 0x64D)) += tx;     // ADD [si+64Dh], ax
+        *(uint16_t*)(s + (uint16_t)(si + 0x74D)) += ty;     // ADD [si+74Dh], dx
+        *(uint16_t*)(s + (uint16_t)(si + 0x114D)) = 0x202;  // MOV [si+114Dh], 202h
+        si += 2;
+    } while ((int16_t)si < (int16_t)cx);                     // CMP si,cx / JL
+}
+
 static void v2_sub_14207_init(uint8_t* ds) {
     // sub_15517 (eip 0x5517-0x552F): clear X/Y velocity for all objects
     for (int16_t si = (int16_t)*(uint16_t*)(ds + 0x372) - 2; si >= 0; si -= 2) {
@@ -5062,12 +5062,7 @@ static void v2_sub_11080(uint8_t* s) {
                 int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
                 int16_t ty = delta_type0(dy), tx = delta_type0(dx_v);
                 if (tx == 0 && ty == 0) continue;
-                uint16_t ss_end = *(uint16_t*)(s + di2 + 0x1AAD);
-                for (uint16_t si2 = *(uint16_t*)(s + di2 + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                    *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                    *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                    *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-                }
+                v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
             }
         }
         slot2e_trace("SF1-post-12fc6");
@@ -5151,12 +5146,7 @@ static void v2_sub_11080(uint8_t* s) {
                     int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
                     int16_t ty = delta_type1(dy), tx = delta_type1(dx_v);
                     if (tx == 0 && ty == 0) continue;
-                    uint16_t ss_end = *(uint16_t*)(s + di2 + 0x1AAD);
-                    for (uint16_t si2 = *(uint16_t*)(s + di2 + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                        *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                        *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                        *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-                    }
+                    v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
                 }
             }
             v2_sub_10130(s); // sub_10130: VGA vsync wait
@@ -5200,12 +5190,7 @@ static void v2_sub_11080(uint8_t* s) {
                     int16_t dx_v = (int16_t)(*(uint16_t*)(s + di3 + 0x173D) - *(uint16_t*)(s + di3 + 0x13A5));
                     int16_t ty = delta_type2(dy), tx = delta_type2(dx_v);
                     if (tx == 0 && ty == 0) continue;
-                    uint16_t ss_end = *(uint16_t*)(s + di3 + 0x1AAD);
-                    for (uint16_t si2 = *(uint16_t*)(s + di3 + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                        *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                        *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                        *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-                    }
+                    v2_subsprite_delta_apply(s, (uint16_t)di3, (uint16_t)tx, (uint16_t)ty);
                 }
             }
             // sub_11792: HUD full update (original: sub_120ff, sub_12199, loc_1205b, sub_11B0B)
@@ -8751,16 +8736,18 @@ static void v2_vm_op_3A(V2VM& vm) {
     v2_vm_sub_15505(vm, si, di);
 }
 
+static void v2_vm_sub_13757(V2VM& vm, uint16_t si);  // vertical-flip body (defined below)
+
 // 0x09 (sub_13743): Conditional vflip — if flag 0x80 NOT set → call sub_13757. 0 bytes.
 static void v2_vm_op_09(V2VM& vm) {
     uint16_t si = vm.global_r(0x42);
-    if (!(vm.ds_read(si + 0x1585) & 0x80)) v2_vm_op_0C(vm);
+    if (!(vm.ds_read(si + 0x1585) & 0x80)) v2_vm_sub_13757(vm, si);
 }
 
 // 0x0A (sub_13733): Conditional vflip — if flag 0x80 set → call sub_13757. 0 bytes.
 static void v2_vm_op_0A(V2VM& vm) {
     uint16_t si = vm.global_r(0x42);
-    if (vm.ds_read(si + 0x1585) & 0x80) v2_vm_op_0C(vm);
+    if (vm.ds_read(si + 0x1585) & 0x80) v2_vm_sub_13757(vm, si);
 }
 
 // 0xD4 (sub_1531c): velocity direction from position delta. Exact replica.
@@ -8786,8 +8773,11 @@ static void v2_vm_op_D4(V2VM& vm) {
     int16_t delta_y = (int16_t)(target_y - vm.ds_read(si + 0x1765));
     if (delta_y < 0) { delta_y = -delta_y; vm.ds_write(0x40, 1); }
     vm.ds_write(0x6E, (uint16_t)delta_y);
-    // max(|dx|, |dy|)
-    uint16_t max_d = (uint16_t)delta_x >= (uint16_t)delta_y ? (uint16_t)delta_x : (uint16_t)delta_y;
+    // max: orig 0x535E: ax=dy; CMP ax,[6Ch]; JGE keep → SIGNED compare of the
+    // operands, tie keeps dy. (|delta| can be 0x8000 after NEG — unsigned max
+    // picks the wrong side there.)
+    uint16_t max_d = ((int16_t)delta_y >= (int16_t)delta_x) ? (uint16_t)delta_y
+                                                            : (uint16_t)delta_x;
     // Read threshold byte
     uint8_t threshold = vm.read_u8();
     vm.ds_write(0x32, threshold);
@@ -8812,13 +8802,15 @@ static void v2_vm_op_D4(V2VM& vm) {
     si = vm.global_r(0x42);
     if (vm.ds_read(si + 0x1585) & 0x40) vm.ds_write(0x3E, vm.ds_read(0x3E) ^ 1);
     if (vm.ds_read(si + 0x1585) & 0x80) vm.ds_write(0x40, vm.ds_read(0x40) ^ 1);
-    // Combine: (ds34_high | ds6c_low), swap bytes
-    uint16_t xr = (vm.ds_read(0x34) & 0xFF00) | (vm.ds_read(0x6C) & 0xFF);
-    xr = ((xr >> 8) & 0xFF) | ((xr & 0xFF) << 8); // XCHG ah, al
+    // Combine: orig 0x53B7: ax=(ds:34h & FF00h); OR ax, ds:6Ch — the OR takes
+    // the FULL word at 0x6C (it exceeds a byte when the halving loop didn't
+    // run), NOT just its low byte. Then XCHG ah,al.
+    uint16_t xr = (uint16_t)((vm.ds_read(0x34) & 0xFF00) | vm.ds_read(0x6C));
+    xr = (uint16_t)(((xr >> 8) & 0xFF) | ((xr & 0xFF) << 8)); // XCHG ah, al
     if (vm.ds_read(0x3E) != 0) xr = (uint16_t)(-(int16_t)xr);
     vm.ds_write(si + 0x164D, xr);
-    uint16_t yr = (vm.ds_read(0x36) & 0xFF00) | (vm.ds_read(0x6E) & 0xFF);
-    yr = ((yr >> 8) & 0xFF) | ((yr & 0xFF) << 8);
+    uint16_t yr = (uint16_t)((vm.ds_read(0x36) & 0xFF00) | vm.ds_read(0x6E));
+    yr = (uint16_t)(((yr >> 8) & 0xFF) | ((yr & 0xFF) << 8));
     if (vm.ds_read(0x40) != 0) yr = (uint16_t)(-(int16_t)yr);
     vm.ds_write(si + 0x1675, yr);
 }
@@ -9188,26 +9180,70 @@ static void v2_vm_op_15(V2VM& vm) {
 }
 
 // 0x0C (sub_13753): Vertical flip — toggle vflip, mirror Y bounds, update sub-sprites. 0 bytes.
-static void v2_vm_op_0C(V2VM& vm) {
-    uint16_t si = vm.global_r(0x42);
-    // XOR flip flag
-    vm.ds_write(si + 0x1585, vm.ds_read(si + 0x1585) ^ 0x80);
-    // Mirror Y bounds: new = 2*center - old - 1
-    uint16_t y = vm.ds_read(si + 0x1765);
-    uint16_t new_14E5 = y + y - vm.ds_read(si + 0x150D) - 1;
-    uint16_t new_150D = y + y - vm.ds_read(si + 0x14E5) - 1;
-    vm.ds_write(si + 0x150D, new_150D);
-    vm.ds_write(si + 0x14E5, new_14E5);
-    // Update sub-sprites if present
-    if (vm.ds_read(si + 0x1AD5) != 0) {
-        uint16_t dx2 = y * 2;
-        uint16_t end_di = vm.ds_read(si + 0x1AAD);
-        for (uint16_t di = vm.ds_read(si + 0x1A85); (int16_t)di < (int16_t)end_di; di += 2) {
-            vm.ds_write(di + 0x74D, dx2 - vm.ds_read(di + 0x74D) - vm.ds_read(di + 0x0C4D));
-            vm.ds_write(di + 0x44D, vm.ds_read(di + 0x44D) ^ 0x400);
-            vm.ds_write(di + 0x114D, 0x202);
-        }
+// sub_136a0 (seg000 eip 0x36A0-0x36FB): horizontal-flip body, shared by VM
+// ops 07 (sub_1368c), 08 (sub_1367c) and 0B (sub_1369c). XOR flag 0x40,
+// mirror X bounds around 2*[si+173Dh], then the sub-sprite loop — which in
+// the orig is a DO-WHILE (body first, CMP di,cx / JL at the end): it runs
+// at least once whenever [si+1AD5h] != 0, even if [si+1A85h] >= [si+1AADh].
+static void v2_vm_sub_136a0(V2VM& vm, uint16_t si) {
+    vm.ds_write(si + 0x1585, vm.ds_read(si + 0x1585) ^ 0x40);        // XOR [si+1585h], 40h
+    uint16_t ax = (uint16_t)((uint16_t)(vm.ds_read(si + 0x173D) << 1)
+                             - vm.ds_read(si + 0x155D) - 1);          // ax = [173D]*2-[155D]-1
+    uint16_t dx = (uint16_t)((uint16_t)(vm.ds_read(si + 0x173D) << 1)
+                             - vm.ds_read(si + 0x1535) - 1);          // dx = [173D]*2-[1535]-1
+    vm.ds_write(si + 0x155D, dx);                                     // [si+155Dh] = dx
+    vm.ds_write(si + 0x1535, ax);                                     // [si+1535h] = ax
+    if (vm.ds_read(si + 0x1AD5) != 0) {                               // CMP [si+1AD5h],0 / JZ
+        uint16_t dx2 = (uint16_t)(vm.ds_read(si + 0x173D) << 1);      // orig re-reads [si+173Dh]
+        uint16_t cx = vm.ds_read(si + 0x1AAD);
+        uint16_t di = vm.ds_read(si + 0x1A85);
+        do {                                                          // loc_136D9
+            vm.ds_write((uint16_t)(di + 0x64D),
+                        (uint16_t)(dx2 - vm.ds_read((uint16_t)(di + 0x64D))
+                                       - vm.ds_read((uint16_t)(di + 0xC4D))));
+            vm.ds_write((uint16_t)(di + 0x44D),
+                        vm.ds_read((uint16_t)(di + 0x44D)) ^ 0x200);  // XOR [di+44Dh], 200h
+            vm.ds_write((uint16_t)(di + 0x114D), 0x202);              // [di+114Dh] = 202h
+            di += 2;
+        } while ((int16_t)di < (int16_t)cx);                          // CMP di,cx / JL
     }
+}
+
+// sub_13757 (seg000 eip 0x3757-0x37B7): vertical-flip body, shared by VM
+// ops 09 (sub_13743), 0A (sub_13733) and 0C (sub_13753). Same shape as
+// sub_136a0 on the Y axis: flag 0x80, bounds [si+150Dh]/[si+14E5h] around
+// 2*[si+1765h], sub-sprite loop is a DO-WHILE (runs at least once when
+// [si+1AD5h] != 0).
+static void v2_vm_sub_13757(V2VM& vm, uint16_t si) {
+    vm.ds_write(si + 0x1585, vm.ds_read(si + 0x1585) ^ 0x80);        // XOR [si+1585h], 80h
+    uint16_t ax = (uint16_t)((uint16_t)(vm.ds_read(si + 0x1765)
+                             + vm.ds_read(si + 0x1765))
+                             - vm.ds_read(si + 0x150D) - 1);          // ax = [1765]*2-[150D]-1
+    uint16_t dx = (uint16_t)((uint16_t)(vm.ds_read(si + 0x1765)
+                             + vm.ds_read(si + 0x1765))
+                             - vm.ds_read(si + 0x14E5) - 1);          // dx = [1765]*2-[14E5]-1
+    vm.ds_write(si + 0x150D, dx);                                     // [si+150Dh] = dx
+    vm.ds_write(si + 0x14E5, ax);                                     // [si+14E5h] = ax
+    if (vm.ds_read(si + 0x1AD5) != 0) {                               // CMP [si+1AD5h],0 / JZ
+        uint16_t dx2 = (uint16_t)(vm.ds_read(si + 0x1765) << 1);      // orig re-reads [si+1765h]
+        uint16_t cx = vm.ds_read(si + 0x1AAD);
+        uint16_t di = vm.ds_read(si + 0x1A85);
+        do {                                                          // loc_13795
+            vm.ds_write((uint16_t)(di + 0x74D),
+                        (uint16_t)(dx2 - vm.ds_read((uint16_t)(di + 0x74D))
+                                       - vm.ds_read((uint16_t)(di + 0xC4D))));
+            vm.ds_write((uint16_t)(di + 0x44D),
+                        vm.ds_read((uint16_t)(di + 0x44D)) ^ 0x400);  // XOR [di+44Dh], 400h
+            vm.ds_write((uint16_t)(di + 0x114D), 0x202);              // [di+114Dh] = 202h
+            di += 2;
+        } while ((int16_t)di < (int16_t)cx);                          // CMP di,cx / JL
+    }
+}
+
+static void v2_vm_op_0C(V2VM& vm) {
+    // sub_13753: MOV si, ds:42h; falls through to sub_13757.
+    uint16_t si = vm.global_r(0x42);
+    v2_vm_sub_13757(vm, si);
 }
 
 // 0x0D (sub_142dc): Clear bit in ds:[byte+0x356]. 0 bytes.
@@ -10015,27 +10051,10 @@ static void v2_vm_op_23(V2VM& vm) {
 // 0x08 (sub_1367c): Horizontal flip if flag 0x40 set. 0 bytes.
 // Like 0x0C but for horizontal direction. Calls sub_136a0 if flag set.
 static void v2_vm_op_08(V2VM& vm) {
+    // sub_1367c: TEST [si+1585h], 40h / JZ ret → call sub_136a0 when set
     uint16_t si = vm.global_r(0x42);
     if (!(vm.ds_read(si + 0x1585) & 0x40)) return;
-    // sub_136a0: horizontal flip logic
-    // XOR flag 0x40
-    vm.ds_write(si + 0x1585, vm.ds_read(si + 0x1585) ^ 0x40);
-    // Mirror X bounds: new = 2*center - old - 1
-    uint16_t x = vm.ds_read(si + 0x173D);
-    uint16_t new_1535 = x + x - vm.ds_read(si + 0x155D) - 1;
-    uint16_t new_155D = x + x - vm.ds_read(si + 0x1535) - 1;
-    vm.ds_write(si + 0x155D, new_155D);
-    vm.ds_write(si + 0x1535, new_1535);
-    // Update sub-sprites if present
-    if (vm.ds_read(si + 0x1AD5) != 0) {
-        uint16_t dx2 = x * 2;
-        uint16_t end_di = vm.ds_read(si + 0x1AAD);
-        for (uint16_t di = vm.ds_read(si + 0x1A85); (int16_t)di < (int16_t)end_di; di += 2) {
-            vm.ds_write(di + 0x64D, dx2 - vm.ds_read(di + 0x64D) - vm.ds_read(di + 0x0C4D));
-            vm.ds_write(di + 0x44D, vm.ds_read(di + 0x44D) ^ 0x200);
-            vm.ds_write(di + 0x114D, 0x202);
-        }
-    }
+    v2_vm_sub_136a0(vm, si);
 }
 
 // 0x5D (sub_14771): Subtract acc from value at address. 2 bytes.
@@ -10105,13 +10124,16 @@ static void v2_vm_op_10(V2VM& vm) {
     uint16_t di = vm.global_r(0x42);
 
     // === sub_13c93 logic ===
-    // 1. Clear all sub-sprites if 0x1AD5 != 0
+    // 1. Clear all sub-sprites if 0x1AD5 != 0. Orig loop loc_13CA2 is a
+    // DO-WHILE (body first, CMP si,ax / JL at end) — at least one iteration.
     if (vm.ds_read(di + 0x1AD5) != 0) {
-        uint16_t end_si = vm.ds_read(di + 0x1AAD);
-        for (uint16_t si = vm.ds_read(di + 0x1A85); (int16_t)si < (int16_t)end_si; si += 2) {
-            vm.ds_write(si + 0x44D, 0);          // clear flags
-            vm.ds_write(si + 0x114D, 0x400);      // set dirty = 0x400
-        }
+        uint16_t ax = vm.ds_read(di + 0x1AAD);
+        uint16_t si = vm.ds_read(di + 0x1A85);
+        do {
+            vm.ds_write((uint16_t)(si + 0x44D), 0);       // clear flags
+            vm.ds_write((uint16_t)(si + 0x114D), 0x400);  // set dirty = 0x400
+            si += 2;
+        } while ((int16_t)si < (int16_t)ax);              // CMP si,ax / JL
     }
 
     // 2. Unlink from linked list (0x1805 = prev, 0x182D = next)
@@ -10199,26 +10221,34 @@ static void v2_vm_op_1C(V2VM& vm) {
 // 0x3F (sub_145e5): OR 0x4000 on all sub-sprites + set dirty. 0 bytes.
 // Loop from [obj+0x1A85] to [obj+0x1AAD], OR flags with 0x4000,
 // OR byte [si+0x114E] with 2 (equivalent to OR word 0x114D with 0x0200).
+// Orig loop is a DO-WHILE with NO [0x1AD5] gate (loc_145F1: body first,
+// CMP si,cx / JL at end) — the body runs at least once unconditionally.
 static void v2_vm_op_3F(V2VM& vm) {
     uint16_t obj = vm.global_r(0x42);
-    uint16_t end = vm.ds_read(obj + 0x1AAD);
-    for (uint16_t si = vm.ds_read(obj + 0x1A85); (int16_t)si < (int16_t)end; si += 2) {
-        vm.ds_write(si + 0x44D, vm.ds_read(si + 0x44D) | 0x4000);
+    uint16_t cx = vm.ds_read(obj + 0x1AAD);
+    uint16_t si = vm.ds_read(obj + 0x1A85);
+    do {
+        vm.ds_write((uint16_t)(si + 0x44D),
+                    vm.ds_read((uint16_t)(si + 0x44D)) | 0x4000);
         // OR byte at [si+0x114E] with 2 — high byte of word at 0x114D
-        uint16_t dirty = vm.ds_read(si + 0x114D);
-        dirty |= 0x0200; // 2 << 8 = OR on high byte
-        vm.ds_write(si + 0x114D, dirty);
-    }
+        vm.ds_write((uint16_t)(si + 0x114D),
+                    vm.ds_read((uint16_t)(si + 0x114D)) | 0x0200);
+        si += 2;
+    } while ((int16_t)si < (int16_t)cx);                 // CMP si,cx / JL
 }
 
 // 0x40 (sub_14604): Clear bits 13-14 on all sub-sprites. 0 bytes.
+// Same DO-WHILE shape as sub_145e5 (loc_14610) — at least one iteration.
 static void v2_vm_op_40(V2VM& vm) {
     uint16_t obj = vm.global_r(0x42);
-    uint16_t end = vm.ds_read(obj + 0x1AAD);
-    for (uint16_t si = vm.ds_read(obj + 0x1A85); (int16_t)si < (int16_t)end; si += 2) {
-        vm.ds_write(si + 0x44D, vm.ds_read(si + 0x44D) & 0x9FFF);
-        vm.ds_write(si + 0x114D, 2);
-    }
+    uint16_t cx = vm.ds_read(obj + 0x1AAD);
+    uint16_t si = vm.ds_read(obj + 0x1A85);
+    do {
+        vm.ds_write((uint16_t)(si + 0x44D),
+                    vm.ds_read((uint16_t)(si + 0x44D)) & 0x9FFF);
+        vm.ds_write((uint16_t)(si + 0x114D), 2);
+        si += 2;
+    } while ((int16_t)si < (int16_t)cx);                 // CMP si,cx / JL
 }
 
 // 0x5C (sub_1474b): Subtract acc from indexed field. 1 byte.
@@ -10338,6 +10368,35 @@ extern "C" void v2_fntest_call_sub_1746c(uint8_t* test_shadow, uint16_t si_speed
 }
 extern "C" void v2_fntest_call_sub_101be(uint8_t* test_shadow) {
     v2_sub_101be(test_shadow);
+}
+extern "C" void v2_fntest_call_sub_10255(uint8_t* test_shadow, uint16_t si, uint16_t dx) {
+    v2_sub_10255(test_shadow, si, dx);
+}
+extern "C" void v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, uint16_t dx) {
+    v2_sub_1020f(test_shadow, si, dx);
+}
+// Class-B: per-object VM exec (v2_vm_execute_object, fwd-declared at top).
+// v2_vm_accumulator is a file-scope global carried across opcodes — reset it
+// so each synthetic case starts from the canonical zero accumulator.
+extern "C" void v2_fntest_call_vm_exec(uint8_t* test_shadow, uint16_t si) {
+    extern int v2_fntest_vm_soft;
+    v2_vm_init_table();      // selftest bypasses the game init that fills the optable
+    // The accumulator lives at DS:0x8A (macro over v2_vm_acc_base) — point it
+    // at the case image for the call so acc is part of the compared DS state,
+    // exactly like the oracle (whose opcodes use ds:0x8A too).
+    uint8_t* saved_acc_base = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    v2_fntest_vm_soft = 1;   // VM FATALs (op>0xD7 etc.) become soft aborts (→2)
+    // Segment parity with the oracle: resolve EVERY segment linearly into
+    // m2c::m (the oracle's raddr does exactly that). Without this, seg values
+    // that happen to equal a zeroed shadow-segment key (e.g. es=[ds:0x2E67]=0
+    // in a spawn path) would resolve to a v2 shadow buffer while the oracle
+    // reads real low memory — incomparable.
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    v2_vm_execute_object(test_shadow, si);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc_base;
 }
 extern "C" void v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si) {
     v2_sub_13dd6(test_shadow, si);
@@ -10895,23 +10954,7 @@ static void v2_vm_op_B3(V2VM& vm) {
 // sub_1369c: MOV si, ds:42h; falls through to sub_136a0 (full hflip with sub-sprites).
 static void v2_vm_op_0B(V2VM& vm) {
     uint16_t si = vm.global_r(0x42);
-    // sub_136a0: XOR flag + mirror bounds + sub-sprite loop
-    vm.ds_write(si + 0x1585, vm.ds_read(si + 0x1585) ^ 0x40);
-    uint16_t x = vm.ds_read(si + 0x173D);
-    uint16_t new_1535 = x + x - vm.ds_read(si + 0x155D) - 1;
-    uint16_t new_155D = x + x - vm.ds_read(si + 0x1535) - 1;
-    vm.ds_write(si + 0x155D, new_155D);
-    vm.ds_write(si + 0x1535, new_1535);
-    // Sub-sprite hflip loop (was MISSING — sub_136a0 includes this)
-    if (vm.ds_read(si + 0x1AD5) != 0) {
-        uint16_t dx2 = x * 2;
-        uint16_t end_di = vm.ds_read(si + 0x1AAD);
-        for (uint16_t di = vm.ds_read(si + 0x1A85); (int16_t)di < (int16_t)end_di; di += 2) {
-            vm.ds_write(di + 0x64D, dx2 - vm.ds_read(di + 0x64D) - vm.ds_read(di + 0x0C4D));
-            vm.ds_write(di + 0x44D, vm.ds_read(di + 0x44D) ^ 0x200);
-            vm.ds_write(di + 0x114D, 0x202);
-        }
-    }
+    v2_vm_sub_136a0(vm, si);
 }
 
 // 0x17 (sub_143f2): Set [obj+141D]=0, then read 2 signed bytes as X/Y velocity. 2 bytes.
@@ -12141,25 +12184,10 @@ static void v2_vm_op_BE(V2VM& vm) {
 
 // 0x07 (sub_1368c): Horizontal flip if NOT hflip. 0 bytes. Opposite of 0x08.
 static void v2_vm_op_07(V2VM& vm) {
-    // sub_1368c: if NOT flipped, call sub_136a0
+    // sub_1368c: TEST [si+1585h], 40h / JNZ ret → call sub_136a0 when clear
     uint16_t si = vm.global_r(0x42);
     if (vm.ds_read(si + 0x1585) & 0x40) return;
-    // sub_136a0: exact replica (same code as op_08)
-    vm.ds_write(si + 0x1585, vm.ds_read(si + 0x1585) ^ 0x40);
-    uint16_t dx = vm.ds_read(si + 0x173D) << 1;
-    uint16_t new_1535 = dx - vm.ds_read(si + 0x155D) - 1;
-    uint16_t new_155D = dx - vm.ds_read(si + 0x1535) - 1;
-    vm.ds_write(si + 0x155D, new_155D);
-    vm.ds_write(si + 0x1535, new_1535);
-    if (vm.ds_read(si + 0x1AD5) != 0) {
-        uint16_t dx2 = vm.ds_read(si + 0x173D) << 1;
-        uint16_t cx = vm.ds_read(si + 0x1AAD);
-        for (uint16_t di = vm.ds_read(si + 0x1A85); (int16_t)di < (int16_t)cx; di += 2) {
-            vm.ds_write(di + 0x64D, dx2 - vm.ds_read(di + 0x64D) - vm.ds_read(di + 0xC4D));
-            vm.ds_write(di + 0x44D, vm.ds_read(di + 0x44D) ^ 0x200);
-            vm.ds_write(di + 0x114D, 0x202);
-        }
-    }
+    v2_vm_sub_136a0(vm, si);
 }
 
 // 0x26 (sub_14edd): Read 2 mode bytes, 4 dispatches (2×off_30C98 + 2×off_30CA2).
@@ -12690,16 +12718,20 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             // After loop: hflip check → JMP loc_136FC if flag 0x40 set
             di = vm.global_r(0x42);
             if (vm.ds_read(di + 0x1585) & 0x40) {
-                // loc_136FC: flip X for all sub-sprites using [1A85,1AAD) range
+                // loc_136FC: flip X for all sub-sprites using [1A85,1AAD) range.
+                // Orig loop loc_13711 is a DO-WHILE (body, then ADD/CMP/JL) —
+                // at least one iteration when [di+1AD5h] != 0.
                 if (vm.ds_read(di + 0x1AD5) != 0) {
                     uint16_t dx2 = vm.ds_read(di + 0x173D) * 2; // parent X * 2
                     uint16_t cx_end = vm.ds_read(di + 0x1AAD);
-                    for (uint16_t d = vm.ds_read(di + 0x1A85); (int16_t)d < (int16_t)cx_end; d += 2) {
+                    uint16_t d = vm.ds_read(di + 0x1A85);
+                    do {
                         uint16_t ax_flip = dx2 - vm.ds_read(d + 0x64D) - vm.ds_read(d + 0x0C4D);
                         vm.ds_write(d + 0x64D, ax_flip);
                         vm.ds_write(d + 0x44D, vm.ds_read(d + 0x44D) | 0x200); // OR, not XOR!
                         vm.ds_write(d + 0x114D, 0x202);
-                    }
+                        d += 2;
+                    } while ((int16_t)d < (int16_t)cx_end);
                 }
             }
             return true;
@@ -12731,16 +12763,19 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             // Original: TEST [si+1585h], 80h; JZ ret; JMP loc_137B8
             // si at this point = end_si (post-loop). loc_137B8 uses si as object.
             if (vm.ds_read(si + 0x1585) & 0x80) {
-                // loc_137B8: flip Y for all sub-sprites
+                // loc_137B8: flip Y for all sub-sprites. Orig loop loc_137CE
+                // is a DO-WHILE — at least one iteration when [si+1AD5h] != 0.
                 if (vm.ds_read(si + 0x1AD5) != 0) {
                     uint16_t dx2 = vm.ds_read(si + 0x1765) * 2;
                     uint16_t cx_end = vm.ds_read(si + 0x1AAD);
-                    for (uint16_t d = vm.ds_read(si + 0x1A85); (int16_t)d < (int16_t)cx_end; d += 2) {
+                    uint16_t d = vm.ds_read(si + 0x1A85);
+                    do {
                         uint16_t ay = dx2 - vm.ds_read(d + 0x74D) - vm.ds_read(d + 0x0C4D);
                         vm.ds_write(d + 0x74D, ay);
                         vm.ds_write(d + 0x44D, vm.ds_read(d + 0x44D) | 0x400);
                         vm.ds_write(d + 0x114D, 0x202);
-                    }
+                        d += 2;
+                    } while ((int16_t)d < (int16_t)cx_end);
                 }
             }
             return true;
@@ -13155,6 +13190,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
         }
 
         default: {
+            extern int v2_fntest_vm_soft;
+            if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 2; return false; }  // fn-test: soft abort
             fprintf(stderr, "FATAL: unimplemented anim cmd 0x%02X (handler=0x%04X) obj=%d pc=%04X\n",
                 cmd, handler, vm.obj, vm.pc);
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
@@ -14602,10 +14639,14 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
         opcode &= 0xFF;
         if (opcode == 0x01) break; // collision VM yield
         if (opcode > 0xD7) {
+            extern int v2_fntest_vm_soft;
+            if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 2; return; }
             fprintf(stderr, "FATAL: collision VM opcode 0x%02X > 0xD7 at pc=%04X obj=%d\n", opcode, vm.pc-1, obj_si);
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
         if (!v2_vm_optable[opcode]) {
+            extern int v2_fntest_vm_soft;
+            if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 2; return; }
             fprintf(stderr, "FATAL: unimplemented collision VM opcode 0x%02X at pc=%04X obj=%d\n", opcode, vm.pc-1, obj_si);
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
@@ -15052,10 +15093,14 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         }
 
         if (opcode > 0xD7) {
+            extern int v2_fntest_vm_soft;
+            if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 2; return; }  // fn-test: soft abort → runner scores it
             fprintf(stderr, "FATAL: VM opcode 0x%02X > 0xD7 at pc=%04X obj=%d\n", opcode, pc_before, obj_idx);
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
         if (!v2_vm_optable[opcode]) {
+            extern int v2_fntest_vm_soft;
+            if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 2; return; }
             fprintf(stderr, "FATAL: unimplemented VM opcode 0x%02X at pc=%04X obj=%d\n", opcode, pc_before, obj_idx);
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
@@ -16041,12 +16086,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 if (bx_type == 0) { ty = delta_type0(dy); tx = delta_type0(dx_val); }
                 else { ty = delta_type1(dy); tx = delta_type1(dx_val); }
                 if (tx == 0 && ty == 0) return;
-                uint16_t ss_end = *(uint16_t*)(s + di_obj + 0x1AAD);
-                for (uint16_t si2 = *(uint16_t*)(s + di_obj + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                    *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                    *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                    *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-                }
+                v2_subsprite_delta_apply(s, (uint16_t)di_obj, (uint16_t)tx, (uint16_t)ty);
             };
 
             // sub_12fc6(bx=0): already called in POST-VM as sub_12fc6 viking 1
@@ -16123,12 +16163,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 int16_t dx_v = (int16_t)(*(uint16_t*)(s + di3 + 0x173D) - *(uint16_t*)(s + di3 + 0x13A5));
                 int16_t ty = delta_type2(dy), tx = delta_type2(dx_v);
                 if (tx == 0 && ty == 0) continue;
-                uint16_t ss_end = *(uint16_t*)(s + di3 + 0x1AAD);
-                for (uint16_t si2 = *(uint16_t*)(s + di3 + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                    *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                    *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                    *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-                }
+                v2_subsprite_delta_apply(s, (uint16_t)di3, (uint16_t)tx, (uint16_t)ty);
             }
         }
 
@@ -17174,12 +17209,7 @@ void v2_phase_render1(uint16_t ds_val) {
             int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
             int16_t ty = delta_type0(dy), tx = delta_type0(dx_v);
             if (tx == 0 && ty == 0) continue;
-            uint16_t ss_end = *(uint16_t*)(s + di2 + 0x1AAD);
-            for (uint16_t si2 = *(uint16_t*)(s + di2 + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-            }
+            v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
         }
     }
 
@@ -17327,12 +17357,7 @@ void v2_phase_post_flip1(uint16_t ds_val) {
             int16_t dx_v = (int16_t)(*(uint16_t*)(s + di2 + 0x173D) - *(uint16_t*)(s + di2 + 0x13A5));
             int16_t ty = delta_type1(dy), tx = delta_type1(dx_v);
             if (tx == 0 && ty == 0) continue;
-            uint16_t ss_end = *(uint16_t*)(s + di2 + 0x1AAD);
-            for (uint16_t si2 = *(uint16_t*)(s + di2 + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-            }
+            v2_subsprite_delta_apply(s, (uint16_t)di2, (uint16_t)tx, (uint16_t)ty);
         }
     }
     // sub_12d2c: invincibility timer
@@ -17434,12 +17459,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             int16_t dx_v = (int16_t)(*(uint16_t*)(s + di3 + 0x173D) - *(uint16_t*)(s + di3 + 0x13A5));
             int16_t ty = delta_type2(dy), tx = delta_type2(dx_v);
             if (tx == 0 && ty == 0) continue;
-            uint16_t ss_end = *(uint16_t*)(s + di3 + 0x1AAD);
-            for (uint16_t si2 = *(uint16_t*)(s + di3 + 0x1A85); (int16_t)si2 < (int16_t)ss_end; si2 += 2) {
-                *(uint16_t*)(s + si2 + 0x64D) += (uint16_t)tx;
-                *(uint16_t*)(s + si2 + 0x74D) += (uint16_t)ty;
-                *(uint16_t*)(s + si2 + 0x114D) = 0x202;
-            }
+            v2_subsprite_delta_apply(s, (uint16_t)di3, (uint16_t)tx, (uint16_t)ty);
         }
     }
     // sub_11792: HUD update — orig calls sub_120FF + sub_12199 + loc_1205B + sub_11B0B.
