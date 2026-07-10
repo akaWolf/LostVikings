@@ -1471,15 +1471,19 @@ const uint32_t FT_VM_ZONE = 0x10000;        // full 64KB code segment
 const uint16_t FT_VM_PC = 0x0100;
 
 uint8_t g_vm_es_in[FT_VM_ZONE], g_vm_es_orig[FT_VM_ZONE];
+uint8_t g_vm_es_patch[8]; int g_vm_es_patch_n = 0;   // zone[0..n) bytes for crafted headers
 
 struct FtVmObj { uint16_t flags, anim, timer, x, y, yvel, ystart, yend; };
 
 long g_vmop_ub = 0;   // vmop cases skipped as orig-UB
 
+struct FtWr { uint16_t addr, val; };   // extra DS word for directed cases
+
 bool ft_synth_case_vmop(uint8_t op, const uint8_t* args, int n_args,
                         const FtVmObj& o, uint32_t bg_seed,
                         const char* group, FtSynthStats& st, long& diff_budget,
-                        long* op_fail)
+                        long* op_fail,
+                        const FtWr* extra = nullptr, int n_extra = 0)
 {
     st.cases++;
     uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
@@ -1506,11 +1510,14 @@ bool ft_synth_case_vmop(uint8_t op, const uint8_t* args, int n_args,
     static const uint16_t OF[] = { 0x1305, 0x13CD, 0x1495, 0x14BD, 0x1535, 0x155D,
                                    0x1855, 0x18AD, 0x1995, 0x19E5, 0x1AD5 };
     for (uint16_t f : OF) ft_wr16(g_synth_in, (uint16_t)(si + f), bg.w());
+    // Directed-case overrides (applied last — may override anything above)
+    for (int i = 0; i < n_extra; i++) ft_wr16(g_synth_in, extra[i].addr, extra[i].val);
 
     // Build the code zone: yield carpet + [op][args] at PC
     memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
     g_vm_es_in[FT_VM_PC] = op;
     for (int i = 0; i < n_args; i++) g_vm_es_in[FT_VM_PC + 1 + i] = args[i];
+    for (int i = 0; i < g_vm_es_patch_n; i++) g_vm_es_in[i] = g_vm_es_patch[i];
 
     // --- oracle ---
     memcpy(zone, g_vm_es_in, FT_VM_ZONE);
@@ -1699,10 +1706,26 @@ int ft_selftest_vmops() {
     uint8_t a[16];
     for (int op = 0; op <= 0xD7; op++) {
         const FtOpPlan& pl = plan[op];
-        if (pl.data_len < 0 && pl.data_len != -1) continue;  // ctrl/UB: not comparable
+        if (pl.data_len == -3) continue;                     // orig-UB: not comparable
         memcpy(a, pl.base, 16);
         ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
                            0xB0000000u | (op << 8), "sweep", sweep, diff_budget, op_fail);
+        if (pl.data_len == -2) {
+            // Control-flow ops: the base run plus a few in-carpet target words
+            // planted at the first arg positions — jumps land on yields either
+            // way, both sides follow the same PC. Escaping variants are
+            // UB-skipped by the runner.
+            static const uint16_t TGT[] = { 0x0120, 0x0080, 0x0000 };
+            for (uint16_t t : TGT) {
+                memcpy(a, pl.base, 16);
+                a[0] = (uint8_t)(t & 0xFF);
+                a[1] = (uint8_t)(t >> 8);
+                ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
+                                   0xB4000000u | (op << 8) | (t & 0xFF),
+                                   "ctrl", sweep, diff_budget, op_fail);
+            }
+            continue;
+        }
         if (pl.data_len <= 0) continue;
         for (auto ptn : PAT) {                       // data-position patterns
             memcpy(a, pl.base, 16);
@@ -1711,6 +1734,9 @@ int ft_selftest_vmops() {
             ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
                                0xB1000000u | (op << 8) | ptn, "sweep", sweep, diff_budget, op_fail);
         }
+        int last_mode = -1;
+        for (int k = 0; k < pl.data_len; k++)
+            if (pl.mode_mask & (1u << k)) last_mode = k;
         for (int k = 0; k < pl.data_len; k++) {      // mode-position channel combos
             if (!(pl.mode_mask & (1u << k))) continue;
             for (auto ch : CHAN) {
@@ -1720,6 +1746,22 @@ int ft_selftest_vmops() {
                 ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
                                    0xB2000000u | (op << 12) | (k << 8) | ch,
                                    "sweep", sweep, diff_budget, op_fail);
+                // For the LAST mode position also feed non-zero data of the
+                // exact per-channel consumption ({literal:2, field:1,
+                // indirect:2, partner:1, rng:0} per 3-bit field) — earlier
+                // positions would shift the base geometry.
+                if (k == last_mode) {
+                    static const int CH_CONS[5] = { 2, 1, 2, 1, 0 };
+                    int a1 = ch & 7, b1 = (ch >> 3) & 7;
+                    int need = (a1 <= 4 ? CH_CONS[a1] : 0) + (b1 <= 4 ? CH_CONS[b1] : 0);
+                    if (need > 0 && k + 1 + need <= 16) {
+                        FtRng cr(0xB3000000u | (op << 12) | (k << 8) | ch);
+                        for (int j = 0; j < need; j++) a[k + 1 + j] = (uint8_t)cr.next();
+                        ft_synth_case_vmop((uint8_t)op, a, 16, BASE,
+                                           0xB3000000u | (op << 12) | (k << 8) | ch,
+                                           "sweep", sweep, diff_budget, op_fail);
+                    }
+                }
             }
         }
     }
@@ -1738,6 +1780,100 @@ int ft_selftest_vmops() {
         FtVmObj o = { (uint16_t)(rng.w() & (uint16_t)~0x0200), rng.w(), rng.w(),
                       rng.w(), rng.w(), rng.w(), rng.w(), rng.w() };
         ft_synth_case_vmop(op, a, 16, o, rng.next(), "fuzz", fuzz, diff_budget, op_fail);
+    }
+
+    // Phase 4: directed cases.
+    // (a) op 0x14 with ALL main object slots occupied — sub_13d52 STC path.
+    //     Orig writes the sub_13809 prologue (0x34=type, 0x36=di, 0x38=flags)
+    //     BEFORE the 13d30/13d52 gates, so the scratch trio must appear in
+    //     DS even on the fail path.
+    {
+        FtWr occ[0x14 + 1];
+        for (int k = 0; k < 0x14; k++)
+            occ[k] = { (uint16_t)(k * 2 + 0x1355), 0x4000 };   // slots 0..0x26 alive
+        occ[0x14] = { (uint16_t)(6 + 0x1355), FT_VM_TESTSEG }; // keep test obj's code seg
+        uint8_t a4[16]; memcpy(a4, plan[0x14].base, 16);
+        ft_synth_case_vmop(0x14, a4, 16, BASE, 0xD0000001u, "directed",
+                           sweep, diff_budget, op_fail, occ, 0x14 + 1);
+    }
+    // (b) op 0x14 with ds:0x32F != 0 — sub_13d30 STC path (prologue order too).
+    {
+        FtWr tr[1] = { { 0x32F, 1 } };
+        uint8_t a4[16]; memcpy(a4, plan[0x14].base, 16);
+        // NB: 0x32F!=0 also flips sub_1424c to the transition fetch (PC and
+        // ES from the anim header at [0x2E67]:[anim*0x15]); with anim=0 and
+        // [0x2E67]=0 both sides execute the same low-memory bytes — the op14
+        // handler itself is then reached only if those bytes lead to it, so
+        // this case primarily covers the transition-fetch parity.
+        ft_synth_case_vmop(0x14, a4, 16, BASE, 0xD0000002u, "directed",
+                           sweep, diff_budget, op_fail, tr, 1);
+    }
+    // (c) transition fetch INTO the test zone: [0x2E67]=TESTSEG and a crafted
+    //     anim header (anim=0 → header at zone[0..]: byte[2]=subcount flags,
+    //     WORD[3]=PC-3 → saved PC becomes FT_VM_PC) so the planted opcode
+    //     executes THROUGH the 0x32F transition path for every data op.
+    {
+        for (int op = 0; op <= 0xD7; op++) {
+            const FtOpPlan& pl = plan[op];
+            if (pl.data_len < 0 && pl.data_len != -1) continue;
+            FtWr tr[2] = { { 0x32F, 1 }, { 0x2E67, FT_VM_TESTSEG } };
+            uint8_t a4[16]; memcpy(a4, pl.base, 16);
+            // crafted header lives at zone[0..4] (anim=0): applied by the
+            // runner via g_vm_es_patch after the carpet is built.
+            g_vm_es_patch[0] = 0; g_vm_es_patch[1] = 0; g_vm_es_patch[2] = 0;
+            g_vm_es_patch[3] = (uint8_t)((FT_VM_PC - 3) & 0xFF);
+            g_vm_es_patch[4] = (uint8_t)((FT_VM_PC - 3) >> 8);
+            g_vm_es_patch_n = 5;
+            ft_synth_case_vmop((uint8_t)op, a4, 16, BASE,
+                               0xD1000000u | (op << 8), "trans", sweep, diff_budget, op_fail, tr, 2);
+            g_vm_es_patch_n = 0;
+        }
+    }
+    // (d) the same transition fetch via the object flag 0x200 (loc_14283 is
+    //     entered when flags&0x200 OR ds:0x32F != 0) — flag variant.
+    {
+        FtVmObj fo = BASE; fo.flags = 0x8200;
+        for (int op = 0; op <= 0xD7; op++) {
+            const FtOpPlan& pl = plan[op];
+            if (pl.data_len < 0 && pl.data_len != -1) continue;
+            FtWr tr[1] = { { 0x2E67, FT_VM_TESTSEG } };
+            uint8_t a4[16]; memcpy(a4, pl.base, 16);
+            g_vm_es_patch[0] = 0; g_vm_es_patch[1] = 0; g_vm_es_patch[2] = 0;
+            g_vm_es_patch[3] = (uint8_t)((FT_VM_PC - 3) & 0xFF);
+            g_vm_es_patch[4] = (uint8_t)((FT_VM_PC - 3) >> 8);
+            g_vm_es_patch_n = 5;
+            ft_synth_case_vmop((uint8_t)op, a4, 16, fo,
+                               0xD2000000u | (op << 8), "trans200", sweep, diff_budget, op_fail, tr, 1);
+            g_vm_es_patch_n = 0;
+        }
+    }
+
+    // (e2) anim-search opcodes with a SECOND live object in range: covers the
+    //      object-found paths of the sub_158xx family (word-write of
+    //      [si+17DDh] into ds:0x3B2, bounds models). Filter table entry at
+    //      [0 - 0x6B34] is set to 0x00 so filter byte 0 matches type 0x0100's
+    //      low byte; [si+17DD]=0x0100 exposes byte-vs-word 0x3B2 writes.
+    {
+        static const uint8_t SOPS[] = { 0x1F, 0x20, 0x21, 0x22, 0x23, 0x31 };
+        for (uint8_t sop : SOPS) {
+            FtWr second[12] = {
+                { 0x372, 8 },
+                { (uint16_t)(2 + 0x1355), FT_VM_TESTSEG },   // slot 2 alive
+                { (uint16_t)(2 + 0x17DD), 0x0100 },          // type word (hi byte set!)
+                { (uint16_t)(2 + 0x1535), 0x0100 },          // target X range
+                { (uint16_t)(2 + 0x155D), 0x0200 },
+                { (uint16_t)(2 + 0x14E5), 0x0140 },          // target Y range
+                { (uint16_t)(2 + 0x150D), 0x0160 },
+                { (uint16_t)(6 + 0x1535), 0x0110 },          // self X range (overrides noise)
+                { (uint16_t)(6 + 0x155D), 0x0130 },
+                { (uint16_t)(0x94CC), 0x0000 },              // filter table [0-0x6B34]: match 0
+                { (uint16_t)(6 + 0x14E5), 0x0130 },          // self Y start (bounds sanity)
+                { (uint16_t)(6 + 0x150D), 0x0150 },
+            };
+            uint8_t a4[16]; memset(a4, 0, 16);               // filter byte 0 + zero args
+            ft_synth_case_vmop(sop, a4, 16, BASE, 0xD3000000u | (sop << 8),
+                               "objfound", sweep, diff_budget, op_fail, second, 12);
+        }
     }
 
     long bad_ops = 0;

@@ -9114,7 +9114,9 @@ static void v2_vm_sub_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
         // Y: ds:0x38 in [target.Y_start, target.Y_end)
         if ((int16_t)y < (int16_t)*(uint16_t*)(rds + si2 + 0x14E5)) continue;
         if ((int16_t)(y - 1) >= (int16_t)*(uint16_t*)(rds + si2 + 0x150D)) continue;
-        vm.ds_write(0x3B2, ot);
+        // orig 0x60AF: MOV ax,[si+17DDh]; MOV ds:3B2h, ax — FULL word, not the
+        // low byte used for the filter compare.
+        vm.ds_write(0x3B2, *(uint16_t*)(rds + si2 + 0x17DD));
         vm.ds_write(0x3B4, si2);
         obj_found = true;
         break;
@@ -9454,8 +9456,8 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
         // JS after SUB: jump if (uint16_t)(a - b) >= 0x8000 (bit 15 set).
         if ((uint16_t)(*(uint16_t*)(rds + obj_di + 0x155D) - *(uint16_t*)(rds + si + 0x1535)) & 0x8000) continue;
         if ((uint16_t)(*(uint16_t*)(rds + si + 0x155D) - *(uint16_t*)(rds + obj_di + 0x1535)) & 0x8000) continue;
-        // Found!
-        vm.ds_write(0x3B2, obj_type);
+        // Found! orig 0x601C: MOV ax,[si+17DDh]; MOV ds:3B2h, ax — FULL word.
+        vm.ds_write(0x3B2, *(uint16_t*)(rds + si + 0x17DD));
         vm.ds_write(0x3B4, si);
         return true; // carry set
     }
@@ -9728,6 +9730,12 @@ static void v2_vm_op_14(V2VM& vm) {
     // Inputs: ax = anim_type, di = 0xFFFF, si = flags
     vm.ds_write(0x3E0, 0xFFFF);
 
+    // sub_13809 prologue (eip 0x3809-0x3810): the scratch trio is written
+    // BEFORE the 13d30/13d52 gates — it must appear in DS on fail paths too.
+    vm.ds_write(0x34, anim_type);   // MOV ds:34h, ax
+    vm.ds_write(0x36, 0xFFFF);      // MOV ds:36h, di
+    vm.ds_write(0x38, si_flags);    // MOV ds:38h, si
+
     // sub_13d30: pre-check
     if (vm.ds_read(0x32F) != 0) return;
 
@@ -9753,12 +9761,8 @@ static void v2_vm_op_14(V2VM& vm) {
     uint8_t* anim_es = v2_resolve_segment(anim_seg, vm.shadow);
     uint16_t bx_anim = (uint16_t)(anim_type * 0x15);
 
-    // Read animation table entry at anim_es:[bx_anim]
-    vm.ds_write(0x34, anim_type);
-    vm.ds_write(0x36, 0xFFFF); // di from sub_14f59
-    vm.ds_write(0x38, si_flags);
-
-    // Set object fields from animation table
+    // Set object fields from animation table (sub_13e52; scratch trio
+    // 0x34/0x36/0x38 was already written by the sub_13809 prologue above)
     vm.ds_write(si_slot + 0x16ED, anim_type);                    // anim index
     vm.ds_write(si_slot + 0x16C5, 0xFFFF);                       // bit flag (di)
     vm.ds_write(si_slot + 0x1585, si_flags);                      // flags
@@ -10049,6 +10053,28 @@ static void v2_vm_op_22(V2VM& vm) {
     v2_vm_sub_158c8(vm, anim_idx, di);
     // off_30C8E[si=2]: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 2);
+    if (cs_addr == 0x44F3) {
+        if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x44E9) {
+        if (!vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x42CF) {
+        v2_vm_do_jump(vm);
+    } else {
+        v2_vm_runtime_dispatch(vm, 0x87AE, 2);
+    }
+}
+
+// 0x31 (sub_144d3): PUSH 2; byte filter; CALL sub_158E6 (flip-aware
+// single-point X search: sub_15ac4 tile + sub_1603e obj) + off_30C8E[2].
+// NOT the sub_158d7 (Y_end+1) family — the scratch protocol differs
+// (0x36=X±1, 0x38=Y_end+1 vs 0x36=Y_end+1), caught by the class-B
+// channel-data sweep.
+static void v2_vm_op_31(V2VM& vm) {
+    uint8_t anim_idx = vm.read_u8();
+    uint16_t di = vm.global_r(0x42);
+    v2_vm_sub_158e6(vm, anim_idx, di);
+    // off_30C8E[si=2] = loc_144f3: carry → skip 2, no carry → jump
+    uint16_t cs_addr = *(uint16_t*)(vm.shadow + 0x87AE + 2);
     if (cs_addr == 0x44F3) {
         if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
     } else if (cs_addr == 0x44E9) {
@@ -14739,7 +14765,7 @@ static void v2_vm_init_table() {
     v2_vm_optable[0x1E] = v2_vm_op_1E;  // sub_1444f: anim load + off_30C8E[0] (sub_158c8 variant)
     v2_vm_optable[0x1F] = v2_vm_op_1F;  // anim load + off_30C8E[0] (sub_158d7 variant)
     v2_vm_optable[0x23] = v2_vm_op_23;  // anim load + off_30C8E[2] (sub_158d7)
-    v2_vm_optable[0x31] = v2_vm_op_23;  // sub_144d3: anim load + off_30C8E[2] (sub_158e6 variant)
+    v2_vm_optable[0x31] = v2_vm_op_31;  // sub_144d3: sub_158e6 flip-point search + off_30C8E[2]
     v2_vm_optable[0x35] = v2_vm_op_35;  // sub_15e91: collision search ALL objects, 3+1 bytes
     v2_vm_optable[0x36] = v2_vm_op_36;  // sub_15e8a: search objects + conditional jump
     v2_vm_optable[0x37] = v2_vm_op_37;  // collision check sub_155d6
