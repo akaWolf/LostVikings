@@ -416,6 +416,15 @@ uint64_t v2_op_anim_count[32]  = {0};   // anim cmds (cmd <= 0x1A)
 
 void v2_dump_opcode_coverage() {
     fprintf(stderr, "\n========== OPCODE COVERAGE REPORT ==========\n");
+    {
+        extern uint64_t v2_ch30c98_count[8];
+        fprintf(stderr, "off_30C98 getter channels: 0:%llu 1:%llu 2:%llu 3:%llu 4:%llu "
+                "| overlap 5:%llu 6:%llu 7:%llu\n",
+                (unsigned long long)v2_ch30c98_count[0], (unsigned long long)v2_ch30c98_count[1],
+                (unsigned long long)v2_ch30c98_count[2], (unsigned long long)v2_ch30c98_count[3],
+                (unsigned long long)v2_ch30c98_count[4], (unsigned long long)v2_ch30c98_count[5],
+                (unsigned long long)v2_ch30c98_count[6], (unsigned long long)v2_ch30c98_count[7]);
+    }
     // Main VM
     {
         int never = 0, executed = 0;
@@ -13576,14 +13585,22 @@ static uint16_t v2_vm_read_random(V2VM& vm) {
 // sub_15473: dispatch on (ax & 7)
 // sub_15470: SHR ax,3 then dispatch on (ax & 7) — used for second value
 // ============================================================================
+uint64_t v2_ch30c98_count[8] = {0};   // B5-style reachability: getter channels
+
 static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode) {
+    v2_ch30c98_count[mode & 7]++;
     switch (mode & 7) {
     case 0: return v2_vm_read_literal(vm);           // sub_1547e: 2 bytes
     case 1: return v2_vm_read_indexed_field(vm);     // sub_15485: 1 byte
     case 2: return v2_vm_read_indirect(vm);          // sub_1549a: 2 bytes
     case 3: return v2_vm_read_indexed_field_1995(vm);// sub_154a3: 1 byte
     case 4: return v2_vm_read_random(vm);            // sub_12312: 0 bytes
-    default: return 0; // entries 5-7 not used
+    default:
+        // Channels 5-7 are the off_30C98→off_30CA2 table-overlap class
+        // (locret_15504 / loc_154cb / loc_154e1): POP-through-frame paths.
+        // Not modeled yet (see the channels-5/7 task); the counter above
+        // tells whether real bytecode ever reaches them.
+        return 0;
     }
 }
 
