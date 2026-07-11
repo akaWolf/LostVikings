@@ -30,6 +30,16 @@ struct myDrawInfoS* myDrawInfo = nullptr;
 extern "C" void v2_fntest_alloc_drawinfo(void) {
     if (!myDrawInfo) myDrawInfo = (myDrawInfoS *)calloc(1, sizeof(myDrawInfoS));
 }
+// Class-C palette probe: snapshot the orig-DAC shadow (drawPalette, kept in
+// sync by the setPalette mirrors at every OUT 3C8/3C9 site) as flat RGB.
+extern "C" void v2_fetch_orig_dac(uint8_t* rgb768) {
+    if (!myDrawInfo) { memset(rgb768, 0, 768); return; }
+    for (int i = 0; i < 256; i++) {
+        rgb768[i*3 + 0] = myDrawInfo->drawPalette[i].r;
+        rgb768[i*3 + 1] = myDrawInfo->drawPalette[i].g;
+        rgb768[i*3 + 2] = myDrawInfo->drawPalette[i].b;
+    }
+}
 SDL_Window* myWindow = NULL;
 SDL_Renderer* myRenderer = NULL;
 SDL_Texture* myTexture = NULL;

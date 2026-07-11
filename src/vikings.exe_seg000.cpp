@@ -3947,6 +3947,19 @@ cs=0x1a2;eip=0x001063; 	T(ADD(si, ax));	// 2234 add     si, ax ;~ 01A2:1063
 cs=0x1a2;eip=0x001065; 	T(ADD(si, word_303e0));	// 2235 add     si, word_303E0 ;~ 01A2:1065
 	// 2236 rep outsb ;~ 01A2:1069
 cs=0x1a2;eip=0x001069; 	T(	REP OUTSB);	// 2236 rep outsb ;~ 01A2:1069
+ // SDL: mirror the DAC burst above (negative range, end<start). DAC index
+ // starts at [bx+259C] (the END color) and autoincrements; the SOURCE is
+ // ds:[word_303E0 + count*3] (count*3, NOT end*3 — original quirk preserved
+ // by the register math above: si = count + count*2). count = (start-end)+1.
+ {
+   dw end_color = *(raddr(ds,bx+0x259C));
+   dw count = *(raddr(ds,bx+0x2594)) - end_color + 1;
+   for (int i = 0; i < count; i++)
+	 setPalette((uint8_t)(end_color + i),
+				(*(db*)(raddr(ds, word_303e0 + count * 3 + i*3 + 0))) << 2,
+				(*(db*)(raddr(ds, word_303e0 + count * 3 + i*3 + 1))) << 2,
+				(*(db*)(raddr(ds, word_303e0 + count * 3 + i*3 + 2))) << 2);
+ }
 loc_1106b:
 	// 4562
 cs=0x1a2;eip=0x00106b; 	T(DEC(bx));	// 2240 dec     bx ;~ 01A2:106B
@@ -3969,6 +3982,10 @@ loc_1107b:
 	// 4565
 cs=0x1a2;eip=0x00107b; 	R(OUT(dx, al));	// 2260 out     dx, al ;~ 01A2:107B
 cs=0x1a2;eip=0x00107c; 	J(LOOP(loc_1107b));	// 2261 loop    loc_1107B ;~ 01A2:107C
+ // SDL: mirror the DAC blank above — all 256 colors to (0,0,0). Without this
+ // the drawPalette shadow kept the pre-blank colors while the real DAC was
+ // black (fade-out helper).
+ for (int i = 0; i < 0x100; i++) setPalette((uint8_t)i, 0, 0, 0);
 cs=0x1a2;eip=0x00107e; 	J(RETN(0));	// 2262 retn ;~ 01A2:107E
 sub_11080:
  printf("sub_11080 load new level\n");

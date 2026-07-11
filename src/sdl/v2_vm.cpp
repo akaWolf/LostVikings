@@ -425,6 +425,14 @@ void v2_dump_opcode_coverage() {
                 (unsigned long long)v2_ch30c98_count[4], (unsigned long long)v2_ch30c98_count[5],
                 (unsigned long long)v2_ch30c98_count[6], (unsigned long long)v2_ch30c98_count[7]);
     }
+    {
+        extern uint64_t v2_pal_probe_frames, v2_pal_probe_diverged, v2_pal_probe_colors;
+        fprintf(stderr, "PAL-PROBE (class C, task #12): frames=%llu diverged=%llu "
+                "color-slots=%llu\n",
+                (unsigned long long)v2_pal_probe_frames,
+                (unsigned long long)v2_pal_probe_diverged,
+                (unsigned long long)v2_pal_probe_colors);
+    }
     // Main VM
     {
         int never = 0, executed = 0;
@@ -1702,14 +1710,17 @@ static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx);
 static uint32_t v2_fs_hash(uint8_t* ds);
 static uint32_t v2_fs_hash_shadow();
 
-// sub_10fe6: write full palette to VGA DAC. Reads 768 bytes from ds:[word_303E0] (usually ds:0x8202).
+// sub_10fe6: write full palette to VGA DAC. Reads 768 bytes from ds:0x8202 —
+// the asm HARDCODES the source (0x0FEC: MOV si, 8202h); word_303E0 is only the
+// source pointer of the sub_10ffc partial animation bursts, NOT of this full
+// upload. (An earlier comment here claimed [word_303E0] — wrong.)
 // Original: OUT 0x3C8=0 (start color), REP OUTSB 0x300 bytes to port 0x3C9, then setPalette().
 // For v2: palette in shadow DS at 0x8202, applied by render callback. DS write: word_303DE=0.
 static void v2_sub_10fe6(uint8_t* s) {
     *(uint16_t*)(s + 0x7EFE) = 0; // word_303DE = 0 (palette write complete)
     // Original VGA DAC write:
     // OUT(0x3C8, 0);  // start at color 0
-    // REP OUTSB ds:[word_303E0], 0x300 bytes → port 0x3C9
+    // REP OUTSB ds:0x8202, 0x300 bytes → port 0x3C9
     // for (i=0; i<256; i++) setPalette(i, ds[0x8202+i*3+0]<<2, ds[0x8202+i*3+1]<<2, ds[0x8202+i*3+2]<<2);
 }
 
@@ -17930,11 +17941,56 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     v2_sub_10130(s);
 }
 
+// Class-C palette probe (task #12): compare the orig-DAC shadow (drawPalette,
+// fed by the setPalette mirrors at every OUT 3C8/3C9 site incl. the negative-
+// range burst and the blank pass) against the v2 palette MODEL (full ds:0x8202
+// snapshot + the color-3 mirror from 0x7F0B — exactly what v2_swap_render_buf
+// publishes). Event-based: prints the first probe events with details, keeps
+// per-run totals for the coverage report. No frame-number triggers.
+uint64_t v2_pal_probe_frames = 0, v2_pal_probe_diverged = 0, v2_pal_probe_colors = 0;
+extern "C" void v2_fetch_orig_dac(uint8_t* rgb768);
+static void v2_palette_probe(uint8_t* s) {
+    uint8_t dac[768];
+    v2_fetch_orig_dac(dac);
+    v2_pal_probe_frames++;
+    const uint8_t* pal = s + 0x8202;
+    int bad = 0; int first_idx = -1;
+    for (int i = 0; i < 256; i++) {
+        uint8_t r, g, b;
+        if (i == 3) {   // v2 model: color 3 mirrored from the cmd_type=6 bytes
+            r = (uint8_t)(s[0x7F0B] << 2); g = (uint8_t)(s[0x7F0C] << 2); b = (uint8_t)(s[0x7F0D] << 2);
+        } else {
+            r = (uint8_t)(pal[i*3+0] << 2); g = (uint8_t)(pal[i*3+1] << 2); b = (uint8_t)(pal[i*3+2] << 2);
+        }
+        if (dac[i*3+0] != r || dac[i*3+1] != g || dac[i*3+2] != b) {
+            if (first_idx < 0) first_idx = i;
+            bad++;
+        }
+    }
+    if (bad) {
+        v2_pal_probe_diverged++;
+        v2_pal_probe_colors += (uint64_t)bad;
+        static int prints = 0;
+        if (prints < 20) {
+            prints++;
+            int i = first_idx;
+            uint8_t vr = (i==3)?(uint8_t)(s[0x7F0B]<<2):(uint8_t)(pal[i*3+0]<<2);
+            uint8_t vg = (i==3)?(uint8_t)(s[0x7F0C]<<2):(uint8_t)(pal[i*3+1]<<2);
+            uint8_t vb = (i==3)?(uint8_t)(s[0x7F0D]<<2):(uint8_t)(pal[i*3+2]<<2);
+            fprintf(stderr, "V2-PAL-DIVERGE[POST_FLIP2]: colors=%d first idx=%02X "
+                    "dac=%02X%02X%02X v2=%02X%02X%02X (303DE=%04X 303E0=%04X)\n",
+                    bad, i, dac[i*3], dac[i*3+1], dac[i*3+2], vr, vg, vb,
+                    *(uint16_t*)(s + 0x7EFE), *(uint16_t*)(s + 0x7F00));
+        }
+    }
+}
+
 void v2_phase_render3(uint16_t ds_val) {
     if (!v2_frame_active) return;
     v2_watch_302("RENDER3");
     // PSNAP compare: catches divergence in post_flip2 (10753/13c0c/12fd0/11792/101be).
     v2_compare_phase_snap(V2_PSNAP_POST_FLIP2_END, "v2_phase_render3");
+    v2_palette_probe(v2_vm_shadow_ds);
     // Mirrors orig pass 3 (eip 0x00BB..0x00D8).
     // sub_1DE05 (render 3)
     v2_sub_1DE05(v2_vm_shadow_ds);
