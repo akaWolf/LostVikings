@@ -1448,7 +1448,9 @@ template <class D>
 #define JGE(label) if (GET_SF()==GET_OF()) GOTOLABEL(label)
 #define JNL(label) JGE(label)
 
-#define JG(label) if (!GET_ZF() && !GET_SF()) GOTOLABEL(label)
+// 8086: JG = !ZF && SF==OF (was !ZF && !SF — wrong when the SUB/ADD/CMP overflows,
+// i.e. |true signed result| > 0x7FFF; SETNLE below always had the correct form).
+#define JG(label) if (!GET_ZF() && GET_SF()==GET_OF()) GOTOLABEL(label)
 #define JNLE(label) JG(label)
 
 #define JLE(label) if (GET_ZF() || GET_SF()!=GET_OF()) GOTOLABEL(label) // TODO
