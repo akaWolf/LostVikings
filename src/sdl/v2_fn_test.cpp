@@ -497,6 +497,10 @@ int ft_selftest_sub_161a1() {
         { 0x0100, 0x0100, 0x0100, 0x0200, 0x0040, 0x0050 },  // target_adj > si_y_st
         { 0x7FFF, 0x8000, 0x0001, 0x7FFF, 0x8000, 0x0001 },  // signed extremes
         { 0x0100, 0x0000, 0x0000, 0x0100, 0x0000, 0x0000 },  // equal mid-values
+        // JG-overflow corners of the adj_y clamp (orig 0x61cb SUB;ADD;JG — 8086 JG
+        // is !ZF && SF==OF, i.e. the TRUE sum of the ADD operands vs 0):
+        { 0x7FF0, 0x0010, 0x0100, 0x0100, 0x0100, 0x0100 },  // true sum +32992 → keep wrapped 0x80E0
+        { 0x8010, 0x0010, 0xFF00, 0x0100, 0x0100, 0x0100 },  // true sum −33024 → clamp 0 (wrapped +0x7F00)
     };
     static const uint16_t DISI[][2] = { {0,2}, {2,0}, {0,0x26}, {4,4} };
     for (auto& xc : XC)

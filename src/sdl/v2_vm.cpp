@@ -1698,12 +1698,19 @@ static void v2_sub_10ffc(uint8_t* s) {
         s[bx + 0x258C] = s[bx + 0x2584];            // reset timer from reload value
         uint8_t end_color = s[bx + 0x259C];
         uint8_t start_color = s[bx + 0x2594];
+        // Orig 0x1023: MOVZX cx,byte[259C]; SUB cl,[2594] — 8-bit SUB (CH stays 0);
+        // JZ next (ZF of the byte) / JS loc_1104d (SF of the byte). Byte domain ±255,
+        // so an int16 of the difference reproduces both flags exactly.
         int16_t range = (int16_t)(uint16_t)end_color - (int16_t)(uint16_t)start_color;
         if (range == 0) continue;
-        // Palette update: write colors [start_color..end_color] from ds:[pal_base + color*3]
-        // Original: OUT(0x3C8, start_color); REP OUTSB (range+1)*3 bytes → port 0x3C9
-        // setPalette(i+base, ds[pal_base+i*3]<<2, ds[pal_base+i*3+1]<<2, ds[pal_base+i*3+2]<<2);
-        // For v2: palette data already in shadow DS at pal_base, render callback reads it.
+        // Both branches are pure VGA DAC writes (OUT 0x3C8/0x3C9), no DS effects:
+        // range > 0: OUT(0x3C8, start_color); count=range+1; REP OUTSB count*3 bytes
+        //            from ds:[word_303E0 + start_color*3].
+        // range < 0 (loc_1104d): NEG cl → count=(start-end)+1; OUT(0x3C8, end_color);
+        //            REP OUTSB count*3 bytes from ds:[word_303E0 + count*3] — orig quirk:
+        //            source offset is count*3, NOT end_color*3.
+        // For v2: palette data already in shadow DS, render callback reads it (task #12:
+        // DAC partial-update semantics incl. the negative-branch quirk).
     }
 }
 
@@ -10554,9 +10561,12 @@ static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si) {
     vm.ds_write(0x32, (uint16_t)y_end);             // MOV ds:32h, ax
 
     // Adjusted Y = Y_end - Y_center + old_Y_center, clamp to > 0
-    int16_t adj_y = (int16_t)vm.ds_read(di + 0x150D) - (int16_t)vm.ds_read(di + 0x1765)
-                    + (int16_t)vm.ds_read(di + 0x13CD);
-    if (adj_y <= 0) adj_y = 0;
+    // Orig 0x61cb-0x61d3: SUB ax,[1765]; ADD ax,[13CD]; JG — flags come from the ADD:
+    // its operands are the WRAPPED int16 SUB result and [13CD]; JG tests the TRUE sum
+    // of those two operands (SF^OF of the ADD), while AX keeps the wrapped bits.
+    int16_t sub16 = (int16_t)(uint16_t)(vm.ds_read(di + 0x150D) - vm.ds_read(di + 0x1765));
+    int32_t add32 = (int32_t)sub16 + (int32_t)(int16_t)vm.ds_read(di + 0x13CD);
+    uint16_t adj_y = (add32 > 0) ? (uint16_t)add32 : 0;
 
     // ds:0x34 = min, ds:0x36 = max of (ds32, adj_y)
     if ((int16_t)(uint16_t)adj_y < (int16_t)vm.ds_read(0x32)) {
@@ -10611,8 +10621,11 @@ static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
         }
         if (!match) continue;
         // Y velocity check: self.vel_Y - target.vel_Y
-        int16_t vel_diff = (int16_t)vm.ds_read(obj_di + 0x196D) - (int16_t)*(uint16_t*)(rds + si + 0x196D);
-        if (vel_diff <= 0) continue; // JZ or JL → skip
+        // Orig 0x6181: SUB ax,[si+196D]; JZ skip; JL skip — JL is SF^OF of the SUB,
+        // i.e. the sign of the TRUE 32-bit difference (not the truncated int16).
+        int32_t vel_diff = (int32_t)(int16_t)vm.ds_read(obj_di + 0x196D)
+                         - (int32_t)(int16_t)*(uint16_t*)(rds + si + 0x196D);
+        if (vel_diff <= 0) continue; // JZ (ZF: wrapped==0 ⇔ diff==0 in ±65534) or JL (true sign) → skip
         // sub_161a1: bounding box check
         if (v2_vm_sub_161a1(vm, obj_di, si)) {
             // Found! ax = 0, STC
@@ -10718,8 +10731,10 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         // --- sub_15AFD: downward tile collision ---
         // Orig sub_15afd does NOT write ds:0x34 — only ds:0x6C (filter) and ds:0x6E (di).
         // (sub_15911, the UPward equivalent, has its own writers via loc_15a7d/64; not here.)
-        int16_t y_moved = (int16_t)vm.ds_read(di + 0x1765) - (int16_t)vm.ds_read(di + 0x13CD);
-        if (dbg) fprintf(stderr, "  y_moved=%d\n", y_moved);
+        // Orig sub_15afd 0x5b01: SUB ax,[13CD]; JZ ret; JGE continue — continue iff the
+        // TRUE difference (SF^OF of the SUB) is > 0, not the truncated int16.
+        int32_t y_moved = (int32_t)(int16_t)vm.ds_read(di + 0x1765) - (int32_t)(int16_t)vm.ds_read(di + 0x13CD);
+        if (dbg) fprintf(stderr, "  y_moved=%d\n", (int)y_moved);
         if (y_moved > 0) {
             vm.ds_write(0x6C, filter_si);
             vm.ds_write(0x6E, di);
@@ -14263,7 +14278,10 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
             }
             if (!match) continue;
             // Type matches. Compare X velocities.
-            int16_t vel_diff = (int16_t)vm.ds_read(di + 0x1945) - (int16_t)*(uint16_t*)(rds + si2 + 0x1945);
+            // Orig sub_15c37 0x5c6a: SUB ax,[si+1945]; JZ skip; JG →sub_15cf5 / else →sub_15cef —
+            // JG tests the TRUE difference (SF^OF of the SUB), not the truncated int16.
+            int32_t vel_diff = (int32_t)(int16_t)vm.ds_read(di + 0x1945)
+                             - (int32_t)(int16_t)*(uint16_t*)(rds + si2 + 0x1945);
             if (vel_diff == 0) continue;
 
             // sub_15cef (vel_diff < 0): ax = self.X_start
