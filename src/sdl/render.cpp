@@ -23,6 +23,13 @@ struct myDrawInfoS
   uint8_t myPixelOffset;
 };
 struct myDrawInfoS* myDrawInfo = nullptr;
+// fn-test (unit 32+): the isolated oracle calls drawPixel (raw-chunk display);
+// the selftest process never starts the game/render threads, so give it the
+// same buffer the game thread would calloc (#179 path). Contents are legacy
+// (myDrawInfo is outside the v2 contract) — only the NULL deref matters.
+extern "C" void v2_fntest_alloc_drawinfo(void) {
+    if (!myDrawInfo) myDrawInfo = (myDrawInfoS *)calloc(1, sizeof(myDrawInfoS));
+}
 SDL_Window* myWindow = NULL;
 SDL_Renderer* myRenderer = NULL;
 SDL_Texture* myTexture = NULL;

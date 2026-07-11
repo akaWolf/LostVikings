@@ -1564,6 +1564,17 @@ extern "C" int v2_fntest_set_data_file_v2(const char* path) {
     v2_data_handle = fopen(path, "rb");
     return v2_data_handle ? 1 : 0;
 }
+// Unit-32: raw-chunk read (sub_10cd8's file half). hdr10_out = 8-byte table
+// entry + plane_size; returns plane_size (0 on failure/0xFFFA).
+static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
+                                  uint8_t* hdr8_out);
+extern "C" uint32_t v2_fntest_call_raw_chunk(uint16_t chunk_id, uint8_t* dest,
+                                             uint8_t* hdr10_out) {
+    memset(hdr10_out, 0, 10);
+    uint16_t ps = v2_read_raw_chunk(chunk_id, dest, 0x40000, hdr10_out);
+    *(uint16_t*)(hdr10_out + 8) = ps;
+    return ps;
+}
 extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
                                               uint8_t* ring_out, uint8_t* hdr10_out) {
     memset(v2_vm_shadow_fs, 0, 0x1000);          // deterministic ring baseline per case
@@ -1577,7 +1588,8 @@ extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
 // sub_10cd8: read raw chunk (no LZSS decompression).
 // Reads plane_size (2 bytes) + raw data (plane_size * 4 bytes) from DATA.DAT.
 // Returns plane_size. dest receives raw plane data (plane_size * 4 bytes).
-static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size) {
+static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
+                                  uint8_t* hdr8_out = nullptr) {
     if (!v2_data_handle) {
         v2_data_handle = fopen("DATA.DAT", "rb");
         if (!v2_data_handle) return 0;
@@ -1591,6 +1603,7 @@ static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max
     uint8_t header[8];
     if (fread(header, 8, 1, v2_data_handle) != 1) return 0;
     uint32_t chunk_offset = *(uint32_t*)(header);
+    if (hdr8_out) memcpy(hdr8_out, header, 8);
 
     // Seek to chunk data
     if (fseek(v2_data_handle, chunk_offset, SEEK_SET)) return 0;

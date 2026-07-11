@@ -12,7 +12,7 @@ UNITS=${*:-"sub_15972 sub_161a1 sub_15da8 sub_15d6b sub_13d68 sub_13dd6 sub_13e1
 sub_13c0c sub_17496 sub_1746c sub_10704 sub_10753 sub_1064b sub_101be vmops \
 sub_10255 sub_1020f sub_12fc6 sub_12fcb sub_12fd0 \
 sub_158aa sub_158b9 sub_158c8 sub_158d7 sub_158e6 sub_1303a sub_13031 \
-sub_1614e sub_15c37 sub_15c93 sub_15afd sub_10982"}
+sub_1614e sub_15c37 sub_15c93 sub_15afd sub_10982 sub_10cd8"}
 SHARDED="sub_158aa sub_158b9"
 NSH=6
 

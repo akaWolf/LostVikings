@@ -100,6 +100,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 29: return (void*)&sub_15c93;   // Y-vel object scan (JNS gate) + d3c/d42 bbox
     case 30: return (void*)&sub_15afd;   // downward tile collision (slope + walk)
     case 31: return (void*)&sub_10982;   // read_chunk: DATA.DAT seek/read + LZSS (class D)
+    case 32: return (void*)&sub_10cd8;   // read_and_display_raw_chunk (class D + A000 planes)
     default: return 0;
     }
 }

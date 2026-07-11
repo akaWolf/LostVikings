@@ -63,6 +63,9 @@ extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
                                         uint16_t filter, uint16_t obj);
 extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
                                               uint8_t* ring_out, uint8_t* hdr10_out);
+extern "C" uint32_t v2_fntest_call_raw_chunk(uint16_t chunk_id, uint8_t* dest,
+                                             uint8_t* hdr10_out);
+extern "C" void     v2_fntest_alloc_drawinfo(void);
 extern "C" uint16_t v2_fntest_get_word_10980(void);
 extern "C" void     v2_fntest_put_word_10980(uint16_t v);
 extern "C" uint16_t v2_fntest_es_override;
@@ -106,7 +109,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_158D7 = 23, FT_SUB_158E6 = 24,
             FT_SUB_1303A = 25, FT_SUB_13031 = 26,
             FT_SUB_1614E = 27, FT_SUB_15C37 = 28, FT_SUB_15C93 = 29,
-            FT_SUB_15AFD = 30, FT_SUB_10982 = 31, FT_COUNT };
+            FT_SUB_15AFD = 30, FT_SUB_10982 = 31, FT_SUB_10CD8 = 32, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -129,7 +132,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_158d7", "sub_158e6",
                                  "sub_1303a", "sub_13031",
                                  "sub_1614e", "sub_15c37", "sub_15c93",
-                                 "sub_15afd", "sub_10982" };
+                                 "sub_15afd", "sub_10982", "sub_10cd8" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -2244,6 +2247,205 @@ int ft_selftest_chunk(uint32_t seed) {
 }
 
 // ---------------------------------------------------------------------------
+// Unit 32 (class D): sub_10cd8 read_and_display_raw_chunk <-> v2_read_raw_chunk.
+// Orig: 0xFFFA no-op; seek id*4 (32-bit `ax*4` here, unlike sub_10982's SHL
+// dx,2); ds:0x2BB4(8) table entry; seek; ds:0x2BBC(2)=plane_size;
+// word_10980=plane_size; fread plane_size*4 into the CHUNK segment
+// ([ds:0x2E77] → FT_RING_SEG); then 4 plane loops into raddr(0xA000,
+// display_offset+i) — in the port's LINEAR model the planes land on top of
+// each other, plane 3 survives; plus a drawPixel pass into myDrawInfo
+// (legacy layer, outside the v2 contract — allocated so the oracle doesn't
+// NULL-deref, contents not compared). Errors → sub_10dba fatal (UB-skip).
+const uint32_t FT_A000_LIN  = 0xA0000;
+// raddr_ takes a dw offset — every plane read/write wraps at 64K (8086
+// segment semantics). The staging fread, by contrast, is a LINEAR libc call:
+// plane_size*4 can spill up to 256K past the chunk zone — save/compare that
+// whole span.
+const uint32_t FT_A000_SPAN  = 0x10000;
+const uint32_t FT_CHUNK_SPAN = 0x40000;
+
+bool ft_synth_case_rawchunk(uint16_t chunk_id, uint16_t disp_off, const char* group,
+                            FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* chunk_zone = mbase + (uint32_t)FT_RING_SEG * 16;
+    uint8_t* a000_zone  = mbase + FT_A000_LIN;
+    static uint8_t saved_chunk[FT_CHUNK_SPAN], saved_a000[FT_A000_SPAN];
+    static uint8_t orig_chunk[FT_CHUNK_SPAN], orig_a000[FT_A000_SPAN];
+    static uint8_t v2_dest[0x40000], v2_hdr[10];
+    memcpy(saved_chunk, chunk_zone, FT_CHUNK_SPAN);
+    memcpy(saved_a000, a000_zone, FT_A000_SPAN);
+    memset(chunk_zone, 0xCC, FT_CHUNK_SPAN);
+    memset(a000_zone, 0xCC, FT_A000_SPAN);
+
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x2E77, FT_RING_SEG);        // chunk segment = test zone
+    for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;
+
+    uint16_t saved_10980 = v2_fntest_get_word_10980();
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { chunk_id, 0, 0, 0, 0, disp_off, 0, 0 };
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_10CD8), g_synth_orig, regs);
+    uint16_t orig_10980 = v2_fntest_get_word_10980();
+    v2_fntest_put_word_10980(saved_10980);
+    if (ft_ub_marks() != esc0) {
+        st.cases--;
+        fprintf(stderr, "FNSELFTEST-UB[sub_10cd8 %s]: chunk=%04X escaped (error path)\n",
+                group, chunk_id);
+        memcpy(chunk_zone, saved_chunk, FT_CHUNK_SPAN);
+        memcpy(a000_zone, saved_a000, FT_A000_SPAN);
+        return true;
+    }
+    memcpy(orig_chunk, chunk_zone, FT_CHUNK_SPAN);
+    memcpy(orig_a000, a000_zone, FT_A000_SPAN);
+    memcpy(chunk_zone, saved_chunk, FT_CHUNK_SPAN);
+    memcpy(a000_zone, saved_a000, FT_A000_SPAN);
+
+    // --- v2 ---
+    memset(v2_dest, 0xCC, sizeof(v2_dest));
+    uint32_t v2_ps = v2_fntest_call_raw_chunk(chunk_id, v2_dest, v2_hdr);
+
+    long diffs = 0;
+    uint32_t data_len = (uint32_t)v2_ps * 4;
+    // chunk zone: the staging fread is LINEAR — the written prefix can span
+    // up to 256K; the rest stays at the 0xCC baseline.
+    for (uint32_t a = 0; a < FT_CHUNK_SPAN; a++) {
+        uint8_t ov = orig_chunk[a];
+        uint8_t vv = (a < data_len) ? v2_dest[a] : 0xCC;
+        if (ov == vv) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10cd8 %s]: chunk+%05X orig=%02X v2=%02X | id=%04X ps=%04X\n",
+                    group, a, ov, vv, chunk_id, (uint16_t)v2_ps); }
+        diffs++;
+        if (diffs > 40) break;
+    }
+    // A000 window: each plane pass writes A000[(uint16_t)(disp_off+i)] =
+    // chunk[(uint16_t)(ps*k+i)] — 16-bit wraps on BOTH sides (raddr takes a dw
+    // offset). Plane 3 runs last, and within 64K each woff maps to exactly one
+    // i, so the survivor at woff is plane 3's byte at i=(uint16_t)(woff-off).
+    for (uint32_t a = 0; a < FT_A000_SPAN; a++) {
+        uint8_t ov = orig_a000[a];
+        uint8_t vv = 0xCC;
+        if (v2_ps) {
+            uint16_t i = (uint16_t)((uint16_t)a - disp_off);
+            if (i < v2_ps) {
+                uint16_t widx = (uint16_t)((uint32_t)v2_ps * 3 + i);
+                vv = (widx < data_len) ? v2_dest[widx] : 0xCC;  // wrapped read past the staging = zone baseline
+            }
+        }
+        if (ov == vv) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10cd8 %s]: a000+%05X orig=%02X v2=%02X | id=%04X off=%04X ps=%04X\n",
+                    group, a, ov, vv, chunk_id, disp_off, (uint16_t)v2_ps); }
+        diffs++;
+        if (diffs > 80) break;
+    }
+    // DS window + full image
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    memcpy(g_scratch + 0x2BB4, v2_hdr, 8);
+    *(uint16_t*)(g_scratch + 0x2BBC) = (uint16_t)v2_ps;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10cd8 %s]: ds addr=%04X orig=%02X v2=%02X | id=%04X\n",
+                    group, a, g_synth_orig[a], g_scratch[a], chunk_id); }
+        diffs++;
+    }
+    if (chunk_id != 0xFFFA && orig_10980 != (uint16_t)v2_ps) {
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10cd8 %s]: word_10980 orig=%04X v2=%04X | id=%04X\n",
+                    group, orig_10980, (uint16_t)v2_ps, chunk_id); }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_rawchunk(uint32_t seed) {
+    (void)seed;
+    FtSynthStats corpus, synth;
+    long diff_budget = 60;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    v2_fntest_alloc_drawinfo();   // oracle's drawPixel pass needs the buffer
+
+    if (!v2_fntest_set_data_file("DATA.DAT") || !v2_fntest_set_data_file_v2("DATA.DAT")) {
+        fprintf(stderr, "FNSELFTEST-SUMMARY[sub_10cd8]: DATA.DAT missing — total cases=0 fail=1\n");
+        return 1;
+    }
+    uint32_t first_off = 0;
+    { FILE* f = fopen("DATA.DAT", "rb");
+      if (f) { if (fread(&first_off, 4, 1, f) != 1) first_off = 0; fclose(f); } }
+    uint32_t nchunks = first_off / 4;
+    fprintf(stderr, "FNSELFTEST-PROG[sub_10cd8]: DATA.DAT chunks=%u\n", nchunks);
+    static const uint16_t OFFS[2] = { 0x0000, 0x20C8 };   // real caller offsets
+    for (uint32_t id = 0; id < nchunks; id++) {
+        if ((id % 64) == 0)
+            fprintf(stderr, "FNSELFTEST-PROG[sub_10cd8]: corpus %u/%u\n", id, nchunks);
+        if (!ft_shard_mine(id)) continue;
+        ft_synth_case_rawchunk((uint16_t)id, OFFS[id & 1], "corpus", corpus, diff_budget);
+    }
+    if (g_shard_i == 0) {
+        ft_synth_case_rawchunk(0xFFFA, 0, "corpus", corpus, diff_budget);
+        ft_synth_case_rawchunk((uint16_t)(nchunks + 8), 0, "corpus", corpus, diff_budget);
+        // real intro/HUD offsets on a couple of known-RAW ids (the unit-31
+        // UB list: those chunks ARE the raw class)
+        ft_synth_case_rawchunk(0x017C, 0x66A8, "corpus", corpus, diff_budget);
+        ft_synth_case_rawchunk(0x0212, 0xAC88, "corpus", corpus, diff_budget);
+    }
+
+    // Synthetic raw fixtures: tiny planes + an A000 spill past 64K.
+    if (g_shard_i == 0) {
+        const char* fx = "/tmp/fnst_raw_fixture.dat";
+        {
+            FILE* f = fopen(fx, "wb");
+            if (f) {
+                // chunk 0: plane_size 1 (4 bytes: 11 22 33 44)
+                // chunk 1: plane_size 3 (12 bytes: 3 per plane)
+                // chunk 2: plane_size 0x3000 spill test (planes = ramp bytes)
+                uint32_t offs[4];
+                uint32_t off = 4 * 4;
+                offs[0] = off; off += 2 + 4;
+                offs[1] = off; off += 2 + 12;
+                offs[2] = off; off += 2 + 0x3000u * 4;
+                offs[3] = off;
+                for (int i = 0; i < 4; i++) fwrite(&offs[i], 4, 1, f);
+                uint16_t ps0 = 1;  fwrite(&ps0, 2, 1, f);
+                const uint8_t p0[4] = { 0x11, 0x22, 0x33, 0x44 };
+                fwrite(p0, 1, 4, f);
+                uint16_t ps1 = 3;  fwrite(&ps1, 2, 1, f);
+                const uint8_t p1[12] = { 1,2,3, 4,5,6, 7,8,9, 10,11,12 };
+                fwrite(p1, 1, 12, f);
+                uint16_t ps2 = 0x3000; fwrite(&ps2, 2, 1, f);
+                for (uint32_t i = 0; i < 0x3000u * 4; i++) {
+                    uint8_t b = (uint8_t)(i * 7 + 13);
+                    fwrite(&b, 1, 1, f);
+                }
+                fclose(f);
+            }
+        }
+        if (v2_fntest_set_data_file(fx) && v2_fntest_set_data_file_v2(fx)) {
+            ft_synth_case_rawchunk(0, 0x0000, "synth", synth, diff_budget);
+            ft_synth_case_rawchunk(0, 0x1234, "synth", synth, diff_budget);
+            ft_synth_case_rawchunk(1, 0x20C8, "synth", synth, diff_budget);
+            ft_synth_case_rawchunk(2, 0xE000, "synth", synth, diff_budget);  // 0xE000+0x3000 spills past 64K
+        }
+        v2_fntest_set_data_file("DATA.DAT");
+        v2_fntest_set_data_file_v2("DATA.DAT");
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_10cd8]: corpus %ld/%ld, synth %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        corpus.pass, corpus.cases, synth.pass, synth.cases,
+        corpus.cases + synth.cases, corpus.fail + synth.fail,
+        (corpus.fail + synth.fail) ? "  <<< DIVERGENCE" : "");
+    return (corpus.fail + synth.fail) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // sub_1303a / sub_13031 <-> v2_vm_sub_1303a (+ v2_vm_sub_135cf) — the anim
 // frame interpreter (units 25/26). The anim script is planted INSIDE the DS
 // image at FT_ANIM_PC (the oracle enters with es==ds, so es:[bx] reads hit
@@ -2952,6 +3154,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15c93")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15C93, 0x15C93001u); }
     if (all || strstr(env, "sub_15afd")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15AFD, 0x15AFD001u); }
     if (all || strstr(env, "sub_10982")) { matched = true; rc |= ft_selftest_chunk(0x10982001u); }
+    if (all || strstr(env, "sub_10cd8")) { matched = true; rc |= ft_selftest_rawchunk(0x10CD8001u); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;
