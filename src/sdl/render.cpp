@@ -30,6 +30,16 @@ struct myDrawInfoS* myDrawInfo = nullptr;
 extern "C" void v2_fntest_alloc_drawinfo(void) {
     if (!myDrawInfo) myDrawInfo = (myDrawInfoS *)calloc(1, sizeof(myDrawInfoS));
 }
+// Class-C pixel probe: snapshot the orig VISIBLE page (drawBuffer at the
+// current flip offset — same mapping headless_dump uses for its PPMs).
+// Returns 0 if the buffer isn't available or the page window would overrun.
+extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count) {
+    if (!myDrawInfo) return 0;
+    uint32_t off = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
+    if (off + count > sizeof(myDrawInfo->drawBuffer)) return 0;
+    memcpy(out, myDrawInfo->drawBuffer + off, count);
+    return 1;
+}
 // Class-C palette probe: snapshot the orig-DAC shadow (drawPalette, kept in
 // sync by the setPalette mirrors at every OUT 3C8/3C9 site) as flat RGB.
 extern "C" void v2_fetch_orig_dac(uint8_t* rgb768) {

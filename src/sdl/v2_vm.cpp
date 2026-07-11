@@ -604,6 +604,31 @@ void v2_verify_render_buf(int frame) {
                 frame, viewport_diff, first_diff_x, first_diff_y, h_orig, h_v2, page_offset);
     }
     _logged++;
+    // Classification aid (env V2_RENDER_DIFF_DUMP=1): one-shot PPM pair + top
+    // orig→v2 color pairs on the FIRST divergence event of the run.
+#ifdef HEADLESS
+    {
+        static int _dumped = 0;
+        if (!_dumped && getenv("V2_RENDER_DIFF_DUMP")) {
+            _dumped = 1;
+            extern void headless_write_ppm(const char*, const uint8_t*, int, int, const SDL_Color*);
+            headless_write_ppm("/tmp/v2_rdiff_orig.ppm", orig_pixels, 320, 176, nullptr);
+            headless_write_ppm("/tmp/v2_rdiff_v2.ppm", v2_render_buf, 320, 176, nullptr);
+            struct Pair { uint8_t o, v; uint32_t n, at; };
+            Pair top[6] = {};
+            for (uint32_t i = 0; i < 320u * 176u; i++) {
+                if (orig_pixels[i] == v2_render_buf[i]) continue;
+                for (int k = 0; k < 6; k++) {
+                    if (top[k].n && top[k].o == orig_pixels[i] && top[k].v == v2_render_buf[i]) { top[k].n++; break; }
+                    if (!top[k].n) { top[k] = { orig_pixels[i], v2_render_buf[i], 1, i }; break; }
+                }
+            }
+            for (int k = 0; k < 6 && top[k].n; k++)
+                fprintf(stderr, "V2-RENDER-DIFF-PAIR: %02X->%02X n=%u sample@(%u,%u)\n",
+                        top[k].o, top[k].v, top[k].n, top[k].at % 320, top[k].at / 320);
+        }
+    }
+#endif
 #ifdef HEADLESS
     // Render diff is NON-CRITICAL — pixel-level only, DS state can match.
     // Log to render_diffs.log inside dump dir, summary at clean exit.
@@ -17949,6 +17974,11 @@ void v2_phase_post_flip2(uint16_t ds_val) {
 // per-run totals for the coverage report. No frame-number triggers.
 uint64_t v2_pal_probe_frames = 0, v2_pal_probe_diverged = 0, v2_pal_probe_colors = 0;
 extern "C" void v2_fetch_orig_dac(uint8_t* rgb768);
+extern "C" int  v2_fetch_orig_page(uint8_t* out, uint32_t count);
+// (The viewport pixel diff itself is the long-standing A2 sensor
+// v2_verify_render_buf at the END of render3 — after both sides painted the
+// frame's final page. An extra POST_FLIP2-entry probe here was a duplicate at
+// the wrong point and was removed; classification aids live in A2 now.)
 static void v2_palette_probe(uint8_t* s) {
     uint8_t dac[768];
     v2_fetch_orig_dac(dac);
