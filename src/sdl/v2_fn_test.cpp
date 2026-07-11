@@ -61,6 +61,14 @@ extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
                                         uint16_t filter, uint16_t obj);
+extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
+                                              uint8_t* ring_out, uint8_t* hdr10_out);
+extern "C" uint16_t v2_fntest_get_word_10980(void);
+extern "C" void     v2_fntest_put_word_10980(uint16_t v);
+extern "C" uint16_t v2_fntest_es_override;
+extern "C" int      v2_fntest_set_data_file(const char* path);
+extern "C" int      v2_fntest_set_data_file_v2(const char* path);
+extern "C" uint8_t  v2_vm_shadow_fs[];
 extern "C" void     v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int which);
 extern "C" long     v2_fntest_ret_mismatches(void);
 #include <setjmp.h>
@@ -98,7 +106,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_158D7 = 23, FT_SUB_158E6 = 24,
             FT_SUB_1303A = 25, FT_SUB_13031 = 26,
             FT_SUB_1614E = 27, FT_SUB_15C37 = 28, FT_SUB_15C93 = 29,
-            FT_SUB_15AFD = 30, FT_COUNT };
+            FT_SUB_15AFD = 30, FT_SUB_10982 = 31, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -121,7 +129,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_158d7", "sub_158e6",
                                  "sub_1303a", "sub_13031",
                                  "sub_1614e", "sub_15c37", "sub_15c93",
-                                 "sub_15afd" };
+                                 "sub_15afd", "sub_10982" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -2020,6 +2028,222 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
 }
 
 // ---------------------------------------------------------------------------
+// Unit 31 (class D): sub_10982 read_chunk <-> v2_read_chunk (DATA.DAT seek/
+// read + LZSS decompress). Inputs: ax=chunk_id, es:di=dest (di=0). The oracle
+// writes: dest zone (ES via v2_fntest_es_override), the LZSS ring + compressed
+// staging in the FS segment ([ds:0x2E69] — pointed at FT_RING_SEG inside the
+// case image), ds:0x2BB4..0x2BBD (table entry + size), cs-global word_10980.
+// v2 side: v2_fntest_call_read_chunk fills a dest buffer + ring copy + the
+// 10-byte header mirror. Corpus: every real DATA.DAT chunk + synthetic LZSS
+// fixtures via v2_fntest_set_data_file{,_v2}.
+const uint16_t FT_RING_SEG = 0x4000;    // 64KB zone at linear 0x40000 (reused test zone)
+const uint16_t FT_DEST_SEG = 0x5800;    // 64KB zone at linear 0x58000
+
+bool ft_synth_case_chunk(uint16_t chunk_id, const char* group,
+                         FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* ring_zone = mbase + (uint32_t)FT_RING_SEG * 16;
+    uint8_t* dest_zone = mbase + (uint32_t)FT_DEST_SEG * 16;
+    static uint8_t saved_ring[0x10000], saved_dest[0x10000];
+    static uint8_t v2_dest[0x10000], v2_ring[0x1000], v2_hdr[10];
+    memcpy(saved_ring, ring_zone, 0x10000);
+    memcpy(saved_dest, dest_zone, 0x10000);
+    memset(ring_zone, 0xCC, 0x10000);       // recognizable baseline both sides of diff
+    memset(dest_zone, 0xCC, 0x10000);
+
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x2E69, FT_RING_SEG);        // FS segment = ring zone
+    for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;  // header window baseline
+
+    uint16_t saved_10980 = v2_fntest_get_word_10980();
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { chunk_id, 0, 0, 0, 0, 0, 0, 0 };
+    v2_fntest_es_override = FT_DEST_SEG;
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_10982), g_synth_orig, regs);
+    v2_fntest_es_override = 0;
+    uint16_t orig_10980 = v2_fntest_get_word_10980();
+    v2_fntest_put_word_10980(saved_10980);
+    if (ft_ub_marks() != esc0) {
+        st.cases--;
+        fprintf(stderr, "FNSELFTEST-UB[sub_10982 %s]: chunk=%04X escaped (error path)\n",
+                group, chunk_id);
+        memcpy(ring_zone, saved_ring, 0x10000);
+        memcpy(dest_zone, saved_dest, 0x10000);
+        return true;
+    }
+    uint16_t orig_di_out = regs[5];
+
+    // Capture oracle zones, restore m2c::m
+    static uint8_t orig_ring[0x10000], orig_dest[0x10000];
+    memcpy(orig_ring, ring_zone, 0x10000);
+    memcpy(orig_dest, dest_zone, 0x10000);
+    memcpy(ring_zone, saved_ring, 0x10000);
+    memcpy(dest_zone, saved_dest, 0x10000);
+
+    // --- v2 ---
+    memset(v2_dest, 0xCC, sizeof(v2_dest));
+    uint32_t v2_size = v2_fntest_call_read_chunk(chunk_id, v2_dest, v2_ring, v2_hdr);
+
+    long diffs = 0;
+    if ((uint32_t)orig_di_out != (v2_size & 0xFFFF)) {
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10982 %s]: size orig(di)=%04X v2=%04X | chunk=%04X\n",
+                    group, orig_di_out, (uint16_t)v2_size, chunk_id); }
+        diffs++;
+    }
+    // dest zone: compare the written prefix (orig baseline was 0xCC everywhere)
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        uint8_t ov = orig_dest[a];
+        uint8_t vv = (a < v2_size) ? v2_dest[a] : 0xCC;
+        if (ov == vv) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10982 %s]: dest+%04X orig=%02X v2=%02X | chunk=%04X\n",
+                    group, a, ov, vv, chunk_id); }
+        diffs++;
+        if (diffs > 40) break;
+    }
+    // ring window 0..0xFFF (the FS staging at 0x1000+ holds the raw compressed
+    // bytes — identical by construction on both sides since both read the same
+    // file; compare it too, bounded by the compressed size from the header).
+    // chunk 0xFFFA is the documented no-op: neither side touches the ring —
+    // the v2 wrapper's baseline zeroing is prep, not a write; skip the window.
+    uint32_t comp_sz = *(uint32_t*)(v2_hdr + 4) - *(uint32_t*)(v2_hdr + 0);
+    uint32_t stage_end = 0x1000 + ((comp_sz < 0xEFF0) ? (uint16_t)comp_sz : 0xEFF0);
+    if (chunk_id == 0xFFFA) stage_end = 0;
+    for (uint32_t a = 0; a < stage_end; a++) {
+        uint8_t ov = orig_ring[a];
+        uint8_t vv;
+        if (a < 0x1000) vv = v2_ring[a];
+        else vv = v2_vm_shadow_fs[a];
+        if (ov == vv) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10982 %s]: fs+%04X orig=%02X v2=%02X | chunk=%04X\n",
+                    group, a, ov, vv, chunk_id); }
+        diffs++;
+        if (diffs > 80) break;
+    }
+    // DS: plant the v2 header mirror, then full-image diff
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    memcpy(g_scratch + 0x2BB4, v2_hdr, 10);
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10982 %s]: ds addr=%04X orig=%02X v2=%02X | chunk=%04X\n",
+                    group, a, g_synth_orig[a], g_scratch[a], chunk_id); }
+        diffs++;
+    }
+    // cs-global word_10980 == decompressed size (v2 mirror lives at hdr[8..9])
+    if (orig_10980 != *(uint16_t*)(v2_hdr + 8)) {
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_10982 %s]: word_10980 orig=%04X v2=%04X | chunk=%04X\n",
+                    group, orig_10980, *(uint16_t*)(v2_hdr + 8), chunk_id); }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_chunk(uint32_t seed) {
+    (void)seed;
+    FtSynthStats corpus, synth;
+    long diff_budget = 60;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+
+    // --- Corpus: every real DATA.DAT chunk -------------------------------
+    if (!v2_fntest_set_data_file("DATA.DAT") || !v2_fntest_set_data_file_v2("DATA.DAT")) {
+        fprintf(stderr, "FNSELFTEST-SUMMARY[sub_10982]: DATA.DAT missing — total cases=0 fail=1\n");
+        return 1;
+    }
+    uint32_t first_off = 0;
+    { FILE* f = fopen("DATA.DAT", "rb");
+      if (f) { if (fread(&first_off, 4, 1, f) != 1) first_off = 0; fclose(f); } }
+    uint32_t nchunks = first_off / 4;
+    fprintf(stderr, "FNSELFTEST-PROG[sub_10982]: DATA.DAT chunks=%u\n", nchunks);
+    for (uint32_t id = 0; id < nchunks; id++) {
+        if ((id % 64) == 0)
+            fprintf(stderr, "FNSELFTEST-PROG[sub_10982]: corpus %u/%u\n", id, nchunks);
+        if (!ft_shard_mine(id)) continue;
+        ft_synth_case_chunk((uint16_t)id, "corpus", corpus, diff_budget);
+    }
+    // 0xFFFA special no-op + one out-of-table id (error path → oracle UB-skip)
+    if (g_shard_i == 0) {
+        ft_synth_case_chunk(0xFFFA, "corpus", corpus, diff_budget);
+        ft_synth_case_chunk((uint16_t)(nchunks + 8), "corpus", corpus, diff_budget);
+    }
+
+    // --- Synthetic LZSS fixtures ------------------------------------------
+    // One fixture file, several crafted chunks: pure literals; backrefs into
+    // the zeroed ring; max-length refs; offset wrap at 0xFFF; termination
+    // mid-backref; size==1 (the DEC dx underflow edge: one byte IS written).
+    if (g_shard_i == 0) {
+        const char* fx = "/tmp/fnst_lzss_fixture.dat";
+        {
+            FILE* f = fopen(fx, "wb");
+            if (f) {
+                struct Blob { uint8_t bytes[64]; int n; uint16_t dsize; };
+                Blob b[6];
+                // 0: 8 literals "ABCDEFGH"
+                { Blob& x = b[0]; x.n = 0; x.dsize = 8; x.bytes[x.n++] = 0xFF;
+                  for (int i = 0; i < 8; i++) x.bytes[x.n++] = (uint8_t)('A' + i); }
+                // 1: literal 'Z', then a backref len 3 into the zeroed ring @0x800
+                { Blob& x = b[1]; x.n = 0; x.dsize = 4; x.bytes[x.n++] = 0x01;
+                  x.bytes[x.n++] = 'Z';
+                  x.bytes[x.n++] = 0x00; x.bytes[x.n++] = 0x08; } // ref word 0x0800: off=0x800 len=3
+                // 2: 2 literals then max-length (18) self-overlapping ref off=0
+                { Blob& x = b[2]; x.n = 0; x.dsize = 20; x.bytes[x.n++] = 0x03;
+                  x.bytes[x.n++] = 0x55; x.bytes[x.n++] = 0xAA;
+                  x.bytes[x.n++] = 0x00; x.bytes[x.n++] = 0xF0; } // off=0 len=15+3=18
+                // 3: ref crossing the ring wrap: off=0xFFE len=5
+                { Blob& x = b[3]; x.n = 0; x.dsize = 5; x.bytes[x.n++] = 0x00;
+                  x.bytes[x.n++] = 0xFE; x.bytes[x.n++] = 0x5F; } // word 0x5FFE: off=0xFFE len=5+3=8→size stops at 5
+                // 4: size 1 via a backref (termination mid-copy)
+                { Blob& x = b[4]; x.n = 0; x.dsize = 1; x.bytes[x.n++] = 0x00;
+                  x.bytes[x.n++] = 0x00; x.bytes[x.n++] = 0x30; } // off=0 len=6, stops after 1
+                // 5: size 1 via literal (DEC dx from 1)
+                { Blob& x = b[5]; x.n = 0; x.dsize = 1; x.bytes[x.n++] = 0x01;
+                  x.bytes[x.n++] = 0x7E; }
+                uint32_t off = 6 * 4;
+                uint32_t offs[7];
+                for (int i = 0; i < 6; i++) { offs[i] = off; off += 2 + (uint32_t)b[i].n; }
+                offs[6] = off;
+                // NOTE the oracle reads chunk i's table entry as TWO dwords
+                // (offset, next) at id*4 — entry i+1 must be chunk i's end.
+                for (int i = 0; i < 6; i++) fwrite(&offs[i], 4, 1, f);
+                // (no 7th entry needed for ids 0..4; id 5 reads offs[5]+offs[6]
+                // where offs[6] would be chunk-5 data — craft: append a dword
+                // equal to the file end as a trailing pseudo-entry INSIDE the
+                // first chunk's padding is impossible → keep ids 0..4 only.)
+                for (int i = 0; i < 6; i++) {
+                    fwrite(&b[i].dsize, 2, 1, f);
+                    fwrite(b[i].bytes, 1, (size_t)b[i].n, f);
+                }
+                fclose(f);
+            }
+        }
+        if (v2_fntest_set_data_file(fx) && v2_fntest_set_data_file_v2(fx)) {
+            for (uint16_t id = 0; id < 5; id++)   // id 5's "next" entry is data, skip
+                ft_synth_case_chunk(id, "synth", synth, diff_budget);
+        }
+        // restore the real file for any later units in the same process
+        v2_fntest_set_data_file("DATA.DAT");
+        v2_fntest_set_data_file_v2("DATA.DAT");
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_10982]: corpus %ld/%ld, synth %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        corpus.pass, corpus.cases, synth.pass, synth.cases,
+        corpus.cases + synth.cases, corpus.fail + synth.fail,
+        (corpus.fail + synth.fail) ? "  <<< DIVERGENCE" : "");
+    return (corpus.fail + synth.fail) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // sub_1303a / sub_13031 <-> v2_vm_sub_1303a (+ v2_vm_sub_135cf) — the anim
 // frame interpreter (units 25/26). The anim script is planted INSIDE the DS
 // image at FT_ANIM_PC (the oracle enters with es==ds, so es:[bx] reads hit
@@ -2727,6 +2951,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15c37")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15C37, 0x15C37001u); }
     if (all || strstr(env, "sub_15c93")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15C93, 0x15C93001u); }
     if (all || strstr(env, "sub_15afd")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15AFD, 0x15AFD001u); }
+    if (all || strstr(env, "sub_10982")) { matched = true; rc |= ft_selftest_chunk(0x10982001u); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

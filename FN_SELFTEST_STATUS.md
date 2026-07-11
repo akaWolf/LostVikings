@@ -48,10 +48,13 @@
 | 29 | `sub_15c93` | Y-vel object scan (гейт SUB;JZ;**JNS** — SF-класс) + sub_15d3c/15d42 bbox | та же схема; JNS читает бит 15 wrapped-разности — int16-усечение ТОЧНО; юнит документирует контраст с JL/JG-классом | 75 563 | **PASS, 0 диффов** | негативный контроль таксономии: wrapped-модель корректна именно здесь | (этот) |
 | 30 | `sub_15afd` | downward tile collision (гейт SUB;JZ;**JGE** — дивергенция №19): slope-проба (ds:0x3A/0x32, push/restore [di+0x150D], таблица [sidx-0x7684]) + loc_15b88 повторная проба + гориз. walk (ds:0x36/0x38) | si=filter, di=obj; гейт [0x1765]−[0x13CD] по истинному знаку; slope: sub_14199=141ba(x>>4,y>>4), sub_16390=(y&0xF)−slope[(tt&0xF)<<4|x&0xF]; walk: same-16px-row ранний CLC, match/advance/clamp к X_end; ax=0x8000\|snap (slope) / 0 (walk-match); extraction из op-хендлера 1584e (v2_vm_sub_15afd) | 75 566 = grid 32 (27 vel-пар×bbox + 5 slope/walk-направленных: sr≥0/<0, 0xFF-фильтр→walk, same-row exit, clamp) + exhaustive **вся ось [0x13CD] 65536** при [0x1765]=+16928 + fuzz 9 998 | **PASS, 0 диффов** | tilemap-крафт как у 20-24 + slope-строки в карте; 2 UB-скипа fuzz | (этот) |
 
-**Итого: 31 процедура (30 юнитов + vmops-раннер), ~2.95M кейсов классов A/B, 0 расхождений.**
-Оценка покрытия seg000: ~64% процедур (~299 из 467) исполняются под
-synthetic-diff сравнением (31 прямая + ~209 опкод-хендлеров транзитивно
-через vmops + ~60 подфункций в глубине юнит-кейсов).
+| 31 | `sub_10982` | **класс D**: read_chunk — DATA.DAT seek/read + LZSS-декомпрессия | ax=chunk_id, es:di=dest (es через v2_fntest_es_override); файл-слой = SDL-инлайны порта (fseek/fread на data_handle); DS: 0x2BB4(таб.запись 8Б)+0x2BBC(size 2Б); ring+staging в FS=[ds:0x2E69]→тест-сег; cs-глобал word_10980=size; ветка (compressed>>4)≥0xB08 → sub_10dba = FATAL «chunk too big» (error-exit) | 538 = **корпус ВСЕ 535 реальных чанков DATA.DAT** (531 сравнимых байт-в-байт: dest-зона + ring 0..0xFFF + staging 0x1000+cx + DS + word_10980 + размер-di; 4 UB = big-RAW-чанки/out-of-table error-path) + 0xFFFA no-op + 5 синтетических LZSS-fixture (литералы, backref в занулённый ring, max-len 18 self-overlap, ring-wrap 0xFFE, терминация посреди backref, size=1 через DEC-underflow — байт ПИШЕТСЯ) | **PASS, 0 диффов** | fixture-файл подменяет DATA.DAT обеим сторонам (v2_fntest_set_data_file{,_v2}); найдена и исправлена придуманная «Non-FS temp» ветка v2_read_chunk (orig там ПАДАЕТ через sub_10dba; также fread берёт CX = 16-бит усечение compressed) | (этот) |
+
+**Итого: 32 процедуры (31 юнит + vmops-раннер), ~2.95M кейсов классов A/B/D, 0 расхождений.**
+Оценка покрытия seg000: ~64% процедур (~300 из 467) исполняются под
+synthetic-diff сравнением (32 прямые + ~209 опкод-хендлеров транзитивно
+через vmops + ~60 подфункций в глубине юнит-кейсов). Класс D открыт:
+вся декомпрессия реального DATA.DAT доказана байт-в-байт.
 
 ## Класс B (VM-опкоды: sub_1424c ↔ v2_vm_execute_object) — В ПРОЦЕССЕ
 

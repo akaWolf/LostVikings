@@ -99,6 +99,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 28: return (void*)&sub_15c37;   // X-vel object scan (JG gate) + cef/cf5 bbox
     case 29: return (void*)&sub_15c93;   // Y-vel object scan (JNS gate) + d3c/d42 bbox
     case 30: return (void*)&sub_15afd;   // downward tile collision (slope + walk)
+    case 31: return (void*)&sub_10982;   // read_chunk: DATA.DAT seek/read + LZSS (class D)
     default: return 0;
     }
 }
@@ -172,6 +173,20 @@ extern "C" void v2_fntest_arm_signals(void) {
     sigaction(SIGALRM, &sa, nullptr);
 }
 
+// Unit-31 (read_chunk) hooks: ES override for the isolated call (0 = default
+// es = ds), and a data-file switcher so synthetic LZSS fixtures can replace
+// DATA.DAT for both the oracle and v2 (the oracle's file layer is the port's
+// SDL-inlined fread/fseek on the static `data_handle`).
+extern "C" uint16_t v2_fntest_es_override = 0;
+extern "C" int v2_fntest_set_data_file(const char* path) {
+    if (data_handle) { fclose(data_handle); data_handle = 0; }
+    data_handle = fopen(path, "rb");
+    return data_handle ? 1 : 0;
+}
+// cs-global word_10980 (the decompressor's stored size) — save/compare hooks.
+extern "C" uint16_t v2_fntest_get_word_10980(void) { return (uint16_t)word_10980; }
+extern "C" void     v2_fntest_put_word_10980(uint16_t v) { word_10980 = v; }
+
 extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs)
 {
     // +0x10 tail: a WORD access at offset 0xFFFF reaches linear ds+0x10000
@@ -193,7 +208,8 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     struct m2c::_STATE* _state = &st;
     X86_REGREF
     cs = 0x1a2;
-    ds = es = (dw)(ds_lin >> 4);
+    ds = (dw)(ds_lin >> 4);
+    es = v2_fntest_es_override ? v2_fntest_es_override : ds;
     ss = seg_offset(m2c::stack);
     esp = 0; sp = (dw)(STACK_SIZE / 2);
     ax = io_regs[0]; bx = io_regs[1]; cx = io_regs[2]; dx = io_regs[3];

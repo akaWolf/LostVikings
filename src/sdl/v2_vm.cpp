@@ -1505,34 +1505,30 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
 
     // Original sub_10982: ecx = compressed_size (including 2-byte header already read).
     // After reading the 2-byte header, file position = chunk_offset + 2.
-    // Original reads cx = compressed_size bytes from that position into FS:0x1000.
-    // This reads 2 bytes MORE than actual compressed data (into next chunk's table entry).
-    // For non-FS path (loc_1098e): reads compressed_size bytes into allocated temp buffer.
-    // We replicate: read compressed_size bytes for FS temp path, compressed_size-2 for non-FS.
-    uint32_t comp_data_size = compressed_size - 2;
+    // Original reads CX (the LOW 16 BITS of ecx) bytes from that position into
+    // FS:0x1000 — 2 bytes more than the actual compressed data (spills into the
+    // next chunk's first bytes; harmless, the decompressor stops on dx underflow).
     static uint8_t comp_buf[0x10000];
-    uint32_t eax_check = compressed_size >> 4;
-    bool use_fs_temp = (eax_check < 0x0B08);
-    size_t read;
-    if (use_fs_temp) {
-        // Original: fread(fs:0x1000, cx, 1, data_handle) where cx = compressed_size (full).
-        // Reads compressed_size bytes starting at chunk_offset + 2.
-        uint32_t fs_read_size = compressed_size;
-        if (fs_read_size > sizeof(comp_buf)) fs_read_size = sizeof(comp_buf);
-        read = fread(v2_vm_shadow_fs + 0x1000, 1, fs_read_size, v2_data_handle);
-        // Zero shadow_fs[0..0xFFF] — original: memset(ds:0, 0, 0x800 words)
-        memset(v2_vm_shadow_fs, 0, 0x1000);
-        // Copy to comp_buf for LZSS decompression
-        if (read > 0) memcpy(comp_buf, v2_vm_shadow_fs + 0x1000, read);
-        printf("V2-CHUNK: id=0x%X use_fs_temp comp=%d decomp=%d\n", chunk_id, (int)fs_read_size, decompressed_size);
-    } else {
-        // Non-FS path (loc_1098e): allocate temp, read compressed_size bytes
-        uint32_t buf_read_size = compressed_size;
-        if (buf_read_size > sizeof(comp_buf)) buf_read_size = sizeof(comp_buf);
-        printf("V2-CHUNK: id=0x%X NO_fs_temp comp=%d decomp=%d\n", chunk_id, (int)buf_read_size, decompressed_size);
-        read = fread(comp_buf, 1, buf_read_size, v2_data_handle);
+    uint32_t eax_check = compressed_size >> 4;    // orig: SHR eax,4 (32-bit)
+    if (eax_check >= 0x0B08) {
+        // Orig loc_1098e: sub_10dba twice = the FATAL "chunk too big" handler
+        // (close file, print error via INT21, exit). No alternate load path
+        // exists — the previous v2 "Non-FS temp" branch was invented. Real
+        // DATA.DAT chunks never reach this (~45KB compressed limit).
+        fprintf(stderr, "V2-CHUNK-FATAL: id=0x%X compressed=%u >= 0xB080 — orig would "
+                "abort via sub_10dba (chunk too big)\n", chunk_id, compressed_size);
+        return 0;
     }
+    // Original: fread(fs:0x1000, cx, 1, data_handle), cx = low 16 bits of ecx.
+    uint32_t fs_read_size = (uint16_t)compressed_size;
+    size_t read = fread(v2_vm_shadow_fs + 0x1000, 1, fs_read_size, v2_data_handle);
+    // Zero shadow_fs[0..0xFFF] — original: memset(ds:0, 0, 0x800 words)
+    memset(v2_vm_shadow_fs, 0, 0x1000);
+    // Copy to comp_buf for LZSS decompression
+    if (read > 0) memcpy(comp_buf, v2_vm_shadow_fs + 0x1000, read);
+    printf("V2-CHUNK: id=0x%X use_fs_temp comp=%d decomp=%d\n", chunk_id, (int)fs_read_size, decompressed_size);
     if (read == 0) return 0;
+    bool use_fs_temp = true;   // ring lives in shadow FS (orig: ds = [ds:0x2E69])
 
     // LZSS decompress. When using FS as temp, the sliding window (ring buffer)
     // is written to shadow_fs[0..0xFFF] — replicating the original's ds:[bx] writes.
@@ -1557,6 +1553,25 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
         }
     }
     return result;
+}
+
+// Unit-31 wrappers: run v2_read_chunk against a caller buffer and expose the
+// v2 side effects the runner compares (ring = shadow FS window, the ds:0x2BB4
+// header mirror). v2_fntest_set_data_file_v2 switches the v2 file handle to a
+// synthetic fixture (paired with the oracle-side v2_fntest_set_data_file).
+extern "C" int v2_fntest_set_data_file_v2(const char* path) {
+    if (v2_data_handle) { fclose(v2_data_handle); v2_data_handle = nullptr; }
+    v2_data_handle = fopen(path, "rb");
+    return v2_data_handle ? 1 : 0;
+}
+extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
+                                              uint8_t* ring_out, uint8_t* hdr10_out) {
+    memset(v2_vm_shadow_fs, 0, 0x1000);          // deterministic ring baseline per case
+    memset(v2_vm_shadow_ds + 0x2BB4, 0, 10);     // header mirror baseline
+    uint32_t n = v2_read_chunk(chunk_id, dest, 0x10000);
+    memcpy(ring_out, v2_vm_shadow_fs, 0x1000);
+    memcpy(hdr10_out, v2_vm_shadow_ds + 0x2BB4, 10);
+    return n;
 }
 
 // sub_10cd8: read raw chunk (no LZSS decompression).
