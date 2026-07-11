@@ -8651,6 +8651,13 @@ static uint16_t v2_vm_sub_141ba(V2VM& vm, uint16_t si, uint16_t di) {
     uint16_t di2 = di << 1;
     uint16_t si2 = si << 1;
     si2 += vm.ds_read((uint16_t)(di2 - 0x7098));
+    // fn-test parity: like v2_resolve_segment, read the tilemap segment
+    // [ds:0x2E63] linearly from m2c::m (the oracle's raddr does exactly
+    // that; the shadow tilemap is not populated in the selftest process).
+    if (v2_replay_verify_active && v2_m2c_base) {
+        return *(uint16_t*)(v2_m2c_base
+                            + ((uint32_t)vm.ds_read(0x2E63) << 4) + si2);
+    }
     // Read from shadow tile map
     if (v2_tilemap_shadow_valid && si2 < V2_TILEMAP_SHADOW_SIZE - 1) {
         return *(uint16_t*)(v2_vm_shadow_tilemap + si2);
@@ -9567,9 +9574,15 @@ static void v2_vm_sub_1589b(V2VM& vm, uint16_t filter_si) {
 // Used by sub_159df (X_end+1), sub_159d3 (X_start), loc_159ec (X_end).
 static bool v2_vm_loc_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t dx) {
     vm.ds_write(0x34, filter_si);
-    int16_t y_top = (int16_t)vm.ds_read(obj_di + 0x150D) - (int16_t)vm.ds_read(obj_di + 0x196D);
-    if (y_top < 0) y_top = 0;
-    uint16_t cx = (uint16_t)y_top;
+    // orig 0x59FC: SUB ax,[196Dh]; JGE — the branch tests the SUB's own
+    // SF^OF, i.e. the TRUE 32-bit difference vs 0; the kept value is the
+    // wrapped 16-bit result. An intermediate int16_t truncates BEFORE the
+    // compare and mis-clamps on signed overflow (e.g. (-15850)-(+16928):
+    // orig clamps to 0, a truncated +32758 didn't — endless walk, caught
+    // by the unit-20 fuzz under the v2 watchdog).
+    int32_t y_top32 = (int32_t)(int16_t)vm.ds_read(obj_di + 0x150D)
+                    - (int32_t)(int16_t)vm.ds_read(obj_di + 0x196D);
+    uint16_t cx = (y_top32 >= 0) ? (uint16_t)y_top32 : 0;
 
     // First check: tile at (obj.X, y_top) — if slope (>= 0x30) → exit no match
     {
@@ -9579,9 +9592,12 @@ static bool v2_vm_loc_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint1
         if (tt >= 0x30) return false;
     }
 
-    // Y_start for vertical scan
-    int16_t y_start = (int16_t)vm.ds_read(obj_di + 0x14E5) - (int16_t)vm.ds_read(obj_di + 0x196D);
-    if (y_start <= 0) y_start = 0;
+    // Y_start for vertical scan — orig 0x5A1B: SUB + JG (same SF^OF rule as
+    // the y_top clamp above: decide on the true 32-bit difference, keep the
+    // wrapped 16-bit value).
+    int32_t y_start32 = (int32_t)(int16_t)vm.ds_read(obj_di + 0x14E5)
+                      - (int32_t)(int16_t)vm.ds_read(obj_di + 0x196D);
+    uint16_t y_start = (y_start32 > 0) ? (uint16_t)y_start32 : 0;
 
     // Vertical scan from y_start to y_top
     for (uint16_t di = (uint16_t)y_start; ; ) {
@@ -10442,6 +10458,59 @@ extern "C" void v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, uint
 extern "C" void v2_fntest_call_sub_12fc6(uint8_t* test_shadow) { v2_sub_12fc6(test_shadow); }
 extern "C" void v2_fntest_call_sub_12fcb(uint8_t* test_shadow) { v2_sub_12fcb(test_shadow); }
 extern "C" void v2_fntest_call_sub_12fd0(uint8_t* test_shadow) { v2_sub_12fd0(test_shadow); }
+// Anim frame interpreter units: sub_1303a (cmd loop core) / sub_13031
+// (+ sub_135cf tail). The anim script lives INSIDE the DS image (the
+// oracle enters with es==ds), so vm.es = the case image too.
+static void v2_vm_sub_1303a(V2VM& vm);   // defined below
+static void v2_vm_sub_135cf(V2VM& vm);   // defined below
+extern "C" void v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int which) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = test_shadow;
+    // anim cmds read constant tables from the CS segment (e.g. cmd 0x15's
+    // sprite-type table at cs:0x32D7) — point at real seg000 like the game.
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = obj; vm.pc = 0; vm.running = true; vm.carry = false;
+    vm.slot = obj / 2;
+    extern int v2_fntest_vm_soft;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    v2_fntest_vm_soft = 1;
+    v2_vm_sub_1303a(vm);
+    if (which) v2_vm_sub_135cf(vm);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+}
+
+// Anim-search family (sub_158aa..sub_158e6 mirrors). A minimal V2VM over the
+// case image; segment parity via v2_replay_verify_active (tile reads resolve
+// [ds:0x2E63] linearly into m2c::m, same as the oracle's raddr).
+// Returns carry (compared against the oracle's CF).
+extern "C" int v2_fntest_call_search(uint8_t* test_shadow, int which,
+                                     uint16_t filter, uint16_t obj) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = test_shadow;
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = obj; vm.pc = 0; vm.running = true; vm.carry = false;
+    vm.slot = obj / 2;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    switch (which) {
+    case 0: v2_vm_sub_158aa(vm, filter, obj); break;
+    case 1: v2_vm_sub_158b9(vm, filter, obj); break;
+    case 2: v2_vm_sub_158c8(vm, filter, obj); break;
+    case 3: v2_vm_sub_158d7(vm, filter, obj); break;
+    default: v2_vm_sub_158e6(vm, filter, obj); break;
+    }
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+    return vm.carry ? 1 : 0;
+}
 // Class-B: per-object VM exec (v2_vm_execute_object, fwd-declared at top).
 // v2_vm_accumulator is a file-scope global carried across opcodes — reset it
 // so each synthetic case starts from the canonical zero accumulator.
@@ -12926,26 +12995,29 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             return true;
 
         case 0x30A2: { // [0] sub_130a2: Advance sprite data offset. 1 byte.
-            // byte * 72 = byte*8 + byte*64 added to sub-sprite ds:[si+0x84D]
+            // byte * 72 = byte*8 + byte*64 added to sub-sprite ds:[si+0x84D].
+            // BOTH slot loops are DO-WHILE in orig (loc_130C1/loc_130DB:
+            // body first, ADD si,2 / CMP si,[80h] / JL) — at least one
+            // iteration even when [7Ch] >= [80h].
             uint8_t frm = vm.es[anim_bx++];
             uint16_t offset = (uint16_t)(frm * 72);
             uint16_t mask_val = vm.ds_read(0x38C);
             uint16_t si = vm.ds_read(0x7C);
             uint16_t end = vm.ds_read(0x80);
             if (mask_val != 0) {
-                // Masked: only update matching sub-sprites
-                for (; (int16_t)si < (int16_t)end; si += 2) {
+                do {                                          // loc_130C1
                     if (vm.ds_read(si + 0x54D) & mask_val) {
                         vm.ds_write(si + 0x84D, vm.ds_read(si + 0x84D) + offset);
                         vm.ds_write(si + 0x114D, 0x202);
                     }
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end);
             } else {
-                // Unmasked: update all sub-sprites
-                for (; (int16_t)si < (int16_t)end; si += 2) {
+                do {                                          // loc_130DB
                     vm.ds_write(si + 0x84D, vm.ds_read(si + 0x84D) + offset);
                     vm.ds_write(si + 0x114D, 0x202);
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end);
             }
             return true;
         }
@@ -12953,30 +13025,34 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
         case 0x30EF: { // [1] sub_130ef: Advance sprite with conditional mask. 1 byte.
             // Same as 0x30A2 but different mask source: uses ds:[obj+0x1855] as cx
             // and checks ds:0x38C for mask filtering
+            // BOTH slot loops are DO-WHILE in orig (loc_13106/loc_13132) —
+            // at least one iteration even when [7Ch] >= [80h]; byte
+            // consumption follows (one byte is read for the first slot
+            // unconditionally on the unmasked path).
             uint16_t si = vm.ds_read(0x7C);
             uint16_t di = vm.global_r(0x42);
             uint16_t cx = vm.ds_read(di + 0x1855);
             uint16_t mask_val = vm.ds_read(0x38C);
             uint16_t end = vm.ds_read(0x80);
             if (mask_val != 0) {
-                // Masked path: read byte per matching sub-sprite
                 uint16_t mdi = mask_val;
-                for (; (int16_t)si < (int16_t)end; si += 2) {
+                do {                                          // loc_13106
                     if (vm.ds_read(si + 0x54D) & mdi) {
                         uint8_t frm = vm.es[anim_bx++];
                         uint16_t offset = (uint16_t)(frm * 72);
                         vm.ds_write(si + 0x84D, cx + offset);
                         vm.ds_write(si + 0x114D, 0x202);
                     }
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end);
             } else {
-                // Unmasked: 1 byte PER sub-sprite (each gets own frame byte!)
-                for (; (int16_t)si < (int16_t)end; si += 2) {
+                do {                                          // loc_13132
                     uint8_t frm = vm.es[anim_bx++];
                     uint16_t offset = (uint16_t)(frm * 72);
                     vm.ds_write(si + 0x84D, cx + offset);
                     vm.ds_write(si + 0x114D, 0x202);
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end);
             }
             return true;
         }
@@ -13073,26 +13149,30 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             //   If gate passes: read byte, set bits on current si. Loop si through all sub-sprites.
             //   If gate fails: skip (no byte read). Still advance si.
             // Unmasked: read 1 byte PER sub-sprite, set bits for each.
+            // BOTH slot loops are DO-WHILE in orig (loc_13297/loc_132BA:
+            // body first, ADD si,2 / CMP si,[80h] / JL) — >=1 iteration.
             uint16_t di_dispatch = (uint16_t)cmd * 2; // di = cmd*2 from original dispatch
             uint16_t si = vm.ds_read(0x7C);
             uint16_t end = vm.ds_read(0x80);
             if (vm.ds_read(0x38C) != 0) {
                 // Masked: gate test on [di+54Dh] where di = cmd*2 (FIXED, not iterating)
                 uint16_t dx = vm.ds_read(0x38C);
-                for (; (int16_t)si < (int16_t)end; si += 2) {
+                do {                                          // loc_13297
                     if (vm.ds_read(di_dispatch + 0x54D) & dx) {
                         uint8_t val = vm.es[anim_bx++];
                         uint16_t bits = ((uint16_t)val << 3) & 0x70;
                         vm.ds_write(si + 0x44D, (vm.ds_read(si + 0x44D) & 0xFF8F) | bits);
                     }
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end);
             } else {
                 // Unmasked: 1 byte PER sub-sprite (NO dirty write — original has none)
-                for (; (int16_t)si < (int16_t)end; si += 2) {
+                do {                                          // loc_132BA
                     uint8_t val = vm.es[anim_bx++];
                     uint16_t bits = ((uint16_t)val << 3) & 0x70;
                     vm.ds_write(si + 0x44D, (vm.ds_read(si + 0x44D) & 0xFF8F) | bits);
-                }
+                    si += 2;
+                } while ((int16_t)si < (int16_t)end);
             }
             return true;
         }
@@ -13258,7 +13338,11 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
 
         default: {
             extern int v2_fntest_vm_soft;
-            if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 2; return false; }  // fn-test: soft abort
+            if (v2_fntest_vm_soft) {
+                fprintf(stderr, "V2-ANIM-SOFT: cmd=%02X handler=%04X bx=%04X\n",
+                        cmd, handler, anim_bx);
+                v2_fntest_vm_soft = 2; return false;   // fn-test: soft abort
+            }
             fprintf(stderr, "FATAL: unimplemented anim cmd 0x%02X (handler=0x%04X) obj=%d pc=%04X\n",
                 cmd, handler, vm.obj, vm.pc);
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);

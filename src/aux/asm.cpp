@@ -280,11 +280,13 @@ void asm2C_init() {
 
 
 // FN-TEST: synthetic orig-UB inputs can drive INT 21h into terminate (4Ch)
-// or MCB-corruption exits. Inside an isolated oracle call raise SIGABRT
-// instead — the fn-test watchdog traps it and scores the case as an escape;
-// outside fn-test this behaves exactly like the plain exit below.
+// or MCB-corruption exits. Inside an isolated oracle call jump straight to
+// the isolated-call recovery point (v2_fntest_escape_jump — a raise(SIGABRT)
+// here raced with the SIGALRM watchdog and could strand the process in
+// sigsuspend); outside fn-test this behaves exactly like the plain exit.
+extern "C" void v2_fntest_escape_jump(void);
 static void fntest_trap_or_exit(int code) {
-	if (::v2_fntest_isolated_active) raise(SIGABRT);
+	if (::v2_fntest_isolated_active) v2_fntest_escape_jump();
 	exit(code);
 }
 
@@ -350,7 +352,7 @@ X86_REGREF
       break;
 		case 0x4c:
 		{
-			if (::v2_fntest_isolated_active) raise(SIGABRT);  // fn-test: DOS terminate = escape
+			if (::v2_fntest_isolated_active) v2_fntest_escape_jump();  // fn-test: DOS terminate = escape
 			stackDump(_state);
 			jumpToBackGround = 1;
 			executionFinished = 1;

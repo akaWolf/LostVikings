@@ -88,6 +88,13 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 17: return (void*)&sub_12fc6;   // sub-sprite delta pass, type 0 (sub_1227e)
     case 18: return (void*)&sub_12fcb;   // sub-sprite delta pass, type 1 (sub_122c0)
     case 19: return (void*)&sub_12fd0;   // sub-sprite delta pass, type 2 (sub_122f3)
+    case 20: return (void*)&sub_158aa;   // anim search: X_start-1 (tile 159c6 + obj 15de5)
+    case 21: return (void*)&sub_158b9;   // anim search: X_end+1  (tile 159df + obj 15dfd)
+    case 22: return (void*)&sub_158c8;   // anim search: Y_start-1 (tile 15a57 + obj 15fb1)
+    case 23: return (void*)&sub_158d7;   // anim search: Y_end+1  (tile 15a70 + obj 15fbe)
+    case 24: return (void*)&sub_158e6;   // anim search: flip-point X (tile 15ac4 + obj 1603e)
+    case 25: return (void*)&sub_1303a;   // anim frame interpreter core (sub_13084 cmd loop)
+    case 26: return (void*)&sub_13031;   // full anim update (sub_1303a + sub_135cf)
     default: return 0;
     }
 }
@@ -101,6 +108,7 @@ extern "C" void* v2_fntest_m2c_base(void) { return (void*)&m2c::m; }
 // happen to land on valid case labels "survive" without an escape — the
 // runners treat a bump here the same as an escape (orig-UB, not comparable).
 extern "C" long v2_fntest_ret_mismatches(void) { return m2c::shadow_stack.m_fntest_ret_mismatch; }
+
 
 // io_regs[8]: [0]=ax [1]=bx [2]=cx [3]=dx [4]=si [5]=di [6]=bp — read as the
 // entry register state, overwritten with the exit state; [7] = CF on exit
@@ -132,6 +140,32 @@ static void v2_fntest_set_alarm_ms(long ms) {
     it.it_interval.tv_sec = 0; it.it_interval.tv_usec = 0;
     it.it_value.tv_sec = ms / 1000; it.it_value.tv_usec = (ms % 1000) * 1000;
     setitimer(ITIMER_REAL, &it, nullptr);
+}
+
+// Direct escape for in-oracle code that must not continue (INT21 4Ch etc.):
+// jumps straight to the isolated-call recovery point, bypassing the signal
+// machinery (raise(SIGABRT) from library code raced with the SIGALRM
+// handler and could strand the process in sigsuspend).
+extern "C" void v2_fntest_escape_jump(void) {
+    v2_fntest_start_escapes++;
+    siglongjmp(v2_fntest_hang_jb, 3);
+}
+
+// V2-side watchdog plumbing for the runners: the same jb/alarm/handlers the
+// oracle uses, so a v2 mirror that diverges into an infinite loop (e.g. a
+// walk whose clamp is jumped over at the int16 boundary) becomes a
+// diagnosable FAIL instead of a stuck shard. Usage in a runner:
+//   v2_fntest_arm_signals();
+//   if (sigsetjmp(*v2_fntest_jb(), 1) == 0) { v2_fntest_alarm_ms(N); call; v2_fntest_alarm_ms(0); }
+//   else { v2_fntest_alarm_ms(0); /* hung */ }
+extern "C" sigjmp_buf* v2_fntest_jb(void) { return &v2_fntest_hang_jb; }
+extern "C" void v2_fntest_alarm_ms(long ms) { v2_fntest_set_alarm_ms(ms); }
+extern "C" void v2_fntest_arm_signals(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = v2_fntest_fault;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGALRM, &sa, nullptr);
 }
 
 extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs)
@@ -205,7 +239,9 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
         // CALL target) abort() — treat like any other orig-UB escape.
         sigaction(SIGABRT, &sa, nullptr);
         if (sigsetjmp(v2_fntest_hang_jb, 1) == 0) {
-            v2_fntest_set_alarm_ms(500);
+            // 2s: long-but-legit paths exist (e.g. a ~2000-step Y tile walk
+            // through the recursive CALL_ chain at -O0 exceeds 500ms).
+            v2_fntest_set_alarm_ms(2000);
             ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
             v2_fntest_set_alarm_ms(0);
         } else {
