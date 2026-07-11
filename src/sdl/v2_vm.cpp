@@ -10518,6 +10518,41 @@ extern "C" int v2_fntest_call_search(uint8_t* test_shadow, int which,
     v2_vm_acc_base = saved_acc;
     return vm.carry ? 1 : 0;
 }
+// Vel/collision scan family (units 27-30). Same minimal-V2VM setup as the
+// search wrapper. Returns -1 on CLC; on STC returns the 16-bit AX the orig
+// leaves: sub_1614e → 0, sub_15c37/sub_15c93 → direction (1=cef/left-or-d3c,
+// 0=cf5/right-or-d42), sub_15afd → tile snap value (0x8000|x or 0).
+static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_sub_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
+                            int16_t& out_dir, uint16_t& out_partner);
+static bool v2_vm_sub_15afd(V2VM& vm, uint16_t filter_si, uint16_t di,
+                            int16_t& out_tile_ax, bool dbg);
+extern "C" int32_t v2_fntest_call_scan(uint8_t* test_shadow, int which,
+                                       uint16_t filter, uint16_t obj) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = test_shadow;
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = obj; vm.pc = 0; vm.running = true; vm.carry = false;
+    vm.slot = obj / 2;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    int32_t r = -1;
+    switch (which) {
+    case 0: if (v2_vm_sub_1614e(vm, filter, obj)) r = 0; break;
+    case 1: { int16_t dir = 0; uint16_t partner = 0;
+              if (v2_vm_sub_15c37(vm, filter, obj, dir, partner)) r = (uint16_t)dir; break; }
+    case 2: { uint16_t dir = 0;
+              if (v2_sub_15c93(vm, filter, obj, dir)) r = dir; break; }
+    default: { int16_t tile_ax = 0;
+               if (v2_vm_sub_15afd(vm, filter, obj, tile_ax, false)) r = (uint16_t)tile_ax; break; }
+    }
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+    return r;
+}
 // Class-B: per-object VM exec (v2_vm_execute_object, fwd-declared at top).
 // v2_vm_accumulator is a file-scope global carried across opcodes — reset it
 // so each synthetic case starts from the canonical zero accumulator.
@@ -10681,6 +10716,152 @@ static void v2_vm_sub_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint1
     vm.ds_write(di + 0x19BD, 0); // clear X fractional accumulator
 }
 
+// sub_15afd (seg000 0x5afd-0x5c36): downward tile collision. si=filter, di=object.
+// Returns CF; out_tile_ax = AX at the STC exits (slope paths: 0x8000|snap value
+// via loc_15bab; horizontal-scan match: 0 via loc_15c20). DS writes: 0x6C/0x6E
+// (only past the y_moved gate), 0x3A + 0x32 (slope probe), 0x36/0x38 (horizontal
+// walk), [di+0x150D] pushed+restored around the slope probe.
+// Orig does NOT write ds:0x34 — only ds:0x6C (filter) and ds:0x6E (di).
+// (sub_15911, the UPward equivalent, has its own writers via loc_15a7d/64; not here.)
+static bool v2_vm_sub_15afd(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& out_tile_ax, bool dbg) {
+    bool tile_found = false;
+    int16_t tile_ax = 0; // result for sub_15972
+
+    // Orig sub_15afd 0x5b01: SUB ax,[13CD]; JZ ret; JGE continue — continue iff the
+    // TRUE difference (SF^OF of the SUB) is > 0, not the truncated int16.
+    int32_t y_moved = (int32_t)(int16_t)vm.ds_read(di + 0x1765) - (int32_t)(int16_t)vm.ds_read(di + 0x13CD);
+    if (dbg) fprintf(stderr, "  y_moved=%d\n", (int)y_moved);
+    if (y_moved > 0) {
+        vm.ds_write(0x6C, filter_si);
+        vm.ds_write(0x6E, di);
+
+        // Scan filter for slope type
+        uint16_t flt = filter_si;
+        uint8_t filt_val;
+        while (true) {
+            filt_val = vm.shadow[(uint16_t)(flt - 0x6B34)];
+            if (filt_val == 0xFF || filt_val >= 0x30) break;
+            flt++;
+        }
+
+        if (dbg) fprintf(stderr, "  filt_val=%02X\n", filt_val);
+        if (filt_val >= 0x30 && filt_val != 0xFF) {
+            uint16_t obj_x = vm.ds_read(di + 0x173D);
+            int16_t adj_y = (int16_t)vm.ds_read(di + 0x13CD) - (int16_t)vm.ds_read(di + 0x1765)
+                            + (int16_t)vm.ds_read(di + 0x150D);
+            uint16_t tt = (v2_vm_sub_141ba(vm, obj_x >> 4, (uint16_t)adj_y >> 4) & 0xFC00) >> 10;
+            if (dbg) fprintf(stderr, "  obj_x=%04X adj_y=%04X tt=%02X\n", obj_x, adj_y, tt);
+            if (tt >= 0x30) {
+                vm.ds_write(0x3A, tt);
+                di = vm.ds_read(0x6E);
+                uint16_t cur_y_end = vm.ds_read(di + 0x150D);
+                uint16_t tt2 = (v2_vm_sub_141ba(vm, obj_x >> 4, cur_y_end >> 4) & 0xFC00) >> 10;
+                if (dbg) fprintf(stderr, "  cur_y_end=%04X tt2=%02X\n", cur_y_end, tt2);
+                if (tt2 < 0x30) {
+                    uint16_t saved = cur_y_end;
+                    uint16_t temp = (tt2 & 0xFFF0) - 1;
+                    vm.ds_write(di + 0x150D, temp);
+                    uint16_t slope_tt = vm.ds_read(0x3A);
+                    uint16_t sidx = ((slope_tt & 0xF) << 4) + (obj_x & 0xF);
+                    uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
+                    int16_t sr = (int16_t)((temp & 0xF) - sv);
+                    if (dbg) fprintf(stderr, "  saved=%04X temp=%04X slope_tt=%02X sidx=%04X sv=%02X sr=%d\n",
+                        saved, temp, slope_tt, sidx, sv, sr);
+                    if (sr >= 0) {
+                        // Orig eip 0x5B72: MOV ds:32h, ax (=sr from sub_16390) — used at eip 0x5B7D ADD ax, ds:32h.
+                        vm.ds_write(0x32, (uint16_t)sr);
+                        vm.ds_write(di + 0x150D, saved);
+                        tile_ax = (int16_t)((uint16_t)((saved & 0xF) + (uint16_t)sr + 1) | 0x8000);
+                        tile_found = true;
+                        if (dbg) fprintf(stderr, "  PATH=A tile_ax=%04X\n", (uint16_t)tile_ax);
+                    } else {
+                        // Orig loc_15b84: just POP into [di+150Dh] — restore saved.
+                        vm.ds_write(di + 0x150D, saved);
+                    }
+                }
+            }
+        }
+
+        // loc_15b88 is reached ONLY from inside loc_15b2a (slope filter found path).
+        // Orig SKIPS loc_15b88 when filter scan finds 0xFF (jmps directly to loc_15bb8).
+        // Therefore guard on slope filter actually being found.
+        bool slope_filter_found = (filt_val >= 0x30 && filt_val != 0xFF);
+        // skip_horizontal: orig at loc_15b88 with tt3>=0x30 AND sr<0 jumps to loc_15c2d
+        // (CLC RET, no horizontal scan, no sub_1614e via carry — caller IS still
+        // sub_1584e which on no-carry calls sub_1614e regardless).
+        // So orig sr<0 path STILL runs sub_1614e but skips horizontal scan.
+        bool skip_horizontal = false;
+        if (!tile_found && slope_filter_found) {
+            // loc_15b88: check slope at current position
+            di = vm.ds_read(0x6E);
+            uint16_t obj_x = vm.ds_read(di + 0x173D);
+            uint16_t cur_y = vm.ds_read(di + 0x150D);
+            uint16_t tt3 = (v2_vm_sub_141ba(vm, obj_x >> 4, cur_y >> 4) & 0xFC00) >> 10;
+            if (dbg) fprintf(stderr, "  loc_15b88: cur_y=%04X tt3=%02X\n", cur_y, tt3);
+            if (tt3 >= 0x30) {
+                uint16_t sidx = ((tt3 & 0xF) << 4) + (obj_x & 0xF);
+                uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
+                int16_t sr = (int16_t)((cur_y & 0xF) - sv);
+                if (dbg) fprintf(stderr, "    sidx=%04X sv=%02X sr=%d\n", sidx, sv, sr);
+                if (sr >= 0) { tile_ax = (int16_t)((uint16_t)sr | 0x8000); tile_found = true;
+                    if (dbg) fprintf(stderr, "    PATH=B tile_ax=%04X\n", (uint16_t)tile_ax);
+                } else {
+                    // orig eip 0x5BA8: jmp loc_15c2d → CLC RET, skipping horizontal scan
+                    skip_horizontal = true;
+                }
+            }
+            // tt3 < 0x30: orig falls through to loc_15bb8 (horizontal scan)
+        }
+
+        if (!tile_found && !skip_horizontal) {
+            // loc_15bb8: horizontal tile scan
+            di = vm.ds_read(0x6E);
+            filter_si = vm.ds_read(0x6C);
+            uint16_t ye = vm.ds_read(di + 0x150D);
+            uint16_t old_ye = (uint16_t)((int16_t)ye - (int16_t)vm.ds_read(di + 0x1765) + (int16_t)vm.ds_read(di + 0x13CD));
+            if ((old_ye & 0xFFF0) != (ye & 0xFFF0)) {
+                uint16_t xe = vm.ds_read(di + 0x155D);
+                vm.ds_write(0x36, ye); vm.ds_write(0x38, xe);
+                for (uint16_t s = vm.ds_read(di + 0x1535); ; ) {
+                    uint8_t al = (uint8_t)((v2_vm_sub_141ba(vm, s >> 4, vm.ds_read(0x36) >> 4) & 0xFC00) >> 10);
+                    bool advance = false;
+                    if (al >= 0x30) {
+                        // orig loc_15bf0: if slope (>= 0x30), JGE loc_15c0b — SKIP slope, continue scan.
+                        // Slope adjustment is NOT applied in horizontal scan.
+                        advance = true;
+                    } else {
+                        // Filter scan (loc_15c00): cmp al with each filter byte until match or above.
+                        uint16_t f = filter_si; bool m = false; bool below = false;
+                        while (true) {
+                            uint8_t fv = vm.shadow[(uint16_t)(f - 0x6B34)];
+                            // JB (al < fv) → loc_15c0b (advance)
+                            if (al < fv) { below = true; break; }
+                            // JZ (al == fv) → loc_15c20 (match)
+                            if (al == fv) { m = true; break; }
+                            f++;
+                        }
+                        if (m) { tile_ax = 0; tile_found = true; break; }
+                        // below or fall through: advance
+                        (void)below;
+                        advance = true;
+                    }
+                    if (advance) {
+                        // loc_15c0b: cmp si, ds:38 (X_end)
+                        if (s == xe) break; // jz loc_15c2d (CLC return)
+                        s += 0x10;
+                        // cmp si, ds:38; jl loc_15bf0 → continue
+                        // else: si = ds:38 (clamp); jmp loc_15bf0
+                        if ((int16_t)s >= (int16_t)xe) s = xe;
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+    out_tile_ax = tile_ax;
+    return tile_found;
+}
+
 // sub_1584e collision check helper — different from sub_155d6!
 // All paths consume 1 byte. Returns carry flag (true = collision).
 // Path 1 (ds:0x390 > 0): full bounding box check via sub_15AFD etc.
@@ -10724,144 +10905,11 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         uint8_t filter = vm.read_u8();
         uint16_t di = vm.global_r(0x42);
         uint16_t filter_si = (uint16_t)filter;
-        bool tile_found = false;
-        int16_t tile_ax = 0; // result for sub_15972
         if (dbg) fprintf(stderr, "  filter_byte=%02X di=%04X\n", filter, di);
 
-        // --- sub_15AFD: downward tile collision ---
-        // Orig sub_15afd does NOT write ds:0x34 — only ds:0x6C (filter) and ds:0x6E (di).
-        // (sub_15911, the UPward equivalent, has its own writers via loc_15a7d/64; not here.)
-        // Orig sub_15afd 0x5b01: SUB ax,[13CD]; JZ ret; JGE continue — continue iff the
-        // TRUE difference (SF^OF of the SUB) is > 0, not the truncated int16.
-        int32_t y_moved = (int32_t)(int16_t)vm.ds_read(di + 0x1765) - (int32_t)(int16_t)vm.ds_read(di + 0x13CD);
-        if (dbg) fprintf(stderr, "  y_moved=%d\n", (int)y_moved);
-        if (y_moved > 0) {
-            vm.ds_write(0x6C, filter_si);
-            vm.ds_write(0x6E, di);
-
-            // Scan filter for slope type
-            uint16_t flt = filter_si;
-            uint8_t filt_val;
-            while (true) {
-                filt_val = vm.shadow[(uint16_t)(flt - 0x6B34)];
-                if (filt_val == 0xFF || filt_val >= 0x30) break;
-                flt++;
-            }
-
-            if (dbg) fprintf(stderr, "  filt_val=%02X\n", filt_val);
-            if (filt_val >= 0x30 && filt_val != 0xFF) {
-                uint16_t obj_x = vm.ds_read(di + 0x173D);
-                int16_t adj_y = (int16_t)vm.ds_read(di + 0x13CD) - (int16_t)vm.ds_read(di + 0x1765)
-                                + (int16_t)vm.ds_read(di + 0x150D);
-                uint16_t tt = (v2_vm_sub_141ba(vm, obj_x >> 4, (uint16_t)adj_y >> 4) & 0xFC00) >> 10;
-                if (dbg) fprintf(stderr, "  obj_x=%04X adj_y=%04X tt=%02X\n", obj_x, adj_y, tt);
-                if (tt >= 0x30) {
-                    vm.ds_write(0x3A, tt);
-                    di = vm.ds_read(0x6E);
-                    uint16_t cur_y_end = vm.ds_read(di + 0x150D);
-                    uint16_t tt2 = (v2_vm_sub_141ba(vm, obj_x >> 4, cur_y_end >> 4) & 0xFC00) >> 10;
-                    if (dbg) fprintf(stderr, "  cur_y_end=%04X tt2=%02X\n", cur_y_end, tt2);
-                    if (tt2 < 0x30) {
-                        uint16_t saved = cur_y_end;
-                        uint16_t temp = (tt2 & 0xFFF0) - 1;
-                        vm.ds_write(di + 0x150D, temp);
-                        uint16_t slope_tt = vm.ds_read(0x3A);
-                        uint16_t sidx = ((slope_tt & 0xF) << 4) + (obj_x & 0xF);
-                        uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
-                        int16_t sr = (int16_t)((temp & 0xF) - sv);
-                        if (dbg) fprintf(stderr, "  saved=%04X temp=%04X slope_tt=%02X sidx=%04X sv=%02X sr=%d\n",
-                            saved, temp, slope_tt, sidx, sv, sr);
-                        if (sr >= 0) {
-                            // Orig eip 0x5B72: MOV ds:32h, ax (=sr from sub_16390) — used at eip 0x5B7D ADD ax, ds:32h.
-                            vm.ds_write(0x32, (uint16_t)sr);
-                            vm.ds_write(di + 0x150D, saved);
-                            tile_ax = (int16_t)((uint16_t)((saved & 0xF) + (uint16_t)sr + 1) | 0x8000);
-                            tile_found = true;
-                            if (dbg) fprintf(stderr, "  PATH=A tile_ax=%04X\n", (uint16_t)tile_ax);
-                        } else {
-                            // Orig loc_15b84: just POP into [di+150Dh] — restore saved.
-                            vm.ds_write(di + 0x150D, saved);
-                        }
-                    }
-                }
-            }
-
-            // loc_15b88 is reached ONLY from inside loc_15b2a (slope filter found path).
-            // Orig SKIPS loc_15b88 when filter scan finds 0xFF (jmps directly to loc_15bb8).
-            // Therefore guard on slope filter actually being found.
-            bool slope_filter_found = (filt_val >= 0x30 && filt_val != 0xFF);
-            // skip_horizontal: orig at loc_15b88 with tt3>=0x30 AND sr<0 jumps to loc_15c2d
-            // (CLC RET, no horizontal scan, no sub_1614e via carry — caller IS still
-            // sub_1584e which on no-carry calls sub_1614e regardless).
-            // So orig sr<0 path STILL runs sub_1614e but skips horizontal scan.
-            bool skip_horizontal = false;
-            if (!tile_found && slope_filter_found) {
-                // loc_15b88: check slope at current position
-                di = vm.ds_read(0x6E);
-                uint16_t obj_x = vm.ds_read(di + 0x173D);
-                uint16_t cur_y = vm.ds_read(di + 0x150D);
-                uint16_t tt3 = (v2_vm_sub_141ba(vm, obj_x >> 4, cur_y >> 4) & 0xFC00) >> 10;
-                if (dbg) fprintf(stderr, "  loc_15b88: cur_y=%04X tt3=%02X\n", cur_y, tt3);
-                if (tt3 >= 0x30) {
-                    uint16_t sidx = ((tt3 & 0xF) << 4) + (obj_x & 0xF);
-                    uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
-                    int16_t sr = (int16_t)((cur_y & 0xF) - sv);
-                    if (dbg) fprintf(stderr, "    sidx=%04X sv=%02X sr=%d\n", sidx, sv, sr);
-                    if (sr >= 0) { tile_ax = (int16_t)((uint16_t)sr | 0x8000); tile_found = true;
-                        if (dbg) fprintf(stderr, "    PATH=B tile_ax=%04X\n", (uint16_t)tile_ax);
-                    } else {
-                        // orig eip 0x5BA8: jmp loc_15c2d → CLC RET, skipping horizontal scan
-                        skip_horizontal = true;
-                    }
-                }
-                // tt3 < 0x30: orig falls through to loc_15bb8 (horizontal scan)
-            }
-
-            if (!tile_found && !skip_horizontal) {
-                // loc_15bb8: horizontal tile scan
-                di = vm.ds_read(0x6E);
-                filter_si = vm.ds_read(0x6C);
-                uint16_t ye = vm.ds_read(di + 0x150D);
-                uint16_t old_ye = (uint16_t)((int16_t)ye - (int16_t)vm.ds_read(di + 0x1765) + (int16_t)vm.ds_read(di + 0x13CD));
-                if ((old_ye & 0xFFF0) != (ye & 0xFFF0)) {
-                    uint16_t xe = vm.ds_read(di + 0x155D);
-                    vm.ds_write(0x36, ye); vm.ds_write(0x38, xe);
-                    for (uint16_t s = vm.ds_read(di + 0x1535); ; ) {
-                        uint8_t al = (uint8_t)((v2_vm_sub_141ba(vm, s >> 4, vm.ds_read(0x36) >> 4) & 0xFC00) >> 10);
-                        bool advance = false;
-                        if (al >= 0x30) {
-                            // orig loc_15bf0: if slope (>= 0x30), JGE loc_15c0b — SKIP slope, continue scan.
-                            // Slope adjustment is NOT applied in horizontal scan.
-                            advance = true;
-                        } else {
-                            // Filter scan (loc_15c00): cmp al with each filter byte until match or above.
-                            uint16_t f = filter_si; bool m = false; bool below = false;
-                            while (true) {
-                                uint8_t fv = vm.shadow[(uint16_t)(f - 0x6B34)];
-                                // JB (al < fv) → loc_15c0b (advance)
-                                if (al < fv) { below = true; break; }
-                                // JZ (al == fv) → loc_15c20 (match)
-                                if (al == fv) { m = true; break; }
-                                f++;
-                            }
-                            if (m) { tile_ax = 0; tile_found = true; break; }
-                            // below or fall through: advance
-                            advance = true;
-                        }
-                        if (advance) {
-                            // loc_15c0b: cmp si, ds:38 (X_end)
-                            if (s == xe) break; // jz loc_15c2d (CLC return)
-                            s += 0x10;
-                            // cmp si, ds:38; jl loc_15bf0 → continue
-                            // else: si = ds:38 (clamp); jmp loc_15bf0
-                            if ((int16_t)s >= (int16_t)xe) s = xe;
-                            continue;
-                        }
-                    }
-                }
-            }
-        }
-
+        // sub_15AFD: downward tile collision (extracted — see v2_vm_sub_15afd above).
+        int16_t tile_ax = 0; // result for sub_15972
+        bool tile_found = v2_vm_sub_15afd(vm, filter_si, di, tile_ax, dbg);
         di = vm.global_r(0x42);
         bool collision_found = false;
         if (tile_found) {
@@ -14183,6 +14231,75 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     return false;  // CLC
 }
 
+// sub_15c37 (seg000 0x5c37-0x5c92): X-velocity object search. si=filter, di=self.
+// Scans the object table for a type match, then branches on the X velocity
+// difference; sub_15cef/sub_15cf5 + loc_15cf9 do the bbox check. Returns CF;
+// out_dir = AX at the STC return (1 = sub_15cef path/moved left, 0 = sub_15cf5
+// path/moved right); out_partner = SI at the STC return (= ds:0x38, matched slot).
+// DS writes: 0x3A (filter), 0x38 (slot cursor), 0x32 (Y-adj scratch on deep paths).
+static bool v2_vm_sub_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
+                            int16_t& out_dir, uint16_t& out_partner) {
+    uint8_t* rds = vm.shadow;
+    uint16_t table_end = *(uint16_t*)(rds + 0x372);
+    vm.ds_write(0x3A, filter_si);
+    for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)table_end; si2 += 2) {
+        if (*(uint16_t*)(rds + si2 + 0x1355) == 0) continue;
+        if (si2 == *(uint16_t*)(rds + 0x42)) continue;
+        vm.ds_write(0x38, si2);
+        uint8_t obj_type = (uint8_t)*(uint16_t*)(rds + si2 + 0x17DD);
+        uint16_t f = filter_si;
+        bool match = false;
+        while (true) {
+            uint8_t fv = *(uint8_t*)(rds + (uint16_t)(f - 0x6B34));
+            if (obj_type < fv) break;
+            if (obj_type == fv) { match = true; break; }
+            f++;
+        }
+        if (!match) continue;
+        // Type matches. Compare X velocities.
+        // Orig sub_15c37 0x5c6a: SUB ax,[si+1945]; JZ skip; JG →sub_15cf5 / else →sub_15cef —
+        // JG tests the TRUE difference (SF^OF of the SUB), not the truncated int16.
+        int32_t vel_diff = (int32_t)(int16_t)vm.ds_read(di + 0x1945)
+                         - (int32_t)(int16_t)*(uint16_t*)(rds + si2 + 0x1945);
+        if (vel_diff == 0) continue;
+
+        // sub_15cef (vel_diff < 0): ax = self.X_start
+        // sub_15cf5 (vel_diff > 0): ax = self.X_end
+        uint16_t ax_x;
+        int16_t snap_dir;
+        if (vel_diff < 0) {
+            ax_x = vm.ds_read(di + 0x1535); // sub_15cef
+            snap_dir = 1; // moved left
+        } else {
+            ax_x = vm.ds_read(di + 0x155D); // sub_15cf5
+            snap_dir = 0; // moved right
+        }
+
+        // loc_15cf9: X point in partner range?
+        if ((int16_t)ax_x < (int16_t)*(uint16_t*)(rds + si2 + 0x1535)) continue;
+        if ((int16_t)(ax_x - 1) >= (int16_t)*(uint16_t*)(rds + si2 + 0x155D)) continue;
+
+        // Y overlap with velocity adjustment:
+        // self.Y_end_adj >= partner.Y_start_adj?
+        int16_t partner_ys_adj = (int16_t)*(uint16_t*)(rds + si2 + 0x14E5) - (int16_t)*(uint16_t*)(rds + si2 + 0x196D);
+        vm.ds_write(0x32, (uint16_t)partner_ys_adj); // orig eip 0x5D0E
+        int16_t self_ye_adj = (int16_t)vm.ds_read(di + 0x150D) - (int16_t)vm.ds_read(di + 0x196D);
+        if (self_ye_adj < partner_ys_adj) continue;
+
+        // partner.Y_end_adj >= self.Y_start_adj?
+        int16_t self_ys_adj = (int16_t)vm.ds_read(di + 0x14E5) - (int16_t)vm.ds_read(di + 0x196D);
+        vm.ds_write(0x32, (uint16_t)self_ys_adj);    // orig eip 0x5D27
+        int16_t partner_ye_adj = (int16_t)*(uint16_t*)(rds + si2 + 0x150D) - (int16_t)*(uint16_t*)(rds + si2 + 0x196D);
+        if (partner_ye_adj < self_ys_adj) continue;
+
+        // Collision found (orig MOV ax,dir; RETN with STC from loc_15cf9's carry path).
+        out_dir = snap_dir;
+        out_partner = si2;
+        return true;
+    }
+    return false;
+}
+
 // sub_15788: Full collision check. ALL paths consume 1 byte.
 // Same 2-phase system. Filter via 1-byte index.
 // state > 0: calls sub_158f5 (search) + sub_15c37 (directional check). Complex.
@@ -14257,66 +14374,13 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     }
 
     if (!found) {
-        // sub_15c37: X-velocity object search.
-        // Scans objects for type match, then compares X velocities.
-        // If X velocity difference != 0 → calls sub_15cef/sub_15cf5 for bounding box check.
-        uint8_t* rds = vm.shadow;
-        uint16_t table_end = *(uint16_t*)(rds + 0x372);
-        vm.ds_write(0x3A, filter_si);
-        for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)table_end; si2 += 2) {
-            if (*(uint16_t*)(rds + si2 + 0x1355) == 0) continue;
-            if (si2 == *(uint16_t*)(rds + 0x42)) continue;
-            vm.ds_write(0x38, si2);
-            uint8_t obj_type = (uint8_t)*(uint16_t*)(rds + si2 + 0x17DD);
-            uint16_t f = filter_si;
-            bool match = false;
-            while (true) {
-                uint8_t fv = *(uint8_t*)(rds + (uint16_t)(f - 0x6B34));
-                if (obj_type < fv) break;
-                if (obj_type == fv) { match = true; break; }
-                f++;
-            }
-            if (!match) continue;
-            // Type matches. Compare X velocities.
-            // Orig sub_15c37 0x5c6a: SUB ax,[si+1945]; JZ skip; JG →sub_15cf5 / else →sub_15cef —
-            // JG tests the TRUE difference (SF^OF of the SUB), not the truncated int16.
-            int32_t vel_diff = (int32_t)(int16_t)vm.ds_read(di + 0x1945)
-                             - (int32_t)(int16_t)*(uint16_t*)(rds + si2 + 0x1945);
-            if (vel_diff == 0) continue;
-
-            // sub_15cef (vel_diff < 0): ax = self.X_start
-            // sub_15cf5 (vel_diff > 0): ax = self.X_end
-            uint16_t ax_x;
-            int16_t snap_dir;
-            if (vel_diff < 0) {
-                ax_x = vm.ds_read(di + 0x1535); // sub_15cef
-                snap_dir = 1; // moved left
-            } else {
-                ax_x = vm.ds_read(di + 0x155D); // sub_15cf5
-                snap_dir = 0; // moved right
-            }
-
-            // loc_15cf9: X point in partner range?
-            if ((int16_t)ax_x < (int16_t)*(uint16_t*)(rds + si2 + 0x1535)) continue;
-            if ((int16_t)(ax_x - 1) >= (int16_t)*(uint16_t*)(rds + si2 + 0x155D)) continue;
-
-            // Y overlap with velocity adjustment:
-            // self.Y_end_adj >= partner.Y_start_adj?
-            int16_t partner_ys_adj = (int16_t)*(uint16_t*)(rds + si2 + 0x14E5) - (int16_t)*(uint16_t*)(rds + si2 + 0x196D);
-            vm.ds_write(0x32, (uint16_t)partner_ys_adj); // orig eip 0x5D0E
-            int16_t self_ye_adj = (int16_t)vm.ds_read(di + 0x150D) - (int16_t)vm.ds_read(di + 0x196D);
-            if (self_ye_adj < partner_ys_adj) continue;
-
-            // partner.Y_end_adj >= self.Y_start_adj?
-            int16_t self_ys_adj = (int16_t)vm.ds_read(di + 0x14E5) - (int16_t)vm.ds_read(di + 0x196D);
-            vm.ds_write(0x32, (uint16_t)self_ys_adj);    // orig eip 0x5D27
-            int16_t partner_ye_adj = (int16_t)*(uint16_t*)(rds + si2 + 0x150D) - (int16_t)*(uint16_t*)(rds + si2 + 0x196D);
-            if (partner_ye_adj < self_ys_adj) continue;
-
-            // Collision found! sub_15d6b: X position snap
-            v2_vm_sub_15d6b(vm, snap_dir, si2, di);
+        // sub_15c37: X-velocity object search (extracted; caller loc_157a7:
+        // CALL sub_15c37; JNC loc_157bb; CALL sub_15d6b — X position snap).
+        int16_t snap_dir = 0;
+        uint16_t partner = 0;
+        if (v2_vm_sub_15c37(vm, filter_si, di, snap_dir, partner)) {
+            v2_vm_sub_15d6b(vm, snap_dir, partner, di);
             found = true;
-            break;
         }
     }
 

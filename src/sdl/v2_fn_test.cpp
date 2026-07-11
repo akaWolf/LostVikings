@@ -59,6 +59,8 @@ extern "C" void     v2_fntest_call_sub_12fcb(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12fd0(uint8_t* test_shadow);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
+extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
+                                        uint16_t filter, uint16_t obj);
 extern "C" void     v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int which);
 extern "C" long     v2_fntest_ret_mismatches(void);
 #include <setjmp.h>
@@ -94,7 +96,9 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_12FC6 = 17, FT_SUB_12FCB = 18, FT_SUB_12FD0 = 19,
             FT_SUB_158AA = 20, FT_SUB_158B9 = 21, FT_SUB_158C8 = 22,
             FT_SUB_158D7 = 23, FT_SUB_158E6 = 24,
-            FT_SUB_1303A = 25, FT_SUB_13031 = 26, FT_COUNT };
+            FT_SUB_1303A = 25, FT_SUB_13031 = 26,
+            FT_SUB_1614E = 27, FT_SUB_15C37 = 28, FT_SUB_15C93 = 29,
+            FT_SUB_15AFD = 30, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -115,7 +119,9 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_12fc6", "sub_12fcb", "sub_12fd0",
                                  "sub_158aa", "sub_158b9", "sub_158c8",
                                  "sub_158d7", "sub_158e6",
-                                 "sub_1303a", "sub_13031" };
+                                 "sub_1303a", "sub_13031",
+                                 "sub_1614e", "sub_15c37", "sub_15c93",
+                                 "sub_15afd" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -1719,6 +1725,301 @@ int ft_selftest_search(FtId id, uint32_t seed) {
 }
 
 // ---------------------------------------------------------------------------
+// Vel/collision scan family (units 27-30):
+//   sub_1614e — Y-vel object scan, JL gate (divergence 17) + sub_161a1 bbox
+//   sub_15c37 — X-vel object scan, JG gate (divergence 20) + cef/cf5 bbox
+//   sub_15c93 — Y-vel object scan, JNS gate (SF-class, wrapped-exact)
+//   sub_15afd — downward tile collision, JZ+JGE gate (divergence 19),
+//               slope probe + horizontal walk (needs the crafted tilemap
+//               and the slope table at [sidx-0x7684]).
+// Inputs: si=filter, di=obj. Output: CF + AX (compared only when CF=1:
+// 1614e→0, 15c37/15c93→direction, 15afd→snap value 0x8000|x or 0).
+
+bool ft_synth_case_scan(FtId id, uint16_t filter, uint16_t obj,
+                        const FtWr* w, int nw,
+                        const uint16_t* tiles, int tw, int th,
+                        uint32_t bg_seed, const char* group,
+                        FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* zone = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x372, 8);                        // 4 slots: 0,2,4,6
+    ft_wr16(g_synth_in, 0x42, obj);                       // self
+    for (uint16_t s = 0; s < 8; s += 2)                   // controlled slot table
+        ft_wr16(g_synth_in, (uint16_t)(s + 0x1355), 0);
+    for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+    ft_wr16(g_synth_in, 0x2E63, FT_VM_TESTSEG);           // tilemap segment (15afd)
+    ft_wr16(g_synth_in, 0x25DC, (uint16_t)tw);
+    ft_wr16(g_synth_in, 0x25DE, (uint16_t)th);
+    for (int y = 0; y < th; y++)
+        ft_wr16(g_synth_in, (uint16_t)(y * 2 - 0x7098), (uint16_t)(y * tw * 2));
+    // canaries on the scratch protocol (0x6C/0x6E belong to sub_15afd only)
+    ft_wr16(g_synth_in, 0x32, 0xBBBB); ft_wr16(g_synth_in, 0x34, 0xBBBB);
+    ft_wr16(g_synth_in, 0x36, 0xBBBB); ft_wr16(g_synth_in, 0x38, 0xBBBB);
+    ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+    ft_wr16(g_synth_in, 0x6C, 0xBBBB); ft_wr16(g_synth_in, 0x6E, 0xBBBB);
+    FtRng bg(bg_seed);
+    static const uint16_t SF[] = { 0x1535, 0x155D, 0x14E5, 0x150D, 0x1585, 0x17DD,
+                                   0x196D, 0x1945, 0x1765, 0x13CD, 0x173D };
+    for (uint16_t f : SF)
+        ft_wr16(g_synth_in, (uint16_t)(obj + f), bg.w());
+    for (int i = 0; i < nw; i++) ft_wr16(g_synth_in, w[i].addr, w[i].val);
+
+    // Build the tile zone (only sub_15afd reads it; harmless for the others)
+    memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
+    for (int i = 0; i < tw * th; i++) {
+        g_vm_es_in[i * 2]     = (uint8_t)(tiles[i] & 0xFF);
+        g_vm_es_in[i * 2 + 1] = (uint8_t)(tiles[i] >> 8);
+    }
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, filter, obj, 0, 0 };
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+    if (ft_ub_marks() != esc0) {
+        st.cases--;
+        fprintf(stderr, "FNSELFTEST-UB[%s %s]: filter=%04X seed=%08X escaped\n",
+                g_name[id], group, filter, bg_seed);
+        return true;
+    }
+    int cf_orig = regs[7] & 1;
+    int32_t eff_orig = cf_orig ? (int32_t)regs[0] : -1;   // AX only meaningful on STC
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    int32_t eff_v2 = -1; int v2_hung = 0;
+    v2_fntest_arm_signals();
+    if (sigsetjmp(*v2_fntest_jb(), 1) == 0) {
+        v2_fntest_alarm_ms(4000);
+        eff_v2 = v2_fntest_call_scan(g_scratch, (int)(id - FT_SUB_1614E), filter, obj);
+        v2_fntest_alarm_ms(0);
+    } else {
+        v2_fntest_alarm_ms(0);
+        v2_hung = 1;
+    }
+    if (v2_hung) {
+        fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: v2 HUNG (watchdog) | filter=%04X obj=%04X seed=%08X"
+                " | self: vY=%04X vX=%04X Y=%04X Yp=%04X Ye=%04X X=%04X"
+                " | o2: alive=%04X t=%04X vY=%04X vX=%04X\n",
+                g_name[id], group, filter, obj, bg_seed,
+                *(uint16_t*)(g_synth_in + obj + 0x196D), *(uint16_t*)(g_synth_in + obj + 0x1945),
+                *(uint16_t*)(g_synth_in + obj + 0x1765), *(uint16_t*)(g_synth_in + obj + 0x13CD),
+                *(uint16_t*)(g_synth_in + obj + 0x150D), *(uint16_t*)(g_synth_in + obj + 0x173D),
+                *(uint16_t*)(g_synth_in + 2 + 0x1355), *(uint16_t*)(g_synth_in + 2 + 0x17DD),
+                *(uint16_t*)(g_synth_in + 2 + 0x196D), *(uint16_t*)(g_synth_in + 2 + 0x1945));
+        st.fail++; return false;
+    }
+
+    long diffs = 0;
+    if (eff_v2 != eff_orig) {
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: CF/AX orig=%ld v2=%ld | filter=%04X obj=%04X seed=%08X\n",
+                    g_name[id], group, (long)eff_orig, (long)eff_v2, filter, obj, bg_seed);
+        }
+        diffs++;
+    }
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X) "
+                    "| filter=%04X obj=%04X seed=%08X\n",
+                    g_name[id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    filter, obj, bg_seed);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_scan(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    const uint16_t OBJ = 6;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    const bool shard0 = (g_shard_i == 0);
+    const uint16_t FT_ADDR = (uint16_t)(0 - 0x6B34);      // filter=0 chain
+    const uint16_t SLOPE_BASE = (uint16_t)(0 - 0x7684);   // slope table base
+    // 4x4 tile map for sub_15afd: row-major types in bits 15..10.
+    // Row 0-1: plain low types; row 2: slope types 0x30/0x31; row 3: 0x05 (match row).
+    uint16_t T[16];
+    for (int i = 0; i < 8;  i++) T[i] = (uint16_t)((i & 0x3F) << 10);
+    T[8] = (uint16_t)(0x30 << 10); T[9]  = (uint16_t)(0x31 << 10);
+    T[10] = (uint16_t)(0x30 << 10); T[11] = (uint16_t)(0x31 << 10);
+    for (int i = 12; i < 16; i++) T[i] = (uint16_t)(0x05 << 10);
+
+    const bool is_afd = (id == FT_SUB_15AFD);
+    // vel field pair per unit: self field / partner field (the gate operands)
+    const uint16_t VF = is_afd ? 0x1765 :
+                        (id == FT_SUB_15C37) ? 0x1945 : 0x196D;
+    const uint16_t VP = is_afd ? 0x13CD : VF;             // 15afd gate is self-only
+
+    // --- Grid: directed branch/corner cases -------------------------------
+    // Velocity gate values: zero, small +/-, int16 corners, OVERFLOW pairs
+    // (|true diff| > 0x7FFF — the divergence-17/19/20 corners).
+    struct VPair { uint16_t a, b; };
+    static const VPair VG[] = {
+        { 0x0000, 0x0000 },  // JZ gate
+        { 0x0005, 0x0002 },  // small positive diff
+        { 0x0002, 0x0005 },  // small negative diff
+        { 0x8000, 0x7FFF },  // wrapped diff = 1, true diff = -65535 → overflow corner
+        { 0x7FFF, 0x8000 },  // wrapped diff = -1, true diff = +65535 → overflow corner
+        { 0xC216, 0x4220 },  // true -32778, wrapped +32758 (divergence-16 numbers)
+        { 0x4220, 0xC216 },  // true +32778, wrapped -32758
+        { 0x8000, 0x0001 },  // true -32769, wrapped +32767
+        { 0x0001, 0x8000 },  // true +32769, wrapped -32767
+    };
+    // Partner bbox variants: full overlap (deep path), X-reject, Y-adj reject.
+    struct PBox { uint16_t xs, xe, ys, ye, vy; };
+    static const PBox PB[] = {
+        { 0x0100, 0x0200, 0x0100, 0x0200, 0x0000 },  // overlap → STC path
+        { 0x0180, 0x0200, 0x0100, 0x0200, 0x0000 },  // X-point reject (loc_15cf9 JL)
+        { 0x0100, 0x0200, 0x01F0, 0x0200, 0x0040 },  // Y-adj corner
+    };
+    int ci = 0;
+    if (shard0) for (const VPair& vg : VG) for (const PBox& pb : PB) {
+        FtWr w[20]; int nw = 0;
+        w[nw++] = { (uint16_t)(OBJ + 0x1535), 0x0140 };   // self X in partner range
+        w[nw++] = { (uint16_t)(OBJ + 0x155D), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + 0x14E5), 0x0140 };   // self Y overlapping
+        w[nw++] = { (uint16_t)(OBJ + 0x150D), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + 0x196D), 0x0000 };   // default vels
+        w[nw++] = { (uint16_t)(OBJ + 0x1945), 0x0000 };
+        w[nw++] = { (uint16_t)(OBJ + VF), vg.a };
+        w[nw++] = { (uint16_t)(OBJ + 0x173D), 0x0148 };   // X for 15afd probes
+        w[nw++] = { FT_ADDR, 0xFF05 };
+        if (!is_afd) {
+            w[nw++] = { (uint16_t)(2 + 0x1355), 1 };      // live partner in slot 2
+            w[nw++] = { (uint16_t)(2 + 0x17DD), 0x0005 }; // type matches filter
+            w[nw++] = { (uint16_t)(2 + VP), vg.b };
+            w[nw++] = { (uint16_t)(2 + 0x1535), pb.xs };
+            w[nw++] = { (uint16_t)(2 + 0x155D), pb.xe };
+            w[nw++] = { (uint16_t)(2 + 0x14E5), pb.ys };
+            w[nw++] = { (uint16_t)(2 + 0x150D), pb.ye };
+            w[nw++] = { (uint16_t)(2 + 0x196D), pb.vy };
+        } else {
+            w[nw++] = { (uint16_t)(OBJ + VP), vg.b };     // 15afd: gate = self [1765]-[13CD]
+        }
+        ft_synth_case_scan(id, 0, OBJ, w, nw, T, 4, 4,
+                           seed ^ (0xA0000000u + ci), "grid", grid, diff_budget);
+        ci++;
+    }
+    // 15afd-specific directed: slope probe + walk corners.
+    if (shard0 && is_afd) {
+        struct ACase { uint16_t y, yp, ye, x, xs, xe; uint16_t f0f1; uint16_t slope; };
+        static const ACase AC[] = {
+            // moved down (y>yp), slope filter 0x30, probe over slope row 2 (y=0x20-0x2F)
+            { 0x0030, 0x0020, 0x002E, 0x0015, 0x0010, 0x0020, 0x0030 | (0xFF<<8), 0x0004 },
+            // same but slope value larger than (temp&0xF) → sr<0 → probe B/walk
+            { 0x0030, 0x0020, 0x002E, 0x0015, 0x0010, 0x0020, 0x0030 | (0xFF<<8), 0x000F },
+            // plain filter (no slope in chain) → straight to walk over match row 3
+            { 0x0040, 0x0030, 0x003E, 0x0015, 0x0010, 0x0020, 0x0005 | (0xFF<<8), 0x0000 },
+            // walk with same 16px row (old_ye & F0 == ye & F0) → early CLC
+            { 0x0032, 0x0030, 0x0031, 0x0015, 0x0010, 0x0020, 0x0005 | (0xFF<<8), 0x0000 },
+            // walk clamp: X range not multiple of 16
+            { 0x0040, 0x0030, 0x003E, 0x0015, 0x0012, 0x002D, 0x0005 | (0xFF<<8), 0x0000 },
+        };
+        int ai = 0;
+        for (const ACase& c : AC) {
+            FtWr w[16]; int nw = 0;
+            w[nw++] = { (uint16_t)(OBJ + 0x1765), c.y };
+            w[nw++] = { (uint16_t)(OBJ + 0x13CD), c.yp };
+            w[nw++] = { (uint16_t)(OBJ + 0x150D), c.ye };
+            w[nw++] = { (uint16_t)(OBJ + 0x173D), c.x };
+            w[nw++] = { (uint16_t)(OBJ + 0x1535), c.xs };
+            w[nw++] = { (uint16_t)(OBJ + 0x155D), c.xe };
+            w[nw++] = { FT_ADDR, c.f0f1 };
+            // slope table entry for tile type 0x30, column (x & 0xF)
+            w[nw++] = { (uint16_t)(SLOPE_BASE + ((0x30 & 0xF) << 4) + (c.x & 0xF)), c.slope };
+            ft_synth_case_scan(id, 0, OBJ, w, nw, T, 4, 4,
+                               seed ^ (0xAF000000u + ai), "grid", grid, diff_budget);
+            ai++;
+        }
+    }
+
+    // --- Exhaustive: the gate's partner operand over all 65536 values ------
+    // Fixed self operand 0x4220 (+16928): sweeps cross both the JZ point and
+    // both overflow corners of the JL/JG/JGE/JNS gate.
+    long exh_done = 0;
+    for (uint32_t v = 0; v <= 0xFFFF; v++) {
+        if (!ft_shard_mine(v)) continue;
+        if ((++exh_done % 4000) == 0)
+            fprintf(stderr, "FNSELFTEST-PROG[%s]: exh %ld (v=%04X)\n", g_name[id], exh_done, v);
+        FtWr w[18]; int nw = 0;
+        w[nw++] = { (uint16_t)(OBJ + 0x1535), 0x0140 };
+        w[nw++] = { (uint16_t)(OBJ + 0x155D), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + 0x14E5), 0x0140 };
+        w[nw++] = { (uint16_t)(OBJ + 0x150D), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + 0x196D), 0x0000 };
+        w[nw++] = { (uint16_t)(OBJ + 0x1945), 0x0000 };
+        w[nw++] = { (uint16_t)(OBJ + 0x173D), 0x0148 };
+        w[nw++] = { FT_ADDR, 0xFF05 };
+        if (!is_afd) {
+            w[nw++] = { (uint16_t)(OBJ + VF), 0x4220 };
+            w[nw++] = { (uint16_t)(2 + 0x1355), 1 };
+            w[nw++] = { (uint16_t)(2 + 0x17DD), 0x0005 };
+            w[nw++] = { (uint16_t)(2 + VP), (uint16_t)v };
+            w[nw++] = { (uint16_t)(2 + 0x1535), 0x0100 };
+            w[nw++] = { (uint16_t)(2 + 0x155D), 0x0200 };
+            w[nw++] = { (uint16_t)(2 + 0x14E5), 0x0100 };
+            w[nw++] = { (uint16_t)(2 + 0x150D), 0x0200 };
+            w[nw++] = { (uint16_t)(2 + 0x196D), 0x0000 };
+        } else {
+            w[nw++] = { (uint16_t)(OBJ + 0x1765), 0x4220 };
+            w[nw++] = { (uint16_t)(OBJ + 0x13CD), (uint16_t)v };
+        }
+        ft_synth_case_scan(id, 0, OBJ, w, nw, T, 4, 4,
+                           seed ^ 0xE0000000u ^ v, "exh", exh, diff_budget);
+    }
+
+    // --- Fuzz ---------------------------------------------------------------
+    FtRng rng(seed ^ (0x51ED0000u * (uint32_t)(g_shard_i + 1)));
+    int fz_count = 10000 / g_shard_n + (g_shard_i < (10000 % g_shard_n) ? 1 : 0);
+    for (int i = 0; i < fz_count; i++) {
+        if ((i % 500) == 0)
+            fprintf(stderr, "FNSELFTEST-PROG[%s]: fuzz %d\n", g_name[id], i);
+        FtWr w[24]; int nw = 0;
+        w[nw++] = { (uint16_t)(OBJ + 0x1535), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x155D), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x14E5), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x150D), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x196D), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x1945), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x1765), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x13CD), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + 0x173D), rng.w() };
+        w[nw++] = { FT_ADDR, (uint16_t)(0xFF00 | (rng.next() & 0x3F)) };
+        // two random slope-table entries (15afd probes; harmless otherwise)
+        w[nw++] = { (uint16_t)(SLOPE_BASE + (rng.next() & 0xFF)), (uint16_t)(rng.next() & 0xF) };
+        w[nw++] = { (uint16_t)(SLOPE_BASE + (rng.next() & 0xFF)), (uint16_t)(rng.next() & 0xF) };
+        int live = (int)(rng.next() % 3);                  // 0-2 live partners
+        for (int k = 0; k < live; k++) {
+            uint16_t slot = (uint16_t)((k == 0) ? 2 : 4);
+            w[nw++] = { (uint16_t)(slot + 0x1355), 1 };
+            w[nw++] = { (uint16_t)(slot + 0x17DD), (uint16_t)(rng.next() & 0x013F) };
+            w[nw++] = { (uint16_t)(slot + 0x196D), rng.w() };
+            w[nw++] = { (uint16_t)(slot + 0x1945), rng.w() };
+        }
+        ft_synth_case_scan(id, 0, OBJ, w, nw, T, 4, 4,
+                           rng.next(), "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exhaustive %ld/%ld, fuzz %ld/%ld — "
+        "total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // sub_1303a / sub_13031 <-> v2_vm_sub_1303a (+ v2_vm_sub_135cf) — the anim
 // frame interpreter (units 25/26). The anim script is planted INSIDE the DS
 // image at FT_ANIM_PC (the oracle enters with es==ds, so es:[bx] reads hit
@@ -2402,6 +2703,10 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_158e6")) { matched = true; rc |= ft_selftest_search(FT_SUB_158E6, 0x158E6001u); }
     if (all || strstr(env, "sub_1303a")) { matched = true; rc |= ft_selftest_anim(FT_SUB_1303A, 0x1303A001u); }
     if (all || strstr(env, "sub_13031")) { matched = true; rc |= ft_selftest_anim(FT_SUB_13031, 0x13031001u); }
+    if (all || strstr(env, "sub_1614e")) { matched = true; rc |= ft_selftest_scan(FT_SUB_1614E, 0x1614E001u); }
+    if (all || strstr(env, "sub_15c37")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15C37, 0x15C37001u); }
+    if (all || strstr(env, "sub_15c93")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15C93, 0x15C93001u); }
+    if (all || strstr(env, "sub_15afd")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15AFD, 0x15AFD001u); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

@@ -95,6 +95,10 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 24: return (void*)&sub_158e6;   // anim search: flip-point X (tile 15ac4 + obj 1603e)
     case 25: return (void*)&sub_1303a;   // anim frame interpreter core (sub_13084 cmd loop)
     case 26: return (void*)&sub_13031;   // full anim update (sub_1303a + sub_135cf)
+    case 27: return (void*)&sub_1614e;   // Y-vel object scan (JL gate) + sub_161a1 bbox
+    case 28: return (void*)&sub_15c37;   // X-vel object scan (JG gate) + cef/cf5 bbox
+    case 29: return (void*)&sub_15c93;   // Y-vel object scan (JNS gate) + d3c/d42 bbox
+    case 30: return (void*)&sub_15afd;   // downward tile collision (slope + walk)
     default: return 0;
     }
 }
