@@ -197,6 +197,11 @@ uint16_t& Z = *(uint16_t *)& e##Z ;
 
 #ifndef DOSBOX_CUSTOM //masm2c
 
+// fn-test isolation hooks (defined in vikings.exe_seg000.cpp) — used by the
+// RETN_/RETF_ mismatch paths to escape a runaway instead of killing the runner.
+extern "C" int  v2_fntest_isolated_active;
+extern "C" void v2_fntest_escape_jump(void);
+
     class ShadowStack {
         struct Frame {
             const char *file;
@@ -1700,6 +1705,12 @@ throw StackPop(skip);
         if (!ret) {
             log_error("Warning. Return address wasn't created by native CALL (found %x)\n", ip);
 //            m2c::stackDump();
+            // fn-test isolation: a runaway that reaches a far RET must escape
+            // back into the isolator (UB-skip), not kill the runner.
+            if (v2_fntest_isolated_active) {
+                shadow_stack.m_fntest_ret_mismatch++;
+                v2_fntest_escape_jump();
+            }
             exit(1);
         }
 //        log_error("~~RETF after 1pop\n");

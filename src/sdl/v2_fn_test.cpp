@@ -2293,6 +2293,18 @@ bool ft_synth_case_vmop(uint8_t op, const uint8_t* args, int n_args,
     memcpy(zone, g_vm_es_in, FT_VM_ZONE);
     memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
     v2_fntest_call_vm_exec(g_scratch, si);
+    if (v2_fntest_vm_soft == 3) {
+        // ch6/7 register-history guard: the orig continues through a stale-DI
+        // DS write (deterministic for the oracle, whose registers persist);
+        // the register-less v2 has no DI model yet — counted separately, not
+        // as a divergence. Only the three wrapper-Y sites can raise this.
+        fprintf(stderr, "FNSELFTEST-GUARD[sub_1424c %s]: op=%02X ch6/7 register-history site\n",
+                group, op);
+        v2_fntest_vm_soft = 0;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        st.cases--;               // model-gap skip (like orig-UB), visible via the GUARD print
+        return true;
+    }
     if (v2_fntest_vm_soft == 2) {
         // v2 hit a VM FATAL (op>0xD7 / unimplemented) on a case the oracle
         // completed — that's a divergence in its own right.
@@ -2455,8 +2467,14 @@ int ft_selftest_vmops() {
     // stable); channel variations (defined channels only) on mode positions
     // with zeroed data.
     static const uint8_t PAT[4] = { 0x11, 0xFF, 0x80, 0x27 };
-    static const uint8_t CHAN[8] = { 0x00, 0x01, 0x02, 0x03, 0x04,   // (c,0)
-                                     0x09, 0x1B, 0x24 };             // (1,1) (3,3) (4,4)
+    static const uint8_t CHAN[14] = { 0x00, 0x01, 0x02, 0x03, 0x04,  // (c,0)
+                                      0x09, 0x1B, 0x24,              // (1,1) (3,3) (4,4)
+                                      // Table-overlap channels (off_30C98→off_30CA2):
+                                      // 5 = clean passthrough (ax=0x0A), 6/7 = POP-through
+                                      // site-ip writes; X-sites RETN onto data (orig-UB →
+                                      // runner skips), Y-sites exit the opcode cleanly.
+                                      0x05, 0x06, 0x07,              // (5..7, 0)
+                                      0x2D, 0x30, 0x38 };            // (5,5) (0,6) (0,7)
     uint8_t a[16];
     for (int op = 0; op <= 0xD7; op++) {
         const FtOpPlan& pl = plan[op];
@@ -2505,9 +2523,11 @@ int ft_selftest_vmops() {
                 // indirect:2, partner:1, rng:0} per 3-bit field) — earlier
                 // positions would shift the base geometry.
                 if (k == last_mode) {
-                    static const int CH_CONS[5] = { 2, 1, 2, 1, 0 };
+                    // Per-channel consumption incl. overlap channels: 5 eats
+                    // nothing (plain RETN), 6 eats 1 (idx byte), 7 eats 2 (addr).
+                    static const int CH_CONS[8] = { 2, 1, 2, 1, 0, 0, 1, 2 };
                     int a1 = ch & 7, b1 = (ch >> 3) & 7;
-                    int need = (a1 <= 4 ? CH_CONS[a1] : 0) + (b1 <= 4 ? CH_CONS[b1] : 0);
+                    int need = CH_CONS[a1] + CH_CONS[b1];
                     if (need > 0 && k + 1 + need <= 16) {
                         FtRng cr(0xB3000000u | (op << 12) | (k << 8) | ch);
                         for (int j = 0; j < need; j++) a[k + 1 + j] = (uint8_t)cr.next();

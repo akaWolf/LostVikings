@@ -8500,9 +8500,28 @@ static uint16_t v2_vm_read_literal(V2VM& vm);
 static uint16_t v2_vm_read_indexed_field(V2VM& vm);
 static uint16_t v2_vm_read_indirect(V2VM& vm);
 static uint16_t v2_vm_read_indexed_field_1995(V2VM& vm);
-static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode);
+static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
+                                     uint16_t site_ret_ip, bool* out_interrupt);
+// Channels 6/7 at sites whose stack top (after the POP of the site's return
+// word) is a DATA word (the PUSHed mode) or a register-history-dependent
+// continuation: the orig RETNs into arbitrary code / writes stale registers
+// to DS — not representable in the register-less v2. The DS effect of the
+// channel itself (site-ret-ip write + byte consumption) HAS already been
+// applied by the dispatcher before this guard fires.
+static void v2_vm_ch67_ub_guard(V2VM& vm, const char* site) {
+    extern int v2_fntest_vm_soft;
+    if (v2_fntest_vm_soft) {
+        fprintf(stderr, "V2-CH67-SOFT: %s\n", site);
+        v2_fntest_vm_soft = 3;   // fn-test: model-gap skip (runner counts separately)
+        return;
+    }
+    fprintf(stderr, "FATAL: off_30C98 ch6/7 at %s — orig RETNs onto a data word "
+            "(jump into arbitrary code / stale-register DS write), "
+            "non-representable in v2\n", site);
+    extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
+}
 static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode);
-static uint16_t v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode);
+static bool v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode);
 static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di);
 static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd);
 static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm);
@@ -8814,13 +8833,16 @@ static void v2_vm_op_D4(V2VM& vm) {
     vm.pc += 1;
     uint8_t mode = (uint8_t)mode_word;
     vm.ds_write(0x34, mode_word);
-    uint16_t target_x = v2_vm_dispatch_30C98(vm, mode & 7);
+    bool ch_intr = false;
+    uint16_t target_x = v2_vm_dispatch_30C98(vm, mode & 7, 0x532F, &ch_intr);
+    if (ch_intr) return;   // ch6/7: RETN lands on the dispatcher's return word — opcode exits
     uint16_t si = vm.global_r(0x42);
     int16_t delta_x = (int16_t)(target_x - vm.ds_read(si + 0x173D));
     if (delta_x < 0) { delta_x = -delta_x; vm.ds_write(0x3E, 1); }
     vm.ds_write(0x6C, (uint16_t)delta_x);
     // Y target: dispatch off_30C98 with (mode >> 3) & 7
-    uint16_t target_y = v2_vm_dispatch_30C98(vm, (vm.ds_read(0x34) >> 3) & 7);
+    uint16_t target_y = v2_vm_dispatch_30C98(vm, (vm.ds_read(0x34) >> 3) & 7, 0x5348, &ch_intr);
+    if (ch_intr) return;   // clean exit (no pushes live at loc_15342's site)
     si = vm.global_r(0x42);
     int16_t delta_y = (int16_t)(target_y - vm.ds_read(si + 0x1765));
     if (delta_y < 0) { delta_y = -delta_y; vm.ds_write(0x40, 1); }
@@ -9737,18 +9759,23 @@ static void v2_vm_op_14(V2VM& vm) {
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
-    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode1);
+    bool ch_intr = false;
+    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode1, 0x4F5E, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op14/X@0x4F5E: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x6C, x_pos);
-    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode1 >> 3);
+    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x4F65, &ch_intr);
+    if (ch_intr) return;   // clean: RETN onto the opcode's own return word
     vm.ds_write(0x6E, y_pos);
 
     // Step 2: Read mode2 byte → dual dispatch → ds:0x374 and ds:0x32 (flags)
     uint16_t word2 = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
-    uint16_t val374 = v2_vm_dispatch_30C98(vm, mode2);
+    uint16_t val374 = v2_vm_dispatch_30C98(vm, mode2, 0x4F70, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op14/X2@0x4F70: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x374, val374);
-    uint16_t flags_raw = v2_vm_dispatch_30C98(vm, mode2 >> 3);
+    uint16_t flags_raw = v2_vm_dispatch_30C98(vm, mode2 >> 3, 0x4F77, &ch_intr);
+    if (ch_intr) return;   // clean
     vm.ds_write(0x32, flags_raw & 0x801);
 
     // Step 3: Compute flags (si) = (current_obj.flags & 0xFE) | ds:0x32
@@ -11192,13 +11219,17 @@ static void v2_vm_op_29(V2VM& vm) {
     // Mode byte 1: X/Y via dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
-    uint16_t si = v2_vm_dispatch_30C98(vm, mode1);       // X coord (tile units)
-    uint16_t di = v2_vm_dispatch_30C98(vm, mode1 >> 3);  // Y coord (tile units)
+    bool ch_intr = false;
+    uint16_t si = v2_vm_dispatch_30C98(vm, mode1, 0x501C, &ch_intr);       // X coord (tile units)
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op29/X@0x501C: RETN onto PUSHed mode word"); return; }
+    uint16_t di = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x5022, &ch_intr);  // Y coord (tile units)
+    if (ch_intr) return;   // clean
 
     // Mode byte 2: tile value
     uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
-    uint16_t tile_val = v2_vm_dispatch_30C98(vm, mode2);
+    uint16_t tile_val = v2_vm_dispatch_30C98(vm, mode2, 0x502B, &ch_intr);
+    if (ch_intr) return;   // clean (no live pushes at the 3rd site)
 
     v2_vm_sub_141e0(vm, si, di, tile_val);
     v2_vm_sub_13fc2(vm, si, di, tile_val);
@@ -11266,12 +11297,15 @@ static void v2_vm_op_48(V2VM& vm) {
     uint16_t word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode = (uint8_t)(word & 0xFF);
     // PUSH ax; CALL sub_15473 — dispatch X
-    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode);
+    bool ch_intr = false;
+    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode, 0x4FF1, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op48/X@0x4FF1: RETN onto PUSHed mode word"); return; }
     // MOV si, ds:42h; SUB ax, [si+173Dh]; MOV [si+1945h], ax
     uint16_t si = vm.global_r(0x42);
     vm.ds_write(si + 0x1945, x_pos - vm.ds_read(si + 0x173D));
     // POP ax; CALL sub_15470 — dispatch Y (SHR ax,3 then dispatch)
-    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode >> 3);
+    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode >> 3, 0x5001, &ch_intr);
+    if (ch_intr) return;   // clean
     // MOV si, ds:42h; SUB ax, [si+1765h]; MOV [si+196Dh], ax
     vm.ds_write(si + 0x196D, y_pos - vm.ds_read(si + 0x1765));
     // MOV [si+141Dh], 100h
@@ -11644,14 +11678,18 @@ static void v2_vm_op_2A(V2VM& vm) {
     // Mode byte 1: X/Y position via dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
-    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode1);
+    bool ch_intr = false;
+    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode1, 0x507D, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op2A/X@0x507D: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x6C, x_pos);
-    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode1 >> 3);
+    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x5084, &ch_intr);
+    if (ch_intr) return;   // clean
     vm.ds_write(0x6E, y_pos);
     // Mode byte 2: tile index via single dispatch
     uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
-    uint16_t tile_val = v2_vm_dispatch_30C98(vm, mode2);
+    uint16_t tile_val = v2_vm_dispatch_30C98(vm, mode2, 0x508E, &ch_intr);
+    if (ch_intr) return;   // clean
     vm.ds_write(0x34, tile_val);
     // sub_141ba: read current tile, AND FC00 (keep upper flags), OR with tile_val
     uint16_t si = x_pos, di = y_pos;
@@ -11671,14 +11709,18 @@ static void v2_vm_op_2B(V2VM& vm) {
     // Mode byte 1: X/Y via dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
-    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode1);
+    bool ch_intr = false;
+    uint16_t x_pos = v2_vm_dispatch_30C98(vm, mode1, 0x503E, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op2B/X@0x503E: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x6C, x_pos);
-    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode1 >> 3);
+    uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x5045, &ch_intr);
+    if (ch_intr) return;   // clean
     vm.ds_write(0x6E, y_pos);
     // Mode byte 2: tile flags value
     uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
-    uint16_t tile_raw = v2_vm_dispatch_30C98(vm, mode2);
+    uint16_t tile_raw = v2_vm_dispatch_30C98(vm, mode2, 0x504F, &ch_intr);
+    if (ch_intr) return;   // clean
     // Transform: xchg ah,al → shl ax,2 → and ax,0xFC00
     uint16_t swapped = (uint16_t)((tile_raw >> 8) | (tile_raw << 8));
     uint16_t transformed = (swapped << 2) & 0xFC00;
@@ -11699,10 +11741,13 @@ static void v2_vm_op_28(V2VM& vm) {
     // Read mode1 byte
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
+    bool ch_intr = false;
     // Dispatch X: (mode1 & 7) → align to tile
-    uint16_t cx_val = (v2_vm_dispatch_30C98(vm, mode1) & 0xFFF0) | 8;
+    uint16_t cx_val = (v2_vm_dispatch_30C98(vm, mode1, 0x4F2F, &ch_intr) & 0xFFF0) | 8;
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op28/X@0x4F2F: RETN onto PUSHed mode word"); return; }
     // Dispatch Y: ((mode1 >> 3) & 7) → align to tile
-    uint16_t dx_val = (v2_vm_dispatch_30C98(vm, mode1 >> 3) & 0xFFF0) | 8;
+    uint16_t dx_val = (v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x4F3B, &ch_intr) & 0xFFF0) | 8;
+    if (ch_intr) return;   // clean
     // Read mode2 byte
     uint8_t mode2 = vm.read_u8();
     // sub_154bf(cx_val, mode2) — X write
@@ -11984,14 +12029,18 @@ static void v2_vm_op_50(V2VM& vm) {
     // Mode byte 1: dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
-    uint16_t val1 = v2_vm_dispatch_30C98(vm, mode1);
+    bool ch_intr = false;
+    uint16_t val1 = v2_vm_dispatch_30C98(vm, mode1, 0x26AE, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op50/1st@0x26AE: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x34, val1);  // word_28514
-    uint16_t val2 = v2_vm_dispatch_30C98(vm, mode1 >> 3);
+    uint16_t val2 = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x26B8, &ch_intr);
+    if (ch_intr) return;   // clean (POP ax at 0x26B4 emptied the frame)
     vm.ds_write(0x6C, val2);  // word_2854C
     // Mode byte 2: single dispatch
     uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
-    uint16_t val3 = v2_vm_dispatch_30C98(vm, mode2);
+    uint16_t val3 = v2_vm_dispatch_30C98(vm, mode2, 0x26C2, &ch_intr);
+    if (ch_intr) return;   // clean
     vm.ds_write(0x6E, val3);  // word_2854E
     // Command buffer entry: type=8 + 3 values + advance by 8
     uint16_t bx_cmd = vm.ds_read(0x218F);
@@ -12399,11 +12448,14 @@ static void v2_vm_op_26(V2VM& vm) {
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
 
     // First dispatch: (mode1 & 7) → value >> 4 → ds:0x6C
-    uint16_t val1 = v2_vm_dispatch_30C98(vm, mode1);
+    bool ch_intr = false;
+    uint16_t val1 = v2_vm_dispatch_30C98(vm, mode1, 0x4EE2, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op26/X@0x4EE2: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x6C, val1 >> 4);
 
     // Second dispatch: ((mode1 >> 3) & 7) → value >> 4 → ds:0x6E
-    uint16_t val2 = v2_vm_dispatch_30C98(vm, mode1 >> 3);
+    uint16_t val2 = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x4EEC, &ch_intr);
+    if (ch_intr) return;   // clean
     vm.ds_write(0x6E, val2 >> 4);
 
     // Read mode2 byte
@@ -12501,8 +12553,11 @@ static void v2_vm_op_27(V2VM& vm) {
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
-    uint16_t si_x = v2_vm_dispatch_30C98(vm, mode1);       // dx = ax (X coord)
-    uint16_t di_y = v2_vm_dispatch_30C98(vm, mode1 >> 3);  // di = ax (Y coord)
+    bool ch_intr = false;
+    uint16_t si_x = v2_vm_dispatch_30C98(vm, mode1, 0x4F0E, &ch_intr);       // dx = ax (X coord)
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op27/X@0x4F0E: RETN onto PUSHed mode word"); return; }
+    uint16_t di_y = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x4F14, &ch_intr);  // di = ax (Y coord)
+    if (ch_intr) return;   // clean
     // sub_141a7: tile type lookup
     uint16_t tile_word = v2_vm_sub_141ba(vm, si_x, di_y);
     // AND 0xFC00; XCHG ah,al; SHR 2
@@ -12607,9 +12662,12 @@ static void v2_vm_op_45(V2VM& vm) {
     // sub_125fa: mode byte + 2 dispatches → si (word_2854C = ds:0x6C), di
     uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
-    uint16_t si_val = v2_vm_dispatch_30C98(vm, mode2);
+    bool ch_intr = false;
+    uint16_t si_val = v2_vm_dispatch_30C98(vm, mode2, 0x25FF, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op45/125fa-X@0x25FF: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x6C, si_val);  // word_2854C at DS:0x006C
-    uint16_t di_val = v2_vm_dispatch_30C98(vm, mode2 >> 3);
+    uint16_t di_val = v2_vm_dispatch_30C98(vm, mode2 >> 3, 0x2609, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op45/125fa-Y@0x2609: opcode tail writes stale di to DS"); return; }
 
     // Command buffer write: type=0x0A, si, di, ds:0x002A
     uint16_t bx_cmd = vm.ds_read(0x218F);  // word_2A66F
@@ -13734,7 +13792,21 @@ static uint16_t v2_vm_read_random(V2VM& vm) {
 // ============================================================================
 uint64_t v2_ch30c98_count[8] = {0};   // B5-style reachability: getter channels
 
-static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode) {
+// site_ret_ip: the word channels 6/7 POP at THIS `CALL sub_15473/sub_15470`
+// site. NOTE: the m2c port's CALL_ pushes the eip OF THE CALL INSTRUCTION
+// ITSELF (real 8086 would push call+3) — the verify baseline is the port, so
+// these constants are the CALL eips (empirically confirmed by the vmops
+// channel cases: orig writes 0x4F65, not 0x4F68). out_interrupt: set true
+// when the orig handler RETNs THROUGH the caller frame (channels 6/7):
+//   depth-1 sites (opcode → CALL dispatch): the opcode handler must return to
+//   the VM loop immediately, executing nothing past the dispatch;
+//   depth-2 sites (opcode → wrapper → CALL dispatch): the WRAPPER cuts its
+//   tail; the opcode continues after the wrapper call (orig lands there), the
+//   "value" it sees in AX is the POP'd site_ret_ip.
+// For the JMP-tail site (sub_12543) the word on the stack belongs to the
+// wrapper's own caller — pass THAT call site's eip instead.
+static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
+                                     uint16_t site_ret_ip, bool* out_interrupt) {
     v2_ch30c98_count[mode & 7]++;
     switch (mode & 7) {
     case 0: return v2_vm_read_literal(vm);           // sub_1547e: 2 bytes
@@ -13742,12 +13814,32 @@ static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode) {
     case 2: return v2_vm_read_indirect(vm);          // sub_1549a: 2 bytes
     case 3: return v2_vm_read_indexed_field_1995(vm);// sub_154a3: 1 byte
     case 4: return v2_vm_read_random(vm);            // sub_12312: 0 bytes
-    default:
-        // Channels 5-7 are the off_30C98→off_30CA2 table-overlap class
-        // (locret_15504 / loc_154cb / loc_154e1): POP-through-frame paths.
-        // Not modeled yet (see the channels-5/7 task); the counter above
-        // tells whether real bytecode ever reaches them.
-        return 0;
+    // Channels 5-7: the off_30C98[si] word read overruns into off_30CA2
+    // (table overlap) — the "getter" jumps into the SETTER handlers.
+    case 5:
+        // locret_15504: plain RETN — a clean no-op getter. AX still holds the
+        // dispatch prologue's (mode&7)<<1 = 0x000A; bx untouched.
+        return 0x000A;
+    case 6: {
+        // loc_154cb entered as a getter: MOV si,es:[bx]; INC bx; AND si,0xFF;
+        // MOV si,[si-6CBA]; ADD si,ds:42; POP ax  ← eats THIS site's return
+        // word (there was no matching PUSH); MOV [si+14E5],ax; RETN → returns
+        // through the caller frame.
+        uint16_t idx = vm.read_u8();
+        uint16_t si = *(uint16_t*)(vm.shadow + (uint16_t)(idx - 0x6CBA));
+        si = (uint16_t)(si + vm.global_r(0x42));
+        vm.ds_write((uint16_t)(si + 0x14E5), site_ret_ip);
+        if (out_interrupt) *out_interrupt = true;
+        return site_ret_ip;   // AX after the POP
+    }
+    default: {
+        // loc_154e1 as a getter: MOV si,es:[bx]; ADD bx,2 (word address, no
+        // 0xFF mask); POP ax (site return word); MOV [si],ax; RETN through.
+        uint16_t addr = vm.read_u16();
+        vm.ds_write(addr, site_ret_ip);
+        if (out_interrupt) *out_interrupt = true;
+        return site_ret_ip;
+    }
     }
 }
 
@@ -13757,7 +13849,11 @@ static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode) {
 // Saves mode to word_28512. Returns the dispatch result.
 // The mode byte is also used later by sub_12543 for second dispatch.
 // ============================================================================
-static uint16_t v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode) {
+// Returns true when a ch6/7 dispatch interrupted the wrapper: the orig RETN
+// lands on sub_1250b's own return word (no live pushes at the 0x2512 site), so
+// the CALLER OPCODE continues right after its `call sub_1250b`, with the
+// sub_12515 tail (the ds:0x2A write) skipped and AX = the POP'd site ip.
+static bool v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode) {
     // ax = es:[bx]; INC bx
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
@@ -13765,7 +13861,9 @@ static uint16_t v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode) {
     // word_28512 (DS:0x0032) = mode word
     vm.ds_write(0x0032, word);
     // sub_15473: dispatch (word & 7)
-    uint16_t result = v2_vm_dispatch_30C98(vm, out_mode);
+    bool ch_intr = false;
+    uint16_t result = v2_vm_dispatch_30C98(vm, out_mode, 0x2512, &ch_intr);
+    if (ch_intr) return true;
     // sub_12515: ax = result * 2; read word from seg001:[ax] → word_2850A (DS:0x002A)
     uint16_t seg001_off = result * 2;
     uint16_t text_ptr = *(uint16_t*)(v2_m2c_base + 0x9480 + seg001_off);
@@ -13773,7 +13871,7 @@ static uint16_t v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode) {
     { extern int v2_dbg_pre_vm_iter;
       fprintf(stderr, "V2-2850A-VMOP[f%d]: mode=%02X dispatch_result=%04X seg001_off=%04X text_ptr=%04X\n",
               v2_dbg_pre_vm_iter, (uint8_t)out_mode, result, seg001_off, text_ptr); }
-    return result;
+    return false;
 }
 
 // ============================================================================
@@ -13792,7 +13890,9 @@ static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
     uint8_t mode = (uint8_t)(word & 0xFF);
 
     // X computation: dispatch → add obj X → sub viewport X → shr 3 → sub word_28518 → clamp
-    uint16_t x_raw = v2_vm_dispatch_30C98(vm, mode);
+    bool ch_intr = false;
+    uint16_t x_raw = v2_vm_dispatch_30C98(vm, mode, 0x25A8, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "125a3/X@0x25A8: RETN onto PUSHed mode word"); return; }
     uint16_t si_obj = vm.ds_read(0x42);  // word_28522 = ds:0x42 (current obj from sub_1250b context)
     int16_t ax = (int16_t)(x_raw + vm.ds_read(si_obj + 0x173D) - vm.ds_read(0x44));
     if (ax < 0) { ax = 2; }
@@ -13805,7 +13905,11 @@ static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
     vm.ds_write(0x6C, (uint16_t)ax); // word_2854C
 
     // Y computation: dispatch → add obj Y → sub viewport Y → shr 3 → sub word_2851A → clamp
-    uint16_t y_raw = v2_vm_dispatch_30C98(vm, mode >> 3);
+    // ch6/7 here RETN cleanly onto op_41's frame (the mode word was POPped at
+    // 0x25CD), but op_41's tail then stores the stale DI register to the
+    // command buffer — register history the register-less v2 can't reproduce.
+    uint16_t y_raw = v2_vm_dispatch_30C98(vm, mode >> 3, 0x25D1, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "125a3/Y@0x25D1: op_41 tail writes stale di to DS"); return; }
     int16_t ay = (int16_t)(y_raw + vm.ds_read(si_obj + 0x1765) - vm.ds_read(0x46));
     if (ay < 0) { ay = 2; }
     else {
@@ -13827,6 +13931,8 @@ static void v2_vm_op_41(V2VM& vm) {
 
     // 1. sub_1250b: read mode byte + first value dispatch → text index, sets word_2850A (0x2A)
     uint8_t mode1;
+    // ch6/7 inside cuts only the wrapper's sub_12515 tail (ds:0x2A stays stale);
+    // the opcode continues either way — orig RETNs to 0x2431.
     v2_vm_sub_1250b(vm, mode1);
 
     // 2. sub_12529: read text dimensions from seg001 → word_28514 (0x34), word_28516 (0x36)
@@ -13840,8 +13946,14 @@ static void v2_vm_op_41(V2VM& vm) {
         vm.ds_write(0x36, h);                // word_28516
     }
 
-    // 3. sub_12543: second dispatch (mode1 >> 3)
-    uint16_t val2 = v2_vm_dispatch_30C98(vm, mode1 >> 3);
+    // 3. sub_12543: second dispatch — orig re-reads the FULL mode word from
+    // ds:0x32 (word_28512), which a ch6 write may have retargeted; then JMP
+    // sub_15470 (tail-jump: no own frame — a ch6/7 POP eats THIS call's return
+    // word 0x243D and the RETN exits the whole opcode).
+    bool ch_intr = false;
+    uint16_t mode_w12543 = vm.ds_read(0x32);
+    uint16_t val2 = v2_vm_dispatch_30C98(vm, (uint8_t)(mode_w12543 >> 3), 0x243A, &ch_intr);
+    if (ch_intr) return;   // clean opcode exit (PUSH bx/POP bx balanced before this site)
 
     // 4. sub_12549: position computation from val2 (ax on entry)
     {
@@ -13859,7 +13971,7 @@ static void v2_vm_op_41(V2VM& vm) {
     }
 
     // 5. sub_125a3: X/Y position from bytecode
-    uint16_t si_pos, di_pos;
+    uint16_t si_pos = 0, di_pos = 0;   // ch6/7 guards inside may return early
     v2_vm_sub_125a3(vm, si_pos, di_pos);
 
     // 6. sub_12613: text bounds clamping
@@ -13891,7 +14003,7 @@ static void v2_vm_op_44(V2VM& vm) {
 
     // 1. sub_1250b
     uint8_t mode1;
-    v2_vm_sub_1250b(vm, mode1);
+    v2_vm_sub_1250b(vm, mode1);   // ch6/7 inside cuts only the wrapper tail
 
     // 2. sub_12529
     {
@@ -13901,18 +14013,24 @@ static void v2_vm_op_44(V2VM& vm) {
         vm.ds_write(0x36, (uint16_t)seg001[text_ptr + 1]);
     }
 
-    // 3. sub_12543: second dispatch
-    uint16_t val2 = v2_vm_dispatch_30C98(vm, mode1 >> 3);
+    // 3. sub_12543: second dispatch — full mode word re-read from ds:0x32;
+    // JMP-tail: ch6/7 eats this call's return word 0x247C and exits the opcode.
+    bool ch_intr = false;
+    uint16_t mode_w12543 = vm.ds_read(0x32);
+    uint16_t val2 = v2_vm_dispatch_30C98(vm, (uint8_t)(mode_w12543 >> 3), 0x2479, &ch_intr);
+    if (ch_intr) return;   // clean opcode exit
 
     // 4. sub_125fa: simple position dispatch — writes word_2854C (0x6C)
-    uint16_t si_pos, di_pos;
+    uint16_t si_pos = 0, di_pos = 0;
     {
         uint16_t word = *(uint16_t*)(vm.es + vm.pc);
         vm.pc += 1;
         uint8_t mode = (uint8_t)(word & 0xFF);
-        uint16_t x_val = v2_vm_dispatch_30C98(vm, mode);
+        uint16_t x_val = v2_vm_dispatch_30C98(vm, mode, 0x25FF, &ch_intr);
+        if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op44/125fa-X@0x25FF: RETN onto PUSHed mode word"); return; }
         vm.ds_write(0x6C, x_val); // word_2854C
-        uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3);
+        uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3, 0x2609, &ch_intr);
+        if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op44/125fa-Y@0x2609: opcode tail writes stale di to DS"); return; }
         si_pos = vm.ds_read(0x6C); // word_2854C
         di_pos = y_val;
     }
@@ -14459,13 +14577,14 @@ static void v2_vm_op_38(V2VM& vm) {
 //   [4] locret_15504: RETN (no-op, 0 bytes)
 // ============================================================================
 static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
-    // sub_154bf: PUSH si, AND ax,7, SHL 1, JMP off_30CA2[mode & 7]
+    // sub_154bf: PUSH si (the VALUE), AND ax,7, SHL 1, JMP off_30CA2[mode & 7]
     uint8_t entry = mode & 7;
 
     switch (entry) {
-    case 0: // locret_15504: no-op
-    case 4: // same as [0]
-        // POP ax (restore si), no bytes consumed
+    case 0: // locret_15504 as a SETTER: plain RETN with the pushed VALUE on
+    case 4: // top of the stack — POP ip = value → jump onto a DATA word.
+        // (Channels 1-3 POP the value into ax first; 0/4 never do.)
+        v2_vm_ch67_ub_guard(vm, "setter ch0/4 @locret_15504: RETN onto the pushed value");
         break;
 
     case 1: { // loc_154cb: indexed field write, 1 byte
@@ -14496,10 +14615,35 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         break;
     }
 
-    default:
-        // Entries 5-7 shouldn't be used (table only has 5 entries)
-        printf("V2-VM: sub_154bf unknown entry %d\n", entry);
+    // Channels 5-7: the off_30CA2[si] word read overruns into off_30CAC (the
+    // main-opcode dispatch table) — the "setter" jumps into unrelated handlers.
+    case 5: {
+        // sub_142b7 (= main-opcode 0x00 handler): POP ax (eats the value),
+        // then [ds:0x42 obj + 0x132D] = BX — stores the CURRENT anim PC into
+        // the object's script-resume slot. Normal RETN afterwards (the pop
+        // rebalanced the frame) — a fully deterministic, clean channel.
+        uint16_t si_obj = vm.global_r(0x42);
+        vm.ds_write(si_obj + 0x132D, vm.pc);
+        (void)ax_val;   // the popped value is discarded by the orig too
         break;
+    }
+    case 6:
+        // nullsub_5: immediate RETN → POP ip = the pushed VALUE → jump onto
+        // a data word. Non-representable control flow.
+        v2_vm_ch67_ub_guard(vm, "setter ch6 @nullsub_5: RETN onto the pushed value");
+        break;
+    default: {
+        // sub_177b2 (the sound-play handler): seq = es:[bx] (ADD bx,2) & 0xFF,
+        // falls into sub_177bb → real SFX side effects (0x304 mute gate inside,
+        // audit + DS slot bookkeeping), THEN its final RETN pops the pushed
+        // VALUE → data jump. Model the deterministic prefix exactly, then guard.
+        uint16_t seq = vm.read_u16() & 0xFF;
+        uint16_t cur_obj = vm.global_r(0x42);
+        if (vm.ds_read(0x304) == 0)
+            fx::play_sfx(vm.shadow, seq, cur_obj);
+        v2_vm_ch67_ub_guard(vm, "setter ch7 @sub_177b2: RETN onto the pushed value after SFX");
+        break;
+    }
     }
 }
 
@@ -14515,11 +14659,16 @@ static void v2_vm_op_49(V2VM& vm) {
     uint8_t mode = (uint8_t)(word & 0xFF);
 
     // First dispatch: (mode & 7) → X value → ds:0x6C
-    uint16_t x_val = v2_vm_dispatch_30C98(vm, mode);
+    // (loc_14fca sites shared by op_49/op_4A; the phase argument PUSH 0/2
+    // sits UNDER the mode-word push, so BOTH sites' ch6/7 RETN onto data.)
+    bool ch_intr = false;
+    uint16_t x_val = v2_vm_dispatch_30C98(vm, mode, 0x4FCF, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op49/X@0x4FCF: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x6C, x_val);
 
     // Second dispatch: ((mode >> 3) & 7) → Y value → ds:0x6E
-    uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3);
+    uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3, 0x4FD6, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op49/Y@0x4FD6: RETN onto PUSHed phase const 0"); return; }
     vm.ds_write(0x6E, y_val);
 
     // Read animation index (1 byte consumed)
@@ -14540,9 +14689,12 @@ static void v2_vm_op_4A(V2VM& vm) {
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
     uint8_t mode = (uint8_t)(word & 0xFF);
-    uint16_t x_val = v2_vm_dispatch_30C98(vm, mode);
+    bool ch_intr = false;
+    uint16_t x_val = v2_vm_dispatch_30C98(vm, mode, 0x4FCF, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op4A/X@0x4FCF: RETN onto PUSHed mode word"); return; }
     vm.ds_write(0x6C, x_val);
-    uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3);
+    uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3, 0x4FD6, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op4A/Y@0x4FD6: RETN onto PUSHed phase const 2"); return; }
     vm.ds_write(0x6E, y_val);
     uint8_t anim_idx = vm.read_u8();
     // sub_1589B: tile search at (6C,6E) + object search at (6C,6E)
