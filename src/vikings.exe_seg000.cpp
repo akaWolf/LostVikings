@@ -121,6 +121,9 @@ extern "C" void v2_fntest_reset_orig_dac(void) {
 // A2 page snapshot hook (task #21) — defined in render.cpp, called at the
 // 3rd-sub-frame sub_16775 site in the main game loop below.
 extern "C" void v2_a2_snapshot_page(void);
+// Task #21 obj-trace ring (defined in v2_vm.cpp).
+extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d);
+extern "C" int v2_objtrace_di;
 
 // Direct-call isolator for the pal pair (see the fnptr note above): swap the
 // case image into the live DS window, call the wrapper like sub_1797b does,
@@ -2377,6 +2380,10 @@ cs=0x1a2;eip=0x0000a6; 	J(CALL(sub_16775,0));	// 90 call    sub_16775 ;~ 01A2:00
 cs=0x1a2;eip=0x0000a9; 	J(CALL(sub_10753,0));	// 91 call    sub_10753 ;~ 01A2:00A9
 cs=0x1a2;eip=0x0000ac; 	J(CALL(sub_13c0c,0));	// 92 call    sub_13C0C ;~ 01A2:00AC
 cs=0x1a2;eip=0x0000af; 	J(CALL(sub_12fd0,0));	// 93 call    sub_12FD0 ;~ 01A2:00AF
+	// Task #21 ring: obj 0x48 [64D/74D] after the sub-frame-3 delta pass.
+	{ v2_objtrace("o:12fd0", *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x64D)),
+	              *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x74D)),
+	              *(uint8_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x114D)), 0); }
 cs=0x1a2;eip=0x0000b2; 	J(CALL(sub_11792,0));	// 94 call    sub_11792 ;~ 01A2:00B2
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 	// ROOT-CAUSE diag: snapshot orig 0x258C..0x2593 counters + palette buffer
@@ -2409,8 +2416,17 @@ sub_100bb:
 	sub_1de05_dirty_update_position(NULL);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x0000bb; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); J(CALLF(sub_1de05,0));	// 104 call    sub_1DE05 ;~ 01A2:00BB
 cs=0x1a2;eip=0x0000c0; 	J(CALL(sub_165aa,0));	// 105 call    sub_165AA ;~ 01A2:00C0
+	{ v2_objtrace("o:165aa", *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x64D)),
+	              *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x74D)),
+	              *(uint8_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x114D)), 0); }
 cs=0x1a2;eip=0x0000c3; 	J(CALL(sub_16661,0));	// 106 call    sub_16661 ;~ 01A2:00C3
+	{ v2_objtrace("o:16661", *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x64D)),
+	              *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x74D)),
+	              *(uint8_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x114D)), 0); }
 cs=0x1a2;eip=0x0000c6; 	J(CALLF(sub_1dd9c,0));	// 107 call    sub_1DD9C ;~ 01A2:00C6
+	{ v2_objtrace("o:post-dd9c", *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x64D)),
+	              *(int16_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x74D)),
+	              *(uint8_t*)raddr(ds,(uint16_t)(v2_objtrace_di+0x114D)), 0); }
 cs=0x1a2;eip=0x0000cb; 	T(MOV(ax, 0x0FFFE));	// 108 mov     ax, 0FFFEh ;~ 01A2:00CB
 	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x0000ce; 	J(CALLF(sub_1c8f1,0));	// 109 call    sub_1C8F1 ;~ 01A2:00CE

@@ -577,6 +577,22 @@ extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count);
 // Dirty-lag classification counters (task #20/#21) — printed by the
 // headless render-diff summary.
 uint64_t v2_render_lag_frames = 0, v2_render_lag_px = 0;
+// Task #21 ring: per-sub-frame trace of one object's draw decisions on BOTH
+// sides. Writers: orig sub_1dd9c head (gate path), orig type-2 renderer entry,
+// v2 draw_sprites layers. Dumped on the first hard events (event-based).
+struct V2ObjTrace { uint32_t seq; char tag[12]; int16_t a, b, c, d; };
+static V2ObjTrace v2_objtrace_ring[64];
+static uint32_t v2_objtrace_n = 0;
+// Traced object index (env V2_OBJTRACE_DI, default 0x48).
+extern "C" int v2_objtrace_di = 0x48;
+extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d) {
+    static int _init = 0;
+    if (!_init) { _init = 1; if (const char* e = getenv("V2_OBJTRACE_DI")) v2_objtrace_di = (int)strtol(e, 0, 0); }
+    V2ObjTrace& e = v2_objtrace_ring[v2_objtrace_n % 64];
+    e.seq = v2_objtrace_n++;
+    snprintf(e.tag, sizeof(e.tag), "%s", tag);
+    e.a = (int16_t)a; e.b = (int16_t)b; e.c = (int16_t)c; e.d = (int16_t)d;
+}
 // Task #19 aid: env V2_PIXWATCH=<y*320+x> — print every stage (across ALL
 // render passes) that changes that v2_render_buf pixel.
 void v2_pixwatch_stage(const char* stage) {
@@ -666,6 +682,55 @@ void v2_verify_render_buf(int frame) {
     v2_render_lag_frames += (lag_diff > 0);
     v2_render_lag_px += (uint64_t)lag_diff;
     if (hard_diff == 0) return;   // pure dirty-lag frame — counted in the summary
+    // Task #21 aid (env V2_HARD_OBJDUMP=1): on the first hard events dump the
+    // live object table from BOTH sides (shadow vs real DS) plus the viewport
+    // state — identifies which object owns the hard bbox and whether the two
+    // sides disagree on its position/sprite-phase fields at compare time.
+    {
+        static int _od = -1;
+        if (_od == -1) _od = getenv("V2_HARD_OBJDUMP") ? 8 : 0;
+        if (_od > 0) {
+            _od--;
+            // Dump the obj-trace ring (writers: orig 1dd9c/renderer, v2 layers)
+            for (uint32_t i = (v2_objtrace_n > 64 ? v2_objtrace_n - 64 : 0); i < v2_objtrace_n; i++) {
+                V2ObjTrace& e = v2_objtrace_ring[i % 64];
+                fprintf(stderr, "  OT[%u] %s a=%d b=%d c=%d d=%d\n", e.seq, e.tag, e.a, e.b, e.c, e.d);
+            }
+            extern uint8_t* v2_vm_get_shadow_ds();
+            uint8_t* sh = v2_vm_get_shadow_ds();
+            uint8_t* rl = v2_m2c_base ? v2_m2c_base + v2_fntest_game_ds_linear() : nullptr;
+            if (!sh) return;
+            fprintf(stderr, "V2-HARD-OBJ[f%d]: hard=%d first=(%d,%d) myOff=0x%X "
+                    "sh vp=(%d,%d) sc=(%04X,%04X) | rl vp=(%d,%d) sc=(%04X,%04X)\n",
+                    frame, hard_diff, first_hard_x, first_hard_y, myDrawInfo->myOffset,
+                    *(int16_t*)(sh + 0x44), *(int16_t*)(sh + 0x46),
+                    *(uint16_t*)(sh + 0x257F), *(uint16_t*)(sh + 0x2581),
+                    rl ? *(int16_t*)(rl + 0x44) : -1, rl ? *(int16_t*)(rl + 0x46) : -1,
+                    rl ? *(uint16_t*)(rl + 0x257F) : 0xDEAD, rl ? *(uint16_t*)(rl + 0x2581) : 0xDEAD);
+            for (int obj = 0; obj <= 0xFE; obj += 2) {
+                uint16_t sf = *(uint16_t*)(sh + obj + 0x44D);
+                uint16_t rf = rl ? *(uint16_t*)(rl + obj + 0x44D) : 0;
+                if (!(sf & 0x8000) && !(rf & 0x8000)) continue;
+                fprintf(stderr, "  obj=%02X sh[fl=%04X xy=(%d,%d) spr=%04X:%04X sz=%04X rd=%04X pc=%04X]"
+                        " rl[fl=%04X xy=(%d,%d) spr=%04X:%04X sz=%04X rd=%04X pc=%04X]%s\n",
+                        obj, sf,
+                        *(int16_t*)(sh + obj + 0x64D), *(int16_t*)(sh + obj + 0x74D),
+                        *(uint16_t*)(sh + obj + 0x94D), *(uint16_t*)(sh + obj + 0x84D),
+                        *(uint16_t*)(sh + obj + 0xC4D), *(uint16_t*)(sh + obj + 0x114D),
+                        *(uint16_t*)(sh + obj + 0x1A0D),
+                        rf,
+                        rl ? *(int16_t*)(rl + obj + 0x64D) : 0, rl ? *(int16_t*)(rl + obj + 0x74D) : 0,
+                        rl ? *(uint16_t*)(rl + obj + 0x94D) : 0, rl ? *(uint16_t*)(rl + obj + 0x84D) : 0,
+                        rl ? *(uint16_t*)(rl + obj + 0xC4D) : 0, rl ? *(uint16_t*)(rl + obj + 0x114D) : 0,
+                        rl ? *(uint16_t*)(rl + obj + 0x1A0D) : 0,
+                        (rl && (sf != rf ||
+                                *(uint16_t*)(sh + obj + 0x64D) != *(uint16_t*)(rl + obj + 0x64D) ||
+                                *(uint16_t*)(sh + obj + 0x74D) != *(uint16_t*)(rl + obj + 0x74D) ||
+                                *(uint16_t*)(sh + obj + 0x84D) != *(uint16_t*)(rl + obj + 0x84D)))
+                            ? "  <-- SH/RL DIFF" : "");
+            }
+        }
+    }
     // Throttle log: first 10 then every 60 frames
     static int _logged = 0;
     if (_logged < 10 || _logged % 60 == 0) {
@@ -17807,17 +17872,21 @@ void v2_phase_render1(uint16_t ds_val) {
     // 1 ahead of orig per game tick (orig calls sub_1e0c7 ONCE per pass at eip 0x006C).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2a-tiles");
-    // sub_165aa + sub_16661 + sub_1406d
-    v2_game_loop_post_render(v2_vm_shadow_ds);
-    // sub_1DD9C (sprite render) — orig draws sprites HERE, after the
-    // sub_165aa/sub_16661 anim-state updates of this sub-frame. v2_draw_sprites
-    // used to run right after v2_draw_tiles (before post_render), i.e. with
-    // the PREVIOUS sub-frame's anim phases: on frames where phases changed the
-    // A2 sensor's v2 frame matched the previous rotation page exactly
-    // (V2-ALT-PAGE proof, task #21/#20).
-    v2_sub_1DD9C(v2_vm_shadow_ds);
+    // Early sprite layer — orig sub_1de05 point: moving objects are erased and
+    // repainted here, BEFORE the sub_165aa/16661 anim-state updates. (Static
+    // objects' page pixels also correspond to this state.)
     v2_draw_sprites(v2_current_ds_val);
     v2_pixwatch_stage("p2a-sprites");
+    // sub_165aa + sub_16661 + sub_1406d
+    v2_game_loop_post_render(v2_vm_shadow_ds);
+    // Late sprite layer — orig sub_1dd9c point (AFTER the anim updates):
+    // repaint only what orig's 1dd9c would (force 0x9568 / [obj+0x114D] byte /
+    // sub_1cdef render-map-bit0 gate), evaluated BEFORE v2_sub_1DD9C DECs the
+    // counters — same order as orig (gate, draw, DEC). Task #20/#21: flames
+    // take the post-update phase, the mid-screen lift keeps the early one.
+    v2_draw_sprites_late(v2_current_ds_val);
+    v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_pixwatch_stage("p2a-sprites-late");
 
     // FS compare DISABLED — was comparing with live orig FS (timing artifact).
     // Correct FS verification done by FS-SNAP-173c7 (snapshot-based).
@@ -17986,13 +18055,15 @@ void v2_phase_render2(uint16_t ds_val) {
     // (effective 20fps animation).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2b-tiles");
-    // sub_165aa + sub_16661 + sub_1406d
-    v2_game_loop_post_render(v2_vm_shadow_ds);
-    // sub_1DD9C (sprite render) — sprites drawn HERE like orig (after the
-    // anim-state updates; see the render1 note, task #21/#20).
-    v2_sub_1DD9C(v2_vm_shadow_ds);
+    // Early sprite layer (orig sub_1de05 point) — see render1 note.
     v2_draw_sprites(v2_current_ds_val);
     v2_pixwatch_stage("p2b-sprites");
+    // sub_165aa + sub_16661 + sub_1406d
+    v2_game_loop_post_render(v2_vm_shadow_ds);
+    // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
+    v2_draw_sprites_late(v2_current_ds_val);
+    v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_pixwatch_stage("p2b-sprites-late");
     // sub_1C8F1
     v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
     // sub_1E0C7
@@ -18242,15 +18313,16 @@ void v2_phase_render3(uint16_t ds_val) {
     // updated by post_flip2's sub_12fd0 (delta_type2 = 1/3 of remaining delta).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("r3-tiles");
+    // Early sprite layer (orig sub_1de05 point) — see render1 note.
+    v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("r3-sprites");
     // sub_165aa + sub_16661 (NO sub_1406d — orig block 8 eips 0xC0/0xC3 only,
     // unlike blocks 4/6 which also call sub_1406d at eip 0x5C/0x91).
     v2_game_loop_post_render(v2_vm_shadow_ds, /*include_anim_queue=*/false);
     v2_pixwatch_stage("r3-post_render");
-    // sub_1DD9C (sprite render) — sprites drawn HERE like orig (after the
-    // anim-state updates; see the render1 note, task #21/#20).
+    // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
+    v2_draw_sprites_late(v2_current_ds_val);
     v2_sub_1DD9C(v2_vm_shadow_ds);
-    v2_draw_sprites(v2_current_ds_val);
-    v2_pixwatch_stage("r3-sprites");
     v2_pixwatch_stage("r3-1DD9C");
     // sub_1C8F1 (flagged tiles)
     v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);

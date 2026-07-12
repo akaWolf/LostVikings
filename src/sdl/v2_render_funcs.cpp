@@ -10,6 +10,10 @@
 #include <cstdio>
 #include "render_v2.h"
 
+// Task #21 obj-trace ring (defined in v2_vm.cpp).
+extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d);
+extern "C" int v2_objtrace_di;
+
 // V2 is fully independent of myDrawInfo / orig drawBuffer.
 // v2 decodes chunks itself via v2_draw_viewport_chunk (writes to v2_render_buf
 // directly, mirroring orig sub_10cd8 → VGA) and v2_draw_hud_background → v2_hud_buf.
@@ -389,7 +393,18 @@ static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
         buf[sy * 320 + sx] = color;
 }
 
-void v2_draw_sprites(uint16_t ds_val) {
+static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate);
+void v2_draw_sprites(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 0); }
+void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
+
+// late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —
+// gates evaluated BEFORE v2_sub_1DD9C's DS effects (DEC of [obj+0x114D]) and
+// BEFORE v2_sub_1C8F1 (which clears render-map bit0), matching the orig call
+// order 1dd9c -> 1c8f1. sub_1cdef gate: clip the object's tile bbox to the
+// viewport (ds:0x9168/0x916A) and scan its cells in the render map (FS) for
+// bit0 (seg003 eip 0x634: TEST word fs:[si],1) — set means this sub-frame's
+// sub_1c8f1 repaints the cell, so the sprite must be repainted over it.
+static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
@@ -418,6 +433,91 @@ void v2_draw_sprites(uint16_t ds_val) {
 
         // Must be active (bit 15) with bits 13-14 clear
         if (!(flags & 0x8000) || (flags & 0x6000)) continue;
+
+        // Task #21 ring: v2 layer decisions for the traced object; d = checksum
+        // of the first 32 sprite-data bytes as THIS side reads them (shadow).
+        if (obj == v2_objtrace_di) {
+            uint16_t t_seg = *(uint16_t*)(ds_base + obj + 0x94D);
+            uint16_t t_off = *(uint16_t*)(ds_base + obj + 0x84D);
+            uint8_t* t_base = v2_resolve_segment(t_seg);
+            if (!t_base) t_base = v2_m2c_base + ((uint32_t)t_seg << 4);
+            int t_h = 0;
+            for (int t_i = 0; t_i < 32; t_i++) t_h += t_base[(uint16_t)(t_off - 1 + t_i)];
+            v2_objtrace(late_gate ? "v:late" : "v:early",
+                        *(int16_t*)(ds_base + obj + 0x64D),
+                        *(int16_t*)(ds_base + obj + 0x74D),
+                        ds_base[obj + 0x114D], t_h);
+        }
+
+        if (late_gate) {
+            // orig sub_1dd9c gates (eips 0x157F..0x1590), checked in orig order:
+            // force flag / pending-redraw byte / sub_1cdef render-map scan.
+            bool draw_it = false;
+            if (ds_base[0x9568] != 0) draw_it = true;                  // TEST ds:9568h
+            else if (ds_base[obj + 0x114D] != 0) draw_it = true;       // TEST byte [di+114Dh]
+            else {
+                // sub_1cdef: clip object's tile bbox to viewport, scan cells
+                // in the render map (FS) for bit0. Exact replica (seg003
+                // eips 0x5BF..0x647); the v2_sub_1DD9C bounds mirror carries
+                // the same math for its DS effects.
+                int16_t cx = (int16_t)*(uint16_t*)(ds_base + obj + 0x64D);
+                int16_t dxv = (int16_t)*(uint16_t*)(ds_base + obj + 0x74D);
+                int16_t si_h = (int16_t)((*(uint16_t*)(ds_base + obj + 0x0C4D) >> 3) + 1);
+                int16_t bp_w = si_h;
+                if (!(cx & 7)) bp_w--;
+                if (!(dxv & 7)) si_h--;
+                cx >>= 3; dxv >>= 3;                                    // SAR — signed
+                int16_t ax_h = si_h;
+                int16_t si_off = 0;
+                bool visible = true;
+                int16_t vw = (int16_t)*(uint16_t*)(ds_base + 0x9168);
+                if (cx < 0) { bp_w += cx; if (bp_w <= 0) visible = false; }
+                else {
+                    si_off += cx;
+                    if (cx >= vw) visible = false;
+                    else { int16_t ov = cx + bp_w - vw; if (ov > 0) bp_w -= ov; }
+                }
+                if (visible) {
+                    int16_t vh = (int16_t)*(uint16_t*)(ds_base + 0x916A);
+                    if (dxv < 0) { ax_h += dxv; if (ax_h <= 0) visible = false; }
+                    else {
+                        if (dxv >= vh) visible = false;
+                        else {
+                            uint16_t bx = (uint16_t)dxv << 1;
+                            si_off += (int16_t)*(uint16_t*)(ds_base + (uint16_t)(bx - 0x7098));
+                            int16_t ov = dxv + ax_h - vh; if (ov > 0) ax_h -= ov;
+                        }
+                    }
+                }
+                if (visible) {
+                    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+#ifdef V2_RENDER_FROM_SHADOW
+                    uint8_t* fs_base = v2_resolve_segment(fs_seg);
+                    if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
+#else
+                    uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
+#endif
+                    // loc_1ce58 (eips 0x628-0x643): dx = (vw - bp) doubled
+                    // (ADD dx,dx @0x62E) and si doubled (ADD si,si @0x630) —
+                    // si becomes the BYTE offset (row_base+col)*2, cells step
+                    // ADD si,2, row tail ADD si,dx. Below si_w stays in WORD
+                    // units with off = (si_w+col)*2 and si_w += bp+stride
+                    // per row — byte-for-byte the same addresses.
+                    uint16_t si_w = (uint16_t)si_off;
+                    int16_t stride = vw - bp_w;
+                    bool hit = false;
+                    for (int16_t row = 0; row < ax_h && !hit; row++) {
+                        for (int16_t col = 0; col < bp_w; col++) {
+                            uint16_t off = (uint16_t)(si_w + col) * 2u;
+                            if (*(uint16_t*)(fs_base + off) & 1) { hit = true; break; }
+                        }
+                        si_w = (uint16_t)(si_w + bp_w + stride);
+                    }
+                    draw_it = hit;
+                }
+            }
+            if (!draw_it) continue;
+        }
 
         int type = flags & 7;
 

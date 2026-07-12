@@ -11,6 +11,9 @@ extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint32_t color);
 
 // External for second window
 extern struct myDrawInfoS_v2* myDrawInfo_v2;
+// Task #21 obj-trace ring (defined in v2_vm.cpp).
+extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d);
+extern "C" int v2_objtrace_di;
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint16_t color);
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint8_t color);
 
@@ -2660,6 +2663,14 @@ cs=0xe25;eip=0x00159b; 	J(JNS(loc_1ddd2));	// 38017 jns     short loc_1DDD2 ;~ 0
 cs=0xe25;eip=0x00159d; 	X(MOV(*(raddr(ds,di+0x114D)), 0));	// 38018 mov     byte ptr [di+114Dh], 0 ;~ 0E25:159D
 loc_1ddd2:
 	// 6250
+	// Task #21 ring: orig 1dd9c draws THIS object now with current 64D/74D.
+	{ if ((int)di == v2_objtrace_di) {
+	    uint16_t _ss = *(uint16_t*)raddr(ds,di+0x94D), _so = *(uint16_t*)raddr(ds,di+0x84D);
+	    uint8_t* _sp = (uint8_t*)raddr(_ss, (uint16_t)(_so - 1));
+	    int _h = 0; for (int _i = 0; _i < 32; _i++) _h += _sp[_i];
+	    v2_objtrace("o:dd9c", *(int16_t*)raddr(ds,di+0x64D),
+	                *(int16_t*)raddr(ds,di+0x74D),
+	                *(uint8_t*)raddr(ds,di+0x114D), _h); } }
 cs=0xe25;eip=0x0015a2; 	T(MOV(bp, 7));	// 38021 mov     bp, 7 ;~ 0E25:15A2
 cs=0xe25;eip=0x0015a5; 	T(AND(bp, *(dw*)(raddr(ds,di+0x44D))));	// 38022 and     bp, [di+44Dh] ;~ 0E25:15A5
 cs=0xe25;eip=0x0015a9; 	T(SHL(bp, 1));	// 38023 shl     bp, 1 ;~ 0E25:15A9

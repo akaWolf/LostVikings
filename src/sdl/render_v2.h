@@ -168,6 +168,14 @@ extern uint8_t* v2_vm_get_shadow_sprite(uint32_t linear_addr);
 
 extern void v2_draw_hud_background(uint16_t ds_val, uint16_t chunk_seg, uint16_t plane_size);
 extern void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size);
+// Second (late) sprite layer at the orig sub_1dd9c point: repaints ONLY the
+// objects orig's sub_1dd9c would draw — force flag ds:0x9568, pending redraw
+// counter byte [obj+0x114D], or the sub_1cdef gate (any of the object's tile
+// cells carries render-map bit0, i.e. will be repainted by this sub-frame's
+// sub_1c8f1). Everything else keeps its early-layer (sub_1de05-point) pixels
+// — that is exactly what the orig page shows (task #21: the lift kept the
+// pre-165aa position on scroll frames while flames took the post-update one).
+extern void v2_draw_sprites_late(uint16_t ds_val);
 // Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
 extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col);
 // Refresh static intro/menu chunk_bg backup from current v2_render_buf (call after
