@@ -549,6 +549,14 @@ int main(int argc, char *argv[]) {
         if (_ft_rc >= 0) return _ft_rc;
     }
 
+    // Task #19 aid: env V2_WP_LIN=<linear offset into m2c::m> — arm the HW
+    // watchpoint on that byte from process start (catches level-load writers;
+    // samples drain in the per-frame v2_hw_wp_drain calls).
+    if (const char* _wp = getenv("V2_WP_LIN")) {
+        extern void v2_hw_wp_arm(uint8_t* ptr, const char* label);
+        v2_hw_wp_arm((uint8_t*)&m2c::m + strtoul(_wp, nullptr, 0), "V2_WP_LIN");
+    }
+
 #ifdef HEADLESS
     // HEADLESS init must run BEFORE any SDL call (sets SDL_VIDEODRIVER=dummy)
     // and BEFORE m2c::init (installs SIGSEGV handler, parses --replay-input).
