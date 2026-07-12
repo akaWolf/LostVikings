@@ -325,6 +325,18 @@ void drawPixel(uint32_t offset, uint8_t color)
 {
   if (offset > 65536*4 - 1)
 	return;
+  // Task #19 aid: env V2_DP_TRAP=<offset> — print every writer of that
+  // drawBuffer offset with its return address (resolve via nm afterwards).
+  {
+    static long _trap = -2;
+    if (_trap == -2) { const char* e = getenv("V2_DP_TRAP"); _trap = e ? strtol(e, 0, 0) : -1; }
+    if ((long)offset == _trap) {
+      void* bt[8]; int n = backtrace(bt, 8);
+      fprintf(stderr, "DP-TRAP: off=%X color=%02X bt:", offset, color);
+      for (int i = 1; i < n; i++) fprintf(stderr, " %p", bt[i]);
+      fprintf(stderr, "\n");
+    }
+  }
   // ONE-SHOT: check if drawBuffer aliases VGA memory
   {
     static bool checked = false;

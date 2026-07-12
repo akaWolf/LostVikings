@@ -571,6 +571,21 @@ struct myDrawInfoS_a2_fwd {  // forward layout for myDrawInfo access
     uint8_t myPixelOffset;
 };
 extern struct myDrawInfoS_a2_fwd* myDrawInfo;
+extern "C" uint32_t v2_fntest_game_ds_linear(void);
+// Task #19 aid: env V2_PIXWATCH=<y*320+x> — print every stage (across ALL
+// render passes) that changes that v2_render_buf pixel.
+void v2_pixwatch_stage(const char* stage) {
+    static long _pw = -2;
+    static uint8_t _pw_last = 0;
+    if (_pw == -2) { const char* e = getenv("V2_PIXWATCH"); _pw = e ? strtol(e, 0, 0) : -1; }
+    if (_pw < 0) return;
+    extern uint8_t v2_render_buf[];
+    uint8_t cur = v2_render_buf[_pw];
+    if (cur != _pw_last) {
+        fprintf(stderr, "PIXWATCH[%s]: %02X -> %02X\n", stage, _pw_last, cur);
+        _pw_last = cur;
+    }
+}
 void v2_verify_render_buf(int frame) {
     extern uint8_t v2_render_buf[320*200];
     if (!myDrawInfo) return;
@@ -626,6 +641,39 @@ void v2_verify_render_buf(int frame) {
             for (int k = 0; k < 6 && top[k].n; k++)
                 fprintf(stderr, "V2-RENDER-DIFF-PAIR: %02X->%02X n=%u sample@(%u,%u)\n",
                         top[k].o, top[k].v, top[k].n, top[k].at % 320, top[k].at / 320);
+            // Task #19: tile-level forensics for the first diff cell — the map
+            // word (from the REAL FS tilemap) and the current tile GFX row so
+            // we can tell which side painted from the CURRENT tile-anim phase.
+            if (v2_m2c_base) {
+                uint8_t* rds = v2_m2c_base + v2_fntest_game_ds_linear();
+                uint16_t scx = *(uint16_t*)(rds + 0x257F);
+                uint16_t scy = *(uint16_t*)(rds + 0x2581);
+                // RENDER map lives in [ds:0x2E69], tile gfx in [ds:0x2E5F];
+                // the map word's & 0xFFC0 IS the byte offset (64B tiles).
+                uint16_t fsseg = *(uint16_t*)(rds + 0x2E69);
+                uint16_t gfxseg = *(uint16_t*)(rds + 0x2E5F);
+                int tx = (first_diff_x >> 4) + (scx >> 4);
+                int ty = (first_diff_y >> 4) + (scy >> 4);
+                uint8_t* fs = v2_m2c_base + (uint32_t)fsseg * 16;
+                uint16_t row_off = *(uint16_t*)(rds + (uint16_t)(ty * 2 - 0x7098));
+                uint16_t mapw = *(uint16_t*)(fs + row_off + tx * 2);
+                uint8_t* gfx = v2_m2c_base + (uint32_t)gfxseg * 16 + (mapw & 0xFFC0);
+                fprintf(stderr, "V2-RENDER-DIFF-TILE: cell=(%d,%d) scroll=(%04X,%04X) fsseg=%04X "
+                        "gfxseg=%04X mapw=%04X gfx0-15:", tx, ty, scx, scy, fsseg, gfxseg, mapw);
+                for (int b = 0; b < 16; b++) fprintf(stderr, " %02X", gfx[b]);
+                fprintf(stderr, "\n");
+                // actual painted rows of that cell from both sides
+                int bx = (first_diff_x & ~15), by = (first_diff_y & ~15);
+                fprintf(stderr, "  orig rows y=%d..%d @x=%d:", by, by + 1, bx);
+                for (int yy = by; yy < by + 2; yy++)
+                    for (int xx = bx; xx < bx + 16; xx++)
+                        fprintf(stderr, "%s%02X", (xx == bx) ? " | " : " ", orig_pixels[yy * 320 + xx]);
+                fprintf(stderr, "\n  v2   rows          :");
+                for (int yy = by; yy < by + 2; yy++)
+                    for (int xx = bx; xx < bx + 16; xx++)
+                        fprintf(stderr, "%s%02X", (xx == bx) ? " | " : " ", v2_render_buf[yy * 320 + xx]);
+                fprintf(stderr, "\n");
+            }
         }
     }
 #endif
@@ -16281,7 +16329,9 @@ static void v2_vm_verify_object_refs(uint8_t* shadow) {
 
 static void v2_do_render() {
     v2_draw_tiles(v2_current_ds_val);
+    v2_pixwatch_stage("p1-tiles");
     v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("p1-sprites");
     v2_sub_1E0C7(v2_vm_shadow_ds);  // CALLF sub_1E0C7 (DS side effects before UI render)
     v2_draw_ui(v2_current_ds_val);
 
@@ -17601,7 +17651,9 @@ void v2_phase_render1(uint16_t ds_val) {
     // which gets called again 6 lines below — caused 0x98DC throttle to advance
     // 1 ahead of orig per game tick (orig calls sub_1e0c7 ONCE per pass at eip 0x006C).
     v2_draw_tiles(v2_current_ds_val);
+    v2_pixwatch_stage("p2a-tiles");
     v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("p2a-sprites");
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // sub_1DD9C (sprite render)
@@ -17773,7 +17825,9 @@ void v2_phase_render2(uint16_t ds_val) {
     // position too. Without this, render2/render3 show same buffer as render1
     // (effective 20fps animation).
     v2_draw_tiles(v2_current_ds_val);
+    v2_pixwatch_stage("p2b-tiles");
     v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("p2b-sprites");
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // sub_1DD9C (sprite render)
@@ -18027,17 +18081,23 @@ void v2_phase_render3(uint16_t ds_val) {
     // 3-PASS SUB-FRAME 3: orig renders to 3rd VGA page with sub-sprite positions
     // updated by post_flip2's sub_12fd0 (delta_type2 = 1/3 of remaining delta).
     v2_draw_tiles(v2_current_ds_val);
+    v2_pixwatch_stage("r3-tiles");
     v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("r3-sprites");
     // sub_165aa + sub_16661 (NO sub_1406d — orig block 8 eips 0xC0/0xC3 only,
     // unlike blocks 4/6 which also call sub_1406d at eip 0x5C/0x91).
     v2_game_loop_post_render(v2_vm_shadow_ds, /*include_anim_queue=*/false);
+    v2_pixwatch_stage("r3-post_render");
     // sub_1DD9C (sprite render)
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_pixwatch_stage("r3-1DD9C");
     // sub_1C8F1 (flagged tiles)
     v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+    v2_pixwatch_stage("r3-flagged");
     // sub_1E0C7 (UI)
     v2_sub_1E0C7(v2_vm_shadow_ds);
     v2_draw_ui(v2_current_ds_val);
+    v2_pixwatch_stage("r3-ui");
     // sub_16775 (page flip 3)
     v2_sub_16775(v2_vm_shadow_ds);
     // A2: per-frame render-buffer compare orig drawBuffer vs v2_render_buf.
@@ -18551,7 +18611,9 @@ void v2_run_sub_1086f_mirror(uint8_t* s) {
         // (eip 01A2:277D in orig — inline insertion). Without these, v2_render_buf
         // never gets full clear → dialog text pixels accumulate across cmd dispatches.
         v2_draw_tiles(v2_current_ds_val);
+        v2_pixwatch_stage("p4-tiles");
         v2_draw_sprites(v2_current_ds_val);
+        v2_pixwatch_stage("p4-sprites");
         v2_draw_ui(v2_current_ds_val);
         v2_sub_1DE05(s);                                       // 01A2:277D sub_1DE05
         v2_sub_165aa(s);                                       // 01A2:2782 sub_165aa (bit-exact, no sub_16661)
