@@ -646,21 +646,35 @@ void v2_verify_render_buf(int frame) {
             // we can tell which side painted from the CURRENT tile-anim phase.
             if (v2_m2c_base) {
                 uint8_t* rds = v2_m2c_base + v2_fntest_game_ds_linear();
-                uint16_t scx = *(uint16_t*)(rds + 0x257F);
-                uint16_t scy = *(uint16_t*)(rds + 0x2581);
-                // RENDER map lives in [ds:0x2E69], tile gfx in [ds:0x2E5F];
-                // the map word's & 0xFFC0 IS the byte offset (64B tiles).
+                // v2_draw_tiles semantics: 8x8 tiles; scroll_x = ds:0x2581 is
+                // the ROW scroll, scroll_y = ds:0x257F the COLUMN scroll.
+                uint16_t row_sc = *(uint16_t*)(rds + 0x2581);
+                uint16_t col_sc = *(uint16_t*)(rds + 0x257F);
                 uint16_t fsseg = *(uint16_t*)(rds + 0x2E69);
                 uint16_t gfxseg = *(uint16_t*)(rds + 0x2E5F);
-                int tx = (first_diff_x >> 4) + (scx >> 4);
-                int ty = (first_diff_y >> 4) + (scy >> 4);
-                uint8_t* fs = v2_m2c_base + (uint32_t)fsseg * 16;
-                uint16_t row_off = *(uint16_t*)(rds + (uint16_t)(ty * 2 - 0x7098));
-                uint16_t mapw = *(uint16_t*)(fs + row_off + tx * 2);
-                uint8_t* gfx = v2_m2c_base + (uint32_t)gfxseg * 16 + (mapw & 0xFFC0);
-                fprintf(stderr, "V2-RENDER-DIFF-TILE: cell=(%d,%d) scroll=(%04X,%04X) fsseg=%04X "
-                        "gfxseg=%04X mapw=%04X gfx0-15:", tx, ty, scx, scy, fsseg, gfxseg, mapw);
-                for (int b = 0; b < 16; b++) fprintf(stderr, " %02X", gfx[b]);
+                int trow = (first_diff_y >> 3) + row_sc;
+                int tcol = (first_diff_x >> 3) + col_sc;
+                uint16_t row_base = *(uint16_t*)(rds + (uint16_t)(trow * 2 - 0x7098));
+                uint16_t map_off = (uint16_t)((row_base + tcol) * 2u);
+                uint8_t* fs_real = v2_m2c_base + (uint32_t)fsseg * 16;
+                uint16_t mapw_real = *(uint16_t*)(fs_real + map_off);
+                extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+                extern uint8_t* v2_vm_get_shadow_ds();
+                uint8_t* sds = v2_vm_get_shadow_ds();
+                uint8_t* fs_shad = sds ? v2_resolve_segment(fsseg, sds) : nullptr;
+                uint16_t mapw_shad = fs_shad ? *(uint16_t*)(fs_shad + map_off) : 0xDEAD;
+                uint8_t* gfx_shad = sds ? v2_resolve_segment(gfxseg, sds) : nullptr;
+                fprintf(stderr, "V2-RENDER-DIFF-TILE: t=(%d,%d) rowsc=%04X colsc=%04X fs=%04X gfx=%04X "
+                        "map_off=%04X mapw real=%04X shadow=%04X\n",
+                        tcol, trow, row_sc, col_sc, fsseg, gfxseg, map_off, mapw_real, mapw_shad);
+                uint8_t* gr = v2_m2c_base + (uint32_t)gfxseg * 16 + (mapw_real & 0xFFC0);
+                fprintf(stderr, "  gfx(real mapw) 0-15:");
+                for (int b = 0; b < 16; b++) fprintf(stderr, " %02X", gr[b]);
+                if (gfx_shad) {
+                    uint8_t* gs = gfx_shad + (mapw_shad & 0xFFC0);
+                    fprintf(stderr, "\n  gfx(shad mapw,shad seg) 0-15:");
+                    for (int b = 0; b < 16; b++) fprintf(stderr, " %02X", gs[b]);
+                }
                 fprintf(stderr, "\n");
                 // actual painted rows of that cell from both sides
                 int bx = (first_diff_x & ~15), by = (first_diff_y & ~15);
@@ -16993,9 +17007,15 @@ void v2_run_animation_vm(uint16_t ds_val) {
     v2_vm_verify_page_state(v2_vm_shadow_ds);
     v2_vm_verify_object_refs(v2_vm_shadow_ds);
 
-#ifdef V2_RENDER_FROM_SHADOW
-    v2_vm_in_frame = false;
-#endif
+    // NOTE (task #19): do NOT clear v2_vm_in_frame here. This function was
+    // once the monolithic per-frame path (drew inside itself, so closing the
+    // window at its exit was correct — 840ad4e); after the phase split it runs
+    // as the VM phase, and clearing here shut the gate BEFORE the render
+    // phases — v2_draw_tiles/sprites never executed and v2_render_buf stayed
+    // frozen on the first transitional frame (the A2 "starfield" divergence).
+    // The frame window now closes only in v2_phase_frame_end; the level-
+    // transition early-out above keeps its own clear (that frame legitimately
+    // skips the normal render, matching orig).
 }
 
 // ============================================================================
