@@ -624,7 +624,9 @@ void v2_verify_render_buf(int frame) {
 #ifdef HEADLESS
     {
         static int _dumped = 0;
-        if (!_dumped && getenv("V2_RENDER_DIFF_DUMP")) {
+        static long _dump_at = -2;   // Nth divergence EVENT to dump (default 1st)
+        if (_dump_at == -2) { const char* e = getenv("V2_RENDER_DIFF_DUMP_AT"); _dump_at = e ? strtol(e, 0, 0) : 1; }
+        if (!_dumped && getenv("V2_RENDER_DIFF_DUMP") && _logged >= _dump_at) {
             _dumped = 1;
             extern void headless_write_ppm(const char*, const uint8_t*, int, int, const SDL_Color*);
             headless_write_ppm("/tmp/v2_rdiff_orig.ppm", orig_pixels, 320, 176, nullptr);
