@@ -574,6 +574,9 @@ struct myDrawInfoS_a2_fwd {  // forward layout for myDrawInfo access
 extern struct myDrawInfoS_a2_fwd* myDrawInfo;
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count);
+// Dirty-lag classification counters (task #20/#21) — printed by the
+// headless render-diff summary.
+uint64_t v2_render_lag_frames = 0, v2_render_lag_px = 0;
 // Task #19 aid: env V2_PIXWATCH=<y*320+x> — print every stage (across ALL
 // render passes) that changes that v2_render_buf pixel.
 void v2_pixwatch_stage(const char* stage) {
@@ -597,6 +600,19 @@ void v2_verify_render_buf(int frame) {
     if (!v2_fetch_orig_page(orig_unfold, sizeof(orig_unfold))) return;
     const uint8_t* orig_pixels = orig_unfold;
 
+    // 3-page rotation ring: last 3 distinct myOffset values. The orig dirty
+    // channels repaint a changed object on [obj+0x114D]-low-byte pages only
+    // (sub_1dd9c: DEC per draw; the 0x202 sub-sprite channel grants just TWO
+    // repaints) — so one rotation page legitimately lags one animation phase
+    // behind on DOS hardware too. Classify each diff pixel: if the v2 value
+    // matches ANY rotation page, orig has already painted that phase
+    // somewhere — a legit dirty-lag ("lag"); if it matches NO page, it is a
+    // real render divergence ("hard").
+    static uint32_t _pg_ring[3] = {0, 0, 0};
+    if (_pg_ring[0] != myDrawInfo->myOffset) {
+        _pg_ring[2] = _pg_ring[1]; _pg_ring[1] = _pg_ring[0]; _pg_ring[0] = myDrawInfo->myOffset;
+    }
+
     // Hash viewport region (rows 0-175, HUD has separate page-flip logic)
     uint32_t h_orig = 0, h_v2 = 0;
     int viewport_diff = 0;
@@ -614,14 +630,86 @@ void v2_verify_render_buf(int frame) {
         }
     }
     if (h_orig == h_v2) return;
+    // Split the diff into hard vs dirty-lag using the alternate pages.
+    int hard_diff = 0, lag_diff = 0;
+    int first_hard_x = -1, first_hard_y = -1;
+    {
+        const uint8_t* alt[2] = {nullptr, nullptr};
+        static uint8_t altbuf[2][320 * 176];
+        int nalt = 0;
+        for (int r = 1; r < 3 && nalt < 2; r++) {
+            if (!_pg_ring[r]) continue;
+            bool ok = true;
+            for (uint32_t y = 0; y < 176 && ok; y++) {
+                uint32_t base = (_pg_ring[r] + y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
+                if (base + 320 > sizeof(myDrawInfo->drawBuffer)) { ok = false; break; }
+                memcpy(altbuf[nalt] + y * 320, myDrawInfo->drawBuffer + base, 320);
+            }
+            if (ok) { alt[nalt] = altbuf[nalt]; nalt++; }
+        }
+        for (int y = 0; y < 176; y++) {
+            for (int x = 0; x < 320; x++) {
+                uint8_t o = orig_pixels[y * 320 + x];
+                uint8_t v = v2_render_buf[y * 320 + x];
+                if (o == v) continue;
+                bool legit = false;
+                for (int a = 0; a < nalt && !legit; a++)
+                    if (alt[a][y * 320 + x] == v) legit = true;
+                if (legit) lag_diff++;
+                else {
+                    if (hard_diff == 0) { first_hard_x = x; first_hard_y = y; }
+                    hard_diff++;
+                }
+            }
+        }
+    }
+    v2_render_lag_frames += (lag_diff > 0);
+    v2_render_lag_px += (uint64_t)lag_diff;
+    if (hard_diff == 0) return;   // pure dirty-lag frame — counted in the summary
     // Throttle log: first 10 then every 60 frames
     static int _logged = 0;
     if (_logged < 10 || _logged % 60 == 0) {
-        fprintf(stderr, "V2-RENDER-DIVERGE[f%d]: viewport_diff=%d bytes (first @ x=%d y=%d) "
+        fprintf(stderr, "V2-RENDER-DIVERGE[f%d]: hard=%d lag=%d (first hard @ x=%d y=%d) "
                 "orig_hash=%08X v2_hash=%08X page_off=0x%X\n",
-                frame, viewport_diff, first_diff_x, first_diff_y, h_orig, h_v2, page_offset);
+                frame, hard_diff, lag_diff, first_hard_x, first_hard_y, h_orig, h_v2, page_offset);
     }
     _logged++;
+    first_diff_x = first_hard_x; first_diff_y = first_hard_y;
+    viewport_diff = hard_diff;
+    // Task #21 aid (env V2_RENDER_ALT_PAGE=1): on a divergent frame, re-unfold
+    // the orig side from the OTHER two pages of the 3-page rotation and count
+    // diffs against the same v2 frame. If an alternate page matches (or is
+    // drastically closer), the residual classes are a page-selection lag of
+    // the sensor (myOffset already advanced), not a render divergence.
+    {
+        static int _alt = -1;
+        if (_alt == -1) _alt = getenv("V2_RENDER_ALT_PAGE") ? 1 : 0;
+        if (_alt) {
+            static uint32_t ring[3] = {0, 0, 0};   // last 3 distinct myOffset values
+            uint32_t cur = myDrawInfo->myOffset;
+            if (ring[0] != cur) { ring[2] = ring[1]; ring[1] = ring[0]; ring[0] = cur; }
+            static int _alt_logged = 0;
+            if (_alt_logged < 40) {
+                _alt_logged++;
+                char line[256]; int pos = 0;
+                pos += snprintf(line + pos, sizeof(line) - (size_t)pos,
+                                "V2-ALT-PAGE[f%d]: cur=0x%X diff=%d", frame, cur, viewport_diff);
+                for (int r = 1; r < 3 && ring[r]; r++) {
+                    int d = 0;
+                    for (int y = 0; y < 176 && d >= 0; y++) {
+                        uint32_t base = (ring[r] + (uint32_t)y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
+                        if (base + 320 > sizeof(myDrawInfo->drawBuffer)) { d = -1; break; }
+                        const uint8_t* rowp = &myDrawInfo->drawBuffer[base];
+                        const uint8_t* vrow = &v2_render_buf[y * 320];
+                        for (int x = 0; x < 320; x++) if (rowp[x] != vrow[x]) d++;
+                    }
+                    pos += snprintf(line + pos, sizeof(line) - (size_t)pos,
+                                    " | alt0x%X=%d", ring[r], d);
+                }
+                fprintf(stderr, "%s\n", line);
+            }
+        }
+    }
     // Classification aid (env V2_RENDER_DIFF_DUMP=1): one-shot PPM pair + top
     // orig→v2 color pairs on the FIRST divergence event of the run.
 #ifdef HEADLESS
@@ -17719,12 +17807,17 @@ void v2_phase_render1(uint16_t ds_val) {
     // 1 ahead of orig per game tick (orig calls sub_1e0c7 ONCE per pass at eip 0x006C).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2a-tiles");
-    v2_draw_sprites(v2_current_ds_val);
-    v2_pixwatch_stage("p2a-sprites");
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
-    // sub_1DD9C (sprite render)
+    // sub_1DD9C (sprite render) — orig draws sprites HERE, after the
+    // sub_165aa/sub_16661 anim-state updates of this sub-frame. v2_draw_sprites
+    // used to run right after v2_draw_tiles (before post_render), i.e. with
+    // the PREVIOUS sub-frame's anim phases: on frames where phases changed the
+    // A2 sensor's v2 frame matched the previous rotation page exactly
+    // (V2-ALT-PAGE proof, task #21/#20).
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("p2a-sprites");
 
     // FS compare DISABLED — was comparing with live orig FS (timing artifact).
     // Correct FS verification done by FS-SNAP-173c7 (snapshot-based).
@@ -17893,12 +17986,13 @@ void v2_phase_render2(uint16_t ds_val) {
     // (effective 20fps animation).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2b-tiles");
-    v2_draw_sprites(v2_current_ds_val);
-    v2_pixwatch_stage("p2b-sprites");
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
-    // sub_1DD9C (sprite render)
+    // sub_1DD9C (sprite render) — sprites drawn HERE like orig (after the
+    // anim-state updates; see the render1 note, task #21/#20).
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("p2b-sprites");
     // sub_1C8F1
     v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
     // sub_1E0C7
@@ -18148,14 +18242,15 @@ void v2_phase_render3(uint16_t ds_val) {
     // updated by post_flip2's sub_12fd0 (delta_type2 = 1/3 of remaining delta).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("r3-tiles");
-    v2_draw_sprites(v2_current_ds_val);
-    v2_pixwatch_stage("r3-sprites");
     // sub_165aa + sub_16661 (NO sub_1406d — orig block 8 eips 0xC0/0xC3 only,
     // unlike blocks 4/6 which also call sub_1406d at eip 0x5C/0x91).
     v2_game_loop_post_render(v2_vm_shadow_ds, /*include_anim_queue=*/false);
     v2_pixwatch_stage("r3-post_render");
-    // sub_1DD9C (sprite render)
+    // sub_1DD9C (sprite render) — sprites drawn HERE like orig (after the
+    // anim-state updates; see the render1 note, task #21/#20).
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_draw_sprites(v2_current_ds_val);
+    v2_pixwatch_stage("r3-sprites");
     v2_pixwatch_stage("r3-1DD9C");
     // sub_1C8F1 (flagged tiles)
     v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);

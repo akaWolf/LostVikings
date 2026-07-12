@@ -118,6 +118,10 @@ extern "C" void v2_fntest_reset_orig_dac(void) {
     for (int i = 0; i < 256; i++) setPalette((uint8_t)i, 0, 0, 0);
 }
 
+// A2 page snapshot hook (task #21) — defined in render.cpp, called at the
+// 3rd-sub-frame sub_16775 site in the main game loop below.
+extern "C" void v2_a2_snapshot_page(void);
+
 // Direct-call isolator for the pal pair (see the fnptr note above): swap the
 // case image into the live DS window, call the wrapper like sub_1797b does,
 // copy the result back. No CALL_, no stack canaries.
@@ -2413,6 +2417,10 @@ cs=0x1a2;eip=0x0000ce; 	J(CALLF(sub_1c8f1,0));	// 109 call    sub_1C8F1 ;~ 01A2:
 
 cs=0x1a2;eip=0x0000d3; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 110 call    sub_1E0C7 ;~ 01A2:00D3
 cs=0x1a2;eip=0x0000d8; 	J(CALL(sub_16775,0));	// 111 call    sub_16775 ;~ 01A2:00D8
+	// A2 page snapshot (task #21): myOffset is exactly THIS frame's page here;
+	// by the time the v2 thread compares, this thread may already be in the
+	// next frame's sub-frame 1 (myOffset advanced) — snapshot now.
+	if (myDrawInfo_v2) v2_a2_snapshot_page();
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(8); /* RENDER3_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER3, ds); // AFTER pass 3 complete
 cs=0x1a2;eip=0x0000db; 	X(MOV(word_30c14, 0));	// 112 mov     word_30C14, 0 ;~ 01A2:00DB

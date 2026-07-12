@@ -303,6 +303,18 @@ void headless_log_render_diff(int frame, int viewport_diff, int x, int y,
 }
 
 void headless_dump_render_diff_summary(void) {
+    // Dirty-lag stats (task #20/#21): frames whose only pixel diffs matched
+    // another page of the 3-page rotation (orig dirty channels repaint a
+    // changed object on [obj+0x114D]-counted pages only — the 0x202
+    // sub-sprite channel covers 2 of 3, so one page lags a phase on real
+    // DOS hardware too). These are NOT divergences; kept as a visible count.
+    {
+        extern uint64_t v2_render_lag_frames, v2_render_lag_px;
+        if (v2_render_lag_frames)
+            fprintf(stderr, "RENDER-LAG (legit dirty-page lag): frames=%llu px=%llu\n",
+                    (unsigned long long)v2_render_lag_frames,
+                    (unsigned long long)v2_render_lag_px);
+    }
     int n = g_render_diff_count.load(std::memory_order_relaxed);
     if (n == 0) return;
     int captured = n < RENDER_DIFF_MAX ? n : RENDER_DIFF_MAX;

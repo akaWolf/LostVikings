@@ -42,10 +42,36 @@ extern "C" void v2_fntest_alloc_drawinfo(void) {
 // attribute-controller pixel pan (0..3 px, value/2 — seg000 sub_1797b).
 // The old linear-320 read sheared every frame by 24 px/row: all "class 2/3"
 // A2 diffs (stars, password screen, scroll) were artifacts of that shear.
+// A2 page snapshot (task #21): the sensor runs on the v2 game-loop thread
+// AFTER the orig thread signals V2_PHASE_RENDER3, but orig keeps going and
+// executes the NEXT frame's sub-frame-1 sub_16775 (myOffset advances to the
+// next page of the 3-page rotation) before v2 finishes comparing. On frames
+// where adjacent pages differ (flame animation phases, transitions, scroll)
+// the sensor then unfolded the WRONG page — every residual R1/R2 diff class
+// matched the previous rotation page exactly (V2-ALT-PAGE proof). Snapshot
+// the whole unfolded page in the ORIG thread right after the 3rd-sub-frame
+// sub_16775 (eip 0xD8), where myOffset is exactly this frame's page.
+static uint8_t v2_a2_page_snap[320 * 176];
+static int     v2_a2_page_snap_valid = 0;
+extern "C" void v2_a2_snapshot_page(void) {
+    if (!myDrawInfo) return;
+    for (uint32_t y = 0; y < 176; y++) {
+        uint32_t base = (myDrawInfo->myOffset + y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
+        if (base + 320 > sizeof(myDrawInfo->drawBuffer)) { v2_a2_page_snap_valid = 0; return; }
+        memcpy(v2_a2_page_snap + y * 320, myDrawInfo->drawBuffer + base, 320);
+    }
+    v2_a2_page_snap_valid = 1;
+}
 extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count) {
     if (!myDrawInfo) return 0;
     uint32_t rows = count / 320;
     if (rows * 320 != count) return 0;
+    // Prefer the phase-synchronized snapshot; fall back to a live unfold
+    // (crash dumps / callers outside the frame loop).
+    if (v2_a2_page_snap_valid && count <= sizeof(v2_a2_page_snap)) {
+        memcpy(out, v2_a2_page_snap, count);
+        return 1;
+    }
     for (uint32_t y = 0; y < rows; y++) {
         uint32_t base = (myDrawInfo->myOffset + y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
         if (base + 320 > sizeof(myDrawInfo->drawBuffer)) return 0;
