@@ -66,6 +66,11 @@ extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
 extern "C" uint32_t v2_fntest_call_raw_chunk(uint16_t chunk_id, uint8_t* dest,
                                              uint8_t* hdr10_out);
 extern "C" void     v2_fntest_alloc_drawinfo(void);
+extern "C" void     v2_fntest_call_pal(uint8_t* test_shadow, int which, uint8_t* dac_out768);
+extern "C" void     v2_fntest_reset_v2_dac(void);
+extern "C" void     v2_fntest_reset_orig_dac(void);
+extern "C" void     v2_fntest_orig_call_pal(int which, uint8_t* ds_image);
+extern "C" void     v2_fetch_orig_dac(uint8_t* rgb768);
 extern "C" uint16_t v2_fntest_get_word_10980(void);
 extern "C" void     v2_fntest_put_word_10980(uint16_t v);
 extern "C" uint16_t v2_fntest_es_override;
@@ -109,7 +114,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_158D7 = 23, FT_SUB_158E6 = 24,
             FT_SUB_1303A = 25, FT_SUB_13031 = 26,
             FT_SUB_1614E = 27, FT_SUB_15C37 = 28, FT_SUB_15C93 = 29,
-            FT_SUB_15AFD = 30, FT_SUB_10982 = 31, FT_SUB_10CD8 = 32, FT_COUNT };
+            FT_SUB_15AFD = 30, FT_SUB_10982 = 31, FT_SUB_10CD8 = 32,
+            FT_SUB_10FE6 = 33, FT_SUB_10FFC = 34, FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -132,7 +138,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_158d7", "sub_158e6",
                                  "sub_1303a", "sub_13031",
                                  "sub_1614e", "sub_15c37", "sub_15c93",
-                                 "sub_15afd", "sub_10982", "sub_10cd8" };
+                                 "sub_15afd", "sub_10982", "sub_10cd8",
+                                 "sub_10fe6", "sub_10ffc" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3093,6 +3100,160 @@ int ft_selftest_vmops() {
     return (sweep.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ============================================================================
+// Units 33-34: DAC dispatch pair — sub_10fe6 (full upload, source hardcoded
+// ds:0x8202) / sub_10ffc (per-channel animation bursts from ds:[word_303E0]).
+// NEW compare channel: oracle drawPalette (reset to zero baseline, then
+// v2_fetch_orig_dac after the call) vs v2_dac_shadow<<2 (reset the same way).
+// Plus the standard full-DS diff (0x7EFE clear, [bx+0x258C] timer reloads).
+// ============================================================================
+struct FtPalCh { uint8_t timer, reload, start, end; };   // [bx+0x258C/0x2584/0x2594/0x259C]
+
+bool ft_synth_case_pal(FtId id, uint8_t chan_mask, const FtPalCh* ch /*8 or null*/,
+                       uint16_t w7f00, uint32_t pal_seed, const char* group,
+                       FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    FtRng pr(pal_seed);
+    for (int i = 0; i < 768; i++) g_synth_in[0x8202 + i] = (uint8_t)pr.w();
+    for (int i = 0; i < 768; i++) g_synth_in[0x7F02 + i] = (uint8_t)pr.w();
+    g_synth_in[0x2583] = chan_mask;                       // byte_2AA63 enable bits
+    for (int b = 0; b < 8; b++) {
+        g_synth_in[b + 0x258C] = ch ? ch[b].timer  : 0;
+        g_synth_in[b + 0x2584] = ch ? ch[b].reload : 0;
+        g_synth_in[b + 0x2594] = ch ? ch[b].start  : 0;
+        g_synth_in[b + 0x259C] = ch ? ch[b].end    : 0;
+    }
+    ft_wr16(g_synth_in, 0x7EFE, 0xBBBB);                  // both sides clear to 0
+    ft_wr16(g_synth_in, 0x7F00, w7f00);                   // word_303E0 burst source
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    // Direct-call isolator (no CALL_): the pair's port bodies end in a C
+    // return (RETN commented at the SDL inline) — see seg000 note.
+    v2_fntest_reset_orig_dac();
+    v2_fntest_orig_call_pal((id == FT_SUB_10FE6) ? 0 : 1, g_synth_orig);
+    uint8_t dac_orig[768];
+    v2_fetch_orig_dac(dac_orig);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    uint8_t dac_v2[768]; int v2_hung = 0;
+    v2_fntest_reset_v2_dac();
+    v2_fntest_arm_signals();
+    if (sigsetjmp(*v2_fntest_jb(), 1) == 0) {
+        v2_fntest_alarm_ms(4000);
+        v2_fntest_call_pal(g_scratch, (id == FT_SUB_10FE6) ? 0 : 1, dac_v2);
+        v2_fntest_alarm_ms(0);
+    } else { v2_fntest_alarm_ms(0); v2_hung = 1; }
+    if (v2_hung) {
+        fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: v2 HUNG (watchdog) | mask=%02X seed=%08X\n",
+                g_name[id], group, chan_mask, pal_seed);
+        st.fail++; return false;
+    }
+
+    long diffs = 0;
+    for (int i = 0; i < 768; i++) {
+        uint8_t ov = dac_orig[i];
+        uint8_t vv = (uint8_t)(dac_v2[i] << 2);
+        if (ov == vv) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: DAC slot=%02X comp=%d orig=%02X v2=%02X "
+                    "| mask=%02X 7F00=%04X seed=%08X\n",
+                    g_name[id], group, i / 3, i % 3, ov, vv, chan_mask, w7f00, pal_seed);
+        }
+        diffs++;
+    }
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X) "
+                    "| mask=%02X seed=%08X\n",
+                    g_name[id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a],
+                    chan_mask, pal_seed);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_pal(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    v2_fntest_alloc_drawinfo();          // oracle setPalette needs myDrawInfo
+    const bool is_ffc = (id == FT_SUB_10FFC);
+
+    // --- grid ---
+    if (!is_ffc) {
+        // sub_10fe6 has no branches: a few palette seeds + wild 0x7F00 values.
+        for (uint32_t s = 0; s < 6; s++)
+            ft_synth_case_pal(id, 0, nullptr, (s & 1) ? 0x7F02 : 0x8202,
+                              seed + s, "grid", grid, diff_budget);
+    } else {
+        // Directed channel configs. LUT [bx-0x6C44] holds the enable bit per
+        // channel; mask 0xFF enables all.
+        struct C { uint8_t mask; FtPalCh ch[8]; uint16_t w7f00; };
+        auto mk = [](uint8_t st_, uint8_t en, uint8_t tm = 0, uint8_t rl = 0) {
+            return FtPalCh{ tm, rl, st_, en };
+        };
+        C cases[] = {
+            // cur==end → JZ skip (no DAC, timer still reloads)
+            { 0xFF, { mk(0x10,0x10), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // positive small range, source 0x7F02 (the fix-#22 scenario)
+            { 0xFF, { mk(0x71,0x74), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // positive from 0x8202
+            { 0xFF, { mk(0x00,0x0F), {}, {}, {}, {}, {}, {}, {} }, 0x8202 },
+            // positive full range 0..0xFF
+            { 0xFF, { mk(0x00,0xFF), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // negative (byte diff bit7=1): count*3 source quirk
+            { 0xFF, { mk(0x20,0x00), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // POSITIVE with byte-diff underflow: end=0x00 start=0xFF → diff8=0x01,
+            // SF=0 → positive path, count=2, DAC slots 0xFF→0x00 (index wrap).
+            // The old int16 range model sent this to the negative path.
+            { 0xFF, { mk(0xFF,0x00), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // negative BIG: start=0x10 end=0x90 → diff8=0x80 (bit7=1), count=0x81,
+            // slots 0x90..0xFF then wrap 0x00..0x10.
+            { 0xFF, { mk(0x10,0x90), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // timer≠0 → whole channel skipped (no reload of others)
+            { 0xFF, { mk(0x10,0x20,5), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // mask off → gate rejects even with data
+            { 0x00, { mk(0x10,0x20), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            // all 8 channels active with different ranges incl. overlaps
+            { 0xFF, { mk(0,3), mk(4,7), mk(8,15), mk(16,16), mk(0x40,0x20),
+                      mk(0x80,0x9F), mk(0xF0,0xFF), mk(2,5) }, 0x7F02 },
+            // wild 303E0 (both sides read the same DS garbage)
+            { 0xFF, { mk(0x10,0x2F), {}, {}, {}, {}, {}, {}, {} }, 0x4321 },
+        };
+        int ci = 0;
+        for (auto& c : cases)
+            ft_synth_case_pal(id, c.mask, c.ch, c.w7f00, seed + 100 + ci++,
+                              "grid", grid, diff_budget);
+    }
+
+    // --- fuzz ---
+    FtRng rng(seed ^ 0xDACDACDAu);
+    int n_fuzz = is_ffc ? 20000 : 2000;
+    for (int i = 0; i < n_fuzz; i++) {
+        FtPalCh ch[8];
+        for (int b = 0; b < 8; b++)
+            ch[b] = { (uint8_t)(rng.w() & ((rng.w() & 3) ? 0 : 0xFF)),  // mostly timer=0
+                      (uint8_t)rng.w(), (uint8_t)rng.w(), (uint8_t)rng.w() };
+        uint16_t w7 = (rng.w() & 1) ? 0x7F02 : ((rng.w() & 1) ? 0x8202 : rng.w());
+        ft_synth_case_pal(id, (uint8_t)rng.w(), is_ffc ? ch : nullptr, w7,
+                          rng.w() * 65536u + rng.w(), "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -3155,6 +3316,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15afd")) { matched = true; rc |= ft_selftest_scan(FT_SUB_15AFD, 0x15AFD001u); }
     if (all || strstr(env, "sub_10982")) { matched = true; rc |= ft_selftest_chunk(0x10982001u); }
     if (all || strstr(env, "sub_10cd8")) { matched = true; rc |= ft_selftest_rawchunk(0x10CD8001u); }
+    if (all || strstr(env, "sub_10fe6")) { matched = true; rc |= ft_selftest_pal(FT_SUB_10FE6, 0x10FE6001u); }
+    if (all || strstr(env, "sub_10ffc")) { matched = true; rc |= ft_selftest_pal(FT_SUB_10FFC, 0x10FFC001u); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

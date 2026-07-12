@@ -1814,6 +1814,8 @@ static void v2_sub_10fe6(uint8_t* s) {
     // OUT(0x3C8, 0);  // start at color 0
     // REP OUTSB ds:0x8202, 0x300 bytes → port 0x3C9
     // for (i=0; i<256; i++) setPalette(i, ds[0x8202+i*3+0]<<2, ds[0x8202+i*3+1]<<2, ds[0x8202+i*3+2]<<2);
+    // v2 shadow DAC (task #22): full upload, source hardcoded ds:0x8202.
+    memcpy(v2_dac_shadow, s + 0x8202, 768);
 }
 
 // sub_10ffc: palette animation (underwater/lava cycling). Processes 8 animation slots (bx=7→0).
@@ -1830,18 +1832,34 @@ static void v2_sub_10ffc(uint8_t* s) {
         uint8_t end_color = s[bx + 0x259C];
         uint8_t start_color = s[bx + 0x2594];
         // Orig 0x1023: MOVZX cx,byte[259C]; SUB cl,[2594] — 8-bit SUB (CH stays 0);
-        // JZ next (ZF of the byte) / JS loc_1104d (SF of the byte). Byte domain ±255,
-        // so an int16 of the difference reproduces both flags exactly.
-        int16_t range = (int16_t)(uint16_t)end_color - (int16_t)(uint16_t)start_color;
-        if (range == 0) continue;
+        // JZ next (ZF of the BYTE) / JS loc_1104d (SF = BIT 7 of the byte result).
+        // NOT an int16 model: end=0x00,start=0xFF gives diff8=0x01, SF=0 → the
+        // POSITIVE path runs with count=2 and DAC index wrapping 0xFF→0x00
+        // (unit-34 finding: the old int16 range sent this to the negative path).
+        uint8_t diff8 = (uint8_t)(end_color - start_color);
+        if (diff8 == 0) continue;
         // Both branches are pure VGA DAC writes (OUT 0x3C8/0x3C9), no DS effects:
-        // range > 0: OUT(0x3C8, start_color); count=range+1; REP OUTSB count*3 bytes
-        //            from ds:[word_303E0 + start_color*3].
-        // range < 0 (loc_1104d): NEG cl → count=(start-end)+1; OUT(0x3C8, end_color);
-        //            REP OUTSB count*3 bytes from ds:[word_303E0 + count*3] — orig quirk:
-        //            source offset is count*3, NOT end_color*3.
-        // For v2: palette data already in shadow DS, render callback reads it (task #12:
-        // DAC partial-update semantics incl. the negative-branch quirk).
+        // bit7=0: OUT(0x3C8, start_color); count=diff8+1 (INC cx, ch=0); REP OUTSB
+        //         count*3 bytes from ds:[word_303E0 + start_color*3].
+        // bit7=1 (loc_1104d): NEG cl → count=(uint8)(start-end)+1; OUT(0x3C8, end);
+        //         REP OUTSB count*3 bytes from ds:[word_303E0 + count*3] — orig
+        //         quirk: source offset is count*3, NOT end_color*3.
+        // v2 shadow DAC (task #22): mirror both bursts from SHADOW data. Source can
+        // be 0x7F02 (word_303E0) — NOT 0x8202 — which is why the old "screen =
+        // 0x8202 snapshot" display model diverged (V2-PAL-DIVERGE idx 0x71).
+        // DAC slot autoincrement wraps 8-bit; (slot*3+i)%768 is byte-exact for it
+        // (768 = 256*3 keeps the 3-phase alignment).
+        if (!(diff8 & 0x80)) {
+            uint16_t count = (uint16_t)diff8 + 1;
+            for (uint16_t i = 0; i < count * 3; i++)
+                v2_dac_shadow[(start_color * 3 + i) % 768] =
+                    s[(uint16_t)(pal_base + start_color * 3 + i)];
+        } else {
+            uint16_t count = (uint16_t)(uint8_t)(0 - diff8) + 1;
+            for (uint16_t i = 0; i < count * 3; i++)
+                v2_dac_shadow[(end_color * 3 + i) % 768] =
+                    s[(uint16_t)(pal_base + count * 3 + i)];
+        }
     }
 }
 
@@ -7051,6 +7069,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     cx >>= 5;                                      // SHR cx, 5
                     uint8_t b = (uint8_t)(cx & 0x3E);              // OUT(0x3C9, b)
                     shadow[0x7F0D] = b;                            // byte_303ED
+                    v2_dac_shadow[9] = r; v2_dac_shadow[10] = g; v2_dac_shadow[11] = b; // shadow DAC (task #22)
                     bx_read += 4;                                  // ADD bx, 4
 
                 } else if (cmd_type == 8) {
@@ -10711,6 +10730,27 @@ extern "C" int32_t v2_fntest_call_scan(uint8_t* test_shadow, int which,
     v2_vm_acc_base = saved_acc;
     return r;
 }
+// Units 33-36: spawn/despawn slot family — pure DS leaf mirrors, no VM state.
+// which: 0=sub_13c0c (despawn cull), 1=sub_13d68 (slot run alloc, returns CF),
+//        2=sub_13dd6 (slot init), 3=sub_13e15 (slot size/type init).
+extern "C" int32_t v2_fntest_call_snapfam(uint8_t* test_shadow, int which, uint16_t si) {
+    switch (which) {
+    case 0: v2_sub_13c0c(test_shadow); return -1;
+    case 1: return v2_sub_13d68(test_shadow, si) ? 1 : 0;
+    case 2: v2_sub_13dd6(test_shadow, si); return -1;
+    default: v2_sub_13e15(test_shadow, si); return -1;
+    }
+}
+// Units 33-34 (DAC): run the v2 palette-dispatch mirrors on a case image and
+// expose the resulting shadow-DAC state. which: 0=sub_10fe6, 1=sub_10ffc.
+// The caller resets v2_dac_shadow to the same baseline as the oracle's
+// drawPalette before each case (both start equal; only call effects differ).
+extern "C" void v2_fntest_call_pal(uint8_t* test_shadow, int which, uint8_t* dac_out768) {
+    if (which == 0) v2_sub_10fe6(test_shadow);
+    else            v2_sub_10ffc(test_shadow);
+    memcpy(dac_out768, v2_dac_shadow, 768);
+}
+extern "C" void v2_fntest_reset_v2_dac(void) { memset(v2_dac_shadow, 0, 768); }
 // Class-B: per-object VM exec (v2_vm_execute_object, fwd-declared at top).
 // v2_vm_accumulator is a file-scope global carried across opcodes — reset it
 // so each synthetic case starts from the canonical zero accumulator.
@@ -16878,6 +16918,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     s[0x7F0C] = 0;                                   // byte ptr word_303EB+1 = 0
                     s[0x7F0D] = 0;                                   // byte_303ED = 0
                     // OUT(0x3C8, 3); OUT(0x3C9, 0); OUT(0x3C9, 0); OUT(0x3C9, 0); — VGA color 3 = black
+                    v2_dac_shadow[9] = 0; v2_dac_shadow[10] = 0; v2_dac_shadow[11] = 0; // shadow DAC (task #22)
 
                     if (!(s[0x342] | s[0x343] | s[0x344])) {
                         // No shade active → sub_1450b first
@@ -16891,6 +16932,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     s[0x7F0B] = 3;                                   // palette color 3 R
                     s[0x7F0C] = 13;                                  // palette color 3 G
                     s[0x7F0D] = 12;                                  // palette color 3 B
+                    v2_dac_shadow[9] = 3; v2_dac_shadow[10] = 13; v2_dac_shadow[11] = 12; // shadow DAC (task #22)
                     // loc_124a9: render transition text. Verified with seg000 sub_103ca.
                     // ax=3 → sub_12515(3) + sub_12529 + sub_12549 + sub_12388 + loc_124c5
                     v2_sub_12515(s, 3);
@@ -18062,15 +18104,15 @@ static void v2_palette_probe(uint8_t* s) {
     uint8_t dac[768];
     v2_fetch_orig_dac(dac);
     v2_pal_probe_frames++;
-    const uint8_t* pal = s + 0x8202;
+    // v2 model = the shadow DAC (task #22): maintained by the v2 mirrors of
+    // every orig OUT 3C8/3C9 site from shadow data — 1:1 with drawPalette's
+    // construction on the orig side. (The old "0x8202 snapshot + color-3
+    // mirror" model missed 10ffc bursts sourced from 0x7F02 under shade.)
     int bad = 0; int first_idx = -1;
     for (int i = 0; i < 256; i++) {
-        uint8_t r, g, b;
-        if (i == 3) {   // v2 model: color 3 mirrored from the cmd_type=6 bytes
-            r = (uint8_t)(s[0x7F0B] << 2); g = (uint8_t)(s[0x7F0C] << 2); b = (uint8_t)(s[0x7F0D] << 2);
-        } else {
-            r = (uint8_t)(pal[i*3+0] << 2); g = (uint8_t)(pal[i*3+1] << 2); b = (uint8_t)(pal[i*3+2] << 2);
-        }
+        uint8_t r = (uint8_t)(v2_dac_shadow[i*3+0] << 2);
+        uint8_t g = (uint8_t)(v2_dac_shadow[i*3+1] << 2);
+        uint8_t b = (uint8_t)(v2_dac_shadow[i*3+2] << 2);
         if (dac[i*3+0] != r || dac[i*3+1] != g || dac[i*3+2] != b) {
             if (first_idx < 0) first_idx = i;
             bad++;
@@ -18083,12 +18125,11 @@ static void v2_palette_probe(uint8_t* s) {
         if (prints < 20) {
             prints++;
             int i = first_idx;
-            uint8_t vr = (i==3)?(uint8_t)(s[0x7F0B]<<2):(uint8_t)(pal[i*3+0]<<2);
-            uint8_t vg = (i==3)?(uint8_t)(s[0x7F0C]<<2):(uint8_t)(pal[i*3+1]<<2);
-            uint8_t vb = (i==3)?(uint8_t)(s[0x7F0D]<<2):(uint8_t)(pal[i*3+2]<<2);
             fprintf(stderr, "V2-PAL-DIVERGE[POST_FLIP2]: colors=%d first idx=%02X "
                     "dac=%02X%02X%02X v2=%02X%02X%02X (303DE=%04X 303E0=%04X)\n",
-                    bad, i, dac[i*3], dac[i*3+1], dac[i*3+2], vr, vg, vb,
+                    bad, i, dac[i*3], dac[i*3+1], dac[i*3+2],
+                    (uint8_t)(v2_dac_shadow[i*3]<<2), (uint8_t)(v2_dac_shadow[i*3+1]<<2),
+                    (uint8_t)(v2_dac_shadow[i*3+2]<<2),
                     *(uint16_t*)(s + 0x7EFE), *(uint16_t*)(s + 0x7F00));
         }
     }
@@ -19471,7 +19512,9 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // Palette source bytes ds:0x7F0B/C/D = 0 (mirror of orig loc_10389 eip
     // 0x396-0x03A3 — both F10 path's sub_10389 AND ESC path's sub_1041c eip
     // 0x448-0x455 do this; ESC path uses word_303eb at ds:0x340B aliasing).
+    // Both orig paths also OUT color 3 = (0,0,0) (eip 0x38B / 0x43D).
     shadow[0x7F0B] = 0; shadow[0x7F0C] = 0; shadow[0x7F0D] = 0;
+    v2_dac_shadow[9] = 0; v2_dac_shadow[10] = 0; v2_dac_shadow[11] = 0; // shadow DAC (task #22)
     // Conditional sub_1450b: orig loc_10389 eip 0x3A8-0x3B3 (F10 path) and
     // sub_103ca eip 0x45A-0x465 (ESC path) check `byte_28822|28823|28824`. If
     // all 0 → call sub_1450b(4,4,4) which writes ds:0x342/343/344=8, ds:0x7EFD|=1,

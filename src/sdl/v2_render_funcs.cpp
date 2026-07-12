@@ -52,6 +52,19 @@ void v2_chunk_bg_update_from_render() {
     v2_chunk_bg_valid = true;
 }
 
+// v2 shadow DAC (task #22): byte-exact model of the VGA DAC state, updated by
+// the v2 mirrors of the orig OUT 3C8/3C9 sites from SHADOW data — the same
+// sites whose setPalette mirrors feed drawPalette on the orig side:
+//   sub_10fe6 full upload (source HARDCODED ds:0x8202), sub_10ffc positive/
+//   negative animation bursts (source ds:[word_303E0 + ...] — can be 0x7F02!),
+//   sub_1106f blank at Mode X init (covered by zero init), and the color-3
+//   writes (sub_10350 / sub_1041c / sub_103ca / VM cmd_type 6 loc_127e4).
+// The previous display model (snapshot of ds:0x8202 + color-3 mirror) was
+// wrong whenever a 10ffc burst ran with word_303E0 = 0x7F02 under nonzero
+// shade: the DAC held 0x7F02 colors while 0x8202 held shaded ones
+// (V2-PAL-DIVERGE idx 0x71). Values are 6-bit VGA (0..0x3F), <<2 at publish.
+uint8_t v2_dac_shadow[768] = {};
+
 void v2_swap_render_buf() {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -69,17 +82,17 @@ void v2_swap_render_buf() {
     if (shad) {
         extern SDL_Color v2_display_palette[256];
         extern bool v2_display_palette_valid;
-        const uint8_t* pal = shad + 0x8202;
+        // Publish the shadow DAC (task #22) — the exact VGA DAC state as
+        // maintained by the v2 mirrors of every orig OUT 3C8/3C9 site.
+        // (Replaces the old "ds:0x8202 snapshot + color-3 mirror" model,
+        // which missed 10ffc bursts sourced from 0x7F02 under shade —
+        // V2-PAL-DIVERGE idx 0x71.)
         for (int i = 0; i < 256; i++) {
-            v2_display_palette[i].r = pal[i*3 + 0] << 2;
-            v2_display_palette[i].g = pal[i*3 + 1] << 2;
-            v2_display_palette[i].b = pal[i*3 + 2] << 2;
+            v2_display_palette[i].r = v2_dac_shadow[i*3 + 0] << 2;
+            v2_display_palette[i].g = v2_dac_shadow[i*3 + 1] << 2;
+            v2_display_palette[i].b = v2_dac_shadow[i*3 + 2] << 2;
             v2_display_palette[i].a = 255;
         }
-        // Color index 3 mirror from cmd_type=6 (dialog text bg) at shad[0x7F0B..0x7F0D]
-        v2_display_palette[3].r = shad[0x7F0B] << 2;
-        v2_display_palette[3].g = shad[0x7F0C] << 2;
-        v2_display_palette[3].b = shad[0x7F0D] << 2;
         v2_display_palette_valid = true;
     }
 }

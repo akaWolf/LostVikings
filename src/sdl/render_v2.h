@@ -173,6 +173,10 @@ extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row
 // Refresh static intro/menu chunk_bg backup from current v2_render_buf (call after
 // op_13/0x11 menu activation to capture cleared+moved state as new static background).
 extern void v2_chunk_bg_update_from_render();
+
+// v2 shadow DAC (task #22): exact VGA DAC state maintained by the v2 mirrors
+// of the orig OUT 3C8/3C9 sites (6-bit values; published <<2 by v2_swap_render_buf).
+extern uint8_t v2_dac_shadow[768];
 extern void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax);
 extern void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si);
 extern void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di);

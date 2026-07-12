@@ -101,8 +101,48 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 30: return (void*)&sub_15afd;   // downward tile collision (slope + walk)
     case 31: return (void*)&sub_10982;   // read_chunk: DATA.DAT seek/read + LZSS (class D)
     case 32: return (void*)&sub_10cd8;   // read_and_display_raw_chunk (class D + A000 planes)
+    // 33/34 (sub_10fe6/sub_10ffc) use v2_fntest_orig_call_pal below: their
+    // port bodies end in a C `return 0` (RETN commented at the SDL inline),
+    // which leaves the CALL_ frame unpopped and trips the isolator's
+    // sp-balance canary. They are stackless (no PUSH/CALL inside), so a
+    // direct wrapper call — the same way live sub_1797b invokes them — is
+    // byte-exact.
     default: return 0;
     }
+}
+
+// Units 33-34 (DAC): reset the oracle's drawPalette shadow to a known
+// baseline before each case so the post-call DAC compare starts equal.
+void setPalette(uint8_t color, uint8_t r, uint8_t g, uint8_t b); // defined below
+extern "C" void v2_fntest_reset_orig_dac(void) {
+    for (int i = 0; i < 256; i++) setPalette((uint8_t)i, 0, 0, 0);
+}
+
+// Direct-call isolator for the pal pair (see the fnptr note above): swap the
+// case image into the live DS window, call the wrapper like sub_1797b does,
+// copy the result back. No CALL_, no stack canaries.
+extern "C" int v2_fntest_isolated_active;   // full decl block is further below
+extern "C" void v2_fntest_orig_call_pal(int which, uint8_t* ds_image) {
+    static uint8_t saved_ds[0x10010];
+    const uint32_t ds_lin = v2_fntest_game_ds_linear();
+    db* const ds_ptr = (db*)&m2c::m + ds_lin;
+    memcpy(saved_ds, ds_ptr, 0x10010);
+    memcpy(ds_ptr, ds_image, 0x10000);
+    struct m2c::_STATE st;
+    memset(&st, 0, sizeof(st));
+    struct m2c::_STATE* _state = &st;
+    X86_REGREF
+    cs = 0x1a2;
+    ds = (dw)(ds_lin >> 4);
+    es = ds;
+    ss = seg_offset(m2c::stack);
+    esp = 0; sp = (dw)(STACK_SIZE / 2);
+    v2_fntest_isolated_active = 1;
+    if (which == 0) sub_10fe6(0, _state);
+    else            sub_10ffc(0, _state);
+    v2_fntest_isolated_active = 0;
+    memcpy(ds_image, ds_ptr, 0x10000);
+    memcpy(ds_ptr, saved_ds, 0x10010);
 }
 
 // Class-B (VM opcode) selftests need a scratch code segment inside m2c::m for
@@ -3887,7 +3927,7 @@ cs=0x1a2;eip=0x000fe4; 	X(POP(si));	// 2161 pop     si ;~ 01A2:0FE4
 cs=0x1a2;eip=0x000fe5; 	J(RETN(0));	// 2162 retn ;~ 01A2:0FE5
 sub_10fe6:
 	// 2169
- printf("panning_fun_04_write_palitra\n");
+ if (!v2_fntest_isolated_active) printf("panning_fun_04_write_palitra\n");
 cs=0x1a2;eip=0x000fe6; 	X(MOV(word_303de, 0));	// 2171 mov     word_303DE, 0 ;~ 01A2:0FE6
 ret_1a2_fec:
 	// 4558
@@ -3941,11 +3981,16 @@ cs=0x1a2;eip=0x001042; 	T(ADD(si, word_303e0));	// 2215 add     si, word_303E0 ;
 	// 2216 rep outsb ;~ 01A2:1046
 cs=0x1a2;eip=0x001046; 	T(	REP OUTSB);	// 2216 rep outsb ;~ 01A2:1046
  {
+   // SDL mirror of the DAC burst above. count comes from the BYTE SUB at
+   // 0x1023 (+ INC): (uint8)(end-start)+1 — NOT an int difference. With
+   // end<start and bit7 of the byte diff clear (e.g. end=0x00 start=0xFF →
+   // diff8=0x01) this positive path DOES run, REP OUTSB emits count*3 bytes
+   // and the DAC index wraps 8-bit past 0xFF (unit-34 finding; the old int
+   // `number` model skipped the loop entirely on that case).
    dw base_color = *(raddr(ds,bx+0x2594));
-   dw number = *(raddr(ds,bx+0x259C)) - base_color + 1;
-   //number = number * 3;
+   dw number = (db)(*(raddr(ds,bx+0x259C)) - *(raddr(ds,bx+0x2594))) + 1;
    for (int i = 0; i < number; i++)
-	 setPalette(i + base_color,
+	 setPalette((uint8_t)(i + base_color),
 				(*(db*)(raddr(ds, word_303e0 + base_color * 3 + i*3 + 0))) << 2,
 				(*(db*)(raddr(ds, word_303e0 + base_color * 3 + i*3 + 1))) << 2,
 				(*(db*)(raddr(ds, word_303e0 + base_color * 3 + i*3 + 2))) << 2);
@@ -3970,13 +4015,14 @@ cs=0x1a2;eip=0x001063; 	T(ADD(si, ax));	// 2234 add     si, ax ;~ 01A2:1063
 cs=0x1a2;eip=0x001065; 	T(ADD(si, word_303e0));	// 2235 add     si, word_303E0 ;~ 01A2:1065
 	// 2236 rep outsb ;~ 01A2:1069
 cs=0x1a2;eip=0x001069; 	T(	REP OUTSB);	// 2236 rep outsb ;~ 01A2:1069
- // SDL: mirror the DAC burst above (negative range, end<start). DAC index
- // starts at [bx+259C] (the END color) and autoincrements; the SOURCE is
- // ds:[word_303E0 + count*3] (count*3, NOT end*3 — original quirk preserved
- // by the register math above: si = count + count*2). count = (start-end)+1.
+ // SDL: mirror the DAC burst above (negative path — bit7 of the BYTE diff
+ // set). DAC index starts at [bx+259C] (the END color) and autoincrements;
+ // the SOURCE is ds:[word_303E0 + count*3] (count*3, NOT end*3 — original
+ // quirk preserved by the register math above: si = count + count*2).
+ // count = (uint8)(start-end)+1 — byte NEG, same 8-bit domain as the gate.
  {
    dw end_color = *(raddr(ds,bx+0x259C));
-   dw count = *(raddr(ds,bx+0x2594)) - end_color + 1;
+   dw count = (db)(*(raddr(ds,bx+0x2594)) - *(raddr(ds,bx+0x259C))) + 1;
    for (int i = 0; i < count; i++)
 	 setPalette((uint8_t)(end_color + i),
 				(*(db*)(raddr(ds, word_303e0 + count * 3 + i*3 + 0))) << 2,

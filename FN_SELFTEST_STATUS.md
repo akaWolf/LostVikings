@@ -256,25 +256,39 @@ int32-фиксы v2, 3 звуковых `SUB si,2; JG` (0x7823/787a/78d1, si≤8
 параллельный прогон после фикса: 37/37 PASS (161a1 grid 240/240,
 exhaustive 131072, vmops 21678).
 
-## Очередь (класс A — DS-чистые, из коллизионно-скроллового кластера)
+## Инвентаризация покрытия (2026-07-15, скрипт scratchpad/inventory.py)
 
-- sub_13d68, sub_13dd6, sub_13e15, sub_13c0c (collision/snap семейство — проверить сегментные зависимости tilemap)
-- sub_10704 / sub_10753 (scroll clamp — проверить, leaf ли; v2-лямбды scroll_*2 чистые)
-- sub_101be (palette DEC pass) — юнит 14 ✓; sub_105cb — КЛАСС E (не юнит):
-  dialog exit-check завязан на SDL-инпут-глобалы (sdl_input_press_snap-мутации
-  0x8000/0x1000, ЖИВЫЕ sdl_spec_state_get(Y/N) — асинхронная клавиатура) +
-  цепь sub_1265b; верифицируется replay-сценариями (диалоги attract)
-- sub_1064b (camera) — НЕ leaf: дерево sub_17496/1746c/174e9 → spawn →
-  sub_13809 → ES-сегмент anim (нужна ES-инфраструктура = первый шаг класса B)
-- sub_1584e-цепочка — после аудита сегментных зависимостей (tilemap через
-  сегменты = класс B-механика: тест-образы сегментов)
+Полный колл-граф seg000: руты = 35 юнитов + dispatch-таблицы из EXE-образа
+(exe_static.bin @+0x19F00). Открытие: **off_30CAC (DS 0x87CC) — ЕДИНАЯ
+таблица опкодов**: и main-VM (sub_1424c, eip 0x42B0), и collision-VM
+(sub_1555c, eip 0x5591) диспатчат через неё; 216 слотов (op 0x00-0xD7),
+слот 0xD8 читал бы синус-таблицы @0x897C — отсюда orig-гард op>0xD7.
+**Опкоды 0xD1-0xD7 живые**: sub_15f17 (op D1, collision search), sub_1287a
+(op D2, password), sub_12829 (op D3, password verify), sub_1531c (op D4,
+траектория), sub_178d6/178f1/1787f (op D5-D7, AIL) — все покрыты vmops.
+Зона 0x876E..0x87CB (47 слов) — мелкие таблицы (off_30C8E post-срез,
+off_30C98/off_30CA2 канальные перекрытия). off_30BC6 anim 27.
 
-Дальше: класс B (VM-опкоды на синтетическом байткоде, es = тест-буфер;
-цель — selftest на каждый опкод, сверка перечня с B5-coverage), класс C
-(рендер, буферный дифф orig drawBuffer ↔ v2_render_buf), класс D
-(декомпрессия, входы из DATA.DAT как файла). Класс E (фазовая
-синхронизация, потоки, звук) — не для fn-тестов, остаётся за headless
-replay (scenarios.sh).
+**Покрыто 455/467 (97.4%) с юнитами 33-34. Реальный остаток 9:**
+
+## Очередь (остаток)
+
+- **sub_12709** (текст-бокс VGA-канал, ES=seg001) — путь password/transition
+- **sub_172d3 / sub_17337** (self-recursive ES графические копировщики)
+- **sub_1775d** (ES-рекурсия, гейт ds:0x302 — звуковой слой)
+- **sub_141f7/141fb/141ff/14203** (ADD bx,2/RETN стабы у 1424c) — тривиальные
+- де-факто покрыты (callee юнитов 17-19 через loc-тела, парсер груб):
+  sub_1227e/122c0/122f3
+- КЛАСС E (не юниты, верифицируются replay-сценариями): sub_1797b (vsync
+  ISR: CRTC pan + DEC 3287C + palette dispatch); sub_105cb (dialog
+  exit-check на живых SDL-глобалах)
+
+Классы: B (vmops полная карта ✓), C (рендер: A2-датчик с CRTC-развёрткой
+pitch 86 после fix #19; PAL-датчик shadow-DAC после fix #22), D (вся
+декомпрессия DATA.DAT ✓). Класс E — headless replay (scenarios.sh).
+
+| 33 | `sub_10fe6` | полный DAC-аплоад (vsync dispatch mode 4); источник ХАРДКОД ds:0x8202 | DS: word_303DE=0; DAC: 768 байт | 2 006 = grid 6 + fuzz 2 000 | **PASS, 0 диффов** | НОВЫЙ канал сравнения: оракульский drawPalette (сброшенный в 0-бейзлайн) vs v2_dac_shadow<<2 — доказан порчей (подмена источника positive-бёрста → DIFF ровно на слотах) | (этот) |
+| 34 | `sub_10ffc` | DAC-анимационные бёрсты по 8 каналам из ds:[word_303E0] (и 0x7F02, и 0x8202) | маска 0x2583, per-канал timer/reload/start/end; DS: [bx+0x258C] перезарядки, 303DE=0; DAC: positive/negative бёрсты | 20 011 = grid 11 (JZ-грань, диапазоны, **byte-SF кейсы: end=0<start=0xFF → POSITIVE с DAC-wrap 0xFF→0x00; negative big count=0x81 c wrap**, timer-skip, gate-off, 8 каналов сразу, wild 303E0) + fuzz 20 000 | **PASS, 0 диффов** | найдена ДО прогона дивергенция №21: v2-модель ветвления по int16-разности вместо БАЙТОВОГО SF (bit7); + дыра порт-зеркала positive (int-цикл не исполнялся при end<start, а REP OUTSB выводит) — обе исправлены; изолятор: прямой вызов обёртки (C-return тела без RETN рвали sp-канарейку CALL_) | (этот) |
 
 ## Как добавить функцию (конвейер)
 
