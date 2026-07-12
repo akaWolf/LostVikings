@@ -61,10 +61,19 @@ void write_binary(const char* path, const void* data, size_t size) {
     fclose(f);
 }
 
-// Compute orig page-offset for current display page.
-uint32_t orig_page_offset() {
-    if (!myDrawInfo) return 0;
-    return myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
+// CRTC unfold of the visible orig page (task #19): drawBuffer models VGA
+// Mode X memory ×4 (byte_addr*4 + plane); the CRT scans each screen row from
+// myOffset + y*0x56 (CRTC offset reg 0x13 = 0x2B words = 86 bytes/row), plus
+// pixel pan myPixelOffset (0..3). A flat 320-wide read shears 24 px/row.
+uint8_t g_orig_unfold[320 * 176];
+const uint8_t* orig_page_unfold() {
+    if (!myDrawInfo) return nullptr;
+    for (uint32_t y = 0; y < 176; y++) {
+        uint32_t base = (myDrawInfo->myOffset + y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
+        if (base + 320 > sizeof(myDrawInfo->drawBuffer)) return nullptr;
+        memcpy(g_orig_unfold + y * 320, myDrawInfo->drawBuffer + base, 320);
+    }
+    return g_orig_unfold;
 }
 
 } // namespace
@@ -193,15 +202,12 @@ void headless_dump_divergence(const char* source, int frame, const char* detail)
         }
     }
 
-    // 4. PPM dumps — both render buffers (viewport region 320x176)
-    if (myDrawInfo) {
-        uint32_t off = orig_page_offset();
-        if (off + 320 * 176 <= sizeof(myDrawInfo->drawBuffer)) {
-            char p[768];
-            snprintf(p, sizeof(p), "%s/orig_buffer.ppm", subdir);
-            headless_write_ppm(p, myDrawInfo->drawBuffer + off, 320, 176,
-                               myDrawInfo->drawPalette);
-        }
+    // 4. PPM dumps — both render buffers (viewport region 320x176).
+    // Orig side CRTC-unfolded (pitch 0x56 bytes/row — task #19).
+    if (const uint8_t* orig_px = orig_page_unfold()) {
+        char p[768];
+        snprintf(p, sizeof(p), "%s/orig_buffer.ppm", subdir);
+        headless_write_ppm(p, orig_px, 320, 176, myDrawInfo->drawPalette);
     }
     {
         char p[768];
@@ -210,14 +216,11 @@ void headless_dump_divergence(const char* source, int frame, const char* detail)
         const SDL_Color* pal = myDrawInfo ? myDrawInfo->drawPalette : nullptr;
         headless_write_ppm(p, v2_render_buf, 320, 176, pal);
     }
-    if (myDrawInfo) {
-        uint32_t off = orig_page_offset();
-        if (off + 320 * 176 <= sizeof(myDrawInfo->drawBuffer)) {
-            char p[768];
-            snprintf(p, sizeof(p), "%s/diff.ppm", subdir);
-            headless_write_diff_ppm(p, myDrawInfo->drawBuffer + off, v2_render_buf,
-                                    320, 176, myDrawInfo->drawPalette);
-        }
+    if (const uint8_t* orig_px = orig_page_unfold()) {
+        char p[768];
+        snprintf(p, sizeof(p), "%s/diff.ppm", subdir);
+        headless_write_diff_ppm(p, orig_px, v2_render_buf,
+                                320, 176, myDrawInfo->drawPalette);
     }
 
     // Dump final atexit reports (audit, opcode coverage, PSNAP summary, render

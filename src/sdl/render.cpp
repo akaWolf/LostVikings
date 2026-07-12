@@ -33,11 +33,24 @@ extern "C" void v2_fntest_alloc_drawinfo(void) {
 // Class-C pixel probe: snapshot the orig VISIBLE page (drawBuffer at the
 // current flip offset — same mapping headless_dump uses for its PPMs).
 // Returns 0 if the buffer isn't available or the page window would overrun.
+//
+// CRTC unfold (task #19): drawBuffer models VGA Mode X memory expanded ×4
+// (byte_addr*4 + plane), and the real CRT scans each screen row from
+// myOffset + y*0x56 — CRTC offset reg 0x13 = 0x2B words = 86 bytes/row
+// (init table ds:0x89DC, sub_16807). One screen row therefore spans 344
+// drawBuffer bytes, of which 320 are visible; myPixelOffset is the
+// attribute-controller pixel pan (0..3 px, value/2 — seg000 sub_1797b).
+// The old linear-320 read sheared every frame by 24 px/row: all "class 2/3"
+// A2 diffs (stars, password screen, scroll) were artifacts of that shear.
 extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count) {
     if (!myDrawInfo) return 0;
-    uint32_t off = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
-    if (off + count > sizeof(myDrawInfo->drawBuffer)) return 0;
-    memcpy(out, myDrawInfo->drawBuffer + off, count);
+    uint32_t rows = count / 320;
+    if (rows * 320 != count) return 0;
+    for (uint32_t y = 0; y < rows; y++) {
+        uint32_t base = (myDrawInfo->myOffset + y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
+        if (base + 320 > sizeof(myDrawInfo->drawBuffer)) return 0;
+        memcpy(out + y * 320, myDrawInfo->drawBuffer + base, 320);
+    }
     return 1;
 }
 // Class-C palette probe: snapshot the orig-DAC shadow (drawPalette, kept in
@@ -354,10 +367,12 @@ void updateDraw()
       FILE* f = fopen(fname, "wb");
       if (f) {
         fprintf(f, "P5\n320 176\n255\n");
-        // Extract 320x176 from planar drawBuffer at offset
+        // Extract 320x176 from planar drawBuffer — CRTC unfold, pitch 0x56
+        // bytes/row (see v2_fetch_orig_page comment, task #19).
         for (int y = 0; y < 176; y++) {
+          uint32_t row = ((myDrawInfo->myOffset + y * 0x56u) * 4u + myDrawInfo->myPixelOffset);
           for (int x = 0; x < 320; x++) {
-            uint8_t c = myDrawInfo->drawBuffer[offset + y * RENDER_WIDTH + x];
+            uint8_t c = myDrawInfo->drawBuffer[(row + x) % VGA_MEM_SIZE];
             fputc(c, f);
           }
         }
@@ -366,21 +381,35 @@ void updateDraw()
       }
     }
   }
-  for (int i = 0; i < 176 * RENDER_WIDTH; i++)
+  // Viewport rows 0..175: CRT scans from myOffset with CRTC offset reg 0x13 =
+  // 0x2B words = 86 bytes/row; drawBuffer is VGA memory ×4 (addr*4+plane), so
+  // one screen row = 344 buffer bytes (320 visible + 24 overscan slack).
+  // Old linear read (offset + i) sheared 86-pitch content 24 px/row (task #19).
+  for (int y = 0; y < 176; y++)
   {
 	//myDrawInfo->myOffset=0x5be8;
 	//myDrawInfo->myOffset=0xa1c8;
 	//myDrawInfo->myOffset=0x66a8;
 	//myDrawInfo->myOffset=0;
-	auto color = myDrawInfo->drawBuffer[(offset + i) % VGA_MEM_SIZE];
-	auto sdl_color = myDrawInfo->drawPalette[color];
-	tempDrawBuffer[i + 0 * RENDER_WIDTH] = SDL_MapRGBA(myFormat, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
+	uint32_t row = (myDrawInfo->myOffset + y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
+	for (int x = 0; x < RENDER_WIDTH; x++)
+	{
+	  auto color = myDrawInfo->drawBuffer[(row + x) % VGA_MEM_SIZE];
+	  auto sdl_color = myDrawInfo->drawPalette[color];
+	  tempDrawBuffer[y * RENDER_WIDTH + x] = SDL_MapRGBA(myFormat, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
+	}
   }
-  for (int i = 0; i < RENDER_WIDTH * (RENDER_HEIGHT - 176); i++)
+  // HUD rows 176..199: VGA split screen (CRTC line compare 0x15F → scan row
+  // 176) restarts scanning at address 0, same 86-byte row pitch, no pixel pan.
+  for (int y = 0; y < RENDER_HEIGHT - 176; y++)
   {
-	auto color = myDrawInfo->drawBuffer[0 + 0 + i];
-	auto sdl_color = myDrawInfo->drawPalette[color];
-	tempDrawBuffer[i + 176 * RENDER_WIDTH] = SDL_MapRGBA(myFormat, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
+	uint32_t row = (0u + y * 0x56u) * 4u;
+	for (int x = 0; x < RENDER_WIDTH; x++)
+	{
+	  auto color = myDrawInfo->drawBuffer[(row + x) % VGA_MEM_SIZE];
+	  auto sdl_color = myDrawInfo->drawPalette[color];
+	  tempDrawBuffer[(176 + y) * RENDER_WIDTH + x] = SDL_MapRGBA(myFormat, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
+	}
   }
   SDL_UpdateTexture(myTexture, NULL, tempDrawBuffer, RENDER_WIDTH*sizeof(uint32_t));
   SDL_RenderClear(myRenderer);
@@ -670,9 +699,10 @@ void updateDraw()
 			   if (g_dump_pgm_request.load(std::memory_order_acquire)) {
 				 auto cur_offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
 				 // Note: g_dump_pgm_request cleared by v2 side AFTER its dump (so both dump same frame)
+				 // CRTC row pitch = 0x56 VGA bytes = 344 drawBuffer bytes (task #19).
 				 save_pgm("/tmp/orig_ladder.ppm",
 				          myDrawInfo->drawBuffer + cur_offset,
-				          RENDER_WIDTH,
+				          0x56 * 4,
 				          myDrawInfo->drawPalette);
 			   }
 			   // Cherry-pick 3f2114a: only update screen when game has finished a

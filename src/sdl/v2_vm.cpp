@@ -560,9 +560,10 @@ void v2_verify_audio_slots(uint8_t* ds, class AudioPool* pool, const char* side_
 // Render buffer compare (A2): viewport region pixel-level orig vs v2 verify.
 // Catches render-only bugs (dialog cut-off #120, palette anim #125) that don't
 // surface as DS divergence. Called at end of v2_phase_render3 after both orig
-// and v2 have finished drawing this frame's final page. Both formats are
-// 1-byte-per-pixel linear (m2c port flattens VGA Mode X — render.cpp:332).
-// Page offset from myDrawInfo->myOffset selects current page in 3-page rotation.
+// and v2 have finished drawing this frame's final page.
+// Orig side is CRTC-unfolded via v2_fetch_orig_page (task #19): drawBuffer is
+// VGA Mode X memory ×4, rows scan from myOffset with pitch 0x56 bytes (CRTC
+// offset reg 0x13 = 0x2B words) — NOT a flat 320-wide framebuffer.
 // ============================================================================
 struct myDrawInfoS_a2_fwd {  // forward layout for myDrawInfo access
     uint8_t drawBuffer[65536 * 4];
@@ -572,6 +573,7 @@ struct myDrawInfoS_a2_fwd {  // forward layout for myDrawInfo access
 };
 extern struct myDrawInfoS_a2_fwd* myDrawInfo;
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
+extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count);
 // Task #19 aid: env V2_PIXWATCH=<y*320+x> — print every stage (across ALL
 // render passes) that changes that v2_render_buf pixel.
 void v2_pixwatch_stage(const char* stage) {
@@ -590,9 +592,10 @@ void v2_verify_render_buf(int frame) {
     extern uint8_t v2_render_buf[320*200];
     if (!myDrawInfo) return;
     uint32_t page_offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
-    // Bound check — drawBuffer is 256KB (65536*4), need 320*176 = 56320 bytes from offset
-    if (page_offset + 320 * 176 > sizeof(myDrawInfo->drawBuffer)) return;
-    const uint8_t* orig_pixels = &myDrawInfo->drawBuffer[page_offset];
+    // CRTC unfold of the visible page (pitch 0x56 bytes/row — task #19).
+    static uint8_t orig_unfold[320 * 176];
+    if (!v2_fetch_orig_page(orig_unfold, sizeof(orig_unfold))) return;
+    const uint8_t* orig_pixels = orig_unfold;
 
     // Hash viewport region (rows 0-175, HUD has separate page-flip logic)
     uint32_t h_orig = 0, h_v2 = 0;
