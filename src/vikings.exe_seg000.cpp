@@ -325,16 +325,27 @@ void drawPixel(uint32_t offset, uint8_t color)
 {
   if (offset > 65536*4 - 1)
 	return;
-  // Task #19 aid: env V2_DP_TRAP=<offset> — print every writer of that
-  // drawBuffer offset with its return address (resolve via nm afterwards).
+  // Task #19 aid: env V2_DP_TRAP=<off1>[,<off2>...] — print every writer of
+  // those drawBuffer offsets with a short backtrace (resolve via nm).
   {
-    static long _trap = -2;
-    if (_trap == -2) { const char* e = getenv("V2_DP_TRAP"); _trap = e ? strtol(e, 0, 0) : -1; }
-    if ((long)offset == _trap) {
-      void* bt[8]; int n = backtrace(bt, 8);
-      fprintf(stderr, "DP-TRAP: off=%X color=%02X bt:", offset, color);
-      for (int i = 1; i < n; i++) fprintf(stderr, " %p", bt[i]);
-      fprintf(stderr, "\n");
+    static long _traps[8];
+    static int _ntraps = -1;
+    if (_ntraps == -1) {
+      _ntraps = 0;
+      if (const char* e = getenv("V2_DP_TRAP")) {
+        char buf[256]; strncpy(buf, e, 255); buf[255] = 0;
+        for (char* t = strtok(buf, ","); t && _ntraps < 8; t = strtok(nullptr, ","))
+          _traps[_ntraps++] = strtol(t, 0, 0);
+      }
+    }
+    for (int ti = 0; ti < _ntraps; ti++) {
+      if ((long)offset == _traps[ti]) {
+        void* bt[8]; int n = backtrace(bt, 8);
+        fprintf(stderr, "DP-TRAP: off=%X color=%02X bt:", offset, color);
+        for (int i = 1; i < n; i++) fprintf(stderr, " %p", bt[i]);
+        fprintf(stderr, "\n");
+        break;
+      }
     }
   }
   // ONE-SHOT: check if drawBuffer aliases VGA memory
