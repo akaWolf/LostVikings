@@ -82,6 +82,8 @@ extern "C" void     v2_fntest_call_sub_13ba5(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11446(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di);
 extern "C" int      v2_fntest_call_sub_15911(uint8_t* test_shadow, uint16_t di, uint16_t si);
+extern "C" void     v2_fntest_call_sub_12549(uint8_t* test_shadow, uint16_t ax);
+extern "C" int      v2_fntest_call_sub_11cbb(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_1450b(uint8_t* test_shadow, uint16_t al, uint16_t si, uint16_t di);
 extern "C" void     v2_fntest_call_sub_10e99(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11c52(uint8_t* test_shadow);
@@ -156,7 +158,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_13A0E = 54, FT_SUB_1450B = 55, FT_SUB_10E99 = 56,
             FT_SUB_15D3C = 57, FT_SUB_15D42 = 58, FT_SUB_11C52 = 59,
             FT_SUB_13BA5 = 60, FT_SUB_11446 = 61, FT_SUB_11569 = 62,
-            FT_SUB_15911 = 63,
+            FT_SUB_15911 = 63, FT_SUB_12549 = 64, FT_SUB_11CBB = 65,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -192,7 +194,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_13a0e", "sub_1450b", "sub_10e99",
                                  "sub_15d3c", "sub_15d42", "sub_11c52",
                                  "sub_13ba5", "sub_11446", "sub_11569",
-                                 "sub_15911" };
+                                 "sub_15911", "sub_12549", "sub_11cbb" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -4150,6 +4152,59 @@ int ft_selftest_sub_15911() {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 64-65: pause-screen logic with the sound stub --------------------
+// sub_12549(ax): corner/frame glyph pick per box mode; calls the SFX channel
+// dispatcher sub_15473 in some branches (headless: AIL stubbed, DS channel
+// effects compared as data). sub_11cbb: pause item interaction ([3B8] input
+// bits, [447] mode) — HUD renderer callees need the same LUT domains as
+// sub_11c52 (ft_norm_11c52); fuzz is base-image-only.
+int ft_selftest_sub_12549() {
+    FtSynthStats grid;
+    long diff_budget = 24;
+    static const uint16_t AXS[] = { 0, 1, 2, 3, 4, 5, 6, 0x10, 0xFFFF };
+    static const uint16_t WH[][2] = { {2,2}, {3,4}, {0x12,5}, {0x28,0x19} };
+    for (uint16_t ax : AXS)
+        for (auto& wh : WH) {
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+            ft_wr16(g_synth_in, 0x34, wh[0]);
+            ft_wr16(g_synth_in, 0x36, wh[1]);
+            ft_fill_tail(g_synth_in);
+            memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+            v2_fntest_call_sub_12549(g_scratch, ax);
+            FtRegs in{}; in.ax = ax;
+            ft_synth_case_regs(FT_SUB_12549, in, 0, -1, "grid", grid, diff_budget);
+        }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_12549]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
+int ft_selftest_sub_11cbb() {
+    FtSynthStats grid;
+    long diff_budget = 24;
+    static const uint16_t MODES[] = { 0, 1, 2 };
+    static const uint16_t INPUTS[] = { 0, 0x0100, 0x0200, 0x0300, 0x8000, 0x0080 };
+    for (uint16_t m : MODES)
+        for (uint16_t inp : INPUTS) {
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+            ft_wr16(g_synth_in, 0x447, m);
+            ft_wr16(g_synth_in, 0x3B8, inp);
+            ft_norm_11c52(g_synth_in);   // same HUD LUT domains
+            ft_fill_tail(g_synth_in);
+            memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+            v2_fntest_call_sub_11cbb(g_scratch);
+            FtRegs in{};
+            ft_synth_case_regs(FT_SUB_11CBB, in, 0, -1, "grid", grid, diff_budget);
+        }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_11cbb]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
 int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
@@ -4272,6 +4327,10 @@ extern "C" int v2_fntest_selftest_env(void) {
         matched = true; rc |= ft_selftest_spawn2();
     }
     if (all || strstr(env, "sub_15911")) { matched = true; rc |= ft_selftest_sub_15911(); }
+    if (all || strstr(env, "sub_12549")) { matched = true; rc |= ft_selftest_sub_12549(); }
+    // sub_11cbb parked: unit 65 exposed gate divergence (task #30) — re-enable
+    // with the fixed mirror.
+    if (strstr(env, "sub_11cbb")) { matched = true; rc |= ft_selftest_sub_11cbb(); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
