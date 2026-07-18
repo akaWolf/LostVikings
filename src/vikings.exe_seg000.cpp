@@ -135,6 +135,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 60: return (void*)&sub_13ba5;   // K3b: permanent-flag spawn sweep
     case 61: return (void*)&sub_11446;   // K3b: game-mode spawn dispatcher
     case 62: return (void*)&sub_11569;   // K3b: 3-viking spawn from table (di)
+    case 63: return (void*)&sub_15911;   // K3b: Y-move search dispatcher (CF/ax)
     default: return 0;
     }
 }

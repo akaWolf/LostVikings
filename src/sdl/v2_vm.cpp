@@ -11107,6 +11107,19 @@ extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_sub_12816(te
 // v2 animdata shadow — pairs with the oracle reading the same bytes via
 // es=[2E67] pointed at the shared test segment.
 extern "C" void v2_fntest_call_sub_13ba5(uint8_t* test_shadow) { v2_sub_13ba5(test_shadow); }
+// Unit 63: sub_15911 (Y-move search dispatcher). Return packs the three v2
+// outputs: bit0 = returned carry, bit1 = vm.carry, bits4+ = out_dir+1
+// (0 = untouched).
+extern "C" int v2_fntest_call_sub_15911(uint8_t* test_shadow, uint16_t di, uint16_t si) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    uint16_t od = 0xFFFF;
+    bool r = v2_sub_15911(vm, di, si, od);
+    int od_code = (od == 0xFFFF) ? 0 : (int)(od + 1);
+    return (r ? 1 : 0) | (vm.carry ? 2 : 0) | (od_code << 4);
+}
 static void v2_sub_11446(uint8_t* s);
 extern "C" void v2_fntest_call_sub_11446(uint8_t* test_shadow) { v2_sub_11446(test_shadow); }
 extern "C" void v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di) { v2_sub_11569(test_shadow, di); }
