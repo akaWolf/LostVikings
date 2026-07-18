@@ -9922,6 +9922,7 @@ static void v2_vm_op_24(V2VM& vm) {
     uint16_t si = vm.global_r(0x42);
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig: MOV di,ds:42h; scans PUSH/POP-clean (task #15)
     if (vm.ds_read(si + 0x1585) & 0x40) {
         v2_vm_sub_158b9(vm, anim_idx, di);
     } else {
@@ -10738,6 +10739,7 @@ static void v2_vm_op_14(V2VM& vm) {
 static void v2_vm_op_1F(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
     v2_vm_sub_158d7(vm, anim_idx, di);
     // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 0); // runtime read
@@ -10791,6 +10793,7 @@ static void v2_vm_op_C2(V2VM& vm) {
 static void v2_vm_op_1E(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
     v2_vm_sub_158c8(vm, anim_idx, di);
     // off_30C8E[0]
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 0);
@@ -10862,6 +10865,7 @@ static void v2_vm_op_21(V2VM& vm) {
 static void v2_vm_op_22(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
     v2_vm_sub_158c8(vm, anim_idx, di);
     // off_30C8E[si=2]: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 2);
@@ -10884,6 +10888,7 @@ static void v2_vm_op_22(V2VM& vm) {
 static void v2_vm_op_31(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
     v2_vm_sub_158e6(vm, anim_idx, di);
     // off_30C8E[si=2] = loc_144f3: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow + 0x87AE + 2);
@@ -10901,6 +10906,7 @@ static void v2_vm_op_31(V2VM& vm) {
 static void v2_vm_op_23(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
     v2_vm_sub_158d7(vm, anim_idx, di);
     // off_30C8E[si=2] = loc_144f3: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 2); // si=2 → byte offset 2
@@ -13652,6 +13658,7 @@ static void v2_vm_op_25(V2VM& vm) {
     bool flag40 = vm.ds_read(si + 0x1585) & 0x40;
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig: MOV di,ds:42h; scans PUSH/POP-clean (task #15)
     if (!flag40) {
         v2_vm_sub_158b9(vm, anim_idx, di);
     } else {
