@@ -85,6 +85,7 @@ extern "C" uint8_t* v2_fntest_tilemap_ptr(void);
 extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
 extern "C" uint8_t* v2_fntest_fs_ptr(void);
 extern "C" void     v2_fntest_clear_fs(uint8_t fill);
+extern "C" void     v2_fntest_call_sub_14207(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_13ba5(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11446(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di);
@@ -166,7 +167,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_15D3C = 57, FT_SUB_15D42 = 58, FT_SUB_11C52 = 59,
             FT_SUB_13BA5 = 60, FT_SUB_11446 = 61, FT_SUB_11569 = 62,
             FT_SUB_15911 = 63, FT_SUB_12549 = 64, FT_SUB_11CBB = 65,
-            FT_SUB_173C7 = 66,
+            FT_SUB_173C7 = 66, FT_SUB_14207 = 67,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -203,7 +204,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_15d3c", "sub_15d42", "sub_11c52",
                                  "sub_13ba5", "sub_11446", "sub_11569",
                                  "sub_15911", "sub_12549", "sub_11cbb",
-                                 "sub_173c7" };
+                                 "sub_173c7", "sub_14207" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -4336,6 +4337,60 @@ int ft_selftest_sub_173c7() {
     return grid.fail ? 1 : 0;
 }
 
+// ---- Unit 67: sub_14207 — full VM sweep + priority drain queue --------------
+// vmops-style context: bytecode in the shared test segment (yield carpet),
+// two live objects in slots 0/2. Directed queue cases pre-load [376]/[378]
+// (the same bytes the spawn op writes) — the drain bound must be re-read
+// live (task #31: three v2 inlines hoisted it).
+bool ft_synth_case_14207(int nobj, uint16_t prio_n, const uint8_t* prio_q,
+                         const char* group, FtSynthStats& st, long& diff_budget)
+{
+    // (case counting happens inside ft_synth_case_regs)
+    uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x372, (uint16_t)(nobj * 2));
+    for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+    ft_wr16(g_synth_in, 0x32F, 0);
+    ft_wr16(g_synth_in, 0x42, 0xFFFF);
+    for (int i = 0; i < nobj; i++) {
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1355), FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x132D), (uint16_t)(FT_VM_PC + i * 8));
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1585), 0x8000);
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1945), 0x1111);  // 15517 must clear
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x196D), 0x2222);
+    }
+    ft_wr16(g_synth_in, 0x376, prio_n);
+    for (int i = 0; i < (int)prio_n; i++) g_synth_in[0x378 + i] = prio_q[i];
+    ft_fill_tail(g_synth_in);
+
+    memset(g_vm_es_in, 0, sizeof(g_vm_es_in));   // yield carpet (op 0x00)
+    memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    FtRegs in{};
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    v2_fntest_call_sub_14207(g_scratch);
+    return ft_synth_case_regs(FT_SUB_14207, in, 0, -1, group, st, diff_budget);
+}
+
+int ft_selftest_sub_14207() {
+    FtSynthStats grid;
+    long diff_budget = 24;
+    static const uint8_t Q0[1] = { 0 };
+    static const uint8_t Q2[2] = { 2, 0 };
+    ft_synth_case_14207(1, 0, Q0, "one-obj", grid, diff_budget);
+    ft_synth_case_14207(2, 0, Q0, "two-obj", grid, diff_budget);
+    ft_synth_case_14207(2, 1, Q0, "queue-1", grid, diff_budget);
+    ft_synth_case_14207(2, 2, Q2, "queue-2", grid, diff_budget);
+    ft_synth_case_14207(0, 0, Q0, "empty", grid, diff_budget);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_14207]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
 int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
@@ -4462,6 +4517,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_12549")) { matched = true; rc |= ft_selftest_sub_12549(); }
     if (all || strstr(env, "sub_11cbb")) { matched = true; rc |= ft_selftest_sub_11cbb(); }
     if (all || strstr(env, "sub_173c7")) { matched = true; rc |= ft_selftest_sub_173c7(); }
+    if (all || strstr(env, "sub_14207")) { matched = true; rc |= ft_selftest_sub_14207(); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

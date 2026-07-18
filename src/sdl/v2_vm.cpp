@@ -5257,6 +5257,43 @@ static void v2_sub_14207_init(uint8_t* ds) {
     *(uint16_t*)(ds + 0x390) = 0;  // word_28870 = 0 (collision flag)
 }
 
+// sub_14207 (eip 0x4207..0x424B): sub_15517 + the full per-object VM sweep
+// with the priority drain queue. Extracted from THREE drifted inline copies
+// (task #31): the inlines hoisted the [376] drain bound — orig CMP di,[376]
+// re-reads it LIVE every iteration (a drained object's spawn op at
+// v2_vm.cpp op site can append to the queue mid-drain). [372] is also
+// re-read live (op_14 creates objects).
+static void v2_sub_14207(uint8_t* shadow) {
+    v2_sub_14207_init(shadow);
+    for (uint16_t si_v = 0; si_v < *(uint16_t*)(shadow + 0x372); si_v += 2) {
+        v2_vm_execute_object(shadow, si_v);
+        if (*(uint16_t*)(shadow + 0x376) != 0) {
+            for (uint16_t di = 0;
+                 (int16_t)di < (int16_t)*(uint16_t*)(shadow + 0x376);   // live re-read
+                 di++) {
+                uint16_t pobj = *(uint16_t*)(shadow + (uint16_t)(di + 0x378)) & 0xFF;
+                v2_vm_execute_object(shadow, pobj);
+            }
+            *(uint16_t*)(shadow + 0x376) = 0;
+        }
+    }
+}
+extern "C" void v2_fntest_call_sub_14207(uint8_t* test_shadow) {
+    // Same VM environment as v2_fntest_call_vm_exec: selftest bypasses game
+    // init (optable), the accumulator lives in the case image, VM FATALs are
+    // soft, and segment resolution is linear for oracle parity.
+    extern int v2_fntest_vm_soft;
+    v2_vm_init_table();
+    uint8_t* saved_acc_base = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    v2_sub_14207(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc_base;
+}
+
 static void v2_sub_11080(uint8_t* s) {
     extern int v2_orig_post_vm_frame, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
     { static int _sc = 0; if (++_sc <= 10)
@@ -5605,21 +5642,7 @@ static void v2_sub_11080(uint8_t* s) {
         *(uint16_t*)(s + 0x03B8) = 0; // word_28898
         slot2e_trace("SF1-pre-VM");
         // sub_14207: VM execution — runs ONCE for the entire sub_115d2 call
-        v2_sub_14207_init(s);
-        // Exact replica including priority object loop
-        // NOTE: table_end MUST be re-read each iteration — VM opcode 0x14 can create
-        // new objects and increase ds:0x372 during execution.
-        for (uint16_t si_vm = 0; si_vm < *(uint16_t*)(s + 0x372); si_vm += 2) {
-            v2_vm_execute_object(s, si_vm);
-            uint16_t prio_count = *(uint16_t*)(s + 0x376);
-            if (prio_count != 0) {
-                for (uint16_t di = 0; (int16_t)di < (int16_t)prio_count; di++) {
-                    uint16_t prio_obj = *(uint16_t*)(s + di + 0x378) & 0xFF;
-                    v2_vm_execute_object(s, prio_obj);
-                }
-                *(uint16_t*)(s + 0x376) = 0;
-            }
-        }
+        v2_sub_14207(s);   // extracted exact sweep (live [372]/[376] re-reads)
         // PSNAP compare: at this point v2 has finished SF1 main VM. Should match
         // orig snap[T_SF1_VM_END] taken at orig sub_115d2 eip 0x15D5 (after sub_14207).
         v2_compare_phase_snap(V2_PSNAP_T_SF1_VM_END, "v2_sub_115d2 SF1 post-VM");
@@ -6214,19 +6237,7 @@ static void v2_run_transition_chain(uint8_t* shadow) {
     // 3. INC word_2880F (ds:0x032F)
     *(uint16_t*)(shadow + 0x032F) += 1;
     // 4. sub_14207: full VM pass (with priority object loop)
-    v2_sub_14207_init(shadow);
-    // Re-read ds:0x372 each iteration — VM can create objects (op_14)
-    for (uint16_t si_v = 0; si_v < *(uint16_t*)(shadow + 0x372); si_v += 2) {
-        v2_vm_execute_object(shadow, si_v);
-        uint16_t prio = *(uint16_t*)(shadow + 0x376);
-        if (prio != 0) {
-            for (uint16_t di = 0; (int16_t)di < (int16_t)prio; di++) {
-                uint16_t pobj = *(uint16_t*)(shadow + di + 0x378) & 0xFF;
-                v2_vm_execute_object(shadow, pobj);
-            }
-            *(uint16_t*)(shadow + 0x376) = 0;
-        }
-    }
+    v2_sub_14207(shadow);   // extracted exact sweep (live [372]/[376] re-reads)
     // 5. JMP sub_11080: level loader. Loads new level, clears state, runs sub_12345.
     v2_sub_11080(shadow);
     // Update v2_current_level so FRAME_BEGIN doesn't re-run v2_sub_11080.
@@ -6474,21 +6485,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     fflush(stderr);
                 };
                 _tv("before-VM");
-            v2_sub_14207_init(shadow);
-            {
-                // Re-read ds:0x372 each iteration — VM can create objects (op_14)
-                for (uint16_t si_v = 0; si_v < *(uint16_t*)(shadow + 0x372); si_v += 2) {
-                    v2_vm_execute_object(shadow, si_v);
-                    uint16_t prio = *(uint16_t*)(shadow + 0x376);
-                    if (prio != 0) {
-                        for (uint16_t di = 0; (int16_t)di < (int16_t)prio; di++) {
-                            uint16_t pobj = *(uint16_t*)(shadow + di + 0x378) & 0xFF;
-                            v2_vm_execute_object(shadow, pobj);
-                        }
-                        *(uint16_t*)(shadow + 0x376) = 0;
-                    }
-                }
-            }
+            v2_sub_14207(shadow);   // extracted exact sweep (live [372]/[376] re-reads)
             // Exact original flow: sub_10138 → VM(old level) → JMP sub_11080 → JMP sub_12345
             // → RETN(0x002D) → sub_11ba5..sub_1673c → sub_14207(VM on new level).
             // v2 replicates: v2_sub_11080 loads new level, sub_12345 clears input.
