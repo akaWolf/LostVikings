@@ -57,6 +57,15 @@ extern "C" void     v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, 
 extern "C" void     v2_fntest_call_sub_12fc6(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12fcb(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12fd0(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_11192(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_111a1(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_111df(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_11784(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_137f1(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_12fb3(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_12ca3(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_12ce4(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_108b8(uint8_t* test_shadow);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -115,7 +124,11 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1303A = 25, FT_SUB_13031 = 26,
             FT_SUB_1614E = 27, FT_SUB_15C37 = 28, FT_SUB_15C93 = 29,
             FT_SUB_15AFD = 30, FT_SUB_10982 = 31, FT_SUB_10CD8 = 32,
-            FT_SUB_10FE6 = 33, FT_SUB_10FFC = 34, FT_COUNT };
+            FT_SUB_10FE6 = 33, FT_SUB_10FFC = 34,
+            FT_SUB_11192 = 35, FT_SUB_111A1 = 36, FT_SUB_111DF = 37,
+            FT_SUB_11784 = 38, FT_SUB_137F1 = 39, FT_SUB_12FB3 = 40,
+            FT_SUB_12CA3 = 41, FT_SUB_12CE4 = 42, FT_SUB_108B8 = 43,
+            FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
 
@@ -139,7 +152,10 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_1303a", "sub_13031",
                                  "sub_1614e", "sub_15c37", "sub_15c93",
                                  "sub_15afd", "sub_10982", "sub_10cd8",
-                                 "sub_10fe6", "sub_10ffc" };
+                                 "sub_10fe6", "sub_10ffc",
+                                 "sub_11192", "sub_111a1", "sub_111df",
+                                 "sub_11784", "sub_137f1", "sub_12fb3",
+                                 "sub_12ca3", "sub_12ce4", "sub_108b8" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3254,6 +3270,101 @@ int ft_selftest_pal(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- K1 units (35-43): parameterless DS clear/init leaves ------------------
+// sub_11080 level-load chain leaves with NO input registers: the whole DS is
+// the contract (they read nothing but constants and write fixed ranges), so
+// one shared runner covers all of them. Input images: the pristine base,
+// all-00, all-FF, 0xA5/0x5A checkerboards, and seeded-random fuzz — both
+// sides run identical copies, full-DS byte compare.
+//   35 sub_11192: bytes ds:356..365 = 0
+//   36 sub_111a1: REP STOSW 0xE00 words ds:44D..204C = 0 (ES=DS)
+//   37 sub_111df: bytes ds:342..347 = 0, word ds:348 = 0
+//   38 sub_11784: words ds:3C2/3C4 = 0
+//   39 sub_137f1: 20 slots: word [si+1355]=0, word [si+1A0D]=FFFF (si!=0x28 loop)
+//   40 sub_12fb3: words ds:44D..54B = 0 (si<0x100 JL loop)
+//   41 sub_12ca3: bytes ds:32E/28 = 0, words 3D4/3CC/336/34A/34C/334/331 = 0,
+//                 words 25AF/3C2 = FFFF (NB word at 0x331 overlaps 0x332)
+//   42 sub_12ce4: words 414/416/418 = 0, words [3E4..3FB] = 0 (si<0x18),
+//                 words 423/425/427 = 6, words 429/42B/42D = 0
+//   43 sub_108b8: sub_12ce4 + word 25C9 = 0x27, word 3C2 = 0
+typedef void (*FtClearCall)(uint8_t*);
+struct FtClearSpec { FtId id; FtClearCall call; };
+const FtClearSpec FT_CLEARS[] = {
+    { FT_SUB_11192, v2_fntest_call_sub_11192 },
+    { FT_SUB_111A1, v2_fntest_call_sub_111a1 },
+    { FT_SUB_111DF, v2_fntest_call_sub_111df },
+    { FT_SUB_11784, v2_fntest_call_sub_11784 },
+    { FT_SUB_137F1, v2_fntest_call_sub_137f1 },
+    { FT_SUB_12FB3, v2_fntest_call_sub_12fb3 },
+    { FT_SUB_12CA3, v2_fntest_call_sub_12ca3 },
+    { FT_SUB_12CE4, v2_fntest_call_sub_12ce4 },
+    { FT_SUB_108B8, v2_fntest_call_sub_108b8 },
+};
+
+bool ft_synth_case_clear(const FtClearSpec& cs, const char* group,
+                         FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    // g_synth_in is prepared by the caller (image pattern); tail refreshed
+    // here so out-of-window reads stay identical after pattern fills.
+    ft_fill_tail(g_synth_in);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(cs.id), g_synth_orig, regs);
+
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    cs.call(g_scratch);
+
+    long diffs = 0;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) {
+            diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X)\n",
+                    g_name[cs.id], group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a]);
+        }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+
+    // Pattern images: pristine, all-00, all-FF, checkerboards.
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_synth_case_clear(cs, "base", grid, diff_budget);
+    memset(g_synth_in, 0x00, 0x10000);
+    ft_synth_case_clear(cs, "zeros", grid, diff_budget);
+    memset(g_synth_in, 0xFF, 0x10000);
+    ft_synth_case_clear(cs, "ones", grid, diff_budget);
+    memset(g_synth_in, 0xA5, 0x10000);
+    ft_synth_case_clear(cs, "a5", grid, diff_budget);
+    memset(g_synth_in, 0x5A, 0x10000);
+    ft_synth_case_clear(cs, "5a", grid, diff_budget);
+
+    // Seeded random images (full-DS noise).
+    FtRng rng(seed);
+    for (int i = 0; i < 64; i++) {
+        for (uint32_t a = 0; a < 0x10000; a += 2) {
+            uint16_t w = rng.w();
+            g_synth_in[a] = (uint8_t)w; g_synth_in[a + 1] = (uint8_t)(w >> 8);
+        }
+        ft_synth_case_clear(cs, "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[cs.id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 } // namespace
 
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
@@ -3318,6 +3429,11 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10cd8")) { matched = true; rc |= ft_selftest_rawchunk(0x10CD8001u); }
     if (all || strstr(env, "sub_10fe6")) { matched = true; rc |= ft_selftest_pal(FT_SUB_10FE6, 0x10FE6001u); }
     if (all || strstr(env, "sub_10ffc")) { matched = true; rc |= ft_selftest_pal(FT_SUB_10FFC, 0x10FFC001u); }
+    for (const FtClearSpec& cs : FT_CLEARS)   // K1 units 35-43
+        if (all || strstr(env, g_name[cs.id])) {
+            matched = true;
+            rc |= ft_selftest_clear(cs, 0xC1EA0000u + (uint32_t)cs.id);
+        }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;

@@ -107,6 +107,15 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     // sp-balance canary. They are stackless (no PUSH/CALL inside), so a
     // direct wrapper call — the same way live sub_1797b invokes them — is
     // byte-exact.
+    case 35: return (void*)&sub_11192;   // K1: clear ds:356..365 bytes
+    case 36: return (void*)&sub_111a1;   // K1: REP STOSW clear ds:44D..204C
+    case 37: return (void*)&sub_111df;   // K1: clear ds:342..347 + word 348
+    case 38: return (void*)&sub_11784;   // K1: clear words ds:3C2/3C4
+    case 39: return (void*)&sub_137f1;   // K1: slots [1355]=0 [1A0D]=FFFF x20
+    case 40: return (void*)&sub_12fb3;   // K1: clear words ds:44D..54B
+    case 41: return (void*)&sub_12ca3;   // K1: game-state clear + 2x FFFF
+    case 42: return (void*)&sub_12ce4;   // K1: health init (6/6/6 + zeros)
+    case 43: return (void*)&sub_108b8;   // K1: 12ce4 + level=0x27 + 3C2=0
     default: return 0;
     }
 }

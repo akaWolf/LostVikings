@@ -4279,7 +4279,8 @@ static void v2_sub_16880(uint8_t* s) {
 // sub_116e3: init level descriptor. Sets transition mode based on level number.
 // sub_12ce4: viking health init. Exact replica.
 static void v2_sub_12ce4(uint8_t* s) {
-    fprintf(stderr, "V2-12CE4: called, 0x423 before=%02X\n", s[0x423]);
+    { static int _n = 0; if (++_n <= 8)   // capped: selftest calls this thousands of times
+        fprintf(stderr, "V2-12CE4: called, 0x423 before=%02X\n", s[0x423]); }
     *(uint16_t*)(s + 0x414) = 0;
     *(uint16_t*)(s + 0x416) = 0;
     *(uint16_t*)(s + 0x418) = 0;
@@ -11079,6 +11080,17 @@ extern "C" void v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, uint
 extern "C" void v2_fntest_call_sub_12fc6(uint8_t* test_shadow) { v2_sub_12fc6(test_shadow); }
 extern "C" void v2_fntest_call_sub_12fcb(uint8_t* test_shadow) { v2_sub_12fcb(test_shadow); }
 extern "C" void v2_fntest_call_sub_12fd0(uint8_t* test_shadow) { v2_sub_12fd0(test_shadow); }
+// K1 units (35-43): parameterless DS clear/init leaves of the sub_11080
+// level-load chain — full-DS contract, no input registers.
+extern "C" void v2_fntest_call_sub_11192(uint8_t* test_shadow) { v2_sub_11192(test_shadow); }
+extern "C" void v2_fntest_call_sub_111a1(uint8_t* test_shadow) { v2_sub_111a1(test_shadow); }
+extern "C" void v2_fntest_call_sub_111df(uint8_t* test_shadow) { v2_sub_111df(test_shadow); }
+extern "C" void v2_fntest_call_sub_11784(uint8_t* test_shadow) { v2_sub_11784(test_shadow); }
+extern "C" void v2_fntest_call_sub_137f1(uint8_t* test_shadow) { v2_sub_137f1(test_shadow); }
+extern "C" void v2_fntest_call_sub_12fb3(uint8_t* test_shadow) { v2_sub_12fb3(test_shadow); }
+extern "C" void v2_fntest_call_sub_12ca3(uint8_t* test_shadow) { v2_sub_12ca3(test_shadow); }
+extern "C" void v2_fntest_call_sub_12ce4(uint8_t* test_shadow) { v2_sub_12ce4(test_shadow); }
+extern "C" void v2_fntest_call_sub_108b8(uint8_t* test_shadow) { v2_sub_108b8(test_shadow); }
 // Anim frame interpreter units: sub_1303a (cmd loop core) / sub_13031
 // (+ sub_135cf tail). The anim script lives INSIDE the DS image (the
 // oracle enters with es==ds), so vm.es = the case image too.
