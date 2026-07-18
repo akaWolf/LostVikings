@@ -4421,6 +4421,45 @@ int ft_selftest_sub_14207() {
     ft_synth_case_14207(2, 1, Q0, "queue-1", grid, diff_budget);
     ft_synth_case_14207(2, 2, Q2, "queue-2", grid, diff_budget);
     ft_synth_case_14207(0, 0, Q0, "empty", grid, diff_budget);
+    // Divergence #28 directed: a ch3 opcode inside the FIRST drained object
+    // skews the orig DI counter (INC of a slot address → CMP di,[0x376]
+    // signed-less fails) — the orig drains ONLY queue[0] and leaves queue[1]
+    // unexecuted. Marker: slot 2 runs an ACCUMULATING op 0x5B (+acc to a
+    // field) — drained+main-loop double execution would differ from the
+    // main-loop-only single hit. v2's register-model loop must match.
+    {
+        uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, 4);              // 2 objects
+        for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+        ft_wr16(g_synth_in, 0x32F, 0);
+        ft_wr16(g_synth_in, 0x42, 0xFFFF);
+        ft_wr16(g_synth_in, 0x8A, 5);               // accumulator for the op5B marker
+        for (int i = 0; i < 2; i++) {
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1355), FT_VM_TESTSEG);
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x132D), (uint16_t)(FT_VM_PC + i * 8));
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1585), 0x8000);
+        }
+        ft_wr16(g_synth_in, 0x376, 2);              // queue of TWO entries
+        g_synth_in[0x378] = 0;                      // queue[0] = slot 0 (ch3 bytecode)
+        g_synth_in[0x379] = 2;                      // queue[1] = slot 2 (marker)
+        ft_fill_tail(g_synth_in);
+        memset(g_vm_es_in, 0, sizeof(g_vm_es_in));  // yield carpet
+        // slot 0 @ FT_VM_PC: op54 (ch3-style address load — di=slot addr) + yield
+        g_vm_es_in[FT_VM_PC]     = 0x54;
+        g_vm_es_in[FT_VM_PC + 1] = 0x10;            // idx → [0x10-0x6CBA] table word
+        g_vm_es_in[FT_VM_PC + 2] = 0x00;            // yield
+        // slot 2 @ FT_VM_PC+8: accumulating op5B marker + yield
+        g_vm_es_in[FT_VM_PC + 8] = 0x5B;
+        g_vm_es_in[FT_VM_PC + 9] = 0x12;            // idx → distinct field
+        g_vm_es_in[FT_VM_PC + 10] = 0x00;           // yield
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        FtRegs in{};
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_14207(g_scratch);
+        ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-ch3-#28", grid, diff_budget);
+    }
     fprintf(stderr,
         "FNSELFTEST-SUMMARY[sub_14207]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
         grid.pass, grid.cases, grid.cases, grid.fail,

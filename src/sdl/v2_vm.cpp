@@ -12784,12 +12784,16 @@ static bool v2_vm_sub_163ac(V2VM& vm) {
     };
 
     // Check 1: tile at (si_x, di_y)
+    // (sub_14199 is PUSH si,di balanced; the orig DI register follows the
+    //  local di variable through the branches — task #15 tracking below.)
     uint16_t ax = tile_type_at(si_x, di_y);
+    vm.di_track = di_y;
     if (ax >= 0x30) return true; // carry
 
     if (ax == 1) {
         // Type 1: check tile above (di_y - 0x10)
-        ax = tile_type_at(si_x, di_y - 0x10);
+        ax = tile_type_at(si_x, (uint16_t)(di_y - 0x10));
+        vm.di_track = (uint16_t)(di_y - 0x10);
         if (ax >= 0x30) return true;
         if (ax == 0 || ax == 0x0C || ax == 3) return true;
         // Fall through to check 2
@@ -12799,9 +12803,11 @@ static bool v2_vm_sub_163ac(V2VM& vm) {
     // Original reloads: di = ds:0x42; di = ds:[di+0x150D]; si preserved from check 1
     uint16_t di_y2 = vm.ds_read(vm.global_r(0x42) + 0x150D);
     ax = tile_type_at(si_x, di_y2);
+    vm.di_track = di_y2;
     if (ax == 0 || ax == 0x0C || ax == 3) {
         // Check 3: tile below (di_y2 + 0x10)
-        ax = tile_type_at(si_x, di_y2 + 0x10);
+        ax = tile_type_at(si_x, (uint16_t)(di_y2 + 0x10));
+        vm.di_track = (uint16_t)(di_y2 + 0x10);
         if (ax >= 0x30) return true;
         if (ax == 1 || ax == 5 || ax == 0x20 || ax == 4 || ax == 2) return true;
         return false; // no carry
@@ -16000,6 +16006,8 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
     vm.obj = obj_si; vm.slot = obj_si / 2;
     vm.running = true; vm.carry = false;
     vm.pc = pc;
+    vm.di_track = v2_vm_di_track;   // collision loops (1555c/15569) are di-clean;
+                                    // the 8086 register carries through (task #15)
 
     int max_ops = 5000;
     uint16_t y_in = (obj_si == 0) ? *(uint16_t*)(shadow + 0x1765) : 0;
@@ -16059,6 +16067,7 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
             }
         }
     }
+    v2_vm_di_track = vm.di_track;   // persist exit di (task #15)
 }
 
 static void v2_vm_init_table() {
