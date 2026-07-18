@@ -9479,6 +9479,7 @@ static void v2_vm_sub_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
         uint16_t bp2 = bp_val + vm.ds_read(0x8F6C);
         *(uint16_t*)(v2_vm_shadow_fs + bp2) = w2 | 1;
         *(uint16_t*)(v2_vm_shadow_fs + (uint16_t)(bp2 + 2)) = w3 | 1;
+        vm.si_track = w3;   // orig: last MOV si, es:[bx+6] (task #15)
     }
 
     // Tracking arrays: store tile position + pixel coords.
@@ -9490,6 +9491,12 @@ static void v2_vm_sub_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
     vm.ds_write((uint16_t)(bx_idx - 0x78CA), bp_after);
     vm.ds_write((uint16_t)(bx_idx - 0x78C8), x_pix);
     vm.ds_write((uint16_t)(bx_idx - 0x78C6), y_pix);
+
+    // Register exits (task #15): orig SHL di,4 / SHR di,2 leaves di = di*4;
+    // si ends as the last tile word read (es:[bx+6]); the bounds-check tail
+    // (0x4047-0x406C) touches neither.
+    vm.di_track = (uint16_t)(di << 4) >> 2;
+    // w3 only exists on the tilemap-valid path; mirror orig: si written there.
 
     // Viewport bounds check — increment counter by 3 if tile visible
     uint16_t vx = (uint16_t)(x_pix - vm.ds_read(0x44) + 0x10);
@@ -9735,6 +9742,8 @@ static void v2_vm_op_C0(V2VM& vm) {
     vm.ds_write(0x372, 6);
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.si_track = filter;   // orig si=byte; 15fbe is PUSH si,di balanced
+    vm.di_track = di;
     vm.carry = v2_vm_sub_15fbe(vm, filter, di);
     vm.ds_write(0x372, saved);
     if (vm.carry) { uint16_t t = *(uint16_t*)(vm.es + vm.pc); vm.pc = t; } else { vm.pc += 2; }
@@ -9747,6 +9756,8 @@ static void v2_vm_op_C3(V2VM& vm) {
     vm.ds_write(0x372, 6);
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.si_track = filter;   // orig si=byte; 15fb1 is PUSH si,di balanced
+    vm.di_track = di;
     vm.carry = v2_vm_sub_15fb1(vm, filter, di);
     vm.ds_write(0x372, saved);
     // off_30C8E[2] = loc_144f3: carry → skip 2, no carry → jump (simple, no save)
@@ -9760,6 +9771,8 @@ static void v2_vm_op_C4(V2VM& vm) {
     vm.ds_write(0x372, 6);
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.si_track = filter;   // orig si=byte; 15fbe is PUSH si,di balanced
+    vm.di_track = di;
     vm.carry = v2_vm_sub_15fbe(vm, filter, di);
     vm.ds_write(0x372, saved);
     // off_30C8E[2] = loc_144f3: carry → skip 2, no carry → jump (simple, no save)
@@ -9935,7 +9948,10 @@ static uint16_t v2_field_addr_A(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
     uint16_t si = vm.global_r(0x42);
-    return (uint16_t)(off + vm.ds_read(si + 0x1995));
+    uint16_t di = (uint16_t)(off + vm.ds_read(si + 0x1995));
+    vm.si_track = si;               // orig: MOV si,ds:42h
+    vm.di_track = di;               // orig: slot address left in DI (task #15)
+    return di;
 }
 // Pattern B address: indexed byte → off_30CA2 lookup → + ds:0x42 → addr
 static uint16_t v2_field_addr_B(V2VM& vm) {
@@ -9978,6 +9994,7 @@ static void v2_vm_op_15(V2VM& vm) {
     uint16_t saved_si = (uint16_t)rel_x;
     v2_vm_sub_154bf(vm, saved_si, mode & 7);
     v2_vm_sub_154bf(vm, (uint16_t)rel_y, (mode >> 3) & 7);
+    vm.di_track = di;   // orig: di=[0x42] from entry; setters leave DI alone
 }
 
 // 0x0C (sub_13753): Vertical flip — toggle vflip, mirror Y bounds, update sub-sprites. 0 bytes.
@@ -12093,7 +12110,7 @@ static void v2_vm_op_29(V2VM& vm) {
     if (ch_intr) return;   // clean (no live pushes at the 3rd site)
 
     v2_vm_sub_141e0(vm, si, di, tile_val);
-    v2_vm_sub_13fc2(vm, si, di, tile_val);
+    v2_vm_sub_13fc2(vm, si, di, tile_val);   // sets si/di_track (di*4, w3)
 }
 
 // 0x2C (sub_15f2c): Collision search with type filter + jump. 3 bytes (1 mode + 2 target).
@@ -12314,6 +12331,8 @@ static uint16_t v2_vm_indexed_1995_target(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
     uint16_t si = vm.global_r(0x42);
     di += vm.ds_read(si + 0x1995);
+    vm.si_track = si;               // orig: MOV si,ds:42h
+    vm.di_track = di;               // orig: slot address left in DI (task #15)
     return (uint16_t)(di + 0x14E5);
 }
 
@@ -12593,6 +12612,10 @@ static void v2_vm_op_2B(V2VM& vm) {
     // sub_141e0: write merged tile back
     v2_vm_sub_141e0(vm, si, di, merged);
     // No sub_13fc2 call in sub_15039
+    // orig re-reads si=[0x6C] (0x506C) / di=[0x6E] (0x5070) before the
+    // PUSH/POP-clean sub_141e0 — those are the exit registers (task #15).
+    vm.si_track = vm.ds_read(0x6C);
+    vm.di_track = vm.ds_read(0x6E);
 }
 
 // 0x28 (sub_14f27): Tile-aligned position write. 2 mode bytes + 4 dispatches.
@@ -13046,6 +13069,8 @@ static void v2_vm_op_A1(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(ax_val - 0x6CBA));
     uint16_t si = vm.global_r(0x42);
     di += vm.ds_read(si + 0x1995);
+    vm.si_track = si;   // orig: MOV si,ds:42h
+    vm.di_track = di;   // orig: slot address in DI (task #15)
     uint16_t addr = (uint16_t)(di + 0x14E5);
     vm.ds_write(addr, vm.ds_read(addr) + v2_vm_accumulator);
 }
@@ -13073,6 +13098,8 @@ static void v2_vm_op_A4(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     uint16_t si = vm.global_r(0x42);
     di += vm.ds_read(si + 0x1995);
+    vm.si_track = si;   // orig: MOV si,ds:42h
+    vm.di_track = di;   // orig: slot address in DI (task #15)
     uint16_t addr = (uint16_t)(di + 0x14E5);
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
 }
@@ -13110,6 +13137,8 @@ static void v2_vm_op_A7(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     uint16_t si = vm.global_r(0x42);
     di += vm.ds_read(si + 0x1995);
+    vm.si_track = si;   // orig: MOV si,ds:42h
+    vm.di_track = di;   // orig: slot address in DI (task #15)
     uint16_t addr = (uint16_t)(di + 0x14E5);
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
 }
@@ -13180,6 +13209,8 @@ static void v2_vm_op_BF(V2VM& vm) {
     vm.ds_write(0x372, 6);
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.si_track = filter;   // orig si=byte; 15fb1 is PUSH si,di balanced
+    vm.di_track = di;
     vm.carry = v2_vm_sub_15fb1(vm, filter, di);
     vm.ds_write(0x372, saved);
     // off_30C8E[0]: carry → jump, !carry → skip 2
@@ -14454,6 +14485,7 @@ static void v2_vm_op_58(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     di += vm.ds_read(vm.global_r(0x42) + 0x1995);
     vm.ds_write((uint16_t)(di + 0x14E5), v2_vm_accumulator);
+    vm.di_track = di;   // orig: slot address in DI (task #15)
 }
 
 // 0x5A (sub_14704): Add acc to value at address. 2 bytes.
@@ -14488,6 +14520,7 @@ static void v2_vm_op_67(V2VM& vm) {
     di += vm.ds_read(vm.global_r(0x42) + 0x1995);
     uint16_t addr = (uint16_t)(di + 0x14E5);
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
+    vm.di_track = di;   // orig: slot address in DI (task #15)
 }
 
 // 0x18 (sub_14409): Set velocity + parent ref. 2 bytes (two signed bytes).
@@ -14550,6 +14583,7 @@ static void v2_vm_op_load_acc_indexed_1995(V2VM& vm) {
     uint16_t obj = vm.global_r(0x42);
     di += *(uint16_t*)(vm.shadow +obj + 0x1995);
     v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(di + 0x14E5));
+    vm.di_track = di;   // orig: slot address in DI (task #15)
 }
 
 // 0x57 (sub_146a3): Store acc to address. 2 bytes.
@@ -15506,6 +15540,7 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         uint8_t idx = vm.read_u8();
         uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
         uint16_t target = field_off + vm.global_r(0x42);
+        vm.si_track = target;          // orig leaves the slot base in SI
         vm.ds_write(target + 0x14E5, ax_val);
         break;
     }
@@ -15513,6 +15548,7 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
     case 2: { // loc_154e1: direct addr write, 2 bytes
         // MOV si, es:[bx]; ADD bx,2; POP ax; MOV [si], ax
         uint16_t addr = vm.read_u16();
+        vm.si_track = addr;            // orig leaves the address in SI
         vm.ds_write(addr, ax_val);
         break;
     }
@@ -15524,6 +15560,8 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
         uint16_t si_obj = vm.global_r(0x42);
         uint16_t di_addr = field_off + vm.ds_read(si_obj + 0x1995);
+        vm.si_track = si_obj;          // orig: MOV si,ds:42h
+        vm.di_track = di_addr;         // orig: field address left in DI
         vm.ds_write(di_addr + 0x14E5, ax_val);
         break;
     }
@@ -15536,6 +15574,7 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         // the object's script-resume slot. Normal RETN afterwards (the pop
         // rebalanced the frame) — a fully deterministic, clean channel.
         uint16_t si_obj = vm.global_r(0x42);
+        vm.si_track = si_obj;          // orig sub_142b7: MOV si,ds:42h
         vm.ds_write(si_obj + 0x132D, vm.pc);
         (void)ax_val;   // the popped value is discarded by the orig too
         break;
@@ -15719,6 +15758,7 @@ static void v2_vm_op_16(V2VM& vm) {
 
     // Second dispatch: si = ds:0x6E, then sub_154bf (mode >> 3)
     v2_vm_sub_154bf(vm, vm.ds_read(0x6E), mode >> 3);
+    vm.di_track = di;   // orig: di=[0x42] from entry; setters leave DI alone
 }
 
 // 0xA3 (sub_14d3d): conditional OR mask to DS address. 3 bytes (1 byte idx + 2 byte addr).
