@@ -10024,6 +10024,7 @@ static void v2_vm_sub_136a0(V2VM& vm, uint16_t si) {
             vm.ds_write((uint16_t)(di + 0x114D), 0x202);              // [di+114Dh] = 202h
             di += 2;
         } while ((int16_t)di < (int16_t)cx);                          // CMP di,cx / JL
+        vm.di_track = di;   // loop exit register (task #15); gate path leaves DI
     }
 }
 
@@ -10055,6 +10056,7 @@ static void v2_vm_sub_13757(V2VM& vm, uint16_t si) {
             vm.ds_write((uint16_t)(di + 0x114D), 0x202);              // [di+114Dh] = 202h
             di += 2;
         } while ((int16_t)di < (int16_t)cx);                          // CMP di,cx / JL
+        vm.di_track = di;   // loop exit register (task #15); gate path leaves DI
     }
 }
 
@@ -15171,6 +15173,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
     uint16_t di = vm.global_r(0x42);
 
     if (state == 0) {
+        vm.di_track = di;   // orig 0x566B: MOV di,ds:42h (task #15)
         // loc_1566a: check if collision bit was previously set
         uint16_t si_38e = vm.global_r(0x38E);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
@@ -15192,6 +15195,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
     }
 
     // state < 0 (loc_155e5): bounding box collision check
+    vm.di_track = di;   // orig 0x55ED: MOV di,ds:42h (state>0 path leaves DI)
     // Read bounding box of current object → write to DS scratch [34]-[3A]
     uint16_t x_left  = vm.ds_read(di + 0x1535);
     vm.ds_write(0x34, x_left);                     // MOV ds:34h, ax
@@ -15239,6 +15243,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     if (state == 0) {
         // loc_15754: ADD bx,2; check bit in [di+0x13F5]
         vm.pc += 2;
+        vm.di_track = di;   // orig 0x5757: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(0x38E);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
         uint16_t flags = vm.ds_read(di + 0x13F5);
@@ -15260,6 +15265,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     }
 
     // state < 0 (loc_156cf): full bounding box check, 2-byte filter
+    vm.di_track = di;   // orig 0x56D5: MOV di,ds:42h (state>0 path leaves DI)
     uint16_t dx_filter = vm.read_u16();
     uint16_t x_left  = vm.ds_read(di + 0x1535);
     uint16_t x_right = vm.ds_read(di + 0x155D);
