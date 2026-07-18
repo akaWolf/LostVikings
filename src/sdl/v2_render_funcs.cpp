@@ -787,6 +787,9 @@ extern "C" void v2_emu_df6a(uint16_t ds_val) {
 // pass: stage 0 = tiles+early (before the 165aa rotation), stage 1 = late
 // (after it, before v2_sub_1DD9C DECs). Forces the render gate open — the
 // init mirror runs outside the frame-phase context.
+// stage 0 = tiles+early; stage 1 = late_begin (arm page + cascade);
+// stage 2 = late_end — call it AFTER the init site's v2_sub_1DD9C so the
+// cascade pixels land between them (same split as the render1/2/3 sites).
 extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage) {
 #ifdef V2_RENDER_FROM_SHADOW
     bool save_in_frame = v2_vm_in_frame;
@@ -795,8 +798,10 @@ extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage) {
     if (stage == 0) {
         v2_draw_tiles(ds_val);
         v2_emu_early(ds_val);
+    } else if (stage == 1) {
+        v2_emu_late_begin(ds_val);
     } else {
-        v2_emu_late(ds_val);
+        v2_emu_late_end(ds_val);
     }
 #ifdef V2_RENDER_FROM_SHADOW
     v2_vm_in_frame = save_in_frame;
@@ -893,7 +898,30 @@ extern "C" void v2_emu_init_pages(uint16_t ds_val) {
 // Stage-1 emu sub-frame, late half — the sub_1dd9c layer + the flagged-tile
 // pass (sub_1c8f1 draws AFTER 1dd9c and clears bit0; call this BEFORE the
 // phase runs v2_sub_1C8F1 so the bits are still live).
-void v2_emu_late(uint16_t ds_val) {
+static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj);
+// Cascade hook: when != 0xFFFF, v2_sub_1DD9C (the DS/FS mirror loop) calls
+// v2_draw_one_sprite_late(this, di) at the orig CALL cs:[bp+15CB] point for
+// every object it decides to draw. This reproduces the orig SINGLE loop:
+// gate → draw pixels → DEC [114D] → sub_1cd7d OR3 cells — so the sub_1cdef
+// scan of the NEXT object in the same sub-frame sees the fresh OR3 bits
+// (in-sub-frame cascade). A separate pixel pass before the mirror missed
+// those bits (scan MISS where orig HIT — flame obj30 class, task #23).
+extern "C" uint16_t v2_dd9c_pixel_ds = 0xFFFF;
+extern "C" void v2_draw_one_sprite_late(uint16_t ds_val, int obj) {
+    // The cascade fires inside v2_sub_1DD9C, which the init mirrors run
+    // OUTSIDE the frame-phase context — force the render gate like
+    // v2_emu_init_pass does (armed v2_dd9c_pixel_ds IS the render context).
+#ifdef V2_RENDER_FROM_SHADOW
+    bool save_in_frame = v2_vm_in_frame;
+    v2_vm_in_frame = true;
+#endif
+    v2_draw_sprites_impl(ds_val, 0, obj);
+#ifdef V2_RENDER_FROM_SHADOW
+    v2_vm_in_frame = save_in_frame;
+#endif
+}
+
+void v2_emu_late_begin(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
@@ -910,7 +938,16 @@ void v2_emu_late(uint16_t ds_val) {
         v2_blit_to_page(v2_emu_page[v2_emu_slot(ds_base, 0x92F9)],
                         xe - v2_emu_base_x, ye - v2_emu_base_y);
     }
-    v2_draw_sprites_late(ds_val);
+    v2_dd9c_pixel_ds = ds_val;   // enable the per-object cascade in v2_sub_1DD9C
+}
+
+void v2_emu_late_end(uint16_t ds_val) {
+#ifdef V2_RENDER_FROM_SHADOW
+    if (!v2_vm_in_frame) return;
+#endif
+    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
+    v2_dd9c_pixel_ds = 0xFFFF;
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
     v2_draw_flagged_tiles(ds_val);
     v2_blit_to_display();
     // Traced object: checksum its 32x32 page area (world − anchor) on all
@@ -1177,10 +1214,22 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         // check this flag and branch to mirrored rendering paths.
         bool hflip = (flags & 0x200) != 0;
 
-        // Coarse bounds check — sprite pixel size
+        // Page-lane detection: writing into an emu page (world-anchored 328x184)
+        // vs the 320x176 screen buffer. The page lane must reproduce the orig
+        // write band exactly (incl. off-window pixels); the screen lane keeps
+        // per-pixel window clipping (equivalent inside the window).
+        bool to_page = false;
+        for (int t_p = 0; t_p < 3; t_p++)
+            if (buf == v2_emu_page[t_p]) to_page = true;
+
+        // Coarse bounds check — sprite pixel size.
+        // Skipped for the page lane: page writes use the exact orig clips
+        // below (raw ds:44/46, no shake); the shaken-window coarse check
+        // would drop sprites orig draws (shake delta / off-window band).
         int sprite_h = num_strips * rows_per_strip;
         int sprite_w = bytes_per_row * 4;  // 4 planes
-        if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 176 || sy0 < -sprite_h) continue;
+        if (!to_page)
+            if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 176 || sy0 < -sprite_h) continue;
 
         // Sprite data: resolve segment to shadow buffer, add offset.
         // sprite_off = 1-based offset to first data byte; mask at offset-1.
@@ -1218,6 +1267,108 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             return hflip ? sx0 + sprite_w - 1 - col : sx0 + col;
         };
 
+        // Page-lane exact bands for types 1/4 (orig seg003_648_proc /
+        // sub_1d3b2): raw ds:44/46 clips (no shake), 4-px column masks and
+        // strip-granular top/bot clip for type 4, full 8x8 write for type 1
+        // (orig has NO masks / no [114D] cut-in there — only object bounds;
+        // up to 7 off-window pixels are written).
+        int t14_top_strips = 0, t14_bot_strips = 0;
+        uint8_t t14_mask = 0xFF;
+        if (to_page && (type == 1 || type == 4)) {
+            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + 0x44);
+            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + 0x46);
+            if (type == 1) {
+                // seg003_648_proc eips 0x668..0x68E: pure bounds.
+                if (world_x >= vp_raw + 0x140) continue;   // JGE 1d154
+                if (world_x <= vp_raw - 0x07) continue;    // JLE (ax -= 0x147)
+                if (world_y >= vpy_raw + 0x0B0) continue;  // JGE 1d154
+                if (world_y <  vpy_raw - 0x07) continue;   // JL (ax -= 0xB7)
+            } else {
+                // sub_1d3b2 eips 0xBA2..0xC3A.
+                static const uint16_t v2_t4_mask_r[4] = {   // cs:[0E92]
+                    0xFFFF,0x77EE,0x33CC,0x1188};
+                static const uint16_t v2_t4_mask_l[4] = {   // cs:[0E9A]
+                    0xFFFF,0xEE77,0xCC33,0x8811};
+                uint16_t mask16 = 0xFFFF;
+                if (world_x >= vp_raw + 0x140) continue;             // JGE 1d6b1
+                if (world_x >= vp_raw + 0x131)                       // JL 1d3fd
+                    mask16 = v2_t4_mask_r[(world_x - (vp_raw + 0x131)) >> 2];
+                if (world_x <= vp_raw - 0x0F) continue;              // JLE 1d6b1
+                if (world_x < vp_raw)                                // JGE 1d425
+                    mask16 = v2_t4_mask_l[(vp_raw - world_x) >> 2];
+                if (world_y >= vpy_raw + 0x0B0) continue;            // JGE 1d6b1
+                if (world_y >= vpy_raw + 0x0A1)                      // JL 1d44c
+                    t14_bot_strips = (world_y - (vpy_raw + 0x0A1)) >> 1; // SHR 1
+                if (world_y < vpy_raw - 0x0F) continue;              // JL 1d6b1
+                if (world_y <= vpy_raw)                              // JG 1d471
+                    t14_top_strips = ((vpy_raw - world_y) & 0xFFFE) >> 1; // AND FFFE
+                t14_mask = hflip ? (uint8_t)(mask16 >> 8)            // loc_1d6d2 SHR ...,8
+                                 : (uint8_t)(mask16 & 0xFF);         // AND ...,0FFh
+            }
+        }
+
+        if (type == 2 && to_page) {
+            // Exact orig write band — loc_1d8a8 (seg003 eip 0x1078..0x1367).
+            // Clips are against RAW ds:44/46 (no shake; CRTC pan shifts the
+            // window, not the buffer writes). Horizontal clip is a column
+            // mask at 4-px granularity (cs:[1379] right / cs:[138B] left,
+            // indexed by (edge_delta)>>2; hflip uses the high mask byte via
+            // SHR word_1C830,8) — so up to 3 off-window pixels ARE written.
+            // Vertical clip is per-row: top = vpy−y (y<=vpy), bot =
+            // y−(vpy+0x91) (y>=vpy+0x91); with bot>0 the last drawn row is
+            // always vpy+0xB0 — one row below the window, also written.
+            // Data: 4 plane blocks of 9*[C4D] bytes, row = [ctrl][d0..d7];
+            // ctrl bit b → column k=7−b, color d[k] (jpt_1DA02 writers).
+            // Plane rotation by (x+0x20)&3 (jpt_1D9E8 cases + INC DI at the
+            // 3→0 wrap) is transparent in world coords: block j lands on
+            // world X = x + 4k + j; hflip (jpt_1DBE3/1DBFE: reversed plane
+            // order, mirrored write offsets [di+b] ← data [si+7−b]) lands on
+            // world X = x + 31 − (4k+j). [114D]=2 side effects and the
+            // sub_1cd7d bitmap call live in the v2_sub_1DD9C DS mirror.
+            static const uint16_t v2_t2_mask_r[8] = {  // cs:[1379]
+                0xFFFF,0x7FFE,0x3FFC,0x1FF8,0x0FF0,0x07E0,0x03C0,0x0180};
+            static const uint16_t v2_t2_mask_l[8] = {  // cs:[138B]
+                0xFFFF,0xFE7F,0xFC3F,0xF81F,0xF00F,0xE007,0xC003,0x8001};
+            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + 0x44);
+            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + 0x46);
+            int rows_total = num_strips;              // ds:[obj+0xC4D]
+            uint16_t mask16 = 0xFFFF;
+            if (world_x >= vp_raw + 0x140) continue;              // JGE 1db98
+            if (world_x >= vp_raw + 0x121)                        // JL 1d8f3
+                mask16 = v2_t2_mask_r[(world_x - (vp_raw + 0x121)) >> 2];
+            if (world_x <= vp_raw - 0x1F) continue;               // JLE 1db98
+            if (world_x < vp_raw)                                 // JGE 1d91b
+                mask16 = v2_t2_mask_l[(vp_raw - world_x) >> 2];
+            int top = 0, bot = 0;
+            if (world_y >= vpy_raw + 0x0B0) continue;             // JGE 1db98
+            if (world_y >= vpy_raw + 0x091)                       // JL 1d93d
+                bot = world_y - (vpy_raw + 0x091);
+            if (world_y < vpy_raw - 0x1F) continue;               // JL 1db98
+            if (world_y <= vpy_raw)                               // JG 1d95b
+                top = vpy_raw - world_y;
+            int cx_rows = rows_total - top - bot;
+            if (cx_rows <= 0) continue;  // orig LOOP would wrap; unreachable geometry
+            uint8_t mask8 = hflip ? (uint8_t)(mask16 >> 8)        // SHR ...,8
+                                  : (uint8_t)(mask16 & 0xFF);     // AND ...,0FFh
+            for (int j = 0; j < 4; j++) {
+                const uint8_t* blk = sprite + 9 * top + j * 9 * rows_total;
+                for (int r = 0; r < cx_rows; r++) {
+                    uint8_t ctrl = (uint8_t)(blk[r * 9] & mask8);
+                    if (!ctrl) continue;
+                    int wy = world_y + top + r;
+                    for (int b = 7; b >= 0; b--) {
+                        if (!(ctrl & (1 << b))) continue;
+                        int k = 7 - b;
+                        int s = 4 * k + j;
+                        int wx = hflip ? (world_x + 31 - s) : (world_x + s);
+                        v2_put_pixel(buf, wx - viewport_x, wy - viewport_y,
+                                     blk[r * 9 + 1 + k]);
+                    }
+                }
+            }
+            continue;
+        }
+
         uint8_t* ptr = sprite;
         for (int section = 0; section < 4; section++) {
             int plane = section;
@@ -1225,6 +1376,15 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                 uint8_t mask = ptr[0];
                 uint8_t* data = ptr + 1;
                 int base_y = sy0 + strip * rows_per_strip;
+
+                // Page lane, type 4: strip-granular top/bot clip (orig skips
+                // the clipped strips' data via the cs:[3D] 9m LUT — same as
+                // stepping ptr) and the 4-px column mask on the ctrl byte.
+                if (to_page && type == 4) {
+                    if (strip < t14_top_strips ||
+                        strip >= num_strips - t14_bot_strips) { ptr += 9; continue; }
+                    mask &= t14_mask;
+                }
 
                 if (mask) {
                     if (type == 1) {

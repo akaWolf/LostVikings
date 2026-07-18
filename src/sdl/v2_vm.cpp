@@ -580,6 +580,8 @@ extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
 extern "C" void v2_emu_init_pages(uint16_t ds_val);
 extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage);
+extern "C" uint16_t v2_dd9c_pixel_ds;   // armed page-cascade DS (0xFFFF = off)
+extern "C" void v2_draw_one_sprite_late(uint16_t ds_val, int obj);
 static uint16_t v2_current_ds_val; // DS segment value for rendering calls (defined here, used below)
 // Dirty-lag classification counters (task #20/#21) — printed by the
 // headless render-diff summary.
@@ -3270,6 +3272,15 @@ static void v2_sub_1DD9C(uint8_t* s) {
         if ((int8_t)s[di + 0x114D] < 0)
             s[di + 0x114D] = 0;
 
+        // Page-emu pixel cascade (task #23): draw this object onto the armed
+        // [92F9] page NOW — same point as the orig CALL cs:[bp+15CBh]. The
+        // orig is ONE loop per object: gate → draw → DEC → sub_1cd7d OR3, so
+        // an earlier object's OR3 cells are seen by the sub_1cdef scan of a
+        // later object in the SAME sub-frame. v2_dd9c_pixel_ds is armed by
+        // v2_emu_late_begin around the render1/2/3 call sites.
+        if (v2_dd9c_pixel_ds != 0xFFFF)
+            v2_draw_one_sprite_late(v2_dd9c_pixel_ds, di);
+
         // Rendering dispatch: VGA render by sprite type (cs:[bp+15CBh]).
         // Read handler address from dispatch table at CS:0x15CB dynamically.
         // Verified table: [0]=0000 [1]=0648 [2]=1078 [3]=0000 [4]=0B82 [5-7]=0000.
@@ -5648,6 +5659,7 @@ static void v2_sub_11080(uint8_t* s) {
         { static int _pre1=0; _pre1++; if(_pre1<=8) fprintf(stderr,"V2-115d2-PRE-DD9C1[%d]: 117D=%02X 117E=%02X flags=%04X active=%d level=%04X\n",_pre1,s[0x117D],s[0x117E],*(uint16_t*)(s+0x30+0x44D),!!(*(uint16_t*)(s+0x30+0x44D)&0x8000),*(uint16_t*)(s+0x25AD)); }
         v2_sub_1DD9C(s);
         slot2e_trace("SF1-post-DD9C");
+        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
         { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf1-%d]: mode=%02X force=%02X\n",_dd4,s[0x117D],s[0x9568]); }
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_sub_1C8F1(s, 0xFFFE);
@@ -5683,6 +5695,7 @@ static void v2_sub_11080(uint8_t* s) {
             // CALLF sub_1DD9C (line 2911 in original)
             v2_sub_1DD9C(s);
             slot2e_trace("SF2-post-DD9C");
+        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
             { static int _dd2=0; _dd2++; if(_dd2<=8) fprintf(stderr,"V2-115d2-DD9C[sf2-%d]: mode=%02X force=%02X\n",_dd2,s[0x117D],s[0x9568]); }
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
             v2_sub_1C8F1(s, 0xFFFE);
@@ -5758,6 +5771,7 @@ static void v2_sub_11080(uint8_t* s) {
             // CALLF sub_1DD9C
             v2_sub_1DD9C(s);
             slot2e_trace("SF3-post-DD9C");
+        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
             { static int _dd3=0; _dd3++; if(_dd3<=8) fprintf(stderr,"V2-115d2-DD9C[sf3-%d]: mode=%02X force=%02X\n",_dd3,s[0x117D],s[0x9568]); }
             // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
@@ -5781,6 +5795,7 @@ static void v2_sub_11080(uint8_t* s) {
         // CALLF sub_1DD9C
         v2_sub_1DD9C(s);
         slot2e_trace("SF4-post-DD9C");
+        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
         // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_sub_1C8F1(s, 0xFFFE);
@@ -18157,9 +18172,13 @@ void v2_phase_render1(uint16_t ds_val) {
     // sub_1cdef render-map-bit0 gate), evaluated BEFORE v2_sub_1DD9C DECs the
     // counters — same order as orig (gate, draw, DEC). Task #20/#21: flames
     // take the post-update phase, the mid-screen lift keeps the early one.
-    v2_emu_late(v2_current_ds_val);
-    v2_draw_sprites_late(v2_current_ds_val);
+    // Task #23 cascade order: arm page → single dd9c loop (gate → pixels →
+    // DEC → cd7d OR3 per object, orig call order) → flagged+unblit → the
+    // display-lane late repaint (render_buf) stays as before.
+    v2_emu_late_begin(v2_current_ds_val);
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_emu_late_end(v2_current_ds_val);
+    v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("p2a-sprites-late");
 
     // FS compare DISABLED — was comparing with live orig FS (timing artifact).
@@ -18336,9 +18355,13 @@ void v2_phase_render2(uint16_t ds_val) {
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
-    v2_emu_late(v2_current_ds_val);
-    v2_draw_sprites_late(v2_current_ds_val);
+    // Task #23 cascade order: arm page → single dd9c loop (gate → pixels →
+    // DEC → cd7d OR3 per object, orig call order) → flagged+unblit → the
+    // display-lane late repaint (render_buf) stays as before.
+    v2_emu_late_begin(v2_current_ds_val);
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_emu_late_end(v2_current_ds_val);
+    v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("p2b-sprites-late");
     // sub_1C8F1
     v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
@@ -18598,9 +18621,13 @@ void v2_phase_render3(uint16_t ds_val) {
     v2_game_loop_post_render(v2_vm_shadow_ds, /*include_anim_queue=*/false);
     v2_pixwatch_stage("r3-post_render");
     // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
-    v2_emu_late(v2_current_ds_val);
-    v2_draw_sprites_late(v2_current_ds_val);
+    // Task #23 cascade order: arm page → single dd9c loop (gate → pixels →
+    // DEC → cd7d OR3 per object, orig call order) → flagged+unblit → the
+    // display-lane late repaint (render_buf) stays as before.
+    v2_emu_late_begin(v2_current_ds_val);
     v2_sub_1DD9C(v2_vm_shadow_ds);
+    v2_emu_late_end(v2_current_ds_val);
+    v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("r3-1DD9C");
     // sub_1C8F1 (flagged tiles)
     v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);

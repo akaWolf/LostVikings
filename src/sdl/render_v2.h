@@ -185,7 +185,12 @@ extern void v2_draw_sprites_late(uint16_t ds_val);
 // v2_emu_late after post_render and BEFORE v2_sub_1C8F1 (needs live bit0);
 // v2_emu_df6a from v2_sub_165aa on a background-role change.
 extern void v2_emu_early(uint16_t ds_val);
-extern void v2_emu_late(uint16_t ds_val);
+// Late layer split (task #23 cascade): begin arms the [92F9] page as blit
+// target and enables the per-object pixel cascade inside v2_sub_1DD9C
+// (v2_dd9c_pixel_ds); end paints flagged tiles, disarms, blits to display.
+// Call order at the render sites: late_begin → v2_sub_1DD9C → late_end.
+extern void v2_emu_late_begin(uint16_t ds_val);
+extern void v2_emu_late_end(uint16_t ds_val);
 extern "C" void v2_emu_df6a(uint16_t ds_val);
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
 extern uint8_t v2_emu_bg[320 * 176];
