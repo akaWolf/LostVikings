@@ -3714,19 +3714,19 @@ static void v2_sub_12816(uint8_t* s) {
 // sub_1133a: init HUD from spawn table extension.
 // Reads viking type + item data for each viking from spawn table.
 static uint16_t v2_sub_1133a(uint8_t* s, uint16_t di) {
-    uint16_t ax = *(uint16_t*)(s + di + 0x25F6);
+    uint16_t ax = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
     s[0x2583] = (uint8_t)ax; // byte_2AA63
     di += 2;
     for (uint16_t si = 0; ; si++) {
-        ax = *(uint16_t*)(s + di + 0x25F6) & 0xFF;
+        ax = *(uint16_t*)(s + (uint16_t)(di + 0x25F6)) & 0xFF;
         if (ax == 0) { di++; break; }
-        s[si + 0x2584] = (uint8_t)ax;
-        s[si + 0x258C] = (uint8_t)ax;
-        s[si + 0x2594] = s[di + 0x25F7];
-        s[si + 0x259C] = s[di + 0x25F8];
+        s[(uint16_t)(si + 0x2584)] = (uint8_t)ax;
+        s[(uint16_t)(si + 0x258C)] = (uint8_t)ax;
+        s[(uint16_t)(si + 0x2594)] = s[(uint16_t)(di + 0x25F7)];
+        s[(uint16_t)(si + 0x259C)] = s[(uint16_t)(di + 0x25F8)];
         di += 3;
         // Skip sub-entries until 0xFFFF
-        while (*(uint16_t*)(s + di + 0x25F6) != 0xFFFF) di += 2;
+        while (*(uint16_t*)(s + (uint16_t)(di + 0x25F6)) != 0xFFFF) di += 2;
         di += 2;
     }
     return di;
@@ -4213,7 +4213,7 @@ loc_1154a:
 // sub_11383: find end of spawn table. Returns di = end index + 2.
 static uint16_t v2_sub_11383(uint8_t* s) {
     uint16_t di = 0;
-    while (*(uint16_t*)(s + di + 0x25F6) != 0xFFFF) di += 0x0E;
+    while (*(uint16_t*)(s + (uint16_t)(di + 0x25F6)) != 0xFFFF) di += 0x0E;   // 16-bit wrap
     return di + 2;
 }
 
@@ -11096,6 +11096,21 @@ extern "C" void v2_fntest_call_sub_12fb3(uint8_t* test_shadow) { v2_sub_12fb3(te
 extern "C" void v2_fntest_call_sub_12ca3(uint8_t* test_shadow) { v2_sub_12ca3(test_shadow); }
 extern "C" void v2_fntest_call_sub_12ce4(uint8_t* test_shadow) { v2_sub_12ce4(test_shadow); }
 extern "C" void v2_fntest_call_sub_108b8(uint8_t* test_shadow) { v2_sub_108b8(test_shadow); }
+extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_sub_12816(test_shadow); }
+// K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
+extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_sub_11383(test_shadow); }
+extern "C" uint16_t v2_fntest_call_sub_1133a(uint8_t* test_shadow, uint16_t di) { return v2_sub_1133a(test_shadow, di); }
+extern "C" uint16_t v2_fntest_call_sub_1241e(uint8_t* test_shadow, uint16_t al, uint16_t si, uint16_t di) {
+    uint16_t si2 = si;
+    v2_sub_1241e(test_shadow, (uint8_t)al, si2, di);
+    return si2;
+}
+extern "C" void v2_fntest_call_sub_12515(uint8_t* test_shadow, uint16_t ax) { v2_sub_12515(test_shadow, ax); }
+extern "C" uint16_t v2_fntest_call_sub_12529(uint8_t* test_shadow, uint16_t bx) {
+    uint16_t bx2 = bx;
+    v2_sub_12529(test_shadow, bx2);
+    return bx2;
+}
 // K2a units (44-47): level-init leaves with data-directed axes.
 extern "C" void v2_fntest_call_sub_11397(uint8_t* test_shadow) { v2_sub_11397(test_shadow); }
 extern "C" void v2_fntest_call_sub_113b0(uint8_t* test_shadow) { v2_sub_113b0(test_shadow); }

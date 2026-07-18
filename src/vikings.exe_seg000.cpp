@@ -120,6 +120,12 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 45: return (void*)&sub_113b0;   // K2a: scroll limits from map dims
     case 46: return (void*)&sub_113d8;   // K2a: viewport center-clamp on viking
     case 47: return (void*)&sub_116e3;   // K2a: level transition state machine
+    case 48: return (void*)&sub_11383;   // K2b: spawn-table terminator find (ret di)
+    case 49: return (void*)&sub_1133a;   // K2b: HUD init from spawn table (di in/out)
+    case 50: return (void*)&sub_1241e;   // K2b: glyph cell writer (al,si,di; ret si+1)
+    case 51: return (void*)&sub_12816;   // K2b: clear glyph list (REP STOSW 956C)
+    case 52: return (void*)&sub_12515;   // K2b: text ptr from seg001 index (ax)
+    case 53: return (void*)&sub_12529;   // K2b: text box dims from seg001 (bx in/out)
     default: return 0;
     }
 }
