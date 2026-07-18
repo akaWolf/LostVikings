@@ -5459,6 +5459,11 @@ static void v2_sub_12fc6(uint8_t* s) { v2_sub_12fc6_family(s, 0); }
 static void v2_sub_12fcb(uint8_t* s) { v2_sub_12fc6_family(s, 1); }
 static void v2_sub_12fd0(uint8_t* s) { v2_sub_12fc6_family(s, 2); }
 
+// Carries the shadow DI across objects within a VM pass (task #15): the
+// dispatcher itself never writes di, so each object's entry di is the
+// previous object's exit di / the priority-loop counter at sub_14207.
+static uint16_t v2_vm_di_track = 0;
+
 static void v2_sub_14207_init(uint8_t* ds) {
     // sub_15517 (eip 0x5517-0x552F): clear X/Y velocity for all objects
     for (int16_t si = (int16_t)*(uint16_t*)(ds + 0x372) - 2; si >= 0; si -= 2) {
@@ -5480,11 +5485,22 @@ static void v2_sub_14207(uint8_t* shadow) {
     for (uint16_t si_v = 0; si_v < *(uint16_t*)(shadow + 0x372); si_v += 2) {
         v2_vm_execute_object(shadow, si_v);
         if (*(uint16_t*)(shadow + 0x376) != 0) {
-            for (uint16_t di = 0;
-                 (int16_t)di < (int16_t)*(uint16_t*)(shadow + 0x376);   // live re-read
-                 di++) {
+            // Priority drain — orig loops on the DI REGISTER (eip 0x4224-0x4239):
+            //   MOV di,0; loc_14227: si=[di+0x378]; CALL sub_1424c; INC di;
+            //   CMP di,[0x376] (live); JL loc_14227.
+            // di lives THROUGH the call: an opcode writing di inside the
+            // drained object (ch3 field address etc.) skews the counter — the
+            // orig then exits early / indexes [di+0x378] by the skewed value.
+            // Divergence #28: v2 used an independent C counter here.
+            v2_vm_di_track = 0;                                   // MOV di,0
+            while (true) {
+                uint16_t di = v2_vm_di_track;
                 uint16_t pobj = *(uint16_t*)(shadow + (uint16_t)(di + 0x378)) & 0xFF;
-                v2_vm_execute_object(shadow, pobj);
+                v2_vm_execute_object(shadow, pobj);               // may skew di_track
+                v2_vm_di_track = (uint16_t)(v2_vm_di_track + 1);  // INC di
+                if (!((int16_t)v2_vm_di_track <
+                      (int16_t)*(uint16_t*)(shadow + 0x376)))     // live CMP/JL
+                    break;
             }
             *(uint16_t*)(shadow + 0x376) = 0;
         }
@@ -5501,6 +5517,7 @@ extern "C" void v2_fntest_call_sub_14207(uint8_t* test_shadow) {
     v2_fntest_vm_soft = 1;
     bool saved_rv = v2_replay_verify_active;
     v2_replay_verify_active = true;
+    v2_vm_di_track = 0;      // oracle io_regs enter with di=0 (task #15)
     v2_sub_14207(test_shadow);
     v2_replay_verify_active = saved_rv;
     v2_vm_acc_base = saved_acc_base;
@@ -8944,6 +8961,18 @@ struct V2VM {
     bool running;         // False when opcode 0x00 yields
     bool carry;           // Carry flag (set by animation load functions)
     int slot;             // Object slot index (obj / 2)
+    // Shadow SI register (task #15): NOT carried across opcodes — the orig
+    // dispatcher rewrites si = opcode*2 at every fetch (loc_142a6). Handlers'
+    // local si writers (channel getters, 12515 tail) update it; the op
+    // 41/44/45 ch6/7 escapes store it into [bx+0x1DA9].
+    uint16_t si_track = 0;
+    // Shadow DI register (task #15): mirrors the 8086 DI value the orig VM
+    // carries across opcodes/objects. Written by the deterministic DI writers
+    // (ch3 field addressing, search scans, per-opcode MOV di sites) and read
+    // by the ch6/7 escape paths of op 41/44/45, which store the STALE di into
+    // the command buffer word [bx+0x1DAB] (the orig continues through the
+    // wrapper writes with whatever di held at escape time).
+    uint16_t di_track = 0;
 
     // Bytecode read helpers
     uint8_t  read_u8()  {
@@ -9216,7 +9245,7 @@ static void v2_vm_ch67_ub_guard(V2VM& vm, const char* site) {
 }
 static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode);
 static bool v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode);
-static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di);
+static bool v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di);
 static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd);
 static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm);
 
@@ -11415,6 +11444,7 @@ extern "C" void v2_fntest_call_vm_exec(uint8_t* test_shadow, uint16_t si) {
     // reads real low memory — incomparable.
     bool saved_rv = v2_replay_verify_active;
     v2_replay_verify_active = true;
+    v2_vm_di_track = 0;      // oracle io_regs enter with di=0 (task #15)
     v2_vm_execute_object(test_shadow, si);
     v2_replay_verify_active = saved_rv;
     v2_vm_acc_base = saved_acc_base;
@@ -13480,10 +13510,19 @@ static void v2_vm_op_45(V2VM& vm) {
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
     bool ch_intr = false;
     uint16_t si_val = v2_vm_dispatch_30C98(vm, mode2, 0x25FF, &ch_intr);
-    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op45/125fa-X@0x25FF: RETN onto PUSHed mode word"); return; }
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op45/125fa-X@0x25FF: RETN onto PUSHed mode word (orig-UB)"); return; }
     vm.ds_write(0x6C, si_val);  // word_2854C at DS:0x006C
     uint16_t di_val = v2_vm_dispatch_30C98(vm, mode2 >> 3, 0x2609, &ch_intr);
-    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op45/125fa-Y@0x2609: opcode tail writes stale di to DS"); return; }
+    if (ch_intr) {
+        // Live Y escape (task #15): sub_12634 continues straight into the
+        // buffer writes (no sub_12613 here) with the stale registers.
+        si_val = vm.si_track;
+        di_val = vm.di_track;
+    } else {
+        vm.si_track = vm.ds_read(0x6C);    // orig 0x260C: MOV si,[0x6C]
+        vm.di_track = di_val;              // orig 0x2610: MOV di,ax
+        si_val = vm.si_track;
+    }
 
     // Command buffer write: type=0x0A, si, di, ds:0x002A
     uint16_t bx_cmd = vm.ds_read(0x218F);  // word_2A66F
@@ -14552,12 +14591,14 @@ static uint16_t v2_vm_read_indexed_field(V2VM& vm) {
     uint16_t lookup_addr = (uint16_t)(idx - 0x6CBA); // 16-bit wrap — outside shadow range
     uint16_t si = *(uint16_t*)(vm.shadow +lookup_addr);
     si += vm.global_r(0x42);
+    vm.si_track = si;               // orig ch1 leaves the field address in SI
     return vm.ds_read((uint16_t)(si + 0x14E5));
 }
 
 // sub_1549a: read 16-bit address from bytecode, dereference (consumes 2 bytes)
 static uint16_t v2_vm_read_indirect(V2VM& vm) {
     uint16_t addr = vm.read_u16();
+    vm.si_track = addr;             // orig ch2: MOV si,es:[bx] — address in SI
     return vm.ds_read(addr);
 }
 
@@ -14569,6 +14610,8 @@ static uint16_t v2_vm_read_indexed_field_1995(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
     uint16_t si = vm.global_r(0x42);
     di += vm.ds_read(si + 0x1995);
+    vm.si_track = si;               // orig ch3: MOV si,ds:42h stays in SI
+    vm.di_track = di;               // orig leaves the field address in DI
     return vm.ds_read(di + 0x14E5);
 }
 
@@ -14645,6 +14688,7 @@ static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
         uint16_t si = *(uint16_t*)(vm.shadow + (uint16_t)(idx - 0x6CBA));
         si = (uint16_t)(si + vm.global_r(0x42));
         vm.ds_write((uint16_t)(si + 0x14E5), site_ret_ip);
+        vm.si_track = si;     // escape getter leaves the store address in SI
         if (out_interrupt) *out_interrupt = true;
         return site_ret_ip;   // AX after the POP
     }
@@ -14653,6 +14697,7 @@ static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
         // 0xFF mask); POP ax (site return word); MOV [si],ax; RETN through.
         uint16_t addr = vm.read_u16();
         vm.ds_write(addr, site_ret_ip);
+        vm.si_track = addr;   // escape getter leaves the store address in SI
         if (out_interrupt) *out_interrupt = true;
         return site_ret_ip;
     }
@@ -14700,7 +14745,13 @@ static bool v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode) {
 // sub_125a3: reads 1 byte + 2 dispatches for X position
 // sub_125a3: X/Y position from bytecode.
 // Writes word_2854C (DS:0x006C). Returns si = word_2854C, di = Y result.
-static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
+// Returns true when a ch6/7 dispatch escaped the routine: the caller opcode
+// continues through its wrapper tail with the STALE si/di registers (carried
+// in vm.si_track/vm.di_track — task #15). X-site escapes are orig-UB (the
+// escape RETN lands on the PUSHed mode DATA word at 0x25A7 → jump into
+// arbitrary code); they keep the soft guard and never reach the caller
+// comparison (the oracle escapes the isolator on those inputs too).
+static bool v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
     uint8_t mode = (uint8_t)(word & 0xFF);
@@ -14708,8 +14759,9 @@ static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
     // X computation: dispatch → add obj X → sub viewport X → shr 3 → sub word_28518 → clamp
     bool ch_intr = false;
     uint16_t x_raw = v2_vm_dispatch_30C98(vm, mode, 0x25A8, &ch_intr);
-    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "125a3/X@0x25A8: RETN onto PUSHed mode word"); return; }
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "125a3/X@0x25A8: RETN onto PUSHed mode word (orig-UB)"); return true; }
     uint16_t si_obj = vm.ds_read(0x42);  // word_28522 = ds:0x42 (current obj from sub_1250b context)
+    vm.si_track = si_obj;                // orig 0x25AB: MOV si, word_28522
     int16_t ax = (int16_t)(x_raw + vm.ds_read(si_obj + 0x173D) - vm.ds_read(0x44));
     if (ax < 0) { ax = 2; }
     else {
@@ -14721,11 +14773,12 @@ static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
     vm.ds_write(0x6C, (uint16_t)ax); // word_2854C
 
     // Y computation: dispatch → add obj Y → sub viewport Y → shr 3 → sub word_2851A → clamp
-    // ch6/7 here RETN cleanly onto op_41's frame (the mode word was POPped at
-    // 0x25CD), but op_41's tail then stores the stale DI register to the
-    // command buffer — register history the register-less v2 can't reproduce.
+    // ch6/7 here RETN cleanly onto the wrapper frame (the mode word was POPped
+    // at 0x25CD): the wrapper continues with STALE registers — si from the
+    // escape getter (vm.si_track), di untouched since entry (vm.di_track).
     uint16_t y_raw = v2_vm_dispatch_30C98(vm, mode >> 3, 0x25D1, &ch_intr);
-    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "125a3/Y@0x25D1: op_41 tail writes stale di to DS"); return; }
+    if (ch_intr) return true;            // live escape — caller stores si/di_track
+    vm.si_track = si_obj;                // orig 0x25D4: MOV si, word_28522
     int16_t ay = (int16_t)(y_raw + vm.ds_read(si_obj + 0x1765) - vm.ds_read(0x46));
     if (ay < 0) { ay = 2; }
     else {
@@ -14734,8 +14787,11 @@ static void v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
         if (ay < 0) ay = 2;
         else if (ay < 2) ay = 2;
     }
-    out_si = vm.ds_read(0x6C); // word_2854C = X result
-    out_di = (uint16_t)ay;      // di = Y result
+    out_si = vm.ds_read(0x6C); // word_2854C = X result  (orig 0x25F3: MOV si,[0x6C])
+    out_di = (uint16_t)ay;      // di = Y result          (orig 0x25F7: MOV di,ax)
+    vm.si_track = out_si;
+    vm.di_track = out_di;
+    return false;
 }
 
 // 0x41 (sub_1242e): Full text/dialog display opcode.
@@ -14786,9 +14842,19 @@ static void v2_vm_op_41(V2VM& vm) {
         vm.ds_write(0x3A, w3A); // word_2851A
     }
 
-    // 5. sub_125a3: X/Y position from bytecode
-    uint16_t si_pos = 0, di_pos = 0;   // ch6/7 guards inside may return early
-    v2_vm_sub_125a3(vm, si_pos, di_pos);
+    // 5. sub_125a3: X/Y position from bytecode. A Y-site ch6/7 escape returns
+    // true with the STALE 8086 registers in vm.si_track/vm.di_track — the
+    // orig wrapper then runs sub_12613 + the buffer writes on those values
+    // (task #15 shadow-register model). X-site escapes are orig-UB and left
+    // the routine via the soft guard (fn-test skips them like the oracle).
+    uint16_t si_pos = 0, di_pos = 0;
+    bool escaped = v2_vm_sub_125a3(vm, si_pos, di_pos);
+    if (escaped) {
+        extern int v2_fntest_vm_soft;
+        if (v2_fntest_vm_soft == 3) return;   // X-site orig-UB guard fired
+        si_pos = vm.si_track;                  // live Y escape: stale registers
+        di_pos = vm.di_track;
+    }
 
     // 6. sub_12613: text bounds clamping
     {
@@ -14801,6 +14867,8 @@ static void v2_vm_op_41(V2VM& vm) {
         if ((int16_t)di_pos >= 0x16) di_pos = 0x15;
         di_pos -= w16;
     }
+    vm.si_track = si_pos;   // sub_12613 exits with the clamped values in si/di
+    vm.di_track = di_pos;
 
     // 7. Command buffer write
     {
@@ -14836,19 +14904,29 @@ static void v2_vm_op_44(V2VM& vm) {
     uint16_t val2 = v2_vm_dispatch_30C98(vm, (uint8_t)(mode_w12543 >> 3), 0x2479, &ch_intr);
     if (ch_intr) return;   // clean opcode exit
 
-    // 4. sub_125fa: simple position dispatch — writes word_2854C (0x6C)
+    // 4. sub_125fa: simple position dispatch — writes word_2854C (0x6C).
+    // Y-site ch6/7 escapes are LIVE (mode word POPped at 0x2605): the wrapper
+    // continues into sub_12613 + the buffer writes with the stale registers
+    // (si from the escape getter, di as carried — task #15). X-site escapes
+    // are orig-UB (RETN onto the PUSHed data word at 0x25FE) — soft guard.
     uint16_t si_pos = 0, di_pos = 0;
     {
         uint16_t word = *(uint16_t*)(vm.es + vm.pc);
         vm.pc += 1;
         uint8_t mode = (uint8_t)(word & 0xFF);
         uint16_t x_val = v2_vm_dispatch_30C98(vm, mode, 0x25FF, &ch_intr);
-        if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op44/125fa-X@0x25FF: RETN onto PUSHed mode word"); return; }
+        if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op44/125fa-X@0x25FF: RETN onto PUSHed mode word (orig-UB)"); return; }
         vm.ds_write(0x6C, x_val); // word_2854C
         uint16_t y_val = v2_vm_dispatch_30C98(vm, mode >> 3, 0x2609, &ch_intr);
-        if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op44/125fa-Y@0x2609: opcode tail writes stale di to DS"); return; }
-        si_pos = vm.ds_read(0x6C); // word_2854C
-        di_pos = y_val;
+        if (ch_intr) {
+            si_pos = vm.si_track;              // live escape: stale registers
+            di_pos = vm.di_track;
+        } else {
+            vm.si_track = vm.ds_read(0x6C);    // orig 0x260C: MOV si,[0x6C]
+            vm.di_track = y_val;               // orig 0x2610: MOV di,ax
+            si_pos = vm.si_track;
+            di_pos = y_val;
+        }
     }
 
     // 5. sub_12613: text bounds clamping
@@ -14862,6 +14940,8 @@ static void v2_vm_op_44(V2VM& vm) {
         if ((int16_t)di_pos >= 0x16) di_pos = 0x15;
         di_pos -= w16;
     }
+    vm.si_track = si_pos;   // sub_12613 exits with the clamped values
+    vm.di_track = di_pos;
 
     // 6. Command buffer write
     {
@@ -14993,7 +15073,9 @@ static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     uint16_t obj = vm.global_r(0x42);
     di += vm.ds_read(obj + 0x1995);
+    vm.di_track = di;               // orig leaves the field address in DI
     uint16_t val = vm.ds_read((uint16_t)(di + 0x14E5));
+    vm.si_track = idx1;             // orig 15445 tail: POP si → first byte
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
     return (val & mask) ? 1 : 0;
 }
@@ -16287,6 +16369,9 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 #endif
         (void)ds_hash_before_snap; (void)obj_hash_before_snap;
         uint8_t opcode = vm.read_u8();
+        // Orig loc_142A6: MOV si,es:[bx]; AND si,0xFF; SHL si,1 — si enters
+        // every handler as opcode*2 (task #15 shadow-register model).
+        vm.si_track = (uint16_t)(opcode << 1);
         // Dump bytes around 94D7 when we're about to read it
         if (pc_before == 0x94D7) {
             static int _dump94d7 = 0; if (_dump94d7 < 3) { _dump94d7++;
@@ -16401,6 +16486,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
             cnt++;
         }
     }
+    v2_vm_di_track = vm.di_track;   // persist exit di for the next object (task #15)
 }
 
 // ============================================================================
