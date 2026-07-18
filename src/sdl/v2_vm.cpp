@@ -4229,11 +4229,11 @@ static uint16_t v2_sub_11383(uint8_t* s) {
 static uint16_t v2_sub_112ae(uint8_t* s, uint16_t di_start) {
     uint16_t di = di_start;
     while (true) {
-        uint16_t chunk_id = *(uint16_t*)(s + di + 0x25F6);
+        uint16_t chunk_id = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
         if (chunk_id == 0xFFFF) break;
         uint16_t type_val = *(uint16_t*)(s + (uint16_t)(di + 2) + 0x25F6) & 0xFF;
         uint16_t dest_off = type_val * 3 + 0x7F02;
-        v2_read_chunk(chunk_id, s + dest_off, 0x10000 - dest_off);
+        v2_read_chunk(chunk_id, s + dest_off, 0x10000 - dest_off, s);  // ds_ctx: header 2BB4/2BBC (class #22)
         di += 3;
     }
     // loc_112da: palette clearing + state copy (falls through from loop end)
@@ -4249,6 +4249,34 @@ static uint16_t v2_sub_112ae(uint8_t* s, uint16_t di_start) {
     // jmp sub_10e99: palette color correction (copies 7F02 → 8202 with shading)
     v2_sub_10e99(s);
     return di + 2;
+}
+
+// sub_12d2c: invincibility/flash shake-decay timers — exact replica
+// (eips 0x2D2C..0x2D6B). Extracted from two identical inline copies
+// (POST_FLIP1 + the sub_115d2 pass block).
+static void v2_sub_12d2c(uint8_t* s) {
+    if (*(uint16_t*)(s + 0x3A2) != 0) {
+        *(uint16_t*)(s + 0x3A2) -= 1;
+        if (*(uint16_t*)(s + 0x39A) != 0)
+            *(uint16_t*)(s + 0x39E) ^= *(uint16_t*)(s + 0x39A);
+        else
+            *(uint16_t*)(s + 0x39E) = 0;
+    } else {
+        *(uint16_t*)(s + 0x39E) = 0;
+    }
+    if (*(uint16_t*)(s + 0x3A4) != 0) {
+        *(uint16_t*)(s + 0x3A4) -= 1;
+        if (*(uint16_t*)(s + 0x39C) != 0)
+            *(uint16_t*)(s + 0x3A0) ^= *(uint16_t*)(s + 0x39C);
+        else
+            *(uint16_t*)(s + 0x3A0) = 0;
+    } else {
+        *(uint16_t*)(s + 0x3A0) = 0;
+    }
+}
+extern "C" void v2_fntest_call_sub_12d2c(uint8_t* test_shadow) { v2_sub_12d2c(test_shadow); }
+extern "C" uint16_t v2_fntest_call_sub_112ae(uint8_t* test_shadow, uint16_t di) {
+    return v2_sub_112ae(test_shadow, di);
 }
 
 // sub_11784: init active viking. word_288A2=0, word_288A4=0. 0 bytes consumed.
@@ -4857,12 +4885,12 @@ static void v2_sub_12ab8(uint8_t* s) {
             {0xC, 0x467D}, {0xD, 0x497D}, {0xE, 0x507D},
         };
         for (auto& t : level_tables) {
-            v2_read_chunk(t.chunk, s + t.offset, 0x10000 - t.offset);
+            v2_read_chunk(t.chunk, s + t.offset, 0x10000 - t.offset, s);  // ds_ctx (class #22)
         }
     }
 
     // Decompress chunk 2 → ds:0x687D (password/level select table)
-    v2_read_chunk(2, s + 0x687D, 0x10000 - 0x687D);
+    v2_read_chunk(2, s + 0x687D, 0x10000 - 0x687D, s);  // ds_ctx (class #22)
 
     // Debug: dump password table (37 levels × 4 bytes at ds:0x85A5..0x8639).
     // Orig sub_12829 reads bytes here with mask 0x7F → ASCII.
@@ -5988,7 +6016,7 @@ static void v2_load_template(uint8_t* shadow) {
     }
 
     // Load level chunk → DS at offset 0x25B3 (level header)
-    uint32_t lsz = v2_read_chunk(level_chunk, shadow + 0x25B3, 0x10000 - 0x25B3);
+    uint32_t lsz = v2_read_chunk(level_chunk, shadow + 0x25B3, 0x10000 - 0x25B3, shadow);  // ds_ctx (class #22)
     printf("V2-TEMPLATE: loaded level chunk %d bytes. byte_2AA9A(0x25BA)=%02X, level_id=%04X\n",
            lsz, shadow[0x25BA], *(uint16_t*)(shadow + 0x25AD));
 }
@@ -17168,26 +17196,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // sub_12fc6(bx=0) is already called in POST-VM (v2_game_loop_post_vm).
         v2_sub_12fcb(s);
         // sub_12d2c: invincibility/flash timer (called from eip 0x0080)
-        // Timer 1: DEC ds:0x3A2, if nonzero XOR ds:0x39E with ds:0x39A; if zero ds:0x39E=0
-        // Timer 2: DEC ds:0x3A4, if nonzero XOR ds:0x3A0 with ds:0x39C; if zero ds:0x3A0=0
-        if (*(uint16_t*)(s + 0x3A2) != 0) {
-            *(uint16_t*)(s + 0x3A2) -= 1;
-            if (*(uint16_t*)(s + 0x39A) != 0)
-                *(uint16_t*)(s + 0x39E) ^= *(uint16_t*)(s + 0x39A);
-            else
-                *(uint16_t*)(s + 0x39E) = 0;
-        } else {
-            *(uint16_t*)(s + 0x39E) = 0;
-        }
-        if (*(uint16_t*)(s + 0x3A4) != 0) {
-            *(uint16_t*)(s + 0x3A4) -= 1;
-            if (*(uint16_t*)(s + 0x39C) != 0)
-                *(uint16_t*)(s + 0x3A0) ^= *(uint16_t*)(s + 0x39C);
-            else
-                *(uint16_t*)(s + 0x3A0) = 0;
-        } else {
-            *(uint16_t*)(s + 0x3A0) = 0;
-        }
+        v2_sub_12d2c(s);   // extracted (unit 69) — was an inline copy
 
         // ====== PASS 2: RENDER 2 + POST-RENDER 2 (eip 0x0086..0x00A6) ======
         // CALLF sub_1DE05 (eip 0x0086)
@@ -18405,16 +18414,7 @@ void v2_phase_post_flip1(uint16_t ds_val) {
     // sub_12fcb: sub-sprite position update, delta type 1 — consolidated.
     v2_sub_12fcb(s);
     // sub_12d2c: invincibility timer
-    if (*(uint16_t*)(s + 0x3A2) != 0) {
-        *(uint16_t*)(s + 0x3A2) -= 1;
-        if (*(uint16_t*)(s + 0x39A) != 0) *(uint16_t*)(s + 0x39E) ^= *(uint16_t*)(s + 0x39A);
-        else *(uint16_t*)(s + 0x39E) = 0;
-    } else *(uint16_t*)(s + 0x39E) = 0;
-    if (*(uint16_t*)(s + 0x3A4) != 0) {
-        *(uint16_t*)(s + 0x3A4) -= 1;
-        if (*(uint16_t*)(s + 0x39C) != 0) *(uint16_t*)(s + 0x3A0) ^= *(uint16_t*)(s + 0x39C);
-        else *(uint16_t*)(s + 0x3A0) = 0;
-    } else *(uint16_t*)(s + 0x3A0) = 0;
+    v2_sub_12d2c(s);   // extracted (unit 69) — was an inline copy
 
     // sub_10130: VGA vsync wait (eip 0x0083) — last in POST_FLIP1 block
     v2_sub_10130(s);

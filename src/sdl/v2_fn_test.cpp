@@ -86,6 +86,8 @@ extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len)
 extern "C" uint8_t* v2_fntest_fs_ptr(void);
 extern "C" void     v2_fntest_clear_fs(uint8_t fill);
 extern "C" void     v2_fntest_call_sub_14207(uint8_t* test_shadow);
+extern "C" uint16_t v2_fntest_call_sub_112ae(uint8_t* test_shadow, uint16_t di);
+extern "C" void     v2_fntest_call_sub_12d2c(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_13ba5(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11446(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di);
@@ -168,6 +170,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_13BA5 = 60, FT_SUB_11446 = 61, FT_SUB_11569 = 62,
             FT_SUB_15911 = 63, FT_SUB_12549 = 64, FT_SUB_11CBB = 65,
             FT_SUB_173C7 = 66, FT_SUB_14207 = 67,
+            FT_SUB_112AE = 68, FT_SUB_12D2C = 69,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -204,7 +207,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_15d3c", "sub_15d42", "sub_11c52",
                                  "sub_13ba5", "sub_11446", "sub_11569",
                                  "sub_15911", "sub_12549", "sub_11cbb",
-                                 "sub_173c7", "sub_14207" };
+                                 "sub_173c7", "sub_14207",
+                                 "sub_112ae", "sub_12d2c" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3464,6 +3468,9 @@ const FtLeafSpec FT_LEAVES[] = {
     { FT_SUB_11C52, v2_fntest_call_sub_11c52,
       { 0x0445, FT_AX_BLINK, 8 }, { 0x0447, FT_AX_STATE01, 3 }, false,
       ft_norm_11c52, true },
+    { FT_SUB_12D2C, v2_fntest_call_sub_12d2c,
+      { 0x03A2, FT_AX_BLINK, 8 }, { 0x03A4, FT_AX_BLINK, 8 }, false,
+      nullptr, false },
 };
 
 int ft_selftest_leaf(const FtLeafSpec& ls, uint32_t seed) {
@@ -4391,6 +4398,48 @@ int ft_selftest_sub_14207() {
     return grid.fail ? 1 : 0;
 }
 
+// ---- Unit 68: sub_112ae — viking-config chunk loads into DS -----------------
+int ft_selftest_sub_112ae() {
+    FtSynthStats grid;
+    long diff_budget = 24;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    if (!v2_fntest_set_data_file("DATA.DAT") || !v2_fntest_set_data_file_v2("DATA.DAT")) {
+        fprintf(stderr, "FNSELFTEST-SUMMARY[sub_112ae]: DATA.DAT missing — total cases=0 fail=1\n");
+        return 1;
+    }
+    // Entries: chunk_id word + type byte; types map to DS dest 0x7F02+type*3.
+    // Real small chunks: the game's own viking-config ids live in the level
+    // tables; ids 3..6 are small palette-ish chunks — enough to walk the
+    // loop, the palette-clear tail and the sub_10e99 jump.
+    struct E { uint16_t id; uint8_t type; };
+    static const E CASES[][3] = {
+        { {3, 0}, {0xFFFF, 0}, {0, 0} },
+        { {3, 0}, {4, 1}, {0xFFFF, 0} },
+        { {5, 2}, {6, 40}, {0xFFFF, 0} },
+    };
+    static const int NC[] = { 1, 2, 2 };
+    for (int c = 0; c < 3; c++) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        uint16_t p = 0x25F6;
+        for (int e = 0; e < NC[c]; e++) {
+            ft_wr16(g_synth_in, p, CASES[c][e].id);
+            g_synth_in[(uint16_t)(p + 2)] = CASES[c][e].type;
+            p = (uint16_t)(p + 3);
+        }
+        ft_wr16(g_synth_in, p, 0xFFFF);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t di_v2 = v2_fntest_call_sub_112ae(g_scratch, 0);
+        FtRegs in{};
+        ft_synth_case_regs(FT_SUB_112AE, in, di_v2, 5, "grid", grid, diff_budget);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_112ae]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
 int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
@@ -4518,6 +4567,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_11cbb")) { matched = true; rc |= ft_selftest_sub_11cbb(); }
     if (all || strstr(env, "sub_173c7")) { matched = true; rc |= ft_selftest_sub_173c7(); }
     if (all || strstr(env, "sub_14207")) { matched = true; rc |= ft_selftest_sub_14207(); }
+    if (all || strstr(env, "sub_112ae")) { matched = true; rc |= ft_selftest_sub_112ae(); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

@@ -141,6 +141,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 65: return (void*)&sub_11cbb;   // K5: pause item interaction (sound stub)
     case 66: return (void*)&sub_173c7;   // FS: render-tilemap builder (ES/GS→FS)
     case 67: return (void*)&sub_14207;   // VM: full sweep + priority drain queue
+    case 68: return (void*)&sub_112ae;   // file: viking-config chunk loads (di)
+    case 69: return (void*)&sub_12d2c;   // shake/flash decay timers
     default: return 0;
     }
 }
