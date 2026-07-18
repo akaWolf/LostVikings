@@ -64,6 +64,7 @@ extern "C" void v2_fntest_snap_game_ds(uint8_t* out64k) {
     memcpy(out64k, (db*)&m2c::m + v2_fntest_game_ds_linear(), 0x10000);
 }
 
+
 // Registry of orig near-function entry points, id-indexed (mirrors the FtId
 // enum in v2_fn_test.cpp). One line per tested function.
 extern "C" void* v2_fntest_orig_fnptr(int id) {
@@ -350,6 +351,8 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
             v2_fntest_set_alarm_ms(0);
             ok = false;
             v2_fntest_start_escapes++;
+            fprintf(stderr, "ISO-FAULT: last cs:eip=%04X:%04X ax=%04X di=%04X si=%04X\n",
+                    (unsigned)cs, (unsigned)eip, (unsigned)ax, (unsigned)di, (unsigned)si);
             m2c::shadow_stack.reset_for_fntest();
         }
     } else {
@@ -382,6 +385,18 @@ struct myDrawInfoS
   uint8_t myPixelOffset;
 };
 extern struct myDrawInfoS* myDrawInfo;
+
+// Selftest runs BEFORE game init: myDrawInfo is NULL there, and every orig
+// HUD/VGA renderer inline (drawPixel writers) dereferences it — the oracle
+// SEGV'd inside sub_1183d/118ad-class paths and the isolator counted it as
+// an escape, leaving the case blind past the fault (unit 65 exposed it; the
+// earlier "green" 11c52 cases only matched because both sides wrote zeros).
+// Give the oracle a real scratch draw target; drawBuffer writes are outside
+// DS and never compared.
+extern "C" void v2_fntest_ensure_drawinfo(void) {
+    if (!myDrawInfo)
+        myDrawInfo = (struct myDrawInfoS*)calloc(1, sizeof(struct myDrawInfoS));
+}
 
 #include "sdl/render_v2.h"
 extern void v2_swap_render_buf();

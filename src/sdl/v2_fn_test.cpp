@@ -78,6 +78,7 @@ extern "C" void     v2_fntest_call_sub_12515(uint8_t* test_shadow, uint16_t ax);
 extern "C" uint16_t v2_fntest_call_sub_12529(uint8_t* test_shadow, uint16_t bx);
 extern "C" void     v2_fntest_call_sub_13a0e(uint8_t* test_shadow);
 extern "C" void     v2_fntest_set_animdata(const uint8_t* data, uint32_t len);
+extern "C" void     v2_fntest_ensure_drawinfo(void);
 extern "C" void     v2_fntest_call_sub_13ba5(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11446(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di);
@@ -3537,9 +3538,15 @@ bool ft_synth_case_regs(FtId id, const FtRegs& in, uint16_t v2_ret,
     st.cases++;
     memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
     uint16_t regs[8] = { in.ax, in.bx, in.cx, in.dx, in.si, in.di, in.bp, 0 };
+    long se0 = v2_fntest_start_escapes, rm0 = v2_fntest_ret_mismatches();
     v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+    long se_d = v2_fntest_start_escapes - se0;
+    long rm_d = v2_fntest_ret_mismatches() - rm0;
 
     long diffs = 0;
+    if ((se_d || rm_d) && diff_budget > 0)
+        fprintf(stderr, "FNSELFTEST-UB[%s %s]: oracle start-escapes=%ld ret-mismatches=%ld\n",
+                g_name[id], group, se_d, rm_d);
     if (ret_reg >= 0 && regs[ret_reg] != v2_ret) {
         if (diff_budget > 0) {
             diff_budget--;
@@ -4191,6 +4198,10 @@ int ft_selftest_sub_11cbb() {
             memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
             ft_wr16(g_synth_in, 0x447, m);
             ft_wr16(g_synth_in, 0x3B8, inp);
+            ft_wr16(g_synth_in, 0x304, 1);   // SFX mute: the orig sub_177bb
+                                             // AIL chain is not walkable in
+                                             // the isolator (sound handles are
+                                             // a documented verify exception)
             ft_norm_11c52(g_synth_in);   // same HUD LUT domains
             ft_fill_tail(g_synth_in);
             memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
@@ -4256,6 +4267,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     fprintf(stderr, "FNSELFTEST: game DS at linear 0x%X (seg 0x%X), oracle = isolated m2c orig\n",
             ds_lin, ds_lin >> 4);
     v2_fntest_watchdog_enable = 1;   // single-threaded here: hang watchdog is safe
+    v2_fntest_ensure_drawinfo();     // oracle HUD/VGA inlines need a draw target
     v2_set_m2c_base(v2_fntest_m2c_base());   // v2 const-data reads (seg001 text
                                              // config, CS jump tables) — same
                                              // bytes the oracle reads
@@ -4328,9 +4340,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     }
     if (all || strstr(env, "sub_15911")) { matched = true; rc |= ft_selftest_sub_15911(); }
     if (all || strstr(env, "sub_12549")) { matched = true; rc |= ft_selftest_sub_12549(); }
-    // sub_11cbb parked: unit 65 exposed gate divergence (task #30) — re-enable
-    // with the fixed mirror.
-    if (strstr(env, "sub_11cbb")) { matched = true; rc |= ft_selftest_sub_11cbb(); }
+    if (all || strstr(env, "sub_11cbb")) { matched = true; rc |= ft_selftest_sub_11cbb(); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
