@@ -11790,6 +11790,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         // loc_15886: INC bx + check bit in collision flags
         vm.pc += 1;
         uint16_t di = vm.global_r(0x42);
+        vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(0x38E);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - 0x6C34));
         uint16_t flags = vm.ds_read(di + 0x13F5);
@@ -11811,6 +11812,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
     {
         uint8_t filter = vm.read_u8();
         uint16_t di = vm.global_r(0x42);
+        vm.di_track = di;   // orig 0x585F: MOV di,ds:42h; scans preserve DI (task #15)
         uint16_t filter_si = (uint16_t)filter;
         if (dbg) fprintf(stderr, "  filter_byte=%02X di=%04X\n", filter, di);
 
@@ -11853,13 +11855,14 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
         // loc_15823: INC bx + check collision bit
         vm.pc += 1;
         uint16_t di = vm.global_r(0x42);
+        vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(0x38E);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - 0x6C34));
         if (vm.ds_read(di + 0x13F5) & mask) return true;
         return false;
     }
     if (state < 0) {
-        // loc_15820: INC bx + CLC
+        // loc_15820: INC bx + CLC — DI untouched
         vm.pc += 1;
         return false;
     }
@@ -11869,6 +11872,7 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
     //   if carry → sub_15da8 + set bit; else skip. Returns CLC always.
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(0x42);
+    vm.di_track = di;   // orig 0x57FC: MOV di,ds:42h; scans preserve DI (task #15)
     // NOTE: orig sub_157eb does NOT write ds:0x3A — filter is passed via SI register.
     // v2 passes filter as parameter to v2_sub_15911 directly. Removed ds_write(0x3A).
     uint16_t out_dir = 0;
@@ -15383,6 +15387,7 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     if (state == 0) {
         // loc_157c0: INC bx + check bit
         vm.pc += 1;
+        vm.di_track = di;   // orig 0x57C1: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(0x38E);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
         if (vm.ds_read(di + 0x13F5) & mask) {
@@ -15392,7 +15397,7 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     }
 
     if (state < 0) {
-        // loc_157bd: INC bx + CLC
+        // loc_157bd: INC bx + CLC — DI untouched
         vm.pc += 1;
         return false;
     }
@@ -15401,6 +15406,8 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     // This path ALWAYS returns CLC (false). Collision is recorded via [di+13F5] bits.
     uint8_t filter = vm.read_u8();
     di = vm.global_r(0x42);
+    vm.di_track = di;   // orig 0x5799: MOV di,ds:42h; scans preserve DI
+    // (the OR [di+13F5h] tail uses it — verified by units 0-3/27-30)
     uint16_t filter_si = (uint16_t)filter; // si from bytecode
     bool found = false;
 
