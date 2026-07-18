@@ -177,14 +177,20 @@ extern void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size);
 // pre-165aa position on scroll frames while flames took the post-update one).
 extern void v2_draw_sprites_late(uint16_t ds_val);
 
-// Page emulator (task #21): byte-exact model of the orig VGA work pages for
-// the A2 sensor (background page + two flipped work pages, sub_1de05 dirty
-// latch-copies + sprite layers). v2_emu_early right after v2_draw_tiles;
-// v2_emu_late after post_render and BEFORE v2_sub_1C8F1 (needs live bit0).
+// Page emulator (task #21): byte-exact model of the orig VGA page channel for
+// the A2 sensor. THREE pages with roles from ds:0x92F7/92F9/92FB (sub_165aa
+// rotation): draw = [92F7] (sprite/flagged layers), shown = [92F9] (CRTC),
+// background = [92FB] (bit0 latch source; bit1 df6a copies on role change).
+// v2_emu_early right after v2_draw_tiles (before the 165aa rotation);
+// v2_emu_late after post_render and BEFORE v2_sub_1C8F1 (needs live bit0);
+// v2_emu_df6a from v2_sub_165aa on a background-role change.
 extern void v2_emu_early(uint16_t ds_val);
 extern void v2_emu_late(uint16_t ds_val);
-extern uint8_t v2_emu_page[2][320 * 176];
-extern int     v2_emu_cur;
+extern "C" void v2_emu_df6a(uint16_t ds_val);
+extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
+extern uint8_t v2_emu_bg[320 * 176];
+extern uint8_t v2_emu_page[3][320 * 176];
+extern int     v2_emu_cur;   // legacy (unused in the 3-page model)
 extern bool    v2_emu_valid;
 // Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
 extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col);

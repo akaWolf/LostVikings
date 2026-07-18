@@ -574,6 +574,12 @@ struct myDrawInfoS_a2_fwd {  // forward layout for myDrawInfo access
 extern struct myDrawInfoS_a2_fwd* myDrawInfo;
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count);
+extern "C" void v2_emu_ring_dump(void);
+extern "C" void v2_emu_df6a(uint16_t ds_val);
+extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
+extern "C" void v2_emu_init_pages(uint16_t ds_val);
+extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage);
+static uint16_t v2_current_ds_val; // DS segment value for rendering calls (defined here, used below)
 // Dirty-lag classification counters (task #20/#21) — printed by the
 // headless render-diff summary.
 uint64_t v2_render_lag_frames = 0, v2_render_lag_px = 0;
@@ -581,14 +587,18 @@ uint64_t v2_render_lag_frames = 0, v2_render_lag_px = 0;
 // sides. Writers: orig sub_1dd9c head (gate path), orig type-2 renderer entry,
 // v2 draw_sprites layers. Dumped on the first hard events (event-based).
 struct V2ObjTrace { uint32_t seq; char tag[12]; int16_t a, b, c, d; };
-static V2ObjTrace v2_objtrace_ring[64];
+static V2ObjTrace v2_objtrace_ring[256];
 static uint32_t v2_objtrace_n = 0;
 // Traced object index (env V2_OBJTRACE_DI, default 0x48).
 extern "C" int v2_objtrace_di = 0x48;
 extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d) {
     static int _init = 0;
-    if (!_init) { _init = 1; if (const char* e = getenv("V2_OBJTRACE_DI")) v2_objtrace_di = (int)strtol(e, 0, 0); }
-    V2ObjTrace& e = v2_objtrace_ring[v2_objtrace_n % 64];
+    if (!_init) {
+        _init = 1;
+        if (const char* e = getenv("V2_OBJTRACE_DI")) v2_objtrace_di = (int)strtol(e, 0, 0);
+        fprintf(stderr, "OBJTRACE-DI=%02X\n", v2_objtrace_di);
+    }
+    V2ObjTrace& e = v2_objtrace_ring[v2_objtrace_n % 256];
     e.seq = v2_objtrace_n++;
     snprintf(e.tag, sizeof(e.tag), "%s", tag);
     e.a = (int16_t)a; e.b = (int16_t)b; e.c = (int16_t)c; e.d = (int16_t)d;
@@ -618,11 +628,61 @@ void v2_verify_render_buf(int frame) {
     // Page emulator (task #21): compare the orig work page against the emu
     // work page of the same rotation slot — the byte-exact model of the DOS
     // page channel. v2_render_buf stays the clean display frame.
-    extern uint8_t v2_emu_page[2][320 * 176];
-    extern int v2_emu_cur;
+    extern uint8_t v2_emu_page[3][320 * 176];
     extern bool v2_emu_valid;
-    const uint8_t* v2_frame = v2_emu_valid ? v2_emu_page[v2_emu_cur] : v2_render_buf;
+    // 3-page model: compare against the SHOWN page role [92F9] — the page the
+    // orig sub-frame-3 CRTC start points at (sub_16775 adds ds:92F9 into the
+    // y_high lookup).
+    const uint8_t* v2_frame = v2_emu_valid ? v2_emu_shown(v2_current_ds_val) : v2_render_buf;
 
+    // Letter-band parity probe (task #21): per-frame checksums of the traced
+    // object's 32-row band on the orig shown snapshot vs the emu pages.
+    if (v2_objtrace_di != 0xFFFF && v2_vm_get_shadow_ds()) {
+        static int _bp = 0;
+        uint8_t* _shd = v2_vm_get_shadow_ds();
+        int16_t oy = *(int16_t*)(_shd + (uint16_t)(v2_objtrace_di + 0x74D));
+        if (oy > 0 && oy < 144 && _bp < 40) {
+            _bp++;
+            extern uint8_t v2_emu_page[3][320 * 176];
+            int so = 0, sv = 0, se[3] = {0, 0, 0};
+            for (int y = oy; y < oy + 32; y++)
+                for (int x = 0; x < 320; x += 4) {
+                    so += orig_pixels[y * 320 + x];
+                    sv += v2_frame[y * 320 + x];
+                    for (int p = 0; p < 3; p++) se[p] += v2_emu_page[p][y * 320 + x];
+                }
+            extern uint16_t v2_a2_snap_pg;
+            fprintf(stderr, "BAND[f%d]: orig=%d v2=%d | emu=%d/%d/%d snap_pg=%04X roles=%04X/%04X/%04X\n",
+                frame, so, sv, se[0], se[1], se[2], v2_a2_snap_pg,
+                *(uint16_t*)(_shd + 0x92F7),
+                *(uint16_t*)(_shd + 0x92F9),
+                *(uint16_t*)(_shd + 0x92FB));
+        }
+    }
+    // Tile-anim phase parity (task #21 f459 class): checksum tile 0xC0's 64
+    // bytes in the REAL vs SHADOW tile-graphics segments at verify time.
+    if (v2_objtrace_di != 0xFFFF && v2_m2c_base) {
+        static int _tc = 0;
+        if (_tc < 24) {
+            uint8_t* _rds = v2_m2c_base + v2_fntest_game_ds_linear();
+            uint16_t gr = *(uint16_t*)(_rds + 0x2E5F);
+            extern uint8_t* v2_vm_get_shadow_ds();
+            uint8_t* shd2 = v2_vm_get_shadow_ds();
+            uint16_t gs = shd2 ? *(uint16_t*)(shd2 + 0x2E5F) : 0;
+            extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+            uint8_t* rb = gr ? v2_m2c_base + ((uint32_t)gr << 4) : nullptr;
+            uint8_t* sb = gs ? v2_resolve_segment(gs, shd2) : nullptr;
+            if (rb && sb) {
+                int sr = 0, ss = 0;
+                for (int i = 0; i < 64; i++) { sr += rb[0xC0 * 64 + i]; ss += sb[0xC0 * 64 + i]; }
+                if (sr != ss || _tc < 4) {
+                    _tc++;
+                    fprintf(stderr, "TILE-C0[f%d]: real=%d shadow=%d%s\n",
+                        frame, sr, ss, sr != ss ? "  <-- PHASE DRIFT" : "");
+                }
+            }
+        }
+    }
     // 3-page rotation ring: last 3 distinct myOffset values. The orig dirty
     // channels repaint a changed object on [obj+0x114D]-low-byte pages only
     // (sub_1dd9c: DEC per draw; the 0x202 sub-sprite channel grants just TWO
@@ -699,8 +759,8 @@ void v2_verify_render_buf(int frame) {
         if (_od > 0) {
             _od--;
             // Dump the obj-trace ring (writers: orig 1dd9c/renderer, v2 layers)
-            for (uint32_t i = (v2_objtrace_n > 64 ? v2_objtrace_n - 64 : 0); i < v2_objtrace_n; i++) {
-                V2ObjTrace& e = v2_objtrace_ring[i % 64];
+            for (uint32_t i = (v2_objtrace_n > 256 ? v2_objtrace_n - 256 : 0); i < v2_objtrace_n; i++) {
+                V2ObjTrace& e = v2_objtrace_ring[i % 256];
                 fprintf(stderr, "  OT[%u] %s a=%d b=%d c=%d d=%d\n", e.seq, e.tag, e.a, e.b, e.c, e.d);
             }
             extern uint8_t* v2_vm_get_shadow_ds();
@@ -744,14 +804,23 @@ void v2_verify_render_buf(int frame) {
         extern uint8_t* v2_vm_get_shadow_ds();
         uint8_t* shd = v2_vm_get_shadow_ds();
         if (!shd) shd = (uint8_t*)&frame; // never: keeps printf safe
+        extern uint16_t v2_a2_snap_pg;
         fprintf(stderr, "V2-RENDER-DIVERGE[f%d]: hard=%d lag=%d (first hard @ x=%d y=%d) "
-                "orig_hash=%08X v2_hash=%08X page_off=0x%X emu=%d/%d "
+                "orig_hash=%08X v2_hash=%08X page_off=0x%X emu=%d roles=%04X/%04X/%04X snap_pg=%04X "
                 "vp=(%d,%d) shake=(%d,%d) sc=(%04X,%04X)\n",
                 frame, hard_diff, lag_diff, first_hard_x, first_hard_y, h_orig, h_v2, page_offset,
-                (int)v2_emu_valid, v2_emu_cur,
+                (int)v2_emu_valid,
+                *(uint16_t*)(shd + 0x92F7), *(uint16_t*)(shd + 0x92F9), *(uint16_t*)(shd + 0x92FB),
+                v2_a2_snap_pg,
                 *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
                 *(int16_t*)(shd + 0x39E), *(int16_t*)(shd + 0x3A0),
                 *(uint16_t*)(shd + 0x257F), *(uint16_t*)(shd + 0x2581));
+        // Emu branch-decision history for the divergent frames (task #21).
+        static int _ring_dumps = 0;
+        if (_ring_dumps < 8) {
+            _ring_dumps++;
+            v2_emu_ring_dump();
+        }
     }
     _logged++;
     first_diff_x = first_hard_x; first_diff_y = first_hard_y;
@@ -797,6 +866,23 @@ void v2_verify_render_buf(int frame) {
         static int _dumped = 0;
         static long _dump_at = -2;   // Nth divergence EVENT to dump (default 1st)
         if (_dump_at == -2) { const char* e = getenv("V2_RENDER_DIFF_DUMP_AT"); _dump_at = e ? strtol(e, 0, 0) : 1; }
+        // Multi-dump mode (V2_RENDER_DIFF_DUMP=multi): PPM pair for the first
+        // event of up to 6 distinct divergent frames, filenames carry frame no.
+        static int _multi = -1;
+        if (_multi == -1) { const char* e = getenv("V2_RENDER_DIFF_DUMP"); _multi = (e && !strcmp(e, "multi")) ? 1 : 0; }
+        if (_multi && _dumped < 6) {
+            static int _last_f = -1;
+            if (frame != _last_f) {
+                _last_f = frame;
+                _dumped++;
+                char pn[64];
+                extern void headless_write_ppm(const char*, const uint8_t*, int, int, const SDL_Color*);
+                snprintf(pn, sizeof(pn), "/tmp/v2_rdiff_f%d_orig.ppm", frame);
+                headless_write_ppm(pn, orig_pixels, 320, 176, nullptr);
+                snprintf(pn, sizeof(pn), "/tmp/v2_rdiff_f%d_v2.ppm", frame);
+                headless_write_ppm(pn, v2_frame, 320, 176, nullptr);
+            }
+        }
         if (!_dumped && getenv("V2_RENDER_DIFF_DUMP") && _logged >= _dump_at) {
             _dumped = 1;
             extern void headless_write_ppm(const char*, const uint8_t*, int, int, const SDL_Color*);
@@ -1613,7 +1699,6 @@ void v2_hw_wp_arm_ds(uint16_t /*offset*/) {}
 // Forward declarations
 static bool v2_sub_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
                           uint16_t si_anim, uint16_t pos_x, uint16_t pos_y);
-static uint16_t v2_current_ds_val; // DS segment value for rendering calls
 static void v2_vm_init_table();
 
 // ============================================================================
@@ -3746,6 +3831,11 @@ static void v2_sub_11439(uint8_t* s) {
             *(uint16_t*)(s + 0x9307) += 2;
             *(uint16_t*)(s + 0x9309) += 2;
         }
+        // Page emu (task #21): the pixel side of sub_16ded — all THREE pages
+        // get the visible tile render at level entry, BEFORE the spawn passes
+        // (sub_13ba5/sub_13a0e below) whose [114D] tickets then paint sprites
+        // through the live sub_1dd9c channel.
+        v2_emu_init_pages(v2_current_ds_val);
     }
     // jmp sub_16775: page flip (tail call)
     v2_sub_16775(s);
@@ -4114,12 +4204,15 @@ static void v2_sub_16880(uint8_t* s) {
     memset(v2_render_buf, 0, 320 * 200);
     memset(v2_hud_buf, 0, 320 * 64);
     // Page emu (task #21): the orig clear wipes ALL VGA pages — invalidate the
-    // emu work pages so they reinitialize from the new scene's background.
+    // emu pages so they reinitialize from the new scene's background (reseed
+    // on next v2_emu_early). NOTE a black-pages+valid variant was tried to
+    // close the scene-entry blind window honestly, but the very first scenes
+    // (pre-flag chunk screens) fill the pages outside the emu channels — the
+    // display fallback (emu invalid → compare v2_render_buf) covers those.
     {
-        extern uint8_t v2_emu_page[2][320 * 176];
+        extern uint8_t v2_emu_page[3][320 * 176];
         extern bool v2_emu_valid;
-        memset(v2_emu_page[0], 0, sizeof(v2_emu_page[0]));
-        memset(v2_emu_page[1], 0, sizeof(v2_emu_page[1]));
+        memset(v2_emu_page, 0, sizeof(v2_emu_page));
         v2_emu_valid = false;
     }
     // Invalidate chunk_bg backup — old level's static pixels (with old palette)
@@ -5506,8 +5599,10 @@ static void v2_sub_11080(uint8_t* s) {
         }
         // sub_1de05_dirty_update_position(NULL); // seg003 recreated
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
+        v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu: tiles + early (task #21)
         // sub_165aa + sub_16661: despawn + scroll tracking
         v2_game_loop_post_render(s);
+        v2_emu_init_pass(v2_current_ds_val, 1);   // page-emu: late layer on [92F7]
         // CALLF sub_1DD9C (1st DD9C in sub_115d2)
         { static int _pre1=0; _pre1++; if(_pre1<=8) fprintf(stderr,"V2-115d2-PRE-DD9C1[%d]: 117D=%02X 117E=%02X flags=%04X active=%d level=%04X\n",_pre1,s[0x117D],s[0x117E],*(uint16_t*)(s+0x30+0x44D),!!(*(uint16_t*)(s+0x30+0x44D)&0x8000),*(uint16_t*)(s+0x25AD)); }
         v2_sub_1DD9C(s);
@@ -5540,8 +5635,10 @@ static void v2_sub_11080(uint8_t* s) {
             v2_sub_10130(s);
             v2_sub_1DE05(s);
             fs_cmp_115d2("SF2-post-DE05");
+            v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu (task #21)
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
+            v2_emu_init_pass(v2_current_ds_val, 1);
             // CALLF sub_1DD9C (line 2911 in original)
             v2_sub_1DD9C(s);
             slot2e_trace("SF2-post-DD9C");
@@ -5612,8 +5709,10 @@ static void v2_sub_11080(uint8_t* s) {
             // CALLF sub_1DE05 (PASS 3)
             v2_sub_1DE05(s);
             fs_cmp_115d2("SF3-post-DE05");
+            v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu (task #21)
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
+            v2_emu_init_pass(v2_current_ds_val, 1);
             fs_cmp_115d2("SF3-pre-DD9C"); mode_cmp_115d2("SF3-pre-DD9C");
             // CALLF sub_1DD9C
             v2_sub_1DD9C(s);
@@ -5633,8 +5732,10 @@ static void v2_sub_11080(uint8_t* s) {
         fs_cmp_115d2("SF4-post-DE05");
         // sub_1de05_dirty_update_position(NULL); // seg003 recreated
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
+        v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu (task #21)
         // sub_165aa + sub_16661:
         v2_game_loop_post_render(s);
+        v2_emu_init_pass(v2_current_ds_val, 1);
         fs_cmp_115d2("SF4-pre-DD9C"); mode_cmp_115d2("SF4-pre-DD9C");
         // CALLF sub_1DD9C
         v2_sub_1DD9C(s);
@@ -7790,6 +7891,51 @@ void v2_record_orig_phase_snap(int phase_idx) {
     memcpy(v2_psnap_ds[phase_idx], v2_vm_real_ds_ptr, 0x10000);
     v2_psnap_valid[phase_idx] = true;
     v2_psnap_frame[phase_idx] = v2_orig_post_vm_frame;
+    // Soft watchpoint (task #21 letter classes): report which phase window
+    // rewrote the watched page byte (armed by v2_a2_snapshot_page, V2_A2_WP).
+    {
+        extern uint8_t* v2_a2_softwp_ptr;
+        static uint32_t prev_sum = 0;
+        static uint8_t* prev_ptr = nullptr;
+        static int hits = 0;
+        if (v2_a2_softwp_ptr) {
+            uint32_t cur = 0;
+            for (int i = 0; i < 32; i++) cur = cur * 131u + v2_a2_softwp_ptr[i];
+            if (v2_a2_softwp_ptr == prev_ptr && cur != prev_sum && hits < 60) {
+                hits++;
+                fprintf(stderr, "A2WP-HIT[f%d]: %08X->%08X seen at snap=%d(%s)\n",
+                    v2_orig_post_vm_frame, prev_sum, cur, phase_idx, v2_psnap_names[phase_idx]);
+            }
+            prev_sum = cur;
+            prev_ptr = v2_a2_softwp_ptr;
+        }
+        // Real FS cell word dynamics at every phase point (letter cell).
+        extern uint8_t* v2_a2_softwp_fs_ptr;
+        extern uint16_t v2_a2_softwp_fs_moff;
+        static uint16_t prev_fsw = 0xFFFF;
+        static uint8_t* prev_fsp = nullptr;
+        static int fs_hits = 0;
+        if (v2_a2_softwp_fs_ptr) {
+            uint16_t w = *(uint16_t*)v2_a2_softwp_fs_ptr;
+            if (v2_a2_softwp_fs_ptr == prev_fsp && w != prev_fsw && fs_hits < 80) {
+                fs_hits++;
+                fprintf(stderr, "A2WP-FS[f%d]: %04X->%04X at snap=%d(%s)\n",
+                    v2_orig_post_vm_frame, prev_fsw, w, phase_idx, v2_psnap_names[phase_idx]);
+            }
+            prev_fsw = w;
+            prev_fsp = v2_a2_softwp_fs_ptr;
+            // Real-vs-shadow FS drift detector for the same cell word.
+            static int drift_hits = 0;
+            if (v2_vm_shadow_fs && drift_hits < 40) {
+                uint16_t sw = *(uint16_t*)(v2_vm_shadow_fs + v2_a2_softwp_fs_moff);
+                if (sw != w) {
+                    drift_hits++;
+                    fprintf(stderr, "A2WP-FSDRIFT[f%d]: real=%04X shadow=%04X at snap=%d(%s)\n",
+                        v2_orig_post_vm_frame, w, sw, phase_idx, v2_psnap_names[phase_idx]);
+                }
+            }
+        }
+    }
 }
 
 // Compare v2 shadow against snapshot for previous phase. Dumps first divergence
@@ -8300,6 +8446,9 @@ static void v2_sub_165aa(uint8_t* shadow) {
         if (dx != *(uint16_t*)(shadow + 0x92FB)) {
             // Original: CALLF sub_1DF6A (position copy + VGA redraw)
             v2_sub_1DF6A(shadow);
+            // Page-emu pixel side of sub_1df6a: bit1 cells shown→background
+            // page (task #21) — same call order as the orig CALLF.
+            v2_emu_df6a(v2_current_ds_val);
             // Original: MOV byte ptr ds:9568h, 1
             shadow[0x9568] = 1;
         }

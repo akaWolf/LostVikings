@@ -120,7 +120,7 @@ extern "C" void v2_fntest_reset_orig_dac(void) {
 
 // A2 page snapshot hook (task #21) — defined in render.cpp, called at the
 // 3rd-sub-frame sub_16775 site in the main game loop below.
-extern "C" void v2_a2_snapshot_page(void);
+extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, uint32_t pixel_pan);
 // Task #21 obj-trace ring (defined in v2_vm.cpp).
 extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d);
 extern "C" int v2_objtrace_di;
@@ -387,8 +387,9 @@ void drawPixel(uint32_t offset, uint8_t color)
     }
     for (int ti = 0; ti < _ntraps; ti++) {
       if ((long)offset == _traps[ti]) {
+        extern int v2_dbg_pre_vm_iter;
         void* bt[8]; int n = backtrace(bt, 8);
-        fprintf(stderr, "DP-TRAP: off=%X color=%02X bt:", offset, color);
+        fprintf(stderr, "DP-TRAP[f%d]: off=%X color=%02X bt:", v2_dbg_pre_vm_iter, offset, color);
         for (int i = 1; i < n; i++) fprintf(stderr, " %p", bt[i]);
         fprintf(stderr, "\n");
         break;
@@ -1503,6 +1504,24 @@ bx = offset;
 //screen_offset = bx;
 myOffset = bx;
 // V2-PAGE spam — commented (1667 lines/run)
+// A2 sensor (task #21): sub-frame-3 page snapshot at the exact CRTC-latch
+// moment — same instruction stream as the OUT 3D4 pair below, DS coherent
+// with the y_offset/page_offset this myOffset was computed from.
+// Site detection via the emulated stack: m2c CALL_ pushes the CALL line's own
+// ip (asm.h:1750), so after the PUSH(cx) prologue [ss:sp+2] == 0x00D8 exactly
+// for the 3rd-sub-frame call in the main game loop. C lines placed around the
+// J(CALL(...)) execute at unrelated times (dispatch unwind) — measured: an
+// arm-flag set "before" the call was not visible inside the body, and DS
+// reads "after" the call saw the next rotation's state at sub-frame-2's
+// myOffset. Only in-body state is time-coherent.
+if (myDrawInfo_v2) {
+    dw _a2_ret_eip = *(dw*)(raddr(ss, (uint16_t)(sp + 2)));
+    if (_a2_ret_eip == 0x00D8) {
+        // Unfold from THIS body's freshly computed CRTC start + pixel pan —
+        // NOT myDrawInfo->myOffset (sub_1797b retrace latch = sub-2 value).
+        v2_a2_snapshot_page(raddr(ds, 0), (uint32_t)offset, (uint32_t)x_low_bits);
+    }
+}
 
 cs=0x1a2;eip=0x0067cb; 	X(PUSHF);	// 15462 pushf ;~ 01A2:67CB
 cs=0x1a2;eip=0x0067cc; 	T(CLI);	// 15463 cli ;~ 01A2:67CC
@@ -2432,11 +2451,10 @@ cs=0x1a2;eip=0x0000cb; 	T(MOV(ax, 0x0FFFE));	// 108 mov     ax, 0FFFEh ;~ 01A2:0
 cs=0x1a2;eip=0x0000ce; 	J(CALLF(sub_1c8f1,0));	// 109 call    sub_1C8F1 ;~ 01A2:00CE
 
 cs=0x1a2;eip=0x0000d3; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 110 call    sub_1E0C7 ;~ 01A2:00D3
+	// A2 page snapshot (task #21): taken INSIDE sub_16775 (in-body), detected
+	// by return-eip 0x00D8 on the emulated stack — C lines placed here around
+	// the J(CALL(...)) run at dispatch-unwind time, not call time (measured).
 cs=0x1a2;eip=0x0000d8; 	J(CALL(sub_16775,0));	// 111 call    sub_16775 ;~ 01A2:00D8
-	// A2 page snapshot (task #21): myOffset is exactly THIS frame's page here;
-	// by the time the v2 thread compares, this thread may already be in the
-	// next frame's sub-frame 1 (myOffset advanced) — snapshot now.
-	if (myDrawInfo_v2) v2_a2_snapshot_page();
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(8); /* RENDER3_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER3, ds); // AFTER pass 3 complete
 cs=0x1a2;eip=0x0000db; 	X(MOV(word_30c14, 0));	// 112 mov     word_30C14, 0 ;~ 01A2:00DB

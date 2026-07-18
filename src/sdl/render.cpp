@@ -53,10 +53,79 @@ extern "C" void v2_fntest_alloc_drawinfo(void) {
 // sub_16775 (eip 0xD8), where myOffset is exactly this frame's page.
 static uint8_t v2_a2_page_snap[320 * 176];
 static int     v2_a2_page_snap_valid = 0;
-extern "C" void v2_a2_snapshot_page(void) {
+// crtc_offset/pixel_pan come from the sub_16775 body locals (the freshly
+// computed sub-frame-3 CRTC start + x pan). myDrawInfo->myOffset must NOT be
+// used here: it is the retrace-latch published by sub_1797b (render callback)
+// and stably carries the SUB-2 value — the measured +1-row panorama skew.
+extern "C" int v2_objtrace_di;
+extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d);
+void v2_hw_wp_arm(uint8_t* ptr, const char* label);   // C++ linkage (v2_vm.cpp)
+uint8_t* v2_a2_softwp_ptr = nullptr;   // soft watch byte (task #21 writer hunt)
+uint8_t* v2_a2_softwp_fs_ptr = nullptr; // soft watch on the REAL FS cell word
+uint16_t v2_a2_softwp_fs_moff = 0;      // its map offset (shadow drift compare)
+uint16_t v2_a2_snap_pg = 0xFFFF;   // ds:0x92F9 at the snapshot moment (sub-3 body)
+extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, uint32_t pixel_pan) {
     if (!myDrawInfo) return;
+    if (dsb) v2_a2_snap_pg = *(const uint16_t*)(dsb + 0x92F9);
+    // Traced-object band probe (task #21): checksum the object's 32-row band
+    // on ALL THREE REAL pages via their y_high subtables — tells whether the
+    // orig background-role page carries the sprite pixels (the letter classes).
+    {
+        int tdi = v2_objtrace_di;
+        if (dsb && tdi != 0xFFFF) {
+            {
+                int16_t oy = *(const int16_t*)(dsb + (uint16_t)(tdi + 0x74D));
+                int sums[3] = {0, 0, 0};
+                static const uint16_t pgs[3] = {0, 0x34, 0x68};
+                for (int p = 0; p < 3; p++) {
+                    for (int y = oy; y < oy + 32; y++) {
+                        uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(0x89F8 + pgs[p] + (uint16_t)((y >> 3) * 2)));
+                        uint32_t rowaddr = (uint32_t)yh + (uint32_t)(y & 7) * 0x56u + 8u;
+                        uint32_t base = rowaddr * 4u;
+                        if (base + 320 > sizeof(myDrawInfo->drawBuffer)) continue;
+                        for (int x = 0; x < 320; x += 4) sums[p] += myDrawInfo->drawBuffer[base + x];
+                    }
+                }
+                v2_objtrace("o:pg", (int16_t)sums[0], (int16_t)sums[1], (int16_t)sums[2], oy);
+                // Writer hunt: soft watch on one letter pixel byte of the pg34
+                // page — v2_record_orig_phase_snap polls it at every phase
+                // point and reports the phase whose window changed the byte
+                // (env V2_A2_WP=1; perf HW breakpoints are not permitted here).
+                static int wp_armed = -1;
+                if (wp_armed == -1) wp_armed = getenv("V2_A2_WP") ? 0 : 2;
+                uint16_t ofl = *(const uint16_t*)(dsb + (uint16_t)(tdi + 0x44D));
+                if (wp_armed == 0 && (ofl & 0x8000) && oy > 0) {
+                    int16_t ox = *(const int16_t*)(dsb + (uint16_t)(tdi + 0x64D));
+                    int y = oy + 8, x = ox + 8;
+                    uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(0x89F8 + 0x34 + (uint16_t)((y >> 3) * 2)));
+                    uint32_t base = ((uint32_t)yh + (uint32_t)(y & 7) * 0x56u + 8u) * 4u + (uint32_t)x;
+                    if (base < sizeof(myDrawInfo->drawBuffer)) {
+                        extern uint8_t* v2_a2_softwp_ptr;
+                        v2_a2_softwp_ptr = myDrawInfo->drawBuffer + base;
+                        fprintf(stderr, "A2WP-ARM(soft): base=0x%X x=%d y=%d\n", base, x, y);
+                        wp_armed = 1;
+                    }
+                    // Also arm a soft watch on the REAL FS render-map word of
+                    // the letter cell — real-vs-shadow bit dynamics comparison.
+                    {
+                        extern uint8_t* v2_a2_softwp_fs_ptr;
+                        extern uint8_t* v2_m2c_base;
+                        uint16_t fsseg = *(const uint16_t*)(dsb + 0x2E69);
+                        uint16_t row = (uint16_t)(y >> 3);
+                        uint16_t rb = *(const uint16_t*)(dsb + (uint16_t)(row * 2 - 0x7098));
+                        uint16_t moff = (uint16_t)((rb + (uint16_t)(x >> 3)) * 2u);
+                        if (fsseg && v2_m2c_base) {
+                            v2_a2_softwp_fs_ptr = v2_m2c_base + (uint32_t)fsseg * 16 + moff;
+                            v2_a2_softwp_fs_moff = moff;
+                            fprintf(stderr, "A2WP-ARM(fs): moff=%04X\n", moff);
+                        }
+                    }
+                }
+            }
+        }
+    }
     for (uint32_t y = 0; y < 176; y++) {
-        uint32_t base = (myDrawInfo->myOffset + y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
+        uint32_t base = (crtc_offset + y * 0x56u) * 4u + pixel_pan;
         if (base + 320 > sizeof(myDrawInfo->drawBuffer)) { v2_a2_page_snap_valid = 0; return; }
         memcpy(v2_a2_page_snap + y * 320, myDrawInfo->drawBuffer + base, 320);
     }

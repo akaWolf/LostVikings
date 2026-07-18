@@ -2666,8 +2666,15 @@ loc_1ddd2:
 	// Task #21 ring: orig 1dd9c draws THIS object now with current 64D/74D.
 	{ if ((int)di == v2_objtrace_di) {
 	    uint16_t _ss = *(uint16_t*)raddr(ds,di+0x94D), _so = *(uint16_t*)raddr(ds,di+0x84D);
-	    uint8_t* _sp = (uint8_t*)raddr(_ss, (uint16_t)(_so - 1));
-	    int _h = 0; for (int _i = 0; _i < 32; _i++) _h += _sp[_i];
+	    uint16_t _fl = *(uint16_t*)raddr(ds,di+0x44D);
+	    int _t = _fl & 7;
+	    // full sprite size per type: t1 = 72; t2 = 4 planes * [C4D] strips *
+	    // (1 mask + 8 data); t4 = 288.
+	    int _sz = (_t == 1) ? 72 : (_t == 4) ? 288
+	              : 4 * (int)*(uint16_t*)raddr(ds,di+0x0C4D) * 9;
+	    if (_sz < 1) _sz = 1; if (_sz > 4096) _sz = 4096;
+	    uint8_t* _sp = (uint8_t*)raddr(_ss, 0);
+	    int _h = 0; for (int _i = 0; _i < _sz; _i++) _h += _sp[(uint16_t)(_so - 1 + _i)];
 	    v2_objtrace("o:dd9c", *(int16_t*)raddr(ds,di+0x64D),
 	                *(int16_t*)raddr(ds,di+0x74D),
 	                *(uint8_t*)raddr(ds,di+0x114D), _h); } }
