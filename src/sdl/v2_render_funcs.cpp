@@ -1240,7 +1240,9 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         {
             static int cmp_mismatch = 0;
             uint16_t cur_lvl = *(uint16_t*)(ds_base + 0x25AD);
-            if (cur_lvl < 38 && cmp_mismatch < 10) {
+            // real-vs-shadow compare only meaningful when orig updates real
+            // memory (V2_ONLY: dynamic segments in the snapshot buffer stay 0).
+            if (v2_vm_get_real_ds() && cur_lvl < 38 && cmp_mismatch < 10) {
                 uint8_t* real_sprite = v2_m2c_base + ((uint32_t)sprite_seg << 4) + sprite_off - 1;
                 if (memcmp(sprite, real_sprite, 32) != 0) {
                     cmp_mismatch++;

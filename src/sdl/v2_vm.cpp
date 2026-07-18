@@ -1810,7 +1810,23 @@ uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds) {
         return v2_vm_shadow_chunk + (uint32_t)(seg - chunk_base) * 16;
     }
     // Fallback to original emulated memory if available
-    if (v2_m2c_base) return v2_m2c_base + (uint32_t)seg * 16;
+    if (v2_m2c_base) {
+#ifdef V2_ONLY
+        // V2_ONLY: the fallback lands in the static-EXE snapshot buffer.
+        // Static addresses (< 0x29F00: seg001 text, CS tables) are valid data;
+        // a DYNAMIC segment here means the shadow resolve failed and the
+        // caller reads zeros — make that visible instead of silent.
+        if ((uint32_t)seg * 16 >= V2_EXE_STATIC_SIZE) {
+            static int fb_dyn = 0;
+            if (fb_dyn < 10) {
+                fb_dyn++;
+                printf("V2-RESOLVE-FALLBACK(V2_ONLY): dynamic seg 0x%04X not in "
+                       "shadow tables — returning snapshot zeros [%d/10]\n", seg, fb_dyn);
+            }
+        }
+#endif
+        return v2_m2c_base + (uint32_t)seg * 16;
+    }
     printf("V2-RESOLVE: unknown segment 0x%04X!\n", seg);
     return nullptr;
 }
@@ -5520,7 +5536,8 @@ static void v2_sub_11080(uint8_t* s) {
     v2_music_dispatch(s, 0x25B7);
     // DEBUG: check FS before and after sub_173c7
     // Also check if GS_TILEDATA matches FS data at 0x960
-    if (v2_m2c_base) {
+    // Gated on real side: prints REAL-DS data (V2_ONLY: frozen snapshot zeros).
+    if (v2_vm_real_ds_ptr) {
         uint8_t* real_ds = v2_m2c_base + ((uint32_t)v2_current_ds_val << 4);
         uint16_t fs_seg = *(uint16_t*)(real_ds + 0x2E69);
         uint8_t* rb = v2_m2c_base + (uint32_t)fs_seg * 16;
@@ -16163,11 +16180,15 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
     if (slot >= 128) return;
 
     // Record pre-animation DS hash (opcode=0xFE marker, before animation update)
+#ifndef V2_ONLY
+    // Trace records are only consumed by trace_compare (needs orig side) —
+    // skipped in V2_ONLY like the per-opcode record below (64KB memcpy each).
     { extern void v2_vm_trace_record_v2(uint16_t, uint16_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*);
       extern uint16_t v2_vm_step_per_obj[128];
       v2_vm_trace_record_v2(obj_idx, v2_vm_step_per_obj[slot], 0xFE,
                             0, 0, 0, 0, shadow); // opcode 0xFE = pre-anim marker
     }
+#endif
 
     // 4. Exact replica of sub_1424c loc_14270..loc_142a2
     // loc_14270: es = ds:[si+0x1355]  — ALWAYS set from code_seg

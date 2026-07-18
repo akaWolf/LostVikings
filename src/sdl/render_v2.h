@@ -29,6 +29,11 @@ struct myDrawInfoS_v2
 // Pointer to emulated memory base (m2c::m), set once at startup
 extern uint8_t* v2_m2c_base;
 
+// Size of the static EXE image (m2c::m[0..0x29F00]) captured in exe_static.bin.
+// In V2_ONLY, addresses below this hold valid snapshot data (seg001 text,
+// CS tables); addresses above are dynamic segments and stay zero.
+constexpr uint32_t V2_EXE_STATIC_SIZE = 0x29F00;
+
 // V2 rendering buffer — single persistent buffer, like drawBuffer in the original.
 // Game thread writes, v2_swap_render_buf copies to v2_display_buf for render thread.
 // Linear format: [y * 320 + x] = palette index, 320x200
@@ -131,6 +136,10 @@ extern void v2_run_animation_vm(uint16_t ds_val);  // legacy: full frame (used d
 // V2 VM shadow DS — 64KB copy of DS segment, written by v2 VM opcodes.
 // Used by v2 renderer when V2_RENDER_FROM_SHADOW is defined.
 extern uint8_t* v2_vm_get_shadow_ds();
+
+// Real DS pointer (nullptr in V2_ONLY / before first frame) — gate for
+// real-vs-shadow diagnostic compares.
+extern uint8_t* v2_vm_get_real_ds();
 
 // Sync shadow DS from real DS before rendering. Call right before v2_draw_tiles.
 extern void v2_vm_sync_for_render();

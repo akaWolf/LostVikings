@@ -8,6 +8,7 @@
 #include <cstring>
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
+#include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
 
 extern bool need_quit;
@@ -18,22 +19,7 @@ static void sigint_handler(int) {
 extern void render_init_v2(void* state);
 extern void sound_init();
 
-// v2 phase dispatcher (defined in v2_vm.cpp)
-enum V2Phase {
-    V2_PHASE_FRAME_BEGIN = 0,
-    V2_PHASE_PRE_VM = 1,
-    V2_PHASE_VM = 2,
-    V2_PHASE_POST_VM = 3,
-    V2_PHASE_RENDER1 = 4,
-    V2_PHASE_POST_FLIP1 = 5,
-    V2_PHASE_RENDER2 = 6,
-    V2_PHASE_POST_FLIP2 = 7,
-    V2_PHASE_RENDER3 = 8,
-    V2_PHASE_POST_FLIP3 = 9,
-    V2_PHASE_FRAME_END = 10
-};
-
-extern void v2_signal_phase(V2Phase phase, uint16_t ds_val);
+// v2 phase dispatcher: V2Phase enum + v2_signal_phase come from render_v2.h.
 extern void v2_set_m2c_base(void* base);
 extern void v2_vm_init_shadow_early(uint16_t ds_val);
 extern void v2_run_animation_vm(uint16_t ds_val);
@@ -52,7 +38,8 @@ namespace m2c {
 // after the C++ Initializer in vikings.exe.cpp populates it. Without this data,
 // seg001 text/menu region (+0x9480) is zero, sub_12529 reads width=0, sub_12388
 // LOOPs cx=0xFFFE = 65k iterations → hang.
-static constexpr size_t V2_EXE_STATIC_SIZE = 0x29F00;
+// V2_EXE_STATIC_SIZE comes from render_v2.h (shared with v2_resolve_segment's
+// V2_ONLY fallback classifier).
 static uint8_t v2_m2c_buf[0x100000] = {0};
 
 static void v2_load_static_data() {
