@@ -2776,17 +2776,20 @@ static void v2_sub_10e99(uint8_t* s) {
     uint8_t* source = s + 0x7F02;
     uint8_t* destination = s + 0x8202;
 
-    // Color 0: corrected
+    // Color 0: corrected. Exact 8086 model (unit 56, div #23): SUB al,off is
+    // 8-BIT; JNS clamps on the sign of the WRAPPED result (bit 7), then
+    // TEST al,0x40 saturates on bit 6 — NOT a true-difference clamp (differs
+    // when source/offset exceed 0x3F; live DAC data never does).
     {
-        int tmp = source[0] - r_off;
-        if (tmp < 0) tmp = 0; if (tmp >= 0x40) tmp = 0x3F;
-        destination[0] = (uint8_t)tmp;
-        tmp = source[1] - g_off;
-        if (tmp < 0) tmp = 0; if (tmp >= 0x40) tmp = 0x3F;
-        destination[1] = (uint8_t)tmp;
-        tmp = source[2] - b_off;
-        if (tmp < 0) tmp = 0; if (tmp >= 0x40) tmp = 0x3F;
-        destination[2] = (uint8_t)tmp;
+        uint8_t d = (uint8_t)(source[0] - r_off);
+        if (d & 0x80) d = 0; if (d & 0x40) d = 0x3F;
+        destination[0] = d;
+        d = (uint8_t)(source[1] - g_off);
+        if (d & 0x80) d = 0; if (d & 0x40) d = 0x3F;
+        destination[1] = d;
+        d = (uint8_t)(source[2] - b_off);
+        if (d & 0x80) d = 0; if (d & 0x40) d = 0x3F;
+        destination[2] = d;
     }
     // Colors 1-15: 45 raw bytes (CMP cx, 0xF1 → MOV cx, 0x2D → LODSB/STOSB loop)
     memcpy(destination + 3, source + 3, 0x2D);
@@ -2796,20 +2799,20 @@ static void v2_sub_10e99(uint8_t* s) {
     // Colors 16-254: 239 corrected (MOV cx, 0xF0 → LOOP: DEC cx first, 239 iterations)
     // Color 255 is NOT processed in original (LOOP exits at cx=0 before body runs).
     for (int i = 0; i < 239; i++) {
-        int tmp = source[0] - r_off;
-        if (tmp < 0) tmp = 0;
-        if (tmp >= 0x40) tmp = 0x3F;
-        destination[0] = (uint8_t)tmp;
+        uint8_t d = (uint8_t)(source[0] - r_off);   // 8-bit SUB + JNS/TEST 0x40 (see color 0)
+        if (d & 0x80) d = 0;
+        if (d & 0x40) d = 0x3F;
+        destination[0] = d;
 
-        tmp = source[1] - g_off;
-        if (tmp < 0) tmp = 0;
-        if (tmp >= 0x40) tmp = 0x3F;
-        destination[1] = (uint8_t)tmp;
+        d = (uint8_t)(source[1] - g_off);
+        if (d & 0x80) d = 0;
+        if (d & 0x40) d = 0x3F;
+        destination[1] = d;
 
-        tmp = source[2] - b_off;
-        if (tmp < 0) tmp = 0;
-        if (tmp >= 0x40) tmp = 0x3F;
-        destination[2] = (uint8_t)tmp;
+        d = (uint8_t)(source[2] - b_off);
+        if (d & 0x80) d = 0;
+        if (d & 0x40) d = 0x3F;
+        destination[2] = d;
 
         source += 3;
         destination += 3;
@@ -11097,6 +11100,31 @@ extern "C" void v2_fntest_call_sub_12ca3(uint8_t* test_shadow) { v2_sub_12ca3(te
 extern "C" void v2_fntest_call_sub_12ce4(uint8_t* test_shadow) { v2_sub_12ce4(test_shadow); }
 extern "C" void v2_fntest_call_sub_108b8(uint8_t* test_shadow) { v2_sub_108b8(test_shadow); }
 extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_sub_12816(test_shadow); }
+// K3a units (54-59): viewport bounds, save-header+fade, DAC fade compare,
+// bbox CF twins, tab-blink.
+extern "C" void v2_fntest_call_sub_13a0e(uint8_t* test_shadow) { v2_sub_13a0e(test_shadow); }
+extern "C" void v2_fntest_call_sub_1450b(uint8_t* test_shadow, uint16_t al, uint16_t si, uint16_t di) {
+    v2_sub_1450b(test_shadow, (uint8_t)al, si, di);
+}
+extern "C" void v2_fntest_call_sub_10e99(uint8_t* test_shadow) { v2_sub_10e99(test_shadow); }
+static void v2_sub_11c52(uint8_t* s);   // defined below (tab-blink)
+extern "C" void v2_fntest_call_sub_11c52(uint8_t* test_shadow) { v2_sub_11c52(test_shadow); }
+static bool v2_sub_15d3c(V2VM& vm, uint16_t si, uint16_t di);
+static bool v2_sub_15d42(V2VM& vm, uint16_t si, uint16_t di);
+extern "C" int v2_fntest_call_sub_15d3c(uint8_t* test_shadow, uint16_t si, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    return v2_sub_15d3c(vm, si, di) ? 1 : 0;
+}
+extern "C" int v2_fntest_call_sub_15d42(uint8_t* test_shadow, uint16_t si, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    return v2_sub_15d42(vm, si, di) ? 1 : 0;
+}
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
 extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_sub_11383(test_shadow); }
 extern "C" uint16_t v2_fntest_call_sub_1133a(uint8_t* test_shadow, uint16_t di) { return v2_sub_1133a(test_shadow, di); }

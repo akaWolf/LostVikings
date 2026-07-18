@@ -126,6 +126,12 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 51: return (void*)&sub_12816;   // K2b: clear glyph list (REP STOSW 956C)
     case 52: return (void*)&sub_12515;   // K2b: text ptr from seg001 index (ax)
     case 53: return (void*)&sub_12529;   // K2b: text box dims from seg001 (bx in/out)
+    case 54: return (void*)&sub_13a0e;   // K3a: viewport bounds (139ef + 13a94 clamps)
+    case 55: return (void*)&sub_1450b;   // K3a: save header set + JMP sub_10e99
+    case 56: return (void*)&sub_10e99;   // K3a: DAC fade compare 7F02->8202
+    case 57: return (void*)&sub_15d3c;   // K3a: bbox CF check (Y from 14E5)
+    case 58: return (void*)&sub_15d42;   // K3a: bbox CF check (Y from 150D)
+    case 59: return (void*)&sub_11c52;   // K3a: tab selector blink
     default: return 0;
     }
 }

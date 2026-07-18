@@ -76,6 +76,12 @@ extern "C" uint16_t v2_fntest_call_sub_1241e(uint8_t* test_shadow, uint16_t al, 
 extern "C" void     v2_fntest_call_sub_12816(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12515(uint8_t* test_shadow, uint16_t ax);
 extern "C" uint16_t v2_fntest_call_sub_12529(uint8_t* test_shadow, uint16_t bx);
+extern "C" void     v2_fntest_call_sub_13a0e(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_1450b(uint8_t* test_shadow, uint16_t al, uint16_t si, uint16_t di);
+extern "C" void     v2_fntest_call_sub_10e99(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_11c52(uint8_t* test_shadow);
+extern "C" int      v2_fntest_call_sub_15d3c(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" int      v2_fntest_call_sub_15d42(uint8_t* test_shadow, uint16_t si, uint16_t di);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -142,6 +148,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_116E3 = 47,
             FT_SUB_11383 = 48, FT_SUB_1133A = 49, FT_SUB_1241E = 50,
             FT_SUB_12816 = 51, FT_SUB_12515 = 52, FT_SUB_12529 = 53,
+            FT_SUB_13A0E = 54, FT_SUB_1450B = 55, FT_SUB_10E99 = 56,
+            FT_SUB_15D3C = 57, FT_SUB_15D42 = 58, FT_SUB_11C52 = 59,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -173,7 +181,9 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_11397", "sub_113b0", "sub_113d8",
                                  "sub_116e3",
                                  "sub_11383", "sub_1133a", "sub_1241e",
-                                 "sub_12816", "sub_12515", "sub_12529" };
+                                 "sub_12816", "sub_12515", "sub_12529",
+                                 "sub_13a0e", "sub_1450b", "sub_10e99",
+                                 "sub_15d3c", "sub_15d42", "sub_11c52" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3361,8 +3371,15 @@ bool ft_synth_case_clear(const FtClearSpec& cs, const char* group,
 //                 compare (class #16 overflow zone X in [0x8000..0x809F])
 //   47 sub_116e3: transition state machine on [25C9] level / [3CC] state
 struct FtLeafAxis { uint16_t addr; const uint16_t* vals; int n; };
+typedef void (*FtLeafNorm)(uint8_t* img);
 struct FtLeafSpec { FtId id; FtClearCall call; FtLeafAxis ax1, ax2;
-                    bool needs_file; };   // unit's orig tail reads DATA.DAT
+                    bool needs_file;      // unit's orig tail reads DATA.DAT
+                    FtLeafNorm norm;      // input-domain fixup (call contract)
+                    bool fuzz_base_only; };  // fuzz = base image + axes only
+                    // (for units whose orig callees walk DS LUTs — full-DS
+                    // noise would only measure those renderers on garbage
+                    // tables, outside this function's contract; the axis grid
+                    // already covers every branch of the function itself)
 
 const uint16_t FT_AX_11397_DI[] = { 0, 2, 4, 8, 0x10, 0x14, 0x7AC2, 0x7AC4,
                                     0x8000, 0xFFFE };
@@ -3375,21 +3392,47 @@ const uint16_t FT_AX_VIKY[]     = { 0, 0x57, 0x58, 0x59, 0xB0, 0x7FFF,
 const uint16_t FT_AX_LEVEL[]    = { 0, 0x27, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
                                     0x30, 0x3E };
 const uint16_t FT_AX_STATE[]    = { 0, 1, 2, 0x8000, 0x8001, 0x8002, 0xFFFF };
+const uint16_t FT_AX_FADE[]     = { 0x0000, 0x0101, 0x3F3F, 0x4040, 0x7F7F,
+                                    0xFF00, 0x00FF, 0xFFFF };
+const uint16_t FT_AX_BLINK[]    = { 0, 1, 0x10, 0x11, 0x1F, 0x20, 0x21, 0xFF };
+const uint16_t FT_AX_STATE01[]  = { 0, 1, 2 };
+
+// sub_11c52 fuzz domain: the orig callees sub_1183d/sub_120d1/sub_118ad are
+// renderers indexing LUTs by DS fields — the call contract is HUD slot 0..11
+// ([443]), item id 0..0x17 ([441]), viking selector indices 0..5
+// ([414/416/418]). Random values there walk garbage pointers inside the
+// oracle's renderer (aborting it mid-way) — outside the function's domain;
+// pin them into range after each noise fill.
+void ft_norm_11c52(uint8_t* img) {
+    ft_wr16(img, 0x0443, (uint16_t)(*(uint16_t*)(img + 0x0443) % 12));
+    ft_wr16(img, 0x0441, (uint16_t)(*(uint16_t*)(img + 0x0441) % 0x18));
+    ft_wr16(img, 0x0414, (uint16_t)(*(uint16_t*)(img + 0x0414) % 6));
+    ft_wr16(img, 0x0416, (uint16_t)(*(uint16_t*)(img + 0x0416) % 6));
+    ft_wr16(img, 0x0418, (uint16_t)(*(uint16_t*)(img + 0x0418) % 6));
+}
 
 const FtLeafSpec FT_LEAVES[] = {
     { FT_SUB_11397, v2_fntest_call_sub_11397,
-      { 0x25CB, FT_AX_11397_DI, 10 }, { 0, nullptr, 0 }, false },
+      { 0x25CB, FT_AX_11397_DI, 10 }, { 0, nullptr, 0 }, false, nullptr, false },
     { FT_SUB_113B0, v2_fntest_call_sub_113b0,
-      { 0x25DC, FT_AX_DIMS, 10 }, { 0x25DE, FT_AX_DIMS, 10 }, false },
+      { 0x25DC, FT_AX_DIMS, 10 }, { 0x25DE, FT_AX_DIMS, 10 }, false, nullptr, false },
     { FT_SUB_113D8, v2_fntest_call_sub_113d8,
-      { 0x173D, FT_AX_VIKX, 10 }, { 0x1765, FT_AX_VIKY, 10 }, false },
+      { 0x173D, FT_AX_VIKX, 10 }, { 0x1765, FT_AX_VIKY, 10 }, false, nullptr, false },
     // 116e3's transition tail CALLs sub_10982 (DATA.DAT read into ds:2193) —
     // both sides need the same file context (class-D setup); fuzz images are
     // skipped for it (random [3D4] -> random chunk ids would just measure the
     // file-reader units 31/32 again on garbage ids, and a random [2BB2]
     // handle would diverge on the DOS-handle emulation, not this function).
     { FT_SUB_116E3, v2_fntest_call_sub_116e3,
-      { 0x25C9, FT_AX_LEVEL, 9 }, { 0x3CC, FT_AX_STATE, 7 }, true },
+      { 0x25C9, FT_AX_LEVEL, 9 }, { 0x3CC, FT_AX_STATE, 7 }, true, nullptr, false },
+    // K3a leaves: fade byte pairs / blink counters. (13a0e moved to the
+    // spawn-family unit — task #29: its orig tail runs the 13ae0/13809
+    // spawn loop, which the plain v2_sub_13a0e mirror does not carry.)
+    { FT_SUB_10E99, v2_fntest_call_sub_10e99,
+      { 0x0342, FT_AX_FADE, 8 }, { 0x0344, FT_AX_FADE, 8 }, false, nullptr, false },
+    { FT_SUB_11C52, v2_fntest_call_sub_11c52,
+      { 0x0445, FT_AX_BLINK, 8 }, { 0x0447, FT_AX_STATE01, 3 }, false,
+      ft_norm_11c52, true },
 };
 
 int ft_selftest_leaf(const FtLeafSpec& ls, uint32_t seed) {
@@ -3415,6 +3458,7 @@ int ft_selftest_leaf(const FtLeafSpec& ls, uint32_t seed) {
             memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
             if (ls.ax1.n) ft_wr16(g_synth_in, ls.ax1.addr, ls.ax1.vals[i]);
             if (ls.ax2.n) ft_wr16(g_synth_in, ls.ax2.addr, ls.ax2.vals[j]);
+            if (ls.norm) ls.norm(g_synth_in);
             ft_synth_case_clear(cs, "grid", grid, diff_budget);
         }
 
@@ -3423,6 +3467,9 @@ int ft_selftest_leaf(const FtLeafSpec& ls, uint32_t seed) {
     // the FT_LEAVES note).
     FtRng rng(seed);
     for (int i = 0; i < (ls.needs_file ? 0 : 48); i++) {
+        if (ls.fuzz_base_only)
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        else
         for (uint32_t a = 0; a < 0x10000; a += 2) {
             uint16_t w = rng.w();
             g_synth_in[a] = (uint8_t)w; g_synth_in[a + 1] = (uint8_t)(w >> 8);
@@ -3431,11 +3478,14 @@ int ft_selftest_leaf(const FtLeafSpec& ls, uint32_t seed) {
                               ls.ax1.vals[rng.next() % (uint32_t)ls.ax1.n]);
         if (ls.ax2.n) ft_wr16(g_synth_in, ls.ax2.addr,
                               ls.ax2.vals[rng.next() % (uint32_t)ls.ax2.n]);
+        if (ls.norm) ls.norm(g_synth_in);
         ft_synth_case_clear(cs, "fuzz-dir", fuzz, diff_budget);
+        if (ls.fuzz_base_only) continue;   // base+axes only (see FT_LEAVES note)
         for (uint32_t a = 0; a < 0x10000; a += 2) {
             uint16_t w = rng.w();
             g_synth_in[a] = (uint8_t)w; g_synth_in[a + 1] = (uint8_t)(w >> 8);
         }
+        if (ls.norm) ls.norm(g_synth_in);
         ft_synth_case_clear(cs, "fuzz", fuzz, diff_budget);
     }
 
@@ -3639,6 +3689,99 @@ int ft_selftest_textcfg(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- K3a: sub_1450b (save header regs + sub_10e99 fade tail) --------------
+int ft_selftest_sub_1450b() {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    static const uint16_t VALS[] = { 0, 1, 2, 5, 0x0F, 0x10, 0x7F, 0x80, 0xFF };
+    for (uint16_t a : VALS) for (uint16_t si : VALS) for (uint16_t di : VALS) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_1450b(g_scratch, a, si, di);
+        FtRegs in{}; in.ax = a; in.si = si; in.di = di;
+        ft_synth_case_regs(FT_SUB_1450B, in, 0, -1, "grid", grid, diff_budget);
+    }
+    FtRng rng(0x1450B001u);
+    for (int i = 0; i < 2000; i++) {
+        for (uint32_t a2 = 0x7EF0; a2 < 0x8300; a2 += 2) {   // noisy DAC zone
+            uint16_t w = rng.w();
+            g_synth_in[a2] = (uint8_t)w; g_synth_in[a2 + 1] = (uint8_t)(w >> 8);
+        }
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t a = rng.w(), si2 = rng.w(), di2 = rng.w();
+        v2_fntest_call_sub_1450b(g_scratch, a, si2, di2);
+        FtRegs in{}; in.ax = a; in.si = si2; in.di = di2;
+        ft_synth_case_regs(FT_SUB_1450B, in, 0, -1, "fuzz", fuzz, diff_budget);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_1450b]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- K3a: sub_15d3c / sub_15d42 (bbox CF twins; CF via io_regs[7]) ---------
+int ft_selftest_bbox2(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    // Directed field sets for [obj+14E5/150D/1535/155D] pairs: overlapping,
+    // touching (the DEC ax edge), disjoint, sign borders.
+    static const uint16_t P[][4] = {   // {start, end} for di and si objects
+        { 0x0100, 0x0110, 0x0100, 0x0110 },   // identical
+        { 0x0100, 0x0110, 0x0110, 0x0120 },   // touching (end==start; DEC edge)
+        { 0x0100, 0x0110, 0x0111, 0x0120 },   // disjoint by 1
+        { 0x0100, 0x0110, 0x010F, 0x0120 },   // overlap by 1
+        { 0x0000, 0x0000, 0x0000, 0x0000 },   // degenerate zeros
+        { 0x7FF0, 0x8010, 0x7FF8, 0x8008 },   // sign border spans
+        { 0xFFF0, 0x0010, 0x0000, 0x0008 },   // wrap-looking values
+    };
+    uint16_t di = 2, si = 4;
+    for (auto& px : P) for (auto& py : P) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x14E5), px[0]);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x150D), px[1]);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x14E5), px[2]);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x150D), px[3]);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1535), py[0]);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x155D), py[1]);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x1535), py[2]);
+        ft_wr16(g_synth_in, (uint16_t)(si + 0x155D), py[3]);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = (id == FT_SUB_15D3C)
+                 ? v2_fntest_call_sub_15d3c(g_scratch, si, di)
+                 : v2_fntest_call_sub_15d42(g_scratch, si, di);
+        FtRegs in{}; in.si = si; in.di = di;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, "grid", grid, diff_budget);
+    }
+    FtRng rng(seed);
+    for (int i = 0; i < 6000; i++) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        uint16_t d2 = (uint16_t)((rng.next() % 20) * 2);
+        uint16_t s2 = (uint16_t)((rng.next() % 20) * 2);
+        static const uint16_t BASES[4] = { 0x14E5, 0x150D, 0x1535, 0x155D };
+        for (int b = 0; b < 4; b++) {
+            ft_wr16(g_synth_in, (uint16_t)(d2 + BASES[b]), rng.w());
+            ft_wr16(g_synth_in, (uint16_t)(s2 + BASES[b]), rng.w());
+        }
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = (id == FT_SUB_15D3C)
+                 ? v2_fntest_call_sub_15d3c(g_scratch, s2, d2)
+                 : v2_fntest_call_sub_15d42(g_scratch, s2, d2);
+        FtRegs in{}; in.si = s2; in.di = d2;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, "fuzz", fuzz, diff_budget);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
@@ -3755,6 +3898,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_1241e")) { matched = true; rc |= ft_selftest_sub_1241e(); }
     if (all || strstr(env, "sub_12515")) { matched = true; rc |= ft_selftest_textcfg(FT_SUB_12515, 0x12515001u); }
     if (all || strstr(env, "sub_12529")) { matched = true; rc |= ft_selftest_textcfg(FT_SUB_12529, 0x12529001u); }
+    if (all || strstr(env, "sub_1450b")) { matched = true; rc |= ft_selftest_sub_1450b(); }
+    if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
+    if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
         return 1;
