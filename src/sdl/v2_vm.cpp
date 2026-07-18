@@ -17010,6 +17010,16 @@ static void v2_do_render() {
 // ======================================================================
 int v2_pageflip_count = 0;
 static void v2_sub_16775(uint8_t* s) {
+    // Cross-mode pixel parity probe (task #25): env V2_FRAMESUM=1 prints a
+    // CRC of the v2 frame at every page flip — the SAME call sites exist in
+    // the default and V2_ONLY builds, so the two streams compare 1:1.
+    if (getenv("V2_FRAMESUM")) {
+        static long _fsn = 0;
+        uint32_t h = 2166136261u;
+        for (uint32_t i = 0; i < 320u * 176u; i++)
+            h = (h ^ v2_render_buf[i]) * 16777619u;
+        fprintf(stderr, "V2-FRAMESUM[%ld]=%08X\n", ++_fsn, h);
+    }
     v2_pageflip_count++;
     // VGA page flip registers:
     // PUSHF; CLI;
