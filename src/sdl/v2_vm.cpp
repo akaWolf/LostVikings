@@ -648,7 +648,7 @@ void v2_verify_render_buf(int frame) {
             int ye = (int)vy + ysh; if (ye > (int)ylv) ye = (int)vy - ysh;
             oy = (int)oy_w - ye;
         }
-        if (oy > 0 && oy < 144 && _bp < 40) {
+        if (oy > 0 && oy < 144 && _bp < 200) {
             _bp++;
             int so = 0, sv = 0, sd = 0, se[3] = {0, 0, 0};
             for (int y = oy; y < oy + 32; y++)
@@ -833,9 +833,34 @@ void v2_verify_render_buf(int frame) {
                 *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
                 *(int16_t*)(shd + 0x39E), *(int16_t*)(shd + 0x3A0),
                 *(uint16_t*)(shd + 0x257F), *(uint16_t*)(shd + 0x2581));
+        // Task #23: pixel dump of the traced object's 24x16 area, orig vs v2,
+        // on divergent frames (event-based, first 3).
+        if (v2_objtrace_di != 0xFFFF) {
+            static int _adump = 0;
+            uint8_t* shd2 = v2_vm_get_shadow_ds();
+            if (shd2 && _adump < 3) {
+                int16_t ox = *(int16_t*)(shd2 + (uint16_t)(v2_objtrace_di + 0x64D));
+                int16_t oyw = *(int16_t*)(shd2 + (uint16_t)(v2_objtrace_di + 0x74D));
+                int16_t vx = *(int16_t*)(shd2 + 0x44), vy = *(int16_t*)(shd2 + 0x46);
+                int sx = ox - vx, sy = oyw - vy;
+                if (first_hard_x >= sx - 8 && first_hard_x < sx + 40 &&
+                    first_hard_y >= sy - 8 && first_hard_y < sy + 40) {
+                    _adump++;
+                    for (int yy = 0; yy < 16; yy++) {
+                        int Y = sy + yy;
+                        if (Y < 0 || Y >= 176) continue;
+                        fprintf(stderr, "  A23-o y=%d:", Y);
+                        for (int xx = 0; xx < 24; xx++) fprintf(stderr, " %02X", orig_pixels[Y*320 + sx + xx]);
+                        fprintf(stderr, "\n  A23-v y=%d:", Y);
+                        for (int xx = 0; xx < 24; xx++) fprintf(stderr, " %02X", v2_frame[Y*320 + sx + xx]);
+                        fprintf(stderr, "\n");
+                    }
+                }
+            }
+        }
         // Emu branch-decision history for the divergent frames (task #21).
         static int _ring_dumps = 0;
-        if (_ring_dumps < 8) {
+        if (_ring_dumps < 24) {
             _ring_dumps++;
             v2_emu_ring_dump();
         }

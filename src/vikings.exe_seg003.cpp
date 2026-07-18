@@ -2019,6 +2019,12 @@ cs=0xe25;eip=0x00106d; 	J(JMP(loc_1d6ad));	// 37477 jmp     loc_1D6AD ;~ 0E25:10
 //printf("loc_1d8a8\n");
  //cs=0xe25;eip=0x000108; 	J(RETN(0));	// 35719 retf ;~ 0E25:0108 //debug
 	// 6204
+	// Task #23 ring: orig type-2 renderer entry — page role at draw time.
+	{ if ((int)di == v2_objtrace_di) {
+	    v2_objtrace("o:t2", *(int16_t*)raddr(ds,di+0x64D),
+	                *(int16_t*)raddr(ds,di+0x74D),
+	                *(uint8_t*)raddr(ds,di+0x114D),
+	                *(int16_t*)raddr(ds,0x92F9)); } }
 cs=0xe25;eip=0x001078; 	X(PUSH(ds));	// 37487 push    ds ;~ 0E25:1078
 cs=0xe25;eip=0x001079; 	X(PUSH(es));	// 37488 push    es ;~ 0E25:1079
 cs=0xe25;eip=0x00107a; 	X(PUSH(di));	// 37489 push    di ;~ 0E25:107A

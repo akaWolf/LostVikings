@@ -93,6 +93,20 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                 // (env V2_A2_WP=1; perf HW breakpoints are not permitted here).
                 static int wp_armed = -1;
                 if (wp_armed == -1) wp_armed = getenv("V2_A2_WP") ? 0 : 2;
+                // Direct map-word watch (env V2_A2_WP_MOFF): rearm every
+                // snapshot so scene/segment changes keep the pointer fresh.
+                if (wp_armed != 2) {
+                    if (const char* e2 = getenv("V2_A2_WP_MOFF")) {
+                        extern uint8_t* v2_a2_softwp_fs_ptr;
+                        extern uint8_t* v2_m2c_base;
+                        uint16_t fsseg2 = *(const uint16_t*)(dsb + 0x2E69);
+                        uint16_t moff2 = (uint16_t)strtol(e2, 0, 0);
+                        if (fsseg2 && v2_m2c_base) {
+                            v2_a2_softwp_fs_ptr = v2_m2c_base + (uint32_t)fsseg2 * 16 + moff2;
+                            v2_a2_softwp_fs_moff = moff2;
+                        }
+                    }
+                }
                 uint16_t ofl = *(const uint16_t*)(dsb + (uint16_t)(tdi + 0x44D));
                 if (wp_armed == 0 && (ofl & 0x8000) && oy > 0) {
                     int16_t ox = *(const int16_t*)(dsb + (uint16_t)(tdi + 0x64D));
@@ -114,6 +128,10 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                         uint16_t row = (uint16_t)(y >> 3);
                         uint16_t rb = *(const uint16_t*)(dsb + (uint16_t)(row * 2 - 0x7098));
                         uint16_t moff = (uint16_t)((rb + (uint16_t)(x >> 3)) * 2u);
+                        // Direct override: env V2_A2_WP_MOFF=0xNNNN watches
+                        // that exact map word instead of the derived cell.
+                        if (const char* e = getenv("V2_A2_WP_MOFF"))
+                            moff = (uint16_t)strtol(e, 0, 0);
                         if (fsseg && v2_m2c_base) {
                             v2_a2_softwp_fs_ptr = v2_m2c_base + (uint32_t)fsseg * 16 + moff;
                             v2_a2_softwp_fs_moff = moff;
