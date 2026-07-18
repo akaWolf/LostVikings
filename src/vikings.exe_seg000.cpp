@@ -132,6 +132,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 57: return (void*)&sub_15d3c;   // K3a: bbox CF check (Y from 14E5)
     case 58: return (void*)&sub_15d42;   // K3a: bbox CF check (Y from 150D)
     case 59: return (void*)&sub_11c52;   // K3a: tab selector blink
+    case 60: return (void*)&sub_13ba5;   // K3b: permanent-flag spawn sweep
+    case 61: return (void*)&sub_11446;   // K3b: game-mode spawn dispatcher
+    case 62: return (void*)&sub_11569;   // K3b: 3-viking spawn from table (di)
     default: return 0;
     }
 }

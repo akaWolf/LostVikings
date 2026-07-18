@@ -18,7 +18,8 @@ sub_11192 sub_111a1 sub_111df sub_11784 sub_137f1 sub_12fb3 \
 sub_12ca3 sub_12ce4 sub_108b8 \
 sub_11397 sub_113b0 sub_113d8 sub_116e3 \
 sub_11383 sub_1133a sub_1241e sub_12816 sub_12515 sub_12529 \
-sub_1450b sub_10e99 sub_15d3c sub_15d42 sub_11c52"}
+sub_1450b sub_10e99 sub_15d3c sub_15d42 sub_11c52 \
+sub_13a0e sub_13ba5 sub_11446 sub_11569"}
 SHARDED="sub_158aa sub_158b9"
 NSH=6
 

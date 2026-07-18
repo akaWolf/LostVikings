@@ -3910,18 +3910,18 @@ static void v2_sub_13ba5(uint8_t* s) {
     // Iterates spawn table, creates objects with flag 0x800 (permanent).
     *(uint16_t*)(s + 0x42) = 0xFFFF;
     for (uint16_t si = 0, di = 0; ; si++, di += 0x0E) {
-        uint16_t spawn_x = *(uint16_t*)(s + di + 0x25F6);
+        uint16_t spawn_x = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
         if (spawn_x == 0xFFFF) break; // end of table → STC
-        if (!(*(uint16_t*)(s + di + 0x2600) & 0x800)) continue; // not permanent → CLC
+        if (!(*(uint16_t*)(s + (uint16_t)(di + 0x2600)) & 0x800)) continue; // not permanent
         // sub_13bbd: setup params and call sub_13809
         *(uint16_t*)(s + 0x32) = si;
         *(uint16_t*)(s + 0x6C) = spawn_x;
-        *(uint16_t*)(s + 0x6E) = *(uint16_t*)(s + di + 0x25F8);
-        *(uint16_t*)(s + 0x3E0) = *(uint16_t*)(s + di + 0x25FA);
-        *(uint16_t*)(s + 0x3E2) = *(uint16_t*)(s + di + 0x25FC);
-        *(uint16_t*)(s + 0x374) = *(uint16_t*)(s + di + 0x2602);
-        uint16_t code_seg_idx = *(uint16_t*)(s + di + 0x25FE);
-        uint16_t anim_idx = *(uint16_t*)(s + di + 0x2600);
+        *(uint16_t*)(s + 0x6E) = *(uint16_t*)(s + (uint16_t)(di + 0x25F8));
+        *(uint16_t*)(s + 0x3E0) = *(uint16_t*)(s + (uint16_t)(di + 0x25FA));
+        *(uint16_t*)(s + 0x3E2) = *(uint16_t*)(s + (uint16_t)(di + 0x25FC));
+        *(uint16_t*)(s + 0x374) = *(uint16_t*)(s + (uint16_t)(di + 0x2602));
+        uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di + 0x25FE));
+        uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di + 0x2600));
         // Original: ax=[di+25FE], si=[di+2600], di=ds:32 (saved spawn index)
         v2_sub_13809(s, code_seg_idx, si, anim_idx,
                      *(uint16_t*)(s + 0x6C), *(uint16_t*)(s + 0x6E));
@@ -11103,6 +11103,19 @@ extern "C" void v2_fntest_call_sub_12ca3(uint8_t* test_shadow) { v2_sub_12ca3(te
 extern "C" void v2_fntest_call_sub_12ce4(uint8_t* test_shadow) { v2_sub_12ce4(test_shadow); }
 extern "C" void v2_fntest_call_sub_108b8(uint8_t* test_shadow) { v2_sub_108b8(test_shadow); }
 extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_sub_12816(test_shadow); }
+// Unit 54 (spawn family): install a synthetic object-template block as the
+// v2 animdata shadow — pairs with the oracle reading the same bytes via
+// es=[2E67] pointed at the shared test segment.
+extern "C" void v2_fntest_call_sub_13ba5(uint8_t* test_shadow) { v2_sub_13ba5(test_shadow); }
+static void v2_sub_11446(uint8_t* s);
+extern "C" void v2_fntest_call_sub_11446(uint8_t* test_shadow) { v2_sub_11446(test_shadow); }
+extern "C" void v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di) { v2_sub_11569(test_shadow, di); }
+extern "C" void v2_fntest_set_animdata(const uint8_t* data, uint32_t len) {
+    if (len > V2_ANIMDATA_SHADOW_SIZE) len = V2_ANIMDATA_SHADOW_SIZE;
+    memset(v2_vm_shadow_animdata, 0, V2_ANIMDATA_SHADOW_SIZE);
+    memcpy(v2_vm_shadow_animdata, data, len);
+    v2_animdata_shadow_valid = true;
+}
 // K3a units (54-59): viewport bounds, save-header+fade, DAC fade compare,
 // bbox CF twins, tab-blink.
 extern "C" void v2_fntest_call_sub_13a0e(uint8_t* test_shadow) { v2_sub_13a0e(test_shadow); }

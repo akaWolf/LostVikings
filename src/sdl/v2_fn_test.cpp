@@ -77,6 +77,10 @@ extern "C" void     v2_fntest_call_sub_12816(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12515(uint8_t* test_shadow, uint16_t ax);
 extern "C" uint16_t v2_fntest_call_sub_12529(uint8_t* test_shadow, uint16_t bx);
 extern "C" void     v2_fntest_call_sub_13a0e(uint8_t* test_shadow);
+extern "C" void     v2_fntest_set_animdata(const uint8_t* data, uint32_t len);
+extern "C" void     v2_fntest_call_sub_13ba5(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_11446(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di);
 extern "C" void     v2_fntest_call_sub_1450b(uint8_t* test_shadow, uint16_t al, uint16_t si, uint16_t di);
 extern "C" void     v2_fntest_call_sub_10e99(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11c52(uint8_t* test_shadow);
@@ -150,6 +154,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_12816 = 51, FT_SUB_12515 = 52, FT_SUB_12529 = 53,
             FT_SUB_13A0E = 54, FT_SUB_1450B = 55, FT_SUB_10E99 = 56,
             FT_SUB_15D3C = 57, FT_SUB_15D42 = 58, FT_SUB_11C52 = 59,
+            FT_SUB_13BA5 = 60, FT_SUB_11446 = 61, FT_SUB_11569 = 62,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -183,7 +188,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_11383", "sub_1133a", "sub_1241e",
                                  "sub_12816", "sub_12515", "sub_12529",
                                  "sub_13a0e", "sub_1450b", "sub_10e99",
-                                 "sub_15d3c", "sub_15d42", "sub_11c52" };
+                                 "sub_15d3c", "sub_15d42", "sub_11c52",
+                                 "sub_13ba5", "sub_11446", "sub_11569" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3792,6 +3798,260 @@ int ft_selftest_bbox2(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
+// Both sides read object templates from ONE synthetic block: the oracle via
+// es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
+// v2_fntest_set_animdata. Template (0x15 bytes per code_seg_idx):
+//   +0 chunk(2: FFFF=no sprite, FFFE=[374]+=1, else [12AD] lookup)
+//   +2 ss_byte(1: low7=sub-sprite count, bit7=[374]+=2)  +3 w16([132D]=v+3)
+//   +7 w16([15AD])  +9 b([1445]) +A b([146D])  +B/+D/+F/+11/+13 w16 fields
+struct FtSpawnRec { uint16_t x, y, hw, hh, code, anim, extra; };
+void ft_spawn_build(const FtSpawnRec* recs, int n,
+                    const uint8_t* tmpl, int tmpl_len,
+                    const FtWr* wr, int nw)
+{
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    // Level context: template segment, empty object table, gates open.
+    ft_wr16(g_synth_in, 0x2E67, FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, 0x033C, 0);
+    ft_wr16(g_synth_in, 0x0372, 0);
+    ft_wr16(g_synth_in, 0x032F, 0);
+    for (int i = 0; i < 0x10; i++) g_synth_in[0x356 + i] = 0;
+    // Clear the object-slot zone the spawn writes into (deterministic diff).
+    for (uint32_t a = 0x1355; a < 0x1B60; a++) g_synth_in[a] = 0;
+    // Spawn table.
+    uint16_t off = 0x25F6;
+    for (int i = 0; i < n; i++) {
+        ft_wr16(g_synth_in, off + 0x0, recs[i].x);
+        ft_wr16(g_synth_in, off + 0x2, recs[i].y);
+        ft_wr16(g_synth_in, off + 0x4, recs[i].hw);
+        ft_wr16(g_synth_in, off + 0x6, recs[i].hh);
+        ft_wr16(g_synth_in, off + 0x8, recs[i].code);
+        ft_wr16(g_synth_in, off + 0xA, recs[i].anim);
+        ft_wr16(g_synth_in, off + 0xC, recs[i].extra);
+        off += 0x0E;
+    }
+    ft_wr16(g_synth_in, off, 0xFFFF);
+    for (int i = 0; i < nw; i++) ft_wr16(g_synth_in, wr[i].addr, wr[i].val);
+    // Template block into the shared oracle segment + the v2 shadow.
+    uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+    memset(zone, 0, 0x200);
+    memcpy(zone, tmpl, tmpl_len);
+    v2_fntest_set_animdata(tmpl, (uint32_t)tmpl_len);
+    ft_fill_tail(g_synth_in);
+}
+
+bool ft_spawn_case(const char* tag, FtSynthStats& st, long& diff_budget) {
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    v2_fntest_call_sub_13a0e(g_scratch);
+    FtRegs in{};
+    return ft_synth_case_regs(FT_SUB_13A0E, in, 0, -1, tag, st, diff_budget);
+}
+
+int ft_selftest_spawn() {
+    FtSynthStats grid;
+    long diff_budget = 40;
+    // Base template pair: idx0 = plain sprite-less object, idx1 = with fields.
+    uint8_t T[0x15 * 3];
+    memset(T, 0, sizeof(T));
+    auto w16 = [&](int off, uint16_t v){ T[off] = (uint8_t)v; T[off+1] = (uint8_t)(v>>8); };
+    // idx 0
+    w16(0x00, 0xFFFF); T[0x02] = 0; w16(0x03, 0x10);
+    w16(0x07, 0x1111); T[0x09] = 0x10; T[0x0A] = 0x18;
+    w16(0x0B, 0x2222); w16(0x0D, 0x3333); w16(0x0F, 0x4444);
+    w16(0x11, 0x5555); w16(0x13, 0x6666);
+    // idx 1
+    int b = 0x15;
+    w16(b+0x00, 0xFFFF); T[b+0x02] = 0; w16(b+0x03, 0x20);
+    w16(b+0x07, 0x7777); T[b+0x09] = 0x20; T[b+0x0A] = 0x08;
+    w16(b+0x0B, 0x0102); w16(b+0x0D, 0x0304); w16(b+0x0F, 0x0506);
+    w16(b+0x11, 0x0708); w16(b+0x13, 0x090A);
+    // idx 2: FFFE chunk ([374]+=1) + ss_byte bit7 ([374]+=2)
+    b = 0x2A;
+    w16(b+0x00, 0xFFFE); T[b+0x02] = 0x80; w16(b+0x03, 0x08);
+    T[b+0x09] = 0x08; T[b+0x0A] = 0x08;
+
+    // Viewport for [44]=0x100,[46]=0x100: bounds [34]=F0,[36]=250,[38]=F0,[3A]=1C0.
+    const FtWr VP[] = { {0x0044, 0x0100}, {0x0046, 0x0100} };
+    FtSpawnRec both_vis[] = {
+        { 0x0120, 0x0120, 8, 8, 0, 0x11, 0xAA55 },
+        { 0x0200, 0x0150, 8, 8, 1, 0x22, 0x1234 },
+    };
+    ft_spawn_build(both_vis, 2, T, sizeof(T), VP, 2);
+    ft_spawn_case("both-vis", grid, diff_budget);
+
+    FtSpawnRec one_vis[] = {
+        { 0x0120, 0x0120, 8, 8, 0, 0x11, 0 },
+        { 0x0500, 0x0150, 8, 8, 1, 0x22, 0 },   // right of [36]
+    };
+    ft_spawn_build(one_vis, 2, T, sizeof(T), VP, 2);
+    ft_spawn_case("one-vis", grid, diff_budget);
+
+    FtSpawnRec none_vis[] = {
+        { 0x0500, 0x0120, 8, 8, 0, 0, 0 },
+        { 0x0120, 0x0500, 8, 8, 1, 0, 0 },
+    };
+    ft_spawn_build(none_vis, 2, T, sizeof(T), VP, 2);
+    ft_spawn_case("none-vis", grid, diff_budget);
+
+    // Edge-touch cases on every bound (signed-operand JGE/JL edges).
+    FtSpawnRec edges[] = {
+        { 0x00E8, 0x0120, 8, 8, 0, 0, 0 },   // x+hw == [34] (0xF0): visible
+        { 0x00E7, 0x0120, 8, 8, 0, 0, 0 },   // x+hw == [34]-1: out
+        { 0x0258, 0x0120, 8, 8, 0, 0, 0 },   // x-hw == [36] (0x250): out
+        { 0x0257, 0x0120, 8, 8, 0, 0, 0 },   // x-hw == [36]-1: visible
+    };
+    ft_spawn_build(edges, 4, T, sizeof(T), VP, 2);
+    ft_spawn_case("edges", grid, diff_budget);
+
+    // Dedup: slot 0 already spawned from spawn index 0.
+    {
+        FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
+        const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},
+                            {0x0372, 2},              // one live slot
+                            {(uint16_t)(0 + 0x1355), 0x1234},   // slot 0 active
+                            {(uint16_t)(0 + 0x16C5), 0} };      // from spawn idx 0
+        ft_spawn_build(recs, 1, T, sizeof(T), wr, 5);
+        ft_spawn_case("dedup", grid, diff_budget);
+    }
+    // Creation gate closed.
+    {
+        FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
+        const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},{0x032F,1} };
+        ft_spawn_build(recs, 1, T, sizeof(T), wr, 3);
+        ft_spawn_case("gate-32F", grid, diff_budget);
+    }
+    // Spawn-bit block: [356]=FF blocks indices 0..7.
+    {
+        FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
+        ft_spawn_build(recs, 1, T, sizeof(T), VP, 2);
+        g_synth_in[0x356] = 0xFF;
+        ft_spawn_case("bit-356", grid, diff_budget);
+    }
+    // All 20 slots busy.
+    {
+        FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
+        ft_spawn_build(recs, 1, T, sizeof(T), VP, 2);
+        for (uint16_t s2 = 0; s2 < 0x28; s2 += 2)
+            ft_wr16(g_synth_in, (uint16_t)(s2 + 0x1355), 0x1111);
+        ft_wr16(g_synth_in, 0x0372, 0x28);
+        ft_spawn_case("slots-full", grid, diff_budget);
+    }
+    // FFFE chunk + ss bit7 template (idx 2): [374] accumulation path.
+    {
+        FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 2, 0x33, 0xBEEF } };
+        ft_spawn_build(recs, 1, T, sizeof(T), VP, 2);
+        ft_spawn_case("fffe-bit7", grid, diff_budget);
+    }
+    // Sprite chunk lookup: template idx0 with chunk=5; [12AD] carries 5->0x4321.
+    {
+        uint8_t T2[0x15]; memcpy(T2, T, 0x15);
+        T2[0] = 5; T2[1] = 0;
+        FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
+        const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},
+                            {0x12AD, 5}, {0x12ED, 0x4321} };
+        ft_spawn_build(recs, 1, T2, sizeof(T2), wr, 4);
+        ft_spawn_case("chunk-hit", grid, diff_budget);
+    }
+    // Sprite chunk with NO resource entry: creation fails mid-init.
+    {
+        uint8_t T2[0x15]; memcpy(T2, T, 0x15);
+        T2[0] = 7; T2[1] = 0;
+        FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
+        ft_spawn_build(recs, 1, T2, sizeof(T2), VP, 2);
+        ft_spawn_case("chunk-miss", grid, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_13a0e]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
+// ---- Units 60-62: the rest of the spawn family -----------------------------
+bool ft_spawn_case_id(FtId id, uint16_t reg_di, const char* tag,
+                      FtSynthStats& st, long& diff_budget) {
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    if (id == FT_SUB_13BA5)      v2_fntest_call_sub_13ba5(g_scratch);
+    else if (id == FT_SUB_11446) v2_fntest_call_sub_11446(g_scratch);
+    else                         v2_fntest_call_sub_11569(g_scratch, reg_di);
+    FtRegs in{}; in.di = reg_di;
+    return ft_synth_case_regs(id, in, 0, -1, tag, st, diff_budget);
+}
+
+int ft_selftest_spawn2() {
+    FtSynthStats grid;
+    long diff_budget = 40;
+    uint8_t T[0x15 * 3];
+    memset(T, 0, sizeof(T));
+    auto w16 = [&](int off, uint16_t v){ T[off] = (uint8_t)v; T[off+1] = (uint8_t)(v>>8); };
+    for (int i = 0; i < 3; i++) {   // three plain templates
+        int b = i * 0x15;
+        w16(b+0x00, 0xFFFF); T[b+0x02] = 0; w16(b+0x03, 0x10 + i);
+        T[b+0x09] = 0x10; T[b+0x0A] = 0x10;
+        w16(b+0x0B, (uint16_t)(0x1000 + i)); w16(b+0x0D, (uint16_t)(0x2000 + i));
+    }
+    const FtWr VP[] = { {0x0044, 0x0100}, {0x0046, 0x0100} };
+    int rc = 0;
+
+    // 60 sub_13ba5: permanent-flag sweep (anim & 0x800).
+    {
+        FtSynthStats g2; 
+        FtSpawnRec recs[] = {
+            { 0x0120, 0x0120, 8, 8, 0, 0x0811, 0x0001 },   // permanent
+            { 0x0200, 0x0150, 8, 8, 1, 0x0022, 0x0002 },   // not
+            { 0x0500, 0x0500, 8, 8, 2, 0x0800, 0x0003 },   // permanent, off-screen (still spawns!)
+        };
+        ft_spawn_build(recs, 3, T, sizeof(T), VP, 2);
+        ft_spawn_case_id(FT_SUB_13BA5, 0, "mixed", g2, diff_budget);
+        FtSpawnRec none[] = { { 0x0120, 0x0120, 8, 8, 0, 0x0011, 0 } };
+        ft_spawn_build(none, 1, T, sizeof(T), VP, 2);
+        ft_spawn_case_id(FT_SUB_13BA5, 0, "no-permanent", g2, diff_budget);
+        fprintf(stderr, "FNSELFTEST-SUMMARY[sub_13ba5]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+                g2.pass, g2.cases, g2.cases, g2.fail, g2.fail ? "  <<< DIVERGENCE" : "");
+        rc |= g2.fail ? 1 : 0; grid.cases += g2.cases; grid.fail += g2.fail;
+    }
+    // 62 sub_11569: 3 vikings from an 18-byte table at [di].
+    {
+        FtSynthStats g2;
+        static const uint16_t ANIM_OR[] = { 0, 0x4000 };
+        for (uint16_t aor : ANIM_OR) {
+            FtSpawnRec none[] = { { 0x0500, 0x0500, 8, 8, 0, 0, 0 } };
+            const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},{0x25C1, aor},
+                                {0x0100, 0x0130},{0x0102, 0x0140},{0x0104, 0x0007},
+                                {0x0106, 0x0150},{0x0108, 0x0140},{0x010A, 0x0008},
+                                {0x010C, 0x0170},{0x010E, 0x0140},{0x0110, 0x0009} };
+            ft_spawn_build(none, 1, T, sizeof(T), wr, 12);
+            ft_spawn_case_id(FT_SUB_11569, 0x0100, aor ? "or4000" : "plain",
+                             g2, diff_budget);
+        }
+        fprintf(stderr, "FNSELFTEST-SUMMARY[sub_11569]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+                g2.pass, g2.cases, g2.cases, g2.fail, g2.fail ? "  <<< DIVERGENCE" : "");
+        rc |= g2.fail ? 1 : 0; grid.cases += g2.cases; grid.fail += g2.fail;
+    }
+    // 61 sub_11446: mode dispatcher (modes 0/2/4/5/0x10/other).
+    {
+        FtSynthStats g2;
+        static const uint16_t MODES[] = { 0, 2, 4, 5, 0x10, 3 };
+        for (uint16_t m : MODES) {
+            FtSpawnRec none[] = { { 0x0500, 0x0500, 8, 8, 0, 0, 0 } };
+            const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},
+                                {0x25BB, 0x0140},{0x25BD, 0x0120},   // mode-0 pos
+                                {0x25BF, 0x0001},{0x25C1, 0x0000},   // code idx / anim
+                                {0x25C3, 0x0042},                    // [374] cfg
+                                {0x25C5, 0x0180},{0x25C7, 0x0110} }; // default-path pos
+            ft_spawn_build(none, 1, T, sizeof(T), wr, 9);
+            g_synth_in[0x25BA] = (uint8_t)m;
+            ft_spawn_case_id(FT_SUB_11446, 0, "mode", g2, diff_budget);
+        }
+        fprintf(stderr, "FNSELFTEST-SUMMARY[sub_11446]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+                g2.pass, g2.cases, g2.cases, g2.fail, g2.fail ? "  <<< DIVERGENCE" : "");
+        rc |= g2.fail ? 1 : 0; grid.cases += g2.cases; grid.fail += g2.fail;
+    }
+    return rc;
+}
+
 int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
@@ -3909,6 +4169,10 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_12515")) { matched = true; rc |= ft_selftest_textcfg(FT_SUB_12515, 0x12515001u); }
     if (all || strstr(env, "sub_12529")) { matched = true; rc |= ft_selftest_textcfg(FT_SUB_12529, 0x12529001u); }
     if (all || strstr(env, "sub_1450b")) { matched = true; rc |= ft_selftest_sub_1450b(); }
+    if (all || strstr(env, "sub_13a0e")) { matched = true; rc |= ft_selftest_spawn(); }
+    if (all || strstr(env, "sub_13ba5") || strstr(env, "sub_11446") || strstr(env, "sub_11569")) {
+        matched = true; rc |= ft_selftest_spawn2();
+    }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
