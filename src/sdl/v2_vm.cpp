@@ -9395,11 +9395,13 @@ static void v2_vm_op_sound1(V2VM& vm) {
 // Bounds-checks si against ds:0x25DC, di against ds:0x25DE.
 // Out of bounds: returns 0x400 (si) or 0 (di).
 static uint16_t v2_vm_sub_141ba(V2VM& vm, uint16_t si, uint16_t di) {
-    if (si >= vm.ds_read(0x25DC)) return 0x400;
+    if (si >= vm.ds_read(0x25DC)) return 0x400;   // bounds exits leave DI
     if (di >= vm.ds_read(0x25DE)) return 0;
     uint16_t di2 = di << 1;
     uint16_t si2 = si << 1;
     si2 += vm.ds_read((uint16_t)(di2 - 0x7098));
+    vm.di_track = di2;   // orig SHL di,1 on the success path (task #15)
+    vm.si_track = si2;   // orig si*2 + row base
     // fn-test parity: like v2_resolve_segment, read the tilemap segment
     // [ds:0x2E63] linearly from m2c::m (the oracle's raddr does exactly
     // that; the shadow tilemap is not populated in the selftest process).
@@ -12155,6 +12157,7 @@ static void v2_vm_op_2C(V2VM& vm) {
             if (obj_type == filt) { matched = true; break; }
             di++;  // scan next entry
         }
+        vm.di_track = di;   // orig: filter-scan stop position stays in DI
         if (!matched) continue;
 
         // Y bounds: 3AE >= [si+14E5] AND (3AE-1) < [si+150D]
@@ -12164,6 +12167,7 @@ static void v2_vm_op_2C(V2VM& vm) {
 
         // X bounds: [di+155D] >= [si+1535] AND [si+155D] >= [di+1535]
         uint16_t di2 = self_si;
+        vm.di_track = di2;  // orig: MOV di,ds:42h before the X bbox
         if (vm.ds_read(di2 + 0x155D) < vm.ds_read(si + 0x1535)) continue;
         if (vm.ds_read(si + 0x155D) < vm.ds_read(di2 + 0x1535)) continue;
 
@@ -12229,6 +12233,7 @@ static void v2_vm_op_35(V2VM& vm) {
             if (obj_type == filt) { matched = true; break; }
             di++;
         }
+        vm.di_track = di;   // orig: filter-scan stop position stays in DI
         if (!matched) continue;
 
         // Y bounds: signed JL comparisons
@@ -12238,6 +12243,7 @@ static void v2_vm_op_35(V2VM& vm) {
 
         // X bounds: signed JL comparisons
         uint16_t di2 = self_si;
+        vm.di_track = di2;  // orig 0x5EE3: MOV di,ds:42h before the X bbox
         if ((int16_t)vm.ds_read(di2 + 0x155D) < (int16_t)vm.ds_read(si + 0x1535)) continue;
         if ((int16_t)vm.ds_read(si + 0x155D) < (int16_t)vm.ds_read(di2 + 0x1535)) continue;
 
@@ -12273,6 +12279,7 @@ static void v2_vm_op_2D(V2VM& vm) {
             if (obj_type == filt) { matched = true; break; }
             di++;
         }
+        vm.di_track = di;   // orig: filter-scan stop position stays in DI
         if (!matched) continue;
 
         uint16_t y_ref = vm.ds_read(0x3AE);
@@ -12280,6 +12287,7 @@ static void v2_vm_op_2D(V2VM& vm) {
         if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + 0x150D)) continue;
 
         uint16_t di2 = self_si;
+        vm.di_track = di2;  // orig: MOV di,ds:42h before the X bbox
         if (vm.ds_read(di2 + 0x155D) < vm.ds_read(si + 0x1535)) continue;
         if (vm.ds_read(si + 0x155D) < vm.ds_read(di2 + 0x1535)) continue;
 
