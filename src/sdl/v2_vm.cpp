@@ -628,11 +628,9 @@ void v2_verify_render_buf(int frame) {
     // Page emulator (task #21): compare the orig work page against the emu
     // work page of the same rotation slot — the byte-exact model of the DOS
     // page channel. v2_render_buf stays the clean display frame.
-    extern uint8_t v2_emu_page[3][320 * 176];
-    extern bool v2_emu_valid;
     // 3-page model: compare against the SHOWN page role [92F9] — the page the
     // orig sub-frame-3 CRTC start points at (sub_16775 adds ds:92F9 into the
-    // y_high lookup).
+    // y_high lookup); v2_emu_shown assembles the anchored window.
     const uint8_t* v2_frame = v2_emu_valid ? v2_emu_shown(v2_current_ds_val) : v2_render_buf;
 
     // Letter-band parity probe (task #21): per-frame checksums of the traced
@@ -640,17 +638,35 @@ void v2_verify_render_buf(int frame) {
     if (v2_objtrace_di != 0xFFFF && v2_vm_get_shadow_ds()) {
         static int _bp = 0;
         uint8_t* _shd = v2_vm_get_shadow_ds();
-        int16_t oy = *(int16_t*)(_shd + (uint16_t)(v2_objtrace_di + 0x74D));
+        int16_t oy_w = *(int16_t*)(_shd + (uint16_t)(v2_objtrace_di + 0x74D));
+        // Screen-space band top: world − effective viewport (vp+shake clamp).
+        int oy;
+        {
+            int16_t vy = *(int16_t*)(_shd + 0x46), ysh = *(int16_t*)(_shd + 0x3A0);
+            int16_t ylv = *(int16_t*)(_shd + 0x25A6);
+            int ye = (int)vy + ysh; if (ye > (int)ylv) ye = (int)vy - ysh;
+            oy = (int)oy_w - ye;
+        }
         if (oy > 0 && oy < 144 && _bp < 40) {
             _bp++;
-            extern uint8_t v2_emu_page[3][320 * 176];
             int so = 0, sv = 0, se[3] = {0, 0, 0};
             for (int y = oy; y < oy + 32; y++)
                 for (int x = 0; x < 320; x += 4) {
                     so += orig_pixels[y * 320 + x];
                     sv += v2_frame[y * 320 + x];
-                    for (int p = 0; p < 3; p++) se[p] += v2_emu_page[p][y * 320 + x];
                 }
+            {
+                int16_t wy0 = *(int16_t*)(v2_vm_get_shadow_ds() + (uint16_t)(v2_objtrace_di + 0x74D));
+                int16_t wx0 = *(int16_t*)(v2_vm_get_shadow_ds() + (uint16_t)(v2_objtrace_di + 0x64D));
+                int py0 = (int)wy0 - v2_emu_base_y, px0 = (int)wx0 - v2_emu_base_x;
+                for (int p = 0; p < 3; p++)
+                    for (int yy = 0; yy < 32; yy++)
+                        for (int xx = 0; xx < 32; xx++) {
+                            int X = px0 + xx, Y = py0 + yy;
+                            if (X >= 0 && X < V2_EMU_W && Y >= 0 && Y < V2_EMU_H)
+                                se[p] += v2_emu_page[p][Y * V2_EMU_W + X];
+                        }
+            }
             extern uint16_t v2_a2_snap_pg;
             fprintf(stderr, "BAND[f%d]: orig=%d v2=%d | emu=%d/%d/%d snap_pg=%04X roles=%04X/%04X/%04X\n",
                 frame, so, sv, se[0], se[1], se[2], v2_a2_snap_pg,
@@ -4210,8 +4226,6 @@ static void v2_sub_16880(uint8_t* s) {
     // (pre-flag chunk screens) fill the pages outside the emu channels — the
     // display fallback (emu invalid → compare v2_render_buf) covers those.
     {
-        extern uint8_t v2_emu_page[3][320 * 176];
-        extern bool v2_emu_valid;
         memset(v2_emu_page, 0, sizeof(v2_emu_page));
         v2_emu_valid = false;
     }
@@ -7924,6 +7938,51 @@ void v2_record_orig_phase_snap(int phase_idx) {
             }
             prev_fsw = w;
             prev_fsp = v2_a2_softwp_fs_ptr;
+            // Tile-anim tick phase map: which snap window rewrites REAL tile
+            // 0xC0's first bytes (the f459 flame class).
+            {
+                extern uint8_t* v2_m2c_base;
+                static int t_hits = 0;
+                static uint32_t t_prev = 0xFFFFFFFF;
+                uint8_t* _rds2 = v2_m2c_base ? v2_m2c_base + v2_fntest_game_ds_linear() : nullptr;
+                uint16_t gseg = _rds2 ? *(uint16_t*)(_rds2 + 0x2E5F) : 0;
+                if (gseg && v2_m2c_base) {
+                    uint8_t* gb = v2_m2c_base + ((uint32_t)gseg << 4) + 0xC0 * 64;
+                    uint32_t cs = 0;
+                    for (int i = 0; i < 16; i++) cs = cs * 131u + gb[i];
+                    if (t_prev != 0xFFFFFFFF && cs != t_prev && t_hits < 40) {
+                        t_hits++;
+                        fprintf(stderr, "TILEC0-TICK[f%d]: at snap=%d(%s)\n",
+                            v2_orig_post_vm_frame, phase_idx, v2_psnap_names[phase_idx]);
+                    }
+                    t_prev = cs;
+                }
+            }
+            // Sprite-data anim tick map: which snap window rewrites the REAL
+            // sprite bytes at [obj+94D]:[obj+84D] of the traced object (f459
+            // flame: segment data are ANIMATED in place, shadow copy frozen).
+            {
+                extern uint8_t* v2_m2c_base;
+                extern int v2_objtrace_di;
+                static int s_hits = 0;
+                static uint32_t s_prev = 0xFFFFFFFF;
+                uint8_t* _rds3 = v2_m2c_base ? v2_m2c_base + v2_fntest_game_ds_linear() : nullptr;
+                if (_rds3 && v2_objtrace_di != 0xFFFF) {
+                    uint16_t sseg = *(uint16_t*)(_rds3 + (uint16_t)(v2_objtrace_di + 0x94D));
+                    uint16_t soff = *(uint16_t*)(_rds3 + (uint16_t)(v2_objtrace_di + 0x84D));
+                    if (sseg) {
+                        uint8_t* sp = v2_m2c_base + ((uint32_t)sseg << 4);
+                        uint32_t cs2 = 0;
+                        for (int i = 0; i < 32; i++) cs2 = cs2 * 131u + sp[(uint16_t)(soff - 1 + i)];
+                        if (s_prev != 0xFFFFFFFF && cs2 != s_prev && s_hits < 40) {
+                            s_hits++;
+                            fprintf(stderr, "SPRDATA-TICK[f%d]: %04X:%04X at snap=%d(%s)\n",
+                                v2_orig_post_vm_frame, sseg, soff, phase_idx, v2_psnap_names[phase_idx]);
+                        }
+                        s_prev = cs2;
+                    }
+                }
+            }
             // Real-vs-shadow FS drift detector for the same cell word.
             static int drift_hits = 0;
             if (v2_vm_shadow_fs && drift_hits < 40) {

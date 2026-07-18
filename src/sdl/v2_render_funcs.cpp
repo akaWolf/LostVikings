@@ -388,9 +388,14 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 // Helper: write one pixel to v2 buffer with bounds checking.
 // Writes ALL colors including 0 (matching original VGA behavior where mask
 // controls which bytes are written, not the color value).
+// Blit translation state: screen-space (sx,sy) + (dx,dy) into a buffer of
+// the given pitch/bounds. Display: dx=dy=0, 320x176. Emu page target: the
+// window offset (eff − base) with the page pitch — set via v2_blit_to_page().
+static int v2_pp_dx = 0, v2_pp_dy = 0, v2_pp_pitch = 320, v2_pp_w = 320, v2_pp_h = 176;
 static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
-    if (sx >= 0 && sx < 320 && sy >= 0 && sy < 176)
-        buf[sy * 320 + sx] = color;
+    int x = sx + v2_pp_dx, y = sy + v2_pp_dy;
+    if (x >= 0 && x < v2_pp_w && y >= 0 && y < v2_pp_h)
+        buf[y * v2_pp_pitch + x] = color;
 }
 
 // ============================================================================
@@ -407,28 +412,114 @@ uint8_t v2_emu_bg[320 * 176];          // background of THIS sub-frame = clean t
 // THREE persistent pages, indexed by the orig page slot value/0x34 (the
 // ds:0x92F7/92F9/92FB role variables hold 0x00/0x34/0x68 — sub_165aa rotates
 // the ROLES over the fixed pages):
-//   [92F7] = draw page (the page the previous sub-frame showed; this
-//            sub-frame's sprite/flagged layers land here),
-//   [92F9] = shown page (the CRTC start of THIS sub-frame's flip),
+//   [92F7] = draw page (the previous sub-frame's shown page; ONLY the 1de05
+//            latches land here),
+//   [92F9] = shown page (this sub-frame draws sub_1dd9c/1c8f1 layers on it
+//            AND the CRTC flips to it — BAND-parity proven),
 //   [92FB] = background page (latch source for the 1de05 bit0 spans; on a
 //            background-role change sub_1df6a copies bit1 cells 92F9→92FB).
-uint8_t v2_emu_page[3][320 * 176];
+//
+// ANCHOR MODEL (f459 shake class): the orig pages hold WORLD content and the
+// CRTC window (vp+shake) moves over them WITHOUT touching the pixels. The emu
+// pages are anchored at B = eff & ~7 (8-aligned world coordinate of page
+// pixel (0,0)) with an 8px right/bottom margin; sub-tile window offsets
+// (eff − B ∈ [0,8)) apply only when reading the shown window — a ±1..7 shake
+// never moves page content, matching the orig.
+uint8_t v2_emu_page[3][V2_EMU_W * V2_EMU_H];
 int     v2_emu_cur = 0;                // legacy extern (unused in 3-page model)
 bool    v2_emu_valid = false;          // pages initialized
-// Per-page viewport of the last sub-frame the page was brought to — every
-// sub-frame ALL pages are shifted to the current effective viewport so that
-// inter-page cell copies (latch/df6a) line up in screen space like the orig
-// world-space page addresses do.
-static int16_t v2_emu_vp_x[3] = {-32768, -32768, -32768};
-static int16_t v2_emu_vp_y[3] = {-32768, -32768, -32768};
+int     v2_emu_base_x = 0;             // world coord of page pixel (0,0), 8-aligned
+int     v2_emu_base_y = 0;
 static inline int v2_emu_slot(uint8_t* ds_base, uint16_t role_addr) {
     uint16_t v = *(uint16_t*)(ds_base + role_addr);
     int s = v / 0x34;
     return s > 2 ? 2 : s;
 }
+// Effective viewport (vp + shake with the sub_16775 clamp).
+static void v2_emu_eff(uint8_t* ds_base, int* xe, int* ye) {
+    int16_t vx = *(int16_t*)(ds_base + 0x44), vy = *(int16_t*)(ds_base + 0x46);
+    int16_t xs = *(int16_t*)(ds_base + 0x39E), ys = *(int16_t*)(ds_base + 0x3A0);
+    int16_t xl = *(int16_t*)(ds_base + 0x25A4), yl = *(int16_t*)(ds_base + 0x25A6);
+    *xe = (int)vx + xs; if (*xe > (int)xl) *xe = (int)vx - xs;
+    *ye = (int)vy + ys; if (*ye > (int)yl) *ye = (int)vy - ys;
+}
+// Copy the current screen-space background render into a page at the given
+// window offset (off = eff − B). Margin bands outside the 320x176 screen keep
+// their previous content (orig pages hold real world there; we lack the data).
+static void v2_emu_page_fill_bg(uint8_t* pg, int offx, int offy) {
+    for (int y = 0; y < 176; y++)
+        memcpy(pg + (y + offy) * V2_EMU_W + offx, v2_emu_bg + y * 320, 320);
+}
+
+// Render one map tile directly into a page at page coords (px0,py0) — the
+// page-space equivalent of the orig edge channels (sub_170b9/17049 paint map
+// rows BEYOND the visible window onto every page; the bg render can't supply
+// those). Tile decode identical to v2_draw_tiles.
+static void v2_emu_render_tile(uint8_t* pg, uint8_t* ds_base,
+                               uint8_t* fs_base, uint8_t* tgfx_base,
+                               int map_row, int map_col, int px0, int py0) {
+    uint16_t lut = (uint16_t)((uint16_t)map_row * 2u - 0x7098u);
+    uint16_t row_base = *(uint16_t*)(ds_base + lut);
+    uint16_t moff = (uint16_t)(((uint16_t)(row_base + map_col)) * 2u);
+    uint16_t entry = *(uint16_t*)(fs_base + moff);
+    uint16_t gfx = entry & 0xFFC0;
+    bool hflip = (entry & 0x10) != 0, vflip = (entry & 0x20) != 0;
+    uint8_t* tile = tgfx_base + gfx;
+    for (int row = 0; row < 8; row++) {
+        int src_row = vflip ? (7 - row) : row;
+        int py = py0 + row;
+        if (py < 0 || py >= V2_EMU_H) continue;
+        uint8_t pixels[8];
+        for (int plane = 0; plane < 4; plane++) {
+            uint8_t b0 = tile[plane * 16 + src_row * 2];
+            uint8_t b1 = tile[plane * 16 + src_row * 2 + 1];
+            if (!hflip) { pixels[plane] = b0; pixels[plane + 4] = b1; }
+            else        { pixels[(3 - plane) + 4] = b0; pixels[(3 - plane)] = b1; }
+        }
+        for (int px = 0; px < 8; px++) {
+            int X = px0 + px;
+            if (X >= 0 && X < V2_EMU_W)
+                pg[py * V2_EMU_W + X] = pixels[px];
+        }
+    }
+}
+
+// Full-page tile render (41x23 tiles from the anchor) — level entry / fresh
+// pages, matching orig sub_16ded which paints whole map rows on every page.
+static void v2_emu_page_render_full(uint8_t* pg, uint8_t* ds_base) {
+    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+    uint16_t tg_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    if (!fs_seg || !tg_seg) return;
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* fsb = v2_resolve_segment(fs_seg);
+    if (!fsb) fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgb = v2_resolve_segment(tg_seg);
+    if (!tgb) tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
+#else
+    uint8_t* fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
+#endif
+    int col0 = v2_emu_base_x >> 3, row0 = v2_emu_base_y >> 3;
+    for (int tr = 0; tr < V2_EMU_H >> 3; tr++)
+        for (int tc = 0; tc < V2_EMU_W >> 3; tc++)
+            v2_emu_render_tile(pg, ds_base, fsb, tgb,
+                               row0 + tr, col0 + tc, tc * 8, tr * 8);
+}
 
 // Blit target override for the sprite renderer: null = v2_render_buf.
+// When a page is the target, blit coordinates are screen-space and get
+// translated by (v2_blit_dx, v2_blit_dy) with the page pitch/bounds.
 static uint8_t* v2_blit_target = nullptr;
+static void v2_blit_to_page(uint8_t* pg, int offx, int offy) {
+    v2_blit_target = pg;
+    v2_pp_dx = offx; v2_pp_dy = offy;
+    v2_pp_pitch = V2_EMU_W; v2_pp_w = V2_EMU_W; v2_pp_h = V2_EMU_H;
+}
+static void v2_blit_to_display(void) {
+    v2_blit_target = nullptr;
+    v2_pp_dx = 0; v2_pp_dy = 0;
+    v2_pp_pitch = 320; v2_pp_w = 320; v2_pp_h = 176;
+}
 static void v2_draw_one_sprite(uint16_t ds_val, int obj); // fwd (kept: debug single-blit)
 
 // Ring trace of emu_early calls (branch decisions) — dumped on A2 divergence.
@@ -468,25 +559,13 @@ void v2_emu_early(uint16_t ds_val) {
     // 1. Background page snapshot (clean tiles just rendered).
     memcpy(v2_emu_bg, v2_render_buf, sizeof(v2_emu_bg));
 
-    // 2. Scroll/scene tracking (stage 1): a viewport change invalidates the
-    //    persistent pages (orig redraws edges via the 16661 channel — stage 2);
-    //    reinitialize from the background + full sprite blit.
-    int16_t vpx = *(int16_t*)(ds_base + 0x44);
-    int16_t vpy = *(int16_t*)(ds_base + 0x46);
-    // Screen space is the EFFECTIVE window (vp + shake, sub_16775 clamp): the
-    // orig pages hold world content and the CRTC start includes the shake
-    // offsets, so a shake step moves the visible window exactly like a scroll
-    // step. Track per-page deltas in effective coordinates (measured on the
-    // f459 class: shake=(1,0) with vp-based deltas left the whole page 1px off).
-    {
-        int16_t xs_ = *(int16_t*)(ds_base + 0x39E);
-        int16_t ys_ = *(int16_t*)(ds_base + 0x3A0);
-        int16_t xl_ = *(int16_t*)(ds_base + 0x25A4);
-        int16_t yl_ = *(int16_t*)(ds_base + 0x25A6);
-        int xe_ = (int)vpx + xs_; if (xe_ > (int)xl_) xe_ = (int)vpx - xs_;
-        int ye_ = (int)vpy + ys_; if (ye_ > (int)yl_) ye_ = (int)vpy - ys_;
-        vpx = (int16_t)xe_; vpy = (int16_t)ye_;
-    }
+    // 2. Effective viewport (vp + shake, sub_16775 clamp) and the 8-aligned
+    //    page anchor. Content NEVER moves for sub-tile window motion (shake,
+    //    pixel pan) — only the read window offset changes, like the orig CRTC.
+    int xe, ye;
+    v2_emu_eff(ds_base, &xe, &ye);
+    int nbx = xe & ~7, nby = ye & ~7;
+    int offx = xe - nbx, offy = ye - nby;   // 0..7
 
     // Chunk scenes (intro/menu/password, lvl flags & 0x42): the orig channel
     // paints the raw-chunk picture onto ALL pages at load (sub_10cd8 with the
@@ -494,70 +573,98 @@ void v2_emu_early(uint16_t ds_val) {
     // page content is the background picture plus the sprite layers. Model:
     // full background copy + sprite canvas on all three pages.
     if (ds_base[0x25CF] & 0x42) {
-        v2_emu_trace(vpx, vpy, 0, 0);
+        v2_emu_trace((int16_t)xe, (int16_t)ye, 0, 0);
         v2_emu_trace_branch(1);
+        v2_emu_base_x = nbx; v2_emu_base_y = nby;
         for (int p = 0; p < 3; p++) {
-            memcpy(v2_emu_page[p], v2_emu_bg, sizeof(v2_emu_bg));
-            v2_emu_vp_x[p] = vpx; v2_emu_vp_y[p] = vpy;
-            v2_blit_target = v2_emu_page[p];
+            memset(v2_emu_page[p], 0, sizeof(v2_emu_page[p]));
+            v2_emu_page_fill_bg(v2_emu_page[p], offx, offy);
+            v2_blit_to_page(v2_emu_page[p], offx, offy);
             v2_draw_sprites(ds_val);
         }
-        v2_blit_target = nullptr;
+        v2_blit_to_display();
         v2_emu_valid = true;
         return;
     }
 
-    // Bring ALL pages to the current effective viewport: shift each by its
-    // own delta and fill exposed stripes from the fresh background render
-    // (screen-space equivalent of the orig edge channel painting new rows on
-    // every page cursor at once, sub_170b9/17049 four-address writes).
-    int sdx0 = 0, sdy0 = 0;
-    for (int p = 0; p < 3; p++) {
-        int sdx = (!v2_emu_valid || v2_emu_vp_x[p] == -32768) ? 99999 : (int)vpx - (int)v2_emu_vp_x[p];
-        int sdy = (!v2_emu_valid || v2_emu_vp_y[p] == -32768) ? 99999 : (int)vpy - (int)v2_emu_vp_y[p];
-        if (p == 0) { sdx0 = sdx; sdy0 = sdy; }
-        v2_emu_vp_x[p] = vpx; v2_emu_vp_y[p] = vpy;
-        uint8_t* pg = v2_emu_page[p];
-        if (sdx >= 320 || sdx <= -320 || sdy >= 176 || sdy <= -176) {
-            // Fresh page: clean tile background; WORK-role pages ([92F7]/[92F9])
-            // additionally get the current sprite canvas — the orig scene-entry
-            // spawn tickets ([obj+0x114D]=3) painted the work pages before the
-            // emu became valid (measured: static objects 32/34 present on the
-            // orig pages with rd=0 by the first valid frame). The BACKGROUND
-            // role page stays sprite-free: seeding it spread ghost pixels
-            // through every bit0 latch (the stable f342 class).
-            memcpy(pg, v2_emu_bg, sizeof(v2_emu_bg));
+    int d8x = nbx - v2_emu_base_x, d8y = nby - v2_emu_base_y;
+    if (!v2_emu_valid || d8x >= 320 || d8x <= -320 || d8y >= 176 || d8y <= -176) {
+        // Fresh pages at the new anchor: clean tile background; WORK-role
+        // pages additionally get the current sprite canvas (scene-entry spawn
+        // tickets painted the work pages before the emu became valid). The
+        // BACKGROUND role page stays sprite-free (f342 ghost class).
+        v2_emu_base_x = nbx; v2_emu_base_y = nby;
+        for (int p = 0; p < 3; p++) {
+            v2_emu_page_render_full(v2_emu_page[p], ds_base);
             if (p != v2_emu_slot(ds_base, 0x92FB)) {
-                v2_blit_target = pg;
+                v2_blit_to_page(v2_emu_page[p], offx, offy);
                 v2_draw_sprites(ds_val);
-                v2_blit_target = nullptr;
             }
-            continue;
         }
-        if (sdy > 0) {
-            memmove(pg, pg + sdy * 320, (size_t)(176 - sdy) * 320);
-            memcpy(pg + (176 - sdy) * 320, v2_emu_bg + (176 - sdy) * 320, (size_t)sdy * 320);
-        } else if (sdy < 0) {
-            memmove(pg - sdy * 320, pg, (size_t)(176 + sdy) * 320);
-            memcpy(pg, v2_emu_bg, (size_t)(-sdy) * 320);
-        }
-        if (sdx != 0) {
-            for (int y = 0; y < 176; y++) {
-                uint8_t* row = pg + y * 320;
-                const uint8_t* bgr = v2_emu_bg + y * 320;
-                if (sdx > 0) {
-                    memmove(row, row + sdx, (size_t)(320 - sdx));
-                    memcpy(row + 320 - sdx, bgr + 320 - sdx, (size_t)sdx);
-                } else {
-                    memmove(row - sdx, row, (size_t)(320 + sdx));
-                    memcpy(row, bgr, (size_t)(-sdx));
+        v2_blit_to_display();
+        v2_emu_trace((int16_t)xe, (int16_t)ye, 9999, 9999);
+        v2_emu_trace_branch(2);
+    } else if (d8x != 0 || d8y != 0) {
+        // Anchor moved by whole tiles: shift ALL pages by (−d8x,−d8y) and
+        // fill the exposed bands from the current background render (the
+        // screen-space equivalent of the orig edge channels painting the new
+        // rows/columns on every page cursor at once).
+        for (int p = 0; p < 3; p++) {
+            uint8_t* pg = v2_emu_page[p];
+            if (d8y > 0) {
+                memmove(pg, pg + d8y * V2_EMU_W, (size_t)(V2_EMU_H - d8y) * V2_EMU_W);
+            } else if (d8y < 0) {
+                memmove(pg - d8y * V2_EMU_W, pg, (size_t)(V2_EMU_H + d8y) * V2_EMU_W);
+            }
+            if (d8x != 0) {
+                for (int y = 0; y < V2_EMU_H; y++) {
+                    uint8_t* row = pg + y * V2_EMU_W;
+                    if (d8x > 0) memmove(row, row + d8x, (size_t)(V2_EMU_W - d8x));
+                    else         memmove(row - d8x, row, (size_t)(V2_EMU_W + d8x));
+                }
+            }
+            // Exposed bands: render map tiles directly in page space — the
+            // orig edge channels paint whole map rows/columns (including the
+            // beyond-window margin the bg render can't supply).
+            {
+                uint16_t fs_seg2 = *(uint16_t*)(ds_base + 0x2E69);
+                uint16_t tg_seg2 = *(uint16_t*)(ds_base + 0x2E5F);
+#ifdef V2_RENDER_FROM_SHADOW
+                uint8_t* fsb2 = v2_resolve_segment(fs_seg2);
+                if (!fsb2) fsb2 = v2_m2c_base + ((uint32_t)fs_seg2 << 4);
+                uint8_t* tgb2 = v2_resolve_segment(tg_seg2);
+                if (!tgb2) tgb2 = v2_m2c_base + ((uint32_t)tg_seg2 << 4);
+#else
+                uint8_t* fsb2 = v2_m2c_base + ((uint32_t)fs_seg2 << 4);
+                uint8_t* tgb2 = v2_m2c_base + ((uint32_t)tg_seg2 << 4);
+#endif
+                int col0 = nbx >> 3, row0 = nby >> 3;
+                if (d8y != 0) {
+                    int ry0 = d8y > 0 ? (V2_EMU_H - d8y) >> 3 : 0;
+                    int ry1 = d8y > 0 ? V2_EMU_H >> 3 : (-d8y) >> 3;
+                    for (int tr = ry0; tr < ry1; tr++)
+                        for (int tc = 0; tc < V2_EMU_W >> 3; tc++)
+                            v2_emu_render_tile(pg, ds_base, fsb2, tgb2,
+                                               row0 + tr, col0 + tc, tc * 8, tr * 8);
+                }
+                if (d8x != 0) {
+                    int cx0 = d8x > 0 ? (V2_EMU_W - d8x) >> 3 : 0;
+                    int cx1 = d8x > 0 ? V2_EMU_W >> 3 : (-d8x) >> 3;
+                    for (int tr = 0; tr < V2_EMU_H >> 3; tr++)
+                        for (int tc = cx0; tc < cx1; tc++)
+                            v2_emu_render_tile(pg, ds_base, fsb2, tgb2,
+                                               row0 + tr, col0 + tc, tc * 8, tr * 8);
                 }
             }
         }
+        v2_emu_base_x = nbx; v2_emu_base_y = nby;
+        v2_emu_trace((int16_t)xe, (int16_t)ye, d8x, d8y);
+        v2_emu_trace_branch(3);
+    } else {
+        v2_emu_trace((int16_t)xe, (int16_t)ye, 0, 0);
+        v2_emu_trace_branch(4);
     }
     v2_emu_valid = true;
-    v2_emu_trace(vpx, vpy, sdx0, sdy0);
-    v2_emu_trace_branch((sdx0 || sdy0) ? 3 : 4);
     {
         // 4. sub_1de05 dirty channel: scan the visible 43x25 map window for
         //    render-map bit0 cells and latch-copy each 8x8 cell from the
@@ -572,13 +679,6 @@ void v2_emu_early(uint16_t ds_val) {
 #endif
         uint16_t scroll_row = *(uint16_t*)(ds_base + 0x2581);
         uint16_t scroll_col = *(uint16_t*)(ds_base + 0x257F);
-        int16_t xs = *(int16_t*)(ds_base + 0x39E);
-        int16_t ys = *(int16_t*)(ds_base + 0x3A0);
-        int16_t xl = *(int16_t*)(ds_base + 0x25A4);
-        int16_t yl = *(int16_t*)(ds_base + 0x25A6);
-        int xe = (int)vpx + xs; if (xe > xl) xe = (int)vpx - xs;
-        int ye = (int)vpy + ys; if (ye > yl) ye = (int)vpy - ys;
-        int pox = xe & 7, poy = ye & 7;
         // sub_1de05 latch pass: every bit0 cell of the visible 43x25 window is
         // span-copied from the BACKGROUND page role [92FB] onto the DRAW page
         // role [92F7] (erases stale sprite pixels). NO sprite drawing happens
@@ -616,14 +716,16 @@ void v2_emu_early(uint16_t ds_val) {
                     if (wx >= t_ox - 8 && wx < t_ox + 40 && wy >= t_oy - 8 && wy < t_oy + 40)
                         trace_cells++;
                 }
-                int sx0 = cv * 8 - pox, sy0 = rv * 8 - poy;
+                // Page coordinates of the cell: world − anchor.
+                int px0 = (int)cs2 * 8 - v2_emu_base_x;
+                int py0 = (int)rs * 8 - v2_emu_base_y;
                 for (int yy = 0; yy < 8; yy++) {
-                    int sy = sy0 + yy;
-                    if (sy < 0 || sy >= 176) continue;
-                    int xa = sx0 < 0 ? 0 : sx0;
-                    int xb = sx0 + 8 > 320 ? 320 : sx0 + 8;
+                    int py = py0 + yy;
+                    if (py < 0 || py >= V2_EMU_H) continue;
+                    int xa = px0 < 0 ? 0 : px0;
+                    int xb = px0 + 8 > V2_EMU_W ? V2_EMU_W : px0 + 8;
                     if (xa < xb)
-                        memcpy(drw + sy * 320 + xa, bgr + sy * 320 + xa, (size_t)(xb - xa));
+                        memcpy(drw + py * V2_EMU_W + xa, bgr + py * V2_EMU_W + xa, (size_t)(xb - xa));
                 }
             }
         }
@@ -654,15 +756,6 @@ extern "C" void v2_emu_df6a(uint16_t ds_val) {
 #endif
     uint16_t scroll_row = *(uint16_t*)(ds_base + 0x2581);
     uint16_t scroll_col = *(uint16_t*)(ds_base + 0x257F);
-    int16_t vpx = *(int16_t*)(ds_base + 0x44);
-    int16_t vpy = *(int16_t*)(ds_base + 0x46);
-    int16_t xs = *(int16_t*)(ds_base + 0x39E);
-    int16_t ys = *(int16_t*)(ds_base + 0x3A0);
-    int16_t xl = *(int16_t*)(ds_base + 0x25A4);
-    int16_t yl = *(int16_t*)(ds_base + 0x25A6);
-    int xe = (int)vpx + xs; if (xe > xl) xe = (int)vpx - xs;
-    int ye = (int)vpy + ys; if (ye > yl) ye = (int)vpy - ys;
-    int pox = xe & 7, poy = ye & 7;
     uint8_t* shown = v2_emu_page[v2_emu_slot(ds_base, 0x92F9)];
     uint8_t* bgr   = v2_emu_page[v2_emu_slot(ds_base, 0x92FB)];
     for (int rv = 0; rv < 25; rv++) {
@@ -673,14 +766,15 @@ extern "C" void v2_emu_df6a(uint16_t ds_val) {
             uint16_t cs2 = (uint16_t)(cv + scroll_col);
             uint16_t moff = (uint16_t)((row_base + cs2) * 2u);
             if (!(*(uint16_t*)(fs_base + moff) & 2)) continue;   // bit1 (TEST 2)
-            int sx0 = cv * 8 - pox, sy0 = rv * 8 - poy;
+            int px0 = (int)cs2 * 8 - v2_emu_base_x;
+            int py0 = (int)rs * 8 - v2_emu_base_y;
             for (int yy = 0; yy < 8; yy++) {
-                int sy = sy0 + yy;
-                if (sy < 0 || sy >= 176) continue;
-                int xa = sx0 < 0 ? 0 : sx0;
-                int xb = sx0 + 8 > 320 ? 320 : sx0 + 8;
+                int py = py0 + yy;
+                if (py < 0 || py >= V2_EMU_H) continue;
+                int xa = px0 < 0 ? 0 : px0;
+                int xb = px0 + 8 > V2_EMU_W ? V2_EMU_W : px0 + 8;
                 if (xa < xb)
-                    memcpy(bgr + sy * 320 + xa, shown + sy * 320 + xa, (size_t)(xb - xa));
+                    memcpy(bgr + py * V2_EMU_W + xa, shown + py * V2_EMU_W + xa, (size_t)(xb - xa));
             }
         }
     }
@@ -703,23 +797,6 @@ extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage) {
         v2_emu_early(ds_val);
     } else {
         v2_emu_late(ds_val);
-        // Init-pass probe: force flag, roles, letter-band checksums on all
-        // three pages right after the late layer of each init pass.
-        static int _ip = 0;
-        if (_ip < 16) {
-            _ip++;
-            uint8_t* ds_base = v2_get_ds_base(ds_val);
-            int sums[3] = {0, 0, 0};
-            for (int p = 0; p < 3; p++)
-                for (int y = 64; y < 96; y++)
-                    for (int x = 0; x < 320; x += 4)
-                        sums[p] += v2_emu_page[p][y * 320 + x];
-            fprintf(stderr, "V2-INITPASS[%d]: force=%02X roles=%04X/%04X/%04X band=%d/%d/%d valid=%d\n",
-                _ip, ds_base[0x9568],
-                *(uint16_t*)(ds_base + 0x92F7), *(uint16_t*)(ds_base + 0x92F9),
-                *(uint16_t*)(ds_base + 0x92FB),
-                sums[0], sums[1], sums[2], (int)v2_emu_valid);
-        }
     }
 #ifdef V2_RENDER_FROM_SHADOW
     v2_vm_in_frame = save_in_frame;
@@ -727,9 +804,20 @@ extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage) {
 }
 
 // Shown page of the current sub-frame — the A2 sensor compares against this.
+// Assembles the 320x176 window (anchor + current effective offset) into a
+// static frame buffer, like the orig CRTC unfold reads myOffset's window.
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val) {
+    static uint8_t win[320 * 176];
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    return v2_emu_page[v2_emu_slot(ds_base, 0x92F9)];
+    uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, 0x92F9)];
+    int xe, ye;
+    v2_emu_eff(ds_base, &xe, &ye);
+    int offx = xe - v2_emu_base_x, offy = ye - v2_emu_base_y;
+    if (offx < 0) offx = 0; if (offx > V2_EMU_W - 320) offx = V2_EMU_W - 320;
+    if (offy < 0) offy = 0; if (offy > V2_EMU_H - 176) offy = V2_EMU_H - 176;
+    for (int y = 0; y < 176; y++)
+        memcpy(win + y * 320, pg + (y + offy) * V2_EMU_W + offx, 320);
+    return win;
 }
 
 // sub_11439/sub_16ded mirror hook (task #21): the orig level-entry init
@@ -754,17 +842,11 @@ extern "C" void v2_emu_init_pages(uint16_t ds_val) {
     v2_vm_in_frame = save_in_frame;
 #endif
     memcpy(v2_emu_bg, v2_render_buf, sizeof(v2_emu_bg));
+    int xe, ye;
+    v2_emu_eff(ds_base, &xe, &ye);
+    v2_emu_base_x = xe & ~7; v2_emu_base_y = ye & ~7;
     for (int p = 0; p < 3; p++)
-        memcpy(v2_emu_page[p], v2_emu_bg, sizeof(v2_emu_bg));
-    int16_t vpx = *(int16_t*)(ds_base + 0x44);
-    int16_t vpy = *(int16_t*)(ds_base + 0x46);
-    int16_t xs = *(int16_t*)(ds_base + 0x39E);
-    int16_t ys = *(int16_t*)(ds_base + 0x3A0);
-    int16_t xl = *(int16_t*)(ds_base + 0x25A4);
-    int16_t yl = *(int16_t*)(ds_base + 0x25A6);
-    int xe = (int)vpx + xs; if (xe > (int)xl) xe = (int)vpx - xs;
-    int ye = (int)vpy + ys; if (ye > (int)yl) ye = (int)vpy - ys;
-    for (int p = 0; p < 3; p++) { v2_emu_vp_x[p] = (int16_t)xe; v2_emu_vp_y[p] = (int16_t)ye; }
+        v2_emu_page_render_full(v2_emu_page[p], ds_base);
     v2_emu_valid = true;
 }
 
@@ -782,29 +864,28 @@ void v2_emu_late(uint16_t ds_val) {
     // painted by the SAME sub-frame's late layer, i.e. dd9c renders into
     // [92F9]; [92F7] (previous shown) only receives the 1de05 latches.
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    v2_blit_target = v2_emu_page[v2_emu_slot(ds_base, 0x92F9)];
+    {
+        int xe, ye;
+        v2_emu_eff(ds_base, &xe, &ye);
+        v2_blit_to_page(v2_emu_page[v2_emu_slot(ds_base, 0x92F9)],
+                        xe - v2_emu_base_x, ye - v2_emu_base_y);
+    }
     v2_draw_sprites_late(ds_val);
     v2_draw_flagged_tiles(ds_val);
-    v2_blit_target = nullptr;
-    // Traced object: checksum its 32x32 screen area on all three pages after
-    // the late layer — page-content chronology for the ghost/missing classes.
+    v2_blit_to_display();
+    // Traced object: checksum its 32x32 page area (world − anchor) on all
+    // three pages after the late layer.
     if (v2_objtrace_di != 0xFFFF) {
         int16_t ox = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + 0x64D));
         int16_t oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + 0x74D));
-        // Exact screen mapping: world − effective viewport (vp+shake, clamp).
-        int16_t vx = *(int16_t*)(ds_base + 0x44), vy = *(int16_t*)(ds_base + 0x46);
-        int16_t xs2 = *(int16_t*)(ds_base + 0x39E), ys2 = *(int16_t*)(ds_base + 0x3A0);
-        int16_t xl2 = *(int16_t*)(ds_base + 0x25A4), yl2 = *(int16_t*)(ds_base + 0x25A6);
-        int xe2 = (int)vx + xs2; if (xe2 > (int)xl2) xe2 = (int)vx - xs2;
-        int ye2 = (int)vy + ys2; if (ye2 > (int)yl2) ye2 = (int)vy - ys2;
-        int sx = (int)ox - xe2, sy = (int)oy - ye2;
+        int px = (int)ox - v2_emu_base_x, py = (int)oy - v2_emu_base_y;
         int sums[3] = {0, 0, 0};
         for (int p = 0; p < 3; p++)
             for (int yy = 0; yy < 32; yy++)
                 for (int xx = 0; xx < 32; xx++) {
-                    int X = sx + xx, Y = sy + yy;
-                    if (X >= 0 && X < 320 && Y >= 0 && Y < 176)
-                        sums[p] += v2_emu_page[p][Y * 320 + X];
+                    int X = px + xx, Y = py + yy;
+                    if (X >= 0 && X < V2_EMU_W && Y >= 0 && Y < V2_EMU_H)
+                        sums[p] += v2_emu_page[p][Y * V2_EMU_W + X];
                 }
         v2_objtrace("e:pg", (int16_t)sums[0], (int16_t)sums[1], (int16_t)sums[2],
                     v2_emu_slot(ds_base, 0x92F7) * 16 + v2_emu_slot(ds_base, 0x92F9));
@@ -1233,13 +1314,13 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
             int screen_y = row_vis * 8 - pix_off_y;
 
             // For each pixel in the 8×8 tile, check mask and draw if set
+            // (v2_put_pixel: honors the emu-page blit translation when the
+            // flagged pass targets a page).
             for (int ty = 0; ty < 8; ty++) {
                 int sy = screen_y + (vflip ? 7 - ty : ty);
-                if (sy < 0 || sy >= 176) continue;
 
                 for (int tx = 0; tx < 8; tx++) {
                     int sx = screen_x + (hflip ? 7 - tx : tx);
-                    if (sx < 0 || sx >= 320) continue;
 
                     // Tile data layout: plane*16 + strip*8 + row*2 + byte
                     int plane = tx & 3;       // tx % 4
@@ -1255,7 +1336,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 
                     // Pixel color from tile data
                     uint8_t color = tile[plane * 16 + strip * 8 + row * 2 + byte_idx];
-                    buf[sy * 320 + sx] = color;
+                    v2_put_pixel(buf, sx, sy, color);
                 }
             }
         }

@@ -189,7 +189,13 @@ extern void v2_emu_late(uint16_t ds_val);
 extern "C" void v2_emu_df6a(uint16_t ds_val);
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
 extern uint8_t v2_emu_bg[320 * 176];
-extern uint8_t v2_emu_page[3][320 * 176];
+// Anchor-model pages: world-anchored (8-aligned base) with an 8px margin —
+// sub-tile window motion (shake/pan) never moves page content.
+#define V2_EMU_W 328
+#define V2_EMU_H 184
+extern uint8_t v2_emu_page[3][V2_EMU_W * V2_EMU_H];
+extern int     v2_emu_base_x;   // world coord of page pixel (0,0)
+extern int     v2_emu_base_y;
 extern int     v2_emu_cur;   // legacy (unused in the 3-page model)
 extern bool    v2_emu_valid;
 // Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
