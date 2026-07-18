@@ -576,6 +576,7 @@ extern "C" uint32_t v2_fntest_game_ds_linear(void);
 extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count);
 extern "C" void v2_emu_ring_dump(void);
 extern "C" void v2_emu_df6a(uint16_t ds_val);
+extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_y, uint16_t clip);
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
 extern "C" void v2_emu_init_pages(uint16_t ds_val);
 extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage);
@@ -649,11 +650,12 @@ void v2_verify_render_buf(int frame) {
         }
         if (oy > 0 && oy < 144 && _bp < 40) {
             _bp++;
-            int so = 0, sv = 0, se[3] = {0, 0, 0};
+            int so = 0, sv = 0, sd = 0, se[3] = {0, 0, 0};
             for (int y = oy; y < oy + 32; y++)
                 for (int x = 0; x < 320; x += 4) {
                     so += orig_pixels[y * 320 + x];
                     sv += v2_frame[y * 320 + x];
+                    sd += v2_render_buf[y * 320 + x];
                 }
             {
                 int16_t wy0 = *(int16_t*)(v2_vm_get_shadow_ds() + (uint16_t)(v2_objtrace_di + 0x74D));
@@ -668,8 +670,8 @@ void v2_verify_render_buf(int frame) {
                         }
             }
             extern uint16_t v2_a2_snap_pg;
-            fprintf(stderr, "BAND[f%d]: orig=%d v2=%d | emu=%d/%d/%d snap_pg=%04X roles=%04X/%04X/%04X\n",
-                frame, so, sv, se[0], se[1], se[2], v2_a2_snap_pg,
+            fprintf(stderr, "BAND[f%d]: orig=%d v2=%d dsp=%d | emu=%d/%d/%d snap_pg=%04X roles=%04X/%04X/%04X\n",
+                frame, so, sv, sd, se[0], se[1], se[2], v2_a2_snap_pg,
                 *(uint16_t*)(_shd + 0x92F7),
                 *(uint16_t*)(_shd + 0x92F9),
                 *(uint16_t*)(_shd + 0x92FB));
@@ -8733,12 +8735,22 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                 // Viewport X bounds (eip 0x4097-0x40A1): if (pos_x - vp_x + 0x10) > 0x160 → skip.
                 uint16_t ax_x = (uint16_t)(pos_x - *(uint16_t*)(shadow + 0x44) + 0x10);
                 if (ax_x > 0x160) continue;
+                // Quadrant clip mask (orig dx, eips 0x40A2-0x40D3): 8=UL 4=UR 2=LL 1=LR.
+                uint16_t clip = 0;
+                if (ax_x < 8)      clip |= 0x0A;
+                if (ax_x > 0x158)  clip |= 0x05;
                 // Viewport Y bounds (eip 0x40B8-0x40C2): if (pos_y - vp_y + 0x10) > 0xD0 → skip.
                 uint16_t ax_y = (uint16_t)(pos_y - *(uint16_t*)(shadow + 0x46) + 0x10);
                 if (ax_y > 0xD0) continue;
+                if (ax_y < 8)      clip |= 0x0C;
+                if (ax_y > 0xC8)   clip |= 0x03;
                 // Mutate ds:0x6C/0x6E per orig eip 0x40D6-0x40E0 (after bound check).
                 *(uint16_t*)(shadow + 0x6C) = (pos_x >> 2) + 8;
                 *(uint16_t*)(shadow + 0x6E) = pos_y >> 2;
+                // Pixel side (task #21): repaint the 2x2 anim tile block onto
+                // the shown+background emu pages (orig sub_1689e calls onto
+                // the [92F9]- and [92FB]-page addresses).
+                v2_emu_anim_tiles(v2_current_ds_val, pos_x, pos_y, clip);
             }
         }
     }

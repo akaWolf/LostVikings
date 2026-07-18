@@ -803,6 +803,43 @@ extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage) {
 #endif
 }
 
+// sub_1406d pixel channel (task #21 flame class): each anim-queue entry
+// repaints the 2x2 tile block around (pos−8) onto BOTH the shown [92F9] and
+// background [92FB] pages (orig draws two passes, eips 0x40E5.. and 0x413B..),
+// bypassing the render-map bits entirely. clip bits (orig dx): 8=UL,4=UR,
+// 2=LL,1=LR quadrant suppressed at viewport edges.
+extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_y, uint16_t clip) {
+#ifdef V2_RENDER_FROM_SHADOW
+    if (!v2_vm_in_frame) return;
+#endif
+    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
+    if (ds_base[0x25CF] & 0x42) return;
+    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+    uint16_t tg_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    if (!fs_seg || !tg_seg) return;
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* fsb = v2_resolve_segment(fs_seg);
+    if (!fsb) fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgb = v2_resolve_segment(tg_seg);
+    if (!tgb) tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
+#else
+    uint8_t* fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
+    uint8_t* tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
+#endif
+    int row0 = ((int)pos_y >> 3) - 1, col0 = ((int)pos_x >> 3) - 1;
+    uint8_t* pages[2] = { v2_emu_page[v2_emu_slot(ds_base, 0x92F9)],
+                          v2_emu_page[v2_emu_slot(ds_base, 0x92FB)] };
+    static const uint16_t qbit[4] = { 8, 4, 2, 1 };   // UL UR LL LR
+    for (int pi = 0; pi < 2; pi++)
+        for (int q = 0; q < 4; q++) {
+            if (clip & qbit[q]) continue;
+            int r = row0 + (q >> 1), c = col0 + (q & 1);
+            v2_emu_render_tile(pages[pi], ds_base, fsb, tgb, r, c,
+                               c * 8 - v2_emu_base_x, r * 8 - v2_emu_base_y);
+        }
+}
+
 // Shown page of the current sub-frame — the A2 sensor compares against this.
 // Assembles the 320x176 window (anchor + current effective offset) into a
 // static frame buffer, like the orig CRTC unfold reads myOffset's window.
@@ -889,6 +926,22 @@ void v2_emu_late(uint16_t ds_val) {
                 }
         v2_objtrace("e:pg", (int16_t)sums[0], (int16_t)sums[1], (int16_t)sums[2],
                     v2_emu_slot(ds_base, 0x92F7) * 16 + v2_emu_slot(ds_base, 0x92F9));
+        // Display-side checksum of the same area (v2_render_buf holds the
+        // full clean frame after the early full sprite pass) — tells whether
+        // the display layer carries a DIFFERENT phase than the page layer.
+        {
+            int xe2, ye2;
+            v2_emu_eff(ds_base, &xe2, &ye2);
+            int sx = (int)ox - xe2, sy = (int)oy - ye2;
+            int ds_sum = 0;
+            for (int yy = 0; yy < 32; yy++)
+                for (int xx = 0; xx < 32; xx++) {
+                    int X = sx + xx, Y = sy + yy;
+                    if (X >= 0 && X < 320 && Y >= 0 && Y < 176)
+                        ds_sum += v2_render_buf[Y * 320 + X];
+                }
+            v2_objtrace("e:dsp", (int16_t)ds_sum, (int16_t)sx, (int16_t)sy, 0);
+        }
     }
 }
 
