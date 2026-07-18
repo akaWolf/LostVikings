@@ -79,6 +79,12 @@ extern "C" uint16_t v2_fntest_call_sub_12529(uint8_t* test_shadow, uint16_t bx);
 extern "C" void     v2_fntest_call_sub_13a0e(uint8_t* test_shadow);
 extern "C" void     v2_fntest_set_animdata(const uint8_t* data, uint32_t len);
 extern "C" void     v2_fntest_ensure_drawinfo(void);
+extern "C" void     v2_fntest_call_sub_173c7(uint8_t* test_shadow);
+extern "C" void     v2_fntest_set_tilemap(const uint8_t* data, uint32_t len);
+extern "C" uint8_t* v2_fntest_tilemap_ptr(void);
+extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
+extern "C" uint8_t* v2_fntest_fs_ptr(void);
+extern "C" void     v2_fntest_clear_fs(uint8_t fill);
 extern "C" void     v2_fntest_call_sub_13ba5(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11446(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di);
@@ -160,6 +166,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_15D3C = 57, FT_SUB_15D42 = 58, FT_SUB_11C52 = 59,
             FT_SUB_13BA5 = 60, FT_SUB_11446 = 61, FT_SUB_11569 = 62,
             FT_SUB_15911 = 63, FT_SUB_12549 = 64, FT_SUB_11CBB = 65,
+            FT_SUB_173C7 = 66,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -195,7 +202,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_13a0e", "sub_1450b", "sub_10e99",
                                  "sub_15d3c", "sub_15d42", "sub_11c52",
                                  "sub_13ba5", "sub_11446", "sub_11569",
-                                 "sub_15911", "sub_12549", "sub_11cbb" };
+                                 "sub_15911", "sub_12549", "sub_11cbb",
+                                 "sub_173c7" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -4216,6 +4224,118 @@ int ft_selftest_sub_11cbb() {
     return grid.fail ? 1 : 0;
 }
 
+// ---- Unit 66: sub_173c7 — render-tilemap (FS) builder -----------------------
+// Zones: tilemap = FT_VM_TESTSEG, GS tiledata = FT_GS_SEG, FS = FT_FS_SEG
+// (m2c::m scratch, save/restored per case). v2 reads/writes its shadow
+// buffers via the v2_fntest_set_* helpers; the FS zone comparison is a NEW
+// compare channel (poison-protocol tested).
+const uint16_t FT_GS_SEG = 0x5000;   // 32K zone 0x50000..0x57FFF
+const uint16_t FT_FS_SEG = 0x5800;   // reuses the chunk DEST zone (saved/restored)
+
+bool ft_synth_case_173c7(uint16_t w, uint16_t h, uint8_t flag25cf,
+                         uint32_t seed, const char* group,
+                         FtSynthStats& st, long& diff_budget)
+{
+    st.cases++;
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* tm_zone = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    uint8_t* gs_zone = mbase + (uint32_t)FT_GS_SEG * 16;
+    uint8_t* fs_zone = mbase + (uint32_t)FT_FS_SEG * 16;
+    static uint8_t saved_fs[0x10000], saved_gs[0x8000];
+    memcpy(saved_fs, fs_zone, 0x10000);
+    memcpy(saved_gs, gs_zone, 0x8000);
+    memset(fs_zone, 0xCC, 0x10000);
+
+    // Tile map W*H words + GS entries (8 bytes per tile type).
+    FtRng rng(seed);
+    static uint8_t tm[0x10000], gsd[0x8000];
+    memset(tm, 0, sizeof(tm)); memset(gsd, 0, sizeof(gsd));
+    for (int i = 0; i < w * h; i++) {
+        uint16_t t = (uint16_t)(rng.w() & 0x3FF) | (uint16_t)(rng.w() & 0xFC00);
+        tm[i * 2] = (uint8_t)t; tm[i * 2 + 1] = (uint8_t)(t >> 8);
+    }
+    for (int i = 0; i < 0x8000; i++) gsd[i] = (uint8_t)rng.w();
+    memset(tm_zone, 0, FT_VM_ZONE);
+    memcpy(tm_zone, tm, sizeof(tm));
+    memset(gs_zone, 0, 0x8000);
+    memcpy(gs_zone, gsd, sizeof(gsd));
+
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x2E63, FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, 0x2E69, FT_FS_SEG);
+    ft_wr16(g_synth_in, 0x2E5D, FT_GS_SEG);
+    ft_wr16(g_synth_in, 0x25DC, w);
+    ft_wr16(g_synth_in, 0x25DE, h);
+    ft_wr16(g_synth_in, 0x2E65, (uint16_t)(w * h * 2));   // GS tail dest offset
+    g_synth_in[0x25CF] = flag25cf;
+    ft_fill_tail(g_synth_in);
+
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_173C7), g_synth_orig, regs);
+    static uint8_t orig_fs[0x10000], orig_tm[0x10000];
+    memcpy(orig_fs, fs_zone, 0x10000);
+    memcpy(orig_tm, tm_zone, 0x10000);
+    memcpy(fs_zone, saved_fs, 0x10000);
+    memcpy(gs_zone, saved_gs, 0x8000);
+
+    // v2: same inputs into the shadows; FS baseline matches the 0xCC zone.
+    v2_fntest_set_tilemap(tm, sizeof(tm));
+    v2_fntest_set_gs_tiledata(gsd, sizeof(gsd));
+    v2_fntest_clear_fs(0xCC);
+    memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+    v2_fntest_call_sub_173c7(g_scratch);
+
+    long diffs = 0;
+    uint8_t* v2fs = v2_fntest_fs_ptr();
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (orig_fs[a] == v2fs[a]) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_173c7 %s]: fs+%04X orig=%02X v2=%02X | w=%d h=%d f=%02X\n",
+                    group, a, orig_fs[a], v2fs[a], w, h, flag25cf); }
+        diffs++;
+        if (diffs > 60) break;
+    }
+    // The GS tail lands in the tilemap zone (ES) — compare it too.
+    uint8_t* v2tm = v2_fntest_tilemap_ptr();
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (orig_tm[a] == v2tm[a]) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_173c7 %s]: tm+%04X orig=%02X v2=%02X | w=%d h=%d\n",
+                    group, a, orig_tm[a], v2tm[a], w, h); }
+        diffs++;
+        if (diffs > 90) break;
+    }
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        if (g_scratch[a] == g_synth_orig[a]) continue;
+        if (v2_fntest_ds_skip(a)) continue;
+        if (diff_budget > 0) { diff_budget--;
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_173c7 %s]: ds addr=%04X orig=%02X v2=%02X\n",
+                    group, a, g_synth_orig[a], g_scratch[a]); }
+        diffs++;
+    }
+    if (diffs) { st.fail++; return false; }
+    st.pass++; return true;
+}
+
+int ft_selftest_sub_173c7() {
+    FtSynthStats grid;
+    long diff_budget = 40;
+    static const uint16_t WH[][2] = { {1,1}, {2,2}, {4,4}, {8,3}, {0x2B,0x19},
+                                      {0x40,0x20} };
+    int ci = 0;
+    for (auto& wh : WH)
+        ft_synth_case_173c7(wh[0], wh[1], 0, 0x173C7000u + ci++, "grid",
+                            grid, diff_budget);
+    ft_synth_case_173c7(4, 4, 0x42, 0x173C70F0u, "chunk-clear", grid, diff_budget);
+    ft_synth_case_173c7(4, 4, 0x02, 0x173C70F1u, "flag02", grid, diff_budget);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_173c7]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
 int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
@@ -4341,6 +4461,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15911")) { matched = true; rc |= ft_selftest_sub_15911(); }
     if (all || strstr(env, "sub_12549")) { matched = true; rc |= ft_selftest_sub_12549(); }
     if (all || strstr(env, "sub_11cbb")) { matched = true; rc |= ft_selftest_sub_11cbb(); }
+    if (all || strstr(env, "sub_173c7")) { matched = true; rc |= ft_selftest_sub_173c7(); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

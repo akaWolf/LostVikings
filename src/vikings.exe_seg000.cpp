@@ -139,6 +139,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 63: return (void*)&sub_15911;   // K3b: Y-move search dispatcher (CF/ax)
     case 64: return (void*)&sub_12549;   // K5: text-frame corner glyph select (ax)
     case 65: return (void*)&sub_11cbb;   // K5: pause item interaction (sound stub)
+    case 66: return (void*)&sub_173c7;   // FS: render-tilemap builder (ES/GS→FS)
     default: return 0;
     }
 }

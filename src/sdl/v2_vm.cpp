@@ -11126,6 +11126,22 @@ extern "C" int v2_fntest_call_sub_15911(uint8_t* test_shadow, uint16_t di, uint1
 static void v2_sub_11446(uint8_t* s);
 extern "C" void v2_fntest_call_sub_11446(uint8_t* test_shadow) { v2_sub_11446(test_shadow); }
 extern "C" void v2_fntest_call_sub_11569(uint8_t* test_shadow, uint16_t di) { v2_sub_11569(test_shadow, di); }
+// Unit 66 (sub_173c7 FS builder): shadow-zone helpers.
+static void v2_sub_173c7(uint8_t* s);
+extern "C" void v2_fntest_call_sub_173c7(uint8_t* test_shadow) { v2_sub_173c7(test_shadow); }
+extern "C" void v2_fntest_set_tilemap(const uint8_t* data, uint32_t len) {
+    if (len > V2_TILEMAP_SHADOW_SIZE) len = V2_TILEMAP_SHADOW_SIZE;
+    memset(v2_vm_shadow_tilemap, 0, V2_TILEMAP_SHADOW_SIZE);
+    memcpy(v2_vm_shadow_tilemap, data, len);
+}
+extern "C" uint8_t* v2_fntest_tilemap_ptr(void) { return v2_vm_shadow_tilemap; }
+extern "C" void v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len) {
+    if (len > V2_GS_TILEDATA_SIZE) len = V2_GS_TILEDATA_SIZE;
+    memset(v2_vm_shadow_gs_tiledata, 0, V2_GS_TILEDATA_SIZE);
+    memcpy(v2_vm_shadow_gs_tiledata, data, len);
+}
+extern "C" uint8_t* v2_fntest_fs_ptr(void) { return v2_vm_shadow_fs; }
+extern "C" void v2_fntest_clear_fs(uint8_t fill) { memset(v2_vm_shadow_fs, fill, 0x10000); }
 extern "C" void v2_fntest_set_animdata(const uint8_t* data, uint32_t len) {
     if (len > V2_ANIMDATA_SHADOW_SIZE) len = V2_ANIMDATA_SHADOW_SIZE;
     memset(v2_vm_shadow_animdata, 0, V2_ANIMDATA_SHADOW_SIZE);
