@@ -1871,7 +1871,12 @@ static uint32_t v2_lzss_decompress(const uint8_t* src, uint8_t* dest, uint16_t d
 // Exact replica of sub_10982/read_chunk: seek, read compressed, LZSS decompress.
 // chunk_id = chunk number, dest = destination buffer, max_size = buffer size.
 // Returns decompressed size, or 0 on failure.
-static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size) {
+// ds_ctx: the DS image receiving the orig side effects (header at 0x2BB4,
+// plane size at 0x2BBC — orig sub_10982 freads them straight into DS).
+// Defaults to the live shadow; isolated units pass their test image.
+static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
+                              uint8_t* ds_ctx = nullptr) {
+    uint8_t* dctx = ds_ctx ? ds_ctx : v2_vm_shadow_ds;
     if (!v2_data_handle) {
         v2_data_handle = fopen("DATA.DAT", "rb");
         if (!v2_data_handle) return 0;
@@ -1889,8 +1894,8 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
     uint32_t chunk_offset = *(uint32_t*)(header);
     uint32_t next_offset = *(uint32_t*)(header + 4);
     uint32_t compressed_size = next_offset - chunk_offset;
-    // Write header to shadow DS (same as original sub_10982 writes to ds:0x2BB4)
-    memcpy(v2_vm_shadow_ds + 0x2BB4, header, 8);
+    // Write header to the DS context (orig sub_10982 writes ds:0x2BB4)
+    memcpy(dctx + 0x2BB4, header, 8);
 
     // Seek to chunk data
     if (fseek(v2_data_handle, chunk_offset, SEEK_SET)) return 0;
@@ -1899,7 +1904,7 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
     // Original: fread(raddr(ds,0x2BBC), 2, 1, data_handle)
     uint16_t decompressed_size;
     if (fread(&decompressed_size, 2, 1, v2_data_handle) != 1) return 0;
-    *(uint16_t*)(v2_vm_shadow_ds + 0x2BBC) = decompressed_size;
+    *(uint16_t*)(dctx + 0x2BBC) = decompressed_size;
 
     // Original sub_10982: ecx = compressed_size (including 2-byte header already read).
     // After reading the 2-byte header, file position = chunk_offset + 2.
@@ -3772,7 +3777,7 @@ static void v2_sub_113d8(uint8_t* s) {
     if (s[0x25BA] != 0) si = *(uint16_t*)(s + 0x03C2); // byte_2AA9A, word_288A2
 
     // X: center on viking, clamp to [0, scroll_X_limit]
-    int16_t ax = (int16_t)*(uint16_t*)(s + si + 0x173D) - 0xA0;
+    int16_t ax = (int16_t)*(uint16_t*)(s + (uint16_t)(si + 0x173D)) - 0xA0;   // 16-bit wrap (unit 46, div #21)
     if (ax < 0) ax = 0;
     if (ax > (int16_t)*(uint16_t*)(s + 0x25A4)) ax = (int16_t)*(uint16_t*)(s + 0x25A4);
     *(uint16_t*)(s + 0x0044) = (uint16_t)ax;   // word_28524 (viewport X)
@@ -3783,7 +3788,7 @@ static void v2_sub_113d8(uint8_t* s) {
     *(uint16_t*)(s + 0x92F3) = scroll_x >> 1;   // word_317D3
 
     // Y: center on viking, clamp to [0, scroll_Y_limit]
-    ax = (int16_t)*(uint16_t*)(s + si + 0x1765) - 0x58;
+    ax = (int16_t)*(uint16_t*)(s + (uint16_t)(si + 0x1765)) - 0x58;   // 16-bit wrap
     if (ax < 0) ax = 0;
     if (ax > (int16_t)*(uint16_t*)(s + 0x25A6)) ax = (int16_t)*(uint16_t*)(s + 0x25A6);
     *(uint16_t*)(s + 0x0046) = (uint16_t)ax;   // word_28526 (viewport Y)
@@ -4335,12 +4340,12 @@ transition:
     } else {
         // Read from transition table
         uint16_t si = *(uint16_t*)(s + 0x03D4); // word_288B4
-        *(uint16_t*)(s + 0x25C9) = *(uint16_t*)(s + si + 0x2B66);
-        chunk_ax = *(uint16_t*)(s + si + 0x2B74);
+        *(uint16_t*)(s + 0x25C9) = *(uint16_t*)(s + (uint16_t)(si + 0x2B66));  // 16-bit wrap
+        chunk_ax = *(uint16_t*)(s + (uint16_t)(si + 0x2B74));                  // 16-bit wrap
     }
     // loc_11774: load transition chunk → ds:0x2193
     *(uint16_t*)(s + 0x2191) = 2; // word_2A671
-    v2_read_chunk(chunk_ax, s + 0x2193, 0x10000 - 0x2193);
+    v2_read_chunk(chunk_ax, s + 0x2193, 0x10000 - 0x2193, s);
     // jmp sub_12ce4 — tail call (unconditional!)
     v2_sub_12ce4(s);
 }
@@ -11091,6 +11096,11 @@ extern "C" void v2_fntest_call_sub_12fb3(uint8_t* test_shadow) { v2_sub_12fb3(te
 extern "C" void v2_fntest_call_sub_12ca3(uint8_t* test_shadow) { v2_sub_12ca3(test_shadow); }
 extern "C" void v2_fntest_call_sub_12ce4(uint8_t* test_shadow) { v2_sub_12ce4(test_shadow); }
 extern "C" void v2_fntest_call_sub_108b8(uint8_t* test_shadow) { v2_sub_108b8(test_shadow); }
+// K2a units (44-47): level-init leaves with data-directed axes.
+extern "C" void v2_fntest_call_sub_11397(uint8_t* test_shadow) { v2_sub_11397(test_shadow); }
+extern "C" void v2_fntest_call_sub_113b0(uint8_t* test_shadow) { v2_sub_113b0(test_shadow); }
+extern "C" void v2_fntest_call_sub_113d8(uint8_t* test_shadow) { v2_sub_113d8(test_shadow); }
+extern "C" void v2_fntest_call_sub_116e3(uint8_t* test_shadow) { v2_sub_116e3(test_shadow); }
 // Anim frame interpreter units: sub_1303a (cmd loop core) / sub_13031
 // (+ sub_135cf tail). The anim script lives INSIDE the DS image (the
 // oracle enters with es==ds), so vm.es = the case image too.

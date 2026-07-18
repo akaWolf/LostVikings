@@ -116,6 +116,10 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 41: return (void*)&sub_12ca3;   // K1: game-state clear + 2x FFFF
     case 42: return (void*)&sub_12ce4;   // K1: health init (6/6/6 + zeros)
     case 43: return (void*)&sub_108b8;   // K1: 12ce4 + level=0x27 + 3C2=0
+    case 44: return (void*)&sub_11397;   // K2a: 2 setters from [di-7AC2/-7ABC]
+    case 45: return (void*)&sub_113b0;   // K2a: scroll limits from map dims
+    case 46: return (void*)&sub_113d8;   // K2a: viewport center-clamp on viking
+    case 47: return (void*)&sub_116e3;   // K2a: level transition state machine
     default: return 0;
     }
 }

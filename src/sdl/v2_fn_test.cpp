@@ -66,6 +66,10 @@ extern "C" void     v2_fntest_call_sub_12fb3(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12ca3(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12ce4(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_108b8(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_11397(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_113b0(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_113d8(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_116e3(uint8_t* test_shadow);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -128,6 +132,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_11192 = 35, FT_SUB_111A1 = 36, FT_SUB_111DF = 37,
             FT_SUB_11784 = 38, FT_SUB_137F1 = 39, FT_SUB_12FB3 = 40,
             FT_SUB_12CA3 = 41, FT_SUB_12CE4 = 42, FT_SUB_108B8 = 43,
+            FT_SUB_11397 = 44, FT_SUB_113B0 = 45, FT_SUB_113D8 = 46,
+            FT_SUB_116E3 = 47,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -155,7 +161,9 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_10fe6", "sub_10ffc",
                                  "sub_11192", "sub_111a1", "sub_111df",
                                  "sub_11784", "sub_137f1", "sub_12fb3",
-                                 "sub_12ca3", "sub_12ce4", "sub_108b8" };
+                                 "sub_12ca3", "sub_12ce4", "sub_108b8",
+                                 "sub_11397", "sub_113b0", "sub_113d8",
+                                 "sub_116e3" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3331,6 +3339,103 @@ bool ft_synth_case_clear(const FtClearSpec& cs, const char* group,
     st.pass++; return true;
 }
 
+// ---- K2a units (44-47): level-init leaves with data-directed axes ---------
+// Same full-DS contract as K1 (no input registers; all inputs are DS fields),
+// plus a directed grid over up to two DS word fields that steer the branches
+// (clamp bounds, transition-state values). All contracts read line-by-line:
+//   44 sub_11397: [3A6]=[([25CB]-0x7AC2)&FFFF]&FF, [3A8]=[([25CB]-0x7ABC)&FFFF]&FF
+//   45 sub_113b0: scroll limits from map dims [25DC]/[25DE] (SHL1/SHL3-0x140/0xB0)
+//   46 sub_113d8: viewport center-clamp on viking [si+173D]/[si+1765]
+//                 (si = [25BA]?[3C2]:0); SUB 0xA0/0x58 + JGE = SIGNED OPERAND
+//                 compare (class #16 overflow zone X in [0x8000..0x809F])
+//   47 sub_116e3: transition state machine on [25C9] level / [3CC] state
+struct FtLeafAxis { uint16_t addr; const uint16_t* vals; int n; };
+struct FtLeafSpec { FtId id; FtClearCall call; FtLeafAxis ax1, ax2;
+                    bool needs_file; };   // unit's orig tail reads DATA.DAT
+
+const uint16_t FT_AX_11397_DI[] = { 0, 2, 4, 8, 0x10, 0x14, 0x7AC2, 0x7AC4,
+                                    0x8000, 0xFFFE };
+const uint16_t FT_AX_DIMS[]     = { 0, 1, 2, 0x28, 0x2B, 0x100, 0x4000,
+                                    0x7FFF, 0x8000, 0xFFFF };
+const uint16_t FT_AX_VIKX[]     = { 0, 0x9F, 0xA0, 0xA1, 0x140, 0x7FFF,
+                                    0x8000, 0x809F, 0x80A0, 0xFFFF };
+const uint16_t FT_AX_VIKY[]     = { 0, 0x57, 0x58, 0x59, 0xB0, 0x7FFF,
+                                    0x8000, 0x8057, 0x8058, 0xFFFF };
+const uint16_t FT_AX_LEVEL[]    = { 0, 0x27, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
+                                    0x30, 0x3E };
+const uint16_t FT_AX_STATE[]    = { 0, 1, 2, 0x8000, 0x8001, 0x8002, 0xFFFF };
+
+const FtLeafSpec FT_LEAVES[] = {
+    { FT_SUB_11397, v2_fntest_call_sub_11397,
+      { 0x25CB, FT_AX_11397_DI, 10 }, { 0, nullptr, 0 }, false },
+    { FT_SUB_113B0, v2_fntest_call_sub_113b0,
+      { 0x25DC, FT_AX_DIMS, 10 }, { 0x25DE, FT_AX_DIMS, 10 }, false },
+    { FT_SUB_113D8, v2_fntest_call_sub_113d8,
+      { 0x173D, FT_AX_VIKX, 10 }, { 0x1765, FT_AX_VIKY, 10 }, false },
+    // 116e3's transition tail CALLs sub_10982 (DATA.DAT read into ds:2193) —
+    // both sides need the same file context (class-D setup); fuzz images are
+    // skipped for it (random [3D4] -> random chunk ids would just measure the
+    // file-reader units 31/32 again on garbage ids, and a random [2BB2]
+    // handle would diverge on the DOS-handle emulation, not this function).
+    { FT_SUB_116E3, v2_fntest_call_sub_116e3,
+      { 0x25C9, FT_AX_LEVEL, 9 }, { 0x3CC, FT_AX_STATE, 7 }, true },
+};
+
+int ft_selftest_leaf(const FtLeafSpec& ls, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    FtClearSpec cs{ ls.id, ls.call };
+
+    if (ls.needs_file) {
+        v2_set_m2c_base(v2_fntest_m2c_base());
+        if (!v2_fntest_set_data_file("DATA.DAT") ||
+            !v2_fntest_set_data_file_v2("DATA.DAT")) {
+            fprintf(stderr, "FNSELFTEST-SUMMARY[%s]: DATA.DAT missing — total cases=0 fail=1\n",
+                    g_name[ls.id]);
+            return 1;
+        }
+    }
+
+    // Directed axis grid on the pristine base image.
+    int n1 = ls.ax1.n ? ls.ax1.n : 1;
+    int n2 = ls.ax2.n ? ls.ax2.n : 1;
+    for (int i = 0; i < n1; i++)
+        for (int j = 0; j < n2; j++) {
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+            if (ls.ax1.n) ft_wr16(g_synth_in, ls.ax1.addr, ls.ax1.vals[i]);
+            if (ls.ax2.n) ft_wr16(g_synth_in, ls.ax2.addr, ls.ax2.vals[j]);
+            ft_synth_case_clear(cs, "grid", grid, diff_budget);
+        }
+
+    // Directed axes on random images (branch values with noisy context),
+    // alternating with pure-noise fuzz. Skipped for file-context units (see
+    // the FT_LEAVES note).
+    FtRng rng(seed);
+    for (int i = 0; i < (ls.needs_file ? 0 : 48); i++) {
+        for (uint32_t a = 0; a < 0x10000; a += 2) {
+            uint16_t w = rng.w();
+            g_synth_in[a] = (uint8_t)w; g_synth_in[a + 1] = (uint8_t)(w >> 8);
+        }
+        if (ls.ax1.n) ft_wr16(g_synth_in, ls.ax1.addr,
+                              ls.ax1.vals[rng.next() % (uint32_t)ls.ax1.n]);
+        if (ls.ax2.n) ft_wr16(g_synth_in, ls.ax2.addr,
+                              ls.ax2.vals[rng.next() % (uint32_t)ls.ax2.n]);
+        ft_synth_case_clear(cs, "fuzz-dir", fuzz, diff_budget);
+        for (uint32_t a = 0; a < 0x10000; a += 2) {
+            uint16_t w = rng.w();
+            g_synth_in[a] = (uint8_t)w; g_synth_in[a + 1] = (uint8_t)(w >> 8);
+        }
+        ft_synth_case_clear(cs, "fuzz", fuzz, diff_budget);
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[ls.id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
@@ -3433,6 +3538,11 @@ extern "C" int v2_fntest_selftest_env(void) {
         if (all || strstr(env, g_name[cs.id])) {
             matched = true;
             rc |= ft_selftest_clear(cs, 0xC1EA0000u + (uint32_t)cs.id);
+        }
+    for (const FtLeafSpec& ls : FT_LEAVES)    // K2a units 44-47
+        if (all || strstr(env, g_name[ls.id])) {
+            matched = true;
+            rc |= ft_selftest_leaf(ls, 0x1EAF0000u + (uint32_t)ls.id);
         }
     if (!matched) {
         fprintf(stderr, "FNSELFTEST: no registered function matches '%s'\n", env);
