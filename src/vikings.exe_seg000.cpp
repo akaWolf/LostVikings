@@ -143,6 +143,10 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 67: return (void*)&sub_14207;   // VM: full sweep + priority drain queue
     case 68: return (void*)&sub_112ae;   // file: viking-config chunk loads (di)
     case 69: return (void*)&sub_12d2c;   // shake/flash decay timers
+    case 70: return (void*)&sub_1167a;   // file: sprite chunk loads into word_2B353 seg (di)
+    case 71: return (void*)&sub_116ae;   // file: anim chunk loads via dword_2B359 + sub_10e85 (di)
+    case 72: return (void*)&sub_11b0b;   // portrait/sound sync + render (needs drawinfo)
+    case 73: return (void*)&sub_10813;   // viking blink (JMP loc_107A2 tail)
     default: return 0;
     }
 }

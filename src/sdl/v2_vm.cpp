@@ -4098,7 +4098,7 @@ static uint16_t v2_sub_1167a(uint8_t* s, uint16_t di) {
         // Decompress chunk into sprite shadow buffer at offset bx.
         // Original: es = word_2B353 (ds:0x2E73 = sprite segment), di = bx.
         // For v2: decompress into v2_sprite_shadow linear buffer.
-        uint32_t dest_sz = v2_read_chunk(chunk_id, v2_sprite_shadow + bx, V2_SPRITE_SHADOW_SIZE - bx);
+        uint32_t dest_sz = v2_read_chunk(chunk_id, v2_sprite_shadow + bx, V2_SPRITE_SHADOW_SIZE - bx, s);
         printf("V2-SPRINIT: chunk=%d bx=%04x decompressed=%d first4=%02x%02x%02x%02x\n",
                chunk_id, bx, dest_sz,
                v2_sprite_shadow[bx], v2_sprite_shadow[bx+1],
@@ -4133,7 +4133,7 @@ static uint16_t v2_sub_116ae(uint8_t* s, uint16_t di) {
         uint32_t buf_offset = linear - chunk_base;
         if (buf_offset < V2_CHUNK_SHADOW_SIZE) {
             uint32_t sz = v2_read_chunk(chunk_id, v2_vm_shadow_chunk + buf_offset,
-                                        V2_CHUNK_SHADOW_SIZE - buf_offset);
+                                        V2_CHUNK_SHADOW_SIZE - buf_offset, s);
             // sub_10E85: normalize es:di past decompressed data
             // es = es + (di >> 4) + 1, di = 0
             uint16_t di_after = (uint16_t)(buf_di + (uint16_t)sz);
@@ -4145,6 +4145,132 @@ static uint16_t v2_sub_116ae(uint8_t* s, uint16_t di) {
         si += 2;
     }
     return di; // orig RETNs with di pointing AT 0xFFFF sentinel (no advance)
+}
+
+// sub_10813 -> loc_107A2: viking blink. Extracted (K4) from the pre_vm inline.
+// Orig eip 0x0813 (seg000 1048-1092) + loc_107A2 (1004-1042):
+//   TEST byte_2AA9A,0xFF; JZ ret.
+//   di=[0x3C2]; CMP di,6; JGE clear            (SIGNED: 0xFFFF=-1 enters bounds)
+//   ax=[di+0x173D]-[0x44]+0x0C; JS clear        (sign of the 16-bit wrap result)
+//   ax=[0x44]+0x14C-[di+0x173D]; JS clear
+//   if ([0x46]!=0): same pair on [di+0x1765] with +0x0C / +0xB0
+//   -> loc_107A2. clear: [0x3B6]=0; [0x3B8]=0; ret.
+// loc_107A2: prev-viking blink clear on switch ([0x3C4]!=[0x3C2], signed <6,
+//   [prev+0x16ED]>=0 -> obj=[prev+0x1A85]: [obj+0x44D]&=0xDFFF, [obj+0x114D]=2;
+//   then [0x3C4]=[0x3C2], [0x3C6]=0x15), then counter: TEST [0x3C6]; JZ ret;
+//   DEC; TEST &2: set -> DEC again, obj=[act+0x1A85]: |=0x2000, [0x114D]=0x200;
+//   clear -> obj: &=0xDFFF, [0x114D]=2.
+// Divergence #27 fixed at extraction: `active < 6` was UNSIGNED and the
+// [active+0x173D]/[+0x1765] reads lacked the 64K wrap casts (orig 8086
+// wraps; precedent: divergence #21 in v2_sub_113d8).
+static void v2_sub_10813(uint8_t* shadow) {
+    uint16_t active = *(uint16_t*)(shadow + 0x03C2); // word_288A2
+    uint16_t prev = *(uint16_t*)(shadow + 0x03C4);   // word_288A4
+
+    uint8_t flag_9a = shadow[0x25BA]; // byte_2AA9A
+    if (flag_9a == 0) return;          // TEST ...,0xFF; JZ locret_1081C
+
+    { uint16_t _lv = *(uint16_t*)(shadow+0x25AD); static int _dm2=0;
+      if (_lv == 0x002B && _dm2 < 10) { _dm2++;
+      fprintf(stderr, "V2-PRE-BLINK[%d]: lv=%04X 117D=%04X 117F=%04X flag=%02X act=%d prev=%d blink=%04X\n",
+        _dm2, _lv, *(uint16_t*)(shadow+0x117D), *(uint16_t*)(shadow+0x117F),
+        flag_9a, active, prev, *(uint16_t*)(shadow+0x03C6)); } }
+
+    // loc_1081D: on-screen bounds. SIGNED CMP di,6; JGE loc_10862.
+    bool on_screen = false;
+    if ((int16_t)active < 6) {
+        int16_t vx = (int16_t)*(uint16_t*)(shadow + (uint16_t)(active + 0x173D)); // world X (64K wrap)
+        int16_t wx = (int16_t)*(uint16_t*)(shadow + 0x0044);                       // word_28524
+        if ((int16_t)(vx - wx + 0x0C) >= 0 && (int16_t)(wx + 0x14C - vx) >= 0) {
+            uint16_t wy = *(uint16_t*)(shadow + 0x0046); // word_28526
+            if (wy == 0) {
+                on_screen = true; // CMP,0; JZ loc_1085F
+            } else {
+                int16_t vy = (int16_t)*(uint16_t*)(shadow + (uint16_t)(active + 0x1765)); // 64K wrap
+                if ((int16_t)(vy - (int16_t)wy + 0x0C) >= 0 && (int16_t)((int16_t)wy + 0x0B0 - vy) >= 0)
+                    on_screen = true;
+            }
+        }
+    }
+    if (!on_screen) {
+        // loc_10862: viking out of viewport (or slot >= 6) -> clear keys, return
+        *(uint16_t*)(shadow + 0x03B6) = 0; // word_28896
+        *(uint16_t*)(shadow + 0x03B8) = 0; // word_28898
+        return;
+    }
+
+    { static int _dbg = 0; if (_dbg < 5) { _dbg++;
+      uint16_t s_val = *(uint16_t*)(shadow + 0x1A85);
+      uint16_t r_val = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + 0x1A85) : 0xDEAD;
+      printf("V2-DBG-10813: active=%d prev=%d flag=%02X 414D=%02X s[1A85]=%04X r[1A85]=%04X\n",
+        active, prev, flag_9a, shadow[0x414D], s_val, r_val); } }
+
+    // loc_107A2: if active changed, clear previous viking's blink + reset counter
+    if (active != prev) {
+        if ((int16_t)prev < 6) { // SIGNED compare: CMP ax,6; JGE (0xFFFF=-1 < 6 -> enters)
+            int16_t p_anim = (int16_t)*(uint16_t*)(shadow + (uint16_t)(prev + 0x16ED));
+            if (p_anim >= 0) {
+                uint16_t p_di = *(uint16_t*)(shadow + (uint16_t)(prev + 0x1A85));
+                *(uint16_t*)(shadow + (uint16_t)(p_di + 0x44D)) &= 0xDFFF;
+                *(uint16_t*)(shadow + (uint16_t)(p_di + 0x114D)) = 2; // word write
+            }
+        }
+        // loc_107c9: update prev + reset counter
+        *(uint16_t*)(shadow + 0x03C4) = active;
+        *(uint16_t*)(shadow + 0x03C6) = 0x15; // word_288A6 = 21
+    }
+
+    // loc_107d5: blink counter processing
+    uint16_t blink = *(uint16_t*)(shadow + 0x03C6); // word_288A6
+    if (blink != 0) { // Original: TEST word_288A6, FFFFh; JZ return (no active<6 check)
+        blink -= 1; // DEC word_288A6
+        *(uint16_t*)(shadow + 0x03C6) = blink;
+        uint16_t di = active;
+        if (blink & 2) {
+            // Bit 1 set after decrement: extra DEC + hide sprite
+            blink -= 1;
+            *(uint16_t*)(shadow + 0x03C6) = blink;
+            uint16_t sub_di = *(uint16_t*)(shadow + (uint16_t)(di + 0x1A85));
+            { uint16_t _ta = (uint16_t)(sub_di + 0x114D);
+              if (_ta >= 0x117D && _ta <= 0x1181) { static int _bh=0; if(_bh<5){_bh++;
+                fprintf(stderr,"V2-BLINK-HIDE: sub_di=%04X addr=%04X was=%04X\n",sub_di,_ta,*(uint16_t*)(shadow+_ta));} } }
+            *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x44D)) |= 0x2000;
+            *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x114D)) = 0x200;
+        } else {
+            // Bit 1 clear: show sprite
+            uint16_t sub_di = *(uint16_t*)(shadow + (uint16_t)(di + 0x1A85));
+            { uint16_t _ta = (uint16_t)(sub_di + 0x114D);
+              if (_ta >= 0x117D && _ta <= 0x1181) { static int _bs=0; if(_bs<5){_bs++;
+                fprintf(stderr,"V2-BLINK-SHOW: sub_di=%04X addr=%04X was=%04X\n",sub_di,_ta,*(uint16_t*)(shadow+_ta));} } }
+            *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x44D)) &= 0xDFFF;
+            *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x114D)) = 2;
+        }
+    }
+}
+
+// sub_11B0B: portrait/sound state sync + render, 3 vikings. Extracted from
+// 3 inline copies (12034-tail, 115d2-SF3, 11792-mirror) — divergence #26: the
+// 11792-mirror copy dropped the render call. Orig eip 0x1B0B (seg000 3515-83),
+// per viking k = 0..2:
+//   ax = [0x429+2k] (word_28909/0B/0D, sound state)
+//   if (ax == [0x42F+2k] && [0x15AD+2k] == [0x423+2k]) skip;   // both unchanged
+//   si = [0x15AD+2k] (word_29A8D/8F/91, portrait idx); if ([0x429+2k] != 0) si += 4;
+//   di = 2k; v2 render hook (orig m2c inline before CALL sub_11AA4) + sub_11AA4;
+//   [0x42F+2k] = [0x429+2k]; [0x423+2k] = [0x15AD+2k].
+static void v2_sub_11b0b(uint8_t* s) {
+    for (int vk = 0; vk < 3; vk++) {
+        uint16_t snd  = *(uint16_t*)(s + 0x0429 + vk * 2); // word_28909/0B/0D
+        uint16_t psnd = *(uint16_t*)(s + 0x042F + vk * 2); // word_2890F/11/13
+        uint16_t por  = *(uint16_t*)(s + 0x15AD + vk * 2); // word_29A8D/8F/91
+        uint16_t ppor = *(uint16_t*)(s + 0x0423 + vk * 2); // word_28903/05/07
+        if (snd == psnd && por == ppor) continue;           // JNZ/JZ skip pair
+        uint16_t portrait_si = por;                         // re-read [0x15AD+2k]
+        if (snd != 0) portrait_si += 4;                     // CMP word,0; ADD si,4
+        // orig v2 hook + CALL sub_11AA4 (VGA portrait render → v2_hud_buf)
+        v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
+        *(uint16_t*)(s + 0x042F + vk * 2) = snd;            // sync sound tracking
+        *(uint16_t*)(s + 0x0423 + vk * 2) = por;            // sync portrait tracking
+    }
 }
 
 // sub_11397: init collision type lookup from level table.
@@ -4306,6 +4432,35 @@ static void v2_sub_12d2c(uint8_t* s) {
 extern "C" void v2_fntest_call_sub_12d2c(uint8_t* test_shadow) { v2_sub_12d2c(test_shadow); }
 extern "C" uint16_t v2_fntest_call_sub_112ae(uint8_t* test_shadow, uint16_t di) {
     return v2_sub_112ae(test_shadow, di);
+}
+
+// Units 70/71: sub_1167a / sub_116ae segment-loader loops. Unit images point
+// ds:0x2E73 at the FT dest zone — snapshot the sprite-shadow channel state so
+// a selftest run can't disturb live resolve state.
+extern "C" uint16_t v2_fntest_call_sub_1167a(uint8_t* test_shadow, uint16_t di) {
+    uint32_t save_base = v2_sprite_shadow_base;
+    bool save_act = v2_sprite_shadow_active;
+    uint16_t r = v2_sub_1167a(test_shadow, di);
+    v2_sprite_shadow_base = save_base;
+    v2_sprite_shadow_active = save_act;
+    return r;
+}
+extern "C" uint16_t v2_fntest_call_sub_116ae(uint8_t* test_shadow, uint16_t di) {
+    return v2_sub_116ae(test_shadow, di);
+}
+// Unit 72: sub_11b0b DS effects (render is a no-op in the selftest process —
+// v2_vm_in_frame=false gates v2_draw_hud_portrait; pixels are covered by A2).
+extern "C" void v2_fntest_call_sub_11b0b(uint8_t* test_shadow) {
+    v2_sub_11b0b(test_shadow);
+}
+// Unit 73: sub_10813 (+loc_107A2 tail) — viking blink, pure DS effects.
+extern "C" void v2_fntest_call_sub_10813(uint8_t* test_shadow) {
+    v2_sub_10813(test_shadow);
+}
+// Sprite-shadow window for unit 70's dest-content compare (loop writes from
+// offset 0; also lets the runner 0xCC-baseline / porch-corrupt the window).
+extern "C" uint8_t* v2_fntest_sprite_shadow_win(uint32_t off) {
+    return (off < V2_SPRITE_SHADOW_SIZE) ? v2_sprite_shadow + off : nullptr;
 }
 
 // sub_11784: init active viking. word_288A2=0, word_288A4=0. 0 bytes consumed.
@@ -5487,20 +5642,7 @@ static void v2_sub_11080(uint8_t* s) {
         *(uint16_t*)(s + 0x0431) = 0xFFFF; // word_28911
         *(uint16_t*)(s + 0x0433) = 0xFFFF; // word_28913
         // JMP sub_11B0B: portrait/sound state sync (tail call from sub_12034)
-        for (int vk = 0; vk < 3; vk++) {
-            uint16_t sound_prev = *(uint16_t*)(s + 0x0429 + vk * 2); // word_28909/0B/0D
-            uint16_t sound_cur  = *(uint16_t*)(s + 0x042F + vk * 2); // word_2890F/11/13
-            uint16_t port_prev  = *(uint16_t*)(s + 0x15AD + vk * 2); // current portrait idx
-            uint16_t port_cur   = *(uint16_t*)(s + 0x0423 + vk * 2); // tracking (just set 0xFFFF)
-            if (sound_prev != sound_cur || port_prev != port_cur) {
-                // VGA portrait render — v2: v2_draw_hud_portrait (rendering only)
-                uint16_t portrait_si = port_prev;
-                if (sound_prev != 0) portrait_si += 4;
-                v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
-                *(uint16_t*)(s + 0x042F + vk * 2) = sound_prev; // sync sound tracking
-                *(uint16_t*)(s + 0x0423 + vk * 2) = port_prev;  // sync portrait tracking
-            }
-        }
+        v2_sub_11b0b(s);
         // sub_120d1: HUD selector state sync + render
         uint16_t sel1 = *(uint16_t*)(s + 0x0414);
         *(uint16_t*)(s + 0x041A) = sel1;
@@ -5839,19 +5981,7 @@ static void v2_sub_11080(uint8_t* s) {
                 }
                 // sub_11B0B: portrait/sound state sync + render (3 vikings)
                 // Moved here from sub_117ad where it was INCORRECTLY placed.
-                for (int vk = 0; vk < 3; vk++) {
-                    uint16_t sound_prev = *(uint16_t*)(s + 0x0429 + vk * 2);
-                    uint16_t sound_cur  = *(uint16_t*)(s + 0x042F + vk * 2);
-                    uint16_t port_prev  = *(uint16_t*)(s + 0x15AD + vk * 2);
-                    uint16_t port_cur   = *(uint16_t*)(s + 0x0423 + vk * 2);
-                    if (sound_prev != sound_cur || port_prev != port_cur) {
-                        uint16_t portrait_si = port_prev;
-                        if (sound_prev != 0) portrait_si += 4;
-                        v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
-                        *(uint16_t*)(s + 0x042F + vk * 2) = sound_prev;
-                        *(uint16_t*)(s + 0x0423 + vk * 2) = port_prev;
-                    }
-                }
+                v2_sub_11b0b(s);
             }
             // CALLF sub_1DE05 (PASS 3)
             v2_sub_1DE05(s);
@@ -7247,97 +7377,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
     }
 
-    // sub_10813 → loc_107A2: viking blink.
-    // Verified with seg000 lines 1048-1092 (sub_10813) and 1004-1042 (loc_107a2).
-    // Must check byte_2AA9A and viewport bounds exactly like original.
-    {
-        uint16_t active = *(uint16_t*)(shadow + 0x03C2); // word_288A2
-        uint16_t prev = *(uint16_t*)(shadow + 0x03C4);   // word_288A4
-
-        // sub_10813: first check byte_2AA9A (ds:0x25BA)
-        uint8_t flag_9a = shadow[0x25BA]; // byte_2AA9A
-        bool on_screen = false;
-        if (flag_9a != 0 && active < 6) {
-            // Check viewport bounds for active viking
-            int16_t vx = (int16_t)*(uint16_t*)(shadow + active + 0x173D); // world X
-            int16_t wx = (int16_t)*(uint16_t*)(shadow + 0x0044);         // word_28524 = viewport X
-            if ((int16_t)(vx - wx + 0x0C) >= 0 && (int16_t)(wx + 0x14C - vx) >= 0) {
-                uint16_t wy = *(uint16_t*)(shadow + 0x0046); // word_28526
-                if (wy == 0) {
-                    on_screen = true; // no Y scroll → always on screen vertically
-                } else {
-                    int16_t vy = (int16_t)*(uint16_t*)(shadow + active + 0x1765); // world Y
-                    if ((int16_t)(vy - (int16_t)wy + 0x0C) >= 0 && (int16_t)((int16_t)wy + 0x0B0 - vy) >= 0) {
-                        on_screen = true;
-                    }
-                }
-            }
-        }
-        { uint16_t _lv = *(uint16_t*)(shadow+0x25AD); static int _dm2=0;
-          if (_lv == 0x002B && _dm2 < 10) { _dm2++;
-          fprintf(stderr, "V2-PRE-BLINK[%d]: lv=%04X 117D=%04X 117F=%04X flag=%02X act=%d prev=%d blink=%04X\n",
-            _dm2, _lv, *(uint16_t*)(shadow+0x117D), *(uint16_t*)(shadow+0x117F),
-            flag_9a, active, prev, *(uint16_t*)(shadow+0x03C6)); } }
-        if (flag_9a == 0) {
-            // byte_2AA9A=0 → locret_1081c → RETN. Do NOT touch input.
-            goto v2_sub_10813_done;
-        }
-        if (!on_screen) {
-            // loc_10862: viking out of viewport → clear keys, return
-            *(uint16_t*)(shadow + 0x03B6) = 0; // word_28896
-            *(uint16_t*)(shadow + 0x03B8) = 0; // word_28898
-            goto v2_sub_10813_done;
-        }
-
-        { static int _dbg = 0; if (_dbg < 5) { _dbg++;
-          uint16_t s_val = *(uint16_t*)(shadow + 0x1A85);
-          uint16_t r_val = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + 0x1A85) : 0xDEAD;
-          printf("V2-DBG-10813: active=%d prev=%d flag=%02X 414D=%02X s[1A85]=%04X r[1A85]=%04X\n",
-            active, prev, flag_9a, shadow[0x414D], s_val, r_val); } }
-
-        // loc_107A2: if active changed, clear previous viking's blink + reset counter
-        if (active != prev) {
-            if ((int16_t)prev < 6) { // SIGNED compare: CMP ax,6; JGE (0xFFFF=-1 < 6 → enters)
-                int16_t p_anim = (int16_t)*(uint16_t*)(shadow + (uint16_t)(prev + 0x16ED));
-                if (p_anim >= 0) {
-                    uint16_t p_di = *(uint16_t*)(shadow + (uint16_t)(prev + 0x1A85));
-                    *(uint16_t*)(shadow + (uint16_t)(p_di + 0x44D)) &= 0xDFFF;
-                    *(uint16_t*)(shadow + (uint16_t)(p_di + 0x114D)) = 2; // word write
-                }
-            }
-            // loc_107c9: update prev + reset counter
-            *(uint16_t*)(shadow + 0x03C4) = active;
-            *(uint16_t*)(shadow + 0x03C6) = 0x15; // word_288A6 = 21
-        }
-
-        // loc_107d5: blink counter processing
-        { uint16_t blink = *(uint16_t*)(shadow + 0x03C6); // word_288A6
-        if (blink != 0) { // Original: TEST word_288A6, FFFFh; JZ return (no active<6 check)
-            blink -= 1; // DEC word_288A6
-            *(uint16_t*)(shadow + 0x03C6) = blink;
-            uint16_t di = active;
-            if (blink & 2) {
-                // Bit 1 set after decrement: extra DEC + hide sprite
-                blink -= 1;
-                *(uint16_t*)(shadow + 0x03C6) = blink;
-                uint16_t sub_di = *(uint16_t*)(shadow + (uint16_t)(di + 0x1A85));
-                { uint16_t _ta = (uint16_t)(sub_di + 0x114D);
-                  if (_ta >= 0x117D && _ta <= 0x1181) { static int _bh=0; if(_bh<5){_bh++;
-                    fprintf(stderr,"V2-BLINK-HIDE: sub_di=%04X addr=%04X was=%04X\n",sub_di,_ta,*(uint16_t*)(shadow+_ta));} } }
-                *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x44D)) |= 0x2000;
-                *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x114D)) = 0x200;
-            } else {
-                // Bit 1 clear: show sprite
-                uint16_t sub_di = *(uint16_t*)(shadow + (uint16_t)(di + 0x1A85));
-                { uint16_t _ta = (uint16_t)(sub_di + 0x114D);
-                  if (_ta >= 0x117D && _ta <= 0x1181) { static int _bs=0; if(_bs<5){_bs++;
-                    fprintf(stderr,"V2-BLINK-SHOW: sub_di=%04X addr=%04X was=%04X\n",sub_di,_ta,*(uint16_t*)(shadow+_ta));} } }
-                *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x44D)) &= 0xDFFF;
-                *(uint16_t*)(shadow + (uint16_t)(sub_di + 0x114D)) = 2;
-            }
-        } }
-    v2_sub_10813_done:
-        ;  // no-op so label isn't at end of compound statement (under #if 0 below)
+    // sub_10813 -> loc_107A2: viking blink (extracted: v2_sub_10813, K4).
+    v2_sub_10813(shadow);
 
 #if 0
         // BOGUS: orig sub_1086f is called ONLY at eip 0x00E7 (POST_FLIP3 phase),
@@ -7524,7 +7565,6 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             v2_sub_10130(shadow); // sub_10130: VGA vsync wait
         }
 #endif // BOGUS sub_1086f mirror in pre_vm — orig only calls at eip 0x00E7
-    }
 
     // sub_1673c: tile scroll management + object spawn/despawn.
     // sub_13a14/sub_13a34: set viewport bounds + call loc_13a94 (object spawn loop).
