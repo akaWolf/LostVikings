@@ -827,7 +827,10 @@ extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_
     uint8_t* fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
 #endif
-    int row0 = ((int)pos_y >> 3) - 1, col0 = ((int)pos_x >> 3) - 1;
+    // Block geometry per orig: page rows start at [6E]=pos_y>>2 (slot of row
+    // pos_y>>3) and the stored bp map offset covers rows (pos_y>>3)..+1,
+    // columns (pos_x>>3)..+1 — the 2x2 block starts AT pos, not around it.
+    int row0 = (int)pos_y >> 3, col0 = (int)pos_x >> 3;
     uint8_t* pages[2] = { v2_emu_page[v2_emu_slot(ds_base, 0x92F9)],
                           v2_emu_page[v2_emu_slot(ds_base, 0x92FB)] };
     static const uint16_t qbit[4] = { 8, 4, 2, 1 };   // UL UR LL LR
