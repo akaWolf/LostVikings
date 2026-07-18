@@ -3082,6 +3082,26 @@ int ft_selftest_vmops() {
         ft_synth_case_vmop(0x14, a4, 16, BASE, 0xD0000001u, "directed",
                            sweep, diff_budget, op_fail, occ, 0x14 + 1);
     }
+    // (a2) task #15 DI-inheritance: op 0x54 (ch3-style field address load —
+    // leaves di = [idx-0x6CBA]+[obj+0x1995]) immediately followed by op 0x41
+    // with a ch6 Y-escape. The orig stores that STALE di (through the
+    // sub_12613 clamps) into [bx+0x1DAB]; v2 must reproduce it via di_track.
+    // Byte stream after the planted 0x54: idx, then the full op41 tail:
+    //   41 | mode1=0x00 (1250b ch0: 2 lit bytes; 12543 ch0: 2 lit bytes)
+    //      | lit lit | lit lit | mode125a3=0x30 (X=ch0: 2 lit; Y=ch6: 1 idx)
+    //      | lit lit | y6idx
+    {
+        uint8_t chain[16] = {
+            /*op54 idx*/ 0x10,
+            /*op*/ 0x41,
+            /*mode1*/ 0x00, /*1250b lit*/ 0x02, 0x00,
+            /*12543 lit*/ 0x03, 0x00,
+            /*125a3 mode*/ 0x30, /*X lit*/ 0x50, 0x00,
+            /*Y ch6 idx*/ 0x11,
+            0, 0, 0, 0, 0 };
+        ft_synth_case_vmop(0x54, chain, 16, BASE, 0xD0000015u, "directed",
+                           sweep, diff_budget, op_fail);
+    }
     // (b) op 0x14 with ds:0x32F != 0 — sub_13d30 STC path (prologue order too).
     {
         FtWr tr[1] = { { 0x32F, 1 } };

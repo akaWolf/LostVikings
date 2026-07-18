@@ -10552,7 +10552,7 @@ static void v2_vm_op_14(V2VM& vm) {
     vm.ds_write(0x38, si_flags);    // MOV ds:38h, si
 
     // sub_13d30: pre-check
-    if (vm.ds_read(0x32F) != 0) return;
+    if (vm.ds_read(0x32F) != 0) { vm.di_track = 0; return; }  // orig loc_13866: MOV di,0
 
     // sub_13d52: find free slot (0 to 0x28, step 2)
     int16_t new_slot = -1;
@@ -10565,6 +10565,7 @@ static void v2_vm_op_14(V2VM& vm) {
     if (new_slot < 0) {
         static bool d14b = false; if (!d14b) { d14b = true;
             printf("V2-DBG-14: FAIL at sub_13d52: no free slot\n"); }
+        vm.di_track = 0;   // orig loc_13866: MOV di,0
         return;
     }
 
@@ -10607,6 +10608,7 @@ static void v2_vm_op_14(V2VM& vm) {
         }
         if (!resource_found) {
             vm.ds_write(si_slot + 0x1355, 0);
+            vm.di_track = 0;   // orig loc_13860→loc_13866: MOV di,0
             return;
         }
     }
@@ -10700,6 +10702,7 @@ static void v2_vm_op_14(V2VM& vm) {
         if (v2_sub_13d68(vm.shadow, si_slot)) {
             // JC → destroy: allocation failed.
             vm.ds_write(si_slot + 0x1355, 0);
+            vm.di_track = 0;   // orig loc_13860→loc_13866: MOV di,0
             return;
         }
         // orig sub_13809 eips 0x3839-0x3843: ds:0x3A/0x38 -> [si+1A85]/[si+1AAD]
@@ -10715,6 +10718,7 @@ static void v2_vm_op_14(V2VM& vm) {
     }
 
     uint16_t di_new = si_slot;
+    vm.di_track = di_new;   // orig loc_1385C: MOV di,si (new slot) — task #15
 
     // Back in sub_14f59: ds:[obj+0x182D] = di (link to child)
     uint16_t obj = vm.global_r(0x42);
@@ -15751,6 +15755,7 @@ static void v2_vm_op_34(V2VM& vm) {
     uint8_t mode = vm.read_u8();
     v2_vm_sub_154bf(vm, (uint16_t)x_delta, mode);
     v2_vm_sub_154bf(vm, (uint16_t)y_delta, mode >> 3);
+    vm.di_track = di;   // orig: di=[0x42] from entry; setters leave DI (task #15)
 }
 
 // 0x16 (sub_15106): Position delta computation + dual sub_154bf dispatch.
