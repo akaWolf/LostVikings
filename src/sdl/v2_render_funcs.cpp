@@ -393,9 +393,212 @@ static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
         buf[sy * 320 + sx] = color;
 }
 
-static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate);
+// ============================================================================
+// Page emulator (task #21, stage 1): byte-exact model of the orig VGA page
+// channel for the A2 sensor. DOS uses one BACKGROUND page (clean tiles, the
+// latch-copy source ds:0x92FB in sub_1de05's dirty spans) plus TWO work pages
+// flipped per sub-frame (ds:0x92F7). Each sub-frame: dirty cells are latch-
+// copied from the background page, then sprites are re-blitted (jpt_1d514) and
+// the sub_1dd9c layer runs. v2's display buffer is a clean full-frame render;
+// the emu pages reproduce what the orig work page actually contains, so the
+// A2 sensor can demand a byte-exact match.
+// ============================================================================
+uint8_t v2_emu_bg[320 * 176];          // background page = full tile render
+uint8_t v2_emu_page[2][320 * 176];     // two persistent work pages
+int     v2_emu_cur = 0;                // page flipped per render phase
+bool    v2_emu_valid = false;          // both pages initialized
+// Per-page viewport of the LAST sub-frame this page was current — the two
+// pages live in different scroll positions (page A repaints on sub-frames
+// 1&3, page B on sub-frame 2), so each shifts by its OWN delta.
+static int16_t v2_emu_vp_x[2] = {-32768, -32768};
+static int16_t v2_emu_vp_y[2] = {-32768, -32768};
+
+// Blit target override for the sprite renderer: null = v2_render_buf.
+static uint8_t* v2_blit_target = nullptr;
+static void v2_draw_one_sprite(uint16_t ds_val, int obj); // fwd (emu re-blit)
+
+// Stage-1 emu sub-frame, early half — mirrors the orig sub-frame structure:
+// work-page flip, the sub_1de05 dirty channel (latch spans from the background
+// page + sprite re-blit), called right after v2_draw_tiles fills
+// v2_render_buf with the clean tile render (= the background page).
+void v2_emu_early(uint16_t ds_val) {
+#ifdef V2_RENDER_FROM_SHADOW
+    if (!v2_vm_in_frame) return;
+#endif
+    if (!v2_m2c_base || !myDrawInfo_v2) return;
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
+
+    // 1. Background page snapshot (clean tiles just rendered).
+    memcpy(v2_emu_bg, v2_render_buf, sizeof(v2_emu_bg));
+
+    // 2. Scroll/scene tracking (stage 1): a viewport change invalidates the
+    //    persistent pages (orig redraws edges via the 16661 channel — stage 2);
+    //    reinitialize from the background + full sprite blit.
+    int16_t vpx = *(int16_t*)(ds_base + 0x44);
+    int16_t vpy = *(int16_t*)(ds_base + 0x46);
+
+    // 3. Page flip (orig flips the work page every sub-frame), then compute
+    //    THIS page's own scroll delta since it was last current.
+    v2_emu_cur ^= 1;
+    int sdx = (v2_emu_vp_x[v2_emu_cur] == -32768) ? 99999 : (int)vpx - (int)v2_emu_vp_x[v2_emu_cur];
+    int sdy = (v2_emu_vp_y[v2_emu_cur] == -32768) ? 99999 : (int)vpy - (int)v2_emu_vp_y[v2_emu_cur];
+    bool scrolled = (sdx != 0) || (sdy != 0);
+    v2_emu_vp_x[v2_emu_cur] = vpx; v2_emu_vp_y[v2_emu_cur] = vpy;
+
+    // Chunk scenes (intro/menu/password, lvl flags & 0x42): the orig channel
+    // paints the raw-chunk picture onto ALL pages at load (sub_10cd8 with the
+    // three display offsets) and there is no tile dirty machinery — the work
+    // page content is the background picture plus the sprite layers. Model:
+    // full background copy every sub-frame.
+    if (ds_base[0x25CF] & 0x42) {
+        memcpy(v2_emu_page[v2_emu_cur], v2_emu_bg, sizeof(v2_emu_bg));
+        v2_emu_valid = true;
+        v2_blit_target = v2_emu_page[v2_emu_cur];
+        v2_draw_sprites(ds_val);
+        v2_blit_target = nullptr;
+        return;
+    }
+
+    bool run_dirty = false;
+    if (!v2_emu_valid || sdx >= 320 || sdx <= -320 || sdy >= 176 || sdy <= -176) {
+        memcpy(v2_emu_page[0], v2_emu_bg, sizeof(v2_emu_bg));
+        memcpy(v2_emu_page[1], v2_emu_bg, sizeof(v2_emu_bg));
+        v2_emu_vp_x[0] = v2_emu_vp_x[1] = vpx;
+        v2_emu_vp_y[0] = v2_emu_vp_y[1] = vpy;
+        v2_emu_valid = true;
+        // fall through: sprites blitted below onto cur (other page gets them
+        // on its own sub-frame — matching orig where a fresh page is fully
+        // repainted over the next flips)
+    } else if (scrolled) {
+        // Scroll (stage 2): the orig pages hold WORLD content and the CRTC
+        // moves; the emu pages are screen-space, so shift THIS page's content
+        // by its OWN (-dx,-dy) and fill the exposed stripes from the fresh
+        // background render (the edge-redraw channel 16661 -> 16e75/16f5f
+        // paints exactly the newly exposed rows/columns from the tile map).
+        {
+            uint8_t* pg = v2_emu_page[v2_emu_cur];
+            if (sdy > 0) {
+                memmove(pg, pg + sdy * 320, (size_t)(176 - sdy) * 320);
+                memcpy(pg + (176 - sdy) * 320, v2_emu_bg + (176 - sdy) * 320, (size_t)sdy * 320);
+            } else if (sdy < 0) {
+                memmove(pg - sdy * 320, pg, (size_t)(176 + sdy) * 320);
+                memcpy(pg, v2_emu_bg, (size_t)(-sdy) * 320);
+            }
+            if (sdx != 0) {
+                for (int y = 0; y < 176; y++) {
+                    uint8_t* row = pg + y * 320;
+                    const uint8_t* bgr = v2_emu_bg + y * 320;
+                    if (sdx > 0) {
+                        memmove(row, row + sdx, (size_t)(320 - sdx));
+                        memcpy(row + 320 - sdx, bgr + 320 - sdx, (size_t)sdx);
+                    } else {
+                        memmove(row - sdx, row, (size_t)(320 + sdx));
+                        memcpy(row, bgr, (size_t)(-sdx));
+                    }
+                }
+            }
+        }
+        run_dirty = true;
+    } else {
+        run_dirty = true;
+    }
+    if (run_dirty) {
+        // 4. sub_1de05 dirty channel: scan the visible 43x25 map window for
+        //    render-map bit0 cells and latch-copy each 8x8 cell from the
+        //    background page onto the CURRENT work page. Cell->screen mapping
+        //    identical to v2_draw_tiles (scroll LUT + sub-tile pixel offset).
+        uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+#ifdef V2_RENDER_FROM_SHADOW
+        uint8_t* fs_base = v2_resolve_segment(fs_seg);
+        if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
+#else
+        uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
+#endif
+        uint16_t scroll_row = *(uint16_t*)(ds_base + 0x2581);
+        uint16_t scroll_col = *(uint16_t*)(ds_base + 0x257F);
+        int16_t xs = *(int16_t*)(ds_base + 0x39E);
+        int16_t ys = *(int16_t*)(ds_base + 0x3A0);
+        int16_t xl = *(int16_t*)(ds_base + 0x25A4);
+        int16_t yl = *(int16_t*)(ds_base + 0x25A6);
+        int xe = (int)vpx + xs; if (xe > xl) xe = (int)vpx - xs;
+        int ye = (int)vpy + ys; if (ye > yl) ye = (int)vpy - ys;
+        int pox = xe & 7, poy = ye & 7;
+        uint8_t* cur = v2_emu_page[v2_emu_cur];
+        // Dirty cell map (map coords, scroll-relative) for the selective
+        // re-blit below — orig re-blits ONLY sprites over refreshed cells.
+        static bool dirty_cell[25][43];
+        memset(dirty_cell, 0, sizeof(dirty_cell));
+        bool any_dirty = false;
+        for (int rv = 0; rv < 25; rv++) {
+            uint16_t rs = (uint16_t)(rv + scroll_row);
+            uint16_t lut = (uint16_t)(rs * 2u - 0x7098u);
+            uint16_t row_base = *(uint16_t*)(ds_base + lut);
+            for (int cv = 0; cv < 43; cv++) {
+                uint16_t cs2 = (uint16_t)(cv + scroll_col);
+                uint16_t moff = (uint16_t)((row_base + cs2) * 2u);
+                if (!(*(uint16_t*)(fs_base + moff) & 1)) continue;
+                dirty_cell[rv][cv] = true; any_dirty = true;
+                int sx0 = cv * 8 - pox, sy0 = rv * 8 - poy;
+                for (int yy = 0; yy < 8; yy++) {
+                    int sy = sy0 + yy;
+                    if (sy < 0 || sy >= 176) continue;
+                    int xa = sx0 < 0 ? 0 : sx0;
+                    int xb = sx0 + 8 > 320 ? 320 : sx0 + 8;
+                    if (xa < xb)
+                        memcpy(cur + sy * 320 + xa, v2_emu_bg + sy * 320 + xa, (size_t)(xb - xa));
+                }
+            }
+        }
+        // 5. Selective sprite re-blit (sub_1de05 second half): only objects
+        //    whose tile cells intersect the refreshed set. Cell math matches
+        //    sub_1cdef: col = [64D]>>3, row = [74D]>>3, span = ([C4D]>>3)+1
+        //    (minus one when the coordinate is 8-aligned).
+        if (any_dirty) {
+            v2_blit_target = cur;
+            for (int obj = 0xFE; obj >= 0; obj -= 2) {
+                uint16_t fl = *(uint16_t*)(ds_base + obj + 0x44D);
+                if (!(fl & 0x8000) || (fl & 0x6000)) continue;
+                int16_t ox = (int16_t)*(uint16_t*)(ds_base + obj + 0x64D);
+                int16_t oy = (int16_t)*(uint16_t*)(ds_base + obj + 0x74D);
+                int16_t span = (int16_t)((*(uint16_t*)(ds_base + obj + 0x0C4D) >> 3) + 1);
+                int16_t w = span, h = span;
+                if (!(ox & 7)) w--;
+                if (!(oy & 7)) h--;
+                int c0 = (ox >> 3) - (int)scroll_col, r0 = (oy >> 3) - (int)scroll_row;
+                bool hit = false;
+                for (int r = r0; r < r0 + h && !hit; r++) {
+                    if (r < 0 || r >= 25) continue;
+                    for (int c = c0; c < c0 + w; c++) {
+                        if (c < 0 || c >= 43) continue;
+                        if (dirty_cell[r][c]) { hit = true; break; }
+                    }
+                }
+                if (hit) v2_draw_one_sprite(ds_val, obj);
+            }
+            v2_blit_target = nullptr;
+        }
+    }
+}
+
+// Stage-1 emu sub-frame, late half — the sub_1dd9c layer + the flagged-tile
+// pass (sub_1c8f1 draws AFTER 1dd9c and clears bit0; call this BEFORE the
+// phase runs v2_sub_1C8F1 so the bits are still live).
+void v2_emu_late(uint16_t ds_val) {
+#ifdef V2_RENDER_FROM_SHADOW
+    if (!v2_vm_in_frame) return;
+#endif
+    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
+    v2_blit_target = v2_emu_page[v2_emu_cur];
+    v2_draw_sprites_late(ds_val);
+    v2_draw_flagged_tiles(ds_val);
+    v2_blit_target = nullptr;
+}
+
+static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj = -1);
 void v2_draw_sprites(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 0); }
 void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
+// Single-object blit for the page-emu selective re-blit (sub_1de05 second half).
+static void v2_draw_one_sprite(uint16_t ds_val, int obj) { v2_draw_sprites_impl(ds_val, 0, obj); }
 
 // late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —
 // gates evaluated BEFORE v2_sub_1DD9C's DS effects (DEC of [obj+0x114D]) and
@@ -404,7 +607,7 @@ void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
 // viewport (ds:0x9168/0x916A) and scan its cells in the render map (FS) for
 // bit0 (seg003 eip 0x634: TEST word fs:[si],1) — set means this sub-frame's
 // sub_1c8f1 repaints the cell, so the sprite must be repainted over it.
-static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate) {
+static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
@@ -412,7 +615,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate) {
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
 
-    uint8_t* buf = v2_render_buf;
+    uint8_t* buf = v2_blit_target ? v2_blit_target : v2_render_buf;
 
     // Viewport origin — pixel scroll values.
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
@@ -429,20 +632,26 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate) {
     int viewport_y = (int)_vp_py + (int)_ys; if (viewport_y > (int)_ylvl) viewport_y = (int)_vp_py - (int)_ys;
     static int spr_dbg = 0; spr_dbg++;
     for (int obj = 0xFE; obj >= 0; obj -= 2) {
+        if (only_obj >= 0 && obj != only_obj) continue;
         uint16_t flags = *(uint16_t*)(ds_base + obj + 0x44D);
 
         // Must be active (bit 15) with bits 13-14 clear
         if (!(flags & 0x8000) || (flags & 0x6000)) continue;
 
         // Task #21 ring: v2 layer decisions for the traced object; d = checksum
-        // of the first 32 sprite-data bytes as THIS side reads them (shadow).
+        // of the FULL sprite data as THIS side reads them (shadow) — same size
+        // formula as the orig-side probe in sub_1dd9c.
         if (obj == v2_objtrace_di) {
             uint16_t t_seg = *(uint16_t*)(ds_base + obj + 0x94D);
             uint16_t t_off = *(uint16_t*)(ds_base + obj + 0x84D);
+            int t_type = flags & 7;
+            int t_sz = (t_type == 1) ? 72 : (t_type == 4) ? 288
+                       : 4 * (int)*(uint16_t*)(ds_base + obj + 0x0C4D) * 9;
+            if (t_sz < 1) t_sz = 1; if (t_sz > 4096) t_sz = 4096;
             uint8_t* t_base = v2_resolve_segment(t_seg);
             if (!t_base) t_base = v2_m2c_base + ((uint32_t)t_seg << 4);
             int t_h = 0;
-            for (int t_i = 0; t_i < 32; t_i++) t_h += t_base[(uint16_t)(t_off - 1 + t_i)];
+            for (int t_i = 0; t_i < t_sz; t_i++) t_h += t_base[(uint16_t)(t_off - 1 + t_i)];
             v2_objtrace(late_gate ? "v:late" : "v:early",
                         *(int16_t*)(ds_base + obj + 0x64D),
                         *(int16_t*)(ds_base + obj + 0x74D),
@@ -705,7 +914,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    uint8_t* buf = v2_render_buf;
+    uint8_t* buf = v2_blit_target ? v2_blit_target : v2_render_buf;
 
     uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
     uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);

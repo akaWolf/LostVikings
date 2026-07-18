@@ -176,6 +176,16 @@ extern void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size);
 // — that is exactly what the orig page shows (task #21: the lift kept the
 // pre-165aa position on scroll frames while flames took the post-update one).
 extern void v2_draw_sprites_late(uint16_t ds_val);
+
+// Page emulator (task #21): byte-exact model of the orig VGA work pages for
+// the A2 sensor (background page + two flipped work pages, sub_1de05 dirty
+// latch-copies + sprite layers). v2_emu_early right after v2_draw_tiles;
+// v2_emu_late after post_render and BEFORE v2_sub_1C8F1 (needs live bit0).
+extern void v2_emu_early(uint16_t ds_val);
+extern void v2_emu_late(uint16_t ds_val);
+extern uint8_t v2_emu_page[2][320 * 176];
+extern int     v2_emu_cur;
+extern bool    v2_emu_valid;
 // Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
 extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col);
 // Refresh static intro/menu chunk_bg backup from current v2_render_buf (call after

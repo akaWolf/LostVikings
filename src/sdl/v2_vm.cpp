@@ -615,6 +615,13 @@ void v2_verify_render_buf(int frame) {
     static uint8_t orig_unfold[320 * 176];
     if (!v2_fetch_orig_page(orig_unfold, sizeof(orig_unfold))) return;
     const uint8_t* orig_pixels = orig_unfold;
+    // Page emulator (task #21): compare the orig work page against the emu
+    // work page of the same rotation slot — the byte-exact model of the DOS
+    // page channel. v2_render_buf stays the clean display frame.
+    extern uint8_t v2_emu_page[2][320 * 176];
+    extern int v2_emu_cur;
+    extern bool v2_emu_valid;
+    const uint8_t* v2_frame = v2_emu_valid ? v2_emu_page[v2_emu_cur] : v2_render_buf;
 
     // 3-page rotation ring: last 3 distinct myOffset values. The orig dirty
     // channels repaint a changed object on [obj+0x114D]-low-byte pages only
@@ -636,7 +643,7 @@ void v2_verify_render_buf(int frame) {
     for (int y = 0; y < 176; y++) {
         for (int x = 0; x < 320; x++) {
             uint8_t o = orig_pixels[y * 320 + x];
-            uint8_t v = v2_render_buf[y * 320 + x];
+            uint8_t v = v2_frame[y * 320 + x];
             h_orig = h_orig * 131u + o;
             h_v2   = h_v2   * 131u + v;
             if (o != v) {
@@ -666,7 +673,7 @@ void v2_verify_render_buf(int frame) {
         for (int y = 0; y < 176; y++) {
             for (int x = 0; x < 320; x++) {
                 uint8_t o = orig_pixels[y * 320 + x];
-                uint8_t v = v2_render_buf[y * 320 + x];
+                uint8_t v = v2_frame[y * 320 + x];
                 if (o == v) continue;
                 bool legit = false;
                 for (int a = 0; a < nalt && !legit; a++)
@@ -734,9 +741,17 @@ void v2_verify_render_buf(int frame) {
     // Throttle log: first 10 then every 60 frames
     static int _logged = 0;
     if (_logged < 10 || _logged % 60 == 0) {
+        extern uint8_t* v2_vm_get_shadow_ds();
+        uint8_t* shd = v2_vm_get_shadow_ds();
+        if (!shd) shd = (uint8_t*)&frame; // never: keeps printf safe
         fprintf(stderr, "V2-RENDER-DIVERGE[f%d]: hard=%d lag=%d (first hard @ x=%d y=%d) "
-                "orig_hash=%08X v2_hash=%08X page_off=0x%X\n",
-                frame, hard_diff, lag_diff, first_hard_x, first_hard_y, h_orig, h_v2, page_offset);
+                "orig_hash=%08X v2_hash=%08X page_off=0x%X emu=%d/%d "
+                "vp=(%d,%d) shake=(%d,%d) sc=(%04X,%04X)\n",
+                frame, hard_diff, lag_diff, first_hard_x, first_hard_y, h_orig, h_v2, page_offset,
+                (int)v2_emu_valid, v2_emu_cur,
+                *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
+                *(int16_t*)(shd + 0x39E), *(int16_t*)(shd + 0x3A0),
+                *(uint16_t*)(shd + 0x257F), *(uint16_t*)(shd + 0x2581));
     }
     _logged++;
     first_diff_x = first_hard_x; first_diff_y = first_hard_y;
@@ -765,7 +780,7 @@ void v2_verify_render_buf(int frame) {
                         uint32_t base = (ring[r] + (uint32_t)y * 0x56u) * 4u + myDrawInfo->myPixelOffset;
                         if (base + 320 > sizeof(myDrawInfo->drawBuffer)) { d = -1; break; }
                         const uint8_t* rowp = &myDrawInfo->drawBuffer[base];
-                        const uint8_t* vrow = &v2_render_buf[y * 320];
+                        const uint8_t* vrow = &v2_frame[y * 320];
                         for (int x = 0; x < 320; x++) if (rowp[x] != vrow[x]) d++;
                     }
                     pos += snprintf(line + pos, sizeof(line) - (size_t)pos,
@@ -786,14 +801,14 @@ void v2_verify_render_buf(int frame) {
             _dumped = 1;
             extern void headless_write_ppm(const char*, const uint8_t*, int, int, const SDL_Color*);
             headless_write_ppm("/tmp/v2_rdiff_orig.ppm", orig_pixels, 320, 176, nullptr);
-            headless_write_ppm("/tmp/v2_rdiff_v2.ppm", v2_render_buf, 320, 176, nullptr);
+            headless_write_ppm("/tmp/v2_rdiff_v2.ppm", v2_frame, 320, 176, nullptr);
             struct Pair { uint8_t o, v; uint32_t n, at; };
             Pair top[6] = {};
             for (uint32_t i = 0; i < 320u * 176u; i++) {
-                if (orig_pixels[i] == v2_render_buf[i]) continue;
+                if (orig_pixels[i] == v2_frame[i]) continue;
                 for (int k = 0; k < 6; k++) {
-                    if (top[k].n && top[k].o == orig_pixels[i] && top[k].v == v2_render_buf[i]) { top[k].n++; break; }
-                    if (!top[k].n) { top[k] = { orig_pixels[i], v2_render_buf[i], 1, i }; break; }
+                    if (top[k].n && top[k].o == orig_pixels[i] && top[k].v == v2_frame[i]) { top[k].n++; break; }
+                    if (!top[k].n) { top[k] = { orig_pixels[i], v2_frame[i], 1, i }; break; }
                 }
             }
             for (int k = 0; k < 6 && top[k].n; k++)
@@ -843,7 +858,7 @@ void v2_verify_render_buf(int frame) {
                 fprintf(stderr, "\n  v2   rows          :");
                 for (int yy = by; yy < by + 2; yy++)
                     for (int xx = bx; xx < bx + 16; xx++)
-                        fprintf(stderr, "%s%02X", (xx == bx) ? " | " : " ", v2_render_buf[yy * 320 + xx]);
+                        fprintf(stderr, "%s%02X", (xx == bx) ? " | " : " ", v2_frame[yy * 320 + xx]);
                 fprintf(stderr, "\n");
             }
         }
@@ -4098,6 +4113,15 @@ static void v2_sub_16880(uint8_t* s) {
     // REP STOSW ax=0, cx=0x8000 words (64KB) to es:0 (VGA 0xA000)
     memset(v2_render_buf, 0, 320 * 200);
     memset(v2_hud_buf, 0, 320 * 64);
+    // Page emu (task #21): the orig clear wipes ALL VGA pages — invalidate the
+    // emu work pages so they reinitialize from the new scene's background.
+    {
+        extern uint8_t v2_emu_page[2][320 * 176];
+        extern bool v2_emu_valid;
+        memset(v2_emu_page[0], 0, sizeof(v2_emu_page[0]));
+        memset(v2_emu_page[1], 0, sizeof(v2_emu_page[1]));
+        v2_emu_valid = false;
+    }
     // Invalidate chunk_bg backup — old level's static pixels (with old palette)
     // must NOT be restored against new level's palette → would cause wrong colors
     // (green/red flicker). New chunk_bg saved later by v2_draw_viewport_chunk if
@@ -17872,6 +17896,10 @@ void v2_phase_render1(uint16_t ds_val) {
     // 1 ahead of orig per game tick (orig calls sub_1e0c7 ONCE per pass at eip 0x006C).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2a-tiles");
+    // Page emu (task #21): sub-frame early half — page flip, sub_1de05 dirty
+    // latch-copies from the background (= the clean tile render above), early
+    // sprite layer on the work page.
+    v2_emu_early(v2_current_ds_val);
     // Early sprite layer — orig sub_1de05 point: moving objects are erased and
     // repainted here, BEFORE the sub_165aa/16661 anim-state updates. (Static
     // objects' page pixels also correspond to this state.)
@@ -17884,6 +17912,7 @@ void v2_phase_render1(uint16_t ds_val) {
     // sub_1cdef render-map-bit0 gate), evaluated BEFORE v2_sub_1DD9C DECs the
     // counters — same order as orig (gate, draw, DEC). Task #20/#21: flames
     // take the post-update phase, the mid-screen lift keeps the early one.
+    v2_emu_late(v2_current_ds_val);
     v2_draw_sprites_late(v2_current_ds_val);
     v2_sub_1DD9C(v2_vm_shadow_ds);
     v2_pixwatch_stage("p2a-sprites-late");
@@ -18055,12 +18084,14 @@ void v2_phase_render2(uint16_t ds_val) {
     // (effective 20fps animation).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2b-tiles");
+    v2_emu_early(v2_current_ds_val);
     // Early sprite layer (orig sub_1de05 point) — see render1 note.
     v2_draw_sprites(v2_current_ds_val);
     v2_pixwatch_stage("p2b-sprites");
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
+    v2_emu_late(v2_current_ds_val);
     v2_draw_sprites_late(v2_current_ds_val);
     v2_sub_1DD9C(v2_vm_shadow_ds);
     v2_pixwatch_stage("p2b-sprites-late");
@@ -18313,6 +18344,7 @@ void v2_phase_render3(uint16_t ds_val) {
     // updated by post_flip2's sub_12fd0 (delta_type2 = 1/3 of remaining delta).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("r3-tiles");
+    v2_emu_early(v2_current_ds_val);
     // Early sprite layer (orig sub_1de05 point) — see render1 note.
     v2_draw_sprites(v2_current_ds_val);
     v2_pixwatch_stage("r3-sprites");
@@ -18321,6 +18353,7 @@ void v2_phase_render3(uint16_t ds_val) {
     v2_game_loop_post_render(v2_vm_shadow_ds, /*include_anim_queue=*/false);
     v2_pixwatch_stage("r3-post_render");
     // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
+    v2_emu_late(v2_current_ds_val);
     v2_draw_sprites_late(v2_current_ds_val);
     v2_sub_1DD9C(v2_vm_shadow_ds);
     v2_pixwatch_stage("r3-1DD9C");
