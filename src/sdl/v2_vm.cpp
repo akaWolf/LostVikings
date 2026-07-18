@@ -3986,22 +3986,25 @@ static void v2_loc_13a94(uint8_t* s) {
     if ((int16_t)*(uint16_t*)(s + 0x3A) < 0) *(uint16_t*)(s + 0x3A) = 0;
     *(uint16_t*)(s + 0x42) = 0xFFFF;
     for (uint16_t si_idx = 0, di_off = 0; ; si_idx++, di_off += 0x0E) {
-        uint16_t sx = *(uint16_t*)(s + di_off + 0x25F6);
+        uint16_t sx = *(uint16_t*)(s + (uint16_t)(di_off + 0x25F6));   // 16-bit wrap
         if (sx == 0xFFFF) break;
-        uint16_t hw = *(uint16_t*)(s + di_off + 0x25FA);
-        if ((int16_t)(sx + hw - *(uint16_t*)(s + 0x34)) < 0) continue;
-        if ((int16_t)(sx - hw - *(uint16_t*)(s + 0x36)) >= 0) continue;
-        uint16_t sy = *(uint16_t*)(s + di_off + 0x25F8);
-        uint16_t hh = *(uint16_t*)(s + di_off + 0x25FC);
-        if ((int16_t)(sy + hh - *(uint16_t*)(s + 0x38)) < 0) continue;
-        if ((int16_t)(sy - hh - *(uint16_t*)(s + 0x3A)) >= 0) continue;
+        uint16_t hw = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FA));
+        // orig: ADD ax,hw (wraps); SUB ax,[34]; JGE — a SIGNED OPERAND compare
+        // of the wrapped sum vs the bound (class #16: not the sign of the
+        // truncated full difference).
+        if ((int16_t)(uint16_t)(sx + hw) <  (int16_t)*(uint16_t*)(s + 0x34)) continue;
+        if ((int16_t)(uint16_t)(sx - hw) >= (int16_t)*(uint16_t*)(s + 0x36)) continue;
+        uint16_t sy = *(uint16_t*)(s + (uint16_t)(di_off + 0x25F8));
+        uint16_t hh = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FC));
+        if ((int16_t)(uint16_t)(sy + hh) <  (int16_t)*(uint16_t*)(s + 0x38)) continue;
+        if ((int16_t)(uint16_t)(sy - hh) >= (int16_t)*(uint16_t*)(s + 0x3A)) continue;
         // In viewport — check if already spawned
         *(uint16_t*)(s + 0x32) = si_idx;
         bool already = false;
         uint16_t table_end = *(uint16_t*)(s + 0x372);
         for (uint16_t si2 = *(uint16_t*)(s + 0x33C); (int16_t)si2 < (int16_t)table_end; si2 += 2) {
-            if (*(uint16_t*)(s + si2 + 0x1355) == 0) continue;
-            if (*(uint16_t*)(s + si2 + 0x16C5) == si_idx) { already = true; break; }
+            if (*(uint16_t*)(s + (uint16_t)(si2 + 0x1355)) == 0) continue;   // 16-bit wrap
+            if (*(uint16_t*)(s + (uint16_t)(si2 + 0x16C5)) == si_idx) { already = true; break; }
         }
         if (already) continue;
         // sub_13ae0: save viewport bounds, setup params, call sub_13809, restore bounds
@@ -4014,9 +4017,9 @@ static void v2_loc_13a94(uint8_t* s) {
         *(uint16_t*)(s + 0x6E) = sy;
         *(uint16_t*)(s + 0x3E0) = hw;
         *(uint16_t*)(s + 0x3E2) = hh;
-        *(uint16_t*)(s + 0x374) = *(uint16_t*)(s + di_off + 0x2602);
-        uint16_t code_seg_idx = *(uint16_t*)(s + di_off + 0x25FE);
-        uint16_t anim_idx = *(uint16_t*)(s + di_off + 0x2600);
+        *(uint16_t*)(s + 0x374) = *(uint16_t*)(s + (uint16_t)(di_off + 0x2602));
+        uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FE));
+        uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di_off + 0x2600));
         v2_sub_13809(s, code_seg_idx, si_idx, anim_idx, sx, sy);
         *(uint16_t*)(s + 0x3A) = save_3A;
         *(uint16_t*)(s + 0x38) = save_38;

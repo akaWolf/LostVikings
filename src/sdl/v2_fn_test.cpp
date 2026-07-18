@@ -3397,6 +3397,14 @@ const uint16_t FT_AX_FADE[]     = { 0x0000, 0x0101, 0x3F3F, 0x4040, 0x7F7F,
 const uint16_t FT_AX_BLINK[]    = { 0, 1, 0x10, 0x11, 0x1F, 0x20, 0x21, 0xFF };
 const uint16_t FT_AX_STATE01[]  = { 0, 1, 2 };
 
+// sub_13a0e spawn unit: the tail runs the 13ae0 spawn loop over the [25F6]
+// table; the base image carries the EXE-static table. Fuzz is base-only —
+// noise in the spawn table drives sub_13809 (VM object init) on garbage
+// code_seg indices, which is the vmops unit's territory.
+void ft_norm_13a0e(uint8_t* img) {
+    ft_wr16(img, 0x032F, 0);   // creation gate open (orig checks it in 13809)
+}
+
 // sub_11c52 fuzz domain: the orig callees sub_1183d/sub_120d1/sub_118ad are
 // renderers indexing LUTs by DS fields — the call contract is HUD slot 0..11
 // ([443]), item id 0..0x17 ([441]), viking selector indices 0..5
@@ -3425,9 +3433,11 @@ const FtLeafSpec FT_LEAVES[] = {
     // handle would diverge on the DOS-handle emulation, not this function).
     { FT_SUB_116E3, v2_fntest_call_sub_116e3,
       { 0x25C9, FT_AX_LEVEL, 9 }, { 0x3CC, FT_AX_STATE, 7 }, true, nullptr, false },
-    // K3a leaves: fade byte pairs / blink counters. (13a0e moved to the
-    // spawn-family unit — task #29: its orig tail runs the 13ae0/13809
-    // spawn loop, which the plain v2_sub_13a0e mirror does not carry.)
+    // K3a/K3b leaves. (13a0e parked until the unit builds the class-B
+    // template context: orig reads object templates via es=[2E67] while
+    // v2_sub_13809 needs v2_vm_shadow_animdata — task #29 wires both to one
+    // synthetic template segment, like the vmops unit does with its
+    // FT_VM_TESTSEG code segment.)
     { FT_SUB_10E99, v2_fntest_call_sub_10e99,
       { 0x0342, FT_AX_FADE, 8 }, { 0x0344, FT_AX_FADE, 8 }, false, nullptr, false },
     { FT_SUB_11C52, v2_fntest_call_sub_11c52,
