@@ -9519,6 +9519,7 @@ static void v2_vm_sub_15505(V2VM& vm, uint16_t si, uint16_t di) {
 static void v2_vm_op_11(V2VM& vm) {
     uint16_t si = vm.global_r(0x42);
     uint16_t di = vm.ds_read(si + 0x1995);
+    vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
     v2_vm_sub_15505(vm, si, di);
 }
 
@@ -9527,6 +9528,7 @@ static void v2_vm_op_11(V2VM& vm) {
 static void v2_vm_op_3A(V2VM& vm) {
     uint16_t di = vm.global_r(0x42);
     uint16_t si = vm.ds_read(di + 0x1995);
+    vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
     v2_vm_sub_15505(vm, si, di);
 }
 
@@ -10047,10 +10049,14 @@ static void v2_vm_op_0C(V2VM& vm) {
 
 // 0x0D (sub_142dc): Clear bit in ds:[byte+0x356]. 0 bytes.
 static void v2_vm_op_0D(V2VM& vm) {
+    vm.si_track = vm.global_r(0x42);            // MOV si, ds:42h
     int16_t val = (int16_t)vm.field_r(0x16C5);
-    if (val < 0) return;
+    vm.di_track = (uint16_t)val;                // MOV di, [si+16C5h]
+    if (val < 0) return;                        // JS: di exits negative
     uint16_t bit = val & 7;
+    vm.di_track = bit;                          // AND di, 7
     uint16_t byte_off = val >> 3;
+    vm.si_track = byte_off;                     // MOV si,[16C5]; SHR si,3
     uint8_t mask = *(vm.shadow + (uint16_t)(bit - 0x6C3C));
     uint16_t addr = byte_off + 0x356;
     if (addr < V2_VM_SHADOW_SIZE)
@@ -10059,10 +10065,14 @@ static void v2_vm_op_0D(V2VM& vm) {
 
 // 0x0E (sub_142fc): Set bit in ds:[byte+0x356]. 0 bytes.
 static void v2_vm_op_0E(V2VM& vm) {
+    vm.si_track = vm.global_r(0x42);            // MOV si, ds:42h
     int16_t val = (int16_t)vm.field_r(0x16C5);
-    if (val < 0) return;
+    vm.di_track = (uint16_t)val;                // MOV di, [si+16C5h]
+    if (val < 0) return;                        // JS: di exits negative
     uint16_t bit = val & 7;
+    vm.di_track = bit;                          // AND di, 7
     uint16_t byte_off = val >> 3;
+    vm.si_track = byte_off;                     // SHR si, 3
     uint8_t mask = *(vm.shadow + (uint16_t)(bit - 0x6C44));
     uint16_t addr = byte_off + 0x356;
     if (addr < V2_VM_SHADOW_SIZE)
@@ -10104,6 +10114,7 @@ static void v2_vm_op_12(V2VM& vm) {
     // sub_15505: [si+15AD] -= [di+15D5]; if no borrow → 0
     uint16_t di = vm.global_r(0x42);
     uint16_t si = vm.ds_read(di + 0x1995);
+    vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
     v2_vm_sub_15505(vm, si, di);
 }
 
@@ -10959,6 +10970,10 @@ static void v2_vm_op_81(V2VM& vm) {
 // POP ax + RETN = exit opcode loop (skip caller's return address)
 static void v2_vm_op_10(V2VM& vm) {
     uint16_t di = vm.global_r(0x42);
+    // orig exit regs: di=[0x42] (sub_13c93 is PUSH/POP di-balanced),
+    // si=[0x42] re-read after the call (0x432F) — task #15 tracking.
+    vm.di_track = di;
+    vm.si_track = di;
 
     // === sub_13c93 logic ===
     // 1. Clear all sub-sprites if 0x1AD5 != 0. Orig loop loc_13CA2 is a
