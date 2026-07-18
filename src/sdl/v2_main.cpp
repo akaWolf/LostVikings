@@ -95,6 +95,15 @@ int main(int argc, char* argv[]) {
         } else if (strncmp(argv[i], "--keymap=", 9) == 0) {
             keymap_path = argv[i] + 9;
         }
+#ifdef HEADLESS
+        else if (strncmp(argv[i], "--max-frames=", 13) == 0) {
+            extern int g_headless_max_frames;
+            g_headless_max_frames = atoi(argv[i] + 13);
+        } else if (strncmp(argv[i], "--dump-dir=", 11) == 0) {
+            extern const char* g_headless_dump_dir;
+            g_headless_dump_dir = argv[i] + 11;
+        }
+#endif
     }
 
     // Load keymap before recorder init (recorder consults v2_keymap).
@@ -197,6 +206,11 @@ int main(int argc, char* argv[]) {
         }
 
         // Frame rate limiter: sleep to target 60 FPS.
+#ifdef HEADLESS
+        // V2_ONLY+HEADLESS: the barrier-phase hook that normally enforces
+        // --max-frames never runs standalone — enforce it from the main loop.
+        { extern int headless_check_exit(void); headless_check_exit(); }
+#endif
         frame_target_ms += FRAME_PERIOD_MS;
         uint32_t now = SDL_GetTicks();
         if ((int32_t)(frame_target_ms - now) > 0) {

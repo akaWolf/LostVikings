@@ -93,7 +93,9 @@ int headless_check_exit(void) {
         v2_dump_opcode_coverage();
         v2_dump_psnap_summary();
         headless_dump_render_diff_summary();
-        v2_fntest_report();
+#ifndef V2_ONLY
+        v2_fntest_report();   // fn-test infra is not part of the V2_ONLY build
+#endif
         fflush(stdout); fflush(stderr);
         _exit(0);
     }

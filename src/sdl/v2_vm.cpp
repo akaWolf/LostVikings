@@ -256,6 +256,12 @@ void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj) {
 void v2_audit_check_frame_end() {
     int orig = g_audit_orig_frame_count.exchange(0, std::memory_order_relaxed);
     int v2   = g_audit_v2_frame_count.exchange(0, std::memory_order_relaxed);
+#ifdef V2_ONLY
+    // Standalone build: there is no orig side to audit against — every v2
+    // SFX would read as a false frame-count divergence.
+    (void)orig; (void)v2;
+    return;
+#endif
     if (orig != v2) {
         extern int v2_dbg_pre_vm_iter;
         int cur_frame = v2_dbg_pre_vm_iter;
@@ -581,6 +587,13 @@ extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
 extern "C" void v2_emu_init_pages(uint16_t ds_val);
 extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage);
 extern "C" uint16_t v2_dd9c_pixel_ds;   // armed page-cascade DS (0xFFFF = off)
+#ifdef V2_ONLY
+// fn-test infrastructure lives in v2_fn_test.cpp + the m2c seg files, which
+// are not part of the V2_ONLY build. The referencing paths are all gated by
+// the oracle/verify context (never taken standalone) — link-level stubs.
+extern "C" int v2_fntest_vm_soft = 0;
+extern "C" uint32_t v2_fntest_game_ds_linear(void) { return 0; }
+#endif
 extern "C" void v2_draw_one_sprite_late(uint16_t ds_val, int obj);
 static uint16_t v2_current_ds_val; // DS segment value for rendering calls (defined here, used below)
 // Dirty-lag classification counters (task #20/#21) — printed by the

@@ -124,7 +124,6 @@ ifdef V2_ONLY
 # image baked into the original DOS .EXE binary).
 CXX_SRCS := \
   src/sdl/v2_main.cpp \
-  src/sdl/play.cpp \
   src/sdl/render.cpp \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
@@ -132,6 +131,10 @@ CXX_SRCS := \
   src/sdl/v2_vm.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_keymap.cpp
+# play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
+ifndef HEADLESS
+CXX_SRCS += src/sdl/play.cpp
+endif
 else
 CXX_SRCS := \
   src/vikings.exe.cpp \
