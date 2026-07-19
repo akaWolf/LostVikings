@@ -13095,12 +13095,37 @@ static void v2_vm_op_13(V2VM& vm) {
         //   - Clear v2_render_buf rows 64..176 (rest of viewport cleared)
         extern uint8_t v2_render_buf[320*200];
         extern uint8_t v2_hud_buf[320*64];
-        // 1. Copy HUD picture → top of viewport (= orig MOVSB src=0 → dst=0x2ADC visible part)
-        memcpy(v2_render_buf, v2_hud_buf, 320 * 64);
-        // 2. Clear HUD area (= orig STOSB di=0..0x2ADC clearing VGA[0..HUD_END])
+        // #39 fix: the orig copies land at ABSOLUTE page bytes 0x2ADC/0x70BC,
+        // while the CRTC window sits at set_display_memory_addr(vp) — on the
+        // title (vp=(0,32)) that is 0x20C8, so the picture appears 30 ROWS
+        // DOWN the screen (0x2ADC-0x20C8 = 0xA14 = 30*0x56), with rows 0..29
+        // black (the STOSB-cleared source region scrolls in above it).
+        // Compute the row shift with the exact orig CRTC formula (16775).
+        int scr_row0;
+        {
+            uint8_t* sh = vm.shadow;
+            int16_t vy = (int16_t)*(uint16_t*)(sh + DS_VIEWPORT_Y);
+            int16_t ys = (int16_t)*(uint16_t*)(sh + 0x3A0);
+            int16_t ylim = (int16_t)*(uint16_t*)(sh + 0x25A6);
+            int y = vy + ys; if (y > ylim) y = vy - ys;
+            int16_t vx = (int16_t)*(uint16_t*)(sh + DS_VIEWPORT_X);
+            int16_t xs = (int16_t)*(uint16_t*)(sh + 0x39E);
+            int16_t xlim = (int16_t)*(uint16_t*)(sh + 0x25A4);
+            int x = vx + xs; if (x > xlim) x = vx - xs;
+            uint16_t role = *(uint16_t*)(sh + DS_PAGE_SHOWN);
+            uint16_t y_high = *(uint16_t*)(sh + (uint16_t)(LUT_PAGE_ROW + role + ((y >> 3) * 2)));
+            uint16_t y_low  = *(uint16_t*)(sh + (uint16_t)(0x8E58 + ((y & 7) * 2)));
+            uint16_t myOff  = (uint16_t)(y_high + y_low + (x >> 2) + 8);
+            scr_row0 = ((int)(uint16_t)(0x2ADC - myOff)) / 0x56;
+            if (scr_row0 < 0) scr_row0 = 0;
+            if (scr_row0 > 176 - 64) scr_row0 = 176 - 64;
+        }
+        // 1. Clear whole viewport first (rows above/below get the STOSB zeroes)
+        memset(v2_render_buf, 0, 320 * 176);
+        // 2. Copy HUD picture to its on-screen position (orig MOVSB dst=0x2ADC)
+        memcpy(v2_render_buf + 320 * scr_row0, v2_hud_buf, 320 * 64);
+        // 3. Clear HUD area (= orig STOSB di=0..0x2ADC clearing VGA[0..HUD_END])
         memset(v2_hud_buf, 0, 320 * 64);
-        // 3. Clear viewport bottom (= orig STOSB clearing rest of viewport pages)
-        memset(v2_render_buf + 320 * 64, 0, 320 * (176 - 64));
         // 4. Refresh chunk_bg backup so per-frame restore in v2_draw_tiles preserves
         //    new static state (HUD picture at top + cleared bottom). Without this,
         //    next frame restore would bring back vikings from old chunk_bg.

@@ -424,6 +424,20 @@ unsigned int plane4_to_linear(uint8_t plane, uint32_t plane_offset)
 }
 void drawPixel(uint32_t offset, uint8_t color)
 {
+  // #39 chrono-probe: full write history of two page dwords (blit head 0x20C8
+  // and blit+30rows 0x2ADC), plane 0 only.
+  {
+    uint32_t dw = offset >> 2;
+    if ((dw == 0x20C8 || dw == 0x2ADC) && (offset & 3) == 0) {
+      extern int v2_dbg_pre_vm_iter;
+      static int n = 0;
+      if (n < 40) { n++;
+        fprintf(stderr, "CHRONO[%02d] f=%d dw=%04X val=%02X ra=%p\n",
+                n, v2_dbg_pre_vm_iter, dw, color, __builtin_return_address(0));
+      }
+    }
+  }
+
 
   if (offset > 65536*4 - 1)
 	return;
@@ -473,6 +487,7 @@ void drawPixel(uint32_t offset, uint8_t color)
 }*/
 void drawPixel(uint8_t plane, uint32_t plane_offset, uint32_t color)
 {
+
   drawPixel(plane4_to_linear(plane, plane_offset + 0), (color >> 0) & 0xFF);
   drawPixel(plane4_to_linear(plane, plane_offset + 1), (color >> 8) & 0xFF);
   drawPixel(plane4_to_linear(plane, plane_offset + 2), (color >> 16) & 0xFF);
@@ -480,12 +495,25 @@ void drawPixel(uint8_t plane, uint32_t plane_offset, uint32_t color)
 }
 void drawPixel(uint8_t plane, uint32_t plane_offset, uint16_t color)
 {
+  {
+    uint32_t dw0 = plane_offset;
+    if ((dw0 == 0x20C8 || dw0 == 0x2ADC) && plane == 0) {
+      extern int v2_dbg_pre_vm_iter;
+      static int n = 0;
+      if (n < 24) { n++;
+        fprintf(stderr, "CHRONO2[%02d] f=%d dw=%04X val=%04X caller=%p\n",
+                n, v2_dbg_pre_vm_iter, dw0, (unsigned)color, __builtin_return_address(0));
+      }
+    }
+  }
+
   //printf("DRW: %x %x %x\n", plane, plane_offset, color);
   drawPixel(plane4_to_linear(plane, plane_offset + 0), color & 0xFF);
   drawPixel(plane4_to_linear(plane, plane_offset + 1), color >> 8);
 }
 void drawPixel(uint8_t plane, uint32_t plane_offset, uint8_t color)
 {
+
   //printf("DRW: %x %x %x\n", plane, plane_offset, color);
   drawPixel(plane4_to_linear(plane, plane_offset), color);
 }
