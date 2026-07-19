@@ -60,6 +60,16 @@ bool v2_glyph_snap_valid = false;
 // like the orig dirty channel repaints the tiles under the removed text.
 uint8_t v2_glyph_prev_snapshot[0x370];
 
+// #39 dirty-tile erosion: orig keeps painted glyphs on the page until a CHANGED
+// (dirty) tile redraws over them (sub_1C8F1 dirty channel). v2 re-blits every
+// foreground tile each sub-frame, so it needs the glyph snapshot — but the
+// snapshot must be eroded wherever the scene content actually changed
+// (illustration swap / scroll), else it keeps painting stale dialog text over
+// the new picture (the whole intro divergence class: 278/2977/9357/28595 are
+// all this one root). Enabled only around the v2_emu_late_end shown-page pass
+// (draw_flagged_tiles has many other callers/targets that must not touch it).
+bool v2_flagged_erode = false;
+
 void v2_chunk_bg_update_from_render() {
     memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
     v2_chunk_bg_valid = true;
@@ -1003,7 +1013,12 @@ void v2_emu_late_end(uint16_t ds_val) {
     v2_dd9c_pixel_ds = 0xFFFF;
     uint8_t* ds_base = v2_get_ds_base(ds_val);
     (void)ds_base;
+    // #39: enable dirty-tile erosion of the glyph snapshot for THIS pass only
+    // (the shown-page late_end render). Tiles that changed since last sub-frame
+    // erode the stale glyph cell before the snapshot is repainted below.
+    v2_flagged_erode = true;
     v2_draw_flagged_tiles(ds_val);
+    v2_flagged_erode = false;
     // #39: orig 1E0C7 paints the glyph cells onto the CURRENT page at this
     // exact point (after 1DD9C, before the flip) - but only on sub-frames
     // where the flush actually ran a full pass (dirty/throttle gates).
@@ -1659,6 +1674,26 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
             uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
+
+            // #39 dirty-tile erosion (only on the late_end shown pass): if the
+            // visible tile at this cell changed since the previous sub-frame,
+            // the scene content there was redrawn — orig's dirty channel would
+            // have overwritten any glyph on the page, so erode the matching
+            // glyph-snapshot cell (glyph grid 40x22 aligns with tile cells).
+            if (v2_flagged_erode && col_vis < 40 && row_vis < 22) {
+                static uint16_t prev_ftile[25 * 43];
+                static bool prev_ftile_valid = false;
+                int tcell = row_vis * 43 + col_vis;
+                if (prev_ftile_valid && tile_entry != prev_ftile[tcell]) {
+                    int gpos = row_vis * 40 + col_vis;
+                    v2_glyph_page_snapshot[gpos] = 0;
+                    v2_glyph_prev_snapshot[gpos] = 0;
+                }
+                prev_ftile[tcell] = tile_entry;
+                // mark valid once the last gated cell (21,39) has been stored,
+                // so the next sub-frame's comparisons all have prev data.
+                if (row_vis == 21 && col_vis == 39) prev_ftile_valid = true;
+            }
 
             // Original sub_1c8f1 ANDs entry with ax=0xFFFE (clears dirty bit 0)
             // then draws if bit 3 (foreground) is set. v2 draws all foreground
