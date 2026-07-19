@@ -1250,12 +1250,12 @@ bool ft_synth_case_101be(uint16_t mask, const uint8_t* en8, const uint8_t* tm8,
     }
     FtRng trng(tbl_seed);
     for (uint32_t off = 0; off < 0x300; off++) {        // 256 entries x 3 bytes
-        g_synth_in[(uint16_t)(0x8202 + off)] = (uint8_t)trng.next();
-        g_synth_in[(uint16_t)(0x7F02 + off)] = (uint8_t)trng.next();
+        g_synth_in[(uint16_t)(DS_PAL_OUT + off)] = (uint8_t)trng.next();
+        g_synth_in[(uint16_t)(DS_PAL_SRC + off)] = (uint8_t)trng.next();
     }
     ft_wr16(g_synth_in, 0x8504, 0xBBBB);
     g_synth_in[0x8506] = 0xBB;
-    ft_wr16(g_synth_in, 0x7EFE, 0xBBBB);
+    ft_wr16(g_synth_in, DS_PAL_REQ, 0xBBBB);
 
     memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
     uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -1344,8 +1344,8 @@ bool ft_synth_case_palrot(FtId id, uint16_t si, uint16_t dx,
     g_synth_in[(uint16_t)(si + 0x2594)] = endi;
     FtRng trng(tbl_seed);
     for (uint32_t off = 0; off < 0x300; off++) {        // 256 entries x 3 bytes
-        g_synth_in[(uint16_t)(0x8202 + off)] = (uint8_t)trng.next();
-        g_synth_in[(uint16_t)(0x7F02 + off)] = (uint8_t)trng.next();
+        g_synth_in[(uint16_t)(DS_PAL_OUT + off)] = (uint8_t)trng.next();
+        g_synth_in[(uint16_t)(DS_PAL_SRC + off)] = (uint8_t)trng.next();
     }
     ft_wr16(g_synth_in, 0x8504, 0xBBBB);                // scratch statics canary
     g_synth_in[0x8506] = 0xBB;
@@ -1390,14 +1390,14 @@ int ft_selftest_palrot(FtId id) {
     // Exhaustive valid half-plane at si=0, dx=0x8202 (game base).
     for (uint32_t c = 0; c <= 0xFF; c++) for (uint32_t e = 0; e <= 0xFF; e++) {
         if (fwd ? (c > e) : (c < e)) continue;
-        ft_synth_case_palrot(id, 0, 0x8202, (uint8_t)c, (uint8_t)e,
+        ft_synth_case_palrot(id, 0, DS_PAL_OUT, (uint8_t)c, (uint8_t)e,
                              0xC0000000u | (c << 8) | e, "exh", exh, diff_budget);
     }
     // Slot addressing: si=0..7 over a small cur/end grid, both game bases.
     for (uint16_t si = 0; si < 8; si++)
         for (uint32_t c = 0; c <= 0xF0; c += 0x3C) for (uint32_t e = 0; e <= 0xF0; e += 0x3C) {
             if (fwd ? (c > e) : (c < e)) continue;
-            ft_synth_case_palrot(id, si, 0x7F02, (uint8_t)c, (uint8_t)e,
+            ft_synth_case_palrot(id, si, DS_PAL_SRC, (uint8_t)c, (uint8_t)e,
                                  0xC1000000u | (si << 16) | (c << 8) | e, "exh", exh, diff_budget);
         }
 
@@ -1407,7 +1407,7 @@ int ft_selftest_palrot(FtId id) {
         uint8_t cur = (uint8_t)c, endi;
         if (fwd) endi = (uint8_t)(cur - d);   // end<cur → wrapped count for 10255
         else     endi = (uint8_t)(cur + d);   // cur<end → wrapped count for 1020f
-        ft_synth_case_palrot(id, (uint16_t)(c & 7), 0x8202, cur, endi,
+        ft_synth_case_palrot(id, (uint16_t)(c & 7), DS_PAL_OUT, cur, endi,
                              0xC2000000u | (d << 8) | c, "wrap", wrap, diff_budget);
     }
     // Base-address wrap: dx near segment end / zero.
@@ -1422,7 +1422,7 @@ int ft_selftest_palrot(FtId id) {
     FtRng rng(fwd ? 0x10255001u : 0x1020F001u);
     for (int i = 0; i < 5000; i++) {
         uint16_t si = (uint16_t)(rng.next() & 7);
-        uint16_t dxv = (rng.next() & 1) ? 0x8202 : 0x7F02;
+        uint16_t dxv = (rng.next() & 1) ? DS_PAL_OUT : DS_PAL_SRC;
         ft_synth_case_palrot(id, si, dxv, (uint8_t)rng.next(), (uint8_t)rng.next(),
                              rng.next(), "fuzz", fuzz, diff_budget);
     }
@@ -2145,7 +2145,7 @@ bool ft_synth_case_chunk(uint16_t chunk_id, const char* group,
 
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
     ft_wr16(g_synth_in, DS_SEG_FS, FT_RING_SEG);        // FS segment = ring zone
-    for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;  // header window baseline
+    for (int i = 0; i < 10; i++) g_synth_in[DS_CHUNK_HDR + i] = 0;  // header window baseline
 
     uint16_t saved_10980 = v2_fntest_get_word_10980();
 
@@ -2218,7 +2218,7 @@ bool ft_synth_case_chunk(uint16_t chunk_id, const char* group,
     }
     // DS: plant the v2 header mirror, then full-image diff
     memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
-    memcpy(g_scratch + 0x2BB4, v2_hdr, 10);
+    memcpy(g_scratch + DS_CHUNK_HDR, v2_hdr, 10);
     for (uint32_t a = 0; a < 0x10000; a++) {
         if (g_scratch[a] == g_synth_orig[a]) continue;
         if (v2_fntest_ds_skip(a)) continue;
@@ -2368,7 +2368,7 @@ bool ft_synth_case_rawchunk(uint16_t chunk_id, uint16_t disp_off, const char* gr
 
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
     ft_wr16(g_synth_in, DS_SEG_CHUNK, FT_RING_SEG);        // chunk segment = test zone
-    for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;
+    for (int i = 0; i < 10; i++) g_synth_in[DS_CHUNK_HDR + i] = 0;
 
     uint16_t saved_10980 = v2_fntest_get_word_10980();
     memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
@@ -2431,7 +2431,7 @@ bool ft_synth_case_rawchunk(uint16_t chunk_id, uint16_t disp_off, const char* gr
     }
     // DS window + full image
     memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
-    memcpy(g_scratch + 0x2BB4, v2_hdr, 8);
+    memcpy(g_scratch + DS_CHUNK_HDR, v2_hdr, 8);
     *(uint16_t*)(g_scratch + 0x2BBC) = (uint16_t)v2_ps;
     for (uint32_t a = 0; a < 0x10000; a++) {
         if (g_scratch[a] == g_synth_orig[a]) continue;
@@ -3216,8 +3216,8 @@ bool ft_synth_case_pal(FtId id, uint8_t chan_mask, const FtPalCh* ch /*8 or null
     st.cases++;
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
     FtRng pr(pal_seed);
-    for (int i = 0; i < 768; i++) g_synth_in[0x8202 + i] = (uint8_t)pr.w();
-    for (int i = 0; i < 768; i++) g_synth_in[0x7F02 + i] = (uint8_t)pr.w();
+    for (int i = 0; i < 768; i++) g_synth_in[DS_PAL_OUT + i] = (uint8_t)pr.w();
+    for (int i = 0; i < 768; i++) g_synth_in[DS_PAL_SRC + i] = (uint8_t)pr.w();
     g_synth_in[0x2583] = chan_mask;                       // byte_2AA63 enable bits
     for (int b = 0; b < 8; b++) {
         g_synth_in[b + 0x258C] = ch ? ch[b].timer  : 0;
@@ -3225,8 +3225,8 @@ bool ft_synth_case_pal(FtId id, uint8_t chan_mask, const FtPalCh* ch /*8 or null
         g_synth_in[b + 0x2594] = ch ? ch[b].start  : 0;
         g_synth_in[b + 0x259C] = ch ? ch[b].end    : 0;
     }
-    ft_wr16(g_synth_in, 0x7EFE, 0xBBBB);                  // both sides clear to 0
-    ft_wr16(g_synth_in, 0x7F00, w7f00);                   // word_303E0 burst source
+    ft_wr16(g_synth_in, DS_PAL_REQ, 0xBBBB);                  // both sides clear to 0
+    ft_wr16(g_synth_in, DS_PAL_SRC_PTR, w7f00);                   // word_303E0 burst source
 
     memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
     // Direct-call isolator (no CALL_): the pair's port bodies end in a C
@@ -3290,7 +3290,7 @@ int ft_selftest_pal(FtId id, uint32_t seed) {
     if (!is_ffc) {
         // sub_10fe6 has no branches: a few palette seeds + wild 0x7F00 values.
         for (uint32_t s = 0; s < 6; s++)
-            ft_synth_case_pal(id, 0, nullptr, (s & 1) ? 0x7F02 : 0x8202,
+            ft_synth_case_pal(id, 0, nullptr, (s & 1) ? DS_PAL_SRC : DS_PAL_OUT,
                               seed + s, "grid", grid, diff_budget);
     } else {
         // Directed channel configs. LUT [bx-0x6C44] holds the enable bit per
@@ -3301,29 +3301,29 @@ int ft_selftest_pal(FtId id, uint32_t seed) {
         };
         C cases[] = {
             // cur==end → JZ skip (no DAC, timer still reloads)
-            { 0xFF, { mk(0x10,0x10), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0xFF, { mk(0x10,0x10), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // positive small range, source 0x7F02 (the fix-#22 scenario)
-            { 0xFF, { mk(0x71,0x74), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0xFF, { mk(0x71,0x74), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // positive from 0x8202
-            { 0xFF, { mk(0x00,0x0F), {}, {}, {}, {}, {}, {}, {} }, 0x8202 },
+            { 0xFF, { mk(0x00,0x0F), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_OUT },
             // positive full range 0..0xFF
-            { 0xFF, { mk(0x00,0xFF), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0xFF, { mk(0x00,0xFF), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // negative (byte diff bit7=1): count*3 source quirk
-            { 0xFF, { mk(0x20,0x00), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0xFF, { mk(0x20,0x00), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // POSITIVE with byte-diff underflow: end=0x00 start=0xFF → diff8=0x01,
             // SF=0 → positive path, count=2, DAC slots 0xFF→0x00 (index wrap).
             // The old int16 range model sent this to the negative path.
-            { 0xFF, { mk(0xFF,0x00), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0xFF, { mk(0xFF,0x00), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // negative BIG: start=0x10 end=0x90 → diff8=0x80 (bit7=1), count=0x81,
             // slots 0x90..0xFF then wrap 0x00..0x10.
-            { 0xFF, { mk(0x10,0x90), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0xFF, { mk(0x10,0x90), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // timer≠0 → whole channel skipped (no reload of others)
-            { 0xFF, { mk(0x10,0x20,5), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0xFF, { mk(0x10,0x20,5), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // mask off → gate rejects even with data
-            { 0x00, { mk(0x10,0x20), {}, {}, {}, {}, {}, {}, {} }, 0x7F02 },
+            { 0x00, { mk(0x10,0x20), {}, {}, {}, {}, {}, {}, {} }, DS_PAL_SRC },
             // all 8 channels active with different ranges incl. overlaps
             { 0xFF, { mk(0,3), mk(4,7), mk(8,15), mk(16,16), mk(0x40,0x20),
-                      mk(0x80,0x9F), mk(0xF0,0xFF), mk(2,5) }, 0x7F02 },
+                      mk(0x80,0x9F), mk(0xF0,0xFF), mk(2,5) }, DS_PAL_SRC },
             // wild 303E0 (both sides read the same DS garbage)
             { 0xFF, { mk(0x10,0x2F), {}, {}, {}, {}, {}, {}, {} }, 0x4321 },
         };
@@ -3341,7 +3341,7 @@ int ft_selftest_pal(FtId id, uint32_t seed) {
         for (int b = 0; b < 8; b++)
             ch[b] = { (uint8_t)(rng.w() & ((rng.w() & 3) ? 0 : 0xFF)),  // mostly timer=0
                       (uint8_t)rng.w(), (uint8_t)rng.w(), (uint8_t)rng.w() };
-        uint16_t w7 = (rng.w() & 1) ? 0x7F02 : ((rng.w() & 1) ? 0x8202 : rng.w());
+        uint16_t w7 = (rng.w() & 1) ? DS_PAL_SRC : ((rng.w() & 1) ? DS_PAL_OUT : rng.w());
         ft_synth_case_pal(id, (uint8_t)rng.w(), is_ffc ? ch : nullptr, w7,
                           rng.w() * 65536u + rng.w(), "fuzz", fuzz, diff_budget);
     }
@@ -4552,7 +4552,7 @@ static bool ft_seg_loader_case(int which /*0=1167a,1=116ae*/,
         ft_wr16(g_synth_in, DS_ANIM_PTR_LO, start_off);     // dword_2B359 lo (offset)
         ft_wr16(g_synth_in, DS_ANIM_PTR_HI, FT_DEST_SEG);   // dword_2B359 hi (segment)
     }
-    for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;  // 10982 header window
+    for (int i = 0; i < 10; i++) g_synth_in[DS_CHUNK_HDR + i] = 0;  // 10982 header window
     ft_fill_tail(g_synth_in);
 
     // --- oracle ---

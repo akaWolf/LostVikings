@@ -1058,7 +1058,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             // force flag / pending-redraw byte / sub_1cdef render-map scan.
             bool draw_it = false;
             int gate_code = 0;   // 1=force 2=rd 3=scan-hit (trace aid)
-            if (ds_base[0x9568] != 0) { draw_it = true; gate_code = 1; }  // TEST ds:9568h
+            if (ds_base[DS_SPRITE_FORCE] != 0) { draw_it = true; gate_code = 1; }  // TEST ds:9568h
             else if (ds_base[obj + OBJ_DIRTY_MODE] != 0) { draw_it = true; gate_code = 2; } // TEST byte [di+114Dh]
             else {
                 // sub_1cdef: clip object's tile bbox to viewport, scan cells
@@ -1587,7 +1587,7 @@ void v2_draw_ui(uint16_t ds_val) {
     uint8_t* buf = v2_render_buf;
 
     // Scan UI element list: 40 columns × 22 rows at ds:0x956C
-    uint8_t* ui_list = ds_base + 0x956C;
+    uint8_t* ui_list = ds_base + DS_GLYPH_BUF;
 
     // Debug: count non-zero cells and dump row occupancy.
     {
@@ -1608,7 +1608,7 @@ void v2_draw_ui(uint16_t ds_val) {
                 v2_dbg_pre_vm_iter, _frame, *(uint16_t*)(ds_base + DS_LEVEL), nz);
             for (int r = 0; r < 22; r++)
                 if (rows_used[r]) fprintf(stderr, "r%d=%d ", r, rows_used[r]);
-            fprintf(stderr, "byte_956B=%02X\n", ds_base[0x956B]);
+            fprintf(stderr, "byte_956B=%02X\n", ds_base[DS_GLYPH_DIRTY]);
             // Dump rows with content as ASCII (glyph 0x10..0x3F = printable chars in font)
             if (nz > 0 && nz < 300) {
                 for (int r = 0; r < 22; r++) {

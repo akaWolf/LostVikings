@@ -80,7 +80,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                 static const uint16_t pgs[3] = {0, 0x34, 0x68};
                 for (int p = 0; p < 3; p++) {
                     for (int y = oy; y < oy + 32; y++) {
-                        uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(0x89F8 + pgs[p] + (uint16_t)((y >> 3) * 2)));
+                        uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(LUT_PAGE_ROW + pgs[p] + (uint16_t)((y >> 3) * 2)));
                         uint32_t rowaddr = (uint32_t)yh + (uint32_t)(y & 7) * 0x56u + 8u;
                         uint32_t base = rowaddr * 4u;
                         if (base + 320 > sizeof(myDrawInfo->drawBuffer)) continue;
@@ -112,7 +112,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                 if (wp_armed == 0 && (ofl & 0x8000) && oy > 0) {
                     int16_t ox = *(const int16_t*)(dsb + (uint16_t)(tdi + OBJ_SPRITE_X));
                     int y = oy + 8, x = ox + 8;
-                    uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(0x89F8 + 0x34 + (uint16_t)((y >> 3) * 2)));
+                    uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(LUT_PAGE_ROW + 0x34 + (uint16_t)((y >> 3) * 2)));
                     uint32_t base = ((uint32_t)yh + (uint32_t)(y & 7) * 0x56u + 8u) * 4u + (uint32_t)x;
                     if (base < sizeof(myDrawInfo->drawBuffer)) {
                         extern uint8_t* v2_a2_softwp_ptr;
@@ -386,7 +386,7 @@ extern "C" void enter_trace_sub12352() {
 }
 
 static bool sdl_spec_is_modifier(uint16_t off) {
-    return off == 0x91A4 /* ALT */ || off == 0x9189 /* CTRL */;
+    return off == DS_KEY_ALT /* ALT */ || off == 0x9189 /* CTRL */;
 }
 
 uint8_t sdl_spec_get(uint16_t off) {
@@ -647,20 +647,20 @@ void updateDraw()
 					   spec_off = 0x919E;  // sc 0x32 byte_3167e — mute music
 					   break;
 					 case SDLK_x:
-					   spec_off = 0x9199;  // sc 0x2D byte_31679
+					   spec_off = DS_KEY_X;  // sc 0x2D byte_31679
 					   break;
 					 case SDLK_LALT:
 					 case SDLK_RALT:
-					   spec_off = 0x91A4;  // sc 0x38 byte_31684
+					   spec_off = DS_KEY_ALT;  // sc 0x38 byte_31684
 					   break;
 					 case SDLK_F10:
-					   spec_off = 0x91B0;  // sc 0x44 byte_31690 — restart level
+					   spec_off = DS_KEY_F10;  // sc 0x44 byte_31690 — restart level
 					   break;
 					 case SDLK_DELETE:
 					   spec_off = 0x91BF;  // sc 0x53 byte_3169f — CTRL+ALT+DEL combo
 					   break;
 					 case SDLK_q:
-					   spec_off = 0x917C;  // sc 0x10 byte_3165C — ALT+Q restart level
+					   spec_off = DS_KEY_Q;  // sc 0x10 byte_3165C — ALT+Q restart level
 					   break;
 					 case SDLK_r:
 					   spec_off = 0x917F;  // sc 0x13 byte_3165F — eip 0x2901 read

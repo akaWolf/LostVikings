@@ -1516,8 +1516,8 @@ void v2_dump_write_ring(const char* reason) {
 // Helper macros: instrument byte writes to ds:0x91A4
 #define V2_WRITE_91A4_SHAD(val, src) do { \
     uint8_t _v = (val); \
-    v2_log_write_ring(0x91A4, v2_vm_shadow_ds[0x91A4], _v, true, src); \
-    v2_vm_shadow_ds[0x91A4] = _v; \
+    v2_log_write_ring(DS_KEY_ALT, v2_vm_shadow_ds[DS_KEY_ALT], _v, true, src); \
+    v2_vm_shadow_ds[DS_KEY_ALT] = _v; \
 } while(0)
 
 // Mirror orig sub_10350's spec_state OR-ins (seg000.cpp lines 2560-2563) to
@@ -1532,10 +1532,10 @@ extern "C" void v2_spec_ors_mirror_10350() {
     // orig and v2 see identical frame-stable values — no race with render
     // thread KEYUP between reads. sdl_spec_state itself is SDL adapter state
     // (not real DS), so reading it satisfies "v2 from own shadow state" rule.
-    v2_vm_shadow_ds[0x91B0] = sdl_spec_get(0x91B0);
-    V2_WRITE_91A4_SHAD(sdl_spec_get(0x91A4), "v2:mirror_sub_10350");
-    v2_vm_shadow_ds[0x9199] = sdl_spec_get(0x9199);
-    v2_vm_shadow_ds[0x917C] = sdl_spec_get(0x917C);
+    v2_vm_shadow_ds[DS_KEY_F10] = sdl_spec_get(DS_KEY_F10);
+    V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:mirror_sub_10350");
+    v2_vm_shadow_ds[DS_KEY_X] = sdl_spec_get(DS_KEY_X);
+    v2_vm_shadow_ds[DS_KEY_Q] = sdl_spec_get(DS_KEY_Q);
 }
 
 // Unified input read for inline sub_12352 sites. In V2_ONLY: reads live input_keys
@@ -1937,7 +1937,7 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
     uint32_t next_offset = *(uint32_t*)(header + 4);
     uint32_t compressed_size = next_offset - chunk_offset;
     // Write header to the DS context (orig sub_10982 writes ds:0x2BB4)
-    memcpy(dctx + 0x2BB4, header, 8);
+    memcpy(dctx + DS_CHUNK_HDR, header, 8);
 
     // Seek to chunk data
     if (fseek(v2_data_handle, chunk_offset, SEEK_SET)) return 0;
@@ -2023,10 +2023,10 @@ extern "C" uint32_t v2_fntest_call_raw_chunk(uint16_t chunk_id, uint8_t* dest,
 extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
                                               uint8_t* ring_out, uint8_t* hdr10_out) {
     memset(v2_vm_shadow_fs, 0, 0x1000);          // deterministic ring baseline per case
-    memset(v2_vm_shadow_ds + 0x2BB4, 0, 10);     // header mirror baseline
+    memset(v2_vm_shadow_ds + DS_CHUNK_HDR, 0, 10);     // header mirror baseline
     uint32_t n = v2_read_chunk(chunk_id, dest, 0x10000);
     memcpy(ring_out, v2_vm_shadow_fs, 0x1000);
-    memcpy(hdr10_out, v2_vm_shadow_ds + 0x2BB4, 10);
+    memcpy(hdr10_out, v2_vm_shadow_ds + DS_CHUNK_HDR, 10);
     return n;
 }
 
@@ -2154,21 +2154,21 @@ static uint32_t v2_fs_hash_shadow();
 // Original: OUT 0x3C8=0 (start color), REP OUTSB 0x300 bytes to port 0x3C9, then setPalette().
 // For v2: palette in shadow DS at 0x8202, applied by render callback. DS write: word_303DE=0.
 static void v2_pal_dac_write_10fe6(uint8_t* s) {
-    *(uint16_t*)(s + 0x7EFE) = 0; // word_303DE = 0 (palette write complete)
+    *(uint16_t*)(s + DS_PAL_REQ) = 0; // word_303DE = 0 (palette write complete)
     // Original VGA DAC write:
     // OUT(0x3C8, 0);  // start at color 0
     // REP OUTSB ds:0x8202, 0x300 bytes → port 0x3C9
     // for (i=0; i<256; i++) setPalette(i, ds[0x8202+i*3+0]<<2, ds[0x8202+i*3+1]<<2, ds[0x8202+i*3+2]<<2);
     // v2 shadow DAC (task #22): full upload, source hardcoded ds:0x8202.
-    memcpy(v2_dac_shadow, s + 0x8202, 768);
+    memcpy(v2_dac_shadow, s + DS_PAL_OUT, 768);
 }
 
 // sub_10ffc: palette animation (underwater/lava cycling). Processes 8 animation slots (bx=7→0).
 // Each slot: check enable flag, copy timer, compute color range, write partial palette to VGA DAC.
 // DS writes: [bx+0x258C] = timer copy, word_303DE = 0. VGA: OUT + setPalette for affected ranges.
 static void v2_pal_anim_10ffc(uint8_t* s) {
-    *(uint16_t*)(s + 0x7EFE) = 0; // word_303DE = 0
-    uint16_t pal_base = *(uint16_t*)(s + 0x7F00); // word_303E0 = palette data pointer
+    *(uint16_t*)(s + DS_PAL_REQ) = 0; // word_303DE = 0
+    uint16_t pal_base = *(uint16_t*)(s + DS_PAL_SRC_PTR); // word_303E0 = palette data pointer
     for (int16_t bx = 7; bx >= 0; bx--) {
         uint8_t mask = s[(uint16_t)(bx - LUT_BYTE_OR)]; // bit mask from table
         if (!(s[0x2583] & mask)) continue;          // byte_2AA63: animation enable bits
@@ -2215,8 +2215,8 @@ static void v2_pal_shade_10f03(uint8_t* s) {
     uint8_t r_shade = s[0x342] | s[0x345];
     uint8_t g_shade = s[0x343] | s[0x346];
     uint8_t b_shade = s[0x344] | s[0x347];
-    uint8_t* src = s + 0x7F02;
-    uint8_t* dst = s + 0x8202;
+    uint8_t* src = s + DS_PAL_SRC;
+    uint8_t* dst = s + DS_PAL_OUT;
     for (int i = 0; i < 0x100; i++) {
         int r = src[0] - r_shade; if (r < 0) r = 0; if (r >= 0x40) r = 0x3F; dst[0] = (uint8_t)r;
         int g = src[1] - g_shade; if (g < 0) g = 0; if (g >= 0x40) g = 0x3F; dst[1] = (uint8_t)g;
@@ -2235,8 +2235,8 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
         s[0x0343] = (uint8_t)bx; // byte_28823
         s[0x0344] = (uint8_t)bx; // byte_28824
         v2_pal_shade_10f03(s);                    // sub_10f03: palette shading → ds:0x8202
-        *(uint16_t*)(s + 0x7EFE) = 4;       // word_303DE = 4 (request palette write)
-        *(uint16_t*)(s + 0x7F00) = 0x8202;  // word_303E0 = shaded palette pointer
+        *(uint16_t*)(s + DS_PAL_REQ) = 4;       // word_303DE = 4 (request palette write)
+        *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;  // word_303E0 = shaded palette pointer
         // Original: CALL sub_16775; CALL sub_10130
         v2_page_flip_16775(s);                     // sub_16775: page flip DS writes
         v2_vsync_wait_10130(s);                     // sub_10130: vsync + palette dispatch (DS: DEC A39C)
@@ -2244,7 +2244,7 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
     s[0x0342] = 0;                                                       // MOV byte_28822, 0
     s[0x0343] = 0;                                                       // MOV byte_28823, 0
     s[0x0344] = 0;                                                       // MOV byte_28824, 0
-    *(uint16_t*)(s + 0x7F00) = 0x8202;                                  // MOV word_303E0, 8202h
+    *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;                                  // MOV word_303E0, 8202h
 }
 
 static void v2_pal_correct_10e99(uint8_t* s); // forward decl for v2_save_game_1450b
@@ -2258,9 +2258,9 @@ static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di)
     s[0x342] = (uint8_t)(al << 1);                                  // SHL al, 1; MOV ds:342h, al
     s[0x343] = (uint8_t)((uint8_t)si << 1);                        // SHL al, 1; MOV ds:343h, al
     s[0x344] = (uint8_t)((uint8_t)di << 1);                        // SHL al, 1; MOV ds:344h, al
-    s[0x7EFD] |= 1;                                                 // OR byte ptr ds:7EFDh, 1
-    *(uint16_t*)(s + 0x7EFE) = 4;                                   // MOV word ptr ds:7EFEh, 4
-    *(uint16_t*)(s + 0x7F00) = 0x8202;                              // MOV word ptr ds:7F00h, 8202h
+    s[DS_PAL_FLAGS] |= 1;                                                 // OR byte ptr ds:7EFDh, 1
+    *(uint16_t*)(s + DS_PAL_REQ) = 4;                                   // MOV word ptr ds:7EFEh, 4
+    *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;                              // MOV word ptr ds:7F00h, 8202h
     // JMP sub_10E99: palette correction — writes 768 bytes to ds:0x8202
     v2_pal_correct_10e99(s);
 }
@@ -2408,8 +2408,8 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
             _printed++;
             uint8_t cur_i = s[1 + 0x259C];
             uint8_t end_i = s[1 + 0x2594];
-            uint16_t addr_82 = (uint16_t)cur_i * 3 + 0x8202;
-            uint16_t addr_7f = (uint16_t)cur_i * 3 + 0x7F02;
+            uint16_t addr_82 = (uint16_t)cur_i * 3 + DS_PAL_OUT;
+            uint16_t addr_7f = (uint16_t)cur_i * 3 + DS_PAL_SRC;
             fprintf(stderr, "V2-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X | slot1 cur=%02X end=%02X r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch=%02X%02X%02X\n",
                 _dbg_calls, s[0x2583],
                 s[0x258C], s[0x258D], s[0x258E], s[0x258F],
@@ -2434,8 +2434,8 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
         _dbg_rotations++;
         if (_dbg_rotations <= 20) {
             uint8_t cur_i = s[si + 0x259C], end_i = s[si + 0x2594];
-            uint16_t addr_82 = cur_i * 3 + 0x8202;
-            uint16_t addr_7f = cur_i * 3 + 0x7F02;
+            uint16_t addr_82 = cur_i * 3 + DS_PAL_OUT;
+            uint16_t addr_7f = cur_i * 3 + DS_PAL_SRC;
             fprintf(stderr, "V2-101BE-ROT[%d call=%d si=%d cur=%02X end=%02X path=%s | r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch_before=%02X%02X%02X]\n",
                 _dbg_rotations, _dbg_calls, si, cur_i, end_i,
                 (cur_i < end_i) ? "10255" : "1020F",
@@ -2448,15 +2448,15 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
         // word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
         if (cur_idx < end_idx) {
             // orig: mov dx,8202h; call sub_10255; mov dx,7F02h; call sub_10255
-            v2_pal_rotate_fwd_10255(s, (uint16_t)si, 0x8202);
-            v2_pal_rotate_fwd_10255(s, (uint16_t)si, 0x7F02);
+            v2_pal_rotate_fwd_10255(s, (uint16_t)si, DS_PAL_OUT);
+            v2_pal_rotate_fwd_10255(s, (uint16_t)si, DS_PAL_SRC);
         } else {
             // orig: mov dx,8202h; call sub_1020F; mov dx,7F02h; call sub_1020F
-            v2_pal_rotate_back_1020f(s, (uint16_t)si, 0x8202);
-            v2_pal_rotate_back_1020f(s, (uint16_t)si, 0x7F02);
+            v2_pal_rotate_back_1020f(s, (uint16_t)si, DS_PAL_OUT);
+            v2_pal_rotate_back_1020f(s, (uint16_t)si, DS_PAL_SRC);
         }
     }
-    *(uint16_t*)(s + 0x7EFE) = 2;                                  // word_303DE = 2
+    *(uint16_t*)(s + DS_PAL_REQ) = 2;                                  // word_303DE = 2
 }
 
 // sub_108c8 (seg000): Sound state toggle + cleanup.
@@ -2466,9 +2466,9 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
 static void v2_audio_tick_108c8(uint8_t* s) {
     uint16_t ax = *(uint16_t*)(s + 0x0302) & *(uint16_t*)(s + 0x0304);  // word_287E2 & word_287E4
     if (ax & 0x8000) return;                                              // TEST ax, 8000h; JNZ ret
-    V2_WRITE_91A4_SHAD(sdl_spec_get(0x91A4), "v2:sub_108c8");
+    V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:sub_108c8");
     s[0x918B] = sdl_spec_get(0x918B);  // SDL S — exact orig INT9
-    if (s[0x91A4] != 1) return;        // CMP byte_31684, 1; JNZ ret
+    if (s[DS_KEY_ALT] != 1) return;        // CMP byte_31684, 1; JNZ ret
     if (s[0x918B] == 1) {              // CMP byte_3166B, 1; JNZ skip
         s[0x918B] = 0;                                                   // MOV byte_3166B, 0
         s[0x0304] ^= 1;                                                  // XOR byte ptr word_287E4, 1
@@ -2854,8 +2854,8 @@ static void v2_pal_correct_10e99(uint8_t* s) {
     uint8_t g_off = s[0x343] | s[0x346];
     uint8_t b_off = s[0x344] | s[0x347];
 
-    uint8_t* source = s + 0x7F02;
-    uint8_t* destination = s + 0x8202;
+    uint8_t* source = s + DS_PAL_SRC;
+    uint8_t* destination = s + DS_PAL_OUT;
 
     // Color 0: corrected. Exact 8086 model (unit 56, div #23): SUB al,off is
     // 8-BIT; JNS clamps on the sign of the WRAPPED result (bit 7), then
@@ -3018,18 +3018,18 @@ static void v2_sprite_draw_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t
 // VGA writes: sub_1E16D renders glyph pixels to es:0xA000 — commented for v2.
 static void v2_glyph_flush_1E0C7(uint8_t* s) {
     // line 3037: TEST byte ptr ds:956Bh, 0FFh                      ; glyph dirty flag
-    if (s[0x956B] == 0) return;                                      // JZ locret_1E16C
+    if (s[DS_GLYPH_DIRTY] == 0) return;                                      // JZ locret_1E16C
 
     // line 3041: TEST byte ptr ds:25CFh, 0E0h                      ; HUD mode bits
     if (s[DS_LEVEL_FLAGS] & 0xE0) {                                         // JZ loc_1E0E4
         // line 3043: CMP word ptr ds:98DCh, 3                      ; throttle check
-        if ((int16_t)*(uint16_t*)(s + 0x98DC) > 3) return;          // JG locret_1E16C
+        if ((int16_t)*(uint16_t*)(s + DS_UI_THROTTLE) > 3) return;          // JG locret_1E16C
         // line 3045: INC word ptr ds:98DCh                         ; throttle increment
-        *(uint16_t*)(s + 0x98DC) += 1;
+        *(uint16_t*)(s + DS_UI_THROTTLE) += 1;
     }
 
     // loc_1E0E4: scan glyph buffer for non-zero entries
-    uint16_t bx = 0x956C;                                           // MOV bx, 956Ch
+    uint16_t bx = DS_GLYPH_BUF;                                           // MOV bx, 956Ch
     uint16_t cx = 0x370;                                             // MOV cx, 370h
 
     while (true) {
@@ -3052,7 +3052,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
 
         // Position calculation:
         // line 3063-3064: ax = bx - 0x956C                         ; offset in glyph buffer
-        uint16_t ax = bx - 0x956C;                                  // SUB ax, 956Ch
+        uint16_t ax = bx - DS_GLYPH_BUF;                                  // SUB ax, 956Ch
         // line 3065-3066: DIV dl(0x28) → al=row, ah=col
         uint8_t row = (uint8_t)(ax / 0x28);                         // al = quotient
         uint8_t col = (uint8_t)(ax % 0x28);                         // ah = remainder
@@ -3090,7 +3090,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
             // loc_1E133:
             // line 3085-3088: dirty flag condition
             bool set_dirty = true;
-            if (*(uint16_t*)(s + 0x9569) == 0) {                    // TEST word ds:9569h
+            if (*(uint16_t*)(s + DS_TEXT_FULLSCREEN) == 0) {                    // TEST word ds:9569h
                 if (s[DS_LEVEL_FLAGS] & 0xE0) {                             // TEST byte ds:25CFh, 0E0h
                     set_dirty = false;                               // JNZ loc_1E147 (skip OR)
                 }
@@ -3102,7 +3102,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
 
             // loc_1E147: render glyph to VGA (if not full-screen text mode)
             // line 3094-3095: TEST word ds:9569h; JNZ loc_1E158
-            if (*(uint16_t*)(s + 0x9569) == 0) {
+            if (*(uint16_t*)(s + DS_TEXT_FULLSCREEN) == 0) {
                 v2_glyph_draw_1E16D(s, si_glyph, di);  // VGA glyph pixel render
             }
 
@@ -3232,7 +3232,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
     }
     // loc_1DF5C:
     // OUT(0x3CE, 0xFF08); — VGA graphics reset, commented
-    s[0x9568] = 0;                                                       // 38215 mov byte ptr ds:9568h, 0
+    s[DS_SPRITE_FORCE] = 0;                                                       // 38215 mov byte ptr ds:9568h, 0
     // POP es; RETF
 }
 
@@ -3244,7 +3244,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         if (!(flags & 0x8000)) continue;  // not active
         if (flags & 0x6000) continue;     // priority skip
 
-        bool force_render = (s[0x9568] != 0);
+        bool force_render = (s[DS_SPRITE_FORCE] != 0);
         bool dirty = (s[di + OBJ_DIRTY_MODE] != 0);
 
         if (!force_render && !dirty) {
@@ -3352,7 +3352,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         // loc_1DDC7: DEC byte [di+114Dh]
         { static int _v2dd=0; if((di==0x30||di==0x36||di==0x3A) && _v2dd<60) { _v2dd++;
           fprintf(stderr,"V2-DD9C[%d]: di=%02X mode=%02X force=%02X flags=%04X vp=(%04X,%04X) xy=(%04X,%04X) tile=(%d,%d) vh=%d vw=%d\n",
-            _v2dd,(uint16_t)di,s[di+OBJ_DIRTY_MODE],s[0x9568],*(uint16_t*)(s+di+OBJ_SPRITE_FLAGS),
+            _v2dd,(uint16_t)di,s[di+OBJ_DIRTY_MODE],s[DS_SPRITE_FORCE],*(uint16_t*)(s+di+OBJ_SPRITE_FLAGS),
             *(uint16_t*)(s+0x44),*(uint16_t*)(s+0x46),
             *(uint16_t*)(s+di+OBJ_SPRITE_X),*(uint16_t*)(s+di+OBJ_SPRITE_Y),
             (int16_t)*(uint16_t*)(s+di+OBJ_SPRITE_X)>>3,(int16_t)*(uint16_t*)(s+di+OBJ_SPRITE_Y)>>3,
@@ -3532,7 +3532,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         *(uint16_t*)(s + di + 0x0E4D) = *(uint16_t*)(s + di + OBJ_SPRITE_Y);
     }
     // Clear force-render flag
-    s[0x9568] = 0;
+    s[DS_SPRITE_FORCE] = 0;
 }
 
 // sub_1DF6A: state change redraw — position copy for dirty objects.
@@ -3646,7 +3646,7 @@ static void v2_text_frame_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t al
     extern int v2_dbg_pre_vm_iter;
     fprintf(stderr, "V2-DLG-ADD[f%d]: sub_12388 si=%04X di=%04X align=%02X lvl=%04X w=%u h=%u 956B=%02X\n",
         v2_dbg_pre_vm_iter, si, di, align, *(uint16_t*)(s + DS_LEVEL),
-        *(uint16_t*)(s + DS_SCRATCH_34), *(uint16_t*)(s + DS_SCRATCH_36), s[0x956B]);
+        *(uint16_t*)(s + DS_SCRATCH_34), *(uint16_t*)(s + DS_SCRATCH_36), s[DS_GLYPH_DIRTY]);
     *(uint16_t*)(s + DS_TEXT_COL) = si;                                     // word_2854C = si
     *(uint16_t*)(s + DS_TEXT_ROW) = di;                                     // word_2854E = di
     uint16_t width = *(uint16_t*)(s + DS_SCRATCH_34);                         // word_28514
@@ -3790,9 +3790,9 @@ static void v2_clear_viking_state_111df(uint8_t* s) {
 static void v2_glyph_list_clear_12816(uint8_t* s) {
     extern int v2_dbg_pre_vm_iter;
     fprintf(stderr, "V2-DLG-CLR[f%d]: sub_12816 lvl=%04X 956B_before=%02X\n",
-        v2_dbg_pre_vm_iter, *(uint16_t*)(s + DS_LEVEL), s[0x956B]);
-    s[0x956B] = 0; // byte_31A4B
-    memset(s + 0x956C, 0, 0x1B8 * 2); // REP STOSW
+        v2_dbg_pre_vm_iter, *(uint16_t*)(s + DS_LEVEL), s[DS_GLYPH_DIRTY]);
+    s[DS_GLYPH_DIRTY] = 0; // byte_31A4B
+    memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2); // REP STOSW
 }
 
 // sub_1133a: init HUD from spawn table extension.
@@ -3969,7 +3969,7 @@ static void v2_render_flag_init_11439(uint8_t* s) {
             *(uint16_t*)(s + 0x930B) = *(uint16_t*)(s + (uint16_t)(p1 - 0x7608)) + dx2;
             v2_tile_row_16dc1(s, bx, 1);     // sub_16dc1: VGA column tile render (1 tile)
             v2_page_copy_col_171dc(s);             // sub_171dc: VGA page copy
-            bx += *(uint16_t*)(s + 0x8F6C);
+            bx += *(uint16_t*)(s + DS_FS_PAGE_STRIDE);
             *(uint16_t*)(s + 0x9305) += 2;
             *(uint16_t*)(s + 0x9307) += 2;
             *(uint16_t*)(s + 0x9309) += 2;
@@ -4439,7 +4439,7 @@ static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
         uint16_t chunk_id = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
         if (chunk_id == 0xFFFF) break;
         uint16_t type_val = *(uint16_t*)(s + (uint16_t)(di + 2) + 0x25F6) & 0xFF;
-        uint16_t dest_off = type_val * 3 + 0x7F02;
+        uint16_t dest_off = type_val * 3 + DS_PAL_SRC;
         v2_read_chunk(chunk_id, s + dest_off, 0x10000 - dest_off, s);  // ds_ctx: header 2BB4/2BBC (class #22)
         di += 3;
     }
@@ -4854,7 +4854,7 @@ static void v2_dos_init_12948(uint8_t* s) {
 
     // INT 21h/2Ch: get current time → PRNG seed (dword at ds:0x8639)
     // asm.cpp returns fixed cx=0x1234, dx=0x5678 for deterministic PRNG
-    *(uint16_t*)(s + 0x8639) = 0x5678; // dx
+    *(uint16_t*)(s + DS_RNG_SEED) = 0x5678; // dx
     *(uint16_t*)(s + 0x863B) = 0x1234; // cx
 }
 
@@ -4875,11 +4875,11 @@ static void v2_open_data_dat_12989(uint8_t* s) {
     // fread 8 bytes → ds:0x2BB4..0x2BBB (chunk table header)
     // Original: INT 21h/3Fh, cx=8, dx=0x2BB4
     fseek(v2_data_handle, 0, SEEK_SET);
-    fread(s + 0x2BB4, 8, 1, v2_data_handle);
+    fread(s + DS_CHUNK_HDR, 8, 1, v2_data_handle);
 
     // fseek to offset from header, fread 0x20 bytes → ds:0x86B0..0x86CF (game header)
     // Original: INT 21h/42h (seek), INT 21h/3Fh (read 0x20 bytes)
-    uint32_t header_offset = *(uint32_t*)(s + 0x2BB4);
+    uint32_t header_offset = *(uint32_t*)(s + DS_CHUNK_HDR);
     fseek(v2_data_handle, header_offset, SEEK_SET);
     fread(s + 0x86B0, 0x20, 1, v2_data_handle);
 
@@ -5629,7 +5629,7 @@ static void v2_load_level_11080(uint8_t* s) {
     *(uint16_t*)(s + 0x0372) = 0; // word_28852 (table end — will be set by object creation)
     *(uint16_t*)(s + DS_CMD_READ) = 0; // word_2B044
     *(uint16_t*)(s + DS_CMD_WRITE) = 0; // word_2A66F
-    s[0x956B] = 0;                // byte_31A4B
+    s[DS_GLYPH_DIRTY] = 0;                // byte_31A4B
     *(uint16_t*)(s + 0x039A) = 0; // word_2887A
     *(uint16_t*)(s + 0x039C) = 0; // word_2887C
     *(uint16_t*)(s + 0x03A2) = 0; // word_28882
@@ -5811,7 +5811,7 @@ static void v2_load_level_11080(uint8_t* s) {
         printf("V2-FS-DBG: diff span=0x%X=%d bytes, potential rows=%.1f\n",
                span, span, (float)span / (cols * 8));
         // Also check: does sub_16ded write to FS? Let me check the VGA page stride.
-        printf("V2-FS-DBG: ds:0x8F6C (FS page stride)=%04X\n", *(uint16_t*)(real_ds + 0x8F6C));
+        printf("V2-FS-DBG: ds:DS_FS_PAGE_STRIDE (FS page stride)=%04X\n", *(uint16_t*)(real_ds + DS_FS_PAGE_STRIDE));
         // Check shadow vs real ds:0x2E69 (FS segment address)
         printf("V2-FS-DBG: real ds:DS_SEG_FS=%04X shadow ds:DS_SEG_FS=%04X\n",
                *(uint16_t*)(real_ds + DS_SEG_FS), *(uint16_t*)(s + DS_SEG_FS));
@@ -5999,7 +5999,7 @@ static void v2_load_level_11080(uint8_t* s) {
         v2_late_sprites_1DD9C(s);
         slot2e_trace("SF1-post-DD9C");
         v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
-        { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf1-%d]: mode=%02X force=%02X\n",_dd4,s[0x117D],s[0x9568]); }
+        { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf1-%d]: mode=%02X force=%02X\n",_dd4,s[0x117D],s[DS_SPRITE_FORCE]); }
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
@@ -6035,7 +6035,7 @@ static void v2_load_level_11080(uint8_t* s) {
             v2_late_sprites_1DD9C(s);
             slot2e_trace("SF2-post-DD9C");
         v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
-            { static int _dd2=0; _dd2++; if(_dd2<=8) fprintf(stderr,"V2-115d2-DD9C[sf2-%d]: mode=%02X force=%02X\n",_dd2,s[0x117D],s[0x9568]); }
+            { static int _dd2=0; _dd2++; if(_dd2<=8) fprintf(stderr,"V2-115d2-DD9C[sf2-%d]: mode=%02X force=%02X\n",_dd2,s[0x117D],s[DS_SPRITE_FORCE]); }
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
             v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
@@ -6099,7 +6099,7 @@ static void v2_load_level_11080(uint8_t* s) {
             v2_late_sprites_1DD9C(s);
             slot2e_trace("SF3-post-DD9C");
         v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
-            { static int _dd3=0; _dd3++; if(_dd3<=8) fprintf(stderr,"V2-115d2-DD9C[sf3-%d]: mode=%02X force=%02X\n",_dd3,s[0x117D],s[0x9568]); }
+            { static int _dd3=0; _dd3++; if(_dd3<=8) fprintf(stderr,"V2-115d2-DD9C[sf3-%d]: mode=%02X force=%02X\n",_dd3,s[0x117D],s[DS_SPRITE_FORCE]); }
             // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
             v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6158,8 +6158,8 @@ static void v2_load_level_11080(uint8_t* s) {
         s[0x0343] = (uint8_t)bx;
         s[0x0344] = (uint8_t)bx;
         v2_pal_shade_10f03(s); // sub_10f03: palette shading → ds:0x8202
-        *(uint16_t*)(s + 0x7EFE) = 4;       // word_303DE = 4 (request palette write)
-        *(uint16_t*)(s + 0x7F00) = 0x8202;  // word_303E0
+        *(uint16_t*)(s + DS_PAL_REQ) = 4;       // word_303DE = 4 (request palette write)
+        *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;  // word_303E0
         // Mirror orig sub_10f5d (seg000 eip 0xF7D..0xF80):
         //   CALL sub_16775 ; page flip (sets shadow[0xA39C]=1)
         //   CALL sub_10130 ; vsync wait — DECs 0xA39C to 0 AND dispatches palette
@@ -6172,7 +6172,7 @@ static void v2_load_level_11080(uint8_t* s) {
     s[0x0342] = 0;
     s[0x0343] = 0;
     s[0x0344] = 0;
-    *(uint16_t*)(s + 0x7F00) = 0x7F02; // word_303E0 = normal palette mode
+    *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_SRC; // word_303E0 = normal palette mode
 
     // jmp sub_12345: input state clear (tail call at end of sub_11080)
     // sub_12345: mov word_28896, 0; mov word_28898, 0; retn
@@ -6404,11 +6404,11 @@ static bool v2_load_exe_ds() {
         extern std::mutex v2_ds_modify_mutex;
         std::lock_guard<std::mutex> _lk(v2_ds_modify_mutex);
         uint16_t r_a39c = *(uint16_t*)(v2_vm_real_ds_ptr + DS_VSYNC_COUNT);
-        uint16_t r_7efe = *(uint16_t*)(v2_vm_real_ds_ptr + 0x7EFE);
+        uint16_t r_7efe = *(uint16_t*)(v2_vm_real_ds_ptr + DS_PAL_REQ);
         *(uint16_t*)(v2_vm_shadow_ds + DS_VSYNC_COUNT) = r_a39c;
-        *(uint16_t*)(v2_vm_shadow_ds + 0x7EFE) = r_7efe;
+        *(uint16_t*)(v2_vm_shadow_ds + DS_PAL_REQ) = r_7efe;
         v2_render_cb_enabled.store(true, std::memory_order_release);
-        fprintf(stderr, "V2-INIT-SYNC: shadow[DS_VSYNC_COUNT]=%04X shadow[0x7EFE]=%04X (from real)\n",
+        fprintf(stderr, "V2-INIT-SYNC: shadow[DS_VSYNC_COUNT]=%04X shadow[DS_PAL_REQ]=%04X (from real)\n",
                 r_a39c, r_7efe);
     } else {
         v2_render_cb_enabled.store(true, std::memory_order_release);
@@ -6452,7 +6452,7 @@ void v2_render_callback() {
     *(uint16_t*)(s + DS_VSYNC_COUNT) -= 1;
     // off_17974[word_303DE]: 0=nullsub_1, 2=sub_10ffc, 4=sub_10fe6.
     // sub_10fe6/sub_10ffc clear shadow[0x7EFE] = 0.
-    uint16_t pal_mode = *(uint16_t*)(s + 0x7EFE);
+    uint16_t pal_mode = *(uint16_t*)(s + DS_PAL_REQ);
     if (pal_mode == 4) v2_pal_dac_write_10fe6(s);
     else if (pal_mode == 2) v2_pal_anim_10ffc(s);
 }
@@ -6699,10 +6699,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         if (need_save) {
             // sub_14590 (only from loc_10469 path)
             shadow[0x342] = 0; shadow[0x343] = 0; shadow[0x344] = 0;
-            shadow[0x7EFD] &= 0xFE;
-            if (shadow[0x7EFD] == 0)
-                *(uint16_t*)(shadow + 0x7F00) = 0x7F02;
-            *(uint16_t*)(shadow + 0x7EFE) = 4;
+            shadow[DS_PAL_FLAGS] &= 0xFE;
+            if (shadow[DS_PAL_FLAGS] == 0)
+                *(uint16_t*)(shadow + DS_PAL_SRC_PTR) = DS_PAL_SRC;
+            *(uint16_t*)(shadow + DS_PAL_REQ) = 4;
             v2_pal_correct_10e99(shadow);
         }
     }
@@ -7530,7 +7530,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     si_pos = save_si + 1;                          // POP si; INC si
                     di_pos = save_di + 1;                          // POP di; INC di
                     v2_text_render_124c5(shadow, si_pos, di_pos, bx_text); // render text
-                    shadow[0x956B] = 1;                            // byte_31A4B = 1
+                    shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B = 1
                     bx_read += 0x0A;                               // ADD bx, 0Ah
 
                 } else if (cmd_type == 0x0A) {
@@ -7542,7 +7542,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     uint16_t bx_text = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAD));
                     *(uint16_t*)(shadow + DS_SCRATCH_34) = 2;               // word_28514 = 2
                     v2_text_render_124c5(shadow, si_pos, di_pos, bx_text); // render text
-                    shadow[0x956B] = 1;                            // byte_31A4B = 1
+                    shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B = 1
                     bx_read += 0x08;                               // ADD bx, 8
 
                 } else if (cmd_type == 2) {
@@ -7555,8 +7555,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     //   + sub_16775 + sub_10130
                     //   word_31A49=0; byte_31A4B=0; word_31DBC=0
                     //   REP STOSW: clear 0x1B8 words at ds:0x956C; pop bx; ADD bx,2
-                    *(uint16_t*)(shadow + 0x9569) = 1;             // word_31A49 = 1
-                    *(uint16_t*)(shadow + 0x98DC) = 0;             // word_31DBC = 0
+                    *(uint16_t*)(shadow + DS_TEXT_FULLSCREEN) = 1;             // word_31A49 = 1
+                    *(uint16_t*)(shadow + DS_UI_THROTTLE) = 0;             // word_31DBC = 0
                     // Conditional first render pass
                     if (shadow[DS_LEVEL_FLAGS] & 0xE0) {
                         v2_page_flip_16775(shadow);                      // sub_16775
@@ -7586,11 +7586,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     // sub_16775 + sub_10130
                     v2_page_flip_16775(shadow);
                     // Cleanup
-                    *(uint16_t*)(shadow + 0x9569) = 0;             // word_31A49 = 0
-                    shadow[0x956B] = 0;                            // byte_31A4B = 0
-                    *(uint16_t*)(shadow + 0x98DC) = 0;             // word_31DBC = 0
+                    *(uint16_t*)(shadow + DS_TEXT_FULLSCREEN) = 0;             // word_31A49 = 0
+                    shadow[DS_GLYPH_DIRTY] = 0;                            // byte_31A4B = 0
+                    *(uint16_t*)(shadow + DS_UI_THROTTLE) = 0;             // word_31DBC = 0
                     // REP STOSW: clear 0x1B8 words at ds:0x956C
-                    memset(shadow + 0x956C, 0, 0x1B8 * 2);
+                    memset(shadow + DS_GLYPH_BUF, 0, 0x1B8 * 2);
                     bx_read += 2;                                  // ADD bx, 2
 
                 } else if (cmd_type == 4) {
@@ -7626,7 +7626,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAB));
                     uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAD));
                     v2_glyph_put_1241e(shadow, ch, si_pos, di_pos);      // call sub_1241e
-                    shadow[0x956B] = 1;                            // byte_31A4B = 1
+                    shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B = 1
                     bx_read += 0x08;                               // ADD bx, 8
 
                 } else {
@@ -8098,9 +8098,9 @@ static const uint16_t v2_psnap_watch[] = {
     0x3C2, 0x3CC,                                              // viking active state, gravity
     0x34E, 0x350,                                              // scroll offset latch
     // === Tier 2: UI/HUD/sound ===
-    0x956B,                                                     // glyph dirty flag
-    0x9568, 0x9569, 0x956A,                                     // global force flags
-    0x98DC,                                                     // UI throttle
+    DS_GLYPH_DIRTY,                                                     // glyph dirty flag
+    DS_SPRITE_FORCE, DS_TEXT_FULLSCREEN, 0x956A,                                     // global force flags
+    DS_UI_THROTTLE,                                                     // UI throttle
     0x86DC, 0x86DE,                                             // input keys snapshot
     0x423, 0x425, 0x427, 0x429, 0x42B, 0x42D, 0x42F,           // viking item slots
     0x431, 0x433, 0x435, 0x437, 0x439, 0x43B, 0x43D,           // viking HUD healthbar prev
@@ -8762,7 +8762,7 @@ static void v2_page_rotate_165aa(uint8_t* shadow) {
             // page (task #21) — same call order as the orig CALLF.
             v2_emu_df6a(v2_current_ds_val);
             // Original: MOV byte ptr ds:9568h, 1
-            shadow[0x9568] = 1;
+            shadow[DS_SPRITE_FORCE] = 1;
         }
         // ds:0x9568 is cleared by v2_late_sprites_1DD9C (via s[0x9568] = 0 at end of loop)
         // Do NOT clear it here — it must persist until sub_1DD9C reads it.
@@ -8801,7 +8801,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     if (shadow[0x9311] < 0x32) {
                         shadow[0x9312] = 0x32 - shadow[0x9311];
                         shadow[0x9311] <<= 2; shadow[0x9312] <<= 2;
-                        *(uint16_t*)(shadow + 0x9319) = *(uint16_t*)(shadow + 0x89F8);
+                        *(uint16_t*)(shadow + 0x9319) = *(uint16_t*)(shadow + LUT_PAGE_ROW);
                     } else { shadow[0x9311] = 0xC8; shadow[0x9312] = 0; }
                     uint16_t di_pg2 = di_r + *(uint16_t*)(shadow + DS_PAGE_BG);
                     shadow[0x9313] = cl_v - (uint8_t)(di_pg2 % cl_v);
@@ -8809,7 +8809,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     if (shadow[0x9313] < 0x32) {
                         shadow[0x9314] = 0x32 - shadow[0x9313];
                         shadow[0x9313] <<= 2; shadow[0x9314] <<= 2;
-                        *(uint16_t*)(shadow + 0x931D) = *(uint16_t*)(shadow + 0x89F8);
+                        *(uint16_t*)(shadow + 0x931D) = *(uint16_t*)(shadow + LUT_PAGE_ROW);
                     } else { shadow[0x9313] = 0xC8; shadow[0x9314] = 0; }
                     uint16_t di_pg3 = di_r + *(uint16_t*)(shadow + DS_PAGE_DRAW);
                     uint16_t di_vga3 = *(uint16_t*)(shadow + (uint16_t)(di_pg3 - 0x7608));
@@ -8852,7 +8852,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     if (shadow[0x9311] < 0x32) {
                         shadow[0x9312] = 0x32 - shadow[0x9311];
                         shadow[0x9311] <<= 2; shadow[0x9312] <<= 2;
-                        *(uint16_t*)(shadow + 0x9319) = *(uint16_t*)(shadow + 0x89F8);
+                        *(uint16_t*)(shadow + 0x9319) = *(uint16_t*)(shadow + LUT_PAGE_ROW);
                     } else {
                         shadow[0x9311] = 0xC8; shadow[0x9312] = 0;
                     }
@@ -8865,7 +8865,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     if (shadow[0x9313] < 0x32) {
                         shadow[0x9314] = 0x32 - shadow[0x9313];
                         shadow[0x9313] <<= 2; shadow[0x9314] <<= 2;
-                        *(uint16_t*)(shadow + 0x931D) = *(uint16_t*)(shadow + 0x89F8);
+                        *(uint16_t*)(shadow + 0x931D) = *(uint16_t*)(shadow + LUT_PAGE_ROW);
                     } else {
                         shadow[0x9313] = 0xC8; shadow[0x9314] = 0;
                     }
@@ -9571,7 +9571,7 @@ static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
         *(uint16_t*)(v2_vm_shadow_fs + bp_val) = w0 | 1;
         *(uint16_t*)(v2_vm_shadow_fs + (uint16_t)(bp_val + 2)) = w1 | 1;
         // Page 2: fs:[bp + stride], fs:[bp + stride + 2]
-        uint16_t bp2 = bp_val + vm.ds_read(0x8F6C);
+        uint16_t bp2 = bp_val + vm.ds_read(DS_FS_PAGE_STRIDE);
         *(uint16_t*)(v2_vm_shadow_fs + bp2) = w2 | 1;
         *(uint16_t*)(v2_vm_shadow_fs + (uint16_t)(bp2 + 2)) = w3 | 1;
         vm.si_track = w3;   // orig: last MOV si, es:[bx+6] (task #15)
@@ -9580,7 +9580,7 @@ static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
     // Tracking arrays: store tile position + pixel coords.
     // NOTE: orig writes bp AFTER `add bp, ds:8F6Ch` (= bp_val + stride = bp2).
     // (eip 0x4035 in sub_13fc2: mov [bx-0x78CA], bp — bp here is post-add).
-    uint16_t bp_after = bp_val + vm.ds_read(0x8F6C);
+    uint16_t bp_after = bp_val + vm.ds_read(DS_FS_PAGE_STRIDE);
     uint16_t cx_count = vm.ds_read(0x8734);
     uint16_t bx_idx = cx_count << 1;
     vm.ds_write((uint16_t)(bx_idx - 0x78CA), bp_after);
@@ -12191,12 +12191,12 @@ static void v2_vm_op_3E(V2VM& vm) {
     vm.ds_write_b(0x342, 0);
     vm.ds_write_b(0x343, 0);
     vm.ds_write_b(0x344, 0);
-    uint8_t flags = vm.shadow[0x7EFD] & 0xFE;
-    vm.ds_write_b(0x7EFD, flags);
+    uint8_t flags = vm.shadow[DS_PAL_FLAGS] & 0xFE;
+    vm.ds_write_b(DS_PAL_FLAGS, flags);
     if (flags == 0) {
-        vm.ds_write(0x7F00, 0x7F02);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_SRC);
     }
-    vm.ds_write(0x7EFE, 4);
+    vm.ds_write(DS_PAL_REQ, 4);
     v2_vm_pal_correct_10e99(vm);
 }
 
@@ -12411,8 +12411,8 @@ static void v2_vm_pal_correct_10e99(V2VM& vm) {
     // Note: original m2c sub_10e99 doesn't correctly update palette buffer
     // (STOSB/es segment issue in m2c translation). v2 implementation is more correct.
 
-    uint16_t si = 0x7F02; // source
-    uint16_t di = 0x8202; // destination
+    uint16_t si = DS_PAL_SRC; // source
+    uint16_t di = DS_PAL_OUT; // destination
 
     // First iteration: 3 corrected bytes + 45 raw bytes
     // R
@@ -12636,10 +12636,10 @@ static void v2_vm_op_4C(V2VM& vm) {
     vm.ds_write_b(0x346, (uint8_t)(g << 1));
     uint8_t b = vm.read_u8();
     vm.ds_write_b(0x347, (uint8_t)(b << 1));
-    uint8_t flags = vm.shadow[0x7EFD];
-    vm.ds_write_b(0x7EFD, flags | 2);
-    vm.ds_write(0x7EFE, 4);
-    vm.ds_write(0x7F00, 0x8202);
+    uint8_t flags = vm.shadow[DS_PAL_FLAGS];
+    vm.ds_write_b(DS_PAL_FLAGS, flags | 2);
+    vm.ds_write(DS_PAL_REQ, 4);
+    vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
     v2_vm_pal_correct_10e99(vm);
 }
 
@@ -12651,12 +12651,12 @@ static void v2_vm_op_4D(V2VM& vm) {
     vm.ds_write_b(0x345, 0);
     vm.ds_write_b(0x346, 0);
     vm.ds_write_b(0x347, 0);
-    uint8_t flags = vm.shadow[0x7EFD] & 0xFD;
-    vm.ds_write_b(0x7EFD, flags);
+    uint8_t flags = vm.shadow[DS_PAL_FLAGS] & 0xFD;
+    vm.ds_write_b(DS_PAL_FLAGS, flags);
     if (flags == 0) {
-        vm.ds_write(0x7F00, 0x7F02);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_SRC);
     }
-    vm.ds_write(0x7EFE, 4);
+    vm.ds_write(DS_PAL_REQ, 4);
     v2_vm_pal_correct_10e99(vm);
 }
 
@@ -12921,15 +12921,15 @@ static void v2_vm_op_13(V2VM& vm) {
         // Original: MOV si, es:[bx+1]; swap ds/es; REP MOVSD from ds:si to es:8142 (48 bytes)
         uint16_t src_ptr = *(uint16_t*)(vm.es + vm.pc + 1); // read pointer value
         for (int i = 0; i < 48; i++) {
-            vm.ds_write_b(0x8142 + i, vm.es[src_ptr + i]);
+            vm.ds_write_b(DS_PAL_SRC_C192 + i, vm.es[src_ptr + i]);
         }
         for (int i = 0; i < 48; i++) {
-            vm.ds_write_b(0x81A2 + i, vm.es[src_ptr + i]);
+            vm.ds_write_b(DS_PAL_SRC_C224 + i, vm.es[src_ptr + i]);
         }
         // sub_10e99: palette color correction (copies 7F02 → 8202 with shading)
         v2_vm_pal_correct_10e99(vm);
-        vm.ds_write(0x7EFE, 4);
-        vm.ds_write(0x7F00, 0x8202);
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
     } else if (al == 0x11) {
         // Orig sub_1434c loc_14396 — exact semantic translation to v2 bifurcated buffers.
         //
@@ -13397,10 +13397,10 @@ static void v2_vm_op_55(V2VM& vm) {
         // LCG: orig: eax=dword_30b19; edx=0x15A4E35; mul edx; add eax,1;
         //            dword_30b19=eax; ror eax,16; acc=ax (low half of rotated)
         // 32-bit LCG on shadow ds:0x8639 (mirrors orig real ds:0x8639).
-        uint32_t seed = *(uint32_t*)(vm.shadow + 0x8639);
+        uint32_t seed = *(uint32_t*)(vm.shadow + DS_RNG_SEED);
         uint64_t tmp = (uint64_t)seed * 0x15A4E35;
         seed = (uint32_t)(tmp + 1);
-        *(uint32_t*)(vm.shadow + 0x8639) = seed;
+        *(uint32_t*)(vm.shadow + DS_RNG_SEED) = seed;
         uint32_t result = (seed >> 16) | (seed << 16);     // ROR 16 = swap halves
         v2_vm_accumulator = (uint16_t)result;
     }
@@ -14810,9 +14810,9 @@ static uint16_t v2_vm_read_random(V2VM& vm) {
         return rotated; // Original returns ax (the rotated value), NOT the XOR'd memory
     }
     // Path 1: LCG — eax = eax * 0x15A4E35 + 1; return ROR(eax, 16)
-    uint32_t seed = *(uint32_t*)(vm.shadow + 0x8639); // dword_30B19
+    uint32_t seed = *(uint32_t*)(vm.shadow + DS_RNG_SEED); // dword_30B19
     seed = seed * 0x15A4E35 + 1;
-    *(uint32_t*)(vm.shadow + 0x8639) = seed;
+    *(uint32_t*)(vm.shadow + DS_RNG_SEED) = seed;
     uint32_t rot = (seed >> 16) | (seed << 16); // ROR eax, 16
     return (uint16_t)rot;
 }
@@ -15802,10 +15802,10 @@ static void v2_vm_op_3D(V2VM& vm) {
     vm.ds_write_b(0x342, (uint8_t)(r << 1));
     vm.ds_write_b(0x343, (uint8_t)(g << 1));
     vm.ds_write_b(0x344, (uint8_t)(b << 1));
-    uint8_t flags = vm.shadow[0x7EFD];
-    vm.ds_write_b(0x7EFD, flags | 1);
-    vm.ds_write(0x7EFE, 4);
-    vm.ds_write(0x7F00, 0x8202);
+    uint8_t flags = vm.shadow[DS_PAL_FLAGS];
+    vm.ds_write_b(DS_PAL_FLAGS, flags | 1);
+    vm.ds_write(DS_PAL_REQ, 4);
+    vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
     v2_vm_pal_correct_10e99(vm);
 }
 
@@ -15957,18 +15957,18 @@ static void v2_vm_op_B6(V2VM& vm) {
         // PRNG path: dword at ds:0x8639 (dword_30B19)
         // mov eax, dword_30B19; mov edx, 15A4E35h; mul edx → edx:eax
         // add eax, 1; mov dword_30B19, eax; ror eax, 10h
-        uint32_t val = *(uint32_t*)(vm.shadow + 0x8639);
+        uint32_t val = *(uint32_t*)(vm.shadow + DS_RNG_SEED);
         uint64_t product = (uint64_t)val * 0x15A4E35ULL;
         val = (uint32_t)(product & 0xFFFFFFFF) + 1;
-        *(uint32_t*)(vm.shadow + 0x8639) = val;
+        *(uint32_t*)(vm.shadow + DS_RNG_SEED) = val;
         // ror eax, 16 = swap high/low words; ax = high word of stored value
         ax = (uint16_t)(val >> 16);
     } else {
         // Timer path: ds:0x352 (word_28832)
         // xchg ah, al; mov word_28832, ax; rcl ax, 3; xor word_28832, ax
-        uint16_t v = vm.ds_read(0x352);
+        uint16_t v = vm.ds_read(DS_RNG_TIMER);
         v = (v >> 8) | (v << 8); // xchg ah, al
-        vm.ds_write(0x352, v);
+        vm.ds_write(DS_RNG_TIMER, v);
         // rcl ax, 3: rotate left through carry, 3 times.
         // CF=0 at entry (from CMP word_288ac, 0 — non-zero minus 0 = no borrow)
         uint16_t r = v;
@@ -15979,7 +15979,7 @@ static void v2_vm_op_B6(V2VM& vm) {
             cf = new_cf;
         }
         // xor word_28832, ax — ax still holds rcl result
-        vm.ds_write(0x352, vm.ds_read(0x352) ^ r);
+        vm.ds_write(DS_RNG_TIMER, vm.ds_read(DS_RNG_TIMER) ^ r);
         ax = r;
     }
     ax &= 1;
@@ -16830,7 +16830,7 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
             // Check: cols and rows
             uint16_t fs_cols = *(uint16_t*)(real + 0x25DC);
             uint16_t fs_rows = *(uint16_t*)(real + 0x25DE);
-            uint16_t stride = *(uint16_t*)(real + 0x8F6C);
+            uint16_t stride = *(uint16_t*)(real + DS_FS_PAGE_STRIDE);
             printf("  FS layout: cols=%d rows=%d used=%d stride=0x%04X\n",
                    fs_cols, fs_rows, fs_rows*fs_cols*8, stride);
         }
@@ -17775,10 +17775,10 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         s[start_off+2] = save[2];
                     }
                 };
-                rotate_palette(0x8202); // shaded palette
-                rotate_palette(0x7F02); // source palette
+                rotate_palette(DS_PAL_OUT); // shaded palette
+                rotate_palette(DS_PAL_SRC); // source palette
             }
-            *(uint16_t*)(s + 0x7EFE) = 2; // word_303DE = 2 (request sub_10ffc in render callback)
+            *(uint16_t*)(s + DS_PAL_REQ) = 2; // word_303DE = 2 (request sub_10ffc in render callback)
         }
         // word_30C14 = 0 (eip 0x00DB — end of frame marker)
         *(uint16_t*)(s + 0x8734) = 0;
@@ -17791,9 +17791,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 // Orig (eip 0x8DF): CMP byte_3166B, 1; JNZ loc_10935 (skip XOR if !=1).
                 // i.e. XOR fires ONLY when byte_3166B == 1. Previous inline had inverted
                 // branch — toggled DS[0x304] every frame when no key pressed → diverged.
-                V2_WRITE_91A4_SHAD(sdl_spec_get(0x91A4), "v2:run_anim_vm:sub_108c8");
+                V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:run_anim_vm:sub_108c8");
                 s[0x918B] = sdl_spec_get(0x918B);  // SDL S — exact orig INT9
-                if (s[0x91A4] == 1 && s[0x918B] == 1) {
+                if (s[DS_KEY_ALT] == 1 && s[0x918B] == 1) {
                     s[0x918B] = 0;   // byte_3166B = 0
                     s[DS_SFX_MUTE] ^= 1;   // word_287E4 ^= 1
                     if (s[DS_SFX_MUTE] & 1) {
@@ -17831,13 +17831,13 @@ void v2_run_animation_vm(uint16_t ds_val) {
         if (*(uint16_t*)(s + DS_CMD_WRITE) == 0) {
             bool trigger = false;
             // Frame-frozen snap mirror (see seg000.cpp sub_10350 notes).
-            s[0x91B0] = sdl_spec_get(0x91B0);  // F10
-            V2_WRITE_91A4_SHAD(sdl_spec_get(0x91A4), "v2:run_anim_vm:sub_10350");
-            s[0x9199] = sdl_spec_get(0x9199);  // X
-            s[0x917C] = sdl_spec_get(0x917C);  // Q
-            if (s[0x91B0] == 1) trigger = true;
-            else if (s[0x91A4] == 1) {
-                if (s[0x9199] == 1 || s[0x917C] == 1) trigger = true;
+            s[DS_KEY_F10] = sdl_spec_get(DS_KEY_F10);  // F10
+            V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:run_anim_vm:sub_10350");
+            s[DS_KEY_X] = sdl_spec_get(DS_KEY_X);  // X
+            s[DS_KEY_Q] = sdl_spec_get(DS_KEY_Q);  // Q
+            if (s[DS_KEY_F10] == 1) trigger = true;
+            else if (s[DS_KEY_ALT] == 1) {
+                if (s[DS_KEY_X] == 1 || s[DS_KEY_Q] == 1) trigger = true;
             }
             if (trigger) {
                 if (*(uint16_t*)(s + DS_GAME_MODE_AC) == 0x8000 || (s[DS_LEVEL_FLAGS] & 8)) {
@@ -17894,7 +17894,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                       v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x312), si_pw, di_pw);
                       v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x314), si_pw, di_pw);
                       v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x316), si_pw, di_pw); }
-                    s[0x956B] = 1;                                       // byte_31A4B = 1
+                    s[DS_GLYPH_DIRTY] = 1;                                       // byte_31A4B = 1
                     // sub_104a1: blocking input wait. Verified with seg000 lines 2447-2515.
                     // Sets word_28925=0x11, word_28923=1, byte_31A4B=1.
                     // Then blocking loop: sub_10130×3 + sub_1DE05 + sub_12352 + sub_10555/sub_105cb
@@ -17945,8 +17945,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         if (ax == 0) *(uint16_t*)(s + 0x0334) |= 2;
                     }
                     // word_31A49=1, word_31DBC=0
-                    *(uint16_t*)(s + 0x9569) = 1;
-                    *(uint16_t*)(s + 0x98DC) = 0;
+                    *(uint16_t*)(s + DS_TEXT_FULLSCREEN) = 1;
+                    *(uint16_t*)(s + DS_UI_THROTTLE) = 0;
                     // Render pass 1: sub_10130 + sub_1DE05 + sub_165aa + sub_1DD9C + sub_1C8F1
                     v2_vsync_wait_10130(s);
                     v2_bg_latch_1DE05(s);
@@ -17968,19 +17968,19 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     v2_draw_ui(v2_current_ds_val);
                     v2_page_flip_16775(s);
                     // word_31A49=0
-                    *(uint16_t*)(s + 0x9569) = 0;
+                    *(uint16_t*)(s + DS_TEXT_FULLSCREEN) = 0;
                     // sub_12816: clear glyph list
-                    s[0x956B] = 0;
-                    memset(s + 0x956C, 0, 0x1B8 * 2);
+                    s[DS_GLYPH_DIRTY] = 0;
+                    memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2);
 
                     // After input: sub_1450b(ax=5, si=0x10, di=0x0F) + sub_14590
                     v2_save_game_1450b(s, 5, 0x10, 0x0F);                 // save game state after input
                     // sub_14590: finalize save — similar to sub_1450b but different params
                     // ds:0x342 = saved_al<<1; ds:0x7EFD |= 2
                     // For v2: just set the flags
-                    s[0x7EFD] |= 2;                                  // OR byte ptr ds:7EFDh, 2
-                    *(uint16_t*)(s + 0x7EFE) = 4;
-                    *(uint16_t*)(s + 0x7F00) = 0x8202;
+                    s[DS_PAL_FLAGS] |= 2;                                  // OR byte ptr ds:7EFDh, 2
+                    *(uint16_t*)(s + DS_PAL_REQ) = 4;
+                    *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;
                     // Load new level
                     v2_load_level_11080(s);
                 }
@@ -19088,7 +19088,7 @@ static void v2_palette_probe(uint8_t* s) {
                     bad, i, dac[i*3], dac[i*3+1], dac[i*3+2],
                     (uint8_t)(v2_dac_shadow[i*3]<<2), (uint8_t)(v2_dac_shadow[i*3+1]<<2),
                     (uint8_t)(v2_dac_shadow[i*3+2]<<2),
-                    *(uint16_t*)(s + 0x7EFE), *(uint16_t*)(s + 0x7F00));
+                    *(uint16_t*)(s + DS_PAL_REQ), *(uint16_t*)(s + DS_PAL_SRC_PTR));
         }
     }
 }
@@ -19188,10 +19188,10 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         // shadow stays in lockstep with real (both update or both stay sticky
         // from sub_108c8 OR-in). Running PART A unconditionally would update
         // shadow even when orig skipped → divergence at 0x91A4 etc.
-        s[0x91B0] = sdl_spec_get(0x91B0);
-        V2_WRITE_91A4_SHAD(sdl_spec_get(0x91A4), "v2:V2_ONLY:PART_A");
-        s[0x9199] = sdl_spec_get(0x9199);
-        s[0x917C] = sdl_spec_get(0x917C);
+        s[DS_KEY_F10] = sdl_spec_get(DS_KEY_F10);
+        V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:V2_ONLY:PART_A");
+        s[DS_KEY_X] = sdl_spec_get(DS_KEY_X);
+        s[DS_KEY_Q] = sdl_spec_get(DS_KEY_Q);
 #endif
 #ifdef V2_ONLY
         // PART B (V2_ONLY only): detect F10/ALT+X/ALT+Q and drive quit-prompt.
@@ -19208,9 +19208,9 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         // inline impl had broken loop body (no render calls) → menu invisible,
         // music_play looped (field-reported bug).
         bool trigger = false;
-        if (s[0x91B0] == 1) trigger = true;
-        else if (s[0x91A4] == 1) {
-            if (s[0x9199] == 1 || s[0x917C] == 1) trigger = true;
+        if (s[DS_KEY_F10] == 1) trigger = true;
+        else if (s[DS_KEY_ALT] == 1) {
+            if (s[DS_KEY_X] == 1 || s[DS_KEY_Q] == 1) trigger = true;
         }
         if (trigger) {
             if (*(uint16_t*)(s + DS_GAME_MODE_AC) == 0x8000 || (s[DS_LEVEL_FLAGS] & 8)) {
@@ -19241,10 +19241,10 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                     // where sub_1450b ran). Clear palette transform + restore
                     // default via sub_10e99. Same as ESC path at line 5867.
                     s[0x342] = 0; s[0x343] = 0; s[0x344] = 0;
-                    s[0x7EFD] &= 0xFE;
-                    if (s[0x7EFD] == 0)
-                        *(uint16_t*)(s + 0x7F00) = 0x7F02;
-                    *(uint16_t*)(s + 0x7EFE) = 4;
+                    s[DS_PAL_FLAGS] &= 0xFE;
+                    if (s[DS_PAL_FLAGS] == 0)
+                        *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_SRC;
+                    *(uint16_t*)(s + DS_PAL_REQ) = 4;
                     v2_pal_correct_10e99(s);
                 }
                 // Post-loop: check word_28814 & 2 → loc_10E35 (Y in quit prompt
@@ -19599,7 +19599,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t save_si = si_pos, save_di = di_pos;
         v2_text_frame_12388(s, si_pos, di_pos, (uint8_t)ax_align);
         v2_text_render_124c5(s, save_si + 1, save_di + 1, bx_text);
-        s[0x956B] = 1;
+        s[DS_GLYPH_DIRTY] = 1;
         bx_read += 0x0A;
     } else if (cmd_type == 0x0A) {
         uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
@@ -19607,7 +19607,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
         *(uint16_t*)(s + DS_SCRATCH_34) = 2;
         v2_text_render_124c5(s, si_pos, di_pos, bx_text);
-        s[0x956B] = 1;
+        s[DS_GLYPH_DIRTY] = 1;
         bx_read += 0x08;
     } else if (cmd_type == 6) {
         uint16_t cx = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
@@ -19623,13 +19623,13 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
         uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
         v2_glyph_put_1241e(s, ch, si_pos, di_pos);
-        s[0x956B] = 1;
+        s[DS_GLYPH_DIRTY] = 1;
         bx_read += 0x08;
     } else if (cmd_type == 2) {
         // off_2B086[2] = loc_12758. Line-by-line mirror of orig (seg000:6304-6355).
         // Each block annotated with orig eip (01A2:XXXX).
-        *(uint16_t*)(s + 0x9569) = 1;                          // 01A2:2759 mov word_31A49, 1
-        *(uint16_t*)(s + 0x98DC) = 0;                          // 01A2:275F mov word_31DBC, 0
+        *(uint16_t*)(s + DS_TEXT_FULLSCREEN) = 1;                          // 01A2:2759 mov word_31A49, 1
+        *(uint16_t*)(s + DS_UI_THROTTLE) = 0;                          // 01A2:275F mov word_31DBC, 0
         if (s[DS_LEVEL_FLAGS] & 0xE0) {                                // 01A2:2765 test byte_2AAAF, 0E0h
             v2_page_flip_16775(s); v2_swap_render_buf();             // 01A2:276C sub_16775
             v2_vsync_wait_10130(s);                                   // 01A2:276F sub_10130
@@ -19667,10 +19667,10 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:27AD sub_1C8F1(ax=FFFE)
         v2_page_flip_16775(s); v2_swap_render_buf();                 // 01A2:27B2 sub_16775
         v2_vsync_wait_10130(s);                                       // 01A2:27B5 sub_10130
-        *(uint16_t*)(s + 0x9569) = 0;                          // 01A2:27B8 mov word_31A49, 0
-        s[0x956B] = 0;                                         // 01A2:27BE mov byte_31A4B, 0
-        *(uint16_t*)(s + 0x98DC) = 0;                          // 01A2:27C3 mov word_31DBC, 0
-        memset(s + 0x956C, 0, 0x1B8 * 2);                      // 01A2:27CC..27D4 rep stosw (ax=0, cx=1B8)
+        *(uint16_t*)(s + DS_TEXT_FULLSCREEN) = 0;                          // 01A2:27B8 mov word_31A49, 0
+        s[DS_GLYPH_DIRTY] = 0;                                         // 01A2:27BE mov byte_31A4B, 0
+        *(uint16_t*)(s + DS_UI_THROTTLE) = 0;                          // 01A2:27C3 mov word_31DBC, 0
+        memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2);                      // 01A2:27CC..27D4 rep stosw (ax=0, cx=1B8)
         bx_read += 2;                                          // 01A2:27D7 add bx, 2
     } else if (cmd_type == 4) {
         *(uint16_t*)(s + 0x0334) |= 4;
@@ -20469,9 +20469,9 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     //   F10 alone:    byte_31690 == 1
     //   ALT+X:        byte_31684 == 1 && byte_31679 == 1
     //   ALT+Q:        byte_31684 == 1 && byte_3165c == 1
-    bool is_quit_path = (shadow[0x91B0] == 1) ||
-                        (shadow[0x91A4] == 1 && shadow[0x9199] == 1) ||
-                        (shadow[0x91A4] == 1 && shadow[0x917C] == 1);
+    bool is_quit_path = (shadow[DS_KEY_F10] == 1) ||
+                        (shadow[DS_KEY_ALT] == 1 && shadow[DS_KEY_X] == 1) ||
+                        (shadow[DS_KEY_ALT] == 1 && shadow[DS_KEY_Q] == 1);
     uint16_t ax_first = is_quit_path ? 3 : 2;
     uint16_t si_first = is_quit_path ? 0x0D : 0x0F;
 
@@ -20526,7 +20526,7 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // sub_104a1 prelude: DS writes + first render pair (eip 0x04A1-0x04C0)
     *(uint16_t*)(shadow + 0x445) = 0x11;          // word_28925
     *(uint16_t*)(shadow + 0x443) = 1;             // word_28923 = cursor pos
-    shadow[0x956B] = 1;                            // byte_31A4B
+    shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B
     // m2c-inline at orig 2739: v2_draw_ui before sub_1e0c7
     extern uint16_t v2_current_ds_val;
     v2_draw_ui(v2_current_ds_val);
@@ -20639,8 +20639,8 @@ static void v2_pw_post_loop(uint8_t* shadow) {
 #endif
     if (exit_ax == 0) *(uint16_t*)(shadow + DS_FRAME_FLAGS) |= 2;   // OR word_28814, 2
     // loc_104FF: cleanup renders (orig lines 2779-2807, two iterations of full render block)
-    *(uint16_t*)(shadow + 0x9569) = 1;            // word_31A49 = 1
-    *(uint16_t*)(shadow + 0x98DC) = 0;            // word_31DBC = 0
+    *(uint16_t*)(shadow + DS_TEXT_FULLSCREEN) = 1;            // word_31A49 = 1
+    *(uint16_t*)(shadow + DS_UI_THROTTLE) = 0;            // word_31DBC = 0
     extern uint16_t v2_current_ds_val;
     for (int i = 0; i < 2; i++) {
         v2_vsync_wait_10130(shadow);
@@ -20659,7 +20659,7 @@ static void v2_pw_post_loop(uint8_t* shadow) {
         v2_glyph_flush_1E0C7(shadow);
         v2_page_flip_16775(shadow);
     }
-    *(uint16_t*)(shadow + 0x9569) = 0;            // word_31A49 = 0
+    *(uint16_t*)(shadow + DS_TEXT_FULLSCREEN) = 0;            // word_31A49 = 0
     v2_glyph_list_clear_12816(shadow);                          // sub_12816: clear glyph buffer
     // Orig JMP sub_14590 (loc_103b7 eip 0x3C6 / loc_10469 eip 0x478) after the
     // dialog loop exits. Body at seg000 line 10262+: clears ds:0x342/343/344=0,
@@ -20668,10 +20668,10 @@ static void v2_pw_post_loop(uint8_t* shadow) {
     // entered the path that called sub_1450b.
     if (v2_pw_did_save_1450b) {
         shadow[0x342] = 0; shadow[0x343] = 0; shadow[0x344] = 0;
-        shadow[0x7EFD] &= 0xFE;
-        if (shadow[0x7EFD] == 0)
-            *(uint16_t*)(shadow + 0x7F00) = 0x7F02;
-        *(uint16_t*)(shadow + 0x7EFE) = 4;
+        shadow[DS_PAL_FLAGS] &= 0xFE;
+        if (shadow[DS_PAL_FLAGS] == 0)
+            *(uint16_t*)(shadow + DS_PAL_SRC_PTR) = DS_PAL_SRC;
+        *(uint16_t*)(shadow + DS_PAL_REQ) = 4;
         v2_pal_correct_10e99(shadow);
         v2_pw_did_save_1450b = false;
     }

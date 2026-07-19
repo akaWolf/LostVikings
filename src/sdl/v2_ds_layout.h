@@ -150,4 +150,49 @@ constexpr uint16_t DS_PAGE_BG        = 0x92FB; // page role: clean background (1
 constexpr uint16_t DS_PIXEL_PAN      = 0x92EE; // byte_317CE: CRTC pixel pan value (myPixelOffset = /2)
 constexpr uint16_t DS_PAN_GATE       = 0x92F2; // byte_317DF: pan/palette dispatch enable gate
 
+// ---------------------------------------------------------------------------
+// DATA.DAT chunk loading / FS
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_CHUNK_HDR      = 0x2BB4; // chunk header read buffer: fread 8B, dword@+0 = data offset
+constexpr uint16_t DS_FS_PAGE_STRIDE = 0x8F6C; // FS page stride word (added to FS cursor per page)
+
+// ---------------------------------------------------------------------------
+// RNG pair (op 0x0F random branch)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_RNG_TIMER      = 0x0352; // word_28832: timer-path RNG word — xchg ah,al; store; rcl ax,3 (CF=0 entry); xor into stored
+constexpr uint16_t DS_RNG_SEED       = 0x8639; // dword_30B19: 32-bit LCG state — seed = seed*0x15A4E35 + 1; result = high word
+
+// ---------------------------------------------------------------------------
+// Palette pipeline (source -> shaded output -> DAC)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_PAL_FLAGS      = 0x7EFD; // palette state flag byte (op_3E: AND 0xFE; ==0 gates PAL_SRC_PTR reset)
+constexpr uint16_t DS_PAL_REQ        = 0x7EFE; // word_303DE: palette write request (0=done, 2=rotate update, 4=full write)
+constexpr uint16_t DS_PAL_SRC_PTR    = 0x7F00; // which palette DAC write uses next: DS_PAL_SRC or DS_PAL_OUT
+constexpr uint16_t DS_PAL_SRC        = 0x7F02; // source palette, 768B (256*RGB)
+constexpr uint16_t DS_PAL_SRC_C192   = 0x8142; // = DS_PAL_SRC + 192*3: op_13/D9 48B block target (colors 192-207)
+constexpr uint16_t DS_PAL_SRC_C224   = 0x81A2; // = DS_PAL_SRC + 224*3: same 48B block duplicated (colors 224-239)
+constexpr uint16_t DS_PAL_OUT        = 0x8202; // = DS_PAL_SRC + 0x300: shaded/output palette, 768B (10f03/10e99 dest, DAC source)
+
+// ---------------------------------------------------------------------------
+// Per-page tile-row VGA offset LUT
+// ---------------------------------------------------------------------------
+constexpr uint16_t LUT_PAGE_ROW      = 0x89F8; // 3 pages x 0x1A rows x 2B: VGA offset of tile row y on page p (idx: +pgs[p]+(y>>3)*2); [0] = wrap target in page-copy
+
+// ---------------------------------------------------------------------------
+// Held-special-key state bytes (INT9 cluster 0x916C+; full map = v2_keymap.cpp)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_KEY_Q          = 0x917C; // Q held (quit combo path)
+constexpr uint16_t DS_KEY_X          = 0x9199; // X held (ALT+X quit)
+constexpr uint16_t DS_KEY_ALT        = 0x91A4; // ALT held (heavily traced via V2_WRITE_91A4_SHAD)
+constexpr uint16_t DS_KEY_F10        = 0x91B0; // F10 held (password/palette-transform path)
+
+// ---------------------------------------------------------------------------
+// Sprite/UI redraw gates + glyph buffer
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_SPRITE_FORCE   = 0x9568; // byte: force-render all sprites this pass (set on page rotate, cleared by 1DD9C path)
+constexpr uint16_t DS_TEXT_FULLSCREEN= 0x9569; // word_31A49: fullscreen text mode flag (1E0C7 layout switch)
+constexpr uint16_t DS_GLYPH_DIRTY    = 0x956B; // byte: glyph buffer dirty (gates 1E0C7 flush)
+constexpr uint16_t DS_GLYPH_BUF      = 0x956C; // glyph buffer, 0x1B8 words (12816 clear, 1241e put, 1E0C7 flush)
+constexpr uint16_t DS_UI_THROTTLE    = 0x98DC; // word_31DBC: UI redraw throttle counter (JG 3 -> skip, else INC)
+
 #endif // V2_DS_LAYOUT_H
