@@ -55,6 +55,10 @@ bool v2_chunk_bg_valid = false;
 // orig pages keep this layer between passes; v2 repaints it after bg blits.
 uint8_t v2_glyph_page_snapshot[0x370];
 bool v2_glyph_snap_valid = false;
+// #39 f193: previous painted snapshot - cells that leave the buffer (a shorter
+// reply) must be erased from the pages with the clean tile background, exactly
+// like the orig dirty channel repaints the tiles under the removed text.
+uint8_t v2_glyph_prev_snapshot[0x370];
 
 void v2_chunk_bg_update_from_render() {
     memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
@@ -1013,7 +1017,31 @@ void v2_emu_late_end(uint16_t ds_val) {
         if (v2_glyph_flush_painted) {
             v2_glyph_flush_painted = false;
             uint8_t* ds_base2 = v2_get_ds_base(ds_val);
+            // Erase cells the new reply no longer occupies: restore the clean
+            // background (v2_emu_bg = this sub-frame tile render) into the shown
+            // page at those 8x8 cells - matches orig repainting tiles under the
+            // removed line. Applied to SHOWN each sub-frame so both rotation
+            // pages get cleaned over two frames.
+            {
+                const uint8_t* nb = ds_base2 + DS_GLYPH_BUF; (void)nb;
+                int xe, ye;
+                v2_emu_eff(ds_base2, &xe, &ye);
+                int ox = xe - v2_emu_base_x, oy = ye - v2_emu_base_y;
+                uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base2, DS_PAGE_SHOWN)];
+                for (int pos = 0; pos < 0x370; pos++) {
+                    if (!v2_glyph_prev_snapshot[pos] || nb[pos]) continue;  // erase only cells the shorter reply vacated
+                    int cx = (pos % 40) * 8, cy = (pos / 40) * 8;
+                    for (int k = 0; k < 8; k++) {
+                        int py = cy + k + oy, sx = cx + ox;
+                        if (py < 0 || py >= V2_EMU_H || sx < 0 || sx + 8 > V2_EMU_W) continue;
+                        int sy = cy + k;
+                        if (sy >= 176) continue;
+                        memcpy(pg + (size_t)py * V2_EMU_W + sx, v2_emu_bg + (size_t)sy * 320 + cx, 8);
+                    }
+                }
+            }
             memcpy(v2_glyph_page_snapshot, ds_base2 + DS_GLYPH_BUF, 0x370);
+            memcpy(v2_glyph_prev_snapshot, v2_glyph_page_snapshot, 0x370);
             v2_glyph_snap_valid = false;
             for (int i = 0; i < 0x370; i++)
                 if (v2_glyph_page_snapshot[i]) { v2_glyph_snap_valid = true; break; }
