@@ -14688,43 +14688,44 @@ static void v2_vm_anim_interp_1303a(V2VM& vm) {
 // Clamps velocity to max values, applies flip, adds to velocity accumulators.
 static void v2_vm_anim_tail_135cf(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
+    ObjRef self{vm, di};
     // Check if update needed
-    if (vm.ds_read(di + OBJ_ANIM_TABLE) != 0xFFFF) return;
+    if (self.u16(OBJ_ANIM_TABLE) != 0xFFFF) return;
 
     // Add scroll delta if flags set
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x8000) {
-        vm.ds_write(di + OBJ_ANIM_DY, vm.ds_read(di + OBJ_ANIM_DY) + vm.ds_read(0x25B5));
+    if (self.flags() & 0x8000) {
+        self.w16(OBJ_ANIM_DY, self.u16(OBJ_ANIM_DY) + vm.ds_read(0x25B5));
     }
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x4000) {
-        vm.ds_write(di + OBJ_ANIM_DX, vm.ds_read(di + OBJ_ANIM_DX) + vm.ds_read(0x25B3));
+    if (self.flags() & 0x4000) {
+        self.w16(OBJ_ANIM_DX, self.u16(OBJ_ANIM_DX) + vm.ds_read(0x25B3));
     }
 
     // Clamp X velocity (164D) to [-178D, +178D]
-    int16_t vx = (int16_t)vm.ds_read(di + OBJ_ANIM_DX);
-    int16_t max_vx = (int16_t)vm.ds_read(di + OBJ_VEL_X_MAX);
+    int16_t vx = self.i16(OBJ_ANIM_DX);
+    int16_t max_vx = self.i16(OBJ_VEL_X_MAX);
     if (vx >= 0) {
         if (vx >= max_vx) vx = max_vx;
     } else {
         if (-vx >= max_vx) vx = -max_vx;
     }
-    vm.ds_write(di + OBJ_ANIM_DX, (uint16_t)vx);
+    self.w16(OBJ_ANIM_DX, (uint16_t)vx);
 
     // Clamp Y velocity (1675) to [-17B5, +17B5]
-    int16_t vy = (int16_t)vm.ds_read(di + OBJ_ANIM_DY);
-    int16_t max_vy = (int16_t)vm.ds_read(di + OBJ_VEL_Y_MAX);
+    int16_t vy = self.i16(OBJ_ANIM_DY);
+    int16_t max_vy = self.i16(OBJ_VEL_Y_MAX);
     if (vy >= 0) {
         if (vy >= max_vy) vy = max_vy;
     } else {
         if (-vy >= max_vy) vy = -max_vy;
     }
-    vm.ds_write(di + OBJ_ANIM_DY, (uint16_t)vy);
+    self.w16(OBJ_ANIM_DY, (uint16_t)vy);
 
     // Apply velocity to accumulators with flip
-    int16_t dx_acc = (vm.ds_read(di + OBJ_FLAGS) & 0x40) ? -vx : vx;
-    vm.ds_write(di + OBJ_VEL_X, vm.ds_read(di + OBJ_VEL_X) + (uint16_t)dx_acc);
+    int16_t dx_acc = (self.flags() & 0x40) ? -vx : vx;
+    self.w16(OBJ_VEL_X, self.u16(OBJ_VEL_X) + (uint16_t)dx_acc);
 
-    int16_t dy_acc = (vm.ds_read(di + OBJ_FLAGS) & 0x80) ? -vy : vy;
-    vm.ds_write(di + OBJ_VEL_Y, vm.ds_read(di + OBJ_VEL_Y) + (uint16_t)dy_acc);
+    int16_t dy_acc = (self.flags() & 0x80) ? -vy : vy;
+    self.w16(OBJ_VEL_Y, self.u16(OBJ_VEL_Y) + (uint16_t)dy_acc);
 }
 
 static void v2_vm_op_2F(V2VM& vm) {
