@@ -2278,6 +2278,26 @@ static void v2_sub_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di) {
 extern void v2_render_callback();  // v2 mirror of sub_1797b (defined below)
 static void v2_sub_10130(uint8_t* s) {
     extern bool need_quit;
+    // #32 localization probe: entry counter value = deterministic iteration
+    // count of this wait (v2_render_callback DECs once per loop pass).
+    if (getenv("V2_FLIPTRACE")) {
+        static long _wn = 0;
+        extern int v2_dbg_pre_vm_iter;
+        fprintf(stderr, "V2-WAIT[%ld] f=%d a39c=%04X\n",
+                ++_wn, v2_dbg_pre_vm_iter, *(uint16_t*)(s + 0xA39C));
+    }
+    {
+        static int ring_on = -1;
+        if (ring_on < 0) ring_on = getenv("V2_FLIPRING") ? 1 : 0;
+        if (ring_on) {
+            extern int v2_dbg_pre_vm_iter;
+            extern void v2_flipring_push(uint8_t tag, uint16_t frame,
+                                         uint16_t a39c, uint16_t lv, void* ra);
+            v2_flipring_push(2, (uint16_t)v2_dbg_pre_vm_iter,
+                             *(uint16_t*)(s + 0xA39C), 0,
+                             __builtin_return_address(0));
+        }
+    }
     while ((int16_t)*(uint16_t*)(s + 0xA39C) >= 1) {
         if (need_quit) return;
 #ifdef V2_ONLY
@@ -5458,6 +5478,25 @@ static void v2_sub_12fc6_family(uint8_t* s, int type) {
 static void v2_sub_12fc6(uint8_t* s) { v2_sub_12fc6_family(s, 0); }
 static void v2_sub_12fcb(uint8_t* s) { v2_sub_12fc6_family(s, 1); }
 static void v2_sub_12fd0(uint8_t* s) { v2_sub_12fc6_family(s, 2); }
+
+// #32 flip-ring: in-memory trace of page flips (tag 1) and sub_10130 entries
+// (tag 2). Dumped from headless_check_exit — printf probes shift the count.
+struct V2FlipRingE { uint8_t tag; uint16_t frame, a39c, lv; void* caller; };
+static V2FlipRingE v2_flipring[8192];
+static int v2_flipring_n = 0;
+void v2_flipring_push(uint8_t tag, uint16_t frame,
+                      uint16_t a39c, uint16_t lv, void* caller) {
+    if (v2_flipring_n < 8192)
+        v2_flipring[v2_flipring_n++] = { tag, frame, a39c, lv, caller };
+}
+void v2_flipring_dump(void) {
+    for (int i = 0; i < v2_flipring_n; i++) {
+        const V2FlipRingE& e = v2_flipring[i];
+        fprintf(stderr, "RING[%d] %s f=%u a39c=%04X lv=%04X ra=%p\n", i,
+                e.tag == 1 ? "FLIP" : "WAIT", e.frame, e.a39c, e.lv, e.caller);
+    }
+    fprintf(stderr, "RING-TOTAL=%d\n", v2_flipring_n);
+}
 
 // Carries the shadow DI across objects within a VM pass (task #15): the
 // dispatcher itself never writes di, so each object's entry di is the
@@ -17263,6 +17302,31 @@ static void v2_sub_16775(uint8_t* s) {
         for (uint32_t i = 0; i < 320u * 176u; i++)
             h = (h ^ v2_render_buf[i]) * 16777619u;
         fprintf(stderr, "V2-FRAMESUM[%ld]=%08X\n", ++_fsn, h);
+    }
+    // #32 localization probe: per-flip context — frame counter, the vsync
+    // counter value about to gate sub_10130, and the current level. A diff
+    // of two builds' traces shows the exact flip where the counts diverge.
+    // Ring variant (V2_FLIPRING): env cached once, entries stored in memory,
+    // dumped at exit — near-zero hot-path cost so the probe itself does not
+    // shift the timing-sensitive count (the printf variant does: 1625→1631).
+    if (getenv("V2_FLIPTRACE")) {
+        static long _ftn = 0;
+        extern int v2_dbg_pre_vm_iter;
+        fprintf(stderr, "V2-FLIP[%ld] f=%d a39c=%04X lv=%04X\n",
+                ++_ftn, v2_dbg_pre_vm_iter,
+                *(uint16_t*)(s + 0xA39C), *(uint16_t*)(s + 0x25AD));
+    }
+    {
+        static int ring_on = -1;
+        if (ring_on < 0) ring_on = getenv("V2_FLIPRING") ? 1 : 0;
+        if (ring_on) {
+            extern int v2_dbg_pre_vm_iter;
+            extern void v2_flipring_push(uint8_t tag, uint16_t frame,
+                                         uint16_t a39c, uint16_t lv, void* ra);
+            v2_flipring_push(1, (uint16_t)v2_dbg_pre_vm_iter,
+                             *(uint16_t*)(s + 0xA39C), *(uint16_t*)(s + 0x25AD),
+                             __builtin_return_address(0));
+        }
     }
     v2_pageflip_count++;
     // VGA page flip registers:

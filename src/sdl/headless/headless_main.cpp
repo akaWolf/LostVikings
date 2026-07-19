@@ -93,6 +93,7 @@ int headless_check_exit(void) {
         v2_dump_opcode_coverage();
         v2_dump_psnap_summary();
         headless_dump_render_diff_summary();
+        { extern void v2_flipring_dump(void); v2_flipring_dump(); }  // #32 probe
 #ifndef V2_ONLY
         v2_fntest_report();   // fn-test infra is not part of the V2_ONLY build
 #endif
