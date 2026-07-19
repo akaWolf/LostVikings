@@ -425,7 +425,7 @@ bool ft_synth_case_15972(uint16_t ax, uint16_t di,
     ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_Y), y);
     ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), y_end);
     ft_wr16(g_synth_in, (uint16_t)(di + 0x14E5), y_start);
-    ft_wr16(g_synth_in, (uint16_t)(di + 0x19E5), 0xAAAA);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_FRAC_Y), 0xAAAA);
 
     memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
     uint16_t regs[8] = { ax, 0, 0, 0, 0, di, 0, 0 };
@@ -659,8 +659,8 @@ struct FtSnapLayout {
     FtId id; uint16_t pos, lo, hi, clr;
     void (*v2call)(uint8_t*, uint16_t, uint16_t, uint16_t);
 };
-const FtSnapLayout FT_SNAP_Y = { FT_SUB_15DA8, OBJ_WORLD_Y, 0x14E5, OBJ_BBOX_Y1, 0x19E5, v2_fntest_call_sub_15da8 };
-const FtSnapLayout FT_SNAP_X = { FT_SUB_15D6B, OBJ_WORLD_X, OBJ_BBOX_X0, OBJ_BBOX_X1, 0x19BD, v2_fntest_call_sub_15d6b };
+const FtSnapLayout FT_SNAP_Y = { FT_SUB_15DA8, OBJ_WORLD_Y, 0x14E5, OBJ_BBOX_Y1, OBJ_FRAC_Y, v2_fntest_call_sub_15da8 };
+const FtSnapLayout FT_SNAP_X = { FT_SUB_15D6B, OBJ_WORLD_X, OBJ_BBOX_X0, OBJ_BBOX_X1, OBJ_FRAC_X, v2_fntest_call_sub_15d6b };
 
 bool ft_synth_case_snap(const FtSnapLayout& L, uint16_t ax, uint16_t di, uint16_t si,
                         uint16_t d_pos, uint16_t d_lo, uint16_t d_hi,
@@ -959,9 +959,9 @@ bool ft_synth_case_13c0c(uint16_t vpx, uint16_t vpy,
         ft_wr16(g_synth_in, (uint16_t)(si + OBJ_CODE_SEG), objs[i].alive);
         ft_wr16(g_synth_in, (uint16_t)(si + OBJ_FLAGS), objs[i].flags);
         ft_wr16(g_synth_in, (uint16_t)(si + OBJ_WORLD_X), objs[i].x);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x14BD), objs[i].hw);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_HALF_W), objs[i].hw);
         ft_wr16(g_synth_in, (uint16_t)(si + OBJ_WORLD_Y), objs[i].y);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x1495), objs[i].hh);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_HALF_H), objs[i].hh);
     }
     ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
     ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
@@ -1464,7 +1464,7 @@ bool ft_synth_case_deltafam(FtId id, uint16_t obj_top, const FtDeltaObj* objs, i
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_CODE_SEG), objs[i].alive);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_SUB_COUNT), objs[i].count);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_X), objs[i].x);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x13A5), objs[i].xs);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_X_PREV), objs[i].xs);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_Y), objs[i].y);
         ft_wr16(g_synth_in, (uint16_t)(di + 0x13CD), objs[i].ys);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_SUB_SLOT), objs[i].sa);
@@ -2553,9 +2553,9 @@ bool ft_synth_case_anim(FtId id, uint16_t obj, const uint8_t* script, int slen,
     ft_wr16(g_synth_in, 0x304, 1);                        // SFX muted (sound cmd gate)
     ft_wr16(g_synth_in, 0x302, 1);                        // music muted
     ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_CODE_SEG), FT_VM_TESTSEG);
-    ft_wr16(g_synth_in, (uint16_t)(obj + 0x1A0D), FT_ANIM_PC);
-    ft_wr16(g_synth_in, (uint16_t)(obj + 0x1A35), t1);
-    ft_wr16(g_synth_in, (uint16_t)(obj + 0x1A5D), t2);
+    ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_ANIM_PC), FT_ANIM_PC);
+    ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_ANIM_TIMER), t1);
+    ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_ANIM_CONT), t2);
     ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_SUB_SLOT), sa);
     ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_SUB_END), se);
     // slot background noise (sprite offsets, flags, dirty)
@@ -2661,7 +2661,7 @@ int ft_selftest_anim(FtId id, uint32_t seed) {
     // [0x1A0D]==0xFFFF: whole call is a no-op
     {
         static const uint8_t nb[1] = { 0x0E };
-        FtWr wn[1] = { { (uint16_t)(OBJ + 0x1A0D), 0xFFFF } };
+        FtWr wn[1] = { { (uint16_t)(OBJ + OBJ_ANIM_PC), 0xFFFF } };
         ft_synth_case_anim(id, OBJ, nb, 1, 0, 0, 0x48, 0x4C,
                            wn, 1, seed + 0x999, "grid", grid, diff_budget);
     }
@@ -2774,8 +2774,8 @@ bool ft_synth_case_vmop(uint8_t op, const uint8_t* args, int n_args,
     ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y1), o.yend);
     // Light background noise over misc object fields (deterministic)
     FtRng bg(bg_seed);
-    static const uint16_t OF[] = { 0x1305, 0x13CD, 0x1495, 0x14BD, OBJ_BBOX_X0, OBJ_BBOX_X1,
-                                   0x1855, 0x18AD, OBJ_PARTNER, 0x19E5, OBJ_SUB_COUNT };
+    static const uint16_t OF[] = { 0x1305, 0x13CD, OBJ_HALF_H, OBJ_HALF_W, OBJ_BBOX_X0, OBJ_BBOX_X1,
+                                   0x1855, 0x18AD, OBJ_PARTNER, OBJ_FRAC_Y, OBJ_SUB_COUNT };
     for (uint16_t f : OF) ft_wr16(g_synth_in, (uint16_t)(si + f), bg.w());
     // Directed-case overrides (applied last — may override anything above)
     for (int i = 0; i < n_extra; i++) ft_wr16(g_synth_in, extra[i].addr, extra[i].val);
@@ -4008,7 +4008,7 @@ int ft_selftest_spawn() {
         T2[0] = 5; T2[1] = 0;
         FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
         const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},
-                            {0x12AD, 5}, {0x12ED, 0x4321} };
+                            {DS_SPRITE_RES_ID, 5}, {DS_SPRITE_RES_BASE, 0x4321} };
         ft_spawn_build(recs, 1, T2, sizeof(T2), wr, 4);
         ft_spawn_case("chunk-hit", grid, diff_budget);
     }

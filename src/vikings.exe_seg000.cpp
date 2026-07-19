@@ -424,6 +424,7 @@ unsigned int plane4_to_linear(uint8_t plane, uint32_t plane_offset)
 }
 void drawPixel(uint32_t offset, uint8_t color)
 {
+
   if (offset > 65536*4 - 1)
 	return;
   // Task #19 aid: env V2_DP_TRAP=<off1>[,<off2>...] — print every writer of

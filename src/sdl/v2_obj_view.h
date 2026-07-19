@@ -31,6 +31,9 @@ struct ObjMem {
     uint16_t pc()         const { return u16(OBJ_PC); }
     int16_t  world_x()    const { return i16(OBJ_WORLD_X); }
     int16_t  world_y()    const { return i16(OBJ_WORLD_Y); }
+    int16_t  y_prev()     const { return i16(OBJ_Y_PREV); }
+    int16_t  vel_x()      const { return i16(OBJ_VEL_X); }
+    int16_t  vel_y()      const { return i16(OBJ_VEL_Y); }
     uint16_t anim_idx()   const { return u16(OBJ_ANIM_IDX); }
     int16_t  bbox_x0()    const { return i16(OBJ_BBOX_X0); }
     int16_t  bbox_x1()    const { return i16(OBJ_BBOX_X1); }
@@ -61,6 +64,9 @@ struct ObjRef {
     uint16_t code_seg()   const { return u16(OBJ_CODE_SEG); }
     int16_t  world_x()    const { return i16(OBJ_WORLD_X); }
     int16_t  world_y()    const { return i16(OBJ_WORLD_Y); }
+    int16_t  y_prev()     const { return i16(OBJ_Y_PREV); }
+    int16_t  vel_x()      const { return i16(OBJ_VEL_X); }
+    int16_t  vel_y()      const { return i16(OBJ_VEL_Y); }
     uint16_t anim_idx()   const { return u16(OBJ_ANIM_IDX); }
     int16_t  bbox_x0()    const { return i16(OBJ_BBOX_X0); }
     int16_t  bbox_x1()    const { return i16(OBJ_BBOX_X1); }

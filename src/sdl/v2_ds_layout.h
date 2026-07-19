@@ -68,6 +68,15 @@ constexpr uint16_t DS_ANIM_PTR_HI    = 0x2E7B; // dword_2B359 hi: anim load curs
 
 constexpr uint16_t DS_VSYNC_COUNT    = 0xA39C; // word_3287C: vsync wait counter (sub_10130/16775)
 
+// Anim interpreter working registers + per-level chunk/resource tables
+constexpr uint16_t DS_ANIM_TIMER     = 0x0078; // anim frame delay countdown (interpreter working reg; saved per object)
+constexpr uint16_t DS_ANIM_CONT      = 0x007A; // anim continuation bytecode offset (working reg; saved per object)
+constexpr uint16_t DS_ANIM_CHUNK_IDS = 0x124D; // per-level anim chunk id table (116ae, step 2)
+constexpr uint16_t DS_ANIM_CHUNK_OFF = 0x126D; // anim chunk buffer far-ptr offsets (116ae)
+constexpr uint16_t DS_ANIM_CHUNK_SEG = 0x128D; // anim chunk buffer far-ptr segments (116ae)
+constexpr uint16_t DS_SPRITE_RES_ID  = 0x12AD; // sprite resource table: chunk ids (0x40B, 1167a fill / 13809 lookup)
+constexpr uint16_t DS_SPRITE_RES_BASE= 0x12ED; // sprite resource table: sprite data base offsets
+
 // ---------------------------------------------------------------------------
 // Object table columns (ds:[obj + COL]; obj = slot*2)
 // ---------------------------------------------------------------------------
@@ -77,15 +86,23 @@ constexpr uint16_t OBJ_SPRITE_Y      = 0x074D; // sprite world Y
 constexpr uint16_t OBJ_SPRITE_OFF    = 0x084D; // sprite data offset (1-based)
 constexpr uint16_t OBJ_SPRITE_SEG    = 0x094D; // sprite data segment
 constexpr uint16_t OBJ_STRIP_COUNT   = 0x0C4D; // type-2 dynamic strip count
+constexpr uint16_t OBJ_SPRITE_CUR_X  = 0x0D4D; // sprite current draw X (copied to OLD after erase)
+constexpr uint16_t OBJ_SPRITE_CUR_Y  = 0x0E4D; // sprite current draw Y
+constexpr uint16_t OBJ_SPRITE_OLD_X  = 0x0F4D; // sprite last-rendered X (dirty-rect erase source)
+constexpr uint16_t OBJ_SPRITE_OLD_Y  = 0x104D; // sprite last-rendered Y
 constexpr uint16_t OBJ_DIRTY_MODE    = 0x114D; // redraw mode/counter (2 show, 0x200 hide, 0x400 clear)
+constexpr uint16_t OBJ_DIRTY_CNT     = 0x114E; // = OBJ_DIRTY_MODE+1 high byte: pending redraw counter (DEC by 1DE05/1DF6A)
 constexpr uint16_t OBJ_CODE_SEG      = 0x1355; // VM bytecode segment (0 = slot free)
 constexpr uint16_t OBJ_PC            = 0x132D; // VM program counter (resume point)
 constexpr uint16_t OBJ_ALT_PC        = 0x137D; // saved call-jump return PC
 constexpr uint16_t OBJ_COLL_BITS     = 0x13F5; // collision result bits (per bit-index)
+constexpr uint16_t OBJ_X_PREV        = 0x13A5; // previous-frame world X (backup before velocity apply)
 constexpr uint16_t OBJ_Y_PREV        = 0x13CD; // previous-frame world Y
 constexpr uint16_t OBJ_ANIM_TABLE    = 0x141D; // anim state table selector
 constexpr uint16_t OBJ_WIDTH         = 0x1445; // sprite width (anim header byte 9)
 constexpr uint16_t OBJ_HEIGHT        = 0x146D; // sprite height (anim header byte 0xA)
+constexpr uint16_t OBJ_HALF_H        = 0x1495; // half-height (despawn bounds check y±hh)
+constexpr uint16_t OBJ_HALF_W        = 0x14BD; // half-width (despawn bounds check x±hw)
 constexpr uint16_t OBJ_BBOX_Y0       = 0x14E5; // bbox top (also generic indexed field base +0x14E5)
 constexpr uint16_t OBJ_FIELD_BASE    = 0x14E5; // generic indexed-field bias: field addr = slot_col
                                                // ([b-0x6CBA] (+[obj+0x1995])) + this; numerically the
@@ -97,20 +114,32 @@ constexpr uint16_t OBJ_FLAGS         = 0x1585; // status flags (0x40 hflip, 0x80
 constexpr uint16_t OBJ_STATE_IDX     = 0x15FD; // object type/state id (scan filters)
 constexpr uint16_t OBJ_RES_HANDLE    = 0x15AD; // sprite resource refcount/handle (15505 release)
 constexpr uint16_t OBJ_RES_COST      = 0x15D5; // resource cost (15505 subtrahend)
+constexpr uint16_t OBJ_CLASS_BITS    = 0x1625; // object class bit mask (anim header +0xF; TEST filters in area scans)
+constexpr uint16_t OBJ_ANIM_DX       = 0x164D; // last anim-scripted move delta X (walk mechanics result; flip-negated)
+constexpr uint16_t OBJ_ANIM_DY       = 0x1675; // last anim-scripted move delta Y (landing check reads sign)
+constexpr uint16_t OBJ_SPAWN_POOL    = 0x169D; // ds:0x374 snapshot at spawn (slot pool selector)
 constexpr uint16_t OBJ_ANIM_IDX      = 0x16ED; // animation index (bit15 = none)
 constexpr uint16_t OBJ_ANIM_SUB      = 0x16C5; // anim sub-state (op 0D/0E bit ops; 0xFFFF init)
 constexpr uint16_t OBJ_TIMER         = 0x1715; // per-object timer
 constexpr uint16_t OBJ_WORLD_X       = 0x173D; // world X (pixels)
 constexpr uint16_t OBJ_WORLD_Y       = 0x1765; // world Y (pixels)
+constexpr uint16_t OBJ_VEL_X_MAX     = 0x178D; // X velocity clamp (anim header +0x11)
+constexpr uint16_t OBJ_VEL_Y_MAX     = 0x17B5; // Y velocity clamp (anim header +0x13)
 constexpr uint16_t OBJ_TYPE_ID       = 0x17DD; // scan type id (filter-table compares)
+constexpr uint16_t OBJ_PARENT        = 0x1805; // spawner slot / linked-list prev (0xFFFF none; unlink pair of OBJ_CHILD)
 constexpr uint16_t OBJ_CHILD         = 0x182D; // spawned child slot (op 14 tail)
 constexpr uint16_t OBJ_SPRITE_BASE   = 0x1855; // sprite resource base offset
+constexpr uint16_t OBJ_ANIM_PC       = 0x1A0D; // last anim frame bytecode offset (0xFFFF none; saved anim_bx)
+constexpr uint16_t OBJ_ANIM_TIMER    = 0x1A35; // per-object save of DS_ANIM_TIMER across frames
+constexpr uint16_t OBJ_ANIM_CONT     = 0x1A5D; // per-object save of DS_ANIM_CONT across frames
 constexpr uint16_t OBJ_SUB_SLOT      = 0x1A85; // first sub-sprite slot
 constexpr uint16_t OBJ_SUB_END       = 0x1AAD; // sub-sprite slot end (exclusive)
 constexpr uint16_t OBJ_SUB_COUNT     = 0x1AD5; // sub-sprite count (0 = none; flip-loop gate)
 constexpr uint16_t OBJ_PARTNER       = 0x1995; // partner/link slot (indexed_1995 addressing base)
 constexpr uint16_t OBJ_VEL_X         = 0x1945; // X velocity (sub_15517 clears)
 constexpr uint16_t OBJ_VEL_Y         = 0x196D; // Y velocity
+constexpr uint16_t OBJ_FRAC_X        = 0x19BD; // X sub-pixel velocity accumulator (byte add; snaps clear the word)
+constexpr uint16_t OBJ_FRAC_Y        = 0x19E5; // Y sub-pixel velocity accumulator (byte add; snaps clear the word)
 constexpr uint16_t OBJ_COLL_TABLE    = 0x1B25; // collision partner table ((obj<<4)+bit_idx base)
 
 // Viking-indexed rows (vk = viking slot 0/2/4)
