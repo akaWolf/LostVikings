@@ -687,7 +687,7 @@ void v2_emu_early(uint16_t ds_val) {
         // via sub_1cd7b/7d and REP-MOVSB latches the spans) — redraw of
         // objects over refreshed cells is the sub_1dd9c layer's job (its
         // sub_1cdef scan tests the same fs bit0), mirrored by v2_emu_late.
-        // Roles read BEFORE this sub-frame's v2_sub_165aa rotation — same as
+        // Roles read BEFORE this sub-frame's v2_page_rotate_165aa rotation — same as
         // orig where sub_1de05 (0xBB) runs before sub_165aa (0xC0).
         uint8_t* drw = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_DRAW)];
         uint8_t* bgr = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_BG)];
@@ -740,7 +740,7 @@ void v2_emu_early(uint16_t ds_val) {
 // bit1 cell of the visible window is span-copied from the NEW shown page
 // [92F9] onto the NEW background page [92FB] — keeps the incoming background
 // page's world content current before it serves latches. Called from
-// v2_sub_165aa right after the role update (same order as orig CALLF).
+// v2_page_rotate_165aa right after the role update (same order as orig CALLF).
 extern "C" void v2_emu_df6a(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -898,7 +898,7 @@ extern "C" void v2_emu_init_pages(uint16_t ds_val) {
 
 // Stage-1 emu sub-frame, late half — the sub_1dd9c layer + the flagged-tile
 // pass (sub_1c8f1 draws AFTER 1dd9c and clears bit0; call this BEFORE the
-// phase runs v2_sub_1C8F1 so the bits are still live).
+// phase runs v2_dirty_tile_scan_1C8F1 so the bits are still live).
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj);
 // Cascade hook: when != 0xFFFF, v2_late_sprites_1DD9C (the DS/FS mirror loop) calls
 // v2_draw_one_sprite_late(this, di) at the orig CALL cs:[bp+15CB] point for
@@ -994,7 +994,7 @@ static void v2_draw_one_sprite(uint16_t ds_val, int obj) { v2_draw_sprites_impl(
 
 // late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —
 // gates evaluated BEFORE v2_late_sprites_1DD9C's DS effects (DEC of [obj+0x114D]) and
-// BEFORE v2_sub_1C8F1 (which clears render-map bit0), matching the orig call
+// BEFORE v2_dirty_tile_scan_1C8F1 (which clears render-map bit0), matching the orig call
 // order 1dd9c -> 1c8f1. sub_1cdef gate: clip the object's tile bbox to the
 // viewport (ds:0x9168/0x916A) and scan its cells in the render map (FS) for
 // bit0 (seg003 eip 0x634: TEST word fs:[si],1) — set means this sub-frame's

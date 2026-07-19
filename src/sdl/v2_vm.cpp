@@ -61,8 +61,8 @@ extern uint8_t sdl_spec_state_get(uint16_t off);
 //
 // Audio output is hardcoded:
 //   default build  — orig sub_177bb plays via play_xmidi_external;
-//                    v2_sub_177bb_v2 is muted (#ifdef V2_ONLY no-op).
-//   V2_ONLY build  — v2_sub_177bb_v2 plays; orig executor not present.
+//                    v2_sfx_play_177bb_v2 is muted (#ifdef V2_ONLY no-op).
+//   V2_ONLY build  — v2_sfx_play_177bb_v2 plays; orig executor not present.
 // Slot table divergence in shadow vs real DS is already excluded from verify
 // (0x990C..0x991E), so muted v2 doesn't break anything else.
 //
@@ -1160,7 +1160,7 @@ static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out
 // v2_pool is globally_muted in default mode (set in sound_init), so no audio
 // output, but slot tracking continues for DS verify symmetry. In V2_ONLY,
 // v2_pool is unmuted and produces audible audio.
-static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
+static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
     if (!xmidi || size == 0) return;
@@ -1195,14 +1195,14 @@ static void v2_sub_176bd_v2(uint8_t* s, uint16_t bx_seg) {
 extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
                                                      uint16_t handle, bool mute);
 // "Production" impl — no replay knowledge. v2 callers go through fx::play_sfx.
-static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq);
+static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq);
 // Forward decl — fx::stop_all_sfx wraps this (full impl after fx:: namespace).
-static void v2_sub_17912_v2(uint8_t* s);
+static void v2_seq_stop_all_17912_v2(uint8_t* s);
 
 // =====================================================================
 // fx:: — single point of replay-aware side-effect dispatch for v2.
 // All v2 code paths that produce side effects (audio, audit, music) MUST
-// route through fx:: wrappers. Side-effect impls (v2_sub_177bb_v2 etc.) have
+// route through fx:: wrappers. Side-effect impls (v2_sfx_play_177bb_v2 etc.) have
 // NO replay knowledge — that concern lives only here. Adding a new side
 // effect = add a new fx:: wrapper that gates and delegates to impl.
 //
@@ -1214,32 +1214,32 @@ static void v2_sub_17912_v2(uint8_t* s);
 //     handle hashes (caused AUDIT-FRAME-DIVERGE divergence in task #103).
 // =====================================================================
 namespace fx {
-    // Play SFX. Audit log fires INSIDE v2_sub_177bb_v2 (mirror of orig sub_177bb
+    // Play SFX. Audit log fires INSIDE v2_sfx_play_177bb_v2 (mirror of orig sub_177bb
     // internal hook), so both wrappers automatically log. Returns deterministic
     // handle (0 if skipped via replay context).
     inline int play_sfx(uint8_t* shadow, uint16_t seq, uint16_t obj) {
-        (void)obj; // audit reads obj from ds:0x42 inside v2_sub_177bb_v2
+        (void)obj; // audit reads obj from ds:0x42 inside v2_sfx_play_177bb_v2
         if (v2_in_replay_anim) return 0;
-        return v2_sub_177bb_v2(shadow, seq);
+        return v2_sfx_play_177bb_v2(shadow, seq);
     }
     // Backward-compat alias — both wrappers identical now (audit moved into
-    // v2_sub_177bb_v2). Kept distinct name for call-site clarity (inventory/
+    // v2_sfx_play_177bb_v2). Kept distinct name for call-site clarity (inventory/
     // pause/transition sites historically used _no_audit).
     inline void play_sfx_no_audit(uint8_t* shadow, uint16_t seq) {
         if (v2_in_replay_anim) return;
-        v2_sub_177bb_v2(shadow, seq);
+        v2_sfx_play_177bb_v2(shadow, seq);
     }
     inline void play_music(uint8_t* shadow, uint16_t bx_seg) {
         if (v2_in_replay_anim) return;
-        v2_sub_176bd_v2(shadow, bx_seg);
+        v2_music_play_176bd_v2(shadow, bx_seg);
     }
     inline void stop_all_sfx(uint8_t* shadow) {
         if (v2_in_replay_anim) return;
-        v2_sub_17912_v2(shadow);
+        v2_seq_stop_all_17912_v2(shadow);
     }
 }
 
-static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq) {
+static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6D);
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -1266,7 +1266,7 @@ static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     v2_audit_log_sfx(1 /* v2 */, ax_seq, obj);
 #ifdef V2_ONLY
     // V2_ONLY: v2 is the sole audio producer → real playback through v2_pool
-    // (symmetric with v2_sub_176bd_v2 music path).
+    // (symmetric with v2_music_play_176bd_v2 music path).
     int sdl_handle = v2_pool.play_xmidi_external_with_handle_and_mute(xmidi, size, (int)ax_seq, handle, false);
 #else
     // Default mode: orig plays audible audio via orig_pool (orig sub_177bb SDL
@@ -1312,17 +1312,17 @@ static int v2_sub_177bb_v2(uint8_t* s, uint16_t ax_seq) {
 // reserve SFX slots in any pool); in V2_ONLY v2_pool holds the real audible
 // SFX slots so this actually stops audio. Orig path's audible audio is stopped
 // by orig sub_1782a SDL inline (targets orig_pool), independent of this.
-static void v2_sub_1782a_v2() {
+static void v2_sfx_stop_all_1782a_v2() {
     v2_pool.stop_all_sfx();
 }
 
 // orig sub_178d6 (vikings.exe_seg000.cpp:16062): if music not muted, replay it.
 // Removed #ifdef V2_ONLY gate — in default mode orig plays music via orig_pool
 // AND writes real_ds[0x990C] = handle. v2 mirror must symmetrically write
-// shadow_ds[0x990C] via fx::play_music → v2_sub_176bd_v2 (which reserves
+// shadow_ds[0x990C] via fx::play_music → v2_music_play_176bd_v2 (which reserves
 // muted slot in v2_pool and writes shadow_ds[0x990C] with deterministic
 // handle). Without this, anim VM op_D5 paths cause DS divergence at 0x990C.
-static void v2_sub_178d6_v2(uint8_t* s) {
+static void v2_music_start_178d6_v2(uint8_t* s) {
     if (*(const uint16_t*)(s + DS_MUSIC_MUTE) != 0) return;  // music muted/off
     uint16_t bx_seg = *(const uint16_t*)(s + 0x2E6B);
     fx::play_music(s, bx_seg);
@@ -1341,7 +1341,7 @@ static void v2_sub_178d6_v2(uint8_t* s) {
 //       AIL_release_sequence(handle) → SDL: no-op (stop already releases)
 //       [si-66F4] = FFFF; [si-66EA] = FFFF
 // "Production" impl — no replay knowledge. v2 callers go through fx::stop_all_sfx.
-static void v2_sub_17912_v2(uint8_t* s) {
+static void v2_seq_stop_all_17912_v2(uint8_t* s) {
     if (*(uint16_t*)(s + DS_MUSIC_MUTE) != 0 && *(uint16_t*)(s + DS_SFX_MUTE) != 0) return;
     uint16_t si = (s[0x25B9] == 1) ? 2 : 0;
     while ((int16_t)si < 0x0A) {
@@ -1526,7 +1526,7 @@ void v2_dump_write_ring(const char* reason) {
 // frame) reads correct shadow[0x91B0/A4/99/7C] state to pick F10 vs ESC path.
 // v2_phase_post_flip3's PART A also does this OR but fires too LATE
 // (after sub_104a1 → PW_ENTRY signal already happened).
-extern "C" void v2_mirror_sub_10350_spec_ors() {
+extern "C" void v2_spec_ors_mirror_10350() {
     // Read frame-frozen snapshot (sdl_spec_snap) — same value orig saw in
     // sub_10350. snap is now COPY semantics (sdl_spec_snapshot_take), so both
     // orig and v2 see identical frame-stable values — no race with render
@@ -1774,7 +1774,7 @@ static void v2_vm_init_table();
 
 // ============================================================================
 // V2 Segment Resolver — maps segment:offset to shadow buffer pointers.
-// In standalone mode, segment values are fake (assigned by v2_sub_12ab8).
+// In standalone mode, segment values are fake (assigned by v2_alloc_segments_12ab8).
 // This function maps them to the correct shadow buffer + offset.
 // ============================================================================
 uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds) {
@@ -2065,7 +2065,7 @@ static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max
     return plane_size;
 }
 
-// v2_sub_10cd8: exact copy of orig sub_10cd8 (read_and_display_raw_chunk).
+// v2_load_chunk_10cd8: exact copy of orig sub_10cd8 (read_and_display_raw_chunk).
 // Orig flow:
 //   1. plane_size = read 2 bytes from DATA.DAT into ds:0x2BBC
 //   2. chunk_addr = ds:0x2E77 (chunk segment)
@@ -2074,7 +2074,7 @@ static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max
 //      else                     v2_draw_viewport_chunk(chunk_addr, plane_size)
 //   5. VGA OUTs + MOVSW (commented in v2)
 // Args: ax = chunk_id, di = display_offset (VGA dest)
-static void v2_sub_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
+static void v2_load_chunk_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
     uint16_t chunk_seg = *(uint16_t*)(shadow + DS_SEG_CHUNK);
     uint16_t plane_size = v2_read_raw_chunk(ax, v2_vm_shadow_chunk, V2_CHUNK_SHADOW_SIZE);
     *(uint16_t*)(shadow + 0x2BBC) = plane_size; // ds:0x2BBC = plane_size (mirror orig)
@@ -2153,7 +2153,7 @@ static uint32_t v2_fs_hash_shadow();
 // upload. (An earlier comment here claimed [word_303E0] — wrong.)
 // Original: OUT 0x3C8=0 (start color), REP OUTSB 0x300 bytes to port 0x3C9, then setPalette().
 // For v2: palette in shadow DS at 0x8202, applied by render callback. DS write: word_303DE=0.
-static void v2_sub_10fe6(uint8_t* s) {
+static void v2_pal_dac_write_10fe6(uint8_t* s) {
     *(uint16_t*)(s + 0x7EFE) = 0; // word_303DE = 0 (palette write complete)
     // Original VGA DAC write:
     // OUT(0x3C8, 0);  // start at color 0
@@ -2166,7 +2166,7 @@ static void v2_sub_10fe6(uint8_t* s) {
 // sub_10ffc: palette animation (underwater/lava cycling). Processes 8 animation slots (bx=7→0).
 // Each slot: check enable flag, copy timer, compute color range, write partial palette to VGA DAC.
 // DS writes: [bx+0x258C] = timer copy, word_303DE = 0. VGA: OUT + setPalette for affected ranges.
-static void v2_sub_10ffc(uint8_t* s) {
+static void v2_pal_anim_10ffc(uint8_t* s) {
     *(uint16_t*)(s + 0x7EFE) = 0; // word_303DE = 0
     uint16_t pal_base = *(uint16_t*)(s + 0x7F00); // word_303E0 = palette data pointer
     for (int16_t bx = 7; bx >= 0; bx--) {
@@ -2211,7 +2211,7 @@ static void v2_sub_10ffc(uint8_t* s) {
 // sub_10fa0: palette fade to black. Blocking render loop bx=0→0x45.
 // sub_10f03: palette shading — reads ds:0x7F02 (source palette), writes ds:0x8202 (shaded palette).
 // Subtracts shade bytes (ds:0x342-0x347) from each RGB component, clamps to [0, 0x3F].
-static void v2_sub_10f03(uint8_t* s) {
+static void v2_pal_shade_10f03(uint8_t* s) {
     uint8_t r_shade = s[0x342] | s[0x345];
     uint8_t g_shade = s[0x343] | s[0x346];
     uint8_t b_shade = s[0x344] | s[0x347];
@@ -2234,7 +2234,7 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
         s[0x0342] = (uint8_t)bx; // byte_28822
         s[0x0343] = (uint8_t)bx; // byte_28823
         s[0x0344] = (uint8_t)bx; // byte_28824
-        v2_sub_10f03(s);                    // sub_10f03: palette shading → ds:0x8202
+        v2_pal_shade_10f03(s);                    // sub_10f03: palette shading → ds:0x8202
         *(uint16_t*)(s + 0x7EFE) = 4;       // word_303DE = 4 (request palette write)
         *(uint16_t*)(s + 0x7F00) = 0x8202;  // word_303E0 = shaded palette pointer
         // Original: CALL sub_16775; CALL sub_10130
@@ -2247,14 +2247,14 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
     *(uint16_t*)(s + 0x7F00) = 0x8202;                                  // MOV word_303E0, 8202h
 }
 
-static void v2_pal_correct_10e99(uint8_t* s); // forward decl for v2_sub_1450b
+static void v2_pal_correct_10e99(uint8_t* s); // forward decl for v2_save_game_1450b
 
 // sub_1450b (seg000): save game state.
 // Original: seg000 lines 9467-9482 (eip 0x450B..0x452F).
 // DS writes: ds:0x342 = al<<1, ds:0x343 = si<<1 (byte), ds:0x344 = di<<1 (byte),
 //            ds:0x7EFD |= 1, ds:0x7EFE = 4, ds:0x7F00 = 0x8202.
 // Then JMP sub_10E99 (palette correction).
-static void v2_sub_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di) {
+static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di) {
     s[0x342] = (uint8_t)(al << 1);                                  // SHL al, 1; MOV ds:342h, al
     s[0x343] = (uint8_t)((uint8_t)si << 1);                        // SHL al, 1; MOV ds:343h, al
     s[0x344] = (uint8_t)((uint8_t)di << 1);                        // SHL al, 1; MOV ds:344h, al
@@ -2355,7 +2355,7 @@ static std::atomic<bool> v2_render_cb_enabled{false};
 // cur*3 wrapped uint16), the saved entry lands at end*3+dx. The byte loop IS
 // the REP MOVSB model: 16-bit pointer wrap included, so orig-UB inputs
 // (end < cur → huge wrapped count) replicate exactly too.
-static void v2_sub_10255(uint8_t* s, uint16_t si, uint16_t dx) {
+static void v2_pal_rotate_fwd_10255(uint8_t* s, uint16_t si, uint16_t dx) {
     uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // AL = [si+259Ch]
     uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // AL = [si+2594h]
     uint16_t di = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // ax=cur*3; di=ax+dx
@@ -2375,7 +2375,7 @@ static void v2_sub_10255(uint8_t* s, uint16_t si, uint16_t dx) {
 // block shifts up 3 bytes backwards (STD; REP MOVSB with cx = (cur-end)*3
 // wrapped, si=di-1, di=di+2), then the saved entry is written at [di-2]
 // (WORD) / [di] (byte) where di ended at end*3+dx+2.
-static void v2_sub_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
+static void v2_pal_rotate_back_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
     uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // movzx ax, [si+259Ch]
     uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // movzx ax, [si+2594h]
     uint16_t di0 = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // di=cur*3+dx
@@ -2395,9 +2395,10 @@ static void v2_sub_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
 // Verified with seg000 lines 2086-2148.
 // Iterates 8 palette channels (si=7 down to 0).
 // For each: checks mask (byte_2AA63 at ds:0x2583), counter at [si+0x258C].
-// If counter reaches 0: rotates 3-byte palette entries (sub_10255 shifts up, sub_1020f shifts down).
+// If counter reaches 0: rotates 3-byte palette entries (sub_10255 for cur<end:
+// block shifts down, saved entry lands at end; sub_1020f for cur>end: the reverse).
 // DS writes: DEC [si+0x258C], word_303DE=2, palette buffer rotations at ds:0x8202+ area.
-static void v2_sub_101be(uint8_t* s) {
+static void v2_pal_ui_cycle_101be(uint8_t* s) {
     static int _dbg_calls = 0, _dbg_rotations = 0;
     _dbg_calls++;
     // ROOT-CAUSE diag: shadow counters + palette state at slot 1 cur_idx.
@@ -2447,12 +2448,12 @@ static void v2_sub_101be(uint8_t* s) {
         // word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
         if (cur_idx < end_idx) {
             // orig: mov dx,8202h; call sub_10255; mov dx,7F02h; call sub_10255
-            v2_sub_10255(s, (uint16_t)si, 0x8202);
-            v2_sub_10255(s, (uint16_t)si, 0x7F02);
+            v2_pal_rotate_fwd_10255(s, (uint16_t)si, 0x8202);
+            v2_pal_rotate_fwd_10255(s, (uint16_t)si, 0x7F02);
         } else {
             // orig: mov dx,8202h; call sub_1020F; mov dx,7F02h; call sub_1020F
-            v2_sub_1020f(s, (uint16_t)si, 0x8202);
-            v2_sub_1020f(s, (uint16_t)si, 0x7F02);
+            v2_pal_rotate_back_1020f(s, (uint16_t)si, 0x8202);
+            v2_pal_rotate_back_1020f(s, (uint16_t)si, 0x7F02);
         }
     }
     *(uint16_t*)(s + 0x7EFE) = 2;                                  // word_303DE = 2
@@ -2497,7 +2498,7 @@ static void v2_audio_tick_108c8(uint8_t* s) {
         }
     } else {                                                              // music ON path
         // sub_176BD(si=0, ax=0, bx=word_2B34B): play music with sequence from ds:0x2E6B
-        // (orig fall-through path at eip 0x947). v2_sub_176bd_v2 handles SDL replacement
+        // (orig fall-through path at eip 0x947). v2_music_play_176bd_v2 handles SDL replacement
         // and updates v2_id_music + dontstop.
         uint16_t bx_seg = *(uint16_t*)(s + 0x2E6B);  // word_2B34B at ds:0x2E6B
         fx::play_music(s, bx_seg);
@@ -2506,7 +2507,7 @@ static void v2_audio_tick_108c8(uint8_t* s) {
 
 // sub_1686f (seg000): VGA mode restore on exit. Verified with seg000 lines 15588-15597.
 // Called from exit cleanup only (sub_10dba). DS write: [92FF]=0 if [9300]!=FF.
-static void v2_sub_1686f(uint8_t* s) {
+static void v2_vga_mode_restore_1686f(uint8_t* s) {
     uint8_t al = s[0x9300];                                             // MOV al, ds:9300h
     if (al == 0xFF) return;                                              // CMP al, FFh; JZ ret
     // MOV ah, 0
@@ -2520,12 +2521,12 @@ static void v2_sub_1686f(uint8_t* s) {
 // Verified with seg000 lines 104-136 (eip 0x00BB..0x012D).
 // Forward decl issue prevents calling render functions here; v2 phases handle this.
 //
-// static void v2_sub_100bb(uint8_t* s) {
+// static void v2_render_pass3_100bb(uint8_t* s) {
 //     v2_bg_latch_1DE05(s);                              // 104 call sub_1DE05
 //     v2_game_loop_post_render(s);                  // 105-106 call sub_165AA + sub_16661
 //     v2_late_sprites_1DD9C(s);                              // 107 call sub_1DD9C
-//     v2_sub_1C8F1(s, 0xFFFE);                     // 108-109 mov ax,FFFEh; call sub_1C8F1
-//     v2_sub_1E0C7(s);                              // 110 call sub_1E0C7
+//     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);                     // 108-109 mov ax,FFFEh; call sub_1C8F1
+//     v2_glyph_flush_1E0C7(s);                              // 110 call sub_1E0C7
 //     v2_page_flip_16775(s);                              // 111 call sub_16775
 //     *(uint16_t*)(s + 0x8734) = 0;                 // 112 mov word_30C14, 0
 //     v2_audio_tick_108c8(s);                              // 113 call sub_108C8
@@ -2550,7 +2551,7 @@ static void v2_sub_1686f(uint8_t* s) {
 // sub_117d0 (seg000): VGA healthbar draw. VGA-ONLY, no DS writes.
 // Verified with seg000 lines 4228+. Draws 32x24 healthbar to VGA planes. Called from sub_120FF.
 // All instructions are VGA OUT + MOVSW + REP STOSW to es:0xA000.
-static void v2_sub_117d0(uint8_t* /*s*/) {
+static void v2_vga_healthbar_117d0(uint8_t* /*s*/) {
     // VGA-only: 4 planes × 24 rows × 4 bytes = healthbar pixels to VGA
     // OUT(0x3C4, plane_mask) — commented
     // REP MOVSW from ds:[si] to es:[di] — VGA write, commented
@@ -2558,7 +2559,7 @@ static void v2_sub_117d0(uint8_t* /*s*/) {
 
 // sub_11aa4 (seg000): VGA portrait draw. VGA-ONLY, no DS writes.
 // Verified with seg000 lines 4327+. Draws 32x7 portrait to VGA. Called from sub_11B0B.
-static void v2_sub_11aa4(uint8_t* /*s*/) {
+static void v2_vga_portrait_11aa4(uint8_t* /*s*/) {
     // VGA-only: 4 planes × 7 rows portrait render
     // OUT(0x3C4, plane_mask) + MOVSW — commented
 }
@@ -2566,7 +2567,7 @@ static void v2_sub_11aa4(uint8_t* /*s*/) {
 // sub_1237f (seg000): Busy-wait delay loop. No DS writes.
 // Verified with seg000 lines 4636-4642. Called from sub_17561 after INT 21h PRINT STRING.
 // Original: outer loop di times, inner loop cx=256 iterations.
-static void v2_sub_1237f(uint8_t* /*s*/, uint16_t di) {
+static void v2_busy_wait_1237f(uint8_t* /*s*/, uint16_t di) {
     while (di != 0) {
         // MOV cx, 100h
         // loc_12382: LOOP loc_12382 — busy wait 256 iterations, no DS writes
@@ -2578,34 +2579,34 @@ static void v2_sub_1237f(uint8_t* /*s*/, uint16_t di) {
 
 // sub_172d3 (seg000): VGA CRTC register batch write. VGA-ONLY, no DS writes.
 // Verified with seg000 lines 15002+. Reads word pairs from ds:[si], writes to VGA port 0x3D4.
-static void v2_sub_172d3(uint8_t* /*s*/) {
+static void v2_vga_crtc_batch_172d3(uint8_t* /*s*/) {
     // VGA CRTC register programming — commented
     // PUSH ax,bx,cx,dx,si; LODSW; OUT dx,ax; LOOP; POP
 }
 
 // sub_17337 (seg000): VGA sequencer + GC register batch write. VGA-ONLY, no DS writes.
 // Verified with seg000 lines 15055+. Similar to sub_172d3 but ports 0x3C4 + 0x3CE.
-static void v2_sub_17337(uint8_t* /*s*/) {
+static void v2_vga_seq_gc_batch_17337(uint8_t* /*s*/) {
     // VGA sequencer + graphics controller — commented
     // PUSH; LODSW; OUT; LOOP; POP
 }
 
 // sub_128a9 (seg000): DOS file close + exit handler. No DS writes (only CS temporaries).
 // Verified with seg000 lines 6110+. INT 21h calls for file operations.
-static void v2_sub_128a9(uint8_t* /*s*/) {
+static void v2_dos_file_close_128a9(uint8_t* /*s*/) {
     // INT(21h, AH=3Eh) — close file handle — commented
     // INT(21h, AH=4Ch) — terminate program — commented
 }
 
 // sub_1292f (seg000): Sound state check. No DS writes (read-only).
 // Verified with seg000 lines 6201+. Tests ds:86AC|86AE, calls AIL if nonzero.
-static void v2_sub_1292f(uint8_t* /*s*/) {
+static void v2_snd_state_check_1292f(uint8_t* /*s*/) {
     // Sound driver shutdown — AIL calls only, no DS writes
 }
 
 // sub_17512 (seg000): Sound driver XMI buffer setup. No DS writes to game state.
 // Verified with seg000 lines 15271+. PUSH si; es=ds:2E6F; di=FFFA; MOVSW to es segment.
-static void v2_sub_17512(uint8_t* /*s*/) {
+static void v2_snd_xmi_setup_17512(uint8_t* /*s*/) {
     // Sound buffer copy to AIL driver segment — no game DS writes
 }
 
@@ -2620,7 +2621,7 @@ static void v2_sub_17512(uint8_t* /*s*/) {
 // INT(0x21, ax=0x2509, dx=0x6440); → set INT 9 to our handler at cs:0x6440
 // DS writes: NONE — saves to CS segment temporaries.
 // For v2: SDL handles keyboard input via SDL_GetKeyboardState.
-static void v2_sub_16528(uint8_t* /*s*/) {
+static void v2_int9_install_16528(uint8_t* /*s*/) {
     // INT(0x21, ax=0x3509);  // DOS: get interrupt vector 9h (keyboard) → es:bx
     // cs:word_16436 = bx;    // save original handler offset
     // cs:word_16438 = es;    // save original handler segment
@@ -2635,7 +2636,7 @@ static void v2_sub_16528(uint8_t* /*s*/) {
 // For each of 4 planes: OUT(0x3C4, plane_mask); 8 × MOV word to VGA at row offsets 0,0x56,0xAC,...
 // VGA pitch = 0x56 (86 bytes per row in Mode X).
 // No DS writes. Pure VGA pixel copy.
-static void v2_sub_1689e(uint8_t* /*s*/, uint16_t /*si_tile*/, uint16_t /*di_vga*/) {
+static void v2_tile_blit_1689e(uint8_t* /*s*/, uint16_t /*si_tile*/, uint16_t /*di_vga*/) {
     // Input: si = tile word (bits 5-4=flip, bits 15-6=data_offset), di = VGA dest offset.
     // Tile data: 64 bytes from ds:0x2E5F segment: 4 planes x 16 bytes (8 rows x 2 bytes/row).
     // VGA pitch = 0x56 (86 bytes). Row offsets: 0, 0x56, 0xAC, 0x102, 0x158, 0x1AE, 0x204, 0x25A.
@@ -2671,7 +2672,7 @@ static void v2_sub_1689e(uint8_t* /*s*/, uint16_t /*si_tile*/, uint16_t /*di_vga
 // Loop cx=0x2B (43 tiles). Each: si=fs:[bx], call sub_1689e(si, di), bx+=2, di+=2.
 // Renders one horizontal row of 43 tiles to VGA page.
 // No DS writes. Pure VGA rendering.
-static void v2_sub_16dc1(uint8_t* /*s*/, uint16_t /*bx_fs*/, uint16_t /*di_vga*/) {
+static void v2_tile_row_16dc1(uint8_t* /*s*/, uint16_t /*bx_fs*/, uint16_t /*di_vga*/) {
     // Verified with seg000 lines 14410-14428 (eip 0x6DC1..0x6DD8).
     // Renders one horizontal row of 43 tiles from FS page table to VGA.
     // PUSH bx, cx, di;
@@ -2690,7 +2691,7 @@ static void v2_sub_16dc1(uint8_t* /*s*/, uint16_t /*bx_fs*/, uint16_t /*di_vga*/
 // OUT(0x3C4, 0x0F02); OUT(0x3CE, 0x0008);
 // Copies tile column between VGA pages using ds:930D/930F/930B offsets.
 // No DS writes.
-static void v2_sub_171dc(uint8_t* /*s*/) {
+static void v2_page_copy_col_171dc(uint8_t* /*s*/) {
     // Verified with seg000 lines 14768-14808 (eip 0x71DC..0x7230).
     // Copies rendered tile column from page 3 to pages 1+2 between VGA pages.
     // PUSH es, cx, dx;
@@ -2713,7 +2714,7 @@ static void v2_sub_171dc(uint8_t* /*s*/) {
 //   bx += ds:0x8F6C (FS page stride), di += 0x2B0 (VGA pitch * 8 rows).
 // Renders one vertical column of 25 tiles to VGA page.
 // No DS writes.
-static void v2_sub_16dd9(uint8_t* /*s*/) {
+static void v2_tile_col_16dd9(uint8_t* /*s*/) {
     // Verified with seg000 lines 14430-14438 (eip 0x6DD9..0x6DEC).
     // Renders one vertical column of 25 tiles from FS page table to VGA.
     // MOV cx, 0x19;                  // 25 tiles per viewport column
@@ -2736,7 +2737,7 @@ static void v2_sub_16dd9(uint8_t* /*s*/) {
 //            then ds:931D for ds:9314 remainder
 // OUT(0x3CE, 0xFF08); // reset bit mask
 // No DS writes.
-static void v2_sub_1712b(uint8_t* /*s*/) {
+static void v2_page_copy_row_1712b(uint8_t* /*s*/) {
     // Verified with seg000 lines 113-182 (eip 0x70FB..0x71DB).
     // Copies rendered tile row from source VGA page to other two pages.
     // PUSH es;
@@ -2763,7 +2764,7 @@ static void v2_sub_1712b(uint8_t* /*s*/) {
 // Then JMP loc_1CF39 → complex glyph rendering dispatch (switch on glyph pixel pattern).
 // Each dispatch path: OUT(0x3C4, plane); writes to es:0xA000 via indexed addressing.
 // All writes go to VGA (es) and cs temporaries — NO DS writes.
-static void v2_sub_1E16D(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t /*di_vga*/) {
+static void v2_glyph_draw_1E16D(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t /*di_vga*/) {
     // Verified with seg003 lines 3116-3142 (eip 0x193D..0x1966).
     // Renders one glyph (72 bytes: 8 strips x 9 bytes) to VGA.
     //
@@ -2803,7 +2804,7 @@ static void v2_sub_1E16D(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t /*di_vg
 // Flip dispatch: si & 0x30 → 4 paths (normal/hflip/vflip/both).
 // Each path: OUT(0x3C4, plane_mask); read tile+mask, write to es:0xA000 with masking.
 // No DS writes.
-static void v2_sub_1C939(uint8_t* /*s*/, uint16_t /*fs_val*/, uint16_t /*di_fs*/) {
+static void v2_masked_tile_1C939(uint8_t* /*s*/, uint16_t /*fs_val*/, uint16_t /*di_fs*/) {
     // Verified with seg003 lines 65-310 (eip 0x0109..0x0540).
     // Renders flagged/animated tile with transparency mask to VGA.
     // Called from sub_1C8F1 when fs:[di] has bit 3 set.
@@ -2903,7 +2904,7 @@ static void v2_pal_correct_10e99(uint8_t* s) {
 // If bit 3 also set: render flagged tile to VGA — VGA only, skipped for v2.
 // DS reads: ds:0x2581, ds:0x257F, ds:0x25DC, ds:[di-0x7098].
 // FS writes: AND fs:[di], ax (clears dirty flag bit 0).
-static void v2_sub_1C8F1(uint8_t* s, uint16_t ax_mask) {
+static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
     uint16_t cx = 0x2B;                                              // MOV cx, 2Bh (columns)
     uint16_t bx = 0x19;                                              // MOV bx, 19h (rows)
     // line 36-40: di = row_offset_table[ds:0x2581] + ds:0x257F, scaled
@@ -2928,7 +2929,7 @@ static void v2_sub_1C8F1(uint8_t* s, uint16_t ax_mask) {
                     *(uint16_t*)(v2_vm_shadow_fs + di) &= ax_mask;   // AND fs:[di], ax
                     // line 51-52: TEST fs:[di], 8; JNZ loc_1C939
                     if (fs_val & 8) {
-                        v2_sub_1C939(s, fs_val, di);  // VGA flagged tile render
+                        v2_masked_tile_1C939(s, fs_val, di);  // VGA flagged tile render
                     }
                 }
             }
@@ -2946,7 +2947,7 @@ static void v2_sub_1C8F1(uint8_t* s, uint16_t ax_mask) {
 // Clips against viewport (ds:0x9168, ds:0x916A).
 // For each tile in clipped rect: OR fs:[si_off], 3.
 // Also renders to VGA (sub_1C8F1 style) — VGA part skipped for v2.
-static void v2_sub_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t si_h, int16_t bp_w) {
+static void v2_sprite_draw_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t si_h, int16_t bp_w) {
     // line 615-619: if !(cx & 7) → DEC bp                          ; TEST cx, 7; JNZ; DEC bp
     if (!(cx_x & 7)) bp_w--;
     // line 622-624: if !(dx & 7) → DEC si                          ; TEST dx, 7; JNZ; DEC si
@@ -3015,7 +3016,7 @@ static void v2_sub_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t si_h, i
 // DS writes: INC 0x98DC (conditional).
 // FS writes: OR fs:[bp], 1 (per glyph — dirty page flag).
 // VGA writes: sub_1E16D renders glyph pixels to es:0xA000 — commented for v2.
-static void v2_sub_1E0C7(uint8_t* s) {
+static void v2_glyph_flush_1E0C7(uint8_t* s) {
     // line 3037: TEST byte ptr ds:956Bh, 0FFh                      ; glyph dirty flag
     if (s[0x956B] == 0) return;                                      // JZ locret_1E16C
 
@@ -3102,7 +3103,7 @@ static void v2_sub_1E0C7(uint8_t* s) {
             // loc_1E147: render glyph to VGA (if not full-screen text mode)
             // line 3094-3095: TEST word ds:9569h; JNZ loc_1E158
             if (*(uint16_t*)(s + 0x9569) == 0) {
-                v2_sub_1E16D(s, si_glyph, di);  // VGA glyph pixel render
+                v2_glyph_draw_1E16D(s, si_glyph, di);  // VGA glyph pixel render
             }
 
             // loc_1E158:
@@ -3146,7 +3147,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
                 int16_t cx_x = (int16_t)*(uint16_t*)(s + di + 0x0F4D);  // old X
                 int16_t dx_y = (int16_t)*(uint16_t*)(s + di + 0x104D);  // old Y
                 int16_t bp_v = (si > 5) ? 5 : (int16_t)si;             // bp=5 for large, si for small
-                v2_sub_1CD7D(s, cx_x, dx_y, (int16_t)si, bp_v);        // set fs dirty + VGA render (commented)
+                v2_sprite_draw_1CD7D(s, cx_x, dx_y, (int16_t)si, bp_v);        // set fs dirty + VGA render (commented)
             }
             // Position copy: [0F4D] ← [0D4D], [104D] ← [0E4D]
             *(uint16_t*)(s + di + 0x0F4D) = *(uint16_t*)(s + di + 0x0D4D);
@@ -3225,7 +3226,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
             // v2 cannot replicate per-pass tile redraw without page-flip — single buffer
             // + multi-pass swap causes flicker. Tile-based levels use full-frame redraw
             // in v2_draw_tiles instead; intro/menu uses chunk_bg restore. dirty bit
-            // marking still happens above (v2_sub_1CD7D) which other DS-aware code uses.
+            // marking still happens above (v2_sprite_draw_1CD7D) which other DS-aware code uses.
             (void)si_row; (void)ax_col; (void)dx_tl;
         }
     }
@@ -3428,7 +3429,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 // loc_1D95B: all bounds passed → sub_1CD7D + VGA render
                 {
                     int16_t si_h = (int16_t)((*(uint16_t*)(s + di + OBJ_STRIP_COUNT) >> 3) + 1); // 37550-37552
-                    v2_sub_1CD7D(s, cx, dx, si_h, 5);                 // 37549: bp=5, 37553: call sub_1CD7D
+                    v2_sprite_draw_1CD7D(s, cx, dx, si_h, 5);                 // 37549: bp=5, 37553: call sub_1CD7D
                 }
                 // 37554-37776: VGA pixel rendering — all VGA OUT + REP MOVSB. No DS writes.
                 // POP di, es, ds. RETN.
@@ -3453,7 +3454,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 ax -= 0xB7;                                            // 36447
                 if (dx < ax) goto type1_exit;                          // 36449
                 // In viewport → sub_1CD7B(si=2)
-                v2_sub_1CD7D(s, cx, dx, 2, 2);                        // 36450-36451
+                v2_sprite_draw_1CD7D(s, cx, dx, 2, 2);                        // 36450-36451
                 // VGA 8x8 render — commented for v2
                 goto type1_end;
             type1_exit:
@@ -3509,7 +3510,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 // cs:word_1C834 = ax-dx, AND 0xFFFE — VGA clip only
             type4_loc_1d471:
                 // All bounds passed → sub_1CD7B(si=3, bp=3)
-                v2_sub_1CD7D(s, cx, dx, 3, 3);                          // 37029-37030
+                v2_sprite_draw_1CD7D(s, cx, dx, 3, 3);                          // 37029-37030
                 // VGA 16x16 render — commented for v2
                 goto type4_end;
             type4_exit:
@@ -3540,7 +3541,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
 //   DS writes: [di+0x0F4D] ← [di+0x0D4D], [di+0x104D] ← [di+0x0E4D]
 // Part 2: tile redraw via dirty page flags — VGA only, no DS side effects
 //   OUT(0x3C4, 0x0F02); OUT(0x3CE, 0x0008); — VGA register setup, commented for v2
-static void v2_sub_1DF6A(uint8_t* s) {
+static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
     // Part 1: position copy for dirty objects
     for (int16_t di = 0xFE; di >= 0; di -= 2) {                     // MOV di, 0FEh; loop
         if (s[di + 0x114E] == 0) continue;                          // TEST byte [di+114Eh], 0FFh; JZ
@@ -3550,7 +3551,7 @@ static void v2_sub_1DF6A(uint8_t* s) {
             int16_t cx_v = (int16_t)*(uint16_t*)(s + di + 0x0F4D); // old X
             int16_t dx_v = (int16_t)*(uint16_t*)(s + di + 0x104D); // old Y
             int16_t bp_v = ((int16_t)si > 5) ? 5 : (int16_t)si;   // bp=5 for large, si for small
-            v2_sub_1CD7D(s, cx_v, dx_v, (int16_t)si, bp_v);        // set fs dirty + VGA render (commented)
+            v2_sprite_draw_1CD7D(s, cx_v, dx_v, (int16_t)si, bp_v);        // set fs dirty + VGA render (commented)
         }
         // Position copy: "last rendered" ← "current" (both paths)
         *(uint16_t*)(s + di + 0x0F4D) = *(uint16_t*)(s + di + 0x0D4D);  // MOV [0F4Dh], cx
@@ -3566,7 +3567,7 @@ static void v2_sub_1DF6A(uint8_t* s) {
 // Original: PUSH si; PUSH di; SHL di,1; ADD si,[di-6CBA]; MOV [si-6A94],al; POP di; POP si; INC si; RETN
 // Input: al = character, si = column, di = row.
 // Writes: ds:[(uint16_t)(si + ds:[di*2 + 0x9346] + 0x956C)] = al, then si++
-static void v2_sub_1241e(uint8_t* s, uint8_t ch, uint16_t& si_col, uint16_t di_row) {
+static void v2_glyph_put_1241e(uint8_t* s, uint8_t ch, uint16_t& si_col, uint16_t di_row) {
     uint16_t di2 = di_row << 1;                                      // SHL di, 1
     uint16_t row_off = *(uint16_t*)(s + (uint16_t)(di2 - LUT_FIELD_OFF));   // [di-6CBAh]
     uint16_t addr = (uint16_t)(si_col + row_off - 0x6A94);           // ADD si,[...]; [si-6A94h]
@@ -3641,7 +3642,7 @@ static void v2_text_align_12549(uint8_t* s, uint16_t ax) {
 // Input: si = column, di = row, ax (on stack) = alignment param (passed as 'align').
 // Uses: word_28514 (width), word_28516 (height), word_28518, word_2851A.
 // Writes: word_2854C, word_2854E, glyph buffer entries.
-static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
+static void v2_text_frame_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
     extern int v2_dbg_pre_vm_iter;
     fprintf(stderr, "V2-DLG-ADD[f%d]: sub_12388 si=%04X di=%04X align=%02X lvl=%04X w=%u h=%u 956B=%02X\n",
         v2_dbg_pre_vm_iter, si, di, align, *(uint16_t*)(s + DS_LEVEL),
@@ -3652,11 +3653,11 @@ static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
     uint16_t height = *(uint16_t*)(s + DS_SCRATCH_36);                       // word_28516
 
     // Top row: left corner + middle + right corner
-    v2_sub_1241e(s, 0x12, si, di);                                   // top-left
+    v2_glyph_put_1241e(s, 0x12, si, di);                                   // top-left
     { uint16_t cx = width - 2;
       for (uint16_t i = 0; i < cx; i++)
-          v2_sub_1241e(s, 0x13, si, di); }                          // top-middle × (width-2)
-    v2_sub_1241e(s, 0x14, si, di);                                   // top-right
+          v2_glyph_put_1241e(s, 0x13, si, di); }                          // top-middle × (width-2)
+    v2_glyph_put_1241e(s, 0x14, si, di);                                   // top-right
 
     // Reset column, next row
     si = *(uint16_t*)(s + DS_TEXT_COL);                                     // si = word_2854C
@@ -3665,22 +3666,22 @@ static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
     // Middle rows: left border + spaces + right border
     { uint16_t cx = height - 2;
       for (uint16_t r = 0; r < cx; r++) {
-          v2_sub_1241e(s, 0x15, si, di);                             // left border
+          v2_glyph_put_1241e(s, 0x15, si, di);                             // left border
           { uint16_t dx = width - 2;
             for (uint16_t c = 0; c < dx; c++)
-                v2_sub_1241e(s, 0x20, si, di); }                    // interior spaces
-          v2_sub_1241e(s, 0x16, si, di);                             // right border (ax=0x16)
+                v2_glyph_put_1241e(s, 0x20, si, di); }                    // interior spaces
+          v2_glyph_put_1241e(s, 0x16, si, di);                             // right border (ax=0x16)
           si = *(uint16_t*)(s + DS_TEXT_COL);                               // reset column
           di++;                                                       // next row
       }
     }
 
     // Bottom row: left corner + middle + right corner
-    v2_sub_1241e(s, 0x17, si, di);                                   // bottom-left
+    v2_glyph_put_1241e(s, 0x17, si, di);                                   // bottom-left
     { uint16_t cx = width - 2;
       for (uint16_t i = 0; i < cx; i++)
-          v2_sub_1241e(s, 0x18, si, di); }                          // bottom-middle
-    v2_sub_1241e(s, 0x19, si, di);                                   // bottom-right
+          v2_glyph_put_1241e(s, 0x18, si, di); }                          // bottom-middle
+    v2_glyph_put_1241e(s, 0x19, si, di);                                   // bottom-right
 
     // Scroll indicator (0x1A/0x1B glyphs).
     // Cherry-pick 3f2114a: orig at eip 0x23F1 added unconditional `goto loc_12415`
@@ -3699,7 +3700,7 @@ static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
         } else {
             ind_ch = 0x1B;                                           // scroll indicator left
         }
-        v2_sub_1241e(s, ind_ch, ind_si, ind_di);                    // call sub_1241e
+        v2_glyph_put_1241e(s, ind_ch, ind_si, ind_di);                    // call sub_1241e
     }
     (void)align;
 
@@ -3713,7 +3714,7 @@ static void v2_sub_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
 // Original: reads bytes from es:bx (seg001), writes glyphs via sub_1241e.
 // Input: si = start column, di = start row, bx = offset in seg001 (past width/height).
 // Uses: word_28514 (width). Writes: word_2854C, glyph buffer.
-static void v2_loc_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
+static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
     if (!v2_m2c_base) return;
     uint8_t* seg001 = v2_m2c_base + 0x9480;
     *(uint16_t*)(s + DS_TEXT_COL) = si;                                     // MOV word_2854C, si
@@ -3726,7 +3727,7 @@ static void v2_loc_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
             // CR: fill rest of line with spaces
             if (cx != 0) {                                           // JCXZ loc_124ec
                 while (cx > 0) {                                     // loc_124e5
-                    v2_sub_1241e(s, 0x20, si, di);                   // call sub_1241e(0x20)
+                    v2_glyph_put_1241e(s, 0x20, si, di);                   // call sub_1241e(0x20)
                     cx--;                                             // LOOP
                 }
             }
@@ -3740,7 +3741,7 @@ static void v2_loc_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
             continue;                                                 // JMP loc_124d8
         }
         // Normal character
-        v2_sub_1241e(s, al, si, di);                                 // loc_12502: call sub_1241e
+        v2_glyph_put_1241e(s, al, si, di);                                 // loc_12502: call sub_1241e
         bx++;                                                         // INC bx
         cx--;                                                         // DEC cx
     }
@@ -3750,7 +3751,7 @@ static void v2_loc_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
 // Original flow: sub_12515 → sub_12529 → sub_12549 → sub_12388 → loc_124c5.
 // sub_12549 at eip=0x24B9 (recovered: E8 8D 00, decompiler omitted).
 // Input: si = start column, di = start row. Uses ds:0x2A (text index set by caller).
-static void v2_loc_124A9(uint8_t* s, uint16_t si, uint16_t di) {
+static void v2_text_box_124A9(uint8_t* s, uint16_t si, uint16_t di) {
     if (!v2_m2c_base) return;
     uint16_t bx = *(uint16_t*)(s + DS_TEXT_IDX);                           // MOV bx, word_2850A
     v2_text_dims_12529(s, bx);                                              // sub_12529 (bx += 2)
@@ -3758,24 +3759,24 @@ static void v2_loc_124A9(uint8_t* s, uint16_t si, uint16_t di) {
     uint16_t ax_h = *(uint16_t*)(s + DS_SCRATCH_36);
     v2_text_align_12549(s, ax_h);                                            // sub_12549 at eip=0x24B9
     uint16_t save_si = si, save_di = di;
-    v2_sub_12388(s, si, di, (uint8_t)ax_h);                          // sub_12388 (PUSHes ax for CMP al,6)
+    v2_text_frame_12388(s, si, di, (uint8_t)ax_h);                          // sub_12388 (PUSHes ax for CMP al,6)
     di = save_di + 1;
     si = save_si + 1;
-    v2_loc_124c5(s, si, di, bx);
+    v2_text_render_124c5(s, si, di, bx);
 }
 
 // sub_111a1: clear sprite table — 0xE00 words at ds:0x44D
-static void v2_sub_111a1(uint8_t* s) {
+static void v2_clear_sprite_table_111a1(uint8_t* s) {
     memset(s + OBJ_SPRITE_FLAGS, 0, 0xE00 * 2);
 }
 
 // sub_11192: clear bit flags — 16 bytes at ds:0x356
-static void v2_sub_11192(uint8_t* s) {
+static void v2_clear_bit_flags_11192(uint8_t* s) {
     for (int i = 0; i < 0x10; i++) s[0x356 + i] = 0;
 }
 
 // sub_111df: clear viking state bytes
-static void v2_sub_111df(uint8_t* s) {
+static void v2_clear_viking_state_111df(uint8_t* s) {
     s[0x0342] = 0; // byte_28822
     s[0x0343] = 0; // byte_28823
     s[0x0344] = 0; // byte_28824
@@ -3786,7 +3787,7 @@ static void v2_sub_111df(uint8_t* s) {
 }
 
 // sub_12816: clear UI glyph list — byte_31A4B=0, clear 0x1B8 words at ds:0x956C
-static void v2_sub_12816(uint8_t* s) {
+static void v2_glyph_list_clear_12816(uint8_t* s) {
     extern int v2_dbg_pre_vm_iter;
     fprintf(stderr, "V2-DLG-CLR[f%d]: sub_12816 lvl=%04X 956B_before=%02X\n",
         v2_dbg_pre_vm_iter, *(uint16_t*)(s + DS_LEVEL), s[0x956B]);
@@ -3796,7 +3797,7 @@ static void v2_sub_12816(uint8_t* s) {
 
 // sub_1133a: init HUD from spawn table extension.
 // Reads viking type + item data for each viking from spawn table.
-static uint16_t v2_sub_1133a(uint8_t* s, uint16_t di) {
+static uint16_t v2_hud_init_1133a(uint8_t* s, uint16_t di) {
     uint16_t ax = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
     s[0x2583] = (uint8_t)ax; // byte_2AA63
     di += 2;
@@ -3826,7 +3827,7 @@ static void v2_clear_velocities_137f1(uint8_t* s) {
 }
 
 // sub_12fb3: clear sprite resource table (ds:0x12AD and ds:0x12ED)
-static void v2_sub_12fb3(uint8_t* s) {
+static void v2_clear_sprite_res_12fb3(uint8_t* s) {
     for (uint16_t si = 0; si < 0x100; si += 2) {
         *(uint16_t*)(s + si + OBJ_SPRITE_FLAGS) = 0; // clear sprite flags
     }
@@ -3942,7 +3943,7 @@ static void v2_scroll_init_173c7(uint8_t* s) {
 // sub_11439: init render flag + first page flip.
 // if !(byte_2AAAF & 0x42): call sub_16ded (VGA tile row rendering)
 // then jmp sub_16775 (page flip — tail call)
-static void v2_sub_11439(uint8_t* s) {
+static void v2_render_flag_init_11439(uint8_t* s) {
     if (!(s[DS_LEVEL_FLAGS] & 0x42)) {
         // sub_16ded: exact DS writes from VGA tile row init.
         // VGA rendering (sub_16dc1 + sub_171dc) skipped — v2 renders each frame.
@@ -3966,8 +3967,8 @@ static void v2_sub_11439(uint8_t* s) {
             *(uint16_t*)(s + 0x930F) = *(uint16_t*)(s + (uint16_t)(p3 - 0x7608)) + dx2;
             uint16_t p1 = *(uint16_t*)(s + 0x9309);
             *(uint16_t*)(s + 0x930B) = *(uint16_t*)(s + (uint16_t)(p1 - 0x7608)) + dx2;
-            v2_sub_16dc1(s, bx, 1);     // sub_16dc1: VGA column tile render (1 tile)
-            v2_sub_171dc(s);             // sub_171dc: VGA page copy
+            v2_tile_row_16dc1(s, bx, 1);     // sub_16dc1: VGA column tile render (1 tile)
+            v2_page_copy_col_171dc(s);             // sub_171dc: VGA page copy
             bx += *(uint16_t*)(s + 0x8F6C);
             *(uint16_t*)(s + 0x9305) += 2;
             *(uint16_t*)(s + 0x9307) += 2;
@@ -4012,7 +4013,7 @@ static void v2_spawn_table_13ba5(uint8_t* s) {
 // Sets ds:0x34/0x36/0x38/0x3A = clamped viewport bounds.
 // Iterates objects si=6..table_end, sets flag 0x200 for those outside bounds.
 // Called from POST_FLIP2 pass and sub_115d2 init.
-static void v2_sub_13c0c(uint8_t* s) {
+static void v2_despawn_bounds_13c0c(uint8_t* s) {
     // FLAG-MODEL NOTE (found by FNSELFTEST, 33837 diverging synthetic cases):
     // JL/JGE are SF^OF — the signed comparison of the LAST SUB/CMP's two
     // OPERANDS — not "sign of the difference". Modelling them as
@@ -4059,7 +4060,7 @@ static void v2_sub_13c0c(uint8_t* s) {
 // loc_13a94: clamp bounds + spawn loop. Exact replica of original loc_13a94 → sub_13ae0.
 // Called from sub_13a14/sub_13a34/loc_13a54/loc_13a74 (scroll spawn) and sub_13a0e (init spawn).
 // Bounds (ds:0x34/0x36/0x38/0x3A) must be set by caller before calling.
-static void v2_loc_13a94(uint8_t* s) {
+static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
     if ((int16_t)*(uint16_t*)(s + DS_SCRATCH_34) < 0) *(uint16_t*)(s + DS_SCRATCH_34) = 0;
     if ((int16_t)*(uint16_t*)(s + DS_SCRATCH_36) < 0) *(uint16_t*)(s + DS_SCRATCH_36) = 0;
     if ((int16_t)*(uint16_t*)(s + DS_SCRATCH_38) < 0) *(uint16_t*)(s + DS_SCRATCH_38) = 0;
@@ -4120,7 +4121,7 @@ static void v2_spawn_visible_13a0e(uint8_t* s) {
     *(uint16_t*)(s + DS_SCRATCH_38) = ax;
     ax += 0xD0;
     *(uint16_t*)(s + DS_SCRATCH_3A) = ax;
-    v2_loc_13a94(s);
+    v2_spawn_bounds_scan_13a94(s);
 }
 
 // sub_1167a: sprite resource loading from level data.
@@ -4423,7 +4424,7 @@ loc_1154a:
 }
 
 // sub_11383: find end of spawn table. Returns di = end index + 2.
-static uint16_t v2_sub_11383(uint8_t* s) {
+static uint16_t v2_spawn_table_end_11383(uint8_t* s) {
     uint16_t di = 0;
     while (*(uint16_t*)(s + (uint16_t)(di + 0x25F6)) != 0xFFFF) di += 0x0E;   // 16-bit wrap
     return di + 2;
@@ -4460,7 +4461,7 @@ static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
 // sub_12d2c: invincibility/flash shake-decay timers — exact replica
 // (eips 0x2D2C..0x2D6B). Extracted from two identical inline copies
 // (POST_FLIP1 + the sub_115d2 pass block).
-static void v2_sub_12d2c(uint8_t* s) {
+static void v2_flash_timers_12d2c(uint8_t* s) {
     if (*(uint16_t*)(s + 0x3A2) != 0) {
         *(uint16_t*)(s + 0x3A2) -= 1;
         if (*(uint16_t*)(s + 0x39A) != 0)
@@ -4480,7 +4481,7 @@ static void v2_sub_12d2c(uint8_t* s) {
         *(uint16_t*)(s + 0x3A0) = 0;
     }
 }
-extern "C" void v2_fntest_call_sub_12d2c(uint8_t* test_shadow) { v2_sub_12d2c(test_shadow); }
+extern "C" void v2_fntest_call_sub_12d2c(uint8_t* test_shadow) { v2_flash_timers_12d2c(test_shadow); }
 extern "C" uint16_t v2_fntest_call_sub_112ae(uint8_t* test_shadow, uint16_t di) {
     return v2_load_viking_cfg_112ae(test_shadow, di);
 }
@@ -4515,7 +4516,7 @@ extern "C" uint8_t* v2_fntest_sprite_shadow_win(uint32_t off) {
 }
 
 // sub_11784: init active viking. word_288A2=0, word_288A4=0. 0 bytes consumed.
-static void v2_sub_11784(uint8_t* s) {
+static void v2_active_viking_init_11784(uint8_t* s) {
     *(uint16_t*)(s + 0x03C2) = 0; // word_288A2 (active viking)
     *(uint16_t*)(s + 0x03C4) = 0; // word_288A4 (previous viking)
 }
@@ -4552,7 +4553,7 @@ static void v2_clear_pages_16880(uint8_t* s) {
 
 // sub_116e3: init level descriptor. Sets transition mode based on level number.
 // sub_12ce4: viking health init. Exact replica.
-static void v2_sub_12ce4(uint8_t* s) {
+static void v2_viking_health_init_12ce4(uint8_t* s) {
     { static int _n = 0; if (++_n <= 8)   // capped: selftest calls this thousands of times
         fprintf(stderr, "V2-12CE4: called, 0x423 before=%02X\n", s[(DS_PORTRAIT_PREV)]); }
     *(uint16_t*)(s + (DS_HUD_SEL)) = 0;
@@ -4568,7 +4569,7 @@ static void v2_sub_12ce4(uint8_t* s) {
     *(uint16_t*)(s + 0x42D) = 0;
 }
 
-static void v2_sub_116e3(uint8_t* s) {
+static void v2_level_desc_init_116e3(uint8_t* s) {
     *(uint16_t*)(s + 0x0352) = 0x1E;  // word_28832
     *(uint16_t*)(s + 0x03CE) = 0;     // word_288AE
     *(uint16_t*)(s + 0x03D0) = 0;     // word_288B0
@@ -4582,7 +4583,7 @@ static void v2_sub_116e3(uint8_t* s) {
         if (ac == 1) goto transition;
         if (ac == 0x8002) {
             // loc_11780: jmp sub_12ce4 — tail call (unconditional!)
-            v2_sub_12ce4(s);
+            v2_viking_health_init_12ce4(s);
             return;
         }
         if (ac == 0x8001) {
@@ -4616,14 +4617,14 @@ transition:
     *(uint16_t*)(s + 0x2191) = 2; // word_2A671
     v2_read_chunk(chunk_ax, s + 0x2193, 0x10000 - 0x2193, s);
     // jmp sub_12ce4 — tail call (unconditional!)
-    v2_sub_12ce4(s);
+    v2_viking_health_init_12ce4(s);
 }
 
 static void v2_load_level(uint8_t* shadow); // forward decl
 static void v2_load_template(uint8_t* shadow);
 static void v2_load_level_data(uint8_t* shadow);
-static void v2_sub_10704(uint8_t* s);   // scroll clamp (defined after the movers)
-static void v2_sub_10753(uint8_t* s);
+static void v2_scroll_step1_10704(uint8_t* s);   // apply pending scroll, step 1 (defined after the movers)
+static void v2_scroll_step2_10753(uint8_t* s);
 
 // ============================================================================
 // sub_13d68 / sub_13dd6 / sub_13e15 — sub-sprite slot allocation family.
@@ -4640,7 +4641,7 @@ static void v2_sub_10753(uint8_t* s);
 // candidate end at EVERY loc_13daa entry (also on later-failed candidates).
 // Returns CF: true = no space (STC). The caller copies ds:0x3A/0x38 into
 // [si+0x1A85]/[si+0x1AAD] on success (orig sub_13809 eips 0x3839-0x3843).
-static bool v2_sub_13d68(uint8_t* s, uint16_t si) {
+static bool v2_slot_alloc_13d68(uint8_t* s, uint16_t si) {
     uint16_t di, lim;
     uint16_t ds374 = *(uint16_t*)(s + 0x374);
     if (ds374 == 0)      { di = 0x48; lim = 0x100; }   // loc_13d8c
@@ -4677,7 +4678,7 @@ static bool v2_sub_13d68(uint8_t* s, uint16_t si) {
 // signed JL bottom test). ds:0x2E73 and [si+0x1855] are re-read EVERY
 // iteration exactly like orig — the loop's own writes can alias them at
 // out-of-pool di values, so hoisting would diverge.
-static void v2_sub_13dd6(uint8_t* s, uint16_t si) {
+static void v2_slot_init_13dd6(uint8_t* s, uint16_t si) {
     uint16_t ax = (uint16_t)(((*(uint16_t*)(s + (uint16_t)(si + OBJ_FLAGS)) & 0xCE) << 3) | 0x8000);
     uint16_t cx = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_END));
     uint16_t di = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_SLOT));
@@ -4694,7 +4695,7 @@ static void v2_sub_13dd6(uint8_t* s, uint16_t si) {
 // sub_13e15 (orig eips 0x3E15-0x3E51): per-slot size/type init. bp = 2*(flags
 // bit0), constant across the loop. do-while like orig (first slot always
 // written, signed JL bottom test).
-static void v2_sub_13e15(uint8_t* s, uint16_t si) {
+static void v2_slot_size_init_13e15(uint8_t* s, uint16_t si) {
     uint16_t bp = (uint16_t)((*(uint16_t*)(s + (uint16_t)(si + OBJ_FLAGS)) & 1) << 1);
     uint16_t cx = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_END));
     uint16_t di = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_SLOT));
@@ -4814,7 +4815,7 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
     // inline copy that drifted from the op_14 one (task #176): pre-tested
     // loops instead of orig's do-while, hoisted per-iteration reads.
     if (*(uint16_t*)(s + new_si + OBJ_SUB_COUNT) != 0) {
-        if (v2_sub_13d68(s, new_si)) {
+        if (v2_slot_alloc_13d68(s, new_si)) {
             // JC loc_13860: no space — clear slot, creation fails.
             *(uint16_t*)(s + new_si + OBJ_CODE_SEG) = 0;
             return false;
@@ -4822,8 +4823,8 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
         // orig sub_13809 eips 0x3839-0x3843: ds:0x3A/0x38 -> [si+1A85]/[si+1AAD]
         *(uint16_t*)(s + new_si + OBJ_SUB_SLOT) = *(uint16_t*)(s + DS_SCRATCH_3A);
         *(uint16_t*)(s + new_si + OBJ_SUB_END) = *(uint16_t*)(s + DS_SCRATCH_38);
-        v2_sub_13dd6(s, new_si);
-        v2_sub_13e15(s, new_si);
+        v2_slot_init_13dd6(s, new_si);
+        v2_slot_size_init_13e15(s, new_si);
     }
     // Update table end
     if ((int16_t)new_si >= (int16_t)*(uint16_t*)(s + DS_OBJ_COUNT)) {
@@ -4841,7 +4842,7 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
 // sub_12948: DOS memory resize + critical error handler + PRNG seed.
 // Original: INT 21h/4Ah (resize), INT 21h/35h/25h (interrupt vectors), sub_16528
 //           (keyboard INT 9 handler), INT 21h/2Ch (get time → PRNG seed).
-static void v2_sub_12948(uint8_t* s) {
+static void v2_dos_init_12948(uint8_t* s) {
     // INT 21h/4Ah: resize memory block — not needed (no DOS memory management)
     // INT 21h/35h: get interrupt vector 24h → ds:0x86AC/0x86AE (old vector saved)
     // INT 21h/25h: set interrupt vector 24h — not needed
@@ -4860,7 +4861,7 @@ static void v2_sub_12948(uint8_t* s) {
 // sub_12989: open DATA.DAT, read header, validate, read game config.
 // Original: INT 21h/3Dh (open file), fread header, BIOS checksum, DOS version check,
 //           joystick calibration, copy sound driver flags from header.
-static void v2_sub_12989(uint8_t* s) {
+static void v2_open_data_dat_12989(uint8_t* s) {
     // INT 21h/3Dh: open "DATA.DAT" for reading
     // Original stores handle in ds:0x2BB2
     if (!v2_data_handle) {
@@ -4958,7 +4959,7 @@ uint16_t v2_get_alloc_size_para(uint16_t seg_val) {
 
 // Apply recorded MCB snapshots into v2 shadow buffers.
 // Strategy: each shadow buffer X corresponds to a DosMemAlloc'd segment with a known
-// size (the alloc request from v2_sub_12ab8). MCB at (alloc_seg-1)*16 falls into
+// size (the alloc request from v2_alloc_segments_12ab8). MCB at (alloc_seg-1)*16 falls into
 // shadow Y iff (Y.seg * 16) <= mcb_lin < (Y.seg + Y.alloc_size_para) * 16.
 // We derive Y.alloc_size_para from the recorded MCB's m_size field (since the alloc
 // for shadow Y is one of the v2_mcb_snaps with that alloc_seg).
@@ -5004,7 +5005,7 @@ void v2_apply_mcb_snapshots(uint8_t* shadow_ds) {
 // B4 verify: cross-check v2's requested paragraphs vs orig's recorded MCB size.
 // Catches regressions in alloc-size constants (sub_12ab8 chunks, sound init etc.)
 // that would let v2 silently get a smaller-than-expected segment → overflow on write.
-static uint16_t v2_sub_10d9f(uint16_t paragraphs) {
+static uint16_t v2_alloc_recorded_10d9f(uint16_t paragraphs) {
     if (v2_alloc_replay_idx < v2_alloc_record_count) {
         uint16_t seg = v2_alloc_record[v2_alloc_replay_idx++];
         uint16_t orig_size = v2_get_alloc_size_para(seg);
@@ -5025,32 +5026,32 @@ static uint16_t v2_sub_10d9f(uint16_t paragraphs) {
     static uint16_t v2_synth_seg = 0x1000;
     uint16_t seg = v2_synth_seg;
     v2_synth_seg += paragraphs;
-    fprintf(stderr, "V2: v2_sub_10d9f(%04X) → synth seg=%04X\n", paragraphs, seg);
+    fprintf(stderr, "V2: v2_alloc_recorded_10d9f(%04X) → synth seg=%04X\n", paragraphs, seg);
     return seg;
 #else
     // Fallback: no recorded value yet (shouldn't happen if original ran first)
-    fprintf(stderr, "V2: v2_sub_10d9f(%04X) — no recorded alloc available!\n", paragraphs);
+    fprintf(stderr, "V2: v2_alloc_recorded_10d9f(%04X) — no recorded alloc available!\n", paragraphs);
     return 0;
 #endif
 }
 
-static void v2_sub_12ab8(uint8_t* s) {
+static void v2_alloc_segments_12ab8(uint8_t* s) {
     // Original: sub_10d9f(bx) = INT 21h/48h: allocate bx paragraphs, returns segment in ax.
     // v2 calls sub_10d9f (DosMemAlloc wrapper) to get the same segment addresses.
-    // Uses v2_sub_10d9f which replays allocation results recorded by original.
-    *(uint16_t*)(s + DS_SEG_TILEGFX) = v2_sub_10d9f(0x8B8);   // tilegfx
-    *(uint16_t*)(s + DS_SEG_GS) = v2_sub_10d9f(0x200);   // GS masks
-    *(uint16_t*)(s + 0x2E5D) = v2_sub_10d9f(0x360);   // GS tiledata
-    *(uint16_t*)(s + DS_SEG_TILEMAP) = v2_sub_10d9f(0x313);   // tilemap
-    *(uint16_t*)(s + DS_SEG_FS) = v2_sub_10d9f(0xC08);   // FS
-    *(uint16_t*)(s + DS_SEG_SPRITE) = v2_sub_10d9f(0x700);   // sprites
+    // Uses v2_alloc_recorded_10d9f which replays allocation results recorded by original.
+    *(uint16_t*)(s + DS_SEG_TILEGFX) = v2_alloc_recorded_10d9f(0x8B8);   // tilegfx
+    *(uint16_t*)(s + DS_SEG_GS) = v2_alloc_recorded_10d9f(0x200);   // GS masks
+    *(uint16_t*)(s + 0x2E5D) = v2_alloc_recorded_10d9f(0x360);   // GS tiledata
+    *(uint16_t*)(s + DS_SEG_TILEMAP) = v2_alloc_recorded_10d9f(0x313);   // tilemap
+    *(uint16_t*)(s + DS_SEG_FS) = v2_alloc_recorded_10d9f(0xC08);   // FS
+    *(uint16_t*)(s + DS_SEG_SPRITE) = v2_alloc_recorded_10d9f(0x700);   // sprites
 
     // Sound driver check: if !(ds:0x302 & ds:0x304 & 0x8000)
     // Original allocates sound driver buffer, decompresses 3 sound chunks, inits AIL.
     // For v2: AIL not used. Copy sound-related DS fields from real DS if available.
     if (!(*(uint16_t*)(s + DS_MUSIC_MUTE) & *(uint16_t*)(s + DS_SFX_MUTE) & 0x8000)) {
         // sub_10d9f(0xE47) → ds:0x992C (sound driver buffer base seg)
-        uint16_t sound_buf_seg = v2_sub_10d9f(0xE47);
+        uint16_t sound_buf_seg = v2_alloc_recorded_10d9f(0xE47);
         *(uint16_t*)(s + 0x992C) = sound_buf_seg;
         *(uint16_t*)(s + 0x992A) = 0;
 
@@ -5098,13 +5099,13 @@ static void v2_sub_12ab8(uint8_t* s) {
     }
 
     // sub_10d9f(0x2ABA) → ds:0x2E77 (chunk buffer)
-    *(uint16_t*)(s + DS_SEG_CHUNK) = v2_sub_10d9f(0x2ABA);
+    *(uint16_t*)(s + DS_SEG_CHUNK) = v2_alloc_recorded_10d9f(0x2ABA);
     *(uint16_t*)(s + 0x2E75) = 0;
     *(uint16_t*)(s + DS_ANIM_PTR_HI) = *(uint16_t*)(s + DS_SEG_CHUNK);
     *(uint16_t*)(s + DS_ANIM_PTR_LO) = 0;
 
     // sub_10d9f(0xC00) → ds:0x2E67 (animdata)
-    *(uint16_t*)(s + DS_SEG_ANIM) = v2_sub_10d9f(0xC00);
+    *(uint16_t*)(s + DS_SEG_ANIM) = v2_alloc_recorded_10d9f(0xC00);
     // Decompress chunk 0x1C6 → animdata
     // ds:0x2E71 = 0x1C6 (current template chunk ID)
     *(uint16_t*)(s + 0x2E71) = 0x1C6;
@@ -5178,7 +5179,7 @@ static void v2_sub_12ab8(uint8_t* s) {
 // sub_17561: AIL sound driver init.
 // Original: complex AIL library initialization (sub_1C75D, sub_1C763, etc.)
 // For v2: sound handled by SDL wrappers, AIL not used.
-static void v2_sub_17561(uint8_t* s) {
+static void v2_ail_init_17561(uint8_t* s) {
     // sub_17561: AIL sound driver init. Verified with seg000 lines 17057-17149.
     // Every DS write replicated instruction-by-instruction.
 
@@ -5213,7 +5214,7 @@ static void v2_sub_17561(uint8_t* s) {
     *(uint16_t*)(s + 0xA39A) = 1;
 
     // 11. sub_10D96(bx=0xE00, ax=0) → DosMemAlloc → ds:9934 = segment
-    *(uint16_t*)(s + 0x9934) = v2_sub_10d9f(0xE1);
+    *(uint16_t*)(s + 0x9934) = v2_alloc_recorded_10d9f(0xE1);
     // 12. ds:9932 = 0
     *(uint16_t*)(s + 0x9932) = 0;
 
@@ -5227,7 +5228,7 @@ static void v2_sub_17561(uint8_t* s) {
             *(uint16_t*)(s + 0xA378) = 0;
             // INT 21h print string — NOP
             // Decompress chunk 0x215 → sound data segment ds:2E6B
-            // For v2: chunk already loaded by v2_sub_12ab8 (sound chunk path)
+            // For v2: chunk already loaded by v2_alloc_segments_12ab8 (sound chunk path)
             // Mirror orig sub_176bd(ax=0, bx=ds:2E6B, si=0) — play music
             fx::play_music(s, *(uint16_t*)(s + 0x2E6B));
             *(uint16_t*)(s + 0xA378) = 1;
@@ -5240,7 +5241,7 @@ static void v2_sub_17561(uint8_t* s) {
 // Original: INT 10h mode 13h, Mode X register setup, CRTC table load, clear VGA memory.
 // DS writes: ds:0x9300 = previous video mode, ds:0x92FF = 1 (VGA initialized flag).
 // VGA page address tables (ds:0x89F8 etc.) are STATIC data from EXE, already in DS.
-static void v2_sub_167ff(uint8_t* s) {
+static void v2_vga_modex_init_167ff(uint8_t* s) {
     // INT 10h/0Fh: get current video mode → ds:0x9300
     // Original saves current mode before switching to Mode X.
     // v2 standalone: no VGA, write 0x03 (text mode, expected diff)
@@ -5270,7 +5271,7 @@ static void v2_sub_167ff(uint8_t* s) {
 }
 
 // sub_12ca3: game state initialization — clear misc state variables.
-static void v2_sub_12ca3(uint8_t* s) {
+static void v2_game_state_init_12ca3(uint8_t* s) {
     s[0x32E] = 0;                        // byte ds:32Eh
     s[0x28] = 0;                         // byte ds:28h
     *(uint16_t*)(s + 0x3D4) = 0;         // word ds:3D4h
@@ -5286,8 +5287,8 @@ static void v2_sub_12ca3(uint8_t* s) {
 
 // sub_108b8: set starting level + init health.
 // Calls sub_12ce4 (health init), sets word_2AAA9 = 0x27 (level 39), word_288A2 = 0.
-static void v2_sub_108b8(uint8_t* s) {
-    v2_sub_12ce4(s);                      // sub_12CE4: health init
+static void v2_start_level_set_108b8(uint8_t* s) {
+    v2_viking_health_init_12ce4(s);                      // sub_12CE4: health init
     *(uint16_t*)(s + 0x25C9) = 0x27;     // word_2AAA9 = starting level (39 = 0x27)
     *(uint16_t*)(s + 0x03C2) = 0;        // word_288A2 = active viking = 0
 }
@@ -5309,13 +5310,13 @@ static void v2_startup(uint8_t* s) {
     // s pointer must be refreshed after load (it IS v2_vm_shadow_ds)
 
     printf("V2-STARTUP: running one-time init (sub_12948..sub_108b8)\n");
-    v2_sub_12948(s);   // PRNG seed
-    v2_sub_12989(s);   // DATA.DAT open + header
-    v2_sub_12ab8(s);   // segment alloc + chunk decompress (level tables)
-    v2_sub_17561(s);   // AIL sound init (skipped)
-    v2_sub_167ff(s);   // VGA Mode X (skipped, DS flags only)
-    v2_sub_12ca3(s);   // game state clear
-    v2_sub_108b8(s);   // starting level + health
+    v2_dos_init_12948(s);   // PRNG seed
+    v2_open_data_dat_12989(s);   // DATA.DAT open + header
+    v2_alloc_segments_12ab8(s);   // segment alloc + chunk decompress (level tables)
+    v2_ail_init_17561(s);   // AIL sound init (skipped)
+    v2_vga_modex_init_167ff(s);   // VGA Mode X (skipped, DS flags only)
+    v2_game_state_init_12ca3(s);   // game state clear
+    v2_start_level_set_108b8(s);   // starting level + health
 
     // --debug CLI flag: enable orig debug-build cheats (F4 INT 3, F5/F6 level
     // cheats). Orig conditional at eip 0xFE: TEST word_286E2, 0xFFFFh; JZ skip.
@@ -5332,7 +5333,7 @@ static void v2_startup(uint8_t* s) {
 // sub_1775d: load music track if changed. DS write: ds:0x25AF.
 // Mirror of seg000:15959-15980 (eip 0x775d-0x7790). Decompresses new music chunk
 // into es:di = ds:0x2E6B:0 via sub_10982; v2 writes shadow_sound + (es-snd_base)*16.
-static void v2_sub_1775d_helper(uint8_t* s) {
+static void v2_music_load_1775d_helper(uint8_t* s) {
     if (*(uint16_t*)(s + DS_MUSIC_MUTE) & 0x8000) return;
     uint16_t new_track = *(uint16_t*)(s + 0x25B8) & 0xFF;
     if (new_track == *(uint16_t*)(s + 0x25AF)) return;
@@ -5362,7 +5363,7 @@ static void v2_sub_1775d_helper(uint8_t* s) {
 // addition INLINED into orig path). So in default mode, fade_music runs from orig.
 // v2 mirror MUST NOT also call fade_music — would cause double-fade (volume reset
 // glitch). The #ifdef V2_ONLY guards v2 from calling fade_music when orig also will.
-static void v2_sub_178f1_helper(const uint8_t* s) {
+static void v2_music_fade_178f1_helper(const uint8_t* s) {
     if (*(uint16_t*)(s + DS_MUSIC_MUTE) != 0) return;  // music muted/off (TEST + JNZ exit)
     // Target v2_pool only — orig path's fade_music (in seg000 SDL inline) targets
     // orig_pool. Per-side pools = no double-fade conflict that the old single-pool
@@ -5386,7 +5387,7 @@ static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
     switch (snd_type) {
         case 0:  // loc_17791: sub_1775d + sub_176bd
             if (*(uint16_t*)(s + DS_MUSIC_MUTE) & 0x8000) break;
-            v2_sub_1775d_helper(s);
+            v2_music_load_1775d_helper(s);
             if (*(uint16_t*)(s + DS_MUSIC_MUTE) == 0) {
                 fx::play_music(s, *(uint16_t*)(s + 0x2E6B));
             }
@@ -5394,10 +5395,10 @@ static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
         case 1:  // NOP (locret_177b1)
             break;
         case 2:  // sub_178f1: AIL fade music
-            v2_sub_178f1_helper(s);
+            v2_music_fade_178f1_helper(s);
             break;
         case 3:  // sub_1775d: music track load only
-            v2_sub_1775d_helper(s);
+            v2_music_load_1775d_helper(s);
             break;
         case 4:  // NOP (locret_177b1)
             break;
@@ -5477,7 +5478,7 @@ static int16_t v2_delta_122f3(int16_t d) {
 // [di+1AD5h]!=0, (tx|ty)!=0) then the DO-WHILE slot loop
 // (v2_subsprite_delta_apply). Orig computes the Y delta FIRST (through
 // off_30BC0[bx] → dx), then the X delta (→ ax kept in ax).
-static void v2_sub_12fe5(uint8_t* s, uint16_t di, int type) {
+static void v2_subsprite_catchup_12fe5(uint8_t* s, uint16_t di, int type) {
     if (*(uint16_t*)(s + (uint16_t)(di + OBJ_CODE_SEG)) == 0) return;
     if (*(uint16_t*)(s + (uint16_t)(di + OBJ_SUB_COUNT)) == 0) return;
     int16_t dy = (int16_t)(*(uint16_t*)(s + (uint16_t)(di + OBJ_WORLD_Y))
@@ -5499,16 +5500,16 @@ static void v2_sub_12fe5(uint8_t* s, uint16_t di, int type) {
 // SUB di,2; JNS loop). The FIRST call happens unconditionally — with
 // [ds:372h]==0 orig still calls sub_12fe5 once with di=0xFFFE (its gates
 // then read wrapped addresses). DO-WHILE, not a pre-test loop.
-static void v2_sub_12fc6_family(uint8_t* s, int type) {
+static void v2_subsprite_walk_12fc6_family(uint8_t* s, int type) {
     int16_t di = (int16_t)(*(uint16_t*)(s + DS_OBJ_COUNT) - 2);
     do {
-        v2_sub_12fe5(s, (uint16_t)di, type);
+        v2_subsprite_catchup_12fe5(s, (uint16_t)di, type);
         di -= 2;                                        // SUB di,2 / JNS
     } while (di >= 0);
 }
-static void v2_sub_12fc6(uint8_t* s) { v2_sub_12fc6_family(s, 0); }
-static void v2_sub_12fcb(uint8_t* s) { v2_sub_12fc6_family(s, 1); }
-static void v2_sub_12fd0(uint8_t* s) { v2_sub_12fc6_family(s, 2); }
+static void v2_subsprite_walk_12fc6(uint8_t* s) { v2_subsprite_walk_12fc6_family(s, 0); }
+static void v2_subsprite_walk_12fcb(uint8_t* s) { v2_subsprite_walk_12fc6_family(s, 1); }
+static void v2_subsprite_walk_12fd0(uint8_t* s) { v2_subsprite_walk_12fc6_family(s, 2); }
 
 // #32 flip-ring: in-memory trace of page flips (tag 1) and sub_10130 entries
 // (tag 2). Dumped from headless_check_exit — printf probes shift the count.
@@ -5663,7 +5664,7 @@ static void v2_load_level_11080(uint8_t* s) {
     // the same path (m2c port early-RETN bypass removed in seg000).
     fx::stop_all_sfx(s);
     // sub_12816: clear UI glyph list
-    v2_sub_12816(s);
+    v2_glyph_list_clear_12816(s);
 
     // VGA page init
     *(uint16_t*)(s + DS_PAGE_DRAW) = 0;    // word_317D7
@@ -5676,19 +5677,19 @@ static void v2_load_level_11080(uint8_t* s) {
     *(uint16_t*)(s + DS_ANIM_PTR_HI) = *(uint16_t*)(s + DS_SEG_CHUNK); // dword segment = chunk buffer segment
 
     // sub_116e3: init level descriptor
-    v2_sub_116e3(s);
+    v2_level_desc_init_116e3(s);
     // sub_11784: init active viking
-    v2_sub_11784(s);
+    v2_active_viking_init_11784(s);
     // sub_16880: clear VGA / render buffer
     v2_clear_pages_16880(s);
     // sub_111a1: clear sprite table
     if (*(uint16_t*)(s + 0x25C9) == 0x002B)
         fprintf(stderr, "V2-117D: BEFORE sub_111a1: 0x%02X\n", s[0x117D]);
-    v2_sub_111a1(s);
+    v2_clear_sprite_table_111a1(s);
     if (*(uint16_t*)(s + 0x25C9) == 0x002B)
         fprintf(stderr, "V2-117D: AFTER sub_111a1: 0x%02X\n", s[0x117D]);
     // sub_11192: clear bit flags
-    v2_sub_11192(s);
+    v2_clear_bit_flags_11192(s);
 
     // Save level number
     uint16_t old_level = *(uint16_t*)(s + DS_LEVEL); // word_2AA8D
@@ -5699,11 +5700,11 @@ static void v2_load_level_11080(uint8_t* s) {
     // sub_111b1: template + level header load (NOT tile chunks — those come after sub_117ad)
     v2_load_template(s);
     // sub_111df: clear viking state
-    v2_sub_111df(s);
+    v2_clear_viking_state_111df(s);
     // sub_12ce4: viking health init (if level != 0x25)
     fprintf(stderr, "V2-3BA: before 12ce4: 0x3BA=%04X\n", *(uint16_t*)(s + DS_INPUT_PREV));
     if (new_level != 0x25) {
-        v2_sub_12ce4(s);
+        v2_viking_health_init_12ce4(s);
         fprintf(stderr, "V2-HEALTH: after 12ce4: 0x423=%02X 0x3BA=%04X\n", s[(DS_PORTRAIT_PREV)], *(uint16_t*)(s + DS_INPUT_PREV));
     }
 
@@ -5762,9 +5763,9 @@ static void v2_load_level_11080(uint8_t* s) {
     v2_load_level_data(s);
 
     // di passthrough chain — each function consumes part of spawn table extension:
-    uint16_t di = v2_sub_11383(s);       // find spawn table end
+    uint16_t di = v2_spawn_table_end_11383(s);       // find spawn table end
     di = v2_load_viking_cfg_112ae(s, di);            // init viking chunk data
-    di = v2_sub_1133a(s, di);            // init HUD config
+    di = v2_hud_init_1133a(s, di);            // init HUD config
     di = v2_load_sprites_1167a(s, di);            // sprite resource loading (fills ds:0x12AD/0x12ED)
     di = v2_load_anims_116ae(s, di);            // animation segment init
     v2_collision_lut_init_11397(s);                      // collision type lookup (not from di chain)
@@ -5834,7 +5835,7 @@ static void v2_load_level_11080(uint8_t* s) {
         fprintf(stderr,"V2-FS-SNAP-173c7: %d diffs\n",d);
     }
     // sub_11439: init word_3287C
-    v2_sub_11439(s);
+    v2_render_flag_init_11439(s);
     // sub_13ba5: init permanent objects from spawn table
     v2_spawn_table_13ba5(s);
     // sub_13a0e: full viewport scan — create objects visible in initial viewport
@@ -5954,7 +5955,7 @@ static void v2_load_level_11080(uint8_t* s) {
         // sub_12fc6: sub-sprite position delta type 0
         // MUST be called — updates sub-sprite X/Y from world position deltas.
         // Exact same function as in game loop RENDER1 phase.
-        v2_sub_12fc6(s);
+        v2_subsprite_walk_12fc6(s);
         slot2e_trace("SF1-post-12fc6");
         // PSNAP compare: v2 has finished SF1 post-VM (sub_1386b..sub_1064b + sub_12fc6).
         // Should match orig snap[T_SF1_POSTVM_END] at eip 0x15E7.
@@ -6000,9 +6001,9 @@ static void v2_load_level_11080(uint8_t* s) {
         v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
         { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf1-%d]: mode=%02X force=%02X\n",_dd4,s[0x117D],s[0x9568]); }
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
-        v2_sub_1C8F1(s, 0xFFFE);
+        v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
-        // ====== SUB-FRAME 2: collision pass 2 + scroll clamp 1 ======
+        // ====== SUB-FRAME 2: collision pass 2 + scroll apply 1 ======
         // sub_16775: PAGE FLIP 2
         v2_page_flip_16775(s);
         // PSNAP compare: after PF2 (eip 0x1608).
@@ -6016,12 +6017,12 @@ static void v2_load_level_11080(uint8_t* s) {
                 v2_run_collision_vm(s, si2);
             }
         }
-        // sub_10704: scroll clamp — consolidated into v2_sub_10704
-        // (v2_scroll_apply + the v2_sub_17496 mover family; lambdas removed)
+        // sub_10704: apply pending scroll, step 1 (speed table 0x2B82) — consolidated into v2_scroll_step1_10704
+        // (v2_scroll_apply + the v2_scroll_left_17496 mover family; lambdas removed)
         {
-            v2_sub_10704(s);
+            v2_scroll_step1_10704(s);
             // sub_12fcb: sub-sprite position delta type 1
-            v2_sub_12fcb(s);
+            v2_subsprite_walk_12fcb(s);
             v2_vsync_wait_10130(s); // sub_10130: VGA vsync wait
             v2_vsync_wait_10130(s);
             v2_bg_latch_1DE05(s);
@@ -6036,23 +6037,23 @@ static void v2_load_level_11080(uint8_t* s) {
         v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
             { static int _dd2=0; _dd2++; if(_dd2<=8) fprintf(stderr,"V2-115d2-DD9C[sf2-%d]: mode=%02X force=%02X\n",_dd2,s[0x117D],s[0x9568]); }
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
-            v2_sub_1C8F1(s, 0xFFFE);
+            v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
-            // ====== SUB-FRAME 3: scroll clamp 2 + viewport bounds + HUD ======
+            // ====== SUB-FRAME 3: scroll apply 2 + viewport bounds + HUD ======
             // sub_16775: PAGE FLIP 3
             v2_page_flip_16775(s);
             // PSNAP compare: after PF3 (eip 0x162F = end of SF2).
             v2_compare_phase_snap(V2_PSNAP_T_SF2_PF_END, "v2_level_init_render_115d2 SF2 post-PF");
-            // sub_10753: scroll clamp 2 — lookup at ds:[si*2 + 0x2B80]
-            v2_sub_10753(s); // sub_10753 (consolidated)
+            // sub_10753: apply pending scroll, step 2 — lookup at ds:[si*2 + 0x2B80]
+            v2_scroll_step2_10753(s); // sub_10753 (consolidated)
 
             // sub_13c0c: viewport bounds update + object visibility marking.
             // Consolidated: this was one of two correct inline copies while
-            // v2_sub_13c0c itself was dead code with a Y-clamp bug (0x3A from
+            // v2_despawn_bounds_13c0c itself was dead code with a Y-clamp bug (0x3A from
             // raw). Single implementation now, covered by FNSELFTEST.
-            v2_sub_13c0c(s);
+            v2_despawn_bounds_13c0c(s);
             // sub_12fd0: sub-sprite position delta type 2
-            v2_sub_12fd0(s);
+            v2_subsprite_walk_12fd0(s);
             // sub_11792: HUD full update (original: sub_120ff, sub_12199, loc_1205b, sub_11B0B)
             if ((s[DS_LEVEL_FLAGS] & 1) && *(uint16_t*)(s + DS_LEVEL) != 0x2C) {
                 // sub_120ff: healthbar state tracking (3 vikings)
@@ -6101,7 +6102,7 @@ static void v2_load_level_11080(uint8_t* s) {
             { static int _dd3=0; _dd3++; if(_dd3<=8) fprintf(stderr,"V2-115d2-DD9C[sf3-%d]: mode=%02X force=%02X\n",_dd3,s[0x117D],s[0x9568]); }
             // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
-            v2_sub_1C8F1(s, 0xFFFE);
+            v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
             // sub_16775: PAGE FLIP 4
             v2_page_flip_16775(s);
             // PSNAP compare: after PF4 (eip 0x1659 = end of SF3).
@@ -6124,7 +6125,7 @@ static void v2_load_level_11080(uint8_t* s) {
         v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
         // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
-        v2_sub_1C8F1(s, 0xFFFE);
+        v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
         v2_page_flip_16775(s); // PAGE FLIP 5 (tail jmp sub_16775 at eip 0x1677)
         // PSNAP compare: SF4 final flush (eip 0x1677).
         v2_compare_phase_snap(V2_PSNAP_T_SF4_END, "v2_level_init_render_115d2 SF4 final");
@@ -6156,13 +6157,13 @@ static void v2_load_level_11080(uint8_t* s) {
         s[0x0342] = (uint8_t)bx;
         s[0x0343] = (uint8_t)bx;
         s[0x0344] = (uint8_t)bx;
-        v2_sub_10f03(s); // sub_10f03: palette shading → ds:0x8202
+        v2_pal_shade_10f03(s); // sub_10f03: palette shading → ds:0x8202
         *(uint16_t*)(s + 0x7EFE) = 4;       // word_303DE = 4 (request palette write)
         *(uint16_t*)(s + 0x7F00) = 0x8202;  // word_303E0
         // Mirror orig sub_10f5d (seg000 eip 0xF7D..0xF80):
         //   CALL sub_16775 ; page flip (sets shadow[0xA39C]=1)
         //   CALL sub_10130 ; vsync wait — DECs 0xA39C to 0 AND dispatches palette
-        // Previously used v2_do_render_and_swap + v2_sub_10fe6, which skipped the
+        // Previously used v2_do_render_and_swap + v2_pal_dac_write_10fe6, which skipped the
         // DEC, leaving shadow[0xA39C]=1 while orig real[0xA39C]=0 → 1-byte diff.
         v2_page_flip_16775(s);
         v2_vsync_wait_10130(s);
@@ -6303,16 +6304,16 @@ static void v2_load_level_data(uint8_t* shadow) {
         //   ax=0x180,      di=0,      sub_10cd8
         //   retn
         uint16_t chunk = *(uint16_t*)(shadow + 0x25E1); // word_2AAC1
-        v2_sub_10cd8(shadow, chunk, 0x20C8);
-        v2_sub_10cd8(shadow, chunk, 0x66A8);
-        v2_sub_10cd8(shadow, chunk, 0xAC88);
-        v2_sub_10cd8(shadow, 0x180, 0);
+        v2_load_chunk_10cd8(shadow, chunk, 0x20C8);
+        v2_load_chunk_10cd8(shadow, chunk, 0x66A8);
+        v2_load_chunk_10cd8(shadow, chunk, 0xAC88);
+        v2_load_chunk_10cd8(shadow, 0x180, 0);
         v2_chunk_shadow_valid = true;
     } else if (flags & 0x20) {
         // loc_112a2 (HUD-only) — exact copy:
         //   ax=0x211, di=0, sub_10cd8
         //   jmp loc_1121b
-        v2_sub_10cd8(shadow, 0x211, 0);
+        v2_load_chunk_10cd8(shadow, 0x211, 0);
         v2_chunk_shadow_valid = true;
         goto tile_load;
     } else if (flags & 0x40) {
@@ -6323,10 +6324,10 @@ static void v2_load_level_data(uint8_t* shadow) {
         //   ax=0x213,      di=0,      sub_10cd8
         //   retn
         uint16_t chunk = *(uint16_t*)(shadow + 0x25E1); // word_2AAC1
-        v2_sub_10cd8(shadow, chunk, 0x20C8);
-        v2_sub_10cd8(shadow, chunk, 0x66A8);
-        v2_sub_10cd8(shadow, chunk, 0xAC88);
-        v2_sub_10cd8(shadow, 0x213, 0);
+        v2_load_chunk_10cd8(shadow, chunk, 0x20C8);
+        v2_load_chunk_10cd8(shadow, chunk, 0x66A8);
+        v2_load_chunk_10cd8(shadow, chunk, 0xAC88);
+        v2_load_chunk_10cd8(shadow, 0x213, 0);
         v2_chunk_shadow_valid = true;
     } else {
 tile_load:
@@ -6452,8 +6453,8 @@ void v2_render_callback() {
     // off_17974[word_303DE]: 0=nullsub_1, 2=sub_10ffc, 4=sub_10fe6.
     // sub_10fe6/sub_10ffc clear shadow[0x7EFE] = 0.
     uint16_t pal_mode = *(uint16_t*)(s + 0x7EFE);
-    if (pal_mode == 4) v2_sub_10fe6(s);
-    else if (pal_mode == 2) v2_sub_10ffc(s);
+    if (pal_mode == 4) v2_pal_dac_write_10fe6(s);
+    else if (pal_mode == 2) v2_pal_anim_10ffc(s);
 }
 
 // Legacy API: copy real DS + segments from original emulator.
@@ -6519,7 +6520,7 @@ static void v2_do_render_and_swap(); // forward decl
 //   5. JMP sub_11080                  (level loader, never returns to sub_10138)
 // Called from:
 //   - v2_game_loop_pre_vm buttons&3 path (when transition flag set at frame start)
-//   - v2 sub_10138 mirror inside v2_sub_1086f (when transition flag set during cmd loop)
+//   - v2 sub_10138 mirror inside v2_cmd_loop_1086f (when transition flag set during cmd loop)
 static void v2_run_transition_chain(uint8_t* shadow) {
     // 1. word_28814 = 0  (orig line 2206)
     *(uint16_t*)(shadow + 0x0334) = 0;
@@ -6824,7 +6825,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         uint16_t vp_y = *(uint16_t*)(shadow + DS_VIEWPORT_Y);
                         *(uint16_t*)(shadow + DS_SCRATCH_38) = vp_y - 0x10;
                         *(uint16_t*)(shadow + DS_SCRATCH_3A) = vp_y - 0x10 + 0xD0;
-                        v2_loc_13a94(shadow);
+                        v2_spawn_bounds_scan_13a94(shadow);
                     } else {
                         // sub_13a34: scroll down bounds
                         uint16_t vp_x = *(uint16_t*)(shadow + DS_VIEWPORT_X);
@@ -6833,7 +6834,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         uint16_t vp_y = *(uint16_t*)(shadow + DS_VIEWPORT_Y);
                         *(uint16_t*)(shadow + DS_SCRATCH_38) = vp_y - 0x10;
                         *(uint16_t*)(shadow + DS_SCRATCH_3A) = vp_y - 0x10 + 0xD0;
-                        v2_loc_13a94(shadow);
+                        v2_spawn_bounds_scan_13a94(shadow);
                     }
                 }
                 uint16_t scroll_x = *(uint16_t*)(shadow + 0x2581) >> 1;
@@ -6848,7 +6849,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         uint16_t vp_x = *(uint16_t*)(shadow + DS_VIEWPORT_X);
                         *(uint16_t*)(shadow + DS_SCRATCH_34) = vp_x - 0x10;
                         *(uint16_t*)(shadow + DS_SCRATCH_36) = vp_x - 0x10 + 0x160;
-                        v2_loc_13a94(shadow);
+                        v2_spawn_bounds_scan_13a94(shadow);
                     } else {
                         // loc_13a54: scroll right bounds
                         uint16_t vp_y = *(uint16_t*)(shadow + DS_VIEWPORT_Y);
@@ -6857,7 +6858,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         uint16_t vp_x = *(uint16_t*)(shadow + DS_VIEWPORT_X);
                         *(uint16_t*)(shadow + DS_SCRATCH_34) = vp_x - 0x10;
                         *(uint16_t*)(shadow + DS_SCRATCH_36) = vp_x - 0x10 + 0x160;
-                        v2_loc_13a94(shadow);
+                        v2_spawn_bounds_scan_13a94(shadow);
                     }
                 }
             }
@@ -6906,8 +6907,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         v2_bg_latch_1DE05(shadow);                                // sub_1DE05
         v2_game_loop_post_render(shadow);                    // sub_165aa + sub_16661
         v2_late_sprites_1DD9C(shadow);                                // sub_1DD9C
-        v2_sub_1C8F1(shadow, 0xFFFE);                       // sub_1C8F1(ax=FFFEh)
-        v2_sub_1E0C7(shadow);                                // sub_1E0C7
+        v2_dirty_tile_scan_1C8F1(shadow, 0xFFFE);                       // sub_1C8F1(ax=FFFEh)
+        v2_glyph_flush_1E0C7(shadow);                                // sub_1E0C7
         v2_page_flip_16775(shadow);                                // sub_16775
 
         // Slot index init (seg000 lines 3622-3629) + sub_11F47 (lines 3996-4033)
@@ -7525,10 +7526,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     v2_text_dims_12529(shadow, bx_text);                // read dims, bx_text += 2
                     v2_text_align_12549(shadow, ax_align);               // set alignment offsets
                     uint16_t save_si = si_pos, save_di = di_pos;
-                    v2_sub_12388(shadow, si_pos, di_pos, (uint8_t)ax_align); // draw box frame
+                    v2_text_frame_12388(shadow, si_pos, di_pos, (uint8_t)ax_align); // draw box frame
                     si_pos = save_si + 1;                          // POP si; INC si
                     di_pos = save_di + 1;                          // POP di; INC di
-                    v2_loc_124c5(shadow, si_pos, di_pos, bx_text); // render text
+                    v2_text_render_124c5(shadow, si_pos, di_pos, bx_text); // render text
                     shadow[0x956B] = 1;                            // byte_31A4B = 1
                     bx_read += 0x0A;                               // ADD bx, 0Ah
 
@@ -7540,7 +7541,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DA9));
                     uint16_t bx_text = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAD));
                     *(uint16_t*)(shadow + DS_SCRATCH_34) = 2;               // word_28514 = 2
-                    v2_loc_124c5(shadow, si_pos, di_pos, bx_text); // render text
+                    v2_text_render_124c5(shadow, si_pos, di_pos, bx_text); // render text
                     shadow[0x956B] = 1;                            // byte_31A4B = 1
                     bx_read += 0x08;                               // ADD bx, 8
 
@@ -7561,7 +7562,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         v2_page_flip_16775(shadow);                      // sub_16775
                         v2_vsync_wait_10130(shadow); // sub_10130: VGA vsync wait
                         // CALLF sub_1E0C7
-                        v2_sub_1E0C7(shadow);
+                        v2_glyph_flush_1E0C7(shadow);
                     }
                     // Render pass 1
                     v2_page_flip_16775(shadow);                          // sub_16775
@@ -7570,9 +7571,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     v2_game_loop_post_render(shadow);              // sub_165aa
                     v2_late_sprites_1DD9C(shadow);                          // CALLF sub_1DD9C
                     // MOV ax, 0xFFFE; CALLF sub_1C8F1 ��� flagged tiles (rendering only)
-                    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+                    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
                     // CALLF sub_1E0C7
-                    v2_sub_1E0C7(shadow);
+                    v2_glyph_flush_1E0C7(shadow);
                     v2_draw_ui(v2_current_ds_val);
                     // Render pass 2
                     v2_page_flip_16775(shadow);                          // sub_16775
@@ -7581,7 +7582,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     v2_game_loop_post_render(shadow);              // sub_165aa
                     v2_late_sprites_1DD9C(shadow);                          // CALLF sub_1DD9C
                     // MOV ax, 0xFFFE; CALLF sub_1C8F1
-                    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+                    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
                     // sub_16775 + sub_10130
                     v2_page_flip_16775(shadow);
                     // Cleanup
@@ -7624,7 +7625,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     uint8_t ch = (uint8_t)*(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DA9));
                     uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAB));
                     uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAD));
-                    v2_sub_1241e(shadow, ch, si_pos, di_pos);      // call sub_1241e
+                    v2_glyph_put_1241e(shadow, ch, si_pos, di_pos);      // call sub_1241e
                     shadow[0x956B] = 1;                            // byte_31A4B = 1
                     bx_read += 0x08;                               // ADD bx, 8
 
@@ -7637,7 +7638,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 *(uint16_t*)(shadow + DS_CMD_READ) = bx_read;
 
                 // CALLF sub_1E0C7 (line 1111)
-                v2_sub_1E0C7(shadow);
+                v2_glyph_flush_1E0C7(shadow);
                 v2_draw_ui(v2_current_ds_val);
 
                 // CALL sub_12352 (line 1112): input processing
@@ -7673,7 +7674,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // sub_13a14/sub_13a34: set viewport bounds + call loc_13a94 (object spawn loop).
     // loc_13a54/loc_13a74: same for X axis.
     {
-        auto loc_13a94 = [&shadow]() { v2_loc_13a94(shadow); };
+        auto loc_13a94 = [&shadow]() { v2_spawn_bounds_scan_13a94(shadow); };
 
         uint16_t scroll_y = *(uint16_t*)(shadow + 0x257F) >> 1;
         uint16_t track_y = *(uint16_t*)(shadow + 0x92F3);
@@ -7727,7 +7728,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 }
 
 // Viewport movers — called from v2_game_loop_post_vm (sub_1064b camera follow)
-static void v2_sub_17496(uint8_t* s, int16_t si_speed) {
+static void v2_scroll_left_17496(uint8_t* s, int16_t si_speed) {
     // Scroll left: ds:0x44 = max(ds:0x44 - si_speed, 0)
     if (*(uint16_t*)(s + 0x394)) return; // lock flag
     int16_t ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X);
@@ -7739,7 +7740,7 @@ static void v2_sub_17496(uint8_t* s, int16_t si_speed) {
     *(uint16_t*)(s + 0x34E) = (uint16_t)dx;
 }
 
-static void v2_sub_1746c(uint8_t* s, int16_t si_speed) {
+static void v2_scroll_right_1746c(uint8_t* s, int16_t si_speed) {
     // Scroll right: ds:0x44 = min(ds:0x44 + si_speed, ds:0x25A4)
     if (*(uint16_t*)(s + 0x394)) return;
     int16_t ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X);
@@ -7752,7 +7753,7 @@ static void v2_sub_1746c(uint8_t* s, int16_t si_speed) {
     *(uint16_t*)(s + 0x34E) = (uint16_t)dx;
 }
 
-static void v2_loc_174e9(uint8_t* s, int16_t si_speed) {
+static void v2_scroll_up_174e9(uint8_t* s, int16_t si_speed) {
     // Scroll up: ds:0x46 = max(ds:0x46 - si_speed, 0)
     if (*(uint16_t*)(s + 0x396)) return;
     int16_t ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y);
@@ -7764,7 +7765,7 @@ static void v2_loc_174e9(uint8_t* s, int16_t si_speed) {
     *(uint16_t*)(s + 0x350) = (uint16_t)dx;
 }
 
-static void v2_loc_174bf(uint8_t* s, int16_t si_speed) {
+static void v2_scroll_down_174bf(uint8_t* s, int16_t si_speed) {
     // Scroll down: ds:0x46 = min(ds:0x46 + si_speed, ds:0x25A6)
     if (*(uint16_t*)(s + 0x396)) return;
     int16_t ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y);
@@ -7785,20 +7786,20 @@ static void v2_loc_174bf(uint8_t* s, int16_t si_speed) {
 // POST_FLIP1 zone, POST_FLIP2 zone); covered by FNSELFTEST.
 static void v2_scroll_apply(uint8_t* s, uint16_t table_off) {
     uint16_t v = *(uint16_t*)(s + 0x3D8);
-    if (v != 0) v2_sub_17496(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+    if (v != 0) v2_scroll_left_17496(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
     else {
         v = *(uint16_t*)(s + 0x3DA);
-        if (v != 0) v2_sub_1746c(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+        if (v != 0) v2_scroll_right_1746c(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
     }
     v = *(uint16_t*)(s + 0x3DE);
-    if (v != 0) v2_loc_174e9(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+    if (v != 0) v2_scroll_up_174e9(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
     else {
         v = *(uint16_t*)(s + 0x3DC);
-        if (v != 0) v2_loc_174bf(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
+        if (v != 0) v2_scroll_down_174bf(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
     }
 }
-static void v2_sub_10704(uint8_t* s) { v2_scroll_apply(s, 0x2B82); }
-static void v2_sub_10753(uint8_t* s) { v2_scroll_apply(s, 0x2B80); }
+static void v2_scroll_step1_10704(uint8_t* s) { v2_scroll_apply(s, 0x2B82); }
+static void v2_scroll_step2_10753(uint8_t* s) { v2_scroll_apply(s, 0x2B80); }
 
 // sub_1064b (orig eips 0x64B-0x702): camera follow — compute per-axis scroll
 // amounts toward the active viking and move the viewport via the speed table
@@ -7808,7 +7809,7 @@ static void v2_sub_10753(uint8_t* s) { v2_scroll_apply(s, 0x2B80); }
 // COMPARE of the last SUB's OPERANDS, while the stored amount is the wrapped
 // difference itself. The old code compared the sign of the difference, which
 // diverges when the subtraction overflows.
-static void v2_sub_1064b(uint8_t* s) {
+static void v2_camera_follow_1064b(uint8_t* s) {
     *(uint16_t*)(s + 0x34E) = 0; // word_2882E
     *(uint16_t*)(s + 0x350) = 0; // word_28830
     *(uint16_t*)(s + 0x3D8) = 0; // word_288B8
@@ -7826,14 +7827,14 @@ static void v2_sub_1064b(uint8_t* s) {
             uint16_t amt = (uint16_t)(sum - obj);          // wrapped SUB value
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10; // CMP si,10h; JL
             *(uint16_t*)(s + 0x3D8) = amt;
-            v2_sub_17496(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+            v2_scroll_left_17496(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
         } else {                                           // loc_10698
             uint16_t diff = (uint16_t)(obj - *(uint16_t*)(s + DS_VIEWPORT_X));
             if ((int16_t)diff > (int16_t)0xB0) {           // SUB si,0B0h; JLE
                 uint16_t amt = (uint16_t)(diff - 0xB0);
                 if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
                 *(uint16_t*)(s + 0x3DA) = amt;
-                v2_sub_1746c(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+                v2_scroll_right_1746c(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
             }
         }
     }
@@ -7845,14 +7846,14 @@ static void v2_sub_1064b(uint8_t* s) {
             uint16_t amt = (uint16_t)(sum - obj);
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
             *(uint16_t*)(s + 0x3DE) = amt;
-            v2_loc_174e9(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+            v2_scroll_up_174e9(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
         } else {
             uint16_t diff = (uint16_t)(obj - *(uint16_t*)(s + DS_VIEWPORT_Y));
             if ((int16_t)diff > (int16_t)0x60) {
                 uint16_t amt = (uint16_t)(diff - 0x60);
                 if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
                 *(uint16_t*)(s + 0x3DC) = amt;
-                v2_loc_174bf(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+                v2_scroll_down_174bf(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
             }
         }
     }
@@ -7861,7 +7862,7 @@ static void v2_sub_1064b(uint8_t* s) {
 // Standalone sub_15fbe for use in game loop (before V2VM struct is defined).
 // sub_15fbe: object search with y_check = ds:[obj_di + 0x150D] + 1.
 // Returns true (carry set) if matching object found.
-static bool v2_gameloop_sub_15fbe(uint8_t* ds, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_gameloop_obj_search_down_15fbe(uint8_t* ds, uint16_t filter_si, uint16_t obj_di) {
     uint16_t y_check = *(uint16_t*)(ds + obj_di + OBJ_BBOX_Y1) + 1;
     *(uint16_t*)(ds + 0x34) = filter_si;
     *(uint16_t*)(ds + 0x36) = y_check;
@@ -8514,7 +8515,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
                 // loc_162e0: all other tile types (including >= 0x30)
                 // Viking platform check: sub_15fbe(0x89)
                 if (di < 6) {
-                    if (v2_gameloop_sub_15fbe(shadow, 0x89, di)) continue; // carry → loc_1637f
+                    if (v2_gameloop_obj_search_down_15fbe(shadow, 0x89, di)) continue; // carry → loc_1637f
                 }
 
                 // loc_162f4: re-read tile at feet (same result as tile_type)
@@ -8676,7 +8677,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_13916, "v2_game_loop_post_vm after-sub_13916");
 
     // sub_1064b: camera follow
-    v2_sub_1064b(shadow);
+    v2_camera_follow_1064b(shadow);
     v2_postvm_check_hash(shadow, "after-sub_1064b", 4);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1064B, "v2_game_loop_post_vm after-sub_1064b");
 
@@ -8692,7 +8693,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 // (orig loc_12758 eip 0x2782 / 0x27A2 — cmd_type=2 dialog dispatch) can call it
 // directly without the extra sub_16661 (object create/destroy on scroll) that
 // v2_game_loop_post_render also runs. Bit-exact match to orig.
-static void v2_sub_165aa(uint8_t* shadow) {
+static void v2_page_rotate_165aa(uint8_t* shadow) {
         static int rot_dbg = 0; rot_dbg++;
         uint16_t ax = *(uint16_t*)(shadow + DS_PAGE_SHOWN);
         if (rot_dbg <= 6) {
@@ -8756,7 +8757,7 @@ static void v2_sub_165aa(uint8_t* shadow) {
         // loc_1664f: if page changed → call sub_1df6a + flag dirty
         if (dx != *(uint16_t*)(shadow + DS_PAGE_BG)) {
             // Original: CALLF sub_1DF6A (position copy + VGA redraw)
-            v2_sub_1DF6A(shadow);
+            v2_dirty_obj_pos_1DF6A(shadow);
             // Page-emu pixel side of sub_1df6a: bit1 cells shown→background
             // page (task #21) — same call order as the orig CALLF.
             v2_emu_df6a(v2_current_ds_val);
@@ -8773,7 +8774,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
     // include_anim_queue: orig blocks 4 and 6 call sub_165aa+sub_16661+sub_1406d;
     // orig block 8 (render3, eips 0xBB-0xD8) calls only sub_165aa+sub_16661 (no
     // sub_1406d). Pass false from v2_phase_render3 to match orig block 8 exactly.
-    v2_sub_165aa(shadow);
+    v2_page_rotate_165aa(shadow);
 
     // sub_16661: object create/destroy based on scroll position.
     // Compares scroll tracking (ds:0x92EF/0x92F1) with current scroll (ds:0x257F/0x2581).
@@ -8822,7 +8823,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + 0x931B) += ax_col + 8;
                     *(uint16_t*)(shadow + 0x931D) += ax_col + 8;
                     *(uint16_t*)(shadow + 0x9315) = di_vga3;
-                    v2_sub_16dd9(shadow); v2_sub_1712b(shadow); // VGA tile row + column render
+                    v2_tile_col_16dd9(shadow); v2_page_copy_row_1712b(shadow); // VGA tile row + column render
                     skip_16e75:;
                 }
                 // sub_166e8: mark sprites dirty if X < viewport_X
@@ -8879,8 +8880,8 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + 0x931B) += ax_col + 8;
                     *(uint16_t*)(shadow + 0x931D) += ax_col + 8;
                     *(uint16_t*)(shadow + 0x9315) = di_vga3;
-                    v2_sub_16dd9(shadow); // VGA tile row render
-                    v2_sub_1712b(shadow); // VGA column render
+                    v2_tile_col_16dd9(shadow); // VGA tile row render
+                    v2_page_copy_row_1712b(shadow); // VGA column render
                 }
                 // sub_16710: mark sprites dirty if X > viewport_X + 0x121
                 uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_X) + 0x121;
@@ -8917,8 +8918,8 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + 0x930F) = *(uint16_t*)(shadow + (uint16_t)(pg2 - 0x7608)) + dx_col;
                     uint16_t pg3 = *(uint16_t*)(shadow + 0x9309);
                     *(uint16_t*)(shadow + 0x930B) = *(uint16_t*)(shadow + (uint16_t)(pg3 - 0x7608)) + dx_col;
-                    v2_sub_16dc1(shadow, 0, 0); // VGA column render
-                    v2_sub_171dc(shadow);       // VGA page copy
+                    v2_tile_row_16dc1(shadow, 0, 0); // VGA column render
+                    v2_page_copy_col_171dc(shadow);       // VGA page copy
                 }
                 // loc_16694: mark sprites dirty if Y < viewport_Y
                 uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_Y);
@@ -8949,7 +8950,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + 0x930F) = *(uint16_t*)(shadow + (uint16_t)(pg2 - 0x7608)) + dx_col;
                     uint16_t pg3 = *(uint16_t*)(shadow + 0x9309);
                     *(uint16_t*)(shadow + 0x930B) = *(uint16_t*)(shadow + (uint16_t)(pg3 - 0x7608)) + dx_col;
-                    v2_sub_16dc1(shadow, 0, 0); v2_sub_171dc(shadow); // VGA column/tile render
+                    v2_tile_row_16dc1(shadow, 0, 0); v2_page_copy_col_171dc(shadow); // VGA column/tile render
                 }
                 // loc_166bc: mark sprites dirty if Y > viewport_Y + 0x91
                 uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_Y) + 0x91;
@@ -9221,17 +9222,17 @@ static bool v2_vm_table_initialized = false;
 // 0x00: Yield — save PC to v2 state, exit VM loop
 // Exact replica of sub_142b7: POP ax; si = ds:0x42; [si+0x132D] = bx; RETN
 // sub_141f7/fb/ff/4203: Skip N bytes stubs. DEAD CODE.
-static void v2_sub_141f7(V2VM& vm) { vm.pc += 2; }   // ADD bx, 2; RETN
-static void v2_sub_141fb(V2VM& vm) { vm.pc += 3; }   // ADD bx, 3; RETN
-static void v2_sub_141ff(V2VM& vm) { vm.pc += 8; }   // ADD bx, 8; RETN
-static void v2_sub_14203(V2VM& vm) { vm.pc += 0xA; } // ADD bx, 0Ah; RETN
+static void v2_vm_skip2_141f7(V2VM& vm) { vm.pc += 2; }   // ADD bx, 2; RETN
+static void v2_vm_skip3_141fb(V2VM& vm) { vm.pc += 3; }   // ADD bx, 3; RETN
+static void v2_vm_skip8_141ff(V2VM& vm) { vm.pc += 8; }   // ADD bx, 8; RETN
+static void v2_vm_skip10_14203(V2VM& vm) { vm.pc += 0xA; } // ADD bx, 0Ah; RETN
 
 // Forward declarations for collision helpers
-static bool v2_vm_loc_15a64(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_loc_15a7d(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_tile_search_top_15a64(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_tile_search_bottom_15a7d(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
 
 // sub_15d3c (seg000): Y bbox overlap (Y_start). Verified seg000 13933-13963. No DS writes.
-static bool v2_sub_15d3c(V2VM& vm, uint16_t si, uint16_t di) {
+static bool v2_y_overlap_start_15d3c(V2VM& vm, uint16_t si, uint16_t di) {
     int16_t ax = (int16_t)vm.ds_read(di + OBJ_BBOX_Y0);
     if (ax < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) return false;
     if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) return false;
@@ -9240,7 +9241,7 @@ static bool v2_sub_15d3c(V2VM& vm, uint16_t si, uint16_t di) {
     return true;
 }
 // sub_15d42 (seg000): Y bbox overlap (Y_end). Verified seg000 13942-13963.
-static bool v2_sub_15d42(V2VM& vm, uint16_t si, uint16_t di) {
+static bool v2_y_overlap_end_15d42(V2VM& vm, uint16_t si, uint16_t di) {
     int16_t ax = (int16_t)vm.ds_read(di + OBJ_BBOX_Y1);
     if (ax < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) return false;
     if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) return false;
@@ -9249,7 +9250,7 @@ static bool v2_sub_15d42(V2VM& vm, uint16_t si, uint16_t di) {
     return true;
 }
 // sub_15c93 (seg000): Object Y-velocity collision search. DS: [3A],[38]. Verified seg000 13831-13879.
-static bool v2_sub_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, uint16_t& out_dir) {
+static bool v2_yvel_obj_search_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, uint16_t& out_dir) {
     vm.ds_write(DS_SCRATCH_3A, filter_si);
     uint16_t table_end = vm.ds_read(DS_OBJ_COUNT);
     for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
@@ -9268,25 +9269,25 @@ static bool v2_sub_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, uint16_t& ou
         int16_t vel_diff = (int16_t)vm.ds_read(di + OBJ_VEL_Y) - (int16_t)vm.ds_read(si + OBJ_VEL_Y);
         if (vel_diff == 0) continue;
         if (vel_diff < 0) {
-            if (v2_sub_15d3c(vm, si, di)) { out_dir = 1; return true; }
+            if (v2_y_overlap_start_15d3c(vm, si, di)) { out_dir = 1; return true; }
         } else {
-            if (v2_sub_15d42(vm, si, di)) { out_dir = 0; return true; }
+            if (v2_y_overlap_end_15d42(vm, si, di)) { out_dir = 0; return true; }
         }
     }
     return false;
 }
 // sub_15911 (seg000): Y tile check for collision. Verified seg000 13280-13297.
-static bool v2_sub_15911(V2VM& vm, uint16_t di, uint16_t filter_si, uint16_t& out_dir) {
+static bool v2_tile_coll_y_15911(V2VM& vm, uint16_t di, uint16_t filter_si, uint16_t& out_dir) {
     // Orig: caller passes filter via SI register; orig sub_157eb does NOT write ds:0x3A.
     // v2 takes filter_si as parameter to avoid touching ds:0x3A scratch.
     uint16_t cur_y = vm.ds_read(di + OBJ_WORLD_Y);
     uint16_t old_y = vm.ds_read(di + OBJ_Y_PREV);
     if (cur_y == old_y) return false;
     if ((int16_t)cur_y > (int16_t)old_y) {
-        vm.carry = v2_vm_loc_15a7d(vm, filter_si, di);
+        vm.carry = v2_vm_tile_search_bottom_15a7d(vm, filter_si, di);
         out_dir = 0;
     } else {
-        vm.carry = v2_vm_loc_15a64(vm, filter_si, di);
+        vm.carry = v2_vm_tile_search_top_15a64(vm, filter_si, di);
         out_dir = 1;
     }
     return vm.carry;
@@ -9336,8 +9337,8 @@ static void v2_vm_ch67_ub_guard(V2VM& vm, const char* site) {
     extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
 }
 static void v2_vm_setter_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode);
-static bool v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode);
-static bool v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di);
+static bool v2_vm_ch_dispatch_1250b(V2VM& vm, uint8_t& out_mode);
+static bool v2_vm_ch_escape_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di);
 static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd);
 static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm);
 
@@ -9438,7 +9439,7 @@ static void v2_vm_op_sound(V2VM& vm) {
         return; // sound disabled
     }
     // Route through fx:: — audit log + sfx play + slot bookkeeping (inside
-    // v2_sub_177bb_v2). Slot writes live in the production helper so both this
+    // v2_sfx_play_177bb_v2). Slot writes live in the production helper so both this
     // VM opcode and anim cmd 0x77B2 inherit symmetric slot bookkeeping.
     int handle = fx::play_sfx(v2_vm_shadow_ds, seq, cur_obj);
     fprintf(stderr, "V2-SFX-REQ[f%d lv=%04X obj=%02X]: seq=%u det_handle=%04X 2E6D=%04X\n",
@@ -9460,7 +9461,7 @@ static void v2_vm_op_sound1(V2VM& vm) {
     if (muted) return; // sound disabled
     // Iterate slots, find ones matching seq=param. For each, selectively stop the
     // adlmidi player by stored handle (set by v2_vm_op_sound), then mark slot free.
-    // Falls back to v2_sub_1782a_v2 (stop-all) if no matching slot has a valid handle.
+    // Falls back to v2_sfx_stop_all_1782a_v2 (stop-all) if no matching slot has a valid handle.
     bool stopped_any = false;
     for (int16_t si = 8; si > 0; si -= 2) {
         if (vm.ds_read((uint16_t)(si - 0x66EA)) == param) {
@@ -9476,7 +9477,7 @@ static void v2_vm_op_sound1(V2VM& vm) {
     // Mirror orig SDL inline (vikings.exe_seg000.cpp:15976): stop_xmidi_external() —
     // belt-and-suspenders fallback when no slot tracked the handle (e.g. sound played
     // outside our slot list). dontstop protects music.
-    if (!stopped_any) v2_sub_1782a_v2();
+    if (!stopped_any) v2_sfx_stop_all_1782a_v2();
 }
 
 // ============================================================================
@@ -9610,7 +9611,7 @@ static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
 static void v2_vm_op_0C(V2VM& vm);
 
 // sub_15505: [si+0x15AD] -= [di+0x15D5]; if no borrow → 0. 0 bytes.
-static void v2_vm_sub_15505(V2VM& vm, uint16_t si, uint16_t di) {
+static void v2_vm_res_deduct_15505(V2VM& vm, uint16_t si, uint16_t di) {
     uint16_t a = vm.ds_read(si + OBJ_RES_HANDLE);
     uint16_t b = vm.ds_read(di + OBJ_RES_COST);
     vm.ds_write(si + OBJ_RES_HANDLE, (a < b) ? (uint16_t)(a - b) : 0);
@@ -9621,7 +9622,7 @@ static void v2_vm_op_11(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t di = vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
-    v2_vm_sub_15505(vm, si, di);
+    v2_vm_res_deduct_15505(vm, si, di);
 }
 
 // 0x3A (sub_14340): di=ds:0x42, si=[di+0x1995] → sub_15505. 0 bytes.
@@ -9630,21 +9631,21 @@ static void v2_vm_op_3A(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     uint16_t si = vm.ds_read(di + OBJ_PARTNER);
     vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
-    v2_vm_sub_15505(vm, si, di);
+    v2_vm_res_deduct_15505(vm, si, di);
 }
 
-static void v2_vm_sub_13757(V2VM& vm, uint16_t si);  // vertical-flip body (defined below)
+static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);  // vertical-flip body (defined below)
 
 // 0x09 (sub_13743): Conditional vflip — if flag 0x80 NOT set → call sub_13757. 0 bytes.
 static void v2_vm_op_09(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (!(vm.ds_read(si + OBJ_FLAGS) & 0x80)) v2_vm_sub_13757(vm, si);
+    if (!(vm.ds_read(si + OBJ_FLAGS) & 0x80)) v2_vm_vflip_body_13757(vm, si);
 }
 
 // 0x0A (sub_13733): Conditional vflip — if flag 0x80 set → call sub_13757. 0 bytes.
 static void v2_vm_op_0A(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x80) v2_vm_sub_13757(vm, si);
+    if (vm.ds_read(si + OBJ_FLAGS) & 0x80) v2_vm_vflip_body_13757(vm, si);
 }
 
 // 0xD4 (sub_1531c): velocity direction from position delta. Exact replica.
@@ -9717,10 +9718,10 @@ static void v2_vm_op_D4(V2VM& vm) {
 
 // 0xD5 (sub_178d6): Sound play via sub_176bd. 1 byte consumed.
 // Original (vikings.exe_seg000.cpp:16062): INC bx (1 byte); if ds:0x302==0:
-// sub_176bd(si=0, ax=0, bx=ds:0x2E6B) → play music. v2 mirrors via v2_sub_178d6_v2.
+// sub_176bd(si=0, ax=0, bx=ds:0x2E6B) → play music. v2 mirrors via v2_music_start_178d6_v2.
 static void v2_vm_op_D5(V2VM& vm) {
     vm.pc += 1;
-    v2_sub_178d6_v2(v2_vm_shadow_ds);
+    v2_music_start_178d6_v2(v2_vm_shadow_ds);
 }
 
 // 0xD6 (sub_178f1): Timer delay. 0 bytes consumed.
@@ -9800,10 +9801,10 @@ static void v2_vm_op_CD(V2VM& vm) {
 }
 
 // Forward declarations for C0-C6 opcodes
-static bool v2_vm_sub_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_sub_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_loc_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
-static bool v2_vm_sub_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_obj_search_down_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_obj_search_up_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
+static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
 static void v2_vm_do_call_jump(V2VM& vm);
 
 // Helper: vikings-only object search wrapper.
@@ -9838,7 +9839,7 @@ static void v2_vm_op_C0(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.si_track = filter;   // orig si=byte; 15fbe is PUSH si,di balanced
     vm.di_track = di;
-    vm.carry = v2_vm_sub_15fbe(vm, filter, di);
+    vm.carry = v2_vm_obj_search_down_15fbe(vm, filter, di);
     vm.ds_write(DS_OBJ_COUNT, saved);
     if (vm.carry) { uint16_t t = *(uint16_t*)(vm.es + vm.pc); vm.pc = t; } else { vm.pc += 2; }
 }
@@ -9852,7 +9853,7 @@ static void v2_vm_op_C3(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.si_track = filter;   // orig si=byte; 15fb1 is PUSH si,di balanced
     vm.di_track = di;
-    vm.carry = v2_vm_sub_15fb1(vm, filter, di);
+    vm.carry = v2_vm_obj_search_up_15fb1(vm, filter, di);
     vm.ds_write(DS_OBJ_COUNT, saved);
     // off_30C8E[2] = loc_144f3: carry → skip 2, no carry → jump (simple, no save)
     if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
@@ -9867,7 +9868,7 @@ static void v2_vm_op_C4(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.si_track = filter;   // orig si=byte; 15fbe is PUSH si,di balanced
     vm.di_track = di;
-    vm.carry = v2_vm_sub_15fbe(vm, filter, di);
+    vm.carry = v2_vm_obj_search_down_15fbe(vm, filter, di);
     vm.ds_write(DS_OBJ_COUNT, saved);
     // off_30C8E[2] = loc_144f3: carry → skip 2, no carry → jump (simple, no save)
     if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
@@ -9884,9 +9885,9 @@ static void v2_vm_op_C1(V2VM& vm) {
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (flag40) {
-        vm.carry = v2_vm_loc_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
     } else {
-        vm.carry = v2_vm_sub_15de5(vm, filter, di);
+        vm.carry = v2_vm_obj_search_left_15de5(vm, filter, di);
     }
     vm.ds_write(DS_OBJ_COUNT, saved);
     if (vm.carry) { uint16_t t = *(uint16_t*)(vm.es + vm.pc); vm.pc = t; } else { vm.pc += 2; }
@@ -9903,9 +9904,9 @@ static void v2_vm_op_C5(V2VM& vm) {
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (flag40) {
-        vm.carry = v2_vm_loc_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
     } else {
-        vm.carry = v2_vm_sub_15de5(vm, filter, di);
+        vm.carry = v2_vm_obj_search_left_15de5(vm, filter, di);
     }
     vm.ds_write(DS_OBJ_COUNT, saved);
     // off_30C8E[2] = loc_144f3: carry → skip 2, no carry → jump (simple, no save)
@@ -9923,9 +9924,9 @@ static void v2_vm_op_C6(V2VM& vm) {
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (!flag40) {
-        vm.carry = v2_vm_loc_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
     } else {
-        vm.carry = v2_vm_sub_15de5(vm, filter, di);
+        vm.carry = v2_vm_obj_search_left_15de5(vm, filter, di);
     }
     vm.ds_write(DS_OBJ_COUNT, saved);
     // off_30C8E[2] = loc_144f3: carry → skip 2, no carry → jump (simple, no save)
@@ -9933,15 +9934,15 @@ static void v2_vm_op_C6(V2VM& vm) {
 }
 
 // Forward declarations for search functions defined later
-static bool v2_vm_loc_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t dx);
-static bool v2_vm_sub_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static void v2_vm_sub_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_loc_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
+static bool v2_vm_tile_scan_x_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t dx);
+static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
 
 // sub_158e6: animation load using flip-aware SINGLE-POINT search.
 // sub_15ac4: single tile check at (X_flip_edge, Y_end+1).
 // sub_1603e: object search at X_flip_edge.
-static void v2_vm_sub_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(0x3B4, 0xFFFF);
     // Determine X based on flip
     uint16_t x;
@@ -10002,11 +10003,11 @@ static void v2_vm_sub_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 }
 
 // sub_158aa: animation load using X_start-1 search (sub_159c6 tile + sub_15de5 obj).
-static void v2_vm_sub_158aa(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static void v2_vm_probe_left_158aa(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(0x3B4, 0xFFFF);
-    bool found = v2_vm_loc_159f6(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X0) - 1);
+    bool found = v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X0) - 1);
     if (found) { vm.carry = true; return; }
-    vm.carry = v2_vm_sub_15de5(vm, filter_si, obj_di);
+    vm.carry = v2_vm_obj_search_left_15de5(vm, filter_si, obj_di);
 }
 
 // 0x24 (sub_144ad): Flip-aware animation load. 1 byte. off_30C8E[2].
@@ -10018,9 +10019,9 @@ static void v2_vm_op_24(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; scans PUSH/POP-clean (task #15)
     if (vm.ds_read(si + OBJ_FLAGS) & 0x40) {
-        v2_vm_sub_158b9(vm, anim_idx, di);
+        v2_vm_probe_right_158b9(vm, anim_idx, di);
     } else {
-        v2_vm_sub_158aa(vm, anim_idx, di);
+        v2_vm_probe_left_158aa(vm, anim_idx, di);
     }
     // off_30C8E[2] = loc_144f3: JC → carry = skip 2, no carry = jump (simple, no save)
     if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
@@ -10098,7 +10099,7 @@ static void v2_vm_op_15(V2VM& vm) {
 // mirror X bounds around 2*[si+173Dh], then the sub-sprite loop — which in
 // the orig is a DO-WHILE (body first, CMP di,cx / JL at the end): it runs
 // at least once whenever [si+1AD5h] != 0, even if [si+1A85h] >= [si+1AADh].
-static void v2_vm_sub_136a0(V2VM& vm, uint16_t si) {
+static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si) {
     vm.ds_write(si + OBJ_FLAGS, vm.ds_read(si + OBJ_FLAGS) ^ 0x40);        // XOR [si+1585h], 40h
     uint16_t ax = (uint16_t)((uint16_t)(vm.ds_read(si + OBJ_WORLD_X) << 1)
                              - vm.ds_read(si + OBJ_BBOX_X1) - 1);          // ax = [173D]*2-[155D]-1
@@ -10128,7 +10129,7 @@ static void v2_vm_sub_136a0(V2VM& vm, uint16_t si) {
 // sub_136a0 on the Y axis: flag 0x80, bounds [si+150Dh]/[si+14E5h] around
 // 2*[si+1765h], sub-sprite loop is a DO-WHILE (runs at least once when
 // [si+1AD5h] != 0).
-static void v2_vm_sub_13757(V2VM& vm, uint16_t si) {
+static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si) {
     vm.ds_write(si + OBJ_FLAGS, vm.ds_read(si + OBJ_FLAGS) ^ 0x80);        // XOR [si+1585h], 80h
     uint16_t ax = (uint16_t)((uint16_t)(vm.ds_read(si + OBJ_WORLD_Y)
                              + vm.ds_read(si + OBJ_WORLD_Y))
@@ -10158,7 +10159,7 @@ static void v2_vm_sub_13757(V2VM& vm, uint16_t si) {
 static void v2_vm_op_0C(V2VM& vm) {
     // sub_13753: MOV si, ds:42h; falls through to sub_13757.
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    v2_vm_sub_13757(vm, si);
+    v2_vm_vflip_body_13757(vm, si);
 }
 
 // 0x0D (sub_142dc): Clear bit in ds:[byte+0x356]. 0 bytes.
@@ -10229,7 +10230,7 @@ static void v2_vm_op_12(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     uint16_t si = vm.ds_read(di + OBJ_PARTNER);
     vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
-    v2_vm_sub_15505(vm, si, di);
+    v2_vm_res_deduct_15505(vm, si, di);
 }
 
 // ============================================================================
@@ -10297,22 +10298,22 @@ static bool v2_vm_tile_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uin
 }
 
 // Entry point wrappers for tile search
-static bool v2_vm_sub_15a57(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_vm_tile_search_up_15a57(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A59
     uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y0) - 1;
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
-static bool v2_vm_loc_15a64(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_vm_tile_search_top_15a64(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A66
     uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y0);
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
-static bool v2_vm_loc_15A70(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_vm_tile_search_down_15A70(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A72
     uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y1) + 1;
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
-static bool v2_vm_loc_15a7d(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_vm_tile_search_bottom_15a7d(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A7F
     uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y1);
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
@@ -10358,16 +10359,16 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
 }
 
 // Entry point wrappers for object search
-static bool v2_vm_sub_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_vm_obj_search_up_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_FIELD_BASE) - 1);
 }
-static bool v2_vm_sub_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_vm_obj_search_down_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_Y1) + 1);
 }
 
 // sub_15ae9: tile search at ds:0x6C, ds:0x6E (single point, not range).
 // Entry to loc_15a93 with si=ds:0x6C, di=ds:0x6E, dx=di, cx=si.
-static bool v2_vm_sub_15ae9(V2VM& vm, uint16_t filter_si) {
+static bool v2_vm_tile_at_pos_15ae9(V2VM& vm, uint16_t filter_si) {
     vm.ds_write(DS_SCRATCH_34, filter_si);
     uint16_t x = vm.ds_read(DS_TEXT_COL);
     uint16_t y = vm.ds_read(DS_TEXT_ROW);
@@ -10393,7 +10394,7 @@ static bool v2_vm_sub_15ae9(V2VM& vm, uint16_t filter_si) {
 
 // sub_160cf: object search using ds:0x6C (X) and ds:0x6E (Y) as reference.
 // Checks: X in [obj.X_start, obj.X_end), Y in [obj.Y_start, obj.Y_end).
-static bool v2_vm_sub_160cf(V2VM& vm, uint16_t filter_si) {
+static bool v2_vm_obj_at_pos_160cf(V2VM& vm, uint16_t filter_si) {
     vm.ds_write(DS_SCRATCH_34, filter_si);
     uint16_t ref_x = vm.ds_read(DS_TEXT_COL);
     uint16_t ref_y = vm.ds_read(DS_TEXT_ROW);
@@ -10437,19 +10438,19 @@ static bool v2_vm_sub_160cf(V2VM& vm, uint16_t filter_si) {
 
 // sub_1589b: animation load using ds:0x6C/0x6E position search.
 // ds:0x3B4=0xFFFF; call sub_15ae9 (tile at 6C/6E); JC→ret; call sub_160cf (obj at 6C/6E); ret.
-static void v2_vm_sub_1589b(V2VM& vm, uint16_t filter_si) {
+static void v2_vm_probe_at_pos_1589b(V2VM& vm, uint16_t filter_si) {
     vm.ds_write(0x3B4, 0xFFFF);
-    bool found_tile = v2_vm_sub_15ae9(vm, filter_si);
+    bool found_tile = v2_vm_tile_at_pos_15ae9(vm, filter_si);
     if (found_tile) {
         vm.carry = true;
         return;
     }
-    vm.carry = v2_vm_sub_160cf(vm, filter_si);
+    vm.carry = v2_vm_obj_at_pos_160cf(vm, filter_si);
 }
 
 // loc_159f6: X-axis tile search core (vertical scan at given X).
 // Used by sub_159df (X_end+1), sub_159d3 (X_start), loc_159ec (X_end).
-static bool v2_vm_loc_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t dx) {
+static bool v2_vm_tile_scan_x_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t dx) {
     vm.ds_write(DS_SCRATCH_34, filter_si);
     // orig 0x59FC: SUB ax,[196Dh]; JGE — the branch tests the SUB's own
     // SF^OF, i.e. the TRUE 32-bit difference vs 0; the kept value is the
@@ -10504,15 +10505,15 @@ static bool v2_vm_loc_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint1
 }
 
 // Entry points for loc_159f6:
-static bool v2_vm_sub_159df(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-    return v2_vm_loc_159f6(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X1) + 1);
+static bool v2_vm_tile_search_right_159df(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    return v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X1) + 1);
 }
-static bool v2_vm_sub_159df_at(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x) {
-    return v2_vm_loc_159f6(vm, filter_si, obj_di, x);
+static bool v2_vm_tile_search_x_159df_at(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x) {
+    return v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, x);
 }
 
 // loc_15dfd: X-axis object search core (common for sub_15df2 and sub_15de5).
-static bool v2_vm_loc_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search) {
+static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search) {
     vm.ds_write(DS_SCRATCH_34, filter_si);
     vm.ds_write(DS_SCRATCH_36, x_search);
     uint8_t* rds = vm.shadow;
@@ -10551,39 +10552,39 @@ static bool v2_vm_loc_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint1
 }
 
 // sub_15de5/sub_15df2 wrappers:
-static bool v2_vm_sub_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-    return v2_vm_loc_15dfd(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X0) - 1);
+static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    return v2_vm_obj_scan_x_15dfd(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X0) - 1);
 }
 
 // sub_158b9: animation load using X-axis search paths (X_end + 1).
-static void v2_vm_sub_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(0x3B4, 0xFFFF);
-    bool found = v2_vm_sub_159df(vm, filter_si, obj_di);
+    bool found = v2_vm_tile_search_right_159df(vm, filter_si, obj_di);
     if (found) {
         vm.carry = true;
         return;
     }
-    vm.carry = v2_vm_loc_15dfd(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X1) + 1);
+    vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X1) + 1);
 }
 
 // sub_158c8: animation load using Y_start-1 search paths.
 // ds:0x3B4 = 0xFFFF; call sub_15a57 (tile search Y_start-1);
 // if carry → return; call sub_15fb1 (obj search Y_start-1); return carry.
-static void v2_vm_sub_158c8(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static void v2_vm_probe_up_158c8(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(0x3B4, 0xFFFF);
-    bool found_a = v2_vm_sub_15a57(vm, filter_si, obj_di);
+    bool found_a = v2_vm_tile_search_up_15a57(vm, filter_si, obj_di);
     if (found_a) {
         vm.carry = true;
         return;
     }
-    vm.carry = v2_vm_sub_15fb1(vm, filter_si, obj_di);
+    vm.carry = v2_vm_obj_search_up_15fb1(vm, filter_si, obj_di);
 }
 
 // sub_158d7: animation load function. Sets carry based on search results.
-static void v2_vm_sub_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static void v2_vm_probe_down_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 // V2-158d7 spam — commented (599 lines/run)
     vm.ds_write(0x3B4, 0xFFFF);
-    bool found_a = v2_vm_loc_15A70(vm, filter_si, obj_di);
+    bool found_a = v2_vm_tile_search_down_15A70(vm, filter_si, obj_di);
     if (found_a) {
         vm.carry = true;
         static bool dbg158 = false;
@@ -10592,7 +10593,7 @@ static void v2_vm_sub_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
         }
         return;
     }
-    bool found_b = v2_vm_sub_15fbe(vm, filter_si, obj_di);
+    bool found_b = v2_vm_obj_search_down_15fbe(vm, filter_si, obj_di);
     vm.carry = found_b;
     static bool dbg158b = false;
     if (!dbg158b && found_b) { dbg158b = true;
@@ -10791,7 +10792,7 @@ static void v2_vm_op_14(V2VM& vm) {
     // directly (same bytes vm.ds_write would touch; no watched addresses in
     // their write set).
     if (vm.ds_read(si_slot + OBJ_SUB_COUNT) != 0) {
-        if (v2_sub_13d68(vm.shadow, si_slot)) {
+        if (v2_slot_alloc_13d68(vm.shadow, si_slot)) {
             // JC → destroy: allocation failed.
             vm.ds_write(si_slot + OBJ_CODE_SEG, 0);
             vm.di_track = 0;   // orig loc_13860→loc_13866: MOV di,0
@@ -10800,8 +10801,8 @@ static void v2_vm_op_14(V2VM& vm) {
         // orig sub_13809 eips 0x3839-0x3843: ds:0x3A/0x38 -> [si+1A85]/[si+1AAD]
         vm.ds_write(si_slot + OBJ_SUB_SLOT, vm.ds_read(DS_SCRATCH_3A));
         vm.ds_write(si_slot + OBJ_SUB_END, vm.ds_read(DS_SCRATCH_38));
-        v2_sub_13dd6(vm.shadow, si_slot);
-        v2_sub_13e15(vm.shadow, si_slot);
+        v2_slot_init_13dd6(vm.shadow, si_slot);
+        v2_slot_size_init_13e15(vm.shadow, si_slot);
     }
 
     // Adjust ds:0x372 (max active object) if needed
@@ -10838,7 +10839,7 @@ static void v2_vm_op_1F(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
-    v2_vm_sub_158d7(vm, anim_idx, di);
+    v2_vm_probe_down_158d7(vm, anim_idx, di);
     // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 0); // runtime read
     if (cs_addr == 0x44E9) {
@@ -10866,10 +10867,10 @@ static void v2_vm_op_C2(V2VM& vm) {
     bool found;
     if (!flipped) {
         // sub_15df2: x_search = [di+0x155D] + 1
-        found = v2_vm_loc_15dfd(vm, anim_idx, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        found = v2_vm_obj_scan_x_15dfd(vm, anim_idx, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
     } else {
         // sub_15de5: x_search = [di+0x1535] - 1
-        found = v2_vm_loc_15dfd(vm, anim_idx, di, vm.ds_read(di + OBJ_BBOX_X0) - 1);
+        found = v2_vm_obj_scan_x_15dfd(vm, anim_idx, di, vm.ds_read(di + OBJ_BBOX_X0) - 1);
     }
     vm.carry = found;
     vm.ds_write(DS_OBJ_COUNT, saved_372); // restore
@@ -10892,7 +10893,7 @@ static void v2_vm_op_1E(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
-    v2_vm_sub_158c8(vm, anim_idx, di);
+    v2_vm_probe_up_158c8(vm, anim_idx, di);
     // off_30C8E[0]
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 0);
     if (cs_addr == 0x44E9) {
@@ -10916,9 +10917,9 @@ static void v2_vm_op_20(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (!flipped) {
-        v2_vm_sub_158aa(vm, anim_idx, di);
+        v2_vm_probe_left_158aa(vm, anim_idx, di);
     } else {
-        v2_vm_sub_158b9(vm, anim_idx, di);
+        v2_vm_probe_right_158b9(vm, anim_idx, di);
     }
     // off_30C8E[0]
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 0);
@@ -10941,9 +10942,9 @@ static void v2_vm_op_21(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (!flipped) {
-        v2_vm_sub_158b9(vm, anim_idx, di);
+        v2_vm_probe_right_158b9(vm, anim_idx, di);
     } else {
-        v2_vm_sub_158aa(vm, anim_idx, di);
+        v2_vm_probe_left_158aa(vm, anim_idx, di);
     }
     // off_30C8E[0]
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 0);
@@ -10964,7 +10965,7 @@ static void v2_vm_op_22(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
-    v2_vm_sub_158c8(vm, anim_idx, di);
+    v2_vm_probe_up_158c8(vm, anim_idx, di);
     // off_30C8E[si=2]: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 2);
     if (cs_addr == 0x44F3) {
@@ -10987,7 +10988,7 @@ static void v2_vm_op_31(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
-    v2_vm_sub_158e6(vm, anim_idx, di);
+    v2_vm_probe_front_158e6(vm, anim_idx, di);
     // off_30C8E[si=2] = loc_144f3: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow + 0x87AE + 2);
     if (cs_addr == 0x44F3) {
@@ -11005,7 +11006,7 @@ static void v2_vm_op_23(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
-    v2_vm_sub_158d7(vm, anim_idx, di);
+    v2_vm_probe_down_158d7(vm, anim_idx, di);
     // off_30C8E[si=2] = loc_144f3: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 2); // si=2 → byte offset 2
     if (cs_addr == 0x44F3) {
@@ -11025,7 +11026,7 @@ static void v2_vm_op_08(V2VM& vm) {
     // sub_1367c: TEST [si+1585h], 40h / JZ ret → call sub_136a0 when set
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (!(vm.ds_read(si + OBJ_FLAGS) & 0x40)) return;
-    v2_vm_sub_136a0(vm, si);
+    v2_vm_hflip_body_136a0(vm, si);
 }
 
 // 0x5D (sub_14771): Subtract acc from value at address. 2 bytes.
@@ -11239,7 +11240,7 @@ static void v2_vm_op_5C(V2VM& vm) {
 // sub_15972: Y position snap after tile collision (sub_15AFD carry path).
 // ax = collision result from sub_15AFD: 0 = plain match, negative = slope (|ax|=adjustment), positive = moved up
 // di = object index
-static void v2_vm_sub_15972(V2VM& vm, int16_t ax, uint16_t di) {
+static void v2_vm_y_snap_tile_15972(V2VM& vm, int16_t ax, uint16_t di) {
     uint16_t dx;
     if (di == 0) {
         static int _s15972 = 0; if (++_s15972 <= 30)
@@ -11285,86 +11286,86 @@ extern "C" void v2_fntest_call_sub_15972(uint8_t* test_shadow, uint16_t ax, uint
     vm.ds = test_shadow;
     vm.shadow = test_shadow;
     vm.obj = di;
-    v2_vm_sub_15972(vm, (int16_t)ax, di);
+    v2_vm_y_snap_tile_15972(vm, (int16_t)ax, di);
 }
 extern "C" int v2_fntest_ds_skip(uint32_t addr) {
     return v2_ds_hash_skip(addr) ? 1 : 0;
 }
 // sub_161a1 bbox check: returns carry (1 = collision). Defined below
-// (v2_vm_sub_161a1 follows sub_15972 in this file); declared here so all
+// (v2_vm_bbox_check_161a1 follows sub_15972 in this file); declared here so all
 // fn-test wrappers stay in one block.
-static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si);
+static bool v2_vm_bbox_check_161a1(V2VM& vm, uint16_t di, uint16_t si);
 extern "C" int v2_fntest_call_sub_161a1(uint8_t* test_shadow, uint16_t di, uint16_t si) {
     V2VM vm{};
     vm.ds = test_shadow;
     vm.shadow = test_shadow;
     vm.obj = di;
-    return v2_vm_sub_161a1(vm, di, si) ? 1 : 0;
+    return v2_vm_bbox_check_161a1(vm, di, si) ? 1 : 0;
 }
 // sub_15DA8 / sub_15d6b: Y/X snap after object collision (defined below).
-static void v2_vm_sub_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di);
-static void v2_vm_sub_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di);
+static void v2_vm_y_snap_obj_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di);
+static void v2_vm_x_snap_obj_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di);
 extern "C" void v2_fntest_call_sub_15da8(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     V2VM vm{};
     vm.ds = test_shadow;
     vm.shadow = test_shadow;
     vm.obj = di;
-    v2_vm_sub_15DA8(vm, (int16_t)ax, si, di);
+    v2_vm_y_snap_obj_15DA8(vm, (int16_t)ax, si, di);
 }
 extern "C" void v2_fntest_call_sub_15d6b(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     V2VM vm{};
     vm.ds = test_shadow;
     vm.shadow = test_shadow;
     vm.obj = di;
-    v2_vm_sub_15d6b(vm, (int16_t)ax, si, di);
+    v2_vm_x_snap_obj_15d6b(vm, (int16_t)ax, si, di);
 }
 // sub_13d68 family: extracted raw-shadow helpers (defined before v2_spawn_object_13809).
 extern "C" int v2_fntest_call_sub_13d68(uint8_t* test_shadow, uint16_t si) {
-    return v2_sub_13d68(test_shadow, si) ? 1 : 0;
+    return v2_slot_alloc_13d68(test_shadow, si) ? 1 : 0;
 }
 extern "C" void v2_fntest_call_sub_13c0c(uint8_t* test_shadow) {
-    v2_sub_13c0c(test_shadow);
+    v2_despawn_bounds_13c0c(test_shadow);
 }
-// Camera/scroll cluster (functions defined near v2_sub_1064b above).
+// Camera/scroll cluster (functions defined near v2_camera_follow_1064b above).
 extern "C" void v2_fntest_call_sub_1064b(uint8_t* test_shadow) {
-    v2_sub_1064b(test_shadow);
+    v2_camera_follow_1064b(test_shadow);
 }
 extern "C" void v2_fntest_call_sub_10704(uint8_t* test_shadow) {
-    v2_sub_10704(test_shadow);
+    v2_scroll_step1_10704(test_shadow);
 }
 extern "C" void v2_fntest_call_sub_10753(uint8_t* test_shadow) {
-    v2_sub_10753(test_shadow);
+    v2_scroll_step2_10753(test_shadow);
 }
 extern "C" void v2_fntest_call_sub_17496(uint8_t* test_shadow, uint16_t si_speed) {
-    v2_sub_17496(test_shadow, (int16_t)si_speed);
+    v2_scroll_left_17496(test_shadow, (int16_t)si_speed);
 }
 extern "C" void v2_fntest_call_sub_1746c(uint8_t* test_shadow, uint16_t si_speed) {
-    v2_sub_1746c(test_shadow, (int16_t)si_speed);
+    v2_scroll_right_1746c(test_shadow, (int16_t)si_speed);
 }
 extern "C" void v2_fntest_call_sub_101be(uint8_t* test_shadow) {
-    v2_sub_101be(test_shadow);
+    v2_pal_ui_cycle_101be(test_shadow);
 }
 extern "C" void v2_fntest_call_sub_10255(uint8_t* test_shadow, uint16_t si, uint16_t dx) {
-    v2_sub_10255(test_shadow, si, dx);
+    v2_pal_rotate_fwd_10255(test_shadow, si, dx);
 }
 extern "C" void v2_fntest_call_sub_1020f(uint8_t* test_shadow, uint16_t si, uint16_t dx) {
-    v2_sub_1020f(test_shadow, si, dx);
+    v2_pal_rotate_back_1020f(test_shadow, si, dx);
 }
-extern "C" void v2_fntest_call_sub_12fc6(uint8_t* test_shadow) { v2_sub_12fc6(test_shadow); }
-extern "C" void v2_fntest_call_sub_12fcb(uint8_t* test_shadow) { v2_sub_12fcb(test_shadow); }
-extern "C" void v2_fntest_call_sub_12fd0(uint8_t* test_shadow) { v2_sub_12fd0(test_shadow); }
+extern "C" void v2_fntest_call_sub_12fc6(uint8_t* test_shadow) { v2_subsprite_walk_12fc6(test_shadow); }
+extern "C" void v2_fntest_call_sub_12fcb(uint8_t* test_shadow) { v2_subsprite_walk_12fcb(test_shadow); }
+extern "C" void v2_fntest_call_sub_12fd0(uint8_t* test_shadow) { v2_subsprite_walk_12fd0(test_shadow); }
 // K1 units (35-43): parameterless DS clear/init leaves of the sub_11080
 // level-load chain — full-DS contract, no input registers.
-extern "C" void v2_fntest_call_sub_11192(uint8_t* test_shadow) { v2_sub_11192(test_shadow); }
-extern "C" void v2_fntest_call_sub_111a1(uint8_t* test_shadow) { v2_sub_111a1(test_shadow); }
-extern "C" void v2_fntest_call_sub_111df(uint8_t* test_shadow) { v2_sub_111df(test_shadow); }
-extern "C" void v2_fntest_call_sub_11784(uint8_t* test_shadow) { v2_sub_11784(test_shadow); }
+extern "C" void v2_fntest_call_sub_11192(uint8_t* test_shadow) { v2_clear_bit_flags_11192(test_shadow); }
+extern "C" void v2_fntest_call_sub_111a1(uint8_t* test_shadow) { v2_clear_sprite_table_111a1(test_shadow); }
+extern "C" void v2_fntest_call_sub_111df(uint8_t* test_shadow) { v2_clear_viking_state_111df(test_shadow); }
+extern "C" void v2_fntest_call_sub_11784(uint8_t* test_shadow) { v2_active_viking_init_11784(test_shadow); }
 extern "C" void v2_fntest_call_sub_137f1(uint8_t* test_shadow) { v2_clear_velocities_137f1(test_shadow); }
-extern "C" void v2_fntest_call_sub_12fb3(uint8_t* test_shadow) { v2_sub_12fb3(test_shadow); }
-extern "C" void v2_fntest_call_sub_12ca3(uint8_t* test_shadow) { v2_sub_12ca3(test_shadow); }
-extern "C" void v2_fntest_call_sub_12ce4(uint8_t* test_shadow) { v2_sub_12ce4(test_shadow); }
-extern "C" void v2_fntest_call_sub_108b8(uint8_t* test_shadow) { v2_sub_108b8(test_shadow); }
-extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_sub_12816(test_shadow); }
+extern "C" void v2_fntest_call_sub_12fb3(uint8_t* test_shadow) { v2_clear_sprite_res_12fb3(test_shadow); }
+extern "C" void v2_fntest_call_sub_12ca3(uint8_t* test_shadow) { v2_game_state_init_12ca3(test_shadow); }
+extern "C" void v2_fntest_call_sub_12ce4(uint8_t* test_shadow) { v2_viking_health_init_12ce4(test_shadow); }
+extern "C" void v2_fntest_call_sub_108b8(uint8_t* test_shadow) { v2_start_level_set_108b8(test_shadow); }
+extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_glyph_list_clear_12816(test_shadow); }
 // Unit 54 (spawn family): install a synthetic object-template block as the
 // v2 animdata shadow — pairs with the oracle reading the same bytes via
 // es=[2E67] pointed at the shared test segment.
@@ -11381,7 +11382,7 @@ extern "C" int v2_fntest_call_sub_15911(uint8_t* test_shadow, uint16_t di, uint1
     vm.shadow = test_shadow;
     vm.obj = di;
     uint16_t od = 0xFFFF;
-    bool r = v2_sub_15911(vm, di, si, od);
+    bool r = v2_tile_coll_y_15911(vm, di, si, od);
     int od_code = (od == 0xFFFF) ? 0 : (int)(od + 1);
     return (r ? 1 : 0) | (vm.carry ? 2 : 0) | (od_code << 4);
 }
@@ -11414,33 +11415,33 @@ extern "C" void v2_fntest_set_animdata(const uint8_t* data, uint32_t len) {
 // bbox CF twins, tab-blink.
 extern "C" void v2_fntest_call_sub_13a0e(uint8_t* test_shadow) { v2_spawn_visible_13a0e(test_shadow); }
 extern "C" void v2_fntest_call_sub_1450b(uint8_t* test_shadow, uint16_t al, uint16_t si, uint16_t di) {
-    v2_sub_1450b(test_shadow, (uint8_t)al, si, di);
+    v2_save_game_1450b(test_shadow, (uint8_t)al, si, di);
 }
 extern "C" void v2_fntest_call_sub_10e99(uint8_t* test_shadow) { v2_pal_correct_10e99(test_shadow); }
 static void v2_selector_blink_11c52(uint8_t* s);   // defined below (tab-blink)
 extern "C" void v2_fntest_call_sub_11c52(uint8_t* test_shadow) { v2_selector_blink_11c52(test_shadow); }
-static bool v2_sub_15d3c(V2VM& vm, uint16_t si, uint16_t di);
-static bool v2_sub_15d42(V2VM& vm, uint16_t si, uint16_t di);
+static bool v2_y_overlap_start_15d3c(V2VM& vm, uint16_t si, uint16_t di);
+static bool v2_y_overlap_end_15d42(V2VM& vm, uint16_t si, uint16_t di);
 extern "C" int v2_fntest_call_sub_15d3c(uint8_t* test_shadow, uint16_t si, uint16_t di) {
     V2VM vm{};
     vm.ds = test_shadow;
     vm.shadow = test_shadow;
     vm.obj = di;
-    return v2_sub_15d3c(vm, si, di) ? 1 : 0;
+    return v2_y_overlap_start_15d3c(vm, si, di) ? 1 : 0;
 }
 extern "C" int v2_fntest_call_sub_15d42(uint8_t* test_shadow, uint16_t si, uint16_t di) {
     V2VM vm{};
     vm.ds = test_shadow;
     vm.shadow = test_shadow;
     vm.obj = di;
-    return v2_sub_15d42(vm, si, di) ? 1 : 0;
+    return v2_y_overlap_end_15d42(vm, si, di) ? 1 : 0;
 }
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
-extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_sub_11383(test_shadow); }
-extern "C" uint16_t v2_fntest_call_sub_1133a(uint8_t* test_shadow, uint16_t di) { return v2_sub_1133a(test_shadow, di); }
+extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_spawn_table_end_11383(test_shadow); }
+extern "C" uint16_t v2_fntest_call_sub_1133a(uint8_t* test_shadow, uint16_t di) { return v2_hud_init_1133a(test_shadow, di); }
 extern "C" uint16_t v2_fntest_call_sub_1241e(uint8_t* test_shadow, uint16_t al, uint16_t si, uint16_t di) {
     uint16_t si2 = si;
-    v2_sub_1241e(test_shadow, (uint8_t)al, si2, di);
+    v2_glyph_put_1241e(test_shadow, (uint8_t)al, si2, di);
     return si2;
 }
 extern "C" void v2_fntest_call_sub_12515(uint8_t* test_shadow, uint16_t ax) { v2_text_lookup_12515(test_shadow, ax); }
@@ -11453,12 +11454,12 @@ extern "C" uint16_t v2_fntest_call_sub_12529(uint8_t* test_shadow, uint16_t bx) 
 extern "C" void v2_fntest_call_sub_11397(uint8_t* test_shadow) { v2_collision_lut_init_11397(test_shadow); }
 extern "C" void v2_fntest_call_sub_113b0(uint8_t* test_shadow) { v2_scroll_limits_113b0(test_shadow); }
 extern "C" void v2_fntest_call_sub_113d8(uint8_t* test_shadow) { v2_viewport_init_113d8(test_shadow); }
-extern "C" void v2_fntest_call_sub_116e3(uint8_t* test_shadow) { v2_sub_116e3(test_shadow); }
+extern "C" void v2_fntest_call_sub_116e3(uint8_t* test_shadow) { v2_level_desc_init_116e3(test_shadow); }
 // Anim frame interpreter units: sub_1303a (cmd loop core) / sub_13031
 // (+ sub_135cf tail). The anim script lives INSIDE the DS image (the
 // oracle enters with es==ds), so vm.es = the case image too.
-static void v2_vm_sub_1303a(V2VM& vm);   // defined below
-static void v2_vm_sub_135cf(V2VM& vm);   // defined below
+static void v2_vm_anim_interp_1303a(V2VM& vm);   // defined below
+static void v2_vm_anim_tail_135cf(V2VM& vm);   // defined below
 extern "C" void v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int which) {
     V2VM vm{};
     vm.ds = test_shadow; vm.shadow = test_shadow;
@@ -11474,8 +11475,8 @@ extern "C" void v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int whic
     bool saved_rv = v2_replay_verify_active;
     v2_replay_verify_active = true;
     v2_fntest_vm_soft = 1;
-    v2_vm_sub_1303a(vm);
-    if (which) v2_vm_sub_135cf(vm);
+    v2_vm_anim_interp_1303a(vm);
+    if (which) v2_vm_anim_tail_135cf(vm);
     v2_replay_verify_active = saved_rv;
     v2_vm_acc_base = saved_acc;
 }
@@ -11497,11 +11498,11 @@ extern "C" int v2_fntest_call_search(uint8_t* test_shadow, int which,
     bool saved_rv = v2_replay_verify_active;
     v2_replay_verify_active = true;
     switch (which) {
-    case 0: v2_vm_sub_158aa(vm, filter, obj); break;
-    case 1: v2_vm_sub_158b9(vm, filter, obj); break;
-    case 2: v2_vm_sub_158c8(vm, filter, obj); break;
-    case 3: v2_vm_sub_158d7(vm, filter, obj); break;
-    default: v2_vm_sub_158e6(vm, filter, obj); break;
+    case 0: v2_vm_probe_left_158aa(vm, filter, obj); break;
+    case 1: v2_vm_probe_right_158b9(vm, filter, obj); break;
+    case 2: v2_vm_probe_up_158c8(vm, filter, obj); break;
+    case 3: v2_vm_probe_down_158d7(vm, filter, obj); break;
+    default: v2_vm_probe_front_158e6(vm, filter, obj); break;
     }
     v2_replay_verify_active = saved_rv;
     v2_vm_acc_base = saved_acc;
@@ -11511,10 +11512,10 @@ extern "C" int v2_fntest_call_search(uint8_t* test_shadow, int which,
 // search wrapper. Returns -1 on CLC; on STC returns the 16-bit AX the orig
 // leaves: sub_1614e → 0, sub_15c37/sub_15c93 → direction (1=cef/left-or-d3c,
 // 0=cf5/right-or-d42), sub_15afd → tile snap value (0x8000|x or 0).
-static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_sub_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
+static bool v2_vm_obj_coll_scan_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
                             int16_t& out_dir, uint16_t& out_partner);
-static bool v2_vm_sub_15afd(V2VM& vm, uint16_t filter_si, uint16_t di,
+static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di,
                             int16_t& out_tile_ax, bool dbg);
 extern "C" int32_t v2_fntest_call_scan(uint8_t* test_shadow, int which,
                                        uint16_t filter, uint16_t obj) {
@@ -11530,13 +11531,13 @@ extern "C" int32_t v2_fntest_call_scan(uint8_t* test_shadow, int which,
     v2_replay_verify_active = true;
     int32_t r = -1;
     switch (which) {
-    case 0: if (v2_vm_sub_1614e(vm, filter, obj)) r = 0; break;
+    case 0: if (v2_vm_obj_coll_scan_1614e(vm, filter, obj)) r = 0; break;
     case 1: { int16_t dir = 0; uint16_t partner = 0;
-              if (v2_vm_sub_15c37(vm, filter, obj, dir, partner)) r = (uint16_t)dir; break; }
+              if (v2_vm_xvel_obj_search_15c37(vm, filter, obj, dir, partner)) r = (uint16_t)dir; break; }
     case 2: { uint16_t dir = 0;
-              if (v2_sub_15c93(vm, filter, obj, dir)) r = dir; break; }
+              if (v2_yvel_obj_search_15c93(vm, filter, obj, dir)) r = dir; break; }
     default: { int16_t tile_ax = 0;
-               if (v2_vm_sub_15afd(vm, filter, obj, tile_ax, false)) r = (uint16_t)tile_ax; break; }
+               if (v2_vm_tile_coll_down_15afd(vm, filter, obj, tile_ax, false)) r = (uint16_t)tile_ax; break; }
     }
     v2_replay_verify_active = saved_rv;
     v2_vm_acc_base = saved_acc;
@@ -11547,10 +11548,10 @@ extern "C" int32_t v2_fntest_call_scan(uint8_t* test_shadow, int which,
 //        2=sub_13dd6 (slot init), 3=sub_13e15 (slot size/type init).
 extern "C" int32_t v2_fntest_call_snapfam(uint8_t* test_shadow, int which, uint16_t si) {
     switch (which) {
-    case 0: v2_sub_13c0c(test_shadow); return -1;
-    case 1: return v2_sub_13d68(test_shadow, si) ? 1 : 0;
-    case 2: v2_sub_13dd6(test_shadow, si); return -1;
-    default: v2_sub_13e15(test_shadow, si); return -1;
+    case 0: v2_despawn_bounds_13c0c(test_shadow); return -1;
+    case 1: return v2_slot_alloc_13d68(test_shadow, si) ? 1 : 0;
+    case 2: v2_slot_init_13dd6(test_shadow, si); return -1;
+    default: v2_slot_size_init_13e15(test_shadow, si); return -1;
     }
 }
 // Units 33-34 (DAC): run the v2 palette-dispatch mirrors on a case image and
@@ -11558,8 +11559,8 @@ extern "C" int32_t v2_fntest_call_snapfam(uint8_t* test_shadow, int which, uint1
 // The caller resets v2_dac_shadow to the same baseline as the oracle's
 // drawPalette before each case (both start equal; only call effects differ).
 extern "C" void v2_fntest_call_pal(uint8_t* test_shadow, int which, uint8_t* dac_out768) {
-    if (which == 0) v2_sub_10fe6(test_shadow);
-    else            v2_sub_10ffc(test_shadow);
+    if (which == 0) v2_pal_dac_write_10fe6(test_shadow);
+    else            v2_pal_anim_10ffc(test_shadow);
     memcpy(dac_out768, v2_dac_shadow, 768);
 }
 extern "C" void v2_fntest_reset_v2_dac(void) { memset(v2_dac_shadow, 0, 768); }
@@ -11588,15 +11589,15 @@ extern "C" void v2_fntest_call_vm_exec(uint8_t* test_shadow, uint16_t si) {
     v2_vm_acc_base = saved_acc_base;
 }
 extern "C" void v2_fntest_call_sub_13dd6(uint8_t* test_shadow, uint16_t si) {
-    v2_sub_13dd6(test_shadow, si);
+    v2_slot_init_13dd6(test_shadow, si);
 }
 extern "C" void v2_fntest_call_sub_13e15(uint8_t* test_shadow, uint16_t si) {
-    v2_sub_13e15(test_shadow, si);
+    v2_slot_size_init_13e15(test_shadow, si);
 }
 
 // sub_161a1: bounding box check for sub_1614E. di=self, si=target.
 // Returns true (carry) if collision.
-static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si) {
+static bool v2_vm_bbox_check_161a1(V2VM& vm, uint16_t di, uint16_t si) {
     // X overlap check
     if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) return false;
     if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) return false;
@@ -11647,7 +11648,7 @@ static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si) {
 
 // sub_1614E: object collision detection for sub_1584e.
 // Scans objects for type match + Y velocity comparison + sub_161a1 bounding box.
-static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+static bool v2_vm_obj_coll_scan_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_3A, filter_si);
     uint8_t* rds = vm.shadow;
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
@@ -11673,7 +11674,7 @@ static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
                          - (int32_t)(int16_t)*(uint16_t*)(rds + si + OBJ_VEL_Y);
         if (vel_diff <= 0) continue; // JZ (ZF: wrapped==0 ⇔ diff==0 in ±65534) or JL (true sign) → skip
         // sub_161a1: bounding box check
-        if (v2_vm_sub_161a1(vm, obj_di, si)) {
+        if (v2_vm_bbox_check_161a1(vm, obj_di, si)) {
             // Found! ax = 0, STC
             return true;
         }
@@ -11683,7 +11684,7 @@ static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 
 // sub_15DA8: Y position snap after object collision.
 // ax = direction (0 = moved down, !0 = moved up). si = partner, di = self.
-static void v2_vm_sub_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di) {
+static void v2_vm_y_snap_obj_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di) {
     uint16_t dx;
     if (di == 0) {
         static int _s15da8 = 0; if (++_s15da8 <= 30)
@@ -11709,7 +11710,7 @@ static void v2_vm_sub_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint1
 
 // sub_15d6b: X position snap for sub_15788 (object collision from sub_15c37).
 // ax = direction (0 = moved right, !0 = moved left). si = partner, di = self.
-static void v2_vm_sub_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di) {
+static void v2_vm_x_snap_obj_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint16_t di) {
     uint16_t dx;
     if (ax_dir == 0) {
         // Moved right: snap self left. dx = self.X_end - partner.X_start + 1
@@ -11733,8 +11734,8 @@ static void v2_vm_sub_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint1
 // (only past the y_moved gate), 0x3A + 0x32 (slope probe), 0x36/0x38 (horizontal
 // walk), [di+0x150D] pushed+restored around the slope probe.
 // Orig does NOT write ds:0x34 — only ds:0x6C (filter) and ds:0x6E (di).
-// (sub_15911, the UPward equivalent, has its own writers via loc_15a7d/64; not here.)
-static bool v2_vm_sub_15afd(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& out_tile_ax, bool dbg) {
+// (sub_15911, the Y-tile check for BOTH directions, has its own writers via loc_15a7d/64; not here.)
+static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& out_tile_ax, bool dbg) {
     bool tile_found = false;
     int16_t tile_ax = 0; // result for sub_15972
 
@@ -11920,22 +11921,22 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         uint16_t filter_si = (uint16_t)filter;
         if (dbg) fprintf(stderr, "  filter_byte=%02X di=%04X\n", filter, di);
 
-        // sub_15AFD: downward tile collision (extracted — see v2_vm_sub_15afd above).
+        // sub_15AFD: downward tile collision (extracted — see v2_vm_tile_coll_down_15afd above).
         int16_t tile_ax = 0; // result for sub_15972
-        bool tile_found = v2_vm_sub_15afd(vm, filter_si, di, tile_ax, dbg);
+        bool tile_found = v2_vm_tile_coll_down_15afd(vm, filter_si, di, tile_ax, dbg);
         di = vm.global_r(DS_CUR_OBJ);
         bool collision_found = false;
         if (tile_found) {
             // sub_15972: Y tile snap
-            v2_vm_sub_15972(vm, tile_ax, di);
+            v2_vm_y_snap_tile_15972(vm, tile_ax, di);
             collision_found = true;
         } else {
             // sub_1614E: object collision check.
             // orig sub_1614e at loc_16179 does `mov si, ds:0x38` before returning CARRY,
             // so SI register = ds:0x38 = matched partner index. sub_15DA8 uses si as partner.
-            if (v2_vm_sub_1614e(vm, filter_si, di)) {
+            if (v2_vm_obj_coll_scan_1614e(vm, filter_si, di)) {
                 uint16_t partner = vm.ds_read(DS_SCRATCH_38);
-                v2_vm_sub_15DA8(vm, 0, partner, di); // ax=0 for sub_1584e (downward)
+                v2_vm_y_snap_obj_15DA8(vm, 0, partner, di); // ax=0 for sub_1584e (downward)
                 collision_found = true;
             }
         }
@@ -11978,23 +11979,23 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig 0x57FC: MOV di,ds:42h; scans preserve DI (task #15)
     // NOTE: orig sub_157eb does NOT write ds:0x3A — filter is passed via SI register.
-    // v2 passes filter as parameter to v2_sub_15911 directly. Removed ds_write(0x3A).
+    // v2 passes filter as parameter to v2_tile_coll_y_15911 directly. Removed ds_write(0x3A).
     uint16_t out_dir = 0;
     bool collision_found = false;
-    if (v2_sub_15911(vm, di, (uint16_t)filter, out_dir)) {
+    if (v2_tile_coll_y_15911(vm, di, (uint16_t)filter, out_dir)) {
         // sub_15972: Y tile snap. AX from sub_15911:
         //   out_dir=1 → cur_y < old_y (moved up)   → orig AX=1 → loc_159a5 snap Y_start UP
         //   out_dir=0 → cur_y > old_y (moved down) → orig AX=0 → loc_15984 snap Y_end DOWN
-        v2_vm_sub_15972(vm, (int16_t)out_dir, di);
+        v2_vm_y_snap_tile_15972(vm, (int16_t)out_dir, di);
         collision_found = true;
     } else {
-        if (v2_sub_15c93(vm, (uint16_t)filter, di, out_dir)) {
+        if (v2_yvel_obj_search_15c93(vm, (uint16_t)filter, di, out_dir)) {
             // orig sub_15c93 at loc_15CBE/loc_15CD7 also restores si from ds:0x38 before
             // CARRY return. AX is 0 or 1 (direction). sub_15DA8 uses si=ds:0x38 as partner.
             uint16_t partner = vm.ds_read(DS_SCRATCH_38);
             // AX from sub_15c93: 1 = vel_diff < 0 (moved up), 0 = vel_diff > 0 (moved down).
             // Pass via out_dir to match orig.
-            v2_vm_sub_15DA8(vm, (int16_t)out_dir, partner, di);
+            v2_vm_y_snap_obj_15DA8(vm, (int16_t)out_dir, partner, di);
             collision_found = true;
         }
     }
@@ -12168,7 +12169,7 @@ static void v2_vm_op_B3(V2VM& vm) {
 // sub_1369c: MOV si, ds:42h; falls through to sub_136a0 (full hflip with sub-sprites).
 static void v2_vm_op_0B(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    v2_vm_sub_136a0(vm, si);
+    v2_vm_hflip_body_136a0(vm, si);
 }
 
 // 0x17 (sub_143f2): Set [obj+141D]=0, then read 2 signed bytes as X/Y velocity. 2 bytes.
@@ -12489,13 +12490,13 @@ static uint16_t v2_vm_indexed_field_b_target(V2VM& vm) {
 }
 
 // sub_146de: indexed field ADD (pattern B). 1 byte.
-static void v2_vm_sub_146de(V2VM& vm) {
+static void v2_vm_field_add_146de(V2VM& vm) {
     uint16_t addr = v2_vm_indexed_field_b_target(vm);
     vm.ds_write(addr, vm.ds_read(addr) + v2_vm_accumulator);
 }
 
 // sub_1474b: indexed field SUB (pattern B). 1 byte.
-static void v2_vm_sub_1474b(V2VM& vm) {
+static void v2_vm_field_sub_1474b(V2VM& vm) {
     uint16_t addr = v2_vm_indexed_field_b_target(vm);
     vm.ds_write(addr, vm.ds_read(addr) - v2_vm_accumulator);
 }
@@ -12550,9 +12551,9 @@ static void v2_vm_op_84(V2VM& vm) {
 static void v2_vm_op_90(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (vm.ds_read(si + OBJ_FLAGS) & 0x40)
-        v2_vm_sub_1474b(vm);
+        v2_vm_field_sub_1474b(vm);
     else
-        v2_vm_sub_146de(vm);
+        v2_vm_field_add_146de(vm);
 }
 
 // 0x93 (sub_1473d): conditional SUB/ADD — opposite of 0x90. 1 byte.
@@ -12560,9 +12561,9 @@ static void v2_vm_op_90(V2VM& vm) {
 static void v2_vm_op_93(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (vm.ds_read(si + OBJ_FLAGS) & 0x40)
-        v2_vm_sub_146de(vm);
+        v2_vm_field_add_146de(vm);
     else
-        v2_vm_sub_1474b(vm);
+        v2_vm_field_sub_1474b(vm);
 }
 
 // 0x92 (sub_14713): hflip conditional ADD/SUB indexed+1995. 1 byte.
@@ -12860,7 +12861,7 @@ static void v2_vm_op_43(V2VM& vm) {
 
 // sub_163ac: Tile type check for platform detection. 0 bytes. Sets carry.
 // sub_163ac: Exact tile check chain. 3 sub_14199 calls with conditional logic.
-static bool v2_vm_sub_163ac(V2VM& vm) {
+static bool v2_vm_platform_check_163ac(V2VM& vm) {
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     uint16_t si_x;
     if (!(vm.ds_read(obj + OBJ_FLAGS) & 0x40)) {
@@ -12978,7 +12979,7 @@ static void v2_vm_op_13(V2VM& vm) {
 
 // 0x4E (sub_144fd): sub_163ac tile check + off_30C8E[0]. 0 bytes.
 static void v2_vm_op_4E(V2VM& vm) {
-    vm.carry = v2_vm_sub_163ac(vm);
+    vm.carry = v2_vm_platform_check_163ac(vm);
     // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 0);
     if (cs_addr == 0x44E9) {
@@ -13334,7 +13335,7 @@ static void v2_vm_op_BF(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.si_track = filter;   // orig si=byte; 15fb1 is PUSH si,di balanced
     vm.di_track = di;
-    vm.carry = v2_vm_sub_15fb1(vm, filter, di);
+    vm.carry = v2_vm_obj_search_up_15fb1(vm, filter, di);
     vm.ds_write(DS_OBJ_COUNT, saved);
     // off_30C8E[0]: carry → jump, !carry → skip 2
     if (vm.carry) { uint16_t t = *(uint16_t*)(vm.es + vm.pc); vm.pc = t; } else { vm.pc += 2; }
@@ -13450,7 +13451,7 @@ static void v2_vm_op_07(V2VM& vm) {
     // sub_1368c: TEST [si+1585h], 40h / JNZ ret → call sub_136a0 when clear
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (vm.ds_read(si + OBJ_FLAGS) & 0x40) return;
-    v2_vm_sub_136a0(vm, si);
+    v2_vm_hflip_body_136a0(vm, si);
 }
 
 // 0x26 (sub_14edd): Read 2 mode bytes, 4 dispatches (2×off_30C98 + 2×off_30CA2).
@@ -13672,7 +13673,7 @@ static void v2_vm_op_36(V2VM& vm) {
 static void v2_vm_op_45(V2VM& vm) {
     // sub_1250b: read mode byte + dispatch (result unused by sub_12634)
     uint8_t mode1;
-    v2_vm_sub_1250b(vm, mode1);
+    v2_vm_ch_dispatch_1250b(vm, mode1);
 
     // sub_125fa: mode byte + 2 dispatches → si (word_2854C = ds:0x6C), di
     uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
@@ -13771,9 +13772,9 @@ static void v2_vm_op_25(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; scans PUSH/POP-clean (task #15)
     if (!flag40) {
-        v2_vm_sub_158b9(vm, anim_idx, di);
+        v2_vm_probe_right_158b9(vm, anim_idx, di);
     } else {
-        v2_vm_sub_158aa(vm, anim_idx, di);
+        v2_vm_probe_left_158aa(vm, anim_idx, di);
     }
     // off_30C8E[si=2]: carry → skip 2, no carry → jump
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 2);
@@ -14498,7 +14499,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
 }
 
 // sub_1303a: setup globals → run anim interpreter → copy results back
-static void v2_vm_sub_1303a(V2VM& vm) {
+static void v2_vm_anim_interp_1303a(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     uint16_t anim_bx = vm.ds_read(di + 0x1A0D);
     if (anim_bx == 0xFFFF) return;
@@ -14532,7 +14533,7 @@ static void v2_vm_sub_1303a(V2VM& vm) {
 // 0x2F (sub_13031): Animation update. 0 bytes. PUSH bx, calls, POP bx.
 // sub_135cf: velocity/bounds update after animation frame.
 // Clamps velocity to max values, applies flip, adds to velocity accumulators.
-static void v2_vm_sub_135cf(V2VM& vm) {
+static void v2_vm_anim_tail_135cf(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     // Check if update needed
     if (vm.ds_read(di + OBJ_ANIM_TABLE) != 0xFFFF) return;
@@ -14574,8 +14575,8 @@ static void v2_vm_sub_135cf(V2VM& vm) {
 }
 
 static void v2_vm_op_2F(V2VM& vm) {
-    v2_vm_sub_1303a(vm);
-    v2_vm_sub_135cf(vm);
+    v2_vm_anim_interp_1303a(vm);
+    v2_vm_anim_tail_135cf(vm);
 }
 
 // 0x46 (sub_1268d): Command buffer write type=6 with param. 2 bytes.
@@ -14887,7 +14888,7 @@ static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
 // lands on sub_1250b's own return word (no live pushes at the 0x2512 site), so
 // the CALLER OPCODE continues right after its `call sub_1250b`, with the
 // sub_12515 tail (the ds:0x2A write) skipped and AX = the POP'd site ip.
-static bool v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode) {
+static bool v2_vm_ch_dispatch_1250b(V2VM& vm, uint8_t& out_mode) {
     // ax = es:[bx]; INC bx
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
@@ -14924,7 +14925,7 @@ static bool v2_vm_sub_1250b(V2VM& vm, uint8_t& out_mode) {
 // escape RETN lands on the PUSHed mode DATA word at 0x25A7 → jump into
 // arbitrary code); they keep the soft guard and never reach the caller
 // comparison (the oracle escapes the isolator on those inputs too).
-static bool v2_vm_sub_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
+static bool v2_vm_ch_escape_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) {
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
     uint8_t mode = (uint8_t)(word & 0xFF);
@@ -14978,7 +14979,7 @@ static void v2_vm_op_41(V2VM& vm) {
     uint8_t mode1;
     // ch6/7 inside cuts only the wrapper's sub_12515 tail (ds:0x2A stays stale);
     // the opcode continues either way — orig RETNs to 0x2431.
-    v2_vm_sub_1250b(vm, mode1);
+    v2_vm_ch_dispatch_1250b(vm, mode1);
 
     // 2. sub_12529: read text dimensions from seg001 → word_28514 (0x34), word_28516 (0x36)
     {
@@ -15021,7 +15022,7 @@ static void v2_vm_op_41(V2VM& vm) {
     // (task #15 shadow-register model). X-site escapes are orig-UB and left
     // the routine via the soft guard (fn-test skips them like the oracle).
     uint16_t si_pos = 0, di_pos = 0;
-    bool escaped = v2_vm_sub_125a3(vm, si_pos, di_pos);
+    bool escaped = v2_vm_ch_escape_125a3(vm, si_pos, di_pos);
     if (escaped) {
         extern int v2_fntest_vm_soft;
         if (v2_fntest_vm_soft == 3) return;   // X-site orig-UB guard fired
@@ -15060,7 +15061,7 @@ static void v2_vm_op_44(V2VM& vm) {
 
     // 1. sub_1250b
     uint8_t mode1;
-    v2_vm_sub_1250b(vm, mode1);   // ch6/7 inside cuts only the wrapper tail
+    v2_vm_ch_dispatch_1250b(vm, mode1);   // ch6/7 inside cuts only the wrapper tail
 
     // 2. sub_12529
     {
@@ -15430,7 +15431,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
 // out_dir = AX at the STC return (1 = sub_15cef path/moved left, 0 = sub_15cf5
 // path/moved right); out_partner = SI at the STC return (= ds:0x38, matched slot).
 // DS writes: 0x3A (filter), 0x38 (slot cursor), 0x32 (Y-adj scratch on deep paths).
-static bool v2_vm_sub_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
+static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
                             int16_t& out_dir, uint16_t& out_partner) {
     uint8_t* rds = vm.shadow;
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
@@ -15537,11 +15538,11 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
         uint16_t x_dir = 0;
         if (cur_x < old_x) {
             // Moved left: sub_159d3 = vertical tile scan at X_start
-            x_carry = v2_vm_sub_159df_at(vm, filter_si, di, vm.ds_read(di + OBJ_BBOX_X0));
+            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, vm.ds_read(di + OBJ_BBOX_X0));
             x_dir = 1;
         } else if (cur_x > old_x) {
             // Moved right: loc_159ec = vertical tile scan at X_end
-            x_carry = v2_vm_sub_159df_at(vm, filter_si, di, vm.ds_read(di + OBJ_BBOX_X1));
+            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, vm.ds_read(di + OBJ_BBOX_X1));
             x_dir = 0;
         }
         if (x_carry) {
@@ -15574,8 +15575,8 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
         // CALL sub_15c37; JNC loc_157bb; CALL sub_15d6b — X position snap).
         int16_t snap_dir = 0;
         uint16_t partner = 0;
-        if (v2_vm_sub_15c37(vm, filter_si, di, snap_dir, partner)) {
-            v2_vm_sub_15d6b(vm, snap_dir, partner, di);
+        if (v2_vm_xvel_obj_search_15c37(vm, filter_si, di, snap_dir, partner)) {
+            v2_vm_x_snap_obj_15d6b(vm, snap_dir, partner, di);
             found = true;
         }
     }
@@ -15758,7 +15759,7 @@ static void v2_vm_op_49(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
 
     // sub_1589B: tile search at (6C,6E) + object search at (6C,6E)
-    v2_vm_sub_1589b(vm, anim_idx);
+    v2_vm_probe_at_pos_1589b(vm, anim_idx);
 
     // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
     if (vm.carry)
@@ -15781,7 +15782,7 @@ static void v2_vm_op_4A(V2VM& vm) {
     vm.ds_write(DS_TEXT_ROW, y_val);
     uint8_t anim_idx = vm.read_u8();
     // sub_1589B: tile search at (6C,6E) + object search at (6C,6E)
-    v2_vm_sub_1589b(vm, anim_idx);
+    v2_vm_probe_at_pos_1589b(vm, anim_idx);
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +0x87AE + 2); // si=2 → byte offset 2
     if (cs_addr == 0x44F3) {
         if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
@@ -15926,7 +15927,7 @@ static void v2_vm_op_AF(V2VM& vm) {
 static void v2_vm_op_30(V2VM& vm) {
     uint8_t filter = vm.read_u8();
     uint16_t obj_di = vm.global_r(DS_CUR_OBJ);
-    v2_vm_sub_158e6(vm, filter, obj_di);
+    v2_vm_probe_front_158e6(vm, filter, obj_di);
     // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
     if (vm.carry) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
@@ -15941,7 +15942,7 @@ static void v2_vm_op_39(V2VM& vm) {
 // 0x4F (sub_14501): push 2, sub_163ac (tile check), off_30C8E[2].
 // 0 byte params + 2 byte jump target. Same as 0x4E but dispatch index 2.
 static void v2_vm_op_4F(V2VM& vm) {
-    vm.carry = v2_vm_sub_163ac(vm);
+    vm.carry = v2_vm_platform_check_163ac(vm);
     // off_30C8E[2] = loc_144f3: JC → carry = skip 2, no carry = jump
     // (opposite of off_30C8E[0] which is JNC → no carry = skip, carry = jump)
     if (!vm.carry) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
@@ -16798,7 +16799,7 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
     cmp_seg("SOUND", v2_vm_shadow_sound, 0xE470, 0x992C);            // 0xE47 para
     cmp_seg("CHUNK", v2_vm_shadow_chunk, V2_CHUNK_SHADOW_SIZE, DS_SEG_CHUNK); // 0x2ABA para
     cmp_seg("GS_TILEDATA", v2_vm_shadow_gs_tiledata, 0x3600, 0x2E5D); // 0x360 para
-    printf("  v2_sub_13fc2 calls: %d\n", v2_13fc2_count);
+    printf("  v2_vm_tile_dirty_13fc2 calls: %d\n", v2_13fc2_count);
     // FS detailed diffs — dump first 20, track range
     {
         uint16_t seg = *(uint16_t*)(real + DS_SEG_FS);
@@ -17316,7 +17317,7 @@ static void v2_do_render() {
     v2_pixwatch_stage("p1-tiles");
     v2_draw_sprites(v2_current_ds_val);
     v2_pixwatch_stage("p1-sprites");
-    v2_sub_1E0C7(v2_vm_shadow_ds);  // CALLF sub_1E0C7 (DS side effects before UI render)
+    v2_glyph_flush_1E0C7(v2_vm_shadow_ds);  // CALLF sub_1E0C7 (DS side effects before UI render)
     v2_draw_ui(v2_current_ds_val);
 
     // Debug: count active sprites in shadow DS
@@ -17515,9 +17516,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
     // sub_1dd9c_main_render_loop_with_state(_state); // seg003 — commented for v2
     // CALLF sub_1C8F1 (seg003 flagged/door tile rendering) — v2 equivalent:
     // sub_1c8f1_door_rendering_with_state(_state); // seg003 — commented for v2
-    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
     // CALLF sub_1E0C7 (seg003 UI glyph rendering)
-    v2_sub_1E0C7(v2_vm_shadow_ds);
+    v2_glyph_flush_1E0C7(v2_vm_shadow_ds);
     v2_draw_ui(v2_current_ds_val);
 
     // ====== PAGE FLIP 1 (eip 0x0071) ======
@@ -17561,25 +17562,25 @@ void v2_run_animation_vm(uint16_t ds_val) {
             }
         }
 
-        // sub_10704: scroll clamp — reads scroll speeds from ds:0x3D8-0x3DE,
+        // sub_10704: apply pending scroll, step 1 — reads scroll amounts from ds:0x3D8-0x3DE,
         // looks up pixel amount from ds:[si*2+0x2B82], calls scroll functions.
         // sub_17496/sub_1746c/loc_174E9/loc_174BF: clamp viewport + update scroll state.
         // DS writes: ds:0x44/0x46, ds:0x257F/0x2581, ds:0x34E/0x350
         // VGA OUT: CRTC start address (0x3D4) — commented for v2
         {
-            // sub_10704 (eip 0x007A): consolidated into v2_sub_10704
-            // (v2_scroll_apply + v2_sub_17496 mover family; lambdas removed).
+            // sub_10704 (eip 0x007A): consolidated into v2_scroll_step1_10704
+            // (v2_scroll_apply + v2_scroll_left_17496 mover family; lambdas removed).
             // No VGA OUT in the movers — CRTC programming is in sub_16775.
-            v2_sub_10704(s);
+            v2_scroll_step1_10704(s);
         }
 
         // sub_12fcb (eip 0x007D): per-object sub-sprite position update, delta
-        // type 1 (bx=2 → sub_122c0). Consolidated into v2_sub_12fcb (exact
+        // type 1 (bx=2 → sub_122c0). Consolidated into v2_subsprite_walk_12fcb (exact
         // delta fns + object DO-WHILE + slot DO-WHILE).
         // sub_12fc6(bx=0) is already called in POST-VM (v2_game_loop_post_vm).
-        v2_sub_12fcb(s);
+        v2_subsprite_walk_12fcb(s);
         // sub_12d2c: invincibility/flash timer (called from eip 0x0080)
-        v2_sub_12d2c(s);   // extracted (unit 69) — was an inline copy
+        v2_flash_timers_12d2c(s);   // extracted (unit 69) — was an inline copy
 
         // ====== PASS 2: RENDER 2 + POST-RENDER 2 (eip 0x0086..0x00A6) ======
         // CALLF sub_1DE05 (eip 0x0086)
@@ -17589,27 +17590,27 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // CALLF sub_1DD9C (eip 0x0094)
         v2_late_sprites_1DD9C(s);
         // sub_1C8F1 (eip 0x0099) — flagged tiles
-        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+        v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
         // sub_1E0C7 (eip 0x00A1) — UI
-        v2_sub_1E0C7(v2_vm_shadow_ds);
+        v2_glyph_flush_1E0C7(v2_vm_shadow_ds);
         v2_draw_ui(v2_current_ds_val);
         // sub_16775 (eip 0x00A6) — page flip 2
         v2_page_flip_16775(s);
 
         // ====== POST-FLIP 2 (eip 0x00A9..0x00B8) ======
         // sub_10753 (eip 0x00A9): scroll clamp 2 — consolidated into
-        // v2_sub_10753 (v2_scroll_apply, table 0x2B80; lambdas removed).
-        v2_sub_10753(s);
+        // v2_scroll_step2_10753 (v2_scroll_apply, table 0x2B80; lambdas removed).
+        v2_scroll_step2_10753(s);
 
         // sub_13c0c (eip 0x00AC): viewport bounds update + object visibility
         // marking. Consolidated: was the second correct inline copy while
-        // v2_sub_13c0c itself was dead code with a Y-clamp bug. Single
+        // v2_despawn_bounds_13c0c itself was dead code with a Y-clamp bug. Single
         // implementation now, covered by FNSELFTEST.
-        v2_sub_13c0c(s);
+        v2_despawn_bounds_13c0c(s);
 
         // sub_12fd0(bx=4): sub-sprite update, delta type 2 (eip 0x00AF) —
-        // consolidated into v2_sub_12fd0.
-        v2_sub_12fd0(s);
+        // consolidated into v2_subsprite_walk_12fd0.
+        v2_subsprite_walk_12fd0(s);
 
         // sub_11792: HUD full update (if flag &1 and level != 0x2C)
         // Calls sub_120ff (healthbar), sub_12199 (items), loc_1205b (?), sub_11b0b (portrait)
@@ -17861,7 +17862,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
 
                     if (!(s[0x342] | s[0x343] | s[0x344])) {
                         // No shade active → sub_1450b first
-                        v2_sub_1450b(s, 4, 4, 4);                   // sub_1450b(ax=4, si=4, di=4)
+                        v2_save_game_1450b(s, 4, 4, 4);                   // sub_1450b(ax=4, si=4, di=4)
                     }
                     // sub_103ca: blocking palette transition UI
                     // sub_177bb(ax=0): stop music
@@ -17880,19 +17881,19 @@ void v2_run_animation_vm(uint16_t ds_val) {
                       uint16_t ax_h = *(uint16_t*)(s + DS_SCRATCH_36); // height from sub_12529
                       v2_text_align_12549(s, ax_h);                    // sub_12549 at eip=0x24B9
                       uint16_t si_t = 0x0D, di_t = 0x0C;
-                      v2_sub_12388(s, si_t, di_t, (uint8_t)ax_h);
-                      v2_loc_124c5(s, si_t + 1, di_t + 1, bx_t); }
+                      v2_text_frame_12388(s, si_t, di_t, (uint8_t)ax_h);
+                      v2_text_render_124c5(s, si_t + 1, di_t + 1, bx_t); }
                     // sub_1265b: display password. ax=5 → sub_12515(5) + loc_124c5
                     v2_text_lookup_12515(s, 5);
                     { uint16_t bx_p = *(uint16_t*)(s + DS_TEXT_IDX);
                       v2_text_dims_12529(s, bx_p);
-                      v2_loc_124c5(s, 0x10 + 1, 0x0F + 1, bx_p); }
+                      v2_text_render_124c5(s, 0x10 + 1, 0x0F + 1, bx_p); }
                     // sub_1241e × 4: draw password characters from ds:0x310-0x316
                     { uint16_t si_pw = 0x12, di_pw = 0x11;
-                      v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + DS_PW_CHAR0), si_pw, di_pw);
-                      v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + 0x312), si_pw, di_pw);
-                      v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + 0x314), si_pw, di_pw);
-                      v2_sub_1241e(s, (uint8_t)*(uint16_t*)(s + 0x316), si_pw, di_pw); }
+                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + DS_PW_CHAR0), si_pw, di_pw);
+                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x312), si_pw, di_pw);
+                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x314), si_pw, di_pw);
+                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x316), si_pw, di_pw); }
                     s[0x956B] = 1;                                       // byte_31A4B = 1
                     // sub_104a1: blocking input wait. Verified with seg000 lines 2447-2515.
                     // Sets word_28925=0x11, word_28923=1, byte_31A4B=1.
@@ -17901,7 +17902,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     *(uint16_t*)(s + 0x0445) = 0x11;                     // word_28925 (0x28925 - 0x284E0 = 0x445)
                     *(uint16_t*)(s + 0x0443) = 1;                        // word_28923 (0x28923 - 0x284E0 = 0x443)
                     // OUT(0x3C9, 0x3F); OUT(0x3C9, 0x3F); OUT(0x3C9, 0x3F); — VGA palette, commented
-                    v2_sub_1E0C7(s);                                     // CALLF sub_1E0C7
+                    v2_glyph_flush_1E0C7(s);                                     // CALLF sub_1E0C7
                     v2_page_flip_16775(s);                                     // CALL sub_16775
                     // Blocking input wait loop
                     // HYPOTHESIS TEST: cap to 1 iteration.
@@ -17951,9 +17952,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     v2_bg_latch_1DE05(s);
                     v2_game_loop_post_render(s);
                     v2_late_sprites_1DD9C(s);
-                    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+                    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
                     // sub_1E0C7 + sub_16775 + sub_10130
-                    v2_sub_1E0C7(s);
+                    v2_glyph_flush_1E0C7(s);
                     v2_draw_ui(v2_current_ds_val);
                     v2_page_flip_16775(s);
                     v2_vsync_wait_10130(s);
@@ -17961,9 +17962,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     v2_bg_latch_1DE05(s);
                     v2_game_loop_post_render(s);
                     v2_late_sprites_1DD9C(s);
-                    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+                    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
                     // sub_1E0C7 + sub_16775
-                    v2_sub_1E0C7(s);
+                    v2_glyph_flush_1E0C7(s);
                     v2_draw_ui(v2_current_ds_val);
                     v2_page_flip_16775(s);
                     // word_31A49=0
@@ -17973,7 +17974,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     memset(s + 0x956C, 0, 0x1B8 * 2);
 
                     // After input: sub_1450b(ax=5, si=0x10, di=0x0F) + sub_14590
-                    v2_sub_1450b(s, 5, 0x10, 0x0F);                 // save game state after input
+                    v2_save_game_1450b(s, 5, 0x10, 0x0F);                 // save game state after input
                     // sub_14590: finalize save — similar to sub_1450b but different params
                     // ds:0x342 = saved_al<<1; ds:0x7EFD |= 2
                     // For v2: just set the flags
@@ -18098,7 +18099,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         v2_verify_audio_slots(v2_vm_shadow_ds, &orig_pool, "default shadow", 1, v2_dbg_pre_vm_iter);
         v2_verify_audio_slots_symmetry(v2_vm_real_ds_ptr, v2_vm_shadow_ds, v2_dbg_pre_vm_iter);
         // Default: orig_pool drives real audio. shadow stores same deterministic
-        // handle as real_ds via v2_sub_177bb_v2 (no v2_pool slot in default mode).
+        // handle as real_ds via v2_sfx_play_177bb_v2 (no v2_pool slot in default mode).
         // Both shadow and real consult orig_pool for stale check → identical clears.
         clear_stale(v2_vm_shadow_ds, orig_pool);
         clear_stale(v2_vm_real_ds_ptr, orig_pool);
@@ -18644,8 +18645,8 @@ void v2_phase_render1(uint16_t ds_val) {
     }
 
     // sub_12fc6(bx=0): sub-sprite position update type 0 (eip 0x004B) —
-    // consolidated into v2_sub_12fc6 (exact sub_1227e + object/slot do-while).
-    v2_sub_12fc6(s);
+    // consolidated into v2_subsprite_walk_12fc6 (exact sub_1227e + object/slot do-while).
+    v2_subsprite_walk_12fc6(s);
 
     // sub_10130: VGA vsync wait (eip 0x004E)
     v2_vsync_wait_10130(s);
@@ -18653,7 +18654,7 @@ void v2_phase_render1(uint16_t ds_val) {
     // sub_1DE05 (render 1, eip 0x0051)
     v2_bg_latch_1DE05(s);
     // v2 single-buffer rendering: redraw tile background + sprites here. The full
-    // v2_do_render() helper used to be called but it ALSO invokes v2_sub_1E0C7,
+    // v2_do_render() helper used to be called but it ALSO invokes v2_glyph_flush_1E0C7,
     // which gets called again 6 lines below — caused 0x98DC throttle to advance
     // 1 ahead of orig per game tick (orig calls sub_1e0c7 ONCE per pass at eip 0x006C).
     v2_draw_tiles(v2_current_ds_val);
@@ -18708,9 +18709,9 @@ void v2_phase_render1(uint16_t ds_val) {
     }
 
     // sub_1C8F1: flagged tiles
-    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
     // sub_1E0C7: UI
-    v2_sub_1E0C7(v2_vm_shadow_ds);
+    v2_glyph_flush_1E0C7(v2_vm_shadow_ds);
     v2_draw_ui(v2_current_ds_val);
     // sub_16775: page flip 1
     v2_page_flip_16775(v2_vm_shadow_ds);
@@ -18795,9 +18796,9 @@ void v2_phase_post_flip1(uint16_t ds_val) {
         else { v = *(uint16_t*)(s + 0x3DC); if (v != 0) scroll_ud(1, *(uint16_t*)(s + v * 2 + 0x2B82)); }
     }
     // sub_12fcb: sub-sprite position update, delta type 1 — consolidated.
-    v2_sub_12fcb(s);
+    v2_subsprite_walk_12fcb(s);
     // sub_12d2c: invincibility timer
-    v2_sub_12d2c(s);   // extracted (unit 69) — was an inline copy
+    v2_flash_timers_12d2c(s);   // extracted (unit 69) — was an inline copy
 
     // sub_10130: VGA vsync wait (eip 0x0083) — last in POST_FLIP1 block
     v2_vsync_wait_10130(s);
@@ -18857,9 +18858,9 @@ void v2_phase_render2(uint16_t ds_val) {
     v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("p2b-sprites-late");
     // sub_1C8F1
-    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
     // sub_1E0C7
-    v2_sub_1E0C7(v2_vm_shadow_ds);
+    v2_glyph_flush_1E0C7(v2_vm_shadow_ds);
     v2_draw_ui(v2_current_ds_val);
     // sub_16775: page flip 2
     v2_page_flip_16775(v2_vm_shadow_ds);
@@ -18874,15 +18875,15 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     // orig block 7 (eips 0xA9-0xB8): sub_10753 → sub_13c0c → sub_12fd0 →
     // sub_11792 → sub_101be → sub_10130. v2 mirrors in same order.
     // (previously v2_vsync_wait_10130 was at START — moved to END to match orig).
-    // sub_10753: scroll clamp 2 — consolidated into v2_sub_10753
+    // sub_10753: scroll clamp 2 — consolidated into v2_scroll_step2_10753
     // (v2_scroll_apply, table 0x2B80; lambdas removed).
-    v2_sub_10753(s);
+    v2_scroll_step2_10753(s);
     // sub_13c0c: viewport bounds — consolidated (this was a FOURTH copy, and
     // like the others it carried the sign-of-difference JL/JGE model; the
-    // single v2_sub_13c0c has the corrected operand-compare semantics).
-    v2_sub_13c0c(s);
+    // single v2_despawn_bounds_13c0c has the corrected operand-compare semantics).
+    v2_despawn_bounds_13c0c(s);
     // sub_12fd0: sub-sprite update, delta type 2 — consolidated.
-    v2_sub_12fd0(s);
+    v2_subsprite_walk_12fd0(s);
     // sub_11792: HUD update — orig calls sub_120FF + sub_12199 + loc_1205B + sub_11B0B.
     // Previously v2 only had sub_120FF (healthbar). Missing sub_12199 caused ds:0x3FC
     // to never sync with ds:0x3E4 after item pickup → ITEM-TRAP divergence at frame ~393.
@@ -19039,7 +19040,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     // when timer→0, rotates palette buffer at 0x8202+ and 0x7F02+, signals
     // word_303DE=2 (handled by v2_render_callback dispatch to sub_10ffc).
     // Without this call ds:0x258C..0x2591 diverges from orig — task #65 root.
-    v2_sub_101be(s);
+    v2_pal_ui_cycle_101be(s);
     // sub_10130: VGA vsync wait (eip 0xB8) — last in POST_FLIP2 block (matches orig).
     v2_vsync_wait_10130(s);
 }
@@ -19123,10 +19124,10 @@ void v2_phase_render3(uint16_t ds_val) {
     v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("r3-1DD9C");
     // sub_1C8F1 (flagged tiles)
-    v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
+    v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
     v2_pixwatch_stage("r3-flagged");
     // sub_1E0C7 (UI)
-    v2_sub_1E0C7(v2_vm_shadow_ds);
+    v2_glyph_flush_1E0C7(v2_vm_shadow_ds);
     v2_draw_ui(v2_current_ds_val);
     v2_pixwatch_stage("r3-ui");
     // sub_16775 (page flip 3)
@@ -19182,7 +19183,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     if (*(uint16_t*)(s + DS_CMD_WRITE) == 0) {
 #ifdef V2_ONLY
         // PART A (V2_ONLY only): direct snap mirror. In default mode the inline
-        // v2_mirror_sub_10350_spec_ors (called from orig sub_10350) is the sole
+        // v2_spec_ors_mirror_10350 (called from orig sub_10350) is the sole
         // shadow updater for these bytes — it shares orig's word_2a66f gate, so
         // shadow stays in lockstep with real (both update or both stay sticky
         // from sub_108c8 OR-in). Running PART A unconditionally would update
@@ -19388,7 +19389,7 @@ void v2_phase_frame_end(uint16_t ds_val) {
 // Forward decls used by mirrors
 static void v2_page_flip_16775(uint8_t* s);
 static void v2_vsync_wait_10130(uint8_t* s);
-static void v2_sub_101be(uint8_t* s);
+static void v2_pal_ui_cycle_101be(uint8_t* s);
 static void v2_audio_tick_108c8(uint8_t* s);
 
 // Helper: replicate orig sub_12352 input read into shadow DS.
@@ -19541,7 +19542,7 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
             shadow[0x2590], shadow[0x2591], shadow[0x2592], shadow[0x2593]);
       }
     }
-    v2_sub_101be(shadow);
+    v2_pal_ui_cycle_101be(shadow);
 
     // 3× sub-frame. orig (eips 0x0177..0x018C) is asymmetric:
     //   eip 0x0177 sub_16775+swap, 0x017A sub_10130, 0x017D sub_108c8
@@ -19596,8 +19597,8 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_text_dims_12529(s, bx_text);
         v2_text_align_12549(s, ax_align);
         uint16_t save_si = si_pos, save_di = di_pos;
-        v2_sub_12388(s, si_pos, di_pos, (uint8_t)ax_align);
-        v2_loc_124c5(s, save_si + 1, save_di + 1, bx_text);
+        v2_text_frame_12388(s, si_pos, di_pos, (uint8_t)ax_align);
+        v2_text_render_124c5(s, save_si + 1, save_di + 1, bx_text);
         s[0x956B] = 1;
         bx_read += 0x0A;
     } else if (cmd_type == 0x0A) {
@@ -19605,7 +19606,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
         uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
         *(uint16_t*)(s + DS_SCRATCH_34) = 2;
-        v2_loc_124c5(s, si_pos, di_pos, bx_text);
+        v2_text_render_124c5(s, si_pos, di_pos, bx_text);
         s[0x956B] = 1;
         bx_read += 0x08;
     } else if (cmd_type == 6) {
@@ -19621,7 +19622,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint8_t ch = (uint8_t)*(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
         uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
         uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
-        v2_sub_1241e(s, ch, si_pos, di_pos);
+        v2_glyph_put_1241e(s, ch, si_pos, di_pos);
         s[0x956B] = 1;
         bx_read += 0x08;
     } else if (cmd_type == 2) {
@@ -19633,7 +19634,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
             v2_page_flip_16775(s); v2_swap_render_buf();             // 01A2:276C sub_16775
             v2_vsync_wait_10130(s);                                   // 01A2:276F sub_10130
             v2_draw_ui(v2_current_ds_val);                     // m2c port: v2_draw_ui (was inline before sub_1E0C7)
-            v2_sub_1E0C7(s);                                   // 01A2:2772 sub_1E0C7
+            v2_glyph_flush_1E0C7(s);                                   // 01A2:2772 sub_1E0C7
         }
         // loc_12777 (gameplay path)
         v2_page_flip_16775(s); v2_swap_render_buf();                 // 01A2:2777 sub_16775
@@ -19647,12 +19648,12 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_pixwatch_stage("p4-sprites");
         v2_draw_ui(v2_current_ds_val);
         v2_bg_latch_1DE05(s);                                       // 01A2:277D sub_1DE05
-        v2_sub_165aa(s);                                       // 01A2:2782 sub_165aa (bit-exact, no sub_16661)
+        v2_page_rotate_165aa(s);                                       // 01A2:2782 sub_165aa (bit-exact, no sub_16661)
         v2_late_sprites_1DD9C(s);                                       // 01A2:2785 sub_1DD9C
         v2_draw_flagged_tiles(v2_current_ds_val);              // m2c port: v2_draw_flagged_tiles BEFORE sub_1c8f1
-        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:278D sub_1C8F1(ax=FFFE)
+        v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:278D sub_1C8F1(ax=FFFE)
         v2_draw_ui(v2_current_ds_val);                         // m2c port: v2_draw_ui BEFORE sub_1E0C7
-        v2_sub_1E0C7(s);                                       // 01A2:2792 sub_1E0C7
+        v2_glyph_flush_1E0C7(s);                                       // 01A2:2792 sub_1E0C7
         // ---- second sub-frame ----
         v2_page_flip_16775(s); v2_swap_render_buf();                 // 01A2:2797 sub_16775
         v2_vsync_wait_10130(s);                                       // 01A2:279A sub_10130
@@ -19663,7 +19664,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_game_loop_post_render(s);                           // 01A2:27A2 sub_165aa (+ sub_16661)
         v2_late_sprites_1DD9C(s);                                       // 01A2:27A5 sub_1DD9C
         v2_draw_flagged_tiles(v2_current_ds_val);              // m2c port: before sub_1c8f1
-        v2_sub_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:27AD sub_1C8F1(ax=FFFE)
+        v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:27AD sub_1C8F1(ax=FFFE)
         v2_page_flip_16775(s); v2_swap_render_buf();                 // 01A2:27B2 sub_16775
         v2_vsync_wait_10130(s);                                       // 01A2:27B5 sub_10130
         *(uint16_t*)(s + 0x9569) = 0;                          // 01A2:27B8 mov word_31A49, 0
@@ -19720,7 +19721,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
     v2_draw_tiles(v2_current_ds_val);
     v2_draw_sprites(v2_current_ds_val);
     v2_draw_ui(v2_current_ds_val);
-    v2_sub_1E0C7(s);
+    v2_glyph_flush_1E0C7(s);
     // sub_12352 (orig eip 0x089D inside sub_1086f main loop, after dispatch).
     // MUST be full v2_read_input_12352_iter — drains sdl_input_press_edges + LAYER 1/2
     // consume. Previously was a simplified inline (ax=v2_input_or; no drain) →
@@ -20128,7 +20129,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
 //   Then: sub_120FF (healthbar) + sub_12199 (item display) + loc_1205B (selector)
 //   + sub_11B0B (portrait/sound sync). Each sub_xxxx has internal render via
 //   sub_1183d/sub_11ad9 — mirrored as v2_draw_hud_healthbar/portrait/item.
-static void v2_sub_11792(uint8_t* shadow) {
+static void v2_hud_update_11792(uint8_t* shadow) {
     extern uint16_t v2_current_ds_val;
     if (!(shadow[DS_LEVEL_FLAGS] & 1) || *(uint16_t*)(shadow + DS_LEVEL) == 0x2C) return;
     // sub_120FF: healthbar tracking. DS writes: [435-439] state, [43B-43F] previous.
@@ -20278,7 +20279,7 @@ static void v2_selector_blink_11c52(uint8_t* s) {
 
 // sub_10555 mirror: quit-prompt selector blink (eip 0x555..0x5CA). Same pattern
 // as sub_11c52 but different sprite range. DS write: DEC word_28925.
-static void v2_sub_10555(uint8_t* s) {
+static void v2_quit_blink_10555(uint8_t* s) {
     uint16_t cnt = *(uint16_t*)(s + 0x445) - 1;
     *(uint16_t*)(s + 0x445) = cnt;
 }
@@ -20323,9 +20324,9 @@ void v2_run_pause_entry(uint8_t* shadow) {
     v2_game_loop_post_render(shadow);             // sub_165aa + sub_16661 + sub_1406d
     v2_late_sprites_1DD9C(shadow);                         // sub_1DD9C: sprite scan-out tracking
     v2_draw_flagged_tiles(v2_current_ds_val);     // m2c-inline at line 4905
-    v2_sub_1C8F1(shadow, 0xFFFE);                 // sub_1C8F1(ax=0xFFFE): door rendering
+    v2_dirty_tile_scan_1C8F1(shadow, 0xFFFE);                 // sub_1C8F1(ax=0xFFFE): door rendering
     v2_draw_ui(v2_current_ds_val);                // m2c-inline at line 4908
-    v2_sub_1E0C7(shadow);                         // sub_1E0C7: UI render
+    v2_glyph_flush_1E0C7(shadow);                         // sub_1E0C7: UI render
     v2_page_flip_16775(shadow);                         // sub_16775: VGA page flip + scroll save (sets 0xA39C=1)
     // Cursor pos: di = word_288A2, si = [di+0x414]; di<<=1; si += di;
     //   word_28923 = si; si <<= 1; word_28921 = [si+0x3E4]
@@ -20387,7 +20388,7 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
     // ALL must be mirrored — orig calls these per-iter, shadow must too or DS diverges.
     bool cbb_exit = v2_pause_items_11cbb(shadow);            // item interaction (ds:0x441-44B)
     v2_selector_blink_11c52(shadow);                            // selector blink DEC
-    v2_sub_11792(shadow);                            // HUD update: healthbar/item/selector/portrait
+    v2_hud_update_11792(shadow);                            // HUD update: healthbar/item/selector/portrait
     v2_page_flip_16775(shadow);                            // page flip (sets 0xA39C=1, 0x92EE pan)
     v2_vsync_wait_10130(shadow);                            // vsync wait (DECs 0xA39C to 0)
     v2_audio_tick_108c8(shadow);                            // audio handler (mute toggles + ALT)
@@ -20443,10 +20444,10 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
 static uint16_t v2_pw_last_exit_ax = 0;
 static bool v2_pw_last_exit_valid = false;
 // Tracks whether v2_pw_pre_loop entered orig's loc_103b7/loc_10469 path and
-// called v2_sub_1450b (sets shadow[0x342/343/344]=8). When true, v2_pw_post_loop
+// called v2_save_game_1450b (sets shadow[0x342/343/344]=8). When true, v2_pw_post_loop
 // must mirror orig's JMP sub_14590 cleanup at end-of-flow (clears those bytes
 // + re-runs palette transform).
-static bool v2_pw_did_sub_1450b = false;
+static bool v2_pw_did_save_1450b = false;
 
 // Step 2: PRE-LOOP setup. Mirrors orig's pre-sub_104a1 setup, choosing
 // between sub_1047c (ESC path, ax=2) and sub_103ca (F10/ALT+X/ALT+Q path,
@@ -20486,10 +20487,10 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // ds:0x7EFE=4, ds:0x7F00=0x8202, then JMP sub_10e99 (palette transform).
     // Track the call so post_loop can mirror the matching sub_14590 cleanup
     // (orig's JMP sub_14590 at loc_103b7 eip 0x3C6 / loc_10469 eip 0x478).
-    v2_pw_did_sub_1450b = false;
+    v2_pw_did_save_1450b = false;
     if (!(shadow[0x342] | shadow[0x343] | shadow[0x344])) {
-        v2_sub_1450b(shadow, 4, 4, 4);
-        v2_pw_did_sub_1450b = true;
+        v2_save_game_1450b(shadow, 4, 4, 4);
+        v2_pw_did_save_1450b = true;
     }
     // sub_177bb(0) — pause SFX (both paths)
     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 0);
@@ -20503,23 +20504,23 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
       uint16_t ax_h = *(uint16_t*)(shadow + DS_SCRATCH_36);
       v2_text_align_12549(shadow, ax_h);
       uint16_t si_t = si_first, di_t = 0x0C;
-      v2_sub_12388(shadow, si_t, di_t, (uint8_t)ax_h);
-      v2_loc_124c5(shadow, si_t + 1, di_t + 1, bx_t); }
+      v2_text_frame_12388(shadow, si_t, di_t, (uint8_t)ax_h);
+      v2_text_render_124c5(shadow, si_t + 1, di_t + 1, bx_t); }
 
     // Second text call: sub_1047c eip 0x495-0x49E / sub_103ca eip 0x03E3-0x03EC.
     // Both use ax=5, si=0x10, di=0xF via sub_1265b.
     v2_text_lookup_12515(shadow, 5);
     { uint16_t bx_p = *(uint16_t*)(shadow + DS_TEXT_IDX);
-      v2_loc_124c5(shadow, 0x10, 0x0F, bx_p); }
+      v2_text_render_124c5(shadow, 0x10, 0x0F, bx_p); }
 
     // F10/quit path only: 4× sub_1241e for saved password chars (sub_103ca
     // eip 0x03EF-0x040A). ESC path doesn't render password chars.
     if (is_quit_path) {
         uint16_t si_pw = 0x12, di_pw = 0x11;
-        v2_sub_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR0), si_pw, di_pw); // word_287F0
-        v2_sub_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x312), si_pw, di_pw); // word_287F2
-        v2_sub_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x314), si_pw, di_pw); // word_287F4
-        v2_sub_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x316), si_pw, di_pw); // word_287F6
+        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR0), si_pw, di_pw); // word_287F0
+        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x312), si_pw, di_pw); // word_287F2
+        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x314), si_pw, di_pw); // word_287F4
+        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x316), si_pw, di_pw); // word_287F6
     }
 
     // sub_104a1 prelude: DS writes + first render pair (eip 0x04A1-0x04C0)
@@ -20529,7 +20530,7 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // m2c-inline at orig 2739: v2_draw_ui before sub_1e0c7
     extern uint16_t v2_current_ds_val;
     v2_draw_ui(v2_current_ds_val);
-    v2_sub_1E0C7(shadow);
+    v2_glyph_flush_1E0C7(shadow);
     v2_page_flip_16775(shadow);
     v2_pw_last_exit_valid = false;
 }
@@ -20576,11 +20577,11 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
         }
         v2_text_lookup_12515(shadow, ax_b);
         uint16_t bx_b = *(uint16_t*)(shadow + DS_TEXT_IDX);
-        v2_loc_124c5(shadow, si_b, 0x0F, bx_b);
+        v2_text_render_124c5(shadow, si_b, 0x0F, bx_b);
         v2_game_loop_post_render(shadow);          // sub_165AA
         v2_late_sprites_1DD9C(shadow);
-        v2_sub_1C8F1(shadow, 0xFFFF);
-        v2_sub_1E0C7(shadow);
+        v2_dirty_tile_scan_1C8F1(shadow, 0xFFFF);
+        v2_glyph_flush_1E0C7(shadow);
         v2_page_flip_16775(shadow);
     }
     // sub_105CB: password exit check
@@ -20591,7 +20592,7 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
             *(uint16_t*)(shadow + 0x445) = 0x11;
             v2_text_lookup_12515(shadow, 4);
             uint16_t bx_e = *(uint16_t*)(shadow + DS_TEXT_IDX);
-            v2_loc_124c5(shadow, 0x16, 0x0F, bx_e);
+            v2_text_render_124c5(shadow, 0x16, 0x0F, bx_e);
         }
     }
     if (ni & 0x100) {
@@ -20600,7 +20601,7 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
             *(uint16_t*)(shadow + 0x445) = 0x11;
             v2_text_lookup_12515(shadow, 5);
             uint16_t bx_e = *(uint16_t*)(shadow + DS_TEXT_IDX);
-            v2_loc_124c5(shadow, 0x10, 0x0F, bx_e);
+            v2_text_render_124c5(shadow, 0x10, 0x0F, bx_e);
         }
     }
     // Y/N: live state read (no snap) — see seg000 sub_105cb note about why.
@@ -20652,27 +20653,27 @@ static void v2_pw_post_loop(uint8_t* shadow) {
         v2_late_sprites_1DD9C(shadow);
         // m2c-inline at orig 2788/2801: v2_draw_flagged_tiles before sub_1c8f1
         v2_draw_flagged_tiles(v2_current_ds_val);
-        v2_sub_1C8F1(shadow, 0xFFFE);
+        v2_dirty_tile_scan_1C8F1(shadow, 0xFFFE);
         // m2c-inline at orig 2792/2804: v2_draw_ui before sub_1e0c7
         v2_draw_ui(v2_current_ds_val);
-        v2_sub_1E0C7(shadow);
+        v2_glyph_flush_1E0C7(shadow);
         v2_page_flip_16775(shadow);
     }
     *(uint16_t*)(shadow + 0x9569) = 0;            // word_31A49 = 0
-    v2_sub_12816(shadow);                          // sub_12816: clear glyph buffer
+    v2_glyph_list_clear_12816(shadow);                          // sub_12816: clear glyph buffer
     // Orig JMP sub_14590 (loc_103b7 eip 0x3C6 / loc_10469 eip 0x478) after the
     // dialog loop exits. Body at seg000 line 10262+: clears ds:0x342/343/344=0,
     // ds:0x7EFD &= 0xFE, conditional ds:0x7F00 = 0x7F02, ds:0x7EFE=4, then JMP
     // sub_10e99 (palette retransform with shade=0). Only mirror if pre_loop
     // entered the path that called sub_1450b.
-    if (v2_pw_did_sub_1450b) {
+    if (v2_pw_did_save_1450b) {
         shadow[0x342] = 0; shadow[0x343] = 0; shadow[0x344] = 0;
         shadow[0x7EFD] &= 0xFE;
         if (shadow[0x7EFD] == 0)
             *(uint16_t*)(shadow + 0x7F00) = 0x7F02;
         *(uint16_t*)(shadow + 0x7EFE) = 4;
         v2_pal_correct_10e99(shadow);
-        v2_pw_did_sub_1450b = false;
+        v2_pw_did_save_1450b = false;
     }
 }
 
@@ -21558,7 +21559,7 @@ void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_pt
     // Run v2 handler via switch dispatch
     // (calling the same switch as v2_vm_run_anim_frame but for just one cmd).
     // Side-effect functions (sfx, music, audit) auto-skip via v2_in_replay_anim
-    // gates inside their impls — see v2_audit_log_sfx / v2_sub_177bb_v2 / etc.
+    // gates inside their impls — see v2_audit_log_sfx / v2_sfx_play_177bb_v2 / etc.
     bool saved_replay = v2_in_replay_anim;
     v2_in_replay_anim = true;
     v2_vm_exec_anim_cmd(vm, handler, v2_anim_bx, cmd);

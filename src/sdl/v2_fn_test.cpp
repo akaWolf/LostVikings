@@ -1327,7 +1327,7 @@ int ft_selftest_sub_101be() {
 }
 
 // ---------------------------------------------------------------------------
-// sub_10255 / sub_1020f <-> v2_sub_10255 / v2_sub_1020f (palette entry
+// sub_10255 / sub_1020f <-> v2_pal_rotate_fwd_10255 / v2_pal_rotate_back_1020f (palette entry
 // rotates, the two callees of sub_101be — registered as standalone units).
 // Contract: si = slot (byte fields [si+0x259C]=cur, [si+0x2594]=end),
 // dx = table base. Both REP MOVSB with a WRAPPED uint16 count, so the
@@ -1437,7 +1437,7 @@ int ft_selftest_palrot(FtId id) {
 }
 
 // ---------------------------------------------------------------------------
-// sub_12fc6 / sub_12fcb / sub_12fd0 <-> v2_sub_12fc6/12fcb/12fd0 (sub-sprite
+// sub_12fc6 / sub_12fcb / sub_12fd0 <-> v2_subsprite_walk_12fc6/12fcb/12fd0 (sub-sprite
 // catch-up passes; delta fns sub_1227e/sub_122c0/sub_122f3 via off_30BC0).
 // Contract: walk objects [ds:372h]-2 down to 0 — DO-WHILE: with [372h]==0 the
 // first call still runs with di=0xFFFE (gates then read wrapped addresses).
@@ -2533,7 +2533,7 @@ int ft_selftest_rawchunk(uint32_t seed) {
 }
 
 // ---------------------------------------------------------------------------
-// sub_1303a / sub_13031 <-> v2_vm_sub_1303a (+ v2_vm_sub_135cf) — the anim
+// sub_1303a / sub_13031 <-> v2_vm_anim_interp_1303a (+ v2_vm_anim_tail_135cf) — the anim
 // frame interpreter (units 25/26). The anim script is planted INSIDE the DS
 // image at FT_ANIM_PC (the oracle enters with es==ds, so es:[bx] reads hit
 // the DS image; v2 gets vm.es = the same image). Object state: [di+0x1A0D]

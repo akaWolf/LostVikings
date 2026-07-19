@@ -377,7 +377,7 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     memcpy(ds_ptr, saved_ds, 0x10010);
     return ok;
 }
-extern "C" void v2_mirror_sub_10350_spec_ors();
+extern "C" void v2_spec_ors_mirror_10350();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
 // Game CMP/TEST sites for these bytes OR-in this state to mirror what ISR set.
 extern uint8_t sdl_spec_get(uint16_t off);
@@ -2200,7 +2200,8 @@ bool read_and_display_raw_chunk(m2c::_STATE *_state)
    goto loc_10d8e;
  }
 
- // V2 chunk decoding moved to v2 mirror path (v2_sub_117ad / v2_level_init_render_115d2):
+ // V2 chunk decoding moved to v2 mirror path (inside v2_level_init_render_115d2;
+ // orig sub_117ad itself stays real-DS/VGA only):
  // reading chunks here ran on REAL chunk segment + called v2_draw_hud_background/
  // v2_draw_viewport_chunk which resolve to SHADOW chunk segment. Shadow chunk
  // wasn't loaded yet at this orig-call moment → garbage pixels → HUD color noise
@@ -3006,7 +3007,7 @@ cs=0x1a2;eip=0x000356; 	J(JNZ(locret_103c9));	// 467 jnz     short locret_103C9 
 	// Mirror shadow synchronously so v2_pw_pre_loop (called via PW_ENTRY signal
 	// inside sub_104a1) reads correct shadow[0x91B0/A4/99/7C] to pick F10 vs ESC.
 	if (myDrawInfo_v2) {
-		v2_mirror_sub_10350_spec_ors();
+		v2_spec_ors_mirror_10350();
 	}
 cs=0x1a2;eip=0x000358; 	T(CMP(byte_31690, 1));	// 468 cmp     byte_31690, 1 ;~ 01A2:0358
 cs=0x1a2;eip=0x00035d; 	J(JZ(loc_10374));	// 469 jz      short loc_10374 ;~ 01A2:035D

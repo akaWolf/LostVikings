@@ -191,8 +191,8 @@ extern void v2_draw_sprites_late(uint16_t ds_val);
 // rotation): draw = [92F7] (sprite/flagged layers), shown = [92F9] (CRTC),
 // background = [92FB] (bit0 latch source; bit1 df6a copies on role change).
 // v2_emu_early right after v2_draw_tiles (before the 165aa rotation);
-// v2_emu_late after post_render and BEFORE v2_sub_1C8F1 (needs live bit0);
-// v2_emu_df6a from v2_sub_165aa on a background-role change.
+// v2_emu_late after post_render and BEFORE v2_dirty_tile_scan_1C8F1 (needs live bit0);
+// v2_emu_df6a from v2_page_rotate_165aa on a background-role change.
 extern void v2_emu_early(uint16_t ds_val);
 // Late layer split (task #23 cascade): begin arms the [92F9] page as blit
 // target and enables the per-object pixel cascade inside v2_late_sprites_1DD9C
