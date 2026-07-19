@@ -15669,13 +15669,14 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     uint16_t di = vm.global_r(DS_CUR_OBJ);
 
+    ObjRef self{vm, di};
     if (state == 0) {
         // loc_157c0: INC bx + check bit
         vm.pc += 1;
         vm.di_track = di;   // orig 0x57C1: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-        if (vm.ds_read(di + OBJ_COLL_BITS) & mask) {
+        if (self.u16(OBJ_COLL_BITS) & mask) {
             return true;  // STC
         }
         return false;  // CLC
@@ -15698,39 +15699,39 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
 
     // sub_158f5: X direction tile check
     {
-        int16_t cur_x = (int16_t)vm.ds_read(di + OBJ_WORLD_X);
-        int16_t old_x = (int16_t)vm.ds_read(di + OBJ_X_PREV);
+        int16_t cur_x = self.world_x();
+        int16_t old_x = self.i16(OBJ_X_PREV);
         bool x_carry = false;
         uint16_t x_dir = 0;
         if (cur_x < old_x) {
             // Moved left: sub_159d3 = vertical tile scan at X_start
-            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, vm.ds_read(di + OBJ_BBOX_X0));
+            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, self.u16(OBJ_BBOX_X0));
             x_dir = 1;
         } else if (cur_x > old_x) {
             // Moved right: loc_159ec = vertical tile scan at X_end
-            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, vm.ds_read(di + OBJ_BBOX_X1));
+            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, self.u16(OBJ_BBOX_X1));
             x_dir = 0;
         }
         if (x_carry) {
             // sub_1592d: X position snap based on direction
             if (x_dir == 0) {
                 // Moved right: snap X_end to tile boundary
-                uint16_t x_end = vm.ds_read(di + OBJ_BBOX_X1);
+                uint16_t x_end = self.u16(OBJ_BBOX_X1);
                 uint16_t snapped = (x_end & 0xFFF0) - 1;
-                vm.ds_write(di + OBJ_BBOX_X1, snapped);
+                self.w16(OBJ_BBOX_X1, snapped);
                 uint16_t delta = x_end - snapped;
-                vm.ds_write(di + OBJ_WORLD_X, vm.ds_read(di + OBJ_WORLD_X) - delta);
-                vm.ds_write(di + OBJ_BBOX_X0, vm.ds_read(di + OBJ_BBOX_X0) - delta);
-                vm.ds_write(di + OBJ_FRAC_X, 0);
+                self.w16(OBJ_WORLD_X, self.u16(OBJ_WORLD_X) - delta);
+                self.w16(OBJ_BBOX_X0, self.u16(OBJ_BBOX_X0) - delta);
+                self.w16(OBJ_FRAC_X, 0);
             } else {
                 // Moved left: snap X_start to tile boundary
-                uint16_t x_start = vm.ds_read(di + OBJ_BBOX_X0);
+                uint16_t x_start = self.u16(OBJ_BBOX_X0);
                 uint16_t snapped = (x_start | 0xF) + 1;
-                vm.ds_write(di + OBJ_BBOX_X0, snapped);
+                self.w16(OBJ_BBOX_X0, snapped);
                 uint16_t delta = snapped - x_start;
-                vm.ds_write(di + OBJ_WORLD_X, vm.ds_read(di + OBJ_WORLD_X) + delta);
-                vm.ds_write(di + OBJ_BBOX_X1, vm.ds_read(di + OBJ_BBOX_X1) + delta);
-                vm.ds_write(di + OBJ_FRAC_X, 0);
+                self.w16(OBJ_WORLD_X, self.u16(OBJ_WORLD_X) + delta);
+                self.w16(OBJ_BBOX_X1, self.u16(OBJ_BBOX_X1) + delta);
+                self.w16(OBJ_FRAC_X, 0);
             }
             found = true;
         }
@@ -15751,7 +15752,7 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
         // loc_157af: set collision bit
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-        vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
+        self.w16(OBJ_COLL_BITS, self.u16(OBJ_COLL_BITS) | mask);
     }
     return false; // ALWAYS CLC — collision recorded via bits only
 }
