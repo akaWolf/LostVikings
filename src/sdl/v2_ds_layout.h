@@ -129,6 +129,7 @@ constexpr uint16_t OBJ_TYPE_ID       = 0x17DD; // scan type id (filter-table com
 constexpr uint16_t OBJ_PARENT        = 0x1805; // spawner slot / linked-list prev (0xFFFF none; unlink pair of OBJ_CHILD)
 constexpr uint16_t OBJ_CHILD         = 0x182D; // spawned child slot (op 14 tail)
 constexpr uint16_t OBJ_SPRITE_BASE   = 0x1855; // sprite resource base offset
+constexpr uint16_t OBJ_CUR_SPRITE_IDX= 0x191D; // last decompressed sprite index (loc_134dc skip-if-same; 0xFFFF init)
 constexpr uint16_t OBJ_ANIM_PC       = 0x1A0D; // last anim frame bytecode offset (0xFFFF none; saved anim_bx)
 constexpr uint16_t OBJ_ANIM_TIMER    = 0x1A35; // per-object save of DS_ANIM_TIMER across frames
 constexpr uint16_t OBJ_ANIM_CONT     = 0x1A5D; // per-object save of DS_ANIM_CONT across frames

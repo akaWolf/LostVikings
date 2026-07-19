@@ -4852,6 +4852,7 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
         if (*(uint16_t*)(s + s2 + OBJ_CODE_SEG) == 0) { new_si = s2; break; }
     }
     if (new_si == 0xFFFF) return false;
+    ObjMem obj{s, new_si};   // #38: spawned object slot view
     // Original: es = ds:0x2E67 (animation data segment), bx = code_seg_idx * 0x15
     // For v2: read from shadow animdata (template data loaded by v2_load_template)
     if (!v2_animdata_shadow_valid) return false;
@@ -4859,10 +4860,10 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
     uint8_t* aes = v2_vm_shadow_animdata;
     uint16_t bx_a = code_seg_idx * 0x15;
     // sub_13e52: init from animation table
-    *(uint16_t*)(s + new_si + OBJ_ANIM_IDX) = code_seg_idx;
-    *(uint16_t*)(s + new_si + OBJ_ANIM_SUB) = di_spawn;
-    *(uint16_t*)(s + new_si + OBJ_FLAGS) = si_anim;
-    *(uint16_t*)(s + new_si + OBJ_SPAWN_POOL) = *(uint16_t*)(s + 0x374);
+    obj.w16(OBJ_ANIM_IDX, code_seg_idx);
+    obj.w16(OBJ_ANIM_SUB, di_spawn);
+    obj.w16(OBJ_FLAGS, si_anim);
+    obj.w16(OBJ_SPAWN_POOL, *(uint16_t*)(s + 0x374));
     *(uint16_t*)(s + 0x374) = 0;
     // sub_12f82: sprite resource lookup
     {
@@ -4880,69 +4881,69 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
             }
             if (!found_res) return false;
         }
-        *(uint16_t*)(s + new_si + OBJ_SPRITE_BASE) = sprite_base;
+        obj.w16(OBJ_SPRITE_BASE, sprite_base);
     }
     uint8_t ss_byte = aes[bx_a + 2];
     if (ss_byte & 0x80) *(uint16_t*)(s + 0x374) += 2;
-    *(uint16_t*)(s + new_si + OBJ_SUB_COUNT) = ss_byte & 0x7F;
-    *(uint16_t*)(s + new_si + OBJ_PC) = *(uint16_t*)(aes + bx_a + 3) + 3;
-    *(uint16_t*)(s + new_si + OBJ_CODE_SEG) = anim_seg;
-    *(uint16_t*)(s + new_si + OBJ_RES_HANDLE) = *(uint16_t*)(aes + bx_a + 7);
-    *(uint16_t*)(s + new_si + OBJ_WIDTH) = (uint16_t)aes[bx_a + 9];
-    *(uint16_t*)(s + new_si + OBJ_HEIGHT) = (uint16_t)aes[bx_a + 0xA];
-    *(uint16_t*)(s + new_si + OBJ_RES_COST) = *(uint16_t*)(aes + bx_a + 0xB);
-    *(uint16_t*)(s + new_si + OBJ_STATE_IDX) = *(uint16_t*)(aes + bx_a + 0xD);
-    *(uint16_t*)(s + new_si + OBJ_CLASS_BITS) = *(uint16_t*)(aes + bx_a + 0xF);
-    *(uint16_t*)(s + new_si + OBJ_VEL_X_MAX) = *(uint16_t*)(aes + bx_a + 0x11);
-    *(uint16_t*)(s + new_si + OBJ_VEL_Y_MAX) = *(uint16_t*)(aes + bx_a + 0x13);
-    *(uint16_t*)(s + new_si + OBJ_WORLD_X) = pos_x;
-    *(uint16_t*)(s + new_si + OBJ_X_PREV) = pos_x;
-    *(uint16_t*)(s + new_si + OBJ_WORLD_Y) = pos_y;
-    *(uint16_t*)(s + new_si + OBJ_Y_PREV) = pos_y;
-    *(uint16_t*)(s + new_si + OBJ_PARENT) = *(uint16_t*)(s + DS_CUR_OBJ);
-    *(uint16_t*)(s + new_si + OBJ_FRAC_X) = 0;
-    *(uint16_t*)(s + new_si + OBJ_FRAC_Y) = 0;
-    *(uint16_t*)(s + new_si + OBJ_TIMER) = 0;
-    *(uint16_t*)(s + new_si + OBJ_ANIM_DX) = 0;
-    *(uint16_t*)(s + new_si + OBJ_ANIM_DY) = 0;
-    *(uint16_t*)(s + new_si + OBJ_VEL_X) = 0;
-    *(uint16_t*)(s + new_si + OBJ_VEL_Y) = 0;
-    *(uint16_t*)(s + new_si + OBJ_TYPE_ID) = 0;
-    *(uint16_t*)(s + new_si + 0x18A5) = 0;
-    *(uint16_t*)(s + new_si + 0x18CD) = 0;
-    *(uint16_t*)(s + new_si + 0x191D) = 0xFFFF;
-    *(uint16_t*)(s + new_si + 0x187D) = 0;
-    *(uint16_t*)(s + new_si + 0x18F5) = 0;
-    *(uint16_t*)(s + new_si + OBJ_CHILD) = 0xFFFF;
-    *(uint16_t*)(s + new_si + OBJ_ANIM_PC) = 0xFFFF;
-    *(uint16_t*)(s + new_si + OBJ_ANIM_TABLE) = 0xFFFF;
+    obj.w16(OBJ_SUB_COUNT, ss_byte & 0x7F);
+    obj.w16(OBJ_PC, *(uint16_t*)(aes + bx_a + 3) + 3);
+    obj.w16(OBJ_CODE_SEG, anim_seg);
+    obj.w16(OBJ_RES_HANDLE, *(uint16_t*)(aes + bx_a + 7));
+    obj.w16(OBJ_WIDTH, (uint16_t)aes[bx_a + 9]);
+    obj.w16(OBJ_HEIGHT, (uint16_t)aes[bx_a + 0xA]);
+    obj.w16(OBJ_RES_COST, *(uint16_t*)(aes + bx_a + 0xB));
+    obj.w16(OBJ_STATE_IDX, *(uint16_t*)(aes + bx_a + 0xD));
+    obj.w16(OBJ_CLASS_BITS, *(uint16_t*)(aes + bx_a + 0xF));
+    obj.w16(OBJ_VEL_X_MAX, *(uint16_t*)(aes + bx_a + 0x11));
+    obj.w16(OBJ_VEL_Y_MAX, *(uint16_t*)(aes + bx_a + 0x13));
+    obj.w16(OBJ_WORLD_X, pos_x);
+    obj.w16(OBJ_X_PREV, pos_x);
+    obj.w16(OBJ_WORLD_Y, pos_y);
+    obj.w16(OBJ_Y_PREV, pos_y);
+    obj.w16(OBJ_PARENT, *(uint16_t*)(s + DS_CUR_OBJ));
+    obj.w16(OBJ_FRAC_X, 0);
+    obj.w16(OBJ_FRAC_Y, 0);
+    obj.w16(OBJ_TIMER, 0);
+    obj.w16(OBJ_ANIM_DX, 0);
+    obj.w16(OBJ_ANIM_DY, 0);
+    obj.w16(OBJ_VEL_X, 0);
+    obj.w16(OBJ_VEL_Y, 0);
+    obj.w16(OBJ_TYPE_ID, 0);
+    obj.w16(0x18A5, 0);
+    obj.w16(0x18CD, 0);
+    obj.w16(OBJ_CUR_SPRITE_IDX, 0xFFFF);
+    obj.w16(0x187D, 0);
+    obj.w16(0x18F5, 0);
+    obj.w16(OBJ_CHILD, 0xFFFF);
+    obj.w16(OBJ_ANIM_PC, 0xFFFF);
+    obj.w16(OBJ_ANIM_TABLE, 0xFFFF);
     // Bounds
-    uint16_t w = *(uint16_t*)(s + new_si + OBJ_WIDTH);
-    uint16_t h = *(uint16_t*)(s + new_si + OBJ_HEIGHT);
-    *(uint16_t*)(s + new_si + OBJ_BBOX_X0) = pos_x - (w >> 1);
-    *(uint16_t*)(s + new_si + OBJ_BBOX_X1) = pos_x - (w >> 1) + w - 1;
-    *(uint16_t*)(s + new_si + OBJ_BBOX_Y0) = pos_y - (h >> 1);
-    *(uint16_t*)(s + new_si + OBJ_BBOX_Y1) = pos_y - (h >> 1) + h - 1;
+    uint16_t w = obj.u16(OBJ_WIDTH);
+    uint16_t h = obj.u16(OBJ_HEIGHT);
+    obj.w16(OBJ_BBOX_X0, pos_x - (w >> 1));
+    obj.w16(OBJ_BBOX_X1, pos_x - (w >> 1) + w - 1);
+    obj.w16(OBJ_BBOX_Y0, pos_y - (h >> 1));
+    obj.w16(OBJ_BBOX_Y1, pos_y - (h >> 1) + h - 1);
     int16_t off_val = (int16_t)*(uint16_t*)(s + 0x3E0);
     if (off_val < 0) {
         *(uint16_t*)(s + 0x3E2) = h >> 1;
         off_val = (int16_t)(w >> 1);
     }
-    *(uint16_t*)(s + new_si + OBJ_HALF_W) = (uint16_t)off_val;
-    *(uint16_t*)(s + new_si + OBJ_HALF_H) = *(uint16_t*)(s + 0x3E2);
+    obj.w16(OBJ_HALF_W, (uint16_t)off_val);
+    obj.w16(OBJ_HALF_H, *(uint16_t*)(s + 0x3E2));
     // sub_13d68 + sub_13dd6 + sub_13e15: sub-sprite allocation + init.
     // Extracted shared functions (see definitions above) — this used to be an
     // inline copy that drifted from the op_14 one (task #176): pre-tested
     // loops instead of orig's do-while, hoisted per-iteration reads.
-    if (*(uint16_t*)(s + new_si + OBJ_SUB_COUNT) != 0) {
+    if (obj.u16(OBJ_SUB_COUNT) != 0) {
         if (v2_slot_alloc_13d68(s, new_si)) {
             // JC loc_13860: no space — clear slot, creation fails.
-            *(uint16_t*)(s + new_si + OBJ_CODE_SEG) = 0;
+            obj.w16(OBJ_CODE_SEG, 0);
             return false;
         }
         // orig sub_13809 eips 0x3839-0x3843: ds:0x3A/0x38 -> [si+1A85]/[si+1AAD]
-        *(uint16_t*)(s + new_si + OBJ_SUB_SLOT) = *(uint16_t*)(s + DS_SCRATCH_3A);
-        *(uint16_t*)(s + new_si + OBJ_SUB_END) = *(uint16_t*)(s + DS_SCRATCH_38);
+        obj.w16(OBJ_SUB_SLOT, *(uint16_t*)(s + DS_SCRATCH_3A));
+        obj.w16(OBJ_SUB_END, *(uint16_t*)(s + DS_SCRATCH_38));
         v2_slot_init_13dd6(s, new_si);
         v2_slot_size_init_13e15(s, new_si);
     }
@@ -10904,7 +10905,7 @@ static void v2_vm_op_14(V2VM& vm) {
     vm.ds_write(si_slot + 0x18CD, 0);
     vm.ds_write(si_slot + 0x187D, 0);
     vm.ds_write(si_slot + 0x18F5, 0);
-    vm.ds_write(si_slot + 0x191D, 0xFFFF);
+    vm.ds_write(si_slot + OBJ_CUR_SPRITE_IDX, 0xFFFF);
     vm.ds_write(si_slot + OBJ_CHILD, 0xFFFF);
     vm.ds_write(si_slot + OBJ_ANIM_PC, 0xFFFF);
     vm.ds_write(si_slot + OBJ_ANIM_TABLE, 0xFFFF);
@@ -14366,13 +14367,13 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             anim_bx += 1;
 
             // Skip if same sprite already loaded
-            if (spr_idx == (uint8_t)vm.ds_read(obj_d + 0x191D)) {
+            if (spr_idx == (uint8_t)vm.ds_read(obj_d + OBJ_CUR_SPRITE_IDX)) {
                 static int _skip = 0;
                 if (_skip++ < 5) fprintf(stderr, "V2-134DC-SKIP[%d]: si=%04X spr=%02X same as 191D\n",
                                           _skip, si_s, spr_idx);
                 return true;
             }
-            vm.ds_write(obj_d + 0x191D, spr_idx);
+            vm.ds_write(obj_d + OBJ_CUR_SPRITE_IDX, spr_idx);
             vm.ds_write(si_s + OBJ_DIRTY_MODE, 0x202); // dirty
 
             // Source setup
@@ -14609,7 +14610,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             }
             // After loop: reset sprite dedup index
             uint16_t di_obj = vm.global_r(DS_CUR_OBJ);
-            vm.ds_write(di_obj + 0x191D, 0xFFFF);
+            vm.ds_write(di_obj + OBJ_CUR_SPRITE_IDX, 0xFFFF);
             return true;
         }
 
