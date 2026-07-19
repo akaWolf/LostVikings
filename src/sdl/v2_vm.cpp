@@ -4804,7 +4804,7 @@ static void v2_slot_init_13dd6(uint8_t* s, uint16_t si) {
     uint16_t di = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_SLOT));
     do {
         *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_FLAGS))  = ax;
-        *(uint16_t*)(s + (uint16_t)(di + 0x54D))  = 0;
+        *(uint16_t*)(s + (uint16_t)(di + OBJ_SUB_CLASS))  = 0;
         *(uint16_t*)(s + (uint16_t)(di + OBJ_DIRTY_MODE)) = 0x204;
         *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_SEG))  = *(uint16_t*)(s + DS_SEG_SPRITE);
         *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_OFF))  = *(uint16_t*)(s + (uint16_t)(si + OBJ_SPRITE_BASE));
@@ -4909,11 +4909,11 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
     obj.w16(OBJ_VEL_X, 0);
     obj.w16(OBJ_VEL_Y, 0);
     obj.w16(OBJ_TYPE_ID, 0);
-    obj.w16(0x18A5, 0);
-    obj.w16(0x18CD, 0);
+    obj.w16(OBJ_STATE_18A5, 0);
+    obj.w16(OBJ_STATE_18CD, 0);
     obj.w16(OBJ_CUR_SPRITE_IDX, 0xFFFF);
-    obj.w16(0x187D, 0);
-    obj.w16(0x18F5, 0);
+    obj.w16(OBJ_STATE_187D, 0);
+    obj.w16(OBJ_STATE_18F5, 0);
     obj.w16(OBJ_CHILD, 0xFFFF);
     obj.w16(OBJ_ANIM_PC, 0xFFFF);
     obj.w16(OBJ_ANIM_TABLE, 0xFFFF);
@@ -10902,10 +10902,10 @@ static void v2_vm_op_14(V2VM& vm) {
     newobj.w16(OBJ_VEL_X, 0);
     newobj.w16(OBJ_VEL_Y, 0);
     newobj.w16(OBJ_TYPE_ID, 0);
-    newobj.w16(0x18A5, 0);
-    newobj.w16(0x18CD, 0);
-    newobj.w16(0x187D, 0);
-    newobj.w16(0x18F5, 0);
+    newobj.w16(OBJ_STATE_18A5, 0);
+    newobj.w16(OBJ_STATE_18CD, 0);
+    newobj.w16(OBJ_STATE_187D, 0);
+    newobj.w16(OBJ_STATE_18F5, 0);
     newobj.w16(OBJ_CUR_SPRITE_IDX, 0xFFFF);
     newobj.w16(OBJ_CHILD, 0xFFFF);
     newobj.w16(OBJ_ANIM_PC, 0xFFFF);
@@ -14244,7 +14244,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 uint16_t dx = vm.ds_read(0x38C);
                 do {
                     ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
-                    if (sub.u16(0x54D) & dx) {   // 0x54D: sub-sprite class mask (unnamed)
+                    if (sub.u16(OBJ_SUB_CLASS) & dx) {   // 0x54D: sub-sprite class mask (unnamed)
                         sub.w16(OBJ_SPRITE_X, sub.u16(OBJ_SPRITE_X) + (uint16_t)off);
                         sub.w16(OBJ_DIRTY_MODE, 0x202);
                     }
@@ -14274,7 +14274,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 uint16_t dx = vm.ds_read(0x38C);
                 do {
                     ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
-                    if (sub.u16(0x54D) & dx) {   // 0x54D: sub-sprite class mask (unnamed)
+                    if (sub.u16(OBJ_SUB_CLASS) & dx) {   // 0x54D: sub-sprite class mask (unnamed)
                         sub.w16(OBJ_SPRITE_Y, sub.u16(OBJ_SPRITE_Y) + (uint16_t)off);
                         sub.w16(OBJ_DIRTY_MODE, 0x202);
                     }
@@ -14322,7 +14322,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             if (mask_val != 0) {
                 do {                                          // loc_130C1
                     ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
-                    if (sub.u16(0x54D) & mask_val) {   // 0x54D: sub-sprite class mask (unnamed)
+                    if (sub.u16(OBJ_SUB_CLASS) & mask_val) {   // 0x54D: sub-sprite class mask (unnamed)
                         sub.w16(OBJ_SPRITE_OFF, sub.u16(OBJ_SPRITE_OFF) + offset);
                         sub.w16(OBJ_DIRTY_MODE, 0x202);
                     }
@@ -14356,7 +14356,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 uint16_t mdi = mask_val;
                 do {                                          // loc_13106
                     ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
-                    if (sub.u16(0x54D) & mdi) {   // 0x54D: sub-sprite class mask (unnamed)
+                    if (sub.u16(OBJ_SUB_CLASS) & mdi) {   // 0x54D: sub-sprite class mask (unnamed)
                         uint8_t frm = vm.es[anim_bx++];
                         uint16_t offset = (uint16_t)(frm * 72);
                         sub.w16(OBJ_SPRITE_OFF, cx + offset);
@@ -14396,8 +14396,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             subs.w16(OBJ_DIRTY_MODE, 0x202); // dirty
 
             // Source setup
-            uint16_t src_seg_val = vm.ds_read(si_s + 0x0B4D);
-            uint16_t src_base = vm.ds_read(si_s + 0x0A4D);
+            uint16_t src_seg_val = vm.ds_read(si_s + OBJ_SUB_SRC_SEG);
+            uint16_t src_base = vm.ds_read(si_s + OBJ_SUB_SRC_BASE);
             uint8_t* src_seg_ptr = v2_resolve_segment(src_seg_val);
             uint16_t lookup = *(uint16_t*)(src_seg_ptr + (uint16_t)(spr_idx * 2 + src_base));
             uint8_t* src = src_seg_ptr + src_base + lookup;
@@ -14480,7 +14480,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 uint16_t dx = vm.ds_read(0x38C);
                 do {                                          // loc_13297
                     ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
-                    if (vm.ds_read(di_dispatch + 0x54D) & dx) {   // 0x54D: sub-sprite class mask (unnamed, dispatch gate)
+                    if (vm.ds_read(di_dispatch + OBJ_SUB_CLASS) & dx) {   // 0x54D: sub-sprite class mask (unnamed, dispatch gate)
                         uint8_t val = vm.es[anim_bx++];
                         uint16_t bits = ((uint16_t)val << 3) & 0x70;
                         sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFF8F) | bits);
@@ -14529,15 +14529,15 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 // Masked: only matching sub-sprites
                 for (; (int16_t)di_s < (int16_t)end_di; di_s += 2) {
                     ObjRef sub{vm, di_s};   // #38: sub-sprite slot view (cursor di_s)
-                    if (!(sub.u16(0x54D) & mask_v)) continue;   // 0x54D: class mask (unnamed)
+                    if (!(sub.u16(OBJ_SUB_CLASS) & mask_v)) continue;   // 0x54D: class mask (unnamed)
                     sub.w16(OBJ_STRIP_COUNT, ax_height);
                     sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
                     sub.w16(OBJ_DIRTY_MODE, 0x202);
                     if (reset_data) {
-                        uint16_t d = sub.u16(0x0A4D) + 1;   // 0x0A4D: sprite source base (unnamed)
+                        uint16_t d = sub.u16(OBJ_SUB_SRC_BASE) + 1;   // 0x0A4D: sprite source base (unnamed)
                         sub.w16(OBJ_SPRITE_OFF, d);
                         vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);  // cur_obj (global), not the sub
-                        sub.w16(OBJ_SPRITE_SEG, sub.u16(0x0B4D));   // 0x0B4D: sprite source seg (unnamed)
+                        sub.w16(OBJ_SPRITE_SEG, sub.u16(OBJ_SUB_SRC_SEG));   // 0x0B4D: sprite source seg (unnamed)
                     }
                 }
             } else {
@@ -14546,10 +14546,10 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 for (; (int16_t)di_s < (int16_t)end_di; di_s += 2) {
                     ObjRef sub{vm, di_s};   // #38: sub-sprite slot view (cursor di_s)
                     if (reset_data) {
-                        uint16_t d = sub.u16(0x0A4D) + 1;   // 0x0A4D: sprite source base (unnamed)
+                        uint16_t d = sub.u16(OBJ_SUB_SRC_BASE) + 1;   // 0x0A4D: sprite source base (unnamed)
                         sub.w16(OBJ_SPRITE_OFF, d);
                         vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);  // cur_obj (global)
-                        sub.w16(OBJ_SPRITE_SEG, sub.u16(0x0B4D));   // 0x0B4D: sprite source seg (unnamed)
+                        sub.w16(OBJ_SPRITE_SEG, sub.u16(OBJ_SUB_SRC_SEG));   // 0x0B4D: sprite source seg (unnamed)
                     }
                     sub.w16(OBJ_STRIP_COUNT, ax_height);
                     sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
@@ -14569,7 +14569,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t end_f = vm.ds_read(0x80);
             for (; (int16_t)si_f < (int16_t)end_f; si_f += 2) {
                 ObjRef sub{vm, si_f};   // #38: sub-sprite slot view (cursor si_f)
-                if (mask_f != 0 && !(sub.u16(0x54D) & mask_f)) continue;   // 0x54D: class mask (unnamed)
+                if (mask_f != 0 && !(sub.u16(OBJ_SUB_CLASS) & mask_f)) continue;   // 0x54D: class mask (unnamed)
                 sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) ^ xor_val);
                 sub.w16(OBJ_DIRTY_MODE, 0x202);
             }
@@ -14583,15 +14583,17 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t end_m = vm.ds_read(0x80);
             if (mask_m != 0) {
                 for (; (int16_t)si_m < (int16_t)end_m; si_m += 2) {
-                    if (vm.ds_read(si_m + 0x54D) & mask_m) {
+                    ObjRef sub{vm, si_m};   // #38: sub-sprite slot view (cursor si_m)
+                    if (sub.u16(OBJ_SUB_CLASS) & mask_m) {
                         uint8_t val = vm.es[anim_bx++] & 0xFF;
-                        vm.ds_write(si_m + 0x54D, val);
+                        sub.w16(OBJ_SUB_CLASS, val);
                     }
                 }
             } else {
                 for (; (int16_t)si_m < (int16_t)end_m; si_m += 2) {
+                    ObjRef sub{vm, si_m};   // #38: sub-sprite slot view (cursor si_m)
                     uint8_t val = vm.es[anim_bx++] & 0xFF;
-                    vm.ds_write(si_m + 0x54D, val);
+                    sub.w16(OBJ_SUB_CLASS, val);
                 }
             }
             return true;
@@ -14620,8 +14622,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t end_r = vm.ds_read(0x80);
             for (; (int16_t)si_r < (int16_t)end_r; si_r += 2) {
                 ObjRef sub{vm, si_r};   // #38: sub-sprite slot view (cursor si_r)
-                sub.w16(0x0A4D, base_off);   // 0x0A4D: sprite source base (unnamed)
-                sub.w16(0x0B4D, base_seg);   // 0x0B4D: sprite source seg (unnamed)
+                sub.w16(OBJ_SUB_SRC_BASE, base_off);   // 0x0A4D: sprite source base (unnamed)
+                sub.w16(OBJ_SUB_SRC_SEG, base_seg);   // 0x0B4D: sprite source seg (unnamed)
                 sub.w16(OBJ_SPRITE_SEG, sprite_seg);
                 // Data ptr: bp = ds:[(si-0x30)-0x78E4] — addr typically outside shadow, use real DS
                 uint16_t bp_addr = (uint16_t)((si_r - 0x30) - 0x78E4);
@@ -14646,7 +14648,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t end_o = vm.ds_read(0x80);
             for (; (int16_t)si_o < (int16_t)end_o; si_o += 2) {
                 ObjRef sub{vm, si_o};   // #38: sub-sprite slot view (cursor si_o)
-                if (mask_o != 0 && !(sub.u16(0x54D) & mask_o)) continue;   // 0x54D: class mask (unnamed)
+                if (mask_o != 0 && !(sub.u16(OBJ_SUB_CLASS) & mask_o)) continue;   // 0x54D: class mask (unnamed)
                 sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x4000);
                 vm.ds_write_b(si_o + OBJ_DIRTY_CNT, 2);
             }
@@ -14659,7 +14661,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t end_a = vm.ds_read(0x80);
             for (; (int16_t)si_a < (int16_t)end_a; si_a += 2) {
                 ObjRef sub{vm, si_a};   // #38: sub-sprite slot view (cursor si_a)
-                if (mask_a != 0 && !(sub.u16(0x54D) & mask_a)) continue;   // 0x54D: class mask (unnamed)
+                if (mask_a != 0 && !(sub.u16(OBJ_SUB_CLASS) & mask_a)) continue;   // 0x54D: class mask (unnamed)
                 sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF);
                 sub.w16(OBJ_DIRTY_MODE, 2);
             }
@@ -17171,7 +17173,7 @@ void v2_vm_verify_subsprites(uint16_t ds_val) {
     struct { uint16_t off; const char* name; } fields[] = {
         {OBJ_SPRITE_FLAGS, "flags"}, {OBJ_DIRTY_MODE, "mode"}, {0x054D, "sprite"},
         {OBJ_SPRITE_X, "X"}, {OBJ_SPRITE_Y, "Y"}, {OBJ_SPRITE_OFF, "data_ptr"},
-        {OBJ_SPRITE_SEG, "spr_seg"}, {0x0A4D, "base_off"}, {0x0B4D, "base_seg"},
+        {OBJ_SPRITE_SEG, "spr_seg"}, {OBJ_SUB_SRC_BASE, "base_off"}, {OBJ_SUB_SRC_SEG, "base_seg"},
     };
     // Check slots 0..0x100 (all possible sub-sprites)
     for (uint16_t slot = 0; slot < 0x100 && ss_errs < 100; slot += 2) {
@@ -21222,8 +21224,8 @@ static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx) {
         OBJ_CODE_SEG, OBJ_PC, OBJ_ALT_PC, OBJ_ANIM_TABLE, OBJ_WIDTH, OBJ_HEIGHT, OBJ_BBOX_Y0, OBJ_BBOX_Y1,
         OBJ_BBOX_X0, OBJ_BBOX_X1, OBJ_FLAGS, OBJ_RES_HANDLE, OBJ_RES_COST, OBJ_STATE_IDX, OBJ_CLASS_BITS, OBJ_ANIM_DX,
         OBJ_ANIM_DY, OBJ_SPAWN_POOL, OBJ_ANIM_SUB, OBJ_ANIM_IDX, OBJ_TIMER, OBJ_WORLD_X, OBJ_WORLD_Y, OBJ_VEL_X_MAX,
-        OBJ_VEL_Y_MAX, OBJ_TYPE_ID, OBJ_PARENT, OBJ_CHILD, OBJ_SPRITE_BASE, 0x187D, 0x18A5, 0x18CD,
-        0x18F5, 0x191D, OBJ_VEL_X, OBJ_VEL_Y, OBJ_FRAC_X, OBJ_FRAC_Y, OBJ_ANIM_PC, OBJ_SUB_SLOT,
+        OBJ_VEL_Y_MAX, OBJ_TYPE_ID, OBJ_PARENT, OBJ_CHILD, OBJ_SPRITE_BASE, OBJ_STATE_187D, OBJ_STATE_18A5, OBJ_STATE_18CD,
+        OBJ_STATE_18F5, 0x191D, OBJ_VEL_X, OBJ_VEL_Y, OBJ_FRAC_X, OBJ_FRAC_Y, OBJ_ANIM_PC, OBJ_SUB_SLOT,
         OBJ_SUB_END, OBJ_SUB_COUNT, OBJ_X_PREV, OBJ_Y_PREV, OBJ_COLL_BITS, OBJ_HALF_W, OBJ_HALF_H,
     };
     for (size_t k = 0; k < sizeof(offs) / sizeof(offs[0]); k++) {
