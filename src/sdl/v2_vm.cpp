@@ -4258,7 +4258,7 @@ static void v2_sub_10813(uint8_t* shadow) {
     // loc_107A2: if active changed, clear previous viking's blink + reset counter
     if (active != prev) {
         if ((int16_t)prev < 6) { // SIGNED compare: CMP ax,6; JGE (0xFFFF=-1 < 6 -> enters)
-            int16_t p_anim = (int16_t)*(uint16_t*)(shadow + (uint16_t)(prev + 0x16ED));
+            int16_t p_anim = (int16_t)*(uint16_t*)(shadow + (uint16_t)(prev + OBJ_ANIM_IDX));
             if (p_anim >= 0) {
                 uint16_t p_di = *(uint16_t*)(shadow + (uint16_t)(prev + OBJ_SUB_SLOT));
                 *(uint16_t*)(shadow + (uint16_t)(p_di + OBJ_SPRITE_FLAGS)) &= 0xDFFF;
@@ -4311,7 +4311,7 @@ static void v2_sub_11b0b(uint8_t* s) {
     for (int vk = 0; vk < 3; vk++) {
         uint16_t snd  = *(uint16_t*)(s + 0x0429 + vk * 2); // word_28909/0B/0D
         uint16_t psnd = *(uint16_t*)(s + 0x042F + vk * 2); // word_2890F/11/13
-        uint16_t por  = *(uint16_t*)(s + 0x15AD + vk * 2); // word_29A8D/8F/91
+        uint16_t por  = *(uint16_t*)(s + VIK_PORTRAIT + vk * 2); // word_29A8D/8F/91
         uint16_t ppor = *(uint16_t*)(s + 0x0423 + vk * 2); // word_28903/05/07
         if (snd == psnd && por == ppor) continue;           // JNZ/JZ skip pair
         uint16_t portrait_si = por;                         // re-read [0x15AD+2k]
@@ -4364,8 +4364,8 @@ static void v2_sub_11569(uint8_t* s, uint16_t di_table) {
 static void v2_sub_11446(uint8_t* s) {
     *(uint16_t*)(s + 0x033C) = 0; // word_2881C = 0
     uint16_t mode = s[0x25BA] & 0xFF; // byte_2AA9A, zero-extended to word
-    fprintf(stderr, "V2-11446: mode=%d 0x423=%04X 0x15AD=%04X level=%04X\n",
-            mode, *(uint16_t*)(s+0x423), *(uint16_t*)(s+0x15AD), *(uint16_t*)(s+DS_LEVEL));
+    fprintf(stderr, "V2-11446: mode=%d 0x423=%04X OBJ_RES_HANDLE=%04X level=%04X\n",
+            mode, *(uint16_t*)(s+0x423), *(uint16_t*)(s+OBJ_RES_HANDLE), *(uint16_t*)(s+DS_LEVEL));
     if (mode == 0) {
         // loc_1146a: Normal gameplay
         *(uint16_t*)(s + 0x0374) = *(uint16_t*)(s + 0x25C3);
@@ -4414,7 +4414,7 @@ static void v2_sub_11446(uint8_t* s) {
     }
 loc_1154a:
     // Copy sound state, set mode 6
-    *(uint16_t*)(s + 0x15AD) = *(uint16_t*)(s + 0x0423); // word_29A8D = word_28903
+    *(uint16_t*)(s + VIK_PORTRAIT) = *(uint16_t*)(s + 0x0423); // word_29A8D = word_28903
     *(uint16_t*)(s + 0x15AF) = *(uint16_t*)(s + 0x0425); // word_29A8F = word_28905
     *(uint16_t*)(s + 0x15B1) = *(uint16_t*)(s + 0x0427); // word_29A91 = word_28907
     *(uint16_t*)(s + 0x033C) = 6;    // word_2881C
@@ -4737,7 +4737,7 @@ static bool v2_sub_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
     uint8_t* aes = v2_vm_shadow_animdata;
     uint16_t bx_a = code_seg_idx * 0x15;
     // sub_13e52: init from animation table
-    *(uint16_t*)(s + new_si + 0x16ED) = code_seg_idx;
+    *(uint16_t*)(s + new_si + OBJ_ANIM_IDX) = code_seg_idx;
     *(uint16_t*)(s + new_si + OBJ_ANIM_SUB) = di_spawn;
     *(uint16_t*)(s + new_si + OBJ_FLAGS) = si_anim;
     *(uint16_t*)(s + new_si + 0x169D) = *(uint16_t*)(s + 0x374);
@@ -4765,7 +4765,7 @@ static bool v2_sub_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
     *(uint16_t*)(s + new_si + OBJ_SUB_COUNT) = ss_byte & 0x7F;
     *(uint16_t*)(s + new_si + OBJ_PC) = *(uint16_t*)(aes + bx_a + 3) + 3;
     *(uint16_t*)(s + new_si + OBJ_CODE_SEG) = anim_seg;
-    *(uint16_t*)(s + new_si + 0x15AD) = *(uint16_t*)(aes + bx_a + 7);
+    *(uint16_t*)(s + new_si + OBJ_RES_HANDLE) = *(uint16_t*)(aes + bx_a + 7);
     *(uint16_t*)(s + new_si + OBJ_WIDTH) = (uint16_t)aes[bx_a + 9];
     *(uint16_t*)(s + new_si + OBJ_HEIGHT) = (uint16_t)aes[bx_a + 0xA];
     *(uint16_t*)(s + new_si + OBJ_RES_COST) = *(uint16_t*)(aes + bx_a + 0xB);
@@ -4799,7 +4799,7 @@ static bool v2_sub_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
     uint16_t h = *(uint16_t*)(s + new_si + OBJ_HEIGHT);
     *(uint16_t*)(s + new_si + OBJ_BBOX_X0) = pos_x - (w >> 1);
     *(uint16_t*)(s + new_si + OBJ_BBOX_X1) = pos_x - (w >> 1) + w - 1;
-    *(uint16_t*)(s + new_si + 0x14E5) = pos_y - (h >> 1);
+    *(uint16_t*)(s + new_si + OBJ_BBOX_Y0) = pos_y - (h >> 1);
     *(uint16_t*)(s + new_si + OBJ_BBOX_Y1) = pos_y - (h >> 1) + h - 1;
     int16_t off_val = (int16_t)*(uint16_t*)(s + 0x3E0);
     if (off_val < 0) {
@@ -6058,7 +6058,7 @@ static void v2_sub_11080(uint8_t* s) {
                 for (int vk = 0; vk < 3; vk++) {
                     uint16_t prev = *(uint16_t*)(s + 0x0435 + vk * 2);
                     *(uint16_t*)(s + 0x043B + vk * 2) = prev;
-                    int16_t health_val = (int16_t)*(uint16_t*)(s + 0x16ED + vk * 2);
+                    int16_t health_val = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX + vk * 2);
                     uint16_t ax;
                     if (health_val < 0) ax = 2;
                     else if (*(uint16_t*)(s + DS_ACTIVE_VIKING) != (uint16_t)(vk * 2)) ax = 1;
@@ -6924,7 +6924,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             shadow[0x044B] = 0xFF;                                    // byte_2892B
             uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
             for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-                if (*(uint16_t*)(shadow + si_f47 + 0x15AD) == 0) continue;
+                if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
                 int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
                              - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
                 if (ax_d < 0) ax_d = -ax_d;
@@ -7145,7 +7145,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
                             for (int tries = 0; tries < 3; tries++) {
                                 di_v -= 2; if ((int16_t)di_v < 0) di_v = 4;
-                                if (*(uint16_t*)(shadow + di_v + 0x15AD) != 0 &&
+                                if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
                                     uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
@@ -7162,7 +7162,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     shadow[0x44B] = 0xFF;
                                     uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
                                     for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-                                        if (*(uint16_t*)(shadow + si_f47 + 0x15AD) == 0) continue;
+                                        if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
                                         int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
                                                      - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
                                         if (ax_d < 0) ax_d = -ax_d;
@@ -7181,7 +7181,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
                             for (int tries = 0; tries < 3; tries++) {
                                 di_v += 2; if (di_v >= 6) di_v = 0;
-                                if (*(uint16_t*)(shadow + di_v + 0x15AD) != 0 &&
+                                if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
                                     uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
@@ -7198,7 +7198,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     shadow[0x44B] = 0xFF;
                                     uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
                                     for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-                                        if (*(uint16_t*)(shadow + si_f47 + 0x15AD) == 0) continue;
+                                        if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
                                         int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
                                                      - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
                                         if (ax_d < 0) ax_d = -ax_d;
@@ -7331,7 +7331,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     *(uint16_t*)(shadow + 0x043F) = *(uint16_t*)(shadow + 0x0439);
                     // Compute new health state: word_29BCD/CF/D1 → DS:0x16ED/EF/F1
                     for (int vk = 0; vk < 3; vk++) {
-                        uint16_t health_addr = 0x16ED + vk * 2; // word_29BCD/CF/D1
+                        uint16_t health_addr = OBJ_ANIM_IDX + vk * 2; // word_29BCD/CF/D1
                         uint16_t new_state;
                         if ((int16_t)*(uint16_t*)(shadow + health_addr) < 0) new_state = 2;
                         else if (*(uint16_t*)(shadow + DS_ACTIVE_VIKING) == (uint16_t)(vk * 2)) new_state = 0;
@@ -7360,7 +7360,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
                     // sub_11B0B: portrait/sound tracking sync
                     for (int vk = 0; vk < 3; vk++) {
-                        uint16_t port = *(uint16_t*)(shadow + 0x15AD + vk * 2);
+                        uint16_t port = *(uint16_t*)(shadow + VIK_PORTRAIT + vk * 2);
                         uint16_t prev_port = *(uint16_t*)(shadow + 0x0423 + vk * 2);
                         uint16_t snd = *(uint16_t*)(shadow + 0x0429 + vk * 2);
                         uint16_t prev_snd = *(uint16_t*)(shadow + 0x042F + vk * 2);
@@ -7459,14 +7459,14 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             do {
                 si_v -= 2; if (si_v < 0) si_v = 4;               // SUB si, 2; JNS; MOV si, 4
                 if ((uint16_t)si_v == *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) { si_v = -1; break; } // wrapped
-            } while (*(uint16_t*)(shadow + (uint16_t)si_v + 0x15AD) == 0); // TEST; JZ loop
+            } while (*(uint16_t*)(shadow + (uint16_t)si_v + VIK_PORTRAIT) == 0); // TEST; JZ loop
         } else if (new_input & 0x10) {
             // loc_12e98: NEXT viking (add)
             si_v = (int16_t)*(uint16_t*)(shadow + DS_ACTIVE_VIKING);
             do {
                 si_v += 2; if (si_v >= 6) si_v = 0;              // ADD si, 2; CMP 6; JL; MOV si, 0
                 if ((uint16_t)si_v == *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) { si_v = -1; break; }
-            } while (*(uint16_t*)(shadow + (uint16_t)si_v + 0x15AD) == 0);
+            } while (*(uint16_t*)(shadow + (uint16_t)si_v + VIK_PORTRAIT) == 0);
         }
         if (si_v >= 0) {
             // loc_12ecd: found valid viking
@@ -7879,7 +7879,7 @@ static bool v2_gameloop_sub_15fbe(uint8_t* ds, uint16_t filter_si, uint16_t obj_
             flt++;
         }
         if (!match) continue;
-        if ((int16_t)y_check < (int16_t)*(uint16_t*)(ds + si + 0x14E5)) continue;
+        if ((int16_t)y_check < (int16_t)*(uint16_t*)(ds + si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)(y_check - 1) >= (int16_t)*(uint16_t*)(ds + si + OBJ_BBOX_Y1)) continue;
         if ((int16_t)*(uint16_t*)(ds + obj_di + OBJ_BBOX_X1) < (int16_t)*(uint16_t*)(ds + si + OBJ_BBOX_X0)) continue;
         if ((int16_t)*(uint16_t*)(ds + si + OBJ_BBOX_X1) < (int16_t)*(uint16_t*)(ds + obj_di + OBJ_BBOX_X0)) continue;
@@ -8010,7 +8010,7 @@ static const uint16_t v2_psnap_watch[] = {
     // obj 0 specific Y-fields:
     OBJ_Y_PREV,  // Y_prev
     0x14E4,  // Y_start neighbor word read (legacy _postvm_diverge_trap migration — covers byte 14E4-14E5)
-    0x14E5,  // Y_start bound (anti-aliased word at 14E5)
+    OBJ_BBOX_Y0,  // Y_start bound (anti-aliased word at 14E5)
     0x150C,  // Y_end neighbor word read (legacy trap migration — covers byte 150C-150D)
     OBJ_BBOX_Y1,  // Y_end bound
     OBJ_BBOX_X0,  // X_start
@@ -8030,7 +8030,7 @@ static const uint16_t v2_psnap_watch[] = {
     0x14BD,  // half_width
     0x1495,  // half_height
     OBJ_ANIM_SUB,  // Y_top
-    0x16ED,  // health
+    OBJ_ANIM_IDX,  // health
     0x169D,  // anim flags (sub_13e52 init source)
     0x18AD,  // animation pc (current bytecode position)
     0x18D5,  // animation seg
@@ -8051,7 +8051,7 @@ static const uint16_t v2_psnap_watch[] = {
     0x1285,  // alt anim ptr
     OBJ_WIDTH,  // collision misc 1
     OBJ_HEIGHT,  // collision misc 2
-    0x15AD,  // portrait
+    OBJ_RES_HANDLE,  // portrait
     OBJ_RES_COST,  // portrait alt
     OBJ_STATE_IDX,  // portrait state
     0x1625,  // sound id
@@ -8440,7 +8440,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
                 ax = (int16_t)(int8_t)ah; // SAR ax, 8
                 *(uint16_t*)(shadow + di + OBJ_VEL_Y) = (uint16_t)ax;
                 *(uint16_t*)(shadow + di + OBJ_WORLD_Y) += (uint16_t)ax; // Y world
-                *(uint16_t*)(shadow + di + 0x14E5) += (uint16_t)ax; // Y start
+                *(uint16_t*)(shadow + di + OBJ_BBOX_Y0) += (uint16_t)ax; // Y start
                 *(uint16_t*)(shadow + di + OBJ_BBOX_Y1) += (uint16_t)ax; // Y end
             }
         }
@@ -8541,7 +8541,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 
             // loc_1636d: apply Y adjustment
             di = *(uint16_t*)(shadow + DS_CUR_OBJ); // reload di from ds:42h
-            *(uint16_t*)(shadow + di + 0x14E5) -= (uint16_t)y_adjust;
+            *(uint16_t*)(shadow + di + OBJ_BBOX_Y0) -= (uint16_t)y_adjust;
             *(uint16_t*)(shadow + di + OBJ_WORLD_Y) -= (uint16_t)y_adjust;
             *(uint16_t*)(shadow + di + OBJ_BBOX_Y1) -= (uint16_t)y_adjust;
             *(uint16_t*)(shadow + di + OBJ_VEL_Y) = 0;
@@ -8582,7 +8582,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
                 *(uint16_t*)(shadow + si + OBJ_BBOX_X1) += (uint16_t)vx;
                 int16_t vy = (int16_t)*(uint16_t*)(shadow + si + OBJ_VEL_Y);
                 *(uint16_t*)(shadow + si + OBJ_WORLD_Y) += (uint16_t)vy;
-                *(uint16_t*)(shadow + si + 0x14E5) += (uint16_t)vy;
+                *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) += (uint16_t)vy;
                 *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) += (uint16_t)vy;
                 *(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) = 0xFFFF; // clear collision
             }
@@ -8621,9 +8621,9 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
                     *(uint16_t*)(shadow + si + OBJ_FLAGS) ^= 0x80;
                     uint16_t y2 = *(uint16_t*)(shadow + si + OBJ_WORLD_Y) * 2;
                     uint16_t new_14E5 = y2 - *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) - 1;
-                    uint16_t new_150D = y2 - *(uint16_t*)(shadow + si + 0x14E5) - 1;
+                    uint16_t new_150D = y2 - *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) - 1;
                     *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) = new_150D;
-                    *(uint16_t*)(shadow + si + 0x14E5) = new_14E5;
+                    *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) = new_14E5;
                     // Sub-sprite vflip loop
                     if (*(uint16_t*)(shadow + si + OBJ_SUB_COUNT) != 0) {
                         uint16_t dy2 = y2;
@@ -8664,7 +8664,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
                 }
                 *(uint16_t*)(shadow + si + OBJ_VEL_Y) = (uint16_t)cx_delta;
                 *(uint16_t*)(shadow + si + OBJ_WORLD_Y) += (uint16_t)cx_delta;
-                *(uint16_t*)(shadow + si + 0x14E5) += (uint16_t)cx_delta;
+                *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) += (uint16_t)cx_delta;
                 *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) += (uint16_t)cx_delta;
 
                 *(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) = 0xFFFF; // clear collision
@@ -9139,7 +9139,7 @@ struct V2VM {
             // flags (0x1585), anim_id (0x16ED) on level 002B. Catches ALL ds_write paths
             // (op_56, op_5A, op_60, op_62, op_67, sub_135cf, sub_1386b, etc).
             if (*(uint16_t*)(shadow + DS_LEVEL) == 0x002B &&
-                (addr == 0x164D || addr == 0x1675 || addr == OBJ_FLAGS || addr == 0x16ED ||
+                (addr == 0x164D || addr == 0x1675 || addr == OBJ_FLAGS || addr == OBJ_ANIM_IDX ||
                  addr == OBJ_VEL_X || addr == OBJ_VEL_Y) &&
                 val != *(uint16_t*)(shadow + addr)) {
                 static int _ew = 0; _ew++;
@@ -9148,7 +9148,7 @@ struct V2VM {
                         addr == 0x164D ? "vel_X_field" :
                         addr == 0x1675 ? "vel_Y_field" :
                         addr == OBJ_FLAGS ? "Erik_flags" :
-                        addr == 0x16ED ? "Erik_anim_id" :
+                        addr == OBJ_ANIM_IDX ? "Erik_anim_id" :
                         addr == OBJ_VEL_X ? "vel_X_acc" :
                         addr == OBJ_VEL_Y ? "vel_Y_acc" : "?";
                     fprintf(stderr,
@@ -9225,8 +9225,8 @@ static bool v2_vm_loc_15a7d(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
 
 // sub_15d3c (seg000): Y bbox overlap (Y_start). Verified seg000 13933-13963. No DS writes.
 static bool v2_sub_15d3c(V2VM& vm, uint16_t si, uint16_t di) {
-    int16_t ax = (int16_t)vm.ds_read(di + 0x14E5);
-    if (ax < (int16_t)vm.ds_read(si + 0x14E5)) return false;
+    int16_t ax = (int16_t)vm.ds_read(di + OBJ_BBOX_Y0);
+    if (ax < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) return false;
     if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) return false;
     if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) return false;
     if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) return false;
@@ -9235,7 +9235,7 @@ static bool v2_sub_15d3c(V2VM& vm, uint16_t si, uint16_t di) {
 // sub_15d42 (seg000): Y bbox overlap (Y_end). Verified seg000 13942-13963.
 static bool v2_sub_15d42(V2VM& vm, uint16_t si, uint16_t di) {
     int16_t ax = (int16_t)vm.ds_read(di + OBJ_BBOX_Y1);
-    if (ax < (int16_t)vm.ds_read(si + 0x14E5)) return false;
+    if (ax < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) return false;
     if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) return false;
     if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) return false;
     if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) return false;
@@ -9604,9 +9604,9 @@ static void v2_vm_op_0C(V2VM& vm);
 
 // sub_15505: [si+0x15AD] -= [di+0x15D5]; if no borrow → 0. 0 bytes.
 static void v2_vm_sub_15505(V2VM& vm, uint16_t si, uint16_t di) {
-    uint16_t a = vm.ds_read(si + 0x15AD);
+    uint16_t a = vm.ds_read(si + OBJ_RES_HANDLE);
     uint16_t b = vm.ds_read(di + OBJ_RES_COST);
-    vm.ds_write(si + 0x15AD, (a < b) ? (uint16_t)(a - b) : 0);
+    vm.ds_write(si + OBJ_RES_HANDLE, (a < b) ? (uint16_t)(a - b) : 0);
 }
 
 // 0x11 (sub_14334): si=ds:0x42, di=[si+0x1995] → sub_15505. 0 bytes.
@@ -9982,7 +9982,7 @@ static void v2_vm_sub_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
         if ((int16_t)x < (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_X0)) continue;
         if ((int16_t)(x - 1) >= (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_X1)) continue;
         // Y: ds:0x38 in [target.Y_start, target.Y_end)
-        if ((int16_t)y < (int16_t)*(uint16_t*)(rds + si2 + 0x14E5)) continue;
+        if ((int16_t)y < (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y0)) continue;
         if ((int16_t)(y - 1) >= (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y1)) continue;
         // orig 0x60AF: MOV ax,[si+17DDh]; MOV ds:3B2h, ax — FULL word, not the
         // low byte used for the filter compare.
@@ -10053,9 +10053,9 @@ static uint16_t v2_field_addr_D(V2VM& vm) {
 }
 
 // 0x61 (sub_147cb): AND [field_A + 0x14E5], acc. 1 byte.
-static void v2_vm_op_61(V2VM& vm) { uint16_t a = v2_field_addr_A(vm); vm.ds_write(a + 0x14E5, vm.ds_read(a + 0x14E5) & v2_vm_accumulator); }
+static void v2_vm_op_61(V2VM& vm) { uint16_t a = v2_field_addr_A(vm); vm.ds_write(a + OBJ_FIELD_BASE, vm.ds_read(a + OBJ_FIELD_BASE) & v2_vm_accumulator); }
 // 0x65 (sub_14827): XOR [field_B + 0x14E5], acc. 1 byte.
-static void v2_vm_op_65(V2VM& vm) { uint16_t a = v2_field_addr_B(vm); vm.ds_write(a + 0x14E5, vm.ds_read(a + 0x14E5) ^ v2_vm_accumulator); }
+static void v2_vm_op_65(V2VM& vm) { uint16_t a = v2_field_addr_B(vm); vm.ds_write(a + OBJ_BBOX_Y0, vm.ds_read(a + OBJ_BBOX_Y0) ^ v2_vm_accumulator); }
 
 // 0x15 (sub_150fc): Relative position to active viking → 2 sub_154bf writes. 1 byte.
 static void v2_vm_op_15(V2VM& vm) {
@@ -10128,9 +10128,9 @@ static void v2_vm_sub_13757(V2VM& vm, uint16_t si) {
                              - vm.ds_read(si + OBJ_BBOX_Y1) - 1);          // ax = [1765]*2-[150D]-1
     uint16_t dx = (uint16_t)((uint16_t)(vm.ds_read(si + OBJ_WORLD_Y)
                              + vm.ds_read(si + OBJ_WORLD_Y))
-                             - vm.ds_read(si + 0x14E5) - 1);          // dx = [1765]*2-[14E5]-1
+                             - vm.ds_read(si + OBJ_BBOX_Y0) - 1);          // dx = [1765]*2-[14E5]-1
     vm.ds_write(si + OBJ_BBOX_Y1, dx);                                     // [si+150Dh] = dx
-    vm.ds_write(si + 0x14E5, ax);                                     // [si+14E5h] = ax
+    vm.ds_write(si + OBJ_BBOX_Y0, ax);                                     // [si+14E5h] = ax
     if (vm.ds_read(si + OBJ_SUB_COUNT) != 0) {                               // CMP [si+1AD5h],0 / JZ
         uint16_t dx2 = (uint16_t)(vm.ds_read(si + OBJ_WORLD_Y) << 1);      // orig re-reads [si+1765h]
         uint16_t cx = vm.ds_read(si + OBJ_SUB_END);
@@ -10210,7 +10210,7 @@ static void v2_vm_op_9C(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_FIELD_BASE);
     vm.ds_write(addr, (vm.ds_read(addr) & dx) | v2_vm_accumulator);
 }
 
@@ -10292,12 +10292,12 @@ static bool v2_vm_tile_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uin
 // Entry point wrappers for tile search
 static bool v2_vm_sub_15a57(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A59
-    uint16_t y = vm.ds_read(obj_di + 0x14E5) - 1;
+    uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y0) - 1;
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_loc_15a64(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A66
-    uint16_t y = vm.ds_read(obj_di + 0x14E5);
+    uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y0);
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_loc_15A70(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
@@ -10336,7 +10336,7 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
         }
         if (!match) continue;
         // Position bounds check — read from real DS
-        if ((int16_t)y_check < (int16_t)*(uint16_t*)(rds + si + 0x14E5)) continue;
+        if ((int16_t)y_check < (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)(y_check - 1) >= (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y1)) continue;
         // X bounds: original uses JS (sign flag only), not JL (SF≠OF).
         // JS after SUB: jump if (uint16_t)(a - b) >= 0x8000 (bit 15 set).
@@ -10352,7 +10352,7 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
 
 // Entry point wrappers for object search
 static bool v2_vm_sub_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-    return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + 0x14E5) - 1);
+    return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_FIELD_BASE) - 1);
 }
 static bool v2_vm_sub_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_Y1) + 1);
@@ -10417,7 +10417,7 @@ static bool v2_vm_sub_160cf(V2VM& vm, uint16_t filter_si) {
         if ((int16_t)(ref_x - 1) >= (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_X1)) continue;
 
         // Y bounds: ref_y >= obj.Y_start AND ref_y-1 < obj.Y_end
-        if ((int16_t)ref_y < (int16_t)*(uint16_t*)(rds + si + 0x14E5)) continue;
+        if ((int16_t)ref_y < (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)(ref_y - 1) >= (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y1)) continue;
 
         // Found!
@@ -10465,7 +10465,7 @@ static bool v2_vm_loc_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint1
     // Y_start for vertical scan — orig 0x5A1B: SUB + JG (same SF^OF rule as
     // the y_top clamp above: decide on the true 32-bit difference, keep the
     // wrapped 16-bit value).
-    int32_t y_start32 = (int32_t)(int16_t)vm.ds_read(obj_di + 0x14E5)
+    int32_t y_start32 = (int32_t)(int16_t)vm.ds_read(obj_di + OBJ_BBOX_Y0)
                       - (int32_t)(int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
     uint16_t y_start = (y_start32 > 0) ? (uint16_t)y_start32 : 0;
 
@@ -10530,9 +10530,9 @@ static bool v2_vm_loc_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint1
         // Y bounds: self adjusted Y range overlaps target Y range
         // self.Y_end - self.vel_Y >= target.Y_start
         int16_t self_y_end_adj = (int16_t)vm.ds_read(obj_di + OBJ_BBOX_Y1) - (int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
-        if (self_y_end_adj < (int16_t)*(uint16_t*)(rds + si + 0x14E5)) continue;
+        if (self_y_end_adj < (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y0)) continue;
         // self.Y_start - self.vel_Y <= target.Y_end (equal counts as match)
-        int16_t self_y_start_adj = (int16_t)vm.ds_read(obj_di + 0x14E5) - (int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
+        int16_t self_y_start_adj = (int16_t)vm.ds_read(obj_di + OBJ_BBOX_Y0) - (int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
         int16_t target_y_end = (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y1);
         if (self_y_start_adj > target_y_end) continue; // jz passes, jge skips
         // Found!
@@ -10664,7 +10664,7 @@ static void v2_vm_op_14(V2VM& vm) {
 
     // Set object fields from animation table (sub_13e52; scratch trio
     // 0x34/0x36/0x38 was already written by the sub_13809 prologue above)
-    vm.ds_write(si_slot + 0x16ED, anim_type);                    // anim index
+    vm.ds_write(si_slot + OBJ_ANIM_IDX, anim_type);                    // anim index
     vm.ds_write(si_slot + OBJ_ANIM_SUB, 0xFFFF);                       // bit flag (di)
     vm.ds_write(si_slot + OBJ_FLAGS, si_flags);                      // flags
     vm.ds_write(si_slot + 0x169D, vm.ds_read(0x374));            // from ds:0x374
@@ -10716,7 +10716,7 @@ static void v2_vm_op_14(V2VM& vm) {
     vm.ds_write(si_slot + OBJ_CODE_SEG, anim_seg);
 
     // More fields from animation table
-    vm.ds_write(si_slot + 0x15AD, *(uint16_t*)(anim_es + bx_anim + 7));    // type
+    vm.ds_write(si_slot + OBJ_RES_HANDLE, *(uint16_t*)(anim_es + bx_anim + 7));    // type
     vm.ds_write(si_slot + OBJ_WIDTH, *(uint8_t*)(anim_es + bx_anim + 9));     // width
     vm.ds_write(si_slot + OBJ_HEIGHT, *(uint8_t*)(anim_es + bx_anim + 0xA));   // height
     vm.ds_write(si_slot + OBJ_RES_COST, *(uint16_t*)(anim_es + bx_anim + 0xB));  // collision type
@@ -10760,7 +10760,7 @@ static void v2_vm_op_14(V2VM& vm) {
 
     uint16_t half_h = vm.ds_read(si_slot + OBJ_HEIGHT) >> 1;
     uint16_t y = vm.ds_read(si_slot + OBJ_WORLD_Y);
-    vm.ds_write(si_slot + 0x14E5, y - half_h);
+    vm.ds_write(si_slot + OBJ_BBOX_Y0, y - half_h);
     vm.ds_write(si_slot + OBJ_BBOX_Y1, y + vm.ds_read(si_slot + OBJ_HEIGHT) - half_h - 1);
 
     // sub_13e52 eip 0x3F9D..0x3FBB: exact replica
@@ -11225,7 +11225,7 @@ static void v2_vm_op_5C(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx - 0x6CBA);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) - v2_vm_accumulator);
 }
 
@@ -11237,7 +11237,7 @@ static void v2_vm_sub_15972(V2VM& vm, int16_t ax, uint16_t di) {
     if (di == 0) {
         static int _s15972 = 0; if (++_s15972 <= 30)
             fprintf(stderr, "V2-15972[%d]: di=0 ax=%04X(s=%d) Y=%04X Y_end=%04X Y_start=%04X\n",
-                _s15972, (uint16_t)ax, ax, vm.ds_read(OBJ_WORLD_Y), vm.ds_read(OBJ_BBOX_Y1), vm.ds_read(0x14E5));
+                _s15972, (uint16_t)ax, ax, vm.ds_read(OBJ_WORLD_Y), vm.ds_read(OBJ_BBOX_Y1), vm.ds_read(OBJ_BBOX_Y0));
     }
     if (ax == 0) {
         // loc_15984: snap Y_end to tile boundary
@@ -11251,9 +11251,9 @@ static void v2_vm_sub_15972(V2VM& vm, int16_t ax, uint16_t di) {
         vm.ds_write(di + OBJ_BBOX_Y1, vm.ds_read(di + OBJ_BBOX_Y1) - dx);
     } else {
         // ax > 0: snap Y_start up to next tile boundary
-        uint16_t y_start = vm.ds_read(di + 0x14E5);
+        uint16_t y_start = vm.ds_read(di + OBJ_BBOX_Y0);
         uint16_t snapped = (y_start | 0xF) + 1;
-        vm.ds_write(di + 0x14E5, snapped);
+        vm.ds_write(di + OBJ_BBOX_Y0, snapped);
         dx = y_start - snapped; // negative (wraps as uint16_t)
         vm.ds_write(di + OBJ_WORLD_Y, vm.ds_read(di + OBJ_WORLD_Y) - dx);
         vm.ds_write(di + OBJ_BBOX_Y1, vm.ds_read(di + OBJ_BBOX_Y1) - dx);
@@ -11262,7 +11262,7 @@ static void v2_vm_sub_15972(V2VM& vm, int16_t ax, uint16_t di) {
     }
     // Common path for ax == 0 and ax < 0
     vm.ds_write(di + OBJ_WORLD_Y, vm.ds_read(di + OBJ_WORLD_Y) - dx);
-    vm.ds_write(di + 0x14E5, vm.ds_read(di + 0x14E5) - dx);
+    vm.ds_write(di + OBJ_BBOX_Y0, vm.ds_read(di + OBJ_BBOX_Y0) - dx);
     vm.ds_write(di + 0x19E5, 0);
 }
 
@@ -11619,20 +11619,20 @@ static bool v2_vm_sub_161a1(V2VM& vm, uint16_t di, uint16_t si) {
     uint16_t ds36 = vm.ds_read(DS_SCRATCH_36);
 
     // Target's adjusted Y: [si+14E5] - [si+1765] + [si+13CD]
-    int16_t target_adj = (int16_t)vm.ds_read(si + 0x14E5) - (int16_t)vm.ds_read(si + OBJ_WORLD_Y)
+    int16_t target_adj = (int16_t)vm.ds_read(si + OBJ_BBOX_Y0) - (int16_t)vm.ds_read(si + OBJ_WORLD_Y)
                          + (int16_t)vm.ds_read(si + OBJ_Y_PREV);
-    if ((int16_t)target_adj < (int16_t)vm.ds_read(si + 0x14E5)) {
+    if ((int16_t)target_adj < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) {
         // target_adj < target.Y_start: orig loc_161f2 — MOV ds:32h, ax (= target_adj) at eip 0x6204.
         vm.ds_write(DS_MODE_WORD, (uint16_t)target_adj);
         // check ds:0x36 >= target_adj AND target.Y_start >= ds:0x34
         if ((int16_t)ds36 < target_adj) return false;
-        if ((int16_t)vm.ds_read(si + 0x14E5) < (int16_t)ds34) return false;
+        if ((int16_t)vm.ds_read(si + OBJ_BBOX_Y0) < (int16_t)ds34) return false;
     } else {
         // target_adj >= target.Y_start: orig loc_1621c — MOV ds:32h, ax where AX is still
         // target_adj at the JGE entry (computed at eips 0x61F2-0x61FA, before the cmp/jge).
         vm.ds_write(DS_MODE_WORD, (uint16_t)target_adj);
         // check ds:0x36 >= target.Y_start AND target_adj >= ds:0x34
-        if ((int16_t)ds36 < (int16_t)vm.ds_read(si + 0x14E5)) return false;
+        if ((int16_t)ds36 < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) return false;
         if ((int16_t)target_adj < (int16_t)ds34) return false;
     }
     return true;
@@ -11682,19 +11682,19 @@ static void v2_vm_sub_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner, uint1
         static int _s15da8 = 0; if (++_s15da8 <= 30)
             fprintf(stderr, "V2-15DA8[%d]: di=0 ax_dir=%d si=%04X Y=%04X Y_end=%04X p_Y_end=%04X p_Y_start=%04X\n",
                 _s15da8, ax_dir, si_partner, vm.ds_read(OBJ_WORLD_Y), vm.ds_read(OBJ_BBOX_Y1),
-                vm.ds_read(si_partner + OBJ_BBOX_Y1), vm.ds_read(si_partner + 0x14E5));
+                vm.ds_read(si_partner + OBJ_BBOX_Y1), vm.ds_read(si_partner + OBJ_BBOX_Y0));
     }
     if (ax_dir == 0) {
         // Moved down: snap up. dx = self.Y_end - partner.Y_start + 1
-        dx = vm.ds_read(di + OBJ_BBOX_Y1) - vm.ds_read(si_partner + 0x14E5) + 1;
+        dx = vm.ds_read(di + OBJ_BBOX_Y1) - vm.ds_read(si_partner + OBJ_BBOX_Y0) + 1;
         vm.ds_write(di + OBJ_WORLD_Y, vm.ds_read(di + OBJ_WORLD_Y) - dx);
-        vm.ds_write(di + 0x14E5, vm.ds_read(di + 0x14E5) - dx);
+        vm.ds_write(di + OBJ_BBOX_Y0, vm.ds_read(di + OBJ_BBOX_Y0) - dx);
         vm.ds_write(di + OBJ_BBOX_Y1, vm.ds_read(di + OBJ_BBOX_Y1) - dx);
     } else {
         // Moved up: snap down. dx = partner.Y_end - self.Y_start + 1
-        dx = vm.ds_read(si_partner + OBJ_BBOX_Y1) - vm.ds_read(di + 0x14E5) + 1;
+        dx = vm.ds_read(si_partner + OBJ_BBOX_Y1) - vm.ds_read(di + OBJ_BBOX_Y0) + 1;
         vm.ds_write(di + OBJ_WORLD_Y, vm.ds_read(di + OBJ_WORLD_Y) + dx);
-        vm.ds_write(di + 0x14E5, vm.ds_read(di + 0x14E5) + dx);
+        vm.ds_write(di + OBJ_BBOX_Y0, vm.ds_read(di + OBJ_BBOX_Y0) + dx);
         vm.ds_write(di + OBJ_BBOX_Y1, vm.ds_read(di + OBJ_BBOX_Y1) + dx);
     }
     vm.ds_write(di + 0x19E5, 0);
@@ -11880,7 +11880,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         fprintf(stderr, "V2-COLL-1584E[%d]: obj=0 state=%d Y=%04X Y_prev=%04X Y_end=%04X Y_start=%04X\n",
             _coll_dbg, state,
             vm.ds_read(vm.obj + OBJ_WORLD_Y), vm.ds_read(vm.obj + OBJ_Y_PREV),
-            vm.ds_read(vm.obj + OBJ_BBOX_Y1), vm.ds_read(vm.obj + 0x14E5));
+            vm.ds_read(vm.obj + OBJ_BBOX_Y1), vm.ds_read(vm.obj + OBJ_BBOX_Y0));
     }
 
     if (state == 0) {
@@ -12068,7 +12068,7 @@ static void v2_vm_op_98(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     uint16_t si = field_off + vm.global_r(DS_CUR_OBJ);
-    uint16_t val = vm.ds_read(si + 0x14E5);
+    uint16_t val = vm.ds_read(si + OBJ_BBOX_Y0);
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
     v2_vm_accumulator = (val & mask) ? 1 : 0;
 }
@@ -12151,7 +12151,7 @@ static void v2_vm_op_B3(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     uint16_t si = field_off + vm.global_r(DS_CUR_OBJ); // pattern B: NO +0x1995
-    uint16_t val = vm.ds_read(si + 0x14E5);
+    uint16_t val = vm.ds_read(si + OBJ_BBOX_Y0);
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
@@ -12222,7 +12222,7 @@ static void v2_vm_op_29(V2VM& vm) {
 static void v2_vm_op_2C(V2VM& vm) {
     // ds:0x3AE = ds:[si+0x14E5] - 1 (self Y - 1)
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(0x3AE, vm.ds_read(self_si + 0x14E5) - 1);
+    vm.ds_write(0x3AE, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
 
     // Read params: filter type index (1 byte) + jump target word (2 bytes)
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
@@ -12251,7 +12251,7 @@ static void v2_vm_op_2C(V2VM& vm) {
 
         // Y bounds: 3AE >= [si+14E5] AND (3AE-1) < [si+150D]
         uint16_t y_ref = vm.ds_read(0x3AE);
-        if (y_ref < vm.ds_read(si + 0x14E5)) continue;
+        if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;
 
         // X bounds: [di+155D] >= [si+1535] AND [si+155D] >= [di+1535]
@@ -12300,7 +12300,7 @@ static void v2_vm_op_48(V2VM& vm) {
 // Verified with seg000 lines 14143-14201.
 static void v2_vm_op_35(V2VM& vm) {
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(0x3AE, vm.ds_read(self_si + 0x14E5) - 1);
+    vm.ds_write(0x3AE, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
 
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint16_t filter_idx = ax_word & 0xFF;
@@ -12327,7 +12327,7 @@ static void v2_vm_op_35(V2VM& vm) {
 
         // Y bounds: signed JL comparisons
         int16_t y_ref = (int16_t)vm.ds_read(0x3AE);
-        if (y_ref < (int16_t)vm.ds_read(si + 0x14E5)) continue;
+        if (y_ref < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)(uint16_t)(y_ref - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
 
         // X bounds: signed JL comparisons
@@ -12372,7 +12372,7 @@ static void v2_vm_op_2D(V2VM& vm) {
         if (!matched) continue;
 
         uint16_t y_ref = vm.ds_read(0x3AE);
-        if (y_ref < vm.ds_read(si + 0x14E5)) continue;
+        if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;
 
         uint16_t di2 = self_si;
@@ -12442,7 +12442,7 @@ static uint16_t v2_vm_indexed_1995_target(V2VM& vm) {
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;               // orig: MOV si,ds:42h
     vm.di_track = di;               // orig: slot address left in DI (task #15)
-    return (uint16_t)(di + 0x14E5);
+    return (uint16_t)(di + OBJ_FIELD_BASE);
 }
 
 // 0x5B (sub_14721): ADD acc to indexed+1995 field. 1 byte.
@@ -12477,7 +12477,7 @@ static uint16_t v2_vm_indexed_field_b_target(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
     si += vm.global_r(DS_CUR_OBJ);
-    return (uint16_t)(si + 0x14E5);
+    return (uint16_t)(si + OBJ_BBOX_Y0);
 }
 
 // sub_146de: indexed field ADD (pattern B). 1 byte.
@@ -12770,7 +12770,7 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
         }
         if (!match) continue;
         // Bounds check
-        if ((int16_t)vm.ds_read(0x3AE) < (int16_t)vm.ds_read(si + 0x14E5)) continue;
+        if ((int16_t)vm.ds_read(0x3AE) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)(vm.ds_read(0x3AE) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
         if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
         if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) continue;
@@ -12827,7 +12827,7 @@ static void v2_vm_op_D1(V2VM& vm) {
         if (!match) continue;
         // Y bounds: unsigned, inverted second check
         uint16_t y_ref = vm.ds_read(0x3AE);
-        if (y_ref < vm.ds_read(si + 0x14E5)) continue;  // JB: unsigned <
+        if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;  // JB: unsigned <
         if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;  // JNB: unsigned >=
         // X bounds: unsigned
         if (vm.ds_read(si_self + OBJ_BBOX_X1) < vm.ds_read(si + OBJ_BBOX_X0)) continue;  // JB
@@ -13154,7 +13154,7 @@ static void v2_vm_op_9F(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) & v2_vm_accumulator);
 }
 
@@ -13186,7 +13186,7 @@ static void v2_vm_op_A1(V2VM& vm) {
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
     vm.di_track = di;   // orig: slot address in DI (task #15)
-    uint16_t addr = (uint16_t)(di + 0x14E5);
+    uint16_t addr = (uint16_t)(di + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) + v2_vm_accumulator);
 }
 
@@ -13199,7 +13199,7 @@ static void v2_vm_op_A2(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
 }
 
@@ -13215,7 +13215,7 @@ static void v2_vm_op_A4(V2VM& vm) {
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
     vm.di_track = di;   // orig: slot address in DI (task #15)
-    uint16_t addr = (uint16_t)(di + 0x14E5);
+    uint16_t addr = (uint16_t)(di + OBJ_FIELD_BASE);
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
 }
 
@@ -13228,7 +13228,7 @@ static void v2_vm_op_A5(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
 }
 
@@ -13254,7 +13254,7 @@ static void v2_vm_op_A7(V2VM& vm) {
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
     vm.di_track = di;   // orig: slot address in DI (task #15)
-    uint16_t addr = (uint16_t)(di + 0x14E5);
+    uint16_t addr = (uint16_t)(di + OBJ_FIELD_BASE);
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
 }
 
@@ -13303,7 +13303,7 @@ static void v2_vm_op_BA(V2VM& vm) {
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     field_off += vm.ds_read(si + OBJ_PARTNER);
-    uint16_t val = vm.ds_read((uint16_t)(field_off + 0x14E5));
+    uint16_t val = vm.ds_read((uint16_t)(field_off + OBJ_BBOX_Y0));
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
@@ -13425,7 +13425,7 @@ static void v2_vm_op_BC(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
     si += vm.global_r(DS_CUR_OBJ);
-    vm.ds_write((uint16_t)(si + 0x14E5), v2_vm_accumulator);
+    vm.ds_write((uint16_t)(si + OBJ_BBOX_Y0), v2_vm_accumulator);
 }
 
 // 0xBE (sub_146af): SHL acc by 8 + store to indexed+1995 field. 1 byte.
@@ -13537,7 +13537,7 @@ static void v2_vm_op_5F(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_FIELD_BASE);
     vm.ds_write(addr, vm.ds_read(addr) & v2_vm_accumulator);
 }
 
@@ -13582,7 +13582,7 @@ static void v2_vm_op_59(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx - 0x6CBA);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_FIELD_BASE);
     vm.ds_write(addr, vm.ds_read(addr) + v2_vm_accumulator);
 }
 
@@ -13620,7 +13620,7 @@ static void v2_vm_op_36(V2VM& vm) {
 
         // Y bounds check
         int16_t ds_3AE = (int16_t)vm.ds_read(0x3AE);
-        if (ds_3AE < (int16_t)vm.ds_read(si + 0x14E5)) continue;
+        if (ds_3AE < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if (ds_3AE - 1 < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) {} else continue; // actually: ds_3AE-1 < 150D → skip
         // Wait, re-read: CMP ax, [si+150D]; JL → skip. So if (ds_3AE-1) < [si+150D] → skip
 
@@ -13638,7 +13638,7 @@ static void v2_vm_op_36(V2VM& vm) {
 
         // Actually I'll just do it literally without over-thinking:
         // (already checked type match)
-        if ((int16_t)vm.ds_read(0x3AE) < (int16_t)vm.ds_read(si + 0x14E5)) continue;
+        if ((int16_t)vm.ds_read(0x3AE) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)(vm.ds_read(0x3AE) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
 
         // X bounds: di=ds:0x42
@@ -13832,7 +13832,7 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
                   "acc=%04X 32F=%04X 86DE=%04X 3B6=%04X 3B8=%04X "
                   "X=%04X Y=%04X\n",
                   _v2_op_trace, vm.obj, bx_before, cmd, handler,
-                  vm.ds_read(vm.obj + 0x16ED),  // this obj's anim ID
+                  vm.ds_read(vm.obj + OBJ_ANIM_IDX),  // this obj's anim ID
                   vm.ds_read(vm.obj + OBJ_PC),  // PC
                   vm.ds_read(DS_ACCUMULATOR),             // accumulator
                   vm.ds_read(DS_TRANSITION),
@@ -13845,7 +13845,7 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
             // CUTSCENE CONTROLLER TRAP: snapshot all 16ED before opcode, compare after
             uint16_t pre_16ED[10];
             for (int i = 0; i < 10; i++)
-                pre_16ED[i] = *(uint16_t*)(vm.shadow + (i * 2) + 0x16ED);
+                pre_16ED[i] = *(uint16_t*)(vm.shadow + (i * 2) + OBJ_ANIM_IDX);
             // (Run opcode below in normal flow, then compare via post-trap.)
             // Stash for post-check via static so post-block can find it:
             extern uint16_t v2_op_pre_16ED[10];
@@ -13896,13 +13896,13 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
             extern uint16_t v2_op_pre_16ED[10];
             extern uint16_t v2_op_who, v2_op_cmd, v2_op_bx;
             for (int i = 0; i < 10; i++) {
-                uint16_t now = *(uint16_t*)(vm.shadow + (i * 2) + 0x16ED);
+                uint16_t now = *(uint16_t*)(vm.shadow + (i * 2) + OBJ_ANIM_IDX);
                 if (now != v2_op_pre_16ED[i]) {
                     static int _aid_trace = 0;
                     if (++_aid_trace <= 100) {
                         fprintf(stderr,
                           "V2-ANIM-WR[%d]: writer_obj=%02X cmd=%02X bx=%04X "
-                          "→ target_obj=%02X 0x16ED: %04X → %04X\n",
+                          "→ target_obj=%02X OBJ_ANIM_IDX: %04X → %04X\n",
                           _aid_trace, v2_op_who, v2_op_cmd, v2_op_bx,
                           i * 2, v2_op_pre_16ED[i], now);
                     }
@@ -14591,7 +14591,7 @@ static void v2_vm_op_56(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx - 0x6CBA);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
-    vm.ds_write((uint16_t)(si + 0x14E5), v2_vm_accumulator);
+    vm.ds_write((uint16_t)(si + OBJ_FIELD_BASE), v2_vm_accumulator);
 }
 
 // 0x58 (sub_146b4): Store acc to indexed+0x1995 field. 1 byte.
@@ -14600,7 +14600,7 @@ static void v2_vm_op_58(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx - 0x6CBA);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     di += vm.ds_read(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER);
-    vm.ds_write((uint16_t)(di + 0x14E5), v2_vm_accumulator);
+    vm.ds_write((uint16_t)(di + OBJ_FIELD_BASE), v2_vm_accumulator);
     vm.di_track = di;   // orig: slot address in DI (task #15)
 }
 
@@ -14623,7 +14623,7 @@ static void v2_vm_op_62(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx - 0x6CBA);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t addr = (uint16_t)(si + 0x14E5);
+    uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
 }
 
@@ -14634,7 +14634,7 @@ static void v2_vm_op_67(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx - 0x6CBA);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     di += vm.ds_read(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER);
-    uint16_t addr = (uint16_t)(di + 0x14E5);
+    uint16_t addr = (uint16_t)(di + OBJ_FIELD_BASE);
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
     vm.di_track = di;   // orig: slot address in DI (task #15)
 }
@@ -14660,7 +14660,7 @@ static void v2_vm_op_bit_test_indexed(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     di += *(uint16_t*)(vm.shadow +obj + OBJ_PARTNER);
-    uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(di + 0x14E5));
+    uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(di + OBJ_BBOX_Y0));
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
     v2_vm_accumulator = (val & mask) ? 1 : 0;
 }
@@ -14698,7 +14698,7 @@ static void v2_vm_op_load_acc_indexed_1995(V2VM& vm) {
     uint16_t di = *(uint16_t*)(vm.shadow +lookup_addr);
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     di += *(uint16_t*)(vm.shadow +obj + OBJ_PARTNER);
-    v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(di + 0x14E5));
+    v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(di + OBJ_FIELD_BASE));
     vm.di_track = di;   // orig: slot address in DI (task #15)
 }
 
@@ -14757,7 +14757,7 @@ static uint16_t v2_vm_read_indexed_field(V2VM& vm) {
     uint16_t si = *(uint16_t*)(vm.shadow +lookup_addr);
     si += vm.global_r(DS_CUR_OBJ);
     vm.si_track = si;               // orig ch1 leaves the field address in SI
-    return vm.ds_read((uint16_t)(si + 0x14E5));
+    return vm.ds_read((uint16_t)(si + OBJ_FIELD_BASE));
 }
 
 // sub_1549a: read 16-bit address from bytecode, dereference (consumes 2 bytes)
@@ -14777,7 +14777,7 @@ static uint16_t v2_vm_read_indexed_field_1995(V2VM& vm) {
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;               // orig ch3: MOV si,ds:42h stays in SI
     vm.di_track = di;               // orig leaves the field address in DI
-    return vm.ds_read(di + 0x14E5);
+    return vm.ds_read(di + OBJ_FIELD_BASE);
 }
 
 // sub_12312: pseudo-random number generator, consumes 0 bytes
@@ -14852,7 +14852,7 @@ static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
         uint16_t idx = vm.read_u8();
         uint16_t si = *(uint16_t*)(vm.shadow + (uint16_t)(idx - 0x6CBA));
         si = (uint16_t)(si + vm.global_r(DS_CUR_OBJ));
-        vm.ds_write((uint16_t)(si + 0x14E5), site_ret_ip);
+        vm.ds_write((uint16_t)(si + OBJ_BBOX_Y0), site_ret_ip);
         vm.si_track = si;     // escape getter leaves the store address in SI
         if (out_interrupt) *out_interrupt = true;
         return site_ret_ip;   // AX after the POP
@@ -15218,7 +15218,7 @@ static uint16_t v2_vm_read_indexed_field_15403(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx2 - 0x6CBA);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
-    uint16_t val = vm.ds_read((uint16_t)(si + 0x14E5));
+    uint16_t val = vm.ds_read((uint16_t)(si + OBJ_FIELD_BASE));
     // AND with mask from idx1 table, return 0 or 1
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
     return (val & mask) ? 1 : 0;
@@ -15239,7 +15239,7 @@ static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm) {
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     di += vm.ds_read(obj + OBJ_PARTNER);
     vm.di_track = di;               // orig leaves the field address in DI
-    uint16_t val = vm.ds_read((uint16_t)(di + 0x14E5));
+    uint16_t val = vm.ds_read((uint16_t)(di + OBJ_FIELD_BASE));
     vm.si_track = idx1;             // orig 15445 tail: POP si → first byte
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
     return (val & mask) ? 1 : 0;
@@ -15315,7 +15315,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
     vm.ds_write(DS_SCRATCH_34, x_left);                     // MOV ds:34h, ax
     uint16_t x_right = vm.ds_read(di + OBJ_BBOX_X1);
     vm.ds_write(DS_SCRATCH_36, x_right);                    // MOV ds:36h, ax
-    uint16_t y_top   = vm.ds_read(di + 0x14E5);
+    uint16_t y_top   = vm.ds_read(di + OBJ_BBOX_Y0);
     vm.ds_write(DS_SCRATCH_38, y_top);                      // MOV ds:38h, ax
     uint16_t y_bot   = vm.ds_read(di + OBJ_BBOX_Y1);
     vm.ds_write(DS_SCRATCH_3A, y_bot);                      // MOV ds:3Ah, ax
@@ -15328,7 +15328,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
         // Bounding box overlap check (signed comparisons, exact original order)
         if ((int16_t)x_right < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
         if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)x_left) continue;
-        if ((int16_t)y_bot < (int16_t)vm.ds_read(si + 0x14E5)) continue;
+        if ((int16_t)y_bot < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)vm.ds_read(si + OBJ_BBOX_Y1) < (int16_t)y_top) continue;
 
         // Collision found! Set bit in [di+0x13F5]
@@ -15383,7 +15383,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     uint16_t dx_filter = vm.read_u16();
     uint16_t x_left  = vm.ds_read(di + OBJ_BBOX_X0);
     uint16_t x_right = vm.ds_read(di + OBJ_BBOX_X1);
-    uint16_t y_top   = vm.ds_read(di + 0x14E5);
+    uint16_t y_top   = vm.ds_read(di + OBJ_BBOX_Y0);
     uint16_t y_bot   = vm.ds_read(di + OBJ_BBOX_Y1);
     // Orig eips 0x56DD/0x56E4/0x56EB/0x56F2: stash bbox into scratch ds:0x34/36/38/3A.
     vm.ds_write(DS_SCRATCH_34, x_left);
@@ -15398,7 +15398,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
         if (si == di) continue;
         if ((int16_t)x_right < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
         if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)x_left) continue;
-        if ((int16_t)y_bot < (int16_t)vm.ds_read(si + 0x14E5)) continue;
+        if ((int16_t)y_bot < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((int16_t)vm.ds_read(si + OBJ_BBOX_Y1) < (int16_t)y_top) continue;
 
         // Collision: set bit + CLC
@@ -15466,13 +15466,13 @@ static bool v2_vm_sub_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
 
         // Y overlap with velocity adjustment:
         // self.Y_end_adj >= partner.Y_start_adj?
-        int16_t partner_ys_adj = (int16_t)*(uint16_t*)(rds + si2 + 0x14E5) - (int16_t)*(uint16_t*)(rds + si2 + OBJ_VEL_Y);
+        int16_t partner_ys_adj = (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y0) - (int16_t)*(uint16_t*)(rds + si2 + OBJ_VEL_Y);
         vm.ds_write(DS_MODE_WORD, (uint16_t)partner_ys_adj); // orig eip 0x5D0E
         int16_t self_ye_adj = (int16_t)vm.ds_read(di + OBJ_BBOX_Y1) - (int16_t)vm.ds_read(di + OBJ_VEL_Y);
         if (self_ye_adj < partner_ys_adj) continue;
 
         // partner.Y_end_adj >= self.Y_start_adj?
-        int16_t self_ys_adj = (int16_t)vm.ds_read(di + 0x14E5) - (int16_t)vm.ds_read(di + OBJ_VEL_Y);
+        int16_t self_ys_adj = (int16_t)vm.ds_read(di + OBJ_BBOX_Y0) - (int16_t)vm.ds_read(di + OBJ_VEL_Y);
         vm.ds_write(DS_MODE_WORD, (uint16_t)self_ys_adj);    // orig eip 0x5D27
         int16_t partner_ye_adj = (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y1) - (int16_t)*(uint16_t*)(rds + si2 + OBJ_VEL_Y);
         if (partner_ye_adj < self_ys_adj) continue;
@@ -15664,7 +15664,7 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
         uint16_t target = field_off + vm.global_r(DS_CUR_OBJ);
         vm.si_track = target;          // orig leaves the slot base in SI
-        vm.ds_write(target + 0x14E5, ax_val);
+        vm.ds_write(target + OBJ_BBOX_Y0, ax_val);
         break;
     }
 
@@ -15685,7 +15685,7 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         uint16_t di_addr = field_off + vm.ds_read(si_obj + OBJ_PARTNER);
         vm.si_track = si_obj;          // orig: MOV si,ds:42h
         vm.di_track = di_addr;         // orig: field address left in DI
-        vm.ds_write(di_addr + 0x14E5, ax_val);
+        vm.ds_write(di_addr + OBJ_BBOX_Y0, ax_val);
         break;
     }
 
@@ -15810,7 +15810,7 @@ static void v2_vm_op_34(V2VM& vm) {
     uint16_t best_si = 0;
 
     for (uint16_t si = 0; si < 6; si += 2) {
-        if (vm.ds_read(si + 0x15AD) == 0) continue;
+        if (vm.ds_read(si + VIK_PORTRAIT) == 0) continue;
         // Manhattan distance: |di.X - si.X| + |di.Y - si.Y|
         int16_t dx_val = (int16_t)(vm.ds_read(di + OBJ_WORLD_X) - vm.ds_read(si + OBJ_WORLD_X));
         if (dx_val < 0) dx_val = -dx_val;
@@ -15995,7 +15995,7 @@ static void v2_vm_op_B8(V2VM& vm) {
     uint8_t field_idx = vm.read_u8();
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(field_idx - 0x6CBA));
     field_off += vm.global_r(DS_CUR_OBJ);
-    uint16_t val = vm.ds_read((uint16_t)(field_off + 0x14E5));
+    uint16_t val = vm.ds_read((uint16_t)(field_off + OBJ_FIELD_BASE));
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(mask_idx - 0x6C34));
     uint16_t ax = (val & mask) ? 1 : 0;
     if (ax == v2_vm_accumulator) {
@@ -16037,7 +16037,7 @@ static int v2_coll_ring_total = 0;
 // Watch list: addresses scanned for changes around every opcode dispatch.
 // Keep in sync with _postvm_diverge_trap watch list.
 // 0x14E5/0x150D/0x1765 = obj 0 Y_start/Y_end/Y_world specifically (track per-obj fields).
-static const uint16_t v2_coll_watch_addrs[] = { 0x0034, 0x0036, 0x14E4, 0x150C, 0x1764, 0x14E5, OBJ_BBOX_Y1, OBJ_WORLD_Y };
+static const uint16_t v2_coll_watch_addrs[] = { 0x0034, 0x0036, 0x14E4, 0x150C, 0x1764, OBJ_BBOX_Y0, OBJ_BBOX_Y1, OBJ_WORLD_Y };
 static const int v2_coll_watch_count = (int)(sizeof(v2_coll_watch_addrs)/sizeof(v2_coll_watch_addrs[0]));
 void v2_coll_ring_push(int frame, uint16_t obj, uint16_t addr, uint8_t op, uint16_t pc, uint16_t pre, uint16_t post) {
     v2_coll_ring[v2_coll_ring_pos] = {frame, obj, addr, op, pc, pre, post};
@@ -16463,7 +16463,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
       if (obj_idx == 0 && _xdbg <= 50)
         fprintf(stderr, "V2-EXEC[%d] obj=0: flags=%04X cs=%04X pc=%04X 32F=%04X anim=%04X\n",
                 _xdbg, flags, code_seg, *(uint16_t*)(shadow + obj_idx + OBJ_PC),
-                *(uint16_t*)(shadow + DS_TRANSITION), *(uint16_t*)(shadow + obj_idx + 0x16ED));
+                *(uint16_t*)(shadow + DS_TRANSITION), *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_IDX));
     }
     if (flags & 0x1000) {
         uint16_t timer = *(uint16_t*)(shadow + obj_idx + OBJ_TIMER);
@@ -16502,7 +16502,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
     // loc_1427C: cmp ds:0x32F, 0; JZ → skip to loc_142a2
     bool anim_update = (flags & 0x200) || *(uint16_t*)(shadow + DS_TRANSITION) != 0;
     if (anim_update) {
-        uint16_t anim_idx = *(uint16_t*)(shadow + obj_idx + 0x16ED);
+        uint16_t anim_idx = *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_IDX);
         if (anim_idx & 0x8000) return;
         uint16_t bx_anim = anim_idx * 0x15;
         uint16_t anim_seg = *(uint16_t*)(shadow + DS_SEG_ANIM);
@@ -16588,11 +16588,11 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         uint16_t pre_acc = v2_vm_accumulator;
         extern int v2_dbg_pre_vm_iter;
         uint16_t pre_obj_141D = *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_TABLE);
-        uint16_t pre_obj_16ED = *(uint16_t*)(shadow + obj_idx + 0x16ED);
+        uint16_t pre_obj_16ED = *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_IDX);
         // Snapshot ALL obj's anim_id to detect cutscene-controller writes.
         uint16_t pre_all_16ED[128];
         for (int oi = 0; oi < 128; oi++)
-            pre_all_16ED[oi] = *(uint16_t*)(shadow + (oi*2) + 0x16ED);
+            pre_all_16ED[oi] = *(uint16_t*)(shadow + (oi*2) + OBJ_ANIM_IDX);
 
         v2_vm_optable[opcode](vm);
 
@@ -16608,7 +16608,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
                   v2_dbg_pre_vm_iter, _mvm, opcode, pc_before, vm.pc,
                   pre_acc, v2_vm_accumulator,
                   pre_obj_141D, *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_TABLE),
-                  pre_obj_16ED, *(uint16_t*)(shadow + obj_idx + 0x16ED),
+                  pre_obj_16ED, *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_IDX),
                   *(uint16_t*)(shadow + obj_idx + OBJ_TIMER),
                   *(uint16_t*)(shadow + obj_idx + OBJ_FLAGS),
                   *(uint16_t*)(shadow + obj_idx + OBJ_PC),
@@ -16621,7 +16621,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         }
         // CUTSCENE-CONTROLLER trap: detect writes to obj 6's 0x16ED specifically.
         if (*(uint16_t*)(shadow + DS_LEVEL) == 0x002B) {
-            uint16_t now6 = *(uint16_t*)(shadow + 6 + 0x16ED);
+            uint16_t now6 = *(uint16_t*)(shadow + 6 + OBJ_ANIM_IDX);
             if (now6 != pre_all_16ED[3]) {  // index 3 = obj 6 (oi*2)
                 static int _cw = 0;
                 if (++_cw <= 1000) {
@@ -17114,7 +17114,7 @@ static void v2_vm_verify_object_consistency(uint8_t* shadow) {
         // Bounds check: X_start <= X_end, Y_start <= Y_end
         int16_t x_start = (int16_t)*(uint16_t*)(shadow + si + OBJ_BBOX_X0);
         int16_t x_end = (int16_t)*(uint16_t*)(shadow + si + OBJ_BBOX_X1);
-        int16_t y_start = (int16_t)*(uint16_t*)(shadow + si + 0x14E5);
+        int16_t y_start = (int16_t)*(uint16_t*)(shadow + si + OBJ_BBOX_Y0);
         int16_t y_end = (int16_t)*(uint16_t*)(shadow + si + OBJ_BBOX_Y1);
         if (x_start > x_end && obj_err < 20) {
             printf("V2-OBJ: obj=%d X bounds inverted: start=%d end=%d\n", si, x_start, x_end);
@@ -17522,19 +17522,19 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // sub_12e16 + sub_12e2d: exact 2-step search
         uint16_t si = *(uint16_t*)(s + DS_ACTIVE_VIKING);
         uint16_t start_si = si;
-        if (si < 6 && (int16_t)*(uint16_t*)(s + si + 0x16ED) < 0) {
+        if (si < 6 && (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) < 0) {
             // Current dead — set blink
             *(uint16_t*)(s + 0x34E) = 5;
             *(uint16_t*)(s + 0x350) = 5;
             // Step 1: advance, check (skip if wrapped to start)
             si += 2; if (si >= 6) si = 0;
             if (si == start_si) goto step2; // wrapped → skip to step 2
-            if ((int16_t)*(uint16_t*)(s + si + 0x16ED) >= 0) goto done_search; // alive
+            if ((int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) goto done_search; // alive
         step2:
             // Step 2: advance again, check
             si += 2; if (si >= 6) si = 0;
             if (si == start_si) { si = 0xFFFF; goto done_search; } // all dead
-            if ((int16_t)*(uint16_t*)(s + si + 0x16ED) >= 0) goto done_search; // alive
+            if ((int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) goto done_search; // alive
             si = 0xFFFF; // dead
         done_search:;
         }
@@ -17635,7 +17635,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
             {
                 uint16_t prev = *(uint16_t*)(s + 0x0435);
                 *(uint16_t*)(s + 0x043B) = prev;
-                int16_t health_val = (int16_t)*(uint16_t*)(s + 0x16ED); // word_29BCD (obj0 code_seg)
+                int16_t health_val = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX); // word_29BCD (obj0 code_seg)
                 uint16_t ax;
                 if (health_val < 0) ax = 2;
                 else if (*(uint16_t*)(s + DS_ACTIVE_VIKING) != 0) ax = 1;
@@ -17705,12 +17705,12 @@ void v2_run_animation_vm(uint16_t ds_val) {
             // sub_11b0b: portrait/sound state sync (3 vikings). Exact replica.
             // Viking 1: compare ds:0x429 vs ds:0x42F AND ds:0x15AD vs ds:0x423
             if (*(uint16_t*)(s + 0x0429) != *(uint16_t*)(s + 0x042F) ||
-                *(uint16_t*)(s + 0x15AD) != *(uint16_t*)(s + 0x0423)) {
-                uint16_t ps = *(uint16_t*)(s + 0x15AD);
+                *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + 0x0423)) {
+                uint16_t ps = *(uint16_t*)(s + VIK_PORTRAIT);
                 if (*(uint16_t*)(s + 0x0429) != 0) ps += 4;
                 v2_draw_hud_portrait(v2_current_ds_val, 0, ps);
                 *(uint16_t*)(s + 0x042F) = *(uint16_t*)(s + 0x0429);
-                *(uint16_t*)(s + 0x0423) = *(uint16_t*)(s + 0x15AD);
+                *(uint16_t*)(s + 0x0423) = *(uint16_t*)(s + VIK_PORTRAIT);
             }
             // Viking 2
             if (*(uint16_t*)(s + 0x042B) != *(uint16_t*)(s + 0x0431) ||
@@ -18129,9 +18129,9 @@ static void v2_sub_11b0b_per_frame(uint8_t* s) {
     if (!(s[DS_LEVEL_FLAGS] & 1) || *(uint16_t*)(s + DS_LEVEL) == 0x2C) return;
     // Viking 1
     if (*(uint16_t*)(s + 0x0429) != *(uint16_t*)(s + 0x042F) ||
-        *(uint16_t*)(s + 0x15AD) != *(uint16_t*)(s + 0x0423)) {
+        *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + 0x0423)) {
         *(uint16_t*)(s + 0x042F) = *(uint16_t*)(s + 0x0429);
-        *(uint16_t*)(s + 0x0423) = *(uint16_t*)(s + 0x15AD);
+        *(uint16_t*)(s + 0x0423) = *(uint16_t*)(s + VIK_PORTRAIT);
     }
     // Viking 2
     if (*(uint16_t*)(s + 0x042B) != *(uint16_t*)(s + 0x0431) ||
@@ -18311,8 +18311,8 @@ void v2_phase_vm(uint16_t ds_val) {
             uint16_t s_fl = *(uint16_t*)(shad + si + OBJ_FLAGS);
             uint16_t r_cs = *(uint16_t*)(real + si + OBJ_CODE_SEG);
             uint16_t s_cs = *(uint16_t*)(shad + si + OBJ_CODE_SEG);
-            uint16_t r_an = *(uint16_t*)(real + si + 0x16ED);
-            uint16_t s_an = *(uint16_t*)(shad + si + 0x16ED);
+            uint16_t r_an = *(uint16_t*)(real + si + OBJ_ANIM_IDX);
+            uint16_t s_an = *(uint16_t*)(shad + si + OBJ_ANIM_IDX);
             uint16_t r_acc = *(uint16_t*)(real + DS_ACCUMULATOR);
             uint16_t s_acc = *(uint16_t*)(shad + 0x8A);
             if (r_pc != s_pc || r_fl != s_fl || r_cs != s_cs || r_an != s_an) {
@@ -18439,8 +18439,8 @@ static void v2_frame_end_verify() {
     static int anim_stuck_frames[256] = {0};
     static bool anim_diverge_logged[256] = {0};
     for (int oi = 0; oi < 0xFE; oi += 2) {
-        uint16_t s_aid = *(uint16_t*)(s + oi + 0x16ED);
-        uint16_t r_aid = *(uint16_t*)(r + oi + 0x16ED);
+        uint16_t s_aid = *(uint16_t*)(s + oi + OBJ_ANIM_IDX);
+        uint16_t r_aid = *(uint16_t*)(r + oi + OBJ_ANIM_IDX);
         // Divergence: orig has different anim_id than v2 → likely the cutscene
         // controller in orig advanced anim but v2 didn't (or v.v.).
         if (s_aid != r_aid && !anim_diverge_logged[oi]) {
@@ -18721,14 +18721,14 @@ void v2_phase_post_flip1(uint16_t ds_val) {
     {
         uint16_t si = *(uint16_t*)(s + DS_ACTIVE_VIKING);
         uint16_t start_si = si;
-        if (si < 6 && (int16_t)*(uint16_t*)(s + si + 0x16ED) < 0) {
+        if (si < 6 && (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) < 0) {
             *(uint16_t*)(s + 0x34E) = 5;
             *(uint16_t*)(s + 0x350) = 5;
             si += 2; if (si >= 6) si = 0;
-            if (si != start_si && (int16_t)*(uint16_t*)(s + si + 0x16ED) >= 0) goto pf1_done;
+            if (si != start_si && (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) goto pf1_done;
             si += 2; if (si >= 6) si = 0;
             if (si == start_si) { si = 0xFFFF; goto pf1_done; }
-            if ((int16_t)*(uint16_t*)(s + si + 0x16ED) >= 0) goto pf1_done;
+            if ((int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) goto pf1_done;
             si = 0xFFFF;
         }
     pf1_done:
@@ -18896,7 +18896,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
         for (int vk = 0; vk < 3; vk++) {
             uint16_t prev = *(uint16_t*)(s + 0x0435 + vk * 2);
             *(uint16_t*)(s + 0x043B + vk * 2) = prev;
-            int16_t hv = (int16_t)*(uint16_t*)(s + 0x16ED + vk * 2);
+            int16_t hv = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX + vk * 2);
             uint16_t ax = (hv < 0) ? 2 : (*(uint16_t*)(s + DS_ACTIVE_VIKING) != (uint16_t)(vk * 2)) ? 1 : 0;
             *(uint16_t*)(s + 0x0435 + vk * 2) = ax;
             if (ax != prev) v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
@@ -19016,7 +19016,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
         for (int vk = 0; vk < 3; vk++) {
             uint16_t sound_prev = *(uint16_t*)(s + 0x0429 + vk * 2);
             uint16_t sound_cur  = *(uint16_t*)(s + 0x042F + vk * 2);
-            uint16_t port_prev  = *(uint16_t*)(s + 0x15AD + vk * 2);
+            uint16_t port_prev  = *(uint16_t*)(s + VIK_PORTRAIT + vk * 2);
             uint16_t port_cur   = *(uint16_t*)(s + 0x0423 + vk * 2);
             if (sound_prev != sound_cur || port_prev != port_cur) {
                 uint16_t portrait_si = port_prev;
@@ -19955,7 +19955,7 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
             for (int tries = 0; tries < 3; tries++) {
                 di_v -= 2; if ((int16_t)di_v < 0) di_v = 4;
-                if (*(uint16_t*)(shadow + di_v + 0x15AD) != 0 &&
+                if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
                     uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
@@ -19970,7 +19970,7 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                     shadow[0x44B] = 0xFF;
                     uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
                     for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-                        if (*(uint16_t*)(shadow + si_f47 + 0x15AD) == 0) continue;
+                        if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
                         int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
                                      - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
                         if (ax_d < 0) ax_d = -ax_d;
@@ -19991,7 +19991,7 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
             for (int tries = 0; tries < 3; tries++) {
                 di_v += 2; if (di_v >= 6) di_v = 0;
-                if (*(uint16_t*)(shadow + di_v + 0x15AD) != 0 &&
+                if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
                     uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
@@ -20006,7 +20006,7 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                     shadow[0x44B] = 0xFF;
                     uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
                     for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-                        if (*(uint16_t*)(shadow + si_f47 + 0x15AD) == 0) continue;
+                        if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
                         int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
                                      - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
                         if (ax_d < 0) ax_d = -ax_d;
@@ -20130,7 +20130,7 @@ static void v2_sub_11792(uint8_t* shadow) {
     *(uint16_t*)(shadow + 0x043D) = *(uint16_t*)(shadow + 0x0437);
     *(uint16_t*)(shadow + 0x043F) = *(uint16_t*)(shadow + 0x0439);
     for (int vk = 0; vk < 3; vk++) {
-        uint16_t health_addr = 0x16ED + vk * 2;
+        uint16_t health_addr = OBJ_ANIM_IDX + vk * 2;
         uint16_t prev_state = *(uint16_t*)(shadow + 0x043B + vk * 2);
         uint16_t new_state;
         if ((int16_t)*(uint16_t*)(shadow + health_addr) < 0) new_state = 2;
@@ -20207,7 +20207,7 @@ static void v2_sub_11792(uint8_t* shadow) {
     }
     // sub_11B0B: portrait/sound tracking sync + portrait render
     for (int vk = 0; vk < 3; vk++) {
-        uint16_t port = *(uint16_t*)(shadow + 0x15AD + vk * 2);
+        uint16_t port = *(uint16_t*)(shadow + VIK_PORTRAIT + vk * 2);
         uint16_t prev_port = *(uint16_t*)(shadow + 0x0423 + vk * 2);
         uint16_t snd = *(uint16_t*)(shadow + 0x0429 + vk * 2);
         uint16_t prev_snd = *(uint16_t*)(shadow + 0x042F + vk * 2);
@@ -20337,7 +20337,7 @@ void v2_run_pause_entry(uint8_t* shadow) {
     {
         uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
         for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-            if (*(uint16_t*)(shadow + si_f47 + 0x15AD) == 0) continue;
+            if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
             int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
                          - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
             if (ax_d < 0) ax_d = -ax_d;
@@ -20940,7 +20940,7 @@ void v2_vm_verify_init(uint16_t obj_idx, uint16_t orig_es, uint16_t orig_pc, uin
     uint16_t v2_pc;
 
     if ((flags & 0x200) || *(uint16_t*)(v2_vm_real_ds_ptr + DS_TRANSITION) != 0) {
-        uint16_t anim_idx = *(uint16_t*)(v2_vm_real_ds_ptr + obj_idx + 0x16ED);
+        uint16_t anim_idx = *(uint16_t*)(v2_vm_real_ds_ptr + obj_idx + OBJ_ANIM_IDX);
         if (anim_idx & 0x8000) return;
         v2_es = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_ANIM);
         uint16_t bx_anim = anim_idx * 0x15;
@@ -21015,9 +21015,9 @@ struct VMTraceEntry {
 static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx) {
     uint32_t h = 0;
     static const uint16_t offs[] = {
-        OBJ_CODE_SEG, OBJ_PC, OBJ_ALT_PC, OBJ_ANIM_TABLE, OBJ_WIDTH, OBJ_HEIGHT, 0x14E5, OBJ_BBOX_Y1,
-        OBJ_BBOX_X0, OBJ_BBOX_X1, OBJ_FLAGS, 0x15AD, OBJ_RES_COST, OBJ_STATE_IDX, 0x1625, 0x164D,
-        0x1675, 0x169D, OBJ_ANIM_SUB, 0x16ED, OBJ_TIMER, OBJ_WORLD_X, OBJ_WORLD_Y, 0x178D,
+        OBJ_CODE_SEG, OBJ_PC, OBJ_ALT_PC, OBJ_ANIM_TABLE, OBJ_WIDTH, OBJ_HEIGHT, OBJ_BBOX_Y0, OBJ_BBOX_Y1,
+        OBJ_BBOX_X0, OBJ_BBOX_X1, OBJ_FLAGS, OBJ_RES_HANDLE, OBJ_RES_COST, OBJ_STATE_IDX, 0x1625, 0x164D,
+        0x1675, 0x169D, OBJ_ANIM_SUB, OBJ_ANIM_IDX, OBJ_TIMER, OBJ_WORLD_X, OBJ_WORLD_Y, 0x178D,
         0x17B5, OBJ_TYPE_ID, 0x1805, OBJ_CHILD, OBJ_SPRITE_BASE, 0x187D, 0x18A5, 0x18CD,
         0x18F5, 0x191D, OBJ_VEL_X, OBJ_VEL_Y, 0x19BD, 0x19E5, 0x1A0D, OBJ_SUB_SLOT,
         OBJ_SUB_END, OBJ_SUB_COUNT, 0x13A5, OBJ_Y_PREV, OBJ_COLL_BITS, 0x14BD, 0x1495,

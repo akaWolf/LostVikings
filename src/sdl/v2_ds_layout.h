@@ -87,6 +87,9 @@ constexpr uint16_t OBJ_ANIM_TABLE    = 0x141D; // anim state table selector
 constexpr uint16_t OBJ_WIDTH         = 0x1445; // sprite width (anim header byte 9)
 constexpr uint16_t OBJ_HEIGHT        = 0x146D; // sprite height (anim header byte 0xA)
 constexpr uint16_t OBJ_BBOX_Y0       = 0x14E5; // bbox top (also generic indexed field base +0x14E5)
+constexpr uint16_t OBJ_FIELD_BASE    = 0x14E5; // generic indexed-field bias: field addr = slot_col
+                                               // ([b-0x6CBA] (+[obj+0x1995])) + this; numerically the
+                                               // BBOX_Y0 column — channels/setters/ops address through it
 constexpr uint16_t OBJ_BBOX_Y1       = 0x150D; // bbox bottom
 constexpr uint16_t OBJ_BBOX_X0       = 0x1535; // bbox left
 constexpr uint16_t OBJ_BBOX_X1       = 0x155D; // bbox right
