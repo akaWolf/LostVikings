@@ -199,7 +199,12 @@ void render_thread_proc_v2(void* _state)
       // Это избегает конфликтов с обработкой событий
 
       render_callback_v2(_state);  // snapshot drawBuffer→stableBuffer + sprite replay
+#ifndef HEADLESS
       updateDraw_v2();             // читает только stableBuffer
+#else
+      // task #36: headless dummy video — pure presenter blit skipped (the
+      // stableBuffer snapshot above still runs: it feeds the A2 extraction).
+#endif
       SDL_Delay(15);
 
       loop_counter++;

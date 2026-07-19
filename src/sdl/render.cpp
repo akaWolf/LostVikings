@@ -824,7 +824,12 @@ void updateDraw()
 #ifndef V2_ONLY
 			   if (word_3287c > 0)
 #endif
+#ifdef HEADLESS
+			   { /* task #36: dummy video driver — the ARGB blit+scale burned
+			        ~40% CPU presenting to nowhere; skip in headless. */ }
+#else
 				   updateDraw();
+#endif
 			   // RESTORED from orig: render_callback (sub_1797b) DECs word_3287C from
 			   // render thread at ~60Hz. Without this, game thread sub_10130 sleeps
 			   // 16ms each call (3+ per frame) → severe slowdown.

@@ -220,11 +220,21 @@ static const VerifySkip v2_ds_skip_ranges[] = {
     {0x2E6A, 0x2E70, "sound segment pointers (#93 partial — sub_10E85 result fields)"},
 };
 
+// Bitmap cache over the static skip table (task #36): the linear range scan
+// cost 30% of total CPU inside v2_ds_hash (16384 dwords × ~40 ranges × 2
+// hashes per opcode). The table is static const — build the byte-granular
+// lookup once; every caller (dword-step hash, byte/word-step verify loops)
+// gets bit-identical answers.
+static bool v2_ds_skip_bm[0x10000];
+static bool v2_ds_skip_bm_ready = false;
 static inline bool v2_ds_hash_skip(uint32_t i) {
-    for (const auto& r : v2_ds_skip_ranges) {
-        if (i >= r.start && i <= r.end) return true;
+    if (!v2_ds_skip_bm_ready) {
+        for (const auto& r : v2_ds_skip_ranges)
+            for (uint32_t a = r.start; a <= r.end && a < 0x10000; a++)
+                v2_ds_skip_bm[a] = true;
+        v2_ds_skip_bm_ready = true;
     }
-    return false;
+    return i < 0x10000 ? v2_ds_skip_bm[i] : false;
 }
 
 // Push event into ring + bump per-frame counter. Thread-safe (lock).
