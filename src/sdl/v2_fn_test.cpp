@@ -3491,7 +3491,7 @@ const FtLeafSpec FT_LEAVES[] = {
       { 0x25C9, FT_AX_LEVEL, 9 }, { 0x3CC, FT_AX_STATE, 7 }, true, nullptr, false },
     // K3a/K3b leaves. (13a0e parked until the unit builds the class-B
     // template context: orig reads object templates via es=[2E67] while
-    // v2_sub_13809 needs v2_vm_shadow_animdata — task #29 wires both to one
+    // v2_spawn_object_13809 needs v2_vm_shadow_animdata — task #29 wires both to one
     // synthetic template segment, like the vmops unit does with its
     // FT_VM_TESTSEG code segment.)
     { FT_SUB_10E99, v2_fntest_call_sub_10e99,

@@ -786,10 +786,10 @@ extern "C" void v2_emu_df6a(uint16_t ds_val) {
 // painted onto ALL rotation pages there (including the future background
 // role). The v2 init mirrors carry only the DS side; call this from each
 // pass: stage 0 = tiles+early (before the 165aa rotation), stage 1 = late
-// (after it, before v2_sub_1DD9C DECs). Forces the render gate open — the
+// (after it, before v2_late_sprites_1DD9C DECs). Forces the render gate open — the
 // init mirror runs outside the frame-phase context.
 // stage 0 = tiles+early; stage 1 = late_begin (arm page + cascade);
-// stage 2 = late_end — call it AFTER the init site's v2_sub_1DD9C so the
+// stage 2 = late_end — call it AFTER the init site's v2_late_sprites_1DD9C so the
 // cascade pixels land between them (same split as the render1/2/3 sites).
 extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage) {
 #ifdef V2_RENDER_FROM_SHADOW
@@ -900,7 +900,7 @@ extern "C" void v2_emu_init_pages(uint16_t ds_val) {
 // pass (sub_1c8f1 draws AFTER 1dd9c and clears bit0; call this BEFORE the
 // phase runs v2_sub_1C8F1 so the bits are still live).
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj);
-// Cascade hook: when != 0xFFFF, v2_sub_1DD9C (the DS/FS mirror loop) calls
+// Cascade hook: when != 0xFFFF, v2_late_sprites_1DD9C (the DS/FS mirror loop) calls
 // v2_draw_one_sprite_late(this, di) at the orig CALL cs:[bp+15CB] point for
 // every object it decides to draw. This reproduces the orig SINGLE loop:
 // gate → draw pixels → DEC [114D] → sub_1cd7d OR3 cells — so the sub_1cdef
@@ -909,7 +909,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj);
 // those bits (scan MISS where orig HIT — flame obj30 class, task #23).
 extern "C" uint16_t v2_dd9c_pixel_ds = 0xFFFF;
 extern "C" void v2_draw_one_sprite_late(uint16_t ds_val, int obj) {
-    // The cascade fires inside v2_sub_1DD9C, which the init mirrors run
+    // The cascade fires inside v2_late_sprites_1DD9C, which the init mirrors run
     // OUTSIDE the frame-phase context — force the render gate like
     // v2_emu_init_pass does (armed v2_dd9c_pixel_ds IS the render context).
 #ifdef V2_RENDER_FROM_SHADOW
@@ -939,7 +939,7 @@ void v2_emu_late_begin(uint16_t ds_val) {
         v2_blit_to_page(v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)],
                         xe - v2_emu_base_x, ye - v2_emu_base_y);
     }
-    v2_dd9c_pixel_ds = ds_val;   // enable the per-object cascade in v2_sub_1DD9C
+    v2_dd9c_pixel_ds = ds_val;   // enable the per-object cascade in v2_late_sprites_1DD9C
 }
 
 void v2_emu_late_end(uint16_t ds_val) {
@@ -993,7 +993,7 @@ void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
 static void v2_draw_one_sprite(uint16_t ds_val, int obj) { v2_draw_sprites_impl(ds_val, 0, obj); }
 
 // late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —
-// gates evaluated BEFORE v2_sub_1DD9C's DS effects (DEC of [obj+0x114D]) and
+// gates evaluated BEFORE v2_late_sprites_1DD9C's DS effects (DEC of [obj+0x114D]) and
 // BEFORE v2_sub_1C8F1 (which clears render-map bit0), matching the orig call
 // order 1dd9c -> 1c8f1. sub_1cdef gate: clip the object's tile bbox to the
 // viewport (ds:0x9168/0x916A) and scan its cells in the render map (FS) for
@@ -1063,7 +1063,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             else {
                 // sub_1cdef: clip object's tile bbox to viewport, scan cells
                 // in the render map (FS) for bit0. Exact replica (seg003
-                // eips 0x5BF..0x647); the v2_sub_1DD9C bounds mirror carries
+                // eips 0x5BF..0x647); the v2_late_sprites_1DD9C bounds mirror carries
                 // the same math for its DS effects.
                 int16_t cx = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_X);
                 int16_t dxv = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_Y);
@@ -1327,7 +1327,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             // world X = x + 4k + j; hflip (jpt_1DBE3/1DBFE: reversed plane
             // order, mirrored write offsets [di+b] ← data [si+7−b]) lands on
             // world X = x + 31 − (4k+j). [114D]=2 side effects and the
-            // sub_1cd7d bitmap call live in the v2_sub_1DD9C DS mirror.
+            // sub_1cd7d bitmap call live in the v2_late_sprites_1DD9C DS mirror.
             static const uint16_t v2_t2_mask_r[8] = {  // cs:[1379]
                 0xFFFF,0x7FFE,0x3FFC,0x1FF8,0x0FF0,0x07E0,0x03C0,0x0180};
             static const uint16_t v2_t2_mask_l[8] = {  // cs:[138B]

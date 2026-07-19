@@ -2200,7 +2200,7 @@ bool read_and_display_raw_chunk(m2c::_STATE *_state)
    goto loc_10d8e;
  }
 
- // V2 chunk decoding moved to v2 mirror path (v2_sub_117ad / v2_sub_115d2):
+ // V2 chunk decoding moved to v2 mirror path (v2_sub_117ad / v2_level_init_render_115d2):
  // reading chunks here ran on REAL chunk segment + called v2_draw_hud_background/
  // v2_draw_viewport_chunk which resolve to SHADOW chunk segment. Shadow chunk
  // wasn't loaded yet at this orig-call moment → garbage pixels → HUD color noise
@@ -2339,7 +2339,7 @@ cs=0x1a2;eip=0x000012; 	J(CALL(sub_108b8,0));	// 42 call    sub_108B8 ;~ 01A2:00
 	if (myDrawInfo_v2) { v2_set_m2c_base((void*)raddr(0,0)); v2_vm_init_shadow_early(ds); }
 cs=0x1a2;eip=0x000015; 	J(CALL(sub_11080,0));	// 43 call    sub_11080 ;~ 01A2:0015
 cs=0x1a2;eip=0x000018; 	X(MOV(word_3287c, 1));	// 44 mov     word_3287C, 1 ;~ 01A2:0018
-	// V2: run v2_run_animation_vm — level change detection triggers v2_sub_11080 on shadow.
+	// V2: run v2_run_animation_vm — level change detection triggers v2_load_level_11080 on shadow.
 	// Then verify compares shadow (v2 init result) vs real (original init result).
 	if (myDrawInfo_v2) { v2_run_animation_vm(ds); v2_vm_verify_after_init(ds); v2_game_thread_start(); }
 loc_1001e:
@@ -2623,7 +2623,7 @@ sub_10130:
 	// Current fix: render_callback REMOVED from render_thread (commented in render.cpp:203).
 	// sub_1797b called SYNCHRONOUSLY from game thread here, after sleep(16ms).
 	// This gives deterministic timing: palette dispatch always happens at the same
-	// point relative to barrier signals. v2_sub_10130 does the same.
+	// point relative to barrier signals. v2_vsync_wait_10130 does the same.
 	// ======================================================================
 cs=0x1a2;eip=0x000130; 	T(CMP(word_3287c, 1));	// 155 cmp     word_3287C, 1 ;~ 01A2:0130
 ret_1a2_135:
@@ -6295,7 +6295,7 @@ cs=0x1a2;eip=0x00234b; 	X(MOV(word_28898, 0));	// 4602 mov     word_28898, 0 ;~ 
 cs=0x1a2;eip=0x002351; 	J(RETN(0));	// 4603 retn ;~ 01A2:2351
 sub_12352:
 	// NOTE: per-sub_12352 snap refresh REMOVED — caused orig+v2 sub_108c8 race.
-	// orig sub_108c8 (main thread) reads snap at time T. v2_sub_108c8 (v2 thread)
+	// orig sub_108c8 (main thread) reads snap at time T. v2_audio_tick_108c8 (v2 thread)
 	// reads snap at time T+400ms when ALT was released between. snap captures
 	// release → orig=1 v2=0 → divergence at ds:0x91A4. snap_take stays at
 	// frame_begin only (sdl_input_press_snap-style) — orig+v2 race-free.
@@ -6377,7 +6377,7 @@ cs=0x1a2;eip=0x00237b; 	X(MOV(word_2889a, ax));	// 4626 mov     word_2889A, ax ;
 	// deadlock. No-op outside record mode.
 	v2_input_record_drain();
 	// V2 barrier: signal AFTER orig sub_12352 finished computing word_28896/28898/2889A.
-	// v2 handler runs v2_sub_12352_iter ONCE per orig call → shadow input state tracks
+	// v2 handler runs v2_read_input_12352_iter ONCE per orig call → shadow input state tracks
 	// orig 1:1 across ALL call sites (main loop, sub_1086f recursion, VIKING_SWITCH/
 	// TRANSITION_TEXT/PAUSE_LOOP iters, post-loop). Eliminates off-by-N divergence
 	// from orig calling sub_12352 multiple times per frame while v2 only mirrored once.

@@ -290,7 +290,7 @@ std::atomic<uint8_t> sdl_spec_press_latch[256] = {};
 // exchanges to snap. snap_get returns snap (used by v2_input_intro_mask for
 // V2_ONLY paths and as backup for transient presses).
 std::atomic<uint16_t> sdl_input_press_edges{0};
-// Non-static so sub_12352 (seg000.cpp) and v2_sub_12352_iter (v2_vm.cpp) can
+// Non-static so sub_12352 (seg000.cpp) and v2_read_input_12352_iter (v2_vm.cpp) can
 // OR into it directly during per-call drain — see LAYER 1 comments in both.
 uint16_t sdl_input_press_snap = 0;
 uint16_t sdl_input_press_snap_get() { return sdl_input_press_snap; }
@@ -305,11 +305,11 @@ uint16_t sdl_input_press_snap_get() { return sdl_input_press_snap; }
 //
 // Two separate flags: orig runs in game thread and consumes via seg000 sub_12352.
 // v2 mirror runs in v2 thread (default mode) or game thread (V2_ONLY) and
-// consumes via v2_sub_12352_iter. Each side must clear ITS OWN word_2889a copy.
+// consumes via v2_read_input_12352_iter. Each side must clear ITS OWN word_2889a copy.
 // Sharing one flag would cause v2 mirror to skip its shadow clear (orig already
 // consumed) → DS-DIFF at 0x03B8/9.
 uint16_t g_press_snap_consumed_this_frame = 0;        // orig side (seg000 sub_12352)
-uint16_t g_press_snap_consumed_shadow_this_frame = 0; // v2 side (v2_sub_12352_iter)
+uint16_t g_press_snap_consumed_shadow_this_frame = 0; // v2 side (v2_read_input_12352_iter)
 
 // is-first-sub12352 flag: only the FIRST sub_12352 of a frame (main sub_12352
 // at eip 0x001E) should consume snap bits via LAYER 2 (and mark them for snap
@@ -329,7 +329,7 @@ bool g_is_first_sub12352_shadow = true;
 // sub_10138 viking-switch wait, sub_104A1 transition-text) where many
 // sub_12352 calls fire within a single main game frame without intervening
 // FRAME_BEGIN to refresh press_snap. orig drains in seg000 sub_12352, stashes
-// the value here, and v2_sub_12352_iter reads it (default mode) or drains
+// the value here, and v2_read_input_12352_iter reads it (default mode) or drains
 // itself (V2_ONLY). Atomically updated by game thread; v2 thread reads after
 // INPUT_UPDATE signal-handler barrier.
 uint16_t g_last_sub12352_new_keydowns = 0;

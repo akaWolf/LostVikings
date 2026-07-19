@@ -119,7 +119,7 @@ enum V2Phase {
     V2_PHASE_INPUT_UPDATE,        // orig signals from INSIDE sub_12352 (after ax is
                                   // computed and v2_input_snapshot written, before
                                   // word_28896/28898/2889A get set). v2 handler runs
-                                  // v2_sub_12352_iter ONCE per orig sub_12352 call,
+                                  // v2_read_input_12352_iter ONCE per orig sub_12352 call,
                                   // so shadow input state tracks orig 1:1 across all
                                   // call sites (main loop + sub_1086f recursion +
                                   // VIKING_SWITCH/TRANSITION_TEXT/PAUSE_LOOP iters).
@@ -195,9 +195,9 @@ extern void v2_draw_sprites_late(uint16_t ds_val);
 // v2_emu_df6a from v2_sub_165aa on a background-role change.
 extern void v2_emu_early(uint16_t ds_val);
 // Late layer split (task #23 cascade): begin arms the [92F9] page as blit
-// target and enables the per-object pixel cascade inside v2_sub_1DD9C
+// target and enables the per-object pixel cascade inside v2_late_sprites_1DD9C
 // (v2_dd9c_pixel_ds); end paints flagged tiles, disarms, blits to display.
-// Call order at the render sites: late_begin → v2_sub_1DD9C → late_end.
+// Call order at the render sites: late_begin → v2_late_sprites_1DD9C → late_end.
 extern void v2_emu_late_begin(uint16_t ds_val);
 extern void v2_emu_late_end(uint16_t ds_val);
 extern "C" void v2_emu_df6a(uint16_t ds_val);
