@@ -329,4 +329,76 @@ constexpr uint16_t DS_SCRATCH_3D6         = 0x03D6; // word_288B6: init-cleared 
 constexpr uint16_t DS_SPAWN_TBL_LO        = 0x03E0; // word_288C0: level spawn-table field (di+0x25FA)
 constexpr uint16_t DS_SPAWN_TBL_HI        = 0x03E2; // word_288C2: level spawn-table field (di+0x25FC)
 
+
+// ---------------------------------------------------------------------------
+// DS globals batch 4 (page-flip/scroll display state + spec-key init bit-masks)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_SPEC_MASK_1EE       = 0x91EE; // word_313CE: spec-key state bit-mask (init 0x1000)
+constexpr uint16_t DS_SPEC_MASK_20A       = 0x920A; // word_313EA: spec-key state bit-mask (init 0x2000)
+constexpr uint16_t DS_SPEC_MASK_210       = 0x9210; // word_313F0: spec-key state bit-mask (init 0x40)
+constexpr uint16_t DS_SPEC_MASK_21E       = 0x921E; // word_313FE: spec-key state bit-mask (init 0x1000)
+constexpr uint16_t DS_SPEC_MASK_224       = 0x9224; // word_31404: spec-key state bit-mask (init 0x8000)
+constexpr uint16_t DS_SPEC_MASK_226       = 0x9226; // word_31406: spec-key state bit-mask (init 0x20)
+constexpr uint16_t DS_SPEC_MASK_22A       = 0x922A; // word_3140A: spec-key state bit-mask (init 0x80)
+constexpr uint16_t DS_SPEC_MASK_22C       = 0x922C; // word_3140C: spec-key state bit-mask (init 0x4000)
+constexpr uint16_t DS_SPEC_MASK_22E       = 0x922E; // word_3140E: spec-key state bit-mask (init 0x8000)
+constexpr uint16_t DS_SPEC_MASK_25E       = 0x925E; // word_3143E: spec-key state bit-mask (init 0x8000)
+constexpr uint16_t DS_SPEC_MASK_260       = 0x9260; // word_31440: spec-key state bit-mask (init 0x2000)
+constexpr uint16_t DS_SPEC_MASK_27A       = 0x927A; // word_3145A: spec-key state bit-mask (init 0x20)
+constexpr uint16_t DS_SPEC_MASK_27C       = 0x927C; // word_3145C: spec-key state bit-mask (init 0x800)
+constexpr uint16_t DS_SPEC_MASK_27E       = 0x927E; // word_3145E: spec-key state bit-mask (init 0x10)
+constexpr uint16_t DS_SPEC_MASK_282       = 0x9282; // word_31462: spec-key state bit-mask (init 0x200)
+constexpr uint16_t DS_SPEC_MASK_284       = 0x9284; // word_31464: spec-key state bit-mask (init 0x400)
+constexpr uint16_t DS_SPEC_MASK_286       = 0x9286; // word_31466: spec-key state bit-mask (init 0x100)
+constexpr uint16_t DS_SPEC_MASK_288       = 0x9288; // word_31468: spec-key state bit-mask (init 0x8000)
+constexpr uint16_t DS_SPEC_MASK_28C       = 0x928C; // word_3146C: spec-key state bit-mask (init 0x400)
+constexpr uint16_t DS_SPEC_MASK_290       = 0x9290; // word_31470: spec-key state bit-mask (init 0x10)
+constexpr uint16_t DS_SCROLL_DISP_X       = 0x92EF; // word_317CF: scroll display X (pixel pan low)
+constexpr uint16_t DS_SCROLL_DISP_Y       = 0x92F1; // word_317D1: scroll display Y
+constexpr uint16_t DS_SCROLL_DISP_X2      = 0x92F3; // word_317D3: scroll display X halved (>>1)
+constexpr uint16_t DS_SCROLL_DISP_Y2      = 0x92F5; // word_317D5: scroll display Y halved
+constexpr uint16_t DS_VGA_PAGE_FLAG       = 0x92FF; // byte_317DF: VGA page/mode restore flag (1686f)
+constexpr uint16_t DS_VGA_MODE_BYTE       = 0x9300; // byte_317E0: VGA mode byte (0xFF gate in mode-restore)
+constexpr uint16_t DS_PAGE_ROWCUR_2       = 0x9305; // word_317E5: page-2 row cursor (shown role + row)
+constexpr uint16_t DS_PAGE_ROWCUR_3       = 0x9307; // word_317E7: page-3 row cursor (bg role + row)
+constexpr uint16_t DS_PAGE_ROWCUR_1       = 0x9309; // word_317E9: page-1 row cursor (draw role + row)
+constexpr uint16_t DS_PAGE_VGA_2          = 0x930B; // word_317EB: page-2 VGA row address
+constexpr uint16_t DS_PAGE_VGA_3          = 0x930D; // word_317ED: page-3 VGA row address
+constexpr uint16_t DS_PAGE_VGA_1          = 0x930F; // word_317EF: page-1 VGA row address
+constexpr uint16_t DS_PAGE_SPLIT_1A       = 0x9311; // byte_317F1: page split-screen counter 1a (0x9C modulo)
+constexpr uint16_t DS_PAGE_SPLIT_1B       = 0x9312; // byte_317F2: page split counter 1b (0x32 - 1a)
+constexpr uint16_t DS_PAGE_SPLIT_2A       = 0x9313; // byte_317F3: page split counter 2a
+constexpr uint16_t DS_PAGE_SPLIT_2B       = 0x9314; // byte_317F4: page split counter 2b
+constexpr uint16_t DS_PAGE_COPY_SRC1      = 0x9315; // word_317F5: page-copy source 1 (1712b)
+constexpr uint16_t DS_PAGE_COPY_DST1      = 0x9317; // word_317F7: page-copy dest 1
+constexpr uint16_t DS_PAGE_COPY_SRC2      = 0x9319; // word_317F9: page-copy source 2
+constexpr uint16_t DS_PAGE_COPY_DST2      = 0x931B; // word_317FB: page-copy dest 2
+constexpr uint16_t DS_PAGE_COPY_SRC3      = 0x931D; // word_317FD: page-copy source 3
+constexpr uint16_t DS_PAGE_SCRATCH_346    = 0x9346; // word_31826: page-related scratch
+
+
+// ---------------------------------------------------------------------------
+// DS globals batch 5 (HUD selector[2..3] / viking state / quit-prompt)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_HUD_SEL_2           = 0x0416; // word_288F6: HUD selector value, viking slot 2 (DS_HUD_SEL[1])
+constexpr uint16_t DS_HUD_SEL_3           = 0x0418; // word_288F8: HUD selector value, viking slot 3 (DS_HUD_SEL[2])
+constexpr uint16_t DS_HUD_SEL_PREV_2      = 0x041C; // word_288FC: tracked previous selector, viking 2
+constexpr uint16_t DS_HUD_SEL_PREV_3      = 0x041E; // word_288FE: tracked previous selector, viking 3
+constexpr uint16_t DS_PORTRAIT_SND_2      = 0x0425; // word_28905: portrait sound state viking 2 (-> viking row 0x15AF)
+constexpr uint16_t DS_PORTRAIT_SND_3      = 0x0427; // word_28907: portrait sound state viking 3 (-> viking row 0x15B1)
+constexpr uint16_t DS_HUD_SCRATCH_42B     = 0x042B; // word_2890B: HUD scratch (cleared)
+constexpr uint16_t DS_HUD_SCRATCH_42D     = 0x042D; // word_2890D: HUD scratch (cleared)
+constexpr uint16_t DS_VK_STATE_1          = 0x0431; // word_28911: per-viking state field 1 (init 0xFFFF)
+constexpr uint16_t DS_VK_STATE_2          = 0x0433; // word_28913: per-viking state field 2 (init 0xFFFF)
+constexpr uint16_t DS_VK_STATE_3          = 0x0437; // word_28917: per-viking state field 3 (init 0xFFFF)
+constexpr uint16_t DS_VK_STATE_4          = 0x0439; // word_28919: per-viking state field 4 (init 0xFFFF)
+constexpr uint16_t DS_HUD_TRACK_1         = 0x043D; // word_2891D: HUD tracked-prev field 1
+constexpr uint16_t DS_HUD_TRACK_2         = 0x043F; // word_2891F: HUD tracked-prev field 2
+constexpr uint16_t DS_HUD_BLINK_FIELD     = 0x0441; // word_28921: HUD blink-gated field (cnt&0x10)
+constexpr uint16_t DS_QUIT_ACTIVE         = 0x0443; // word_28923: quit-prompt active flag (set 1)
+constexpr uint16_t DS_QUIT_BLINK          = 0x0445; // word_28925: quit-prompt blink counter (init 0x11, DEC in 10555)
+constexpr uint16_t DS_QUIT_MODE           = 0x0447; // word_28927: quit-prompt mode
+constexpr uint16_t DS_HUD_FORCE           = 0x044B; // byte_2892B: HUD force-redraw byte (set 0xFF)
+constexpr uint16_t DS_HUD_FIELD_483       = 0x0483; // word_28963: HUD field (verify-cross-ref)
+
 #endif // V2_DS_LAYOUT_H
