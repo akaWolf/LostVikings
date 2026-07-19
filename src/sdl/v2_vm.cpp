@@ -16826,7 +16826,12 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 
         // MAIN-VM PER-OPCODE TRACE: obj=06 — ALL frames in level 002B (#85).
         // Capture full obj 6 history to find where v2 diverges from orig.
-        if (*(uint16_t*)(shadow + DS_LEVEL) == 0x002B && obj_idx == 6) {
+        // Gated behind env V2_MVM6 (off by default): this fired every op for the
+        // whole lv=002B intro sequence, flooding stderr and slowing intro to
+        // ~2.5 fps. Opt-in when the #85 obj-6 history is actually needed.
+        static int _mvm6_en = -1;
+        if (_mvm6_en < 0) _mvm6_en = getenv("V2_MVM6") ? 1 : 0;
+        if (_mvm6_en && *(uint16_t*)(shadow + DS_LEVEL) == 0x002B && obj_idx == 6) {
             static int _mvm = 0;
             if (++_mvm <= 20000) {
                 fprintf(stderr,

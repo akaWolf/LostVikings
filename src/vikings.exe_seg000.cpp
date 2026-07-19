@@ -10225,7 +10225,9 @@ cs=0x1a2;eip=0x0042ae; 	T(SHL(si, 1));	// 8830 shl     si, 1 ;~ 01A2:42AE
 	    int f = v2_dbg_pre_vm_iter;
 	    uint16_t cur_obj = *(dw*)(raddr(ds, 0x42));
 	    uint16_t cur_lv = *(dw*)(raddr(ds, 0x25AD));
-	    if (cur_obj == 6 && cur_lv == 0x002B) {
+	    static int _omvm6_en = -1;
+	    if (_omvm6_en < 0) _omvm6_en = getenv("V2_MVM6") ? 1 : 0;
+	    if (_omvm6_en && cur_obj == 6 && cur_lv == 0x002B) {
 	      static int _omvm = 0;
 	      if (_omvm++ < 20000) {
 	        uint16_t cur_16ED = *(dw*)(raddr(ds, cur_obj + 0x16ED));
