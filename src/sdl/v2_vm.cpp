@@ -10248,24 +10248,24 @@ static void v2_vm_op_15(V2VM& vm) {
 // the orig is a DO-WHILE (body first, CMP di,cx / JL at the end): it runs
 // at least once whenever [si+1AD5h] != 0, even if [si+1A85h] >= [si+1AADh].
 static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si) {
-    vm.ds_write(si + OBJ_FLAGS, vm.ds_read(si + OBJ_FLAGS) ^ 0x40);        // XOR [si+1585h], 40h
-    uint16_t ax = (uint16_t)((uint16_t)(vm.ds_read(si + OBJ_WORLD_X) << 1)
-                             - vm.ds_read(si + OBJ_BBOX_X1) - 1);          // ax = [173D]*2-[155D]-1
-    uint16_t dx = (uint16_t)((uint16_t)(vm.ds_read(si + OBJ_WORLD_X) << 1)
-                             - vm.ds_read(si + OBJ_BBOX_X0) - 1);          // dx = [173D]*2-[1535]-1
-    vm.ds_write(si + OBJ_BBOX_X1, dx);                                     // [si+155Dh] = dx
-    vm.ds_write(si + OBJ_BBOX_X0, ax);                                     // [si+1535h] = ax
-    if (vm.ds_read(si + OBJ_SUB_COUNT) != 0) {                               // CMP [si+1AD5h],0 / JZ
-        uint16_t dx2 = (uint16_t)(vm.ds_read(si + OBJ_WORLD_X) << 1);      // orig re-reads [si+173Dh]
-        uint16_t cx = vm.ds_read(si + OBJ_SUB_END);
-        uint16_t di = vm.ds_read(si + OBJ_SUB_SLOT);
+    ObjRef self{vm, si};
+    self.w16(OBJ_FLAGS, self.u16(OBJ_FLAGS) ^ 0x40);                      // XOR [si+1585h], 40h
+    uint16_t ax = (uint16_t)((uint16_t)(self.u16(OBJ_WORLD_X) << 1)
+                             - self.u16(OBJ_BBOX_X1) - 1);                // ax = [173D]*2-[155D]-1
+    uint16_t dx = (uint16_t)((uint16_t)(self.u16(OBJ_WORLD_X) << 1)
+                             - self.u16(OBJ_BBOX_X0) - 1);                // dx = [173D]*2-[1535]-1
+    self.w16(OBJ_BBOX_X1, dx);                                            // [si+155Dh] = dx
+    self.w16(OBJ_BBOX_X0, ax);                                           // [si+1535h] = ax
+    if (self.u16(OBJ_SUB_COUNT) != 0) {                                  // CMP [si+1AD5h],0 / JZ
+        uint16_t dx2 = (uint16_t)(self.u16(OBJ_WORLD_X) << 1);           // orig re-reads [si+173Dh]
+        uint16_t cx = self.u16(OBJ_SUB_END);
+        uint16_t di = self.u16(OBJ_SUB_SLOT);
         do {                                                          // loc_136D9
-            vm.ds_write((uint16_t)(di + OBJ_SPRITE_X),
-                        (uint16_t)(dx2 - vm.ds_read((uint16_t)(di + OBJ_SPRITE_X))
-                                       - vm.ds_read((uint16_t)(di + OBJ_STRIP_COUNT))));
-            vm.ds_write((uint16_t)(di + OBJ_SPRITE_FLAGS),
-                        vm.ds_read((uint16_t)(di + OBJ_SPRITE_FLAGS)) ^ 0x200);  // XOR [di+44Dh], 200h
-            vm.ds_write((uint16_t)(di + OBJ_DIRTY_MODE), 0x202);              // [di+114Dh] = 202h
+            ObjRef sub{vm, di};
+            sub.w16(OBJ_SPRITE_X,
+                    (uint16_t)(dx2 - sub.u16(OBJ_SPRITE_X) - sub.u16(OBJ_STRIP_COUNT)));
+            sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) ^ 0x200);  // XOR [di+44Dh], 200h
+            sub.w16(OBJ_DIRTY_MODE, 0x202);                                // [di+114Dh] = 202h
             di += 2;
         } while ((int16_t)di < (int16_t)cx);                          // CMP di,cx / JL
         vm.di_track = di;   // loop exit register (task #15); gate path leaves DI
@@ -10278,26 +10278,27 @@ static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si) {
 // 2*[si+1765h], sub-sprite loop is a DO-WHILE (runs at least once when
 // [si+1AD5h] != 0).
 static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si) {
-    vm.ds_write(si + OBJ_FLAGS, vm.ds_read(si + OBJ_FLAGS) ^ 0x80);        // XOR [si+1585h], 80h
-    uint16_t ax = (uint16_t)((uint16_t)(vm.ds_read(si + OBJ_WORLD_Y)
-                             + vm.ds_read(si + OBJ_WORLD_Y))
-                             - vm.ds_read(si + OBJ_BBOX_Y1) - 1);          // ax = [1765]*2-[150D]-1
-    uint16_t dx = (uint16_t)((uint16_t)(vm.ds_read(si + OBJ_WORLD_Y)
-                             + vm.ds_read(si + OBJ_WORLD_Y))
-                             - vm.ds_read(si + OBJ_BBOX_Y0) - 1);          // dx = [1765]*2-[14E5]-1
-    vm.ds_write(si + OBJ_BBOX_Y1, dx);                                     // [si+150Dh] = dx
-    vm.ds_write(si + OBJ_BBOX_Y0, ax);                                     // [si+14E5h] = ax
-    if (vm.ds_read(si + OBJ_SUB_COUNT) != 0) {                               // CMP [si+1AD5h],0 / JZ
-        uint16_t dx2 = (uint16_t)(vm.ds_read(si + OBJ_WORLD_Y) << 1);      // orig re-reads [si+1765h]
-        uint16_t cx = vm.ds_read(si + OBJ_SUB_END);
-        uint16_t di = vm.ds_read(si + OBJ_SUB_SLOT);
+    ObjRef self{vm, si};
+    self.w16(OBJ_FLAGS, self.u16(OBJ_FLAGS) ^ 0x80);                      // XOR [si+1585h], 80h
+    uint16_t ax = (uint16_t)((uint16_t)(self.u16(OBJ_WORLD_Y)
+                             + self.u16(OBJ_WORLD_Y))
+                             - self.u16(OBJ_BBOX_Y1) - 1);                // ax = [1765]*2-[150D]-1
+    uint16_t dx = (uint16_t)((uint16_t)(self.u16(OBJ_WORLD_Y)
+                             + self.u16(OBJ_WORLD_Y))
+                             - self.u16(OBJ_BBOX_Y0) - 1);                // dx = [1765]*2-[14E5]-1
+    self.w16(OBJ_BBOX_Y1, dx);                                            // [si+150Dh] = dx
+    self.w16(OBJ_BBOX_Y0, ax);                                           // [si+14E5h] = ax
+    if (self.u16(OBJ_SUB_COUNT) != 0) {                                  // CMP [si+1AD5h],0 / JZ
+        uint16_t dx2 = (uint16_t)(self.u16(OBJ_WORLD_Y) << 1);           // orig re-reads [si+1765h]
+        uint16_t cx = self.u16(OBJ_SUB_END);
+        uint16_t di = self.u16(OBJ_SUB_SLOT);
         do {                                                          // loc_13795
-            vm.ds_write((uint16_t)(di + OBJ_SPRITE_Y),
-                        (uint16_t)(dx2 - vm.ds_read((uint16_t)(di + OBJ_SPRITE_Y))
-                                       - vm.ds_read((uint16_t)(di + OBJ_STRIP_COUNT))));
-            vm.ds_write((uint16_t)(di + OBJ_SPRITE_FLAGS),
-                        vm.ds_read((uint16_t)(di + OBJ_SPRITE_FLAGS)) ^ 0x400);  // XOR [di+44Dh], 400h
-            vm.ds_write((uint16_t)(di + OBJ_DIRTY_MODE), 0x202);              // [di+114Dh] = 202h
+            ObjRef sub{vm, di};
+            sub.w16(OBJ_SPRITE_Y,
+                        (uint16_t)(dx2 - sub.u16(OBJ_SPRITE_Y)
+                                       - sub.u16(OBJ_STRIP_COUNT)));
+            sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) ^ 0x400);  // XOR [di+44Dh], 400h
+            sub.w16(OBJ_DIRTY_MODE, 0x202);                                // [di+114Dh] = 202h
             di += 2;
         } while ((int16_t)di < (int16_t)cx);                          // CMP di,cx / JL
         vm.di_track = di;   // loop exit register (task #15); gate path leaves DI
