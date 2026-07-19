@@ -233,4 +233,31 @@ constexpr uint16_t DS_GLYPH_DIRTY    = 0x956B; // byte: glyph buffer dirty (gate
 constexpr uint16_t DS_GLYPH_BUF      = 0x956C; // glyph buffer, 0x1B8 words (12816 clear, 1241e put, 1E0C7 flush)
 constexpr uint16_t DS_UI_THROTTLE    = 0x98DC; // word_31DBC: UI redraw throttle counter (JG 3 -> skip, else INC)
 
+
+// ---------------------------------------------------------------------------
+// DS globals batch 1 (scroll / palette-shade / anim-cursor / search scratch)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_ANIM_SLOT         = 0x007C; // word_2855C: anim sub-sprite loop cursor start (exec_anim_cmd si=ds:7C)
+constexpr uint16_t DS_ANIM_SLOT_END     = 0x0080; // word_28560: anim sub-sprite loop cursor end
+constexpr uint16_t DS_PAL_SHADE_R       = 0x0342; // word_28822: palette shade accumulator R (sub_10e99, ORed with 0x345)
+constexpr uint16_t DS_PAL_SHADE_G       = 0x0343; // byte: palette shade accumulator G (ORed with 0x346)
+constexpr uint16_t DS_PAL_SHADE_B       = 0x0344; // byte: palette shade accumulator B (ORed with 0x347)
+constexpr uint16_t DS_PAL_SHADE_R2      = 0x0345; // byte: palette shade accumulator R second term
+constexpr uint16_t DS_PAL_SHADE_G2      = 0x0346; // byte: palette shade accumulator G second term
+constexpr uint16_t DS_PAL_SHADE_B2      = 0x0347; // byte: palette shade accumulator B second term
+constexpr uint16_t DS_SCROLL_DELTA_X    = 0x034E; // word_2882E: per-frame viewport scroll delta X (movers write, CRTC pan)
+constexpr uint16_t DS_SCROLL_DELTA_Y    = 0x0350; // word_28830: per-frame viewport scroll delta Y
+constexpr uint16_t DS_SPAWN_POOL_SEL    = 0x0374; // word_28854: spawn slot-pool selector (13d68 pool by count; op14/spawn)
+constexpr uint16_t DS_ANIM_SUB_MASK     = 0x038C; // word_2886C: anim sub-sprite mask (exec_anim_cmd gate ds:0x38C)
+constexpr uint16_t DS_SCROLL_LOCK_X     = 0x0394; // word_28874: horizontal scroll lock (movers 17496/1746c early-return)
+constexpr uint16_t DS_SCROLL_LOCK_Y     = 0x0396; // word_28876: vertical scroll lock (movers 174e9/174bf early-return)
+constexpr uint16_t DS_SHAKE_X           = 0x039E; // word_2887E: screen-shake X offset (emu_eff vp+shake, 16775 pan)
+constexpr uint16_t DS_SHAKE_Y           = 0x03A0; // word_28880: screen-shake Y offset
+constexpr uint16_t DS_SEARCH_RES_TYPE   = 0x03B2; // word_28892: tile/obj search result type id
+constexpr uint16_t DS_SEARCH_RES_SLOT   = 0x03B4; // word_28894: tile/obj search result slot (0xFFFF=none)
+constexpr uint16_t DS_SCROLL_AMT_LEFT   = 0x03D8; // word_288B8: pending scroll amount, left (camera_follow/scroll_apply)
+constexpr uint16_t DS_SCROLL_AMT_RIGHT  = 0x03DA; // word_288BA: pending scroll amount, right
+constexpr uint16_t DS_SCROLL_AMT_DOWN   = 0x03DC; // word_288BC: pending scroll amount, down
+constexpr uint16_t DS_SCROLL_AMT_UP     = 0x03DE; // word_288BE: pending scroll amount, up
+
 #endif // V2_DS_LAYOUT_H
