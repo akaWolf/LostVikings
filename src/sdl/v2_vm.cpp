@@ -8537,9 +8537,9 @@ static void v2_postvm_check_hash(uint8_t* shadow, const char* label, int idx) {
 }
 
 // V2 post-VM game loop
-static void v2_game_loop_post_vm(uint8_t* shadow) {
-    // sub_1386b: backup X/Y + apply velocity to positions
-    {
+// ---- v2_game_loop_post_vm orchestration steps (B2: extracted inline blocks) ----
+// backup X/Y prev + clamp/apply per-object velocity to world+bbox (orig sub_1386b)
+static void v2_apply_velocity_1386b(uint8_t* shadow) {
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
         for (uint16_t di = 0; (int16_t)di < (int16_t)table_end; di += 2) {
             if (*(uint16_t*)(shadow + di + OBJ_CODE_SEG) == 0) continue;
@@ -8600,14 +8600,10 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
                 *(uint16_t*)(shadow + di + OBJ_BBOX_Y1) += (uint16_t)ax; // Y end
             }
         }
-    }
-    v2_postvm_check_hash(shadow, "after-sub_1386b", 0);
-    v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1386B, "v2_game_loop_post_vm after-sub_1386b");
+}
 
-    // sub_1625d: ground detection + position snapping for objects with flag 0x2000
-    // NOTE: original order is sub_1386b → sub_1625d → sub_15546 (verified seg000 lines 3958-3960)
-    // Matches original flow exactly: loc_16260 → loc_162c4/loc_162d3/loc_162e0 → loc_1636d
-    {
+// ground detection + Y position snapping for flag-0x2000 objects (orig sub_1625d)
+static void v2_ground_snap_1625d(uint8_t* shadow) {
         // sub_14199 equivalent: tile type at pixel (x, y)
         auto tile_type_at = [&](uint16_t x, uint16_t y) -> uint16_t {
             uint16_t sx = x >> 4, sy = y >> 4;
@@ -8702,13 +8698,10 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             *(uint16_t*)(shadow + di + OBJ_BBOX_Y1) -= (uint16_t)y_adjust;
             *(uint16_t*)(shadow + di + OBJ_VEL_Y) = 0;
         }
-    }
-    v2_postvm_check_hash(shadow, "after-sub_1625d", 1);
-    v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1625D, "v2_game_loop_post_vm after-sub_1625d");
+}
 
-    // sub_15546: clear collision result fields + run collision detection VM (sub_15569)
-    // NOTE: runs AFTER sub_1625d (verified seg000 line 3960, eip 0x15DE)
-    {
+// clear per-object collision-result field + run collision-detect VM (orig sub_15546/15569)
+static void v2_clear_coll_run_vm_15546(uint8_t* shadow) {
         *(uint16_t*)(shadow + DS_COLL_PHASE) = 1;
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
         for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
@@ -8719,12 +8712,10 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             if (*(uint16_t*)(shadow + si + OBJ_CODE_SEG) == 0) continue;
             v2_run_collision_vm(shadow, si);
         }
-    }
-    v2_postvm_check_hash(shadow, "after-sub_15546", 2);
-    v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_15546, "v2_game_loop_post_vm after-sub_15546");
+}
 
-    // sub_13916: collision resolution — process objects with active collision state
-    {
+// collision resolution: velocity apply + hflip/vflip push-apart (orig sub_13916)
+static void v2_collision_resolve_13916(uint8_t* shadow) {
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
         for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
             if (*(uint16_t*)(shadow + si + OBJ_CODE_SEG) == 0) continue;
@@ -8826,7 +8817,29 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
                 *(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) = 0xFFFF; // clear collision
             }
         }
-    }
+}
+
+static void v2_game_loop_post_vm(uint8_t* shadow) {
+    // sub_1386b: backup X/Y + apply velocity to positions
+    v2_apply_velocity_1386b(shadow);
+    v2_postvm_check_hash(shadow, "after-sub_1386b", 0);
+    v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1386B, "v2_game_loop_post_vm after-sub_1386b");
+
+    // sub_1625d: ground detection + position snapping for objects with flag 0x2000
+    // NOTE: original order is sub_1386b → sub_1625d → sub_15546 (verified seg000 lines 3958-3960)
+    // Matches original flow exactly: loc_16260 → loc_162c4/loc_162d3/loc_162e0 → loc_1636d
+    v2_ground_snap_1625d(shadow);
+    v2_postvm_check_hash(shadow, "after-sub_1625d", 1);
+    v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1625D, "v2_game_loop_post_vm after-sub_1625d");
+
+    // sub_15546: clear collision result fields + run collision detection VM (sub_15569)
+    // NOTE: runs AFTER sub_1625d (verified seg000 line 3960, eip 0x15DE)
+    v2_clear_coll_run_vm_15546(shadow);
+    v2_postvm_check_hash(shadow, "after-sub_15546", 2);
+    v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_15546, "v2_game_loop_post_vm after-sub_15546");
+
+    // sub_13916: collision resolution — process objects with active collision state
+    v2_collision_resolve_13916(shadow);
     v2_postvm_check_hash(shadow, "after-sub_13916", 3);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_13916, "v2_game_loop_post_vm after-sub_13916");
 
