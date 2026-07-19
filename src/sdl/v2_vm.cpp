@@ -806,9 +806,16 @@ void v2_verify_render_buf(int frame) {
     // autodetect — identifies the diverging layer (#39 methodology).
     {
         static int _dump_on = -1;
-        if (_dump_on == -1) _dump_on = getenv("V2_A2_DUMP") ? 1 : 0;
+        static int _dump_hard = -2;   // env V2_A2_DUMP_HARD=N: dump the first frame whose hard==N (any layer, event-based)
+        if (_dump_on == -1) {
+            _dump_on = getenv("V2_A2_DUMP") ? 1 : 0;
+            const char* h = getenv("V2_A2_DUMP_HARD");
+            _dump_hard = h ? atoi(h) : -1;
+        }
         static bool dumped = false;
-        if (_dump_on && !dumped) {
+        bool want = _dump_on && !dumped &&
+                    (_dump_hard < 0 ? true : hard_diff == _dump_hard);
+        if (want) {
             dumped = true;
             FILE* fo = fopen("/tmp/v2_a2_orig.pgm", "wb");
             if (fo) { fprintf(fo, "P5\n320 176\n255\n"); fwrite(orig_pixels, 1, 320*176, fo); fclose(fo); }
