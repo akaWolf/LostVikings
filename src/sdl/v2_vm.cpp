@@ -14385,14 +14385,15 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             anim_bx += 1;
 
             // Skip if same sprite already loaded
-            if (spr_idx == (uint8_t)vm.ds_read(obj_d + OBJ_CUR_SPRITE_IDX)) {
+            ObjRef self{vm, obj_d}, subs{vm, si_s};
+            if (spr_idx == (uint8_t)self.u16(OBJ_CUR_SPRITE_IDX)) {
                 static int _skip = 0;
                 if (_skip++ < 5) fprintf(stderr, "V2-134DC-SKIP[%d]: si=%04X spr=%02X same as 191D\n",
                                           _skip, si_s, spr_idx);
                 return true;
             }
-            vm.ds_write(obj_d + OBJ_CUR_SPRITE_IDX, spr_idx);
-            vm.ds_write(si_s + OBJ_DIRTY_MODE, 0x202); // dirty
+            self.w16(OBJ_CUR_SPRITE_IDX, spr_idx);
+            subs.w16(OBJ_DIRTY_MODE, 0x202); // dirty
 
             // Source setup
             uint16_t src_seg_val = vm.ds_read(si_s + 0x0B4D);
@@ -14402,8 +14403,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint8_t* src = src_seg_ptr + src_base + lookup;
 
             // Destination setup in v2 shadow sprite buffer
-            uint16_t dst_seg = vm.ds_read(si_s + OBJ_SPRITE_SEG);
-            uint16_t dst_off = vm.ds_read(si_s + OBJ_SPRITE_OFF) - 1;
+            uint16_t dst_seg = subs.u16(OBJ_SPRITE_SEG);
+            uint16_t dst_off = subs.u16(OBJ_SPRITE_OFF) - 1;
             uint32_t dst_abs = ((uint32_t)dst_seg << 4) + dst_off;
 
             // Resolve destination to correct shadow buffer via v2_resolve_segment.
@@ -14411,7 +14412,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint8_t* dst_base = v2_resolve_segment(dst_seg);
             if (!dst_base) return true;
             uint8_t* dst = dst_base + dst_off;
-            uint8_t flags = (0x70 & (uint8_t)vm.ds_read(si_s + OBJ_SPRITE_FLAGS)) | 0x80;
+            uint8_t flags = (0x70 & (uint8_t)subs.u16(OBJ_SPRITE_FLAGS)) | 0x80;
             // Trace: identify if this invocation hits offset 0x2000 in GS_tiledata
             { static int _trace = 0;
               uint16_t gs_seg_now = vm.ds_read(0x2E5D);
@@ -14527,30 +14528,32 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             if (mask_v != 0) {
                 // Masked: only matching sub-sprites
                 for (; (int16_t)di_s < (int16_t)end_di; di_s += 2) {
-                    if (!(vm.ds_read(di_s + 0x54D) & mask_v)) continue;
-                    vm.ds_write(di_s + OBJ_STRIP_COUNT, ax_height);
-                    vm.ds_write(di_s + OBJ_SPRITE_FLAGS, (vm.ds_read(di_s + OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
-                    vm.ds_write(di_s + OBJ_DIRTY_MODE, 0x202);
+                    ObjRef sub{vm, di_s};   // #38: sub-sprite slot view (cursor di_s)
+                    if (!(sub.u16(0x54D) & mask_v)) continue;   // 0x54D: class mask (unnamed)
+                    sub.w16(OBJ_STRIP_COUNT, ax_height);
+                    sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
+                    sub.w16(OBJ_DIRTY_MODE, 0x202);
                     if (reset_data) {
-                        uint16_t d = vm.ds_read(di_s + 0x0A4D) + 1;
-                        vm.ds_write(di_s + OBJ_SPRITE_OFF, d);
-                        vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);
-                        vm.ds_write(di_s + OBJ_SPRITE_SEG, vm.ds_read(di_s + 0x0B4D));
+                        uint16_t d = sub.u16(0x0A4D) + 1;   // 0x0A4D: sprite source base (unnamed)
+                        sub.w16(OBJ_SPRITE_OFF, d);
+                        vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);  // cur_obj (global), not the sub
+                        sub.w16(OBJ_SPRITE_SEG, sub.u16(0x0B4D));   // 0x0B4D: sprite source seg (unnamed)
                     }
                 }
             } else {
                 // Unmasked: all sub-sprites. Original loops loc_1335f→loc_13381→loop.
                 // reset_data check is INSIDE the loop (per sub-sprite, not just first).
                 for (; (int16_t)di_s < (int16_t)end_di; di_s += 2) {
+                    ObjRef sub{vm, di_s};   // #38: sub-sprite slot view (cursor di_s)
                     if (reset_data) {
-                        uint16_t d = vm.ds_read(di_s + 0x0A4D) + 1;
-                        vm.ds_write(di_s + OBJ_SPRITE_OFF, d);
-                        vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);
-                        vm.ds_write(di_s + OBJ_SPRITE_SEG, vm.ds_read(di_s + 0x0B4D));
+                        uint16_t d = sub.u16(0x0A4D) + 1;   // 0x0A4D: sprite source base (unnamed)
+                        sub.w16(OBJ_SPRITE_OFF, d);
+                        vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);  // cur_obj (global)
+                        sub.w16(OBJ_SPRITE_SEG, sub.u16(0x0B4D));   // 0x0B4D: sprite source seg (unnamed)
                     }
-                    vm.ds_write(di_s + OBJ_STRIP_COUNT, ax_height);
-                    vm.ds_write(di_s + OBJ_SPRITE_FLAGS, (vm.ds_read(di_s + OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
-                    vm.ds_write(di_s + OBJ_DIRTY_MODE, 0x202);
+                    sub.w16(OBJ_STRIP_COUNT, ax_height);
+                    sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
+                    sub.w16(OBJ_DIRTY_MODE, 0x202);
                 }
             }
             return true;
@@ -14616,22 +14619,24 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             // Loop sub-sprites
             uint16_t end_r = vm.ds_read(0x80);
             for (; (int16_t)si_r < (int16_t)end_r; si_r += 2) {
-                vm.ds_write(si_r + 0x0A4D, base_off);
-                vm.ds_write(si_r + 0x0B4D, base_seg);
-                vm.ds_write(si_r + OBJ_SPRITE_SEG, sprite_seg);
+                ObjRef sub{vm, si_r};   // #38: sub-sprite slot view (cursor si_r)
+                sub.w16(0x0A4D, base_off);   // 0x0A4D: sprite source base (unnamed)
+                sub.w16(0x0B4D, base_seg);   // 0x0B4D: sprite source seg (unnamed)
+                sub.w16(OBJ_SPRITE_SEG, sprite_seg);
                 // Data ptr: bp = ds:[(si-0x30)-0x78E4] — addr typically outside shadow, use real DS
                 uint16_t bp_addr = (uint16_t)((si_r - 0x30) - 0x78E4);
                 // vm.ds points to either real DS or ds_before snapshot (in replay).
                 // For addresses outside shadow range, MUST read from real DS.
                 // Use ds_read which handles shadow/real split correctly.
                 uint16_t data_ptr = *(uint16_t*)(vm.shadow +bp_addr);
-                vm.ds_write(si_r + OBJ_SPRITE_OFF, data_ptr);
-                vm.ds_write(si_r + OBJ_SPRITE_FLAGS, vm.ds_read(si_r + OBJ_SPRITE_FLAGS) | 0x0A);
+                sub.w16(OBJ_SPRITE_OFF, data_ptr);
+                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x0A);
                 vm.ds_write_b(si_r + OBJ_DIRTY_MODE, 2);
             }
             // After loop: reset sprite dedup index
             uint16_t di_obj = vm.global_r(DS_CUR_OBJ);
-            vm.ds_write(di_obj + OBJ_CUR_SPRITE_IDX, 0xFFFF);
+            ObjRef self{vm, di_obj};
+            self.w16(OBJ_CUR_SPRITE_IDX, 0xFFFF);
             return true;
         }
 
