@@ -10082,16 +10082,17 @@ static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di
 // sub_1603e: object search at X_flip_edge.
 static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(0x3B4, 0xFFFF);
+    ObjRef self{vm, obj_di};
     // Determine X based on flip
     uint16_t x;
-    if (vm.ds_read(obj_di + OBJ_FLAGS) & 0x40) {
-        x = vm.ds_read(obj_di + OBJ_BBOX_X0) - 1;
+    if (self.flags() & 0x40) {
+        x = self.u16(OBJ_BBOX_X0) - 1;
     } else {
-        x = vm.ds_read(obj_di + OBJ_BBOX_X1) + 1;
+        x = self.u16(OBJ_BBOX_X1) + 1;
     }
     // sub_15ac4: single tile check at (x, Y_end+1)
     vm.ds_write(DS_SCRATCH_34, filter_si);
-    uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y1) + 1;
+    uint16_t y = self.u16(OBJ_BBOX_Y1) + 1;
     uint16_t tile_val = v2_vm_tile_read_141ba(vm, x >> 4, y >> 4);
     uint8_t tt = (uint8_t)((tile_val & 0xFC00) >> 10);
     // Filter comparison (single point)
@@ -10111,10 +10112,11 @@ static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
     bool obj_found = false;
     for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)table_end; si2 += 2) {
-        if (*(uint16_t*)(rds + si2 + OBJ_CODE_SEG) == 0) continue;
+        ObjMem cand{rds, si2};
+        if (cand.code_seg() == 0) continue;
         if (si2 == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
         vm.ds_write(DS_SCRATCH_3A, si2);
-        uint8_t ot = (uint8_t)*(uint16_t*)(rds + si2 + OBJ_TYPE_ID);
+        uint8_t ot = (uint8_t)cand.type_id();
         uint16_t f2 = filter_si;
         bool m2 = false;
         while (true) {
@@ -10125,14 +10127,14 @@ static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
         }
         if (!m2) continue;
         // X: ds:0x36 in [target.X_start, target.X_end)
-        if ((int16_t)x < (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_X0)) continue;
-        if ((int16_t)(x - 1) >= (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_X1)) continue;
+        if ((int16_t)x < cand.bbox_x0()) continue;
+        if ((int16_t)(x - 1) >= cand.bbox_x1()) continue;
         // Y: ds:0x38 in [target.Y_start, target.Y_end)
-        if ((int16_t)y < (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)(y - 1) >= (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y1)) continue;
+        if ((int16_t)y < cand.bbox_y0()) continue;
+        if ((int16_t)(y - 1) >= cand.bbox_y1()) continue;
         // orig 0x60AF: MOV ax,[si+17DDh]; MOV ds:3B2h, ax — FULL word, not the
         // low byte used for the filter compare.
-        vm.ds_write(0x3B2, *(uint16_t*)(rds + si2 + OBJ_TYPE_ID));
+        vm.ds_write(0x3B2, cand.type_id());
         vm.ds_write(0x3B4, si2);
         obj_found = true;
         break;
@@ -15600,13 +15602,15 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
 static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
                             int16_t& out_dir, uint16_t& out_partner) {
     uint8_t* rds = vm.shadow;
+    ObjRef self{vm, di};
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
     vm.ds_write(DS_SCRATCH_3A, filter_si);
     for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)table_end; si2 += 2) {
-        if (*(uint16_t*)(rds + si2 + OBJ_CODE_SEG) == 0) continue;
+        ObjMem cand{rds, si2};
+        if (cand.code_seg() == 0) continue;
         if (si2 == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
         vm.ds_write(DS_SCRATCH_38, si2);
-        uint8_t obj_type = (uint8_t)*(uint16_t*)(rds + si2 + OBJ_TYPE_ID);
+        uint8_t obj_type = (uint8_t)cand.type_id();
         uint16_t f = filter_si;
         bool match = false;
         while (true) {
@@ -15619,8 +15623,7 @@ static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t d
         // Type matches. Compare X velocities.
         // Orig sub_15c37 0x5c6a: SUB ax,[si+1945]; JZ skip; JG →sub_15cf5 / else →sub_15cef —
         // JG tests the TRUE difference (SF^OF of the SUB), not the truncated int16.
-        int32_t vel_diff = (int32_t)(int16_t)vm.ds_read(di + OBJ_VEL_X)
-                         - (int32_t)(int16_t)*(uint16_t*)(rds + si2 + OBJ_VEL_X);
+        int32_t vel_diff = (int32_t)self.vel_x() - (int32_t)cand.vel_x();
         if (vel_diff == 0) continue;
 
         // sub_15cef (vel_diff < 0): ax = self.X_start
@@ -15628,28 +15631,28 @@ static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t d
         uint16_t ax_x;
         int16_t snap_dir;
         if (vel_diff < 0) {
-            ax_x = vm.ds_read(di + OBJ_BBOX_X0); // sub_15cef
+            ax_x = self.u16(OBJ_BBOX_X0); // sub_15cef
             snap_dir = 1; // moved left
         } else {
-            ax_x = vm.ds_read(di + OBJ_BBOX_X1); // sub_15cf5
+            ax_x = self.u16(OBJ_BBOX_X1); // sub_15cf5
             snap_dir = 0; // moved right
         }
 
         // loc_15cf9: X point in partner range?
-        if ((int16_t)ax_x < (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_X0)) continue;
-        if ((int16_t)(ax_x - 1) >= (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_X1)) continue;
+        if ((int16_t)ax_x < cand.bbox_x0()) continue;
+        if ((int16_t)(ax_x - 1) >= cand.bbox_x1()) continue;
 
         // Y overlap with velocity adjustment:
         // self.Y_end_adj >= partner.Y_start_adj?
-        int16_t partner_ys_adj = (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y0) - (int16_t)*(uint16_t*)(rds + si2 + OBJ_VEL_Y);
+        int16_t partner_ys_adj = (int16_t)(cand.bbox_y0() - cand.vel_y());
         vm.ds_write(DS_MODE_WORD, (uint16_t)partner_ys_adj); // orig eip 0x5D0E
-        int16_t self_ye_adj = (int16_t)vm.ds_read(di + OBJ_BBOX_Y1) - (int16_t)vm.ds_read(di + OBJ_VEL_Y);
+        int16_t self_ye_adj = (int16_t)(self.bbox_y1() - self.vel_y());
         if (self_ye_adj < partner_ys_adj) continue;
 
         // partner.Y_end_adj >= self.Y_start_adj?
-        int16_t self_ys_adj = (int16_t)vm.ds_read(di + OBJ_BBOX_Y0) - (int16_t)vm.ds_read(di + OBJ_VEL_Y);
+        int16_t self_ys_adj = (int16_t)(self.bbox_y0() - self.vel_y());
         vm.ds_write(DS_MODE_WORD, (uint16_t)self_ys_adj);    // orig eip 0x5D27
-        int16_t partner_ye_adj = (int16_t)*(uint16_t*)(rds + si2 + OBJ_BBOX_Y1) - (int16_t)*(uint16_t*)(rds + si2 + OBJ_VEL_Y);
+        int16_t partner_ye_adj = (int16_t)(cand.bbox_y1() - cand.vel_y());
         if (partner_ye_adj < self_ys_adj) continue;
 
         // Collision found (orig MOV ax,dir; RETN with STC from loc_15cf9's carry path).
