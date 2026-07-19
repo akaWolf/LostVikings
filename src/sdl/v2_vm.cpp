@@ -2287,16 +2287,13 @@ static void v2_sub_10130(uint8_t* s) {
                 ++_wn, v2_dbg_pre_vm_iter, *(uint16_t*)(s + 0xA39C));
     }
     {
-        static int ring_on = -1;
-        if (ring_on < 0) ring_on = getenv("V2_FLIPRING") ? 1 : 0;
-        if (ring_on) {
-            extern int v2_dbg_pre_vm_iter;
-            extern void v2_flipring_push(uint8_t tag, uint16_t frame,
-                                         uint16_t a39c, uint16_t lv, void* ra);
-            v2_flipring_push(2, (uint16_t)v2_dbg_pre_vm_iter,
-                             *(uint16_t*)(s + 0xA39C), 0,
-                             __builtin_return_address(0));
-        }
+        // #32 groove trap: always record (see the flip-site note).
+        extern int v2_dbg_pre_vm_iter;
+        extern void v2_flipring_push(uint8_t tag, uint16_t frame,
+                                     uint16_t a39c, uint16_t lv, void* ra);
+        v2_flipring_push(2, (uint16_t)v2_dbg_pre_vm_iter,
+                         *(uint16_t*)(s + 0xA39C), 0,
+                         __builtin_return_address(0));
     }
     while ((int16_t)*(uint16_t*)(s + 0xA39C) >= 1) {
         if (need_quit) return;
@@ -5490,12 +5487,28 @@ void v2_flipring_push(uint8_t tag, uint16_t frame,
         v2_flipring[v2_flipring_n++] = { tag, frame, a39c, lv, caller };
 }
 void v2_flipring_dump(void) {
-    for (int i = 0; i < v2_flipring_n; i++) {
-        const V2FlipRingE& e = v2_flipring[i];
-        fprintf(stderr, "RING[%d] %s f=%u a39c=%04X lv=%04X ra=%p\n", i,
-                e.tag == 1 ? "FLIP" : "WAIT", e.frame, e.a39c, e.lv, e.caller);
+    // Always leave the last run's trace on disk (#32 trap, user decision):
+    // an anomalous flip count can then be diffed against a good-run file
+    // without having had to enable anything in advance.
+    if (FILE* f = fopen("/tmp/v2_flipring_last.txt", "w")) {
+        for (int i = 0; i < v2_flipring_n; i++) {
+            const V2FlipRingE& e = v2_flipring[i];
+            fprintf(f, "RING[%d] %s f=%u a39c=%04X lv=%04X ra=%p\n", i,
+                    e.tag == 1 ? "FLIP" : "WAIT", e.frame, e.a39c, e.lv, e.caller);
+        }
+        fprintf(f, "RING-TOTAL=%d\n", v2_flipring_n);
+        fclose(f);
+        fprintf(stderr, "V2-FLIPRING: %d entries -> /tmp/v2_flipring_last.txt\n",
+                v2_flipring_n);
     }
-    fprintf(stderr, "RING-TOTAL=%d\n", v2_flipring_n);
+    if (getenv("V2_FLIPRING")) {
+        for (int i = 0; i < v2_flipring_n; i++) {
+            const V2FlipRingE& e = v2_flipring[i];
+            fprintf(stderr, "RING[%d] %s f=%u a39c=%04X lv=%04X ra=%p\n", i,
+                    e.tag == 1 ? "FLIP" : "WAIT", e.frame, e.a39c, e.lv, e.caller);
+        }
+        fprintf(stderr, "RING-TOTAL=%d\n", v2_flipring_n);
+    }
 }
 
 // Carries the shadow DI across objects within a VM pass (task #15): the
@@ -17317,16 +17330,14 @@ static void v2_sub_16775(uint8_t* s) {
                 *(uint16_t*)(s + 0xA39C), *(uint16_t*)(s + 0x25AD));
     }
     {
-        static int ring_on = -1;
-        if (ring_on < 0) ring_on = getenv("V2_FLIPRING") ? 1 : 0;
-        if (ring_on) {
-            extern int v2_dbg_pre_vm_iter;
-            extern void v2_flipring_push(uint8_t tag, uint16_t frame,
-                                         uint16_t a39c, uint16_t lv, void* ra);
-            v2_flipring_push(1, (uint16_t)v2_dbg_pre_vm_iter,
-                             *(uint16_t*)(s + 0xA39C), *(uint16_t*)(s + 0x25AD),
-                             __builtin_return_address(0));
-        }
+        // #32 groove trap: always record (user decision 2026-07-22 — keep the
+        // trap armed so a rare anomalous run leaves its trace on disk).
+        extern int v2_dbg_pre_vm_iter;
+        extern void v2_flipring_push(uint8_t tag, uint16_t frame,
+                                     uint16_t a39c, uint16_t lv, void* ra);
+        v2_flipring_push(1, (uint16_t)v2_dbg_pre_vm_iter,
+                         *(uint16_t*)(s + 0xA39C), *(uint16_t*)(s + 0x25AD),
+                         __builtin_return_address(0));
     }
     v2_pageflip_count++;
     // VGA page flip registers:
