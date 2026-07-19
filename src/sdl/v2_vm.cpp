@@ -209,6 +209,7 @@ static const VerifySkip v2_ds_skip_ranges[] = {
     {0x86D0, 0x86D0, "BIOS checksum (#95)"},
     // Input layer — render thread async update mirrors orig INT9 ISR (#83/#105)
     {0x86DC, 0x86DE, "word_30bbc/30bbe input layer (orig INT9 async race)"},
+    {0x028C, 0x028D, "word_2876C last-key char (INT9 async mirror, #37)"},
     // VGA hardware state
     {0x9300, 0x9300, "VGA mode byte (#97)"},
     // Sound system — v2 doesn't fully replicate AIL/XMI
@@ -2318,6 +2319,27 @@ static void v2_sub_10130(uint8_t* s) {
 #endif
         v2_render_callback();         // mirrors orig sub_10130 → sub_1797b call
     }
+}
+
+// Task #37: mirror of the orig INT9 line eip 0x647F-0x6483 —
+//   ax = ds:[si-0x7198] (si = scancode*2); word_2876C = ax.
+// Fired from the SDL KEYDOWN handler for EVERY key press (typematic repeats
+// included — DOS hardware repeat re-sent make codes, and the password
+// bytecode polls/clears ds:0x028C per character). The LUT itself is the
+// ORIGINAL static table read from DS (letters/digits → ASCII, ENTER/SPACE →
+// 0x81, non-character keys → 0), never hardcoded here.
+extern "C" void v2_mirror_int9_char(uint8_t dos_scan) {
+    uint16_t off = (uint16_t)((uint16_t)(dos_scan * 2) - 0x7198);
+    if (v2_vm_shadow_ds) {
+        uint16_t val = *(uint16_t*)(v2_vm_shadow_ds + off);
+        *(uint16_t*)(v2_vm_shadow_ds + 0x028C) = val;
+    }
+#ifndef V2_ONLY
+    if (v2_m2c_base && v2_current_ds_val) {
+        uint8_t* rds = v2_m2c_base + ((uint32_t)v2_current_ds_val << 4);
+        *(uint16_t*)(rds + 0x028C) = *(uint16_t*)(rds + off);
+    }
+#endif
 }
 
 // Atomic flag set when shadow DS is initialized — gates v2_render_callback
