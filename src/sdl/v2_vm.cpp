@@ -14478,19 +14478,21 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 // Masked: gate test on [di+54Dh] where di = cmd*2 (FIXED, not iterating)
                 uint16_t dx = vm.ds_read(0x38C);
                 do {                                          // loc_13297
-                    if (vm.ds_read(di_dispatch + 0x54D) & dx) {
+                    ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
+                    if (vm.ds_read(di_dispatch + 0x54D) & dx) {   // 0x54D: sub-sprite class mask (unnamed, dispatch gate)
                         uint8_t val = vm.es[anim_bx++];
                         uint16_t bits = ((uint16_t)val << 3) & 0x70;
-                        vm.ds_write(si + OBJ_SPRITE_FLAGS, (vm.ds_read(si + OBJ_SPRITE_FLAGS) & 0xFF8F) | bits);
+                        sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFF8F) | bits);
                     }
                     si += 2;
                 } while ((int16_t)si < (int16_t)end);
             } else {
                 // Unmasked: 1 byte PER sub-sprite (NO dirty write — original has none)
                 do {                                          // loc_132BA
+                    ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
                     uint8_t val = vm.es[anim_bx++];
                     uint16_t bits = ((uint16_t)val << 3) & 0x70;
-                    vm.ds_write(si + OBJ_SPRITE_FLAGS, (vm.ds_read(si + OBJ_SPRITE_FLAGS) & 0xFF8F) | bits);
+                    sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFF8F) | bits);
                     si += 2;
                 } while ((int16_t)si < (int16_t)end);
             }
@@ -14563,9 +14565,10 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t mask_f = vm.ds_read(0x38C);
             uint16_t end_f = vm.ds_read(0x80);
             for (; (int16_t)si_f < (int16_t)end_f; si_f += 2) {
-                if (mask_f != 0 && !(vm.ds_read(si_f + 0x54D) & mask_f)) continue;
-                vm.ds_write(si_f + OBJ_SPRITE_FLAGS, vm.ds_read(si_f + OBJ_SPRITE_FLAGS) ^ xor_val);
-                vm.ds_write(si_f + OBJ_DIRTY_MODE, 0x202);
+                ObjRef sub{vm, si_f};   // #38: sub-sprite slot view (cursor si_f)
+                if (mask_f != 0 && !(sub.u16(0x54D) & mask_f)) continue;   // 0x54D: class mask (unnamed)
+                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) ^ xor_val);
+                sub.w16(OBJ_DIRTY_MODE, 0x202);
             }
             return true;
         }
@@ -14637,8 +14640,9 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t mask_o = vm.ds_read(0x38C);
             uint16_t end_o = vm.ds_read(0x80);
             for (; (int16_t)si_o < (int16_t)end_o; si_o += 2) {
-                if (mask_o != 0 && !(vm.ds_read(si_o + 0x54D) & mask_o)) continue;
-                vm.ds_write(si_o + OBJ_SPRITE_FLAGS, vm.ds_read(si_o + OBJ_SPRITE_FLAGS) | 0x4000);
+                ObjRef sub{vm, si_o};   // #38: sub-sprite slot view (cursor si_o)
+                if (mask_o != 0 && !(sub.u16(0x54D) & mask_o)) continue;   // 0x54D: class mask (unnamed)
+                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x4000);
                 vm.ds_write_b(si_o + OBJ_DIRTY_CNT, 2);
             }
             return true;
@@ -14649,9 +14653,10 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t mask_a = vm.ds_read(0x38C);
             uint16_t end_a = vm.ds_read(0x80);
             for (; (int16_t)si_a < (int16_t)end_a; si_a += 2) {
-                if (mask_a != 0 && !(vm.ds_read(si_a + 0x54D) & mask_a)) continue;
-                vm.ds_write(si_a + OBJ_SPRITE_FLAGS, vm.ds_read(si_a + OBJ_SPRITE_FLAGS) & 0x9FFF);
-                vm.ds_write(si_a + OBJ_DIRTY_MODE, 2);
+                ObjRef sub{vm, si_a};   // #38: sub-sprite slot view (cursor si_a)
+                if (mask_a != 0 && !(sub.u16(0x54D) & mask_a)) continue;   // 0x54D: class mask (unnamed)
+                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF);
+                sub.w16(OBJ_DIRTY_MODE, 2);
             }
             return true;
         }
