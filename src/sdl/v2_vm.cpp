@@ -15460,19 +15460,18 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
     uint8_t filter = vm.read_u8(); // ALL paths consume 1 byte
 
     uint16_t di = vm.global_r(DS_CUR_OBJ);
+    ObjRef self{vm, di};
 
     if (state == 0) {
         vm.di_track = di;   // orig 0x566B: MOV di,ds:42h (task #15)
         // loc_1566a: check if collision bit was previously set
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-        uint16_t flags = vm.ds_read(di + OBJ_COLL_BITS);
-        if (flags & mask) {
+        if (self.u16(OBJ_COLL_BITS) & mask) {
             // sub_16243: read collided object from table
             // di_idx = di * 16 + ds:0x38E; ax = ds:[di_idx + 0x1B25]
             uint16_t di_idx = (uint16_t)(di * 16 + vm.global_r(DS_COLL_BIT_IDX));
-            uint16_t collided_obj = vm.ds_read(di_idx + OBJ_COLL_TABLE);
-            vm.ds_write(di + OBJ_PARTNER, collided_obj);
+            self.set_partner(vm.ds_read(di_idx + OBJ_COLL_TABLE));
             return true;  // STC → collision (caller does call-jump which saves 0x137D)
         }
         return false;  // CLC → no collision
@@ -15486,30 +15485,31 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
     // state < 0 (loc_155e5): bounding box collision check
     vm.di_track = di;   // orig 0x55ED: MOV di,ds:42h (state>0 path leaves DI)
     // Read bounding box of current object → write to DS scratch [34]-[3A]
-    uint16_t x_left  = vm.ds_read(di + OBJ_BBOX_X0);
+    uint16_t x_left  = self.u16(OBJ_BBOX_X0);
     vm.ds_write(DS_SCRATCH_34, x_left);                     // MOV ds:34h, ax
-    uint16_t x_right = vm.ds_read(di + OBJ_BBOX_X1);
+    uint16_t x_right = self.u16(OBJ_BBOX_X1);
     vm.ds_write(DS_SCRATCH_36, x_right);                    // MOV ds:36h, ax
-    uint16_t y_top   = vm.ds_read(di + OBJ_BBOX_Y0);
+    uint16_t y_top   = self.u16(OBJ_BBOX_Y0);
     vm.ds_write(DS_SCRATCH_38, y_top);                      // MOV ds:38h, ax
-    uint16_t y_bot   = vm.ds_read(di + OBJ_BBOX_Y1);
+    uint16_t y_bot   = self.u16(OBJ_BBOX_Y1);
     vm.ds_write(DS_SCRATCH_3A, y_bot);                      // MOV ds:3Ah, ax
 
     uint16_t table_end = vm.global_r(DS_OBJ_COUNT);
     for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;              // inactive
-        if (vm.ds_read(si + OBJ_STATE_IDX) != filter) continue;         // wrong type
+        ObjRef cand{vm, si};
+        if (cand.code_seg() == 0) continue;                        // inactive
+        if (cand.u16(OBJ_STATE_IDX) != filter) continue;           // wrong type
         if (si == di) continue;                                    // self
         // Bounding box overlap check (signed comparisons, exact original order)
-        if ((int16_t)x_right < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
-        if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)x_left) continue;
-        if ((int16_t)y_bot < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)vm.ds_read(si + OBJ_BBOX_Y1) < (int16_t)y_top) continue;
+        if ((int16_t)x_right < cand.bbox_x0()) continue;
+        if (cand.bbox_x1() < (int16_t)x_left) continue;
+        if ((int16_t)y_bot < cand.bbox_y0()) continue;
+        if (cand.bbox_y1() < (int16_t)y_top) continue;
 
         // Collision found! Set bit in [di+0x13F5]
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-        vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
+        self.w16(OBJ_COLL_BITS, self.u16(OBJ_COLL_BITS) | mask);
         // sub_16235: store collided object in table
         // di_idx = di * 16 + ds:0x38E; ds:[di_idx + 0x1B25] = si
         {
@@ -15528,6 +15528,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
 static bool v2_vm_collision_check_156c0(V2VM& vm) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     uint16_t di = vm.global_r(DS_CUR_OBJ);
+    ObjRef self{vm, di};
 
     if (state == 0) {
         // loc_15754: ADD bx,2; check bit in [di+0x13F5]
@@ -15535,13 +15536,11 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
         vm.di_track = di;   // orig 0x5757: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-        uint16_t flags = vm.ds_read(di + OBJ_COLL_BITS);
-        if (flags & mask) {
+        if (self.u16(OBJ_COLL_BITS) & mask) {
             // sub_16243: read stored partner from ds:[(di<<4) + ds:38E + 0x1B25],
             // write to ds:[di+0x1995]. Orig eips 0x5769..0x576C.
             uint16_t addr = (uint16_t)((di << 4) + si_38e + OBJ_COLL_TABLE);
-            uint16_t partner = vm.ds_read(addr);
-            vm.ds_write(di + OBJ_PARTNER, partner);
+            self.set_partner(vm.ds_read(addr));
             return true;  // STC
         }
         return false;  // CLC
@@ -15556,10 +15555,10 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     // state < 0 (loc_156cf): full bounding box check, 2-byte filter
     vm.di_track = di;   // orig 0x56D5: MOV di,ds:42h (state>0 path leaves DI)
     uint16_t dx_filter = vm.read_u16();
-    uint16_t x_left  = vm.ds_read(di + OBJ_BBOX_X0);
-    uint16_t x_right = vm.ds_read(di + OBJ_BBOX_X1);
-    uint16_t y_top   = vm.ds_read(di + OBJ_BBOX_Y0);
-    uint16_t y_bot   = vm.ds_read(di + OBJ_BBOX_Y1);
+    uint16_t x_left  = self.u16(OBJ_BBOX_X0);
+    uint16_t x_right = self.u16(OBJ_BBOX_X1);
+    uint16_t y_top   = self.u16(OBJ_BBOX_Y0);
+    uint16_t y_bot   = self.u16(OBJ_BBOX_Y1);
     // Orig eips 0x56DD/0x56E4/0x56EB/0x56F2: stash bbox into scratch ds:0x34/36/38/3A.
     vm.ds_write(DS_SCRATCH_34, x_left);
     vm.ds_write(DS_SCRATCH_36, x_right);
@@ -15568,18 +15567,19 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
 
     uint16_t table_end = vm.global_r(DS_OBJ_COUNT);
     for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
-        if (!(vm.ds_read(si + OBJ_CLASS_BITS) & dx_filter)) continue;  // TEST, not CMP
+        ObjRef cand{vm, si};
+        if (cand.code_seg() == 0) continue;
+        if (!(cand.u16(OBJ_CLASS_BITS) & dx_filter)) continue;     // TEST, not CMP
         if (si == di) continue;
-        if ((int16_t)x_right < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
-        if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)x_left) continue;
-        if ((int16_t)y_bot < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)vm.ds_read(si + OBJ_BBOX_Y1) < (int16_t)y_top) continue;
+        if ((int16_t)x_right < cand.bbox_x0()) continue;
+        if (cand.bbox_x1() < (int16_t)x_left) continue;
+        if ((int16_t)y_bot < cand.bbox_y0()) continue;
+        if (cand.bbox_y1() < (int16_t)y_top) continue;
 
         // Collision: set bit + CLC
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-        vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
+        self.w16(OBJ_COLL_BITS, self.u16(OBJ_COLL_BITS) | mask);
         // sub_16235: stash collided partner at ds:[(di<<4) + ds:38E + 0x1B25].
         // (orig eips 0x573F → 0x6235..0x6242). Missed in original v2 port.
         {
