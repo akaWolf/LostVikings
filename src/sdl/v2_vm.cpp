@@ -10813,6 +10813,7 @@ static void v2_vm_op_14(V2VM& vm) {
     }
 
     uint16_t si_slot = (uint16_t)new_slot;
+    ObjRef newobj{vm, si_slot};   // #38: new object slot view
 
     // sub_13e52: init object fields
     // es = ds:0x2E67 (animation data segment)
@@ -10822,10 +10823,10 @@ static void v2_vm_op_14(V2VM& vm) {
 
     // Set object fields from animation table (sub_13e52; scratch trio
     // 0x34/0x36/0x38 was already written by the sub_13809 prologue above)
-    vm.ds_write(si_slot + OBJ_ANIM_IDX, anim_type);                    // anim index
-    vm.ds_write(si_slot + OBJ_ANIM_SUB, 0xFFFF);                       // bit flag (di)
-    vm.ds_write(si_slot + OBJ_FLAGS, si_flags);                      // flags
-    vm.ds_write(si_slot + OBJ_SPAWN_POOL, vm.ds_read(0x374));            // from ds:0x374
+    newobj.w16(OBJ_ANIM_IDX, anim_type);// anim index
+    newobj.w16(OBJ_ANIM_SUB, 0xFFFF);// bit flag (di)
+    newobj.w16(OBJ_FLAGS, si_flags);// flags
+    newobj.w16(OBJ_SPAWN_POOL, vm.ds_read(0x374));// from ds:0x374
 
     vm.ds_write(0x374, 0);
 
@@ -10850,89 +10851,89 @@ static void v2_vm_op_14(V2VM& vm) {
             }
         }
         if (!resource_found) {
-            vm.ds_write(si_slot + OBJ_CODE_SEG, 0);
+            newobj.w16(OBJ_CODE_SEG, 0);
             vm.di_track = 0;   // orig loc_13860→loc_13866: MOV di,0
             return;
         }
     }
 
-    vm.ds_write(si_slot + OBJ_SPRITE_BASE, sprite_base);
+    newobj.w16(OBJ_SPRITE_BASE, sprite_base);
 
     // es:[bx+2]: sub-sprite count + flags
     uint16_t sub_count_raw = *(uint16_t*)(anim_es + bx_anim + 2);
     if (sub_count_raw & 0x80) {
         vm.ds_write(0x374, vm.ds_read(0x374) + 2);
     }
-    vm.ds_write(si_slot + OBJ_SUB_COUNT, sub_count_raw & 0x7F);
+    newobj.w16(OBJ_SUB_COUNT, sub_count_raw & 0x7F);
 
     // es:[bx+3]: initial PC (bytecode pointer) + 3
     uint16_t init_pc = *(uint16_t*)(anim_es + bx_anim + 3) + 3;
-    vm.ds_write(si_slot + OBJ_PC, init_pc);
+    newobj.w16(OBJ_PC, init_pc);
 
 
     // CODE SEGMENT = ds:0x2E67 (animation segment)
-    vm.ds_write(si_slot + OBJ_CODE_SEG, anim_seg);
+    newobj.w16(OBJ_CODE_SEG, anim_seg);
 
     // More fields from animation table
-    vm.ds_write(si_slot + OBJ_RES_HANDLE, *(uint16_t*)(anim_es + bx_anim + 7));    // type
-    vm.ds_write(si_slot + OBJ_WIDTH, *(uint8_t*)(anim_es + bx_anim + 9));     // width
-    vm.ds_write(si_slot + OBJ_HEIGHT, *(uint8_t*)(anim_es + bx_anim + 0xA));   // height
-    vm.ds_write(si_slot + OBJ_RES_COST, *(uint16_t*)(anim_es + bx_anim + 0xB));  // collision type
-    vm.ds_write(si_slot + OBJ_STATE_IDX, *(uint16_t*)(anim_es + bx_anim + 0xD));  // filter
-    vm.ds_write(si_slot + OBJ_CLASS_BITS, *(uint16_t*)(anim_es + bx_anim + 0xF));  // collision mask
-    vm.ds_write(si_slot + OBJ_VEL_X_MAX, *(uint16_t*)(anim_es + bx_anim + 0x11)); // field
-    vm.ds_write(si_slot + OBJ_VEL_Y_MAX, *(uint16_t*)(anim_es + bx_anim + 0x13)); // field
+    newobj.w16(OBJ_RES_HANDLE, *(uint16_t*)(anim_es + bx_anim + 7));// type
+    newobj.w16(OBJ_WIDTH, *(uint8_t*)(anim_es + bx_anim + 9));// width
+    newobj.w16(OBJ_HEIGHT, *(uint8_t*)(anim_es + bx_anim + 0xA));// height
+    newobj.w16(OBJ_RES_COST, *(uint16_t*)(anim_es + bx_anim + 0xB));// collision type
+    newobj.w16(OBJ_STATE_IDX, *(uint16_t*)(anim_es + bx_anim + 0xD));// filter
+    newobj.w16(OBJ_CLASS_BITS, *(uint16_t*)(anim_es + bx_anim + 0xF));// collision mask
+    newobj.w16(OBJ_VEL_X_MAX, *(uint16_t*)(anim_es + bx_anim + 0x11));// field
+    newobj.w16(OBJ_VEL_Y_MAX, *(uint16_t*)(anim_es + bx_anim + 0x13));// field
 
     // Position from ds:0x6C/0x6E
-    vm.ds_write(si_slot + OBJ_WORLD_X, vm.ds_read(DS_TEXT_COL));   // X
-    vm.ds_write(si_slot + OBJ_X_PREV, vm.ds_read(DS_TEXT_COL));   // saved X
-    vm.ds_write(si_slot + OBJ_WORLD_Y, vm.ds_read(DS_TEXT_ROW));   // Y
-    vm.ds_write(si_slot + OBJ_Y_PREV, vm.ds_read(DS_TEXT_ROW));   // saved Y
+    newobj.w16(OBJ_WORLD_X, vm.ds_read(DS_TEXT_COL));// X
+    newobj.w16(OBJ_X_PREV, vm.ds_read(DS_TEXT_COL));// saved X
+    newobj.w16(OBJ_WORLD_Y, vm.ds_read(DS_TEXT_ROW));// Y
+    newobj.w16(OBJ_Y_PREV, vm.ds_read(DS_TEXT_ROW));// saved Y
 
     // Parent link
-    vm.ds_write(si_slot + OBJ_PARENT, vm.global_r(DS_CUR_OBJ));
+    newobj.w16(OBJ_PARENT, vm.global_r(DS_CUR_OBJ));
 
     // Zero-init fields
-    vm.ds_write(si_slot + OBJ_FRAC_X, 0);
-    vm.ds_write(si_slot + OBJ_FRAC_Y, 0);
-    vm.ds_write(si_slot + OBJ_TIMER, 0);
-    vm.ds_write(si_slot + OBJ_ANIM_DX, 0);
-    vm.ds_write(si_slot + OBJ_ANIM_DY, 0);
-    vm.ds_write(si_slot + OBJ_VEL_X, 0);
-    vm.ds_write(si_slot + OBJ_VEL_Y, 0);
-    vm.ds_write(si_slot + OBJ_TYPE_ID, 0);
-    vm.ds_write(si_slot + 0x18A5, 0);
-    vm.ds_write(si_slot + 0x18CD, 0);
-    vm.ds_write(si_slot + 0x187D, 0);
-    vm.ds_write(si_slot + 0x18F5, 0);
-    vm.ds_write(si_slot + OBJ_CUR_SPRITE_IDX, 0xFFFF);
-    vm.ds_write(si_slot + OBJ_CHILD, 0xFFFF);
-    vm.ds_write(si_slot + OBJ_ANIM_PC, 0xFFFF);
-    vm.ds_write(si_slot + OBJ_ANIM_TABLE, 0xFFFF);
+    newobj.w16(OBJ_FRAC_X, 0);
+    newobj.w16(OBJ_FRAC_Y, 0);
+    newobj.w16(OBJ_TIMER, 0);
+    newobj.w16(OBJ_ANIM_DX, 0);
+    newobj.w16(OBJ_ANIM_DY, 0);
+    newobj.w16(OBJ_VEL_X, 0);
+    newobj.w16(OBJ_VEL_Y, 0);
+    newobj.w16(OBJ_TYPE_ID, 0);
+    newobj.w16(0x18A5, 0);
+    newobj.w16(0x18CD, 0);
+    newobj.w16(0x187D, 0);
+    newobj.w16(0x18F5, 0);
+    newobj.w16(OBJ_CUR_SPRITE_IDX, 0xFFFF);
+    newobj.w16(OBJ_CHILD, 0xFFFF);
+    newobj.w16(OBJ_ANIM_PC, 0xFFFF);
+    newobj.w16(OBJ_ANIM_TABLE, 0xFFFF);
 
     // Compute bounding box from width/height and position
-    uint16_t half_w = vm.ds_read(si_slot + OBJ_WIDTH) >> 1;
-    uint16_t x = vm.ds_read(si_slot + OBJ_WORLD_X);
-    vm.ds_write(si_slot + OBJ_BBOX_X0, x - half_w);
-    vm.ds_write(si_slot + OBJ_BBOX_X1, x + vm.ds_read(si_slot + OBJ_WIDTH) - half_w - 1);
+    uint16_t half_w = newobj.u16(OBJ_WIDTH) >> 1;
+    uint16_t x = newobj.u16(OBJ_WORLD_X);
+    newobj.w16(OBJ_BBOX_X0, x - half_w);
+    newobj.w16(OBJ_BBOX_X1, x + newobj.u16(OBJ_WIDTH) - half_w - 1);
 
-    uint16_t half_h = vm.ds_read(si_slot + OBJ_HEIGHT) >> 1;
-    uint16_t y = vm.ds_read(si_slot + OBJ_WORLD_Y);
-    vm.ds_write(si_slot + OBJ_BBOX_Y0, y - half_h);
-    vm.ds_write(si_slot + OBJ_BBOX_Y1, y + vm.ds_read(si_slot + OBJ_HEIGHT) - half_h - 1);
+    uint16_t half_h = newobj.u16(OBJ_HEIGHT) >> 1;
+    uint16_t y = newobj.u16(OBJ_WORLD_Y);
+    newobj.w16(OBJ_BBOX_Y0, y - half_h);
+    newobj.w16(OBJ_BBOX_Y1, y + newobj.u16(OBJ_HEIGHT) - half_h - 1);
 
     // sub_13e52 eip 0x3F9D..0x3FBB: exact replica
     {
         uint16_t ax = vm.ds_read(0x3E0);
         if ((int16_t)ax < 0) {
             // height/2 → ds:0x3E2, width/2 → ax
-            ax = vm.ds_read(si_slot + OBJ_HEIGHT) >> 1;
+            ax = newobj.u16(OBJ_HEIGHT) >> 1;
             vm.ds_write(0x3E2, ax); // MOV ds:3E2h, ax
-            ax = vm.ds_read(si_slot + OBJ_WIDTH) >> 1;
+            ax = newobj.u16(OBJ_WIDTH) >> 1;
         }
         // loc_13fb4:
-        vm.ds_write(si_slot + OBJ_HALF_W, ax);          // [si+14BDh] = ax
-        vm.ds_write(si_slot + OBJ_HALF_H, vm.ds_read(0x3E2)); // [si+1495h] = ds:3E2h
+        newobj.w16(OBJ_HALF_W, ax);// [si+14BDh] = ax
+        newobj.w16(OBJ_HALF_H, vm.ds_read(0x3E2));// [si+1495h] = ds:3E2h
     }
 
     // sub_13d68 + sub_13dd6 + sub_13e15: sub-sprite allocation + init.
@@ -10941,16 +10942,16 @@ static void v2_vm_op_14(V2VM& vm) {
     // line-by-line-verified implementations. They operate on the shadow
     // directly (same bytes vm.ds_write would touch; no watched addresses in
     // their write set).
-    if (vm.ds_read(si_slot + OBJ_SUB_COUNT) != 0) {
+    if (newobj.u16(OBJ_SUB_COUNT) != 0) {
         if (v2_slot_alloc_13d68(vm.shadow, si_slot)) {
             // JC → destroy: allocation failed.
-            vm.ds_write(si_slot + OBJ_CODE_SEG, 0);
+            newobj.w16(OBJ_CODE_SEG, 0);
             vm.di_track = 0;   // orig loc_13860→loc_13866: MOV di,0
             return;
         }
         // orig sub_13809 eips 0x3839-0x3843: ds:0x3A/0x38 -> [si+1A85]/[si+1AAD]
-        vm.ds_write(si_slot + OBJ_SUB_SLOT, vm.ds_read(DS_SCRATCH_3A));
-        vm.ds_write(si_slot + OBJ_SUB_END, vm.ds_read(DS_SCRATCH_38));
+        newobj.w16(OBJ_SUB_SLOT, vm.ds_read(DS_SCRATCH_3A));
+        newobj.w16(OBJ_SUB_END, vm.ds_read(DS_SCRATCH_38));
         v2_slot_init_13dd6(vm.shadow, si_slot);
         v2_slot_size_init_13e15(vm.shadow, si_slot);
     }
