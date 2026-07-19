@@ -211,7 +211,8 @@ static const VerifySkip v2_ds_skip_ranges[] = {
     {0x86D0, 0x86D0, "BIOS checksum (#95)"},
     // Input layer — render thread async update mirrors orig INT9 ISR (#83/#105)
     {0x86DC, 0x86DE, "word_30bbc/30bbe input layer (orig INT9 async race)"},
-    {DS_LAST_CHAR, 0x028D, "word_2876C last-key char (INT9 async mirror, #37)"},
+    // {DS_LAST_CHAR,0x028D} skip REMOVED (#37b): the letter channel is now a
+    // frame-boundary snap (sdl_int9_char_pending), both DS get it at one point.
     // VGA hardware state
     {0x9300, 0x9300, "VGA mode byte (#97)"},
     // Sound system — v2 doesn't fully replicate AIL/XMI
@@ -822,11 +823,30 @@ void v2_verify_render_buf(int frame) {
                     extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
                     uint8_t* fh = v2_resolve_segment(fs_s, shd2);
                     fprintf(stderr, "V2-A2-FS: real_seg=%04X shadow_seg=%04X\n", fs_r, fs_s);
-                    for (int r = 3; r <= 6 && fr && fh; r++) {
+                    // tilegfx tile #0 (64B) both sides + chunk plane row-0 heads
+                    uint16_t tg_r = *(uint16_t*)(rds2 + DS_SEG_TILEGFX);
+                    uint16_t tg_s = *(uint16_t*)(shd2 + DS_SEG_TILEGFX);
+                    uint8_t* tr = v2_m2c_base + ((uint32_t)tg_r << 4);
+                    uint8_t* ts = v2_resolve_segment(tg_s, shd2);
+                    fprintf(stderr, "V2-A2-TILE0: real_seg=%04X shadow_seg=%04X\n  real  :", tg_r, tg_s);
+                    for (int i = 0; i < 32 && tr; i++) fprintf(stderr, "%02X", tr[i]);
+                    fprintf(stderr, "\n  shadow:");
+                    for (int i = 0; i < 32 && ts; i++) fprintf(stderr, "%02X", ts[i]);
+                    fprintf(stderr, "\n");
+                    extern uint8_t* v2_vm_get_shadow_chunk();
+                    uint8_t* shc2 = v2_vm_get_shadow_chunk();
+                    uint16_t psz = *(uint16_t*)(shd2 + 0x2BBC);
+                    fprintf(stderr, "V2-A2-CHUNKROW0: plane_size=%04X planes:", psz);
+                    for (int p = 0; p < 4 && shc2; p++) {
+                        fprintf(stderr, " p%d=", p);
+                        for (int i = 0; i < 6; i++) fprintf(stderr, "%02X", shc2[(uint32_t)psz*p + i]);
+                    }
+                    fprintf(stderr, "\n");
+                    for (int r = 4; r <= 8 && fr && fh; r++) {
                         fprintf(stderr, "  row%d real:", r);
-                        for (int c = 0; c < 8; c++) fprintf(stderr, " %04X", *(uint16_t*)(fr + (r*43+c)*2));
-                        fprintf(stderr, " | shadow:");
-                        for (int c = 0; c < 8; c++) fprintf(stderr, " %04X", *(uint16_t*)(fh + (r*43+c)*2));
+                        for (int c = 8; c < 21; c++) fprintf(stderr, " %04X", *(uint16_t*)(fr + (r*43+c)*2));
+                        fprintf(stderr, " | sh:");
+                        for (int c = 8; c < 21; c++) fprintf(stderr, " %04X", *(uint16_t*)(fh + (r*43+c)*2));
                         fprintf(stderr, "\n");
                     }
                 }

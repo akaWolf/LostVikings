@@ -290,6 +290,14 @@ std::atomic<uint8_t> sdl_spec_press_latch[256] = {};
 // exchanges to snap. snap_get returns snap (used by v2_input_intro_mask for
 // V2_ONLY paths and as backup for transient presses).
 std::atomic<uint16_t> sdl_input_press_edges{0};
+// Task #37b: INT9 letter channel per-frame snap. KEYDOWN stores the DOS scan
+// here (bit8 = valid, last press wins = DOS typematic ISR overwrites
+// word_2876C); the game thread drains it at frame begin so BOTH DS copies
+// (real + shadow) receive the char at the same logical point - the immediate
+// render-thread write raced the split VM order (v2 runs BEFORE orig: a char
+// landing between them leaked into ds:0x34 on the password screen, #37 crash
+// report). With this snap the {0x28C} verify skip is REMOVED (stricter).
+std::atomic<uint16_t> sdl_int9_char_pending{0};
 // Non-static so sub_12352 (seg000.cpp) and v2_read_input_12352_iter (v2_vm.cpp) can
 // OR into it directly during per-call drain — see LAYER 1 comments in both.
 uint16_t sdl_input_press_snap = 0;
@@ -438,6 +446,12 @@ void sdl_spec_snapshot_take() {
     g_is_first_sub12352_orig                = true;
     g_is_first_sub12352_shadow              = true;
     sdl_input_press_snap |= sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
+    // #37b: drain the INT9 letter channel - one char per frame boundary,
+    // written to BOTH real and shadow DS by v2_mirror_int9_char.
+    {
+        uint16_t pend = sdl_int9_char_pending.exchange(0, std::memory_order_relaxed);
+        if (pend & 0x100) v2_mirror_int9_char((uint8_t)(pend & 0xFF));
+    }
 }
 
 
@@ -731,7 +745,7 @@ void updateDraw()
 					   };
 					   for (const auto& m : k2dos)
 					     if (m.s == event.key.keysym.scancode) {
-					       v2_mirror_int9_char(m.dos);
+					       sdl_int9_char_pending.store((uint16_t)(0x100 | m.dos), std::memory_order_relaxed); // #37b: drained at frame begin
 					       break;
 					     }
 					 }
