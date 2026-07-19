@@ -599,6 +599,10 @@ extern "C" void v2_emu_df6a(uint16_t ds_val);
 extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_y, uint16_t clip);
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
 extern "C" void v2_emu_op13_text_menu(uint16_t ds_val, const uint8_t* hud64);
+extern "C" void v2_glyphs_to_shown_page(uint16_t ds_val);
+// #39: set by v2_glyph_flush_1E0C7 when a full glyph pass ran this sub-frame;
+// consumed by v2_emu_late_end (the orig 1E0C7 moment: after 1DD9C, before flip).
+bool v2_glyph_flush_painted = false;
 extern "C" void v2_emu_init_pages(uint16_t ds_val);
 extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage);
 extern "C" uint16_t v2_dd9c_pixel_ds;   // armed page-cascade DS (0xFFFF = off)
@@ -3216,6 +3220,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
             // line 3094-3095: TEST word ds:9569h; JNZ loc_1E158
             if (*(uint16_t*)(s + DS_TEXT_FULLSCREEN) == 0) {
                 v2_glyph_draw_1E16D(s, si_glyph, di);  // VGA glyph pixel render
+                v2_glyph_flush_painted = true;         // #39: orig painted the page this pass
             }
 
             // loc_1E158:
@@ -3231,13 +3236,15 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
             cx--;                                                     // LOOP (implicit DEC cx)
         }
         // If cx reached 0 → return (LOOP fell through to locret_1E16C)
-        if (cx == 0) return;
+        if (cx == 0) { v2_glyph_flush_painted = true; return; }  // #39: full pass done — page render follows in late_end
         // Otherwise: ds:[bx]==0 → go back to outer scan (loc_1E0EA).
         // Orig DOES NOT advance bx past the zero — it does `mov di, bx; repe scasb`
         // which scans past zero bytes (di++ and cx-- per zero) until non-zero.
         // Previous v2 had a spurious `bx++` here that mis-aligned cx by one each
         // restart, causing ds:0x98DC throttle differential downstream.
     }
+    // #39: full pass also ends here when the outer scan exhausts — mark it.
+    v2_glyph_flush_painted = true;
 }
 
 // sub_1DE05: dirty rect processing — DEC byte [di+0x114E] + save position.

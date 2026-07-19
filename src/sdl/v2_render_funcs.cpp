@@ -51,6 +51,10 @@ uint8_t  v2_hud_buf[320*64];
 // On op_13/0x11 (menu activation) backup is updated to match cleared+moved state.
 uint8_t v2_chunk_bg_backup[320*176];
 bool v2_chunk_bg_valid = false;
+// #39: glyph layer snapshot as of the last orig 1E0C7 painted tick - the
+// orig pages keep this layer between passes; v2 repaints it after bg blits.
+uint8_t v2_glyph_page_snapshot[0x370];
+bool v2_glyph_snap_valid = false;
 
 void v2_chunk_bg_update_from_render() {
     memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
@@ -887,6 +891,7 @@ extern "C" void v2_emu_op13_text_menu(uint16_t ds_val, const uint8_t* hud64) {
     memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
     v2_chunk_bg_valid = true;
     v2_emu_valid = true;
+    v2_glyph_snap_valid = false;   // orig STOSB wiped the pages incl. the glyph layer
 }
 
 // Shown page of the current sub-frame — the A2 sensor compares against this.
@@ -982,6 +987,10 @@ void v2_emu_late_begin(uint16_t ds_val) {
     v2_dd9c_pixel_ds = ds_val;   // enable the per-object cascade in v2_late_sprites_1DD9C
 }
 
+static void v2_emu_late_end_tail_marker(uint16_t ds_val);
+extern "C" void v2_glyphs_to_shown_page(uint16_t ds_val);
+extern uint8_t v2_glyph_page_snapshot[0x370];
+extern bool v2_glyph_snap_valid;
 void v2_emu_late_end(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -989,8 +998,76 @@ void v2_emu_late_end(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
     v2_dd9c_pixel_ds = 0xFFFF;
     uint8_t* ds_base = v2_get_ds_base(ds_val);
+    (void)ds_base;
     v2_draw_flagged_tiles(ds_val);
+    // #39: orig 1E0C7 paints the glyph cells onto the CURRENT page at this
+    // exact point (after 1DD9C, before the flip) - but only on sub-frames
+    // where the flush actually ran a full pass (dirty/throttle gates).
+    {
+        // #39 snapshot model: orig pages physically KEEP the glyph layer after
+        // each 1E0C7 pass (no full bg blits in orig), while the v2 emu re-blits
+        // page backgrounds every sub-frame. So: capture the buffer state at
+        // each painted tick, and repaint THE SNAPSHOT (not the live buffer -
+        // that would run ahead of the orig type-in) after every bg pass.
+        extern bool v2_glyph_flush_painted;
+        if (v2_glyph_flush_painted) {
+            v2_glyph_flush_painted = false;
+            uint8_t* ds_base2 = v2_get_ds_base(ds_val);
+            memcpy(v2_glyph_page_snapshot, ds_base2 + DS_GLYPH_BUF, 0x370);
+            v2_glyph_snap_valid = false;
+            for (int i = 0; i < 0x370; i++)
+                if (v2_glyph_page_snapshot[i]) { v2_glyph_snap_valid = true; break; }
+        }
+        if (v2_glyph_snap_valid)
+            v2_glyphs_to_shown_page(ds_val);
+    }
     v2_blit_to_display();
+    v2_emu_late_end_tail_marker(ds_val);
+}
+
+// #39: gated page-side glyph render. Orig sub_1E0C7 paints non-zero glyph
+// cells (same 72-byte glyph format as v2_draw_ui) onto the CURRENT page;
+// unconditional per-subframe painting made v2 run AHEAD of the intro
+// type-in dialog, so this runs only when the flush pass really painted.
+extern "C" void v2_glyphs_to_shown_page(uint16_t ds_val) {
+    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
+    if (!ds_base) return;
+    const uint8_t* gl = v2_glyph_page_snapshot;
+    int xe, ye;
+    v2_emu_eff(ds_base, &xe, &ye);
+    int ox = xe - v2_emu_base_x, oy = ye - v2_emu_base_y;
+    uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
+    for (int pos = 0; pos < 0x370; pos++) {
+        uint8_t ch = gl[pos];
+        if (ch == 0) continue;
+        uint16_t glyph_index = (uint16_t)(ch - 0x10);
+        int sx = (pos % 40) * 8 + ox;
+        int sy = (pos / 40) * 8 + oy;
+        const uint8_t* glyph = ds_base + (uint16_t)(0x687Du + glyph_index * 72u);
+        for (int plane = 0; plane < 4; plane++) {
+            for (int strip = 0; strip < 2; strip++) {
+                uint8_t mask = glyph[0];
+                const uint8_t* data = glyph + 1;
+                int by = sy + strip * 4;
+                if (mask) {
+                    static const int bit_dx[8] = {0,4,0,4,0,4,0,4};
+                    static const int bit_dy[8] = {0,0,1,1,2,2,3,3};
+                    for (int b = 0; b < 8; b++) {
+                        if (!(mask & (0x80 >> b))) continue;
+                        int px = sx + bit_dx[b] + plane, py = by + bit_dy[b];
+                        if (px >= 0 && px < V2_EMU_W && py >= 0 && py < V2_EMU_H)
+                            pg[(size_t)py * V2_EMU_W + px] = data[b];
+                    }
+                }
+                glyph += 9;
+            }
+        }
+    }
+}
+
+static void v2_emu_late_end_tail_marker(uint16_t ds_val) {
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
     // Traced object: checksum its 32x32 page area (world − anchor) on all
     // three pages after the late layer.
     if (v2_objtrace_di != 0xFFFF) {
