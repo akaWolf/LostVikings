@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include "v2_ds_layout.h"
 #include <thread>
 #include <vector>
 #include <cassert>
@@ -74,7 +75,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
         int tdi = v2_objtrace_di;
         if (dsb && tdi != 0xFFFF) {
             {
-                int16_t oy = *(const int16_t*)(dsb + (uint16_t)(tdi + 0x74D));
+                int16_t oy = *(const int16_t*)(dsb + (uint16_t)(tdi + OBJ_SPRITE_Y));
                 int sums[3] = {0, 0, 0};
                 static const uint16_t pgs[3] = {0, 0x34, 0x68};
                 for (int p = 0; p < 3; p++) {
@@ -99,7 +100,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                     if (const char* e2 = getenv("V2_A2_WP_MOFF")) {
                         extern uint8_t* v2_a2_softwp_fs_ptr;
                         extern uint8_t* v2_m2c_base;
-                        uint16_t fsseg2 = *(const uint16_t*)(dsb + 0x2E69);
+                        uint16_t fsseg2 = *(const uint16_t*)(dsb + DS_SEG_FS);
                         uint16_t moff2 = (uint16_t)strtol(e2, 0, 0);
                         if (fsseg2 && v2_m2c_base) {
                             v2_a2_softwp_fs_ptr = v2_m2c_base + (uint32_t)fsseg2 * 16 + moff2;
@@ -107,9 +108,9 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                         }
                     }
                 }
-                uint16_t ofl = *(const uint16_t*)(dsb + (uint16_t)(tdi + 0x44D));
+                uint16_t ofl = *(const uint16_t*)(dsb + (uint16_t)(tdi + OBJ_SPRITE_FLAGS));
                 if (wp_armed == 0 && (ofl & 0x8000) && oy > 0) {
-                    int16_t ox = *(const int16_t*)(dsb + (uint16_t)(tdi + 0x64D));
+                    int16_t ox = *(const int16_t*)(dsb + (uint16_t)(tdi + OBJ_SPRITE_X));
                     int y = oy + 8, x = ox + 8;
                     uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(0x89F8 + 0x34 + (uint16_t)((y >> 3) * 2)));
                     uint32_t base = ((uint32_t)yh + (uint32_t)(y & 7) * 0x56u + 8u) * 4u + (uint32_t)x;
@@ -124,7 +125,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                     {
                         extern uint8_t* v2_a2_softwp_fs_ptr;
                         extern uint8_t* v2_m2c_base;
-                        uint16_t fsseg = *(const uint16_t*)(dsb + 0x2E69);
+                        uint16_t fsseg = *(const uint16_t*)(dsb + DS_SEG_FS);
                         uint16_t row = (uint16_t)(y >> 3);
                         uint16_t rb = *(const uint16_t*)(dsb + (uint16_t)(row * 2 - 0x7098));
                         uint16_t moff = (uint16_t)((rb + (uint16_t)(x >> 3)) * 2u);

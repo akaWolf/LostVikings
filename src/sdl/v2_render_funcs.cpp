@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdio>
 #include "render_v2.h"
+#include "v2_ds_layout.h"
 
 // Task #21 obj-trace ring (defined in v2_vm.cpp).
 extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d);
@@ -131,9 +132,9 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint8_t* buf = v2_render_buf;
 
     // Tile map segment (FS)
-    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
     // Tile graphics segment
-    uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    uint16_t tgfx_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
     // V2-DRAWT-DBG: log entry state every 60 frames
     {
         static int _dt_dbg = 0; _dt_dbg++;
@@ -141,8 +142,8 @@ void v2_draw_tiles(uint16_t ds_val) {
             fprintf(stderr,
               "V2-DRAWT-DBG[%d]: ds=%04X fs_seg=%04X tgfx_seg=%04X 25CF=%02X 25AD=%04X 25C9=%04X\n",
               _dt_dbg, ds_val, fs_seg, tgfx_seg,
-              ds_base[0x25CF],
-              *(uint16_t*)(ds_base + 0x25AD),
+              ds_base[DS_LEVEL_FLAGS],
+              *(uint16_t*)(ds_base + DS_LEVEL),
               *(uint16_t*)(ds_base + 0x25C9));
         }
     }
@@ -156,7 +157,7 @@ void v2_draw_tiles(uint16_t ds_val) {
     // V2 single-buffer architecture: restore chunk_bg_backup each frame to erase
     // dynamic content (sprites, cursor) and recover static chunk pixels — semantic
     // equivalent of orig page-flip + dirty-rect tile-redraw mechanism.
-    uint8_t lvl_flags = ds_base[0x25CF];
+    uint8_t lvl_flags = ds_base[DS_LEVEL_FLAGS];
     if (lvl_flags & 0x42) {
         if (v2_chunk_bg_valid) {
             memcpy(v2_render_buf, v2_chunk_bg_backup, 320 * 176);
@@ -188,8 +189,8 @@ void v2_draw_tiles(uint16_t ds_val) {
     // x_high_bits = x_offset >> 2 (byte position in VGA row, → CRTC start addr)
     // Combined display position = (x_high_bits<<2) + x_low_bits = x_offset (full pixel precision).
     // In v2 linear buffer: total sub-tile pixel offset = x_offset & 7.
-    int16_t vp_px = *(int16_t*)(ds_base + 0x44);
-    int16_t vp_py = *(int16_t*)(ds_base + 0x46);
+    int16_t vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
+    int16_t vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
     int16_t x_some = *(int16_t*)(ds_base + 0x39E);
     int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
     int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
@@ -289,8 +290,8 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 #endif
     if (!v2_m2c_base) return;
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
-    uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
+    uint16_t tgfx_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
     if (!fs_seg || !tgfx_seg) return;
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
@@ -302,8 +303,8 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
     uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
     uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
-    int16_t vp_px = *(int16_t*)(ds_base + 0x44);
-    int16_t vp_py = *(int16_t*)(ds_base + 0x46);
+    int16_t vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
+    int16_t vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
     int16_t x_some = *(int16_t*)(ds_base + 0x39E);
     int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
     int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
@@ -437,7 +438,7 @@ static inline int v2_emu_slot(uint8_t* ds_base, uint16_t role_addr) {
 }
 // Effective viewport (vp + shake with the sub_16775 clamp).
 static void v2_emu_eff(uint8_t* ds_base, int* xe, int* ye) {
-    int16_t vx = *(int16_t*)(ds_base + 0x44), vy = *(int16_t*)(ds_base + 0x46);
+    int16_t vx = *(int16_t*)(ds_base + DS_VIEWPORT_X), vy = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
     int16_t xs = *(int16_t*)(ds_base + 0x39E), ys = *(int16_t*)(ds_base + 0x3A0);
     int16_t xl = *(int16_t*)(ds_base + 0x25A4), yl = *(int16_t*)(ds_base + 0x25A6);
     *xe = (int)vx + xs; if (*xe > (int)xl) *xe = (int)vx - xs;
@@ -487,8 +488,8 @@ static void v2_emu_render_tile(uint8_t* pg, uint8_t* ds_base,
 // Full-page tile render (41x23 tiles from the anchor) — level entry / fresh
 // pages, matching orig sub_16ded which paints whole map rows on every page.
 static void v2_emu_page_render_full(uint8_t* pg, uint8_t* ds_base) {
-    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
-    uint16_t tg_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
+    uint16_t tg_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
     if (!fs_seg || !tg_seg) return;
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fsb = v2_resolve_segment(fs_seg);
@@ -572,7 +573,7 @@ void v2_emu_early(uint16_t ds_val) {
     // three display offsets) and there is no tile dirty machinery — the work
     // page content is the background picture plus the sprite layers. Model:
     // full background copy + sprite canvas on all three pages.
-    if (ds_base[0x25CF] & 0x42) {
+    if (ds_base[DS_LEVEL_FLAGS] & 0x42) {
         v2_emu_trace((int16_t)xe, (int16_t)ye, 0, 0);
         v2_emu_trace_branch(1);
         v2_emu_base_x = nbx; v2_emu_base_y = nby;
@@ -627,8 +628,8 @@ void v2_emu_early(uint16_t ds_val) {
             // orig edge channels paint whole map rows/columns (including the
             // beyond-window margin the bg render can't supply).
             {
-                uint16_t fs_seg2 = *(uint16_t*)(ds_base + 0x2E69);
-                uint16_t tg_seg2 = *(uint16_t*)(ds_base + 0x2E5F);
+                uint16_t fs_seg2 = *(uint16_t*)(ds_base + DS_SEG_FS);
+                uint16_t tg_seg2 = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
 #ifdef V2_RENDER_FROM_SHADOW
                 uint8_t* fsb2 = v2_resolve_segment(fs_seg2);
                 if (!fsb2) fsb2 = v2_m2c_base + ((uint32_t)fs_seg2 << 4);
@@ -670,7 +671,7 @@ void v2_emu_early(uint16_t ds_val) {
         //    render-map bit0 cells and latch-copy each 8x8 cell from the
         //    background page onto the CURRENT work page. Cell->screen mapping
         //    identical to v2_draw_tiles (scroll LUT + sub-tile pixel offset).
-        uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+        uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
 #ifdef V2_RENDER_FROM_SHADOW
         uint8_t* fs_base = v2_resolve_segment(fs_seg);
         if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
@@ -693,8 +694,8 @@ void v2_emu_early(uint16_t ds_val) {
         int trace_cells = 0;   // latch cells inside the traced object's area
         int16_t t_ox = 0, t_oy = 0;
         if (v2_objtrace_di != 0xFFFF) {
-            t_ox = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + 0x64D));
-            t_oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + 0x74D));
+            t_ox = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_X));
+            t_oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_Y));
             // Shadow FS letter-cell word dynamics (pairs with orig A2WP-FS).
             uint16_t row = (uint16_t)((t_oy + 8) >> 3);
             uint16_t rb = *(uint16_t*)(ds_base + (uint16_t)(row * 2 - 0x7098));
@@ -746,8 +747,8 @@ extern "C" void v2_emu_df6a(uint16_t ds_val) {
 #endif
     if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (ds_base[0x25CF] & 0x42) return;   // chunk scenes: no tile machinery
-    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+    if (ds_base[DS_LEVEL_FLAGS] & 0x42) return;   // chunk scenes: no tile machinery
+    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
     if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
@@ -819,9 +820,9 @@ extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_
 #endif
     if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (ds_base[0x25CF] & 0x42) return;
-    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
-    uint16_t tg_seg = *(uint16_t*)(ds_base + 0x2E5F);
+    if (ds_base[DS_LEVEL_FLAGS] & 0x42) return;
+    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
+    uint16_t tg_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
     if (!fs_seg || !tg_seg) return;
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fsb = v2_resolve_segment(fs_seg);
@@ -874,7 +875,7 @@ extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val) {
 extern "C" void v2_emu_init_pages(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (ds_base[0x25CF] & 0x42) return;   // intro flags: orig skips sub_16ded
+    if (ds_base[DS_LEVEL_FLAGS] & 0x42) return;   // intro flags: orig skips sub_16ded
 #ifdef V2_RENDER_FROM_SHADOW
     // v2_draw_tiles is gated on v2_vm_in_frame (skips seg000-hook contexts);
     // this runs on the v2 thread inside the level-init mirror — force the
@@ -953,8 +954,8 @@ void v2_emu_late_end(uint16_t ds_val) {
     // Traced object: checksum its 32x32 page area (world − anchor) on all
     // three pages after the late layer.
     if (v2_objtrace_di != 0xFFFF) {
-        int16_t ox = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + 0x64D));
-        int16_t oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + 0x74D));
+        int16_t ox = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_X));
+        int16_t oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_Y));
         int px = (int)ox - v2_emu_base_x, py = (int)oy - v2_emu_base_y;
         int sums[3] = {0, 0, 0};
         for (int p = 0; p < 3; p++)
@@ -1013,8 +1014,8 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
     // Sprites in orig are drawn at world_pos - vp_px in VGA buffer; CRTC then shifts
     // entire display by x_some via start address + pixel pan. v2 single-buffer:
     // bake the shake into the effective camera so all elements stay aligned.
-    int16_t _vp_px = *(int16_t*)(ds_base + 0x44);
-    int16_t _vp_py = *(int16_t*)(ds_base + 0x46);
+    int16_t _vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
+    int16_t _vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
     int16_t _xs   = *(int16_t*)(ds_base + 0x39E);
     int16_t _ys   = *(int16_t*)(ds_base + 0x3A0);
     int16_t _xlvl = *(int16_t*)(ds_base + 0x25A4);
@@ -1024,7 +1025,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
     static int spr_dbg = 0; spr_dbg++;
     for (int obj = 0xFE; obj >= 0; obj -= 2) {
         if (only_obj >= 0 && obj != only_obj) continue;
-        uint16_t flags = *(uint16_t*)(ds_base + obj + 0x44D);
+        uint16_t flags = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_FLAGS);
 
         // Must be active (bit 15) with bits 13-14 clear
         if (!(flags & 0x8000) || (flags & 0x6000)) continue;
@@ -1033,11 +1034,11 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         // of the FULL sprite data as THIS side reads them (shadow) — same size
         // formula as the orig-side probe in sub_1dd9c.
         if (obj == v2_objtrace_di) {
-            uint16_t t_seg = *(uint16_t*)(ds_base + obj + 0x94D);
-            uint16_t t_off = *(uint16_t*)(ds_base + obj + 0x84D);
+            uint16_t t_seg = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG);
+            uint16_t t_off = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF);
             int t_type = flags & 7;
             int t_sz = (t_type == 1) ? 72 : (t_type == 4) ? 288
-                       : 4 * (int)*(uint16_t*)(ds_base + obj + 0x0C4D) * 9;
+                       : 4 * (int)*(uint16_t*)(ds_base + obj + OBJ_STRIP_COUNT) * 9;
             if (t_sz < 1) t_sz = 1; if (t_sz > 4096) t_sz = 4096;
             uint8_t* t_base = v2_resolve_segment(t_seg);
             if (!t_base) t_base = v2_m2c_base + ((uint32_t)t_seg << 4);
@@ -1047,9 +1048,9 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             for (int t_p = 0; t_p < 3; t_p++)
                 if (buf == v2_emu_page[t_p]) t_slot = t_p;
             v2_objtrace(late_gate ? "v:late" : "v:early",
-                        *(int16_t*)(ds_base + obj + 0x64D),
-                        *(int16_t*)(ds_base + obj + 0x74D),
-                        t_slot * 256 + ds_base[obj + 0x114D], t_h);
+                        *(int16_t*)(ds_base + obj + OBJ_SPRITE_X),
+                        *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y),
+                        t_slot * 256 + ds_base[obj + OBJ_DIRTY_MODE], t_h);
         }
 
         if (late_gate) {
@@ -1058,15 +1059,15 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             bool draw_it = false;
             int gate_code = 0;   // 1=force 2=rd 3=scan-hit (trace aid)
             if (ds_base[0x9568] != 0) { draw_it = true; gate_code = 1; }  // TEST ds:9568h
-            else if (ds_base[obj + 0x114D] != 0) { draw_it = true; gate_code = 2; } // TEST byte [di+114Dh]
+            else if (ds_base[obj + OBJ_DIRTY_MODE] != 0) { draw_it = true; gate_code = 2; } // TEST byte [di+114Dh]
             else {
                 // sub_1cdef: clip object's tile bbox to viewport, scan cells
                 // in the render map (FS) for bit0. Exact replica (seg003
                 // eips 0x5BF..0x647); the v2_sub_1DD9C bounds mirror carries
                 // the same math for its DS effects.
-                int16_t cx = (int16_t)*(uint16_t*)(ds_base + obj + 0x64D);
-                int16_t dxv = (int16_t)*(uint16_t*)(ds_base + obj + 0x74D);
-                int16_t si_h = (int16_t)((*(uint16_t*)(ds_base + obj + 0x0C4D) >> 3) + 1);
+                int16_t cx = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_X);
+                int16_t dxv = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_Y);
+                int16_t si_h = (int16_t)((*(uint16_t*)(ds_base + obj + OBJ_STRIP_COUNT) >> 3) + 1);
                 int16_t bp_w = si_h;
                 if (!(cx & 7)) bp_w--;
                 if (!(dxv & 7)) si_h--;
@@ -1094,7 +1095,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                     }
                 }
                 if (visible) {
-                    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
+                    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
 #ifdef V2_RENDER_FROM_SHADOW
                     uint8_t* fs_base = v2_resolve_segment(fs_seg);
                     if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
@@ -1130,20 +1131,20 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                     if (buf == v2_emu_page[t_p]) t_slot = t_p;
                 int fs_word = -1;
                 {
-                    uint16_t fs_seg2 = *(uint16_t*)(ds_base + 0x2E69);
+                    uint16_t fs_seg2 = *(uint16_t*)(ds_base + DS_SEG_FS);
                     uint8_t* fsb2 = v2_resolve_segment(fs_seg2);
                     if (!fsb2) fsb2 = v2_m2c_base + ((uint32_t)fs_seg2 << 4);
-                    int16_t oy2 = (int16_t)*(uint16_t*)(ds_base + obj + 0x74D);
-                    int16_t ox2 = (int16_t)*(uint16_t*)(ds_base + obj + 0x64D);
+                    int16_t oy2 = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_Y);
+                    int16_t ox2 = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_X);
                     uint16_t row2 = (uint16_t)((oy2 + 8) >> 3);
                     uint16_t rb2 = *(uint16_t*)(ds_base + (uint16_t)(row2 * 2 - 0x7098));
                     uint16_t moff2 = (uint16_t)((rb2 + (uint16_t)((ox2 + 8) >> 3)) * 2u);
                     fs_word = *(uint16_t*)(fsb2 + moff2);
                 }
                 v2_objtrace("v:gate",
-                            *(int16_t*)(ds_base + obj + 0x64D),
-                            *(int16_t*)(ds_base + obj + 0x74D),
-                            t_slot * 4096 + gate_code * 256 + ds_base[obj + 0x114D],
+                            *(int16_t*)(ds_base + obj + OBJ_SPRITE_X),
+                            *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y),
+                            t_slot * 4096 + gate_code * 256 + ds_base[obj + OBJ_DIRTY_MODE],
                             fs_word);
             }
             if (!draw_it) continue;
@@ -1153,15 +1154,15 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
 
         {
             static int spr_printed = 0;
-            uint16_t cur_lvl = *(uint16_t*)(ds_base + 0x25AD);
+            uint16_t cur_lvl = *(uint16_t*)(ds_base + DS_LEVEL);
             if (spr_printed < 15 && cur_lvl < 38) {
                 spr_printed++;
                 printf("V2-SPR[l%d]: obj=%02x fl=%04x t=%d xy=(%d,%d) seg=%04x off=%04x scr=(%d,%d)\n",
                        cur_lvl, obj, flags, type,
-                       *(int16_t*)(ds_base + obj + 0x64D),
-                       *(int16_t*)(ds_base + obj + 0x74D),
-                       *(uint16_t*)(ds_base + obj + 0x94D),
-                       *(uint16_t*)(ds_base + obj + 0x84D),
+                       *(int16_t*)(ds_base + obj + OBJ_SPRITE_X),
+                       *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y),
+                       *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG),
+                       *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF),
                        viewport_x, viewport_y);
             }
         }
@@ -1173,14 +1174,14 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         // Types 0,3,5,6,7 → cs:0x0000 (not used)
         if (type != 1 && type != 2 && type != 4) continue;
 
-        int16_t world_x = *(int16_t*)(ds_base + obj + 0x64D);
-        int16_t world_y = *(int16_t*)(ds_base + obj + 0x74D);
+        int16_t world_x = *(int16_t*)(ds_base + obj + OBJ_SPRITE_X);
+        int16_t world_y = *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y);
 
         int sx0 = world_x - viewport_x;
         int sy0 = world_y - viewport_y;
 
-        uint16_t sprite_off = *(uint16_t*)(ds_base + obj + 0x84D);
-        uint16_t sprite_seg = *(uint16_t*)(ds_base + obj + 0x94D);
+        uint16_t sprite_off = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF);
+        uint16_t sprite_seg = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG);
         if (!sprite_seg) continue;
 
         // Determine format parameters per type:
@@ -1197,7 +1198,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         } else if (type == 2) {
             // loc_1d8a8: dynamic size, CX = ds:[obj+0x0C4D]
             // CX strips/section, 1 row/strip (DI += 0x56), 8 bytes/row
-            num_strips = (int)*(uint16_t*)(ds_base + obj + 0x0C4D);
+            num_strips = (int)*(uint16_t*)(ds_base + obj + OBJ_STRIP_COUNT);
             if (num_strips <= 0) continue;
             rows_per_strip = 1;
             bytes_per_row = 8;
@@ -1239,7 +1240,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         uint8_t* sprite = seg_base + sprite_off - 1;
         {
             static int cmp_mismatch = 0;
-            uint16_t cur_lvl = *(uint16_t*)(ds_base + 0x25AD);
+            uint16_t cur_lvl = *(uint16_t*)(ds_base + DS_LEVEL);
             // real-vs-shadow compare only meaningful when orig updates real
             // memory (V2_ONLY: dynamic segments in the snapshot buffer stay 0).
             if (v2_vm_get_real_ds() && cur_lvl < 38 && cmp_mismatch < 10) {
@@ -1277,8 +1278,8 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         int t14_top_strips = 0, t14_bot_strips = 0;
         uint8_t t14_mask = 0xFF;
         if (to_page && (type == 1 || type == 4)) {
-            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + 0x44);
-            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + 0x46);
+            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_X);
+            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_Y);
             if (type == 1) {
                 // seg003_648_proc eips 0x668..0x68E: pure bounds.
                 if (world_x >= vp_raw + 0x140) continue;   // JGE 1d154
@@ -1331,8 +1332,8 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                 0xFFFF,0x7FFE,0x3FFC,0x1FF8,0x0FF0,0x07E0,0x03C0,0x0180};
             static const uint16_t v2_t2_mask_l[8] = {  // cs:[138B]
                 0xFFFF,0xFE7F,0xFC3F,0xF81F,0xF00F,0xE007,0xC003,0x8001};
-            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + 0x44);
-            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + 0x46);
+            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_X);
+            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_Y);
             int rows_total = num_strips;              // ds:[obj+0xC4D]
             uint16_t mask16 = 0xFFFF;
             if (world_x >= vp_raw + 0x140) continue;              // JGE 1db98
@@ -1462,9 +1463,9 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint8_t* ds_base = v2_get_ds_base(ds_val);
     uint8_t* buf = v2_blit_target ? v2_blit_target : v2_render_buf;
 
-    uint16_t fs_seg = *(uint16_t*)(ds_base + 0x2E69);
-    uint16_t tgfx_seg = *(uint16_t*)(ds_base + 0x2E5F);
-    uint16_t gs_seg = *(uint16_t*)(ds_base + 0x2E61);
+    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
+    uint16_t tgfx_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
+    uint16_t gs_seg = *(uint16_t*)(ds_base + DS_SEG_GS);
     if (!fs_seg || !tgfx_seg || !gs_seg) return;
 
 #ifdef V2_RENDER_FROM_SHADOW
@@ -1487,8 +1488,8 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 
     // Sub-tile pixel offset (same as v2_draw_tiles).
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
-    int16_t vp_px = *(int16_t*)(ds_base + 0x44);
-    int16_t vp_py = *(int16_t*)(ds_base + 0x46);
+    int16_t vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
+    int16_t vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
     int16_t x_some = *(int16_t*)(ds_base + 0x39E);
     int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
     int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
@@ -1604,7 +1605,7 @@ void v2_draw_ui(uint16_t ds_val) {
         if (nz != _last_nz) {
             extern int v2_dbg_pre_vm_iter;
             fprintf(stderr, "V2-UI-COUNT[f%d render=%d lvl=%04X]: nz_cells=%d rows: ",
-                v2_dbg_pre_vm_iter, _frame, *(uint16_t*)(ds_base + 0x25AD), nz);
+                v2_dbg_pre_vm_iter, _frame, *(uint16_t*)(ds_base + DS_LEVEL), nz);
             for (int r = 0; r < 22; r++)
                 if (rows_used[r]) fprintf(stderr, "r%d=%d ", r, rows_used[r]);
             fprintf(stderr, "byte_956B=%02X\n", ds_base[0x956B]);
