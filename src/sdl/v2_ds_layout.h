@@ -401,4 +401,75 @@ constexpr uint16_t DS_QUIT_MODE           = 0x0447; // word_28927: quit-prompt m
 constexpr uint16_t DS_HUD_FORCE           = 0x044B; // byte_2892B: HUD force-redraw byte (set 0xFF)
 constexpr uint16_t DS_HUD_FIELD_483       = 0x0483; // word_28963: HUD field (verify-cross-ref)
 
+
+// ---------------------------------------------------------------------------
+// DS globals batch 6 (truly-new addrs; already-named addrs use existing phase-A names)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_AIM_SIGN_X            = 0x003E; // word_2851E: aim/trajectory X-direction sign (negate xr; XOR OBJ_FLAGS&0x40)
+constexpr uint16_t DS_AIM_SIGN_Y            = 0x0040; // word_28520: aim/trajectory Y-direction sign (negate yr; XOR OBJ_FLAGS&0x80)
+constexpr uint16_t DS_FLAG_202              = 0x0202; // word_286E2: state flag (set 1; 0x202 also dirty-mode marker value)
+constexpr uint16_t DS_HUD_DRAW_DI           = 0x0421; // word_28901: cached di draw-offset for HUD portrait/selector
+constexpr uint16_t DS_HUD_FIELD_449         = 0x0449; // word_28929: HUD field (init 0xFFFF)
+constexpr uint16_t DS_PROBE_77C             = 0x077C; // word_28C5C: divergence-probe address (no orig symbol reader; debug watch[])
+constexpr uint16_t DS_RENDER_117D           = 0x117D; // word_2965D: dd9c-render field, block 0x117D-0x1181 (verify-probed)
+constexpr uint16_t DS_RENDER_117E           = 0x117E; // word_2965E: dd9c-render field (block 0x117D-0x1181)
+constexpr uint16_t DS_RENDER_117F           = 0x117F; // word_2965F: dd9c-render field (block 0x117D-0x1181)
+constexpr uint16_t DS_VK_PORTRAIT_SND_2     = 0x15AF; // word_29A8F: viking-2 HUD row portrait-sound (from DS_PORTRAIT_SND_2)
+constexpr uint16_t DS_VK_PORTRAIT_SND_3     = 0x15B1; // word_29A91: viking-3 HUD row portrait-sound (from DS_PORTRAIT_SND_3)
+constexpr uint16_t DS_VK_HEALTH_2           = 0x16EF; // word_29BCF: viking-2 HUD row health value
+constexpr uint16_t DS_VK_HEALTH_3           = 0x16F1; // word_29BD1: viking-3 HUD row health value
+constexpr uint16_t DS_OBJ_QUEUE_HEAD        = 0x2191; // word_2A671: head index of 0x800-word queue at ds:0x2191 (init 2; ADD 2 push)
+constexpr uint16_t DS_PAL_ANIM_TIMER_1      = 0x258D; // byte_2AA6D: palette-anim timer slot 1
+constexpr uint16_t DS_PAL_ANIM_TIMER_2      = 0x258E; // byte_2AA6E: palette-anim timer slot 2
+constexpr uint16_t DS_PAL_ANIM_TIMER_3      = 0x258F; // byte_2AA6F: palette-anim timer slot 3
+constexpr uint16_t DS_PAL_ANIM_TIMER_4      = 0x2590; // byte_2AA70: palette-anim timer slot 4
+constexpr uint16_t DS_PAL_ANIM_TIMER_5      = 0x2591; // byte_2AA71: palette-anim timer slot 5
+constexpr uint16_t DS_PAL_ANIM_TIMER_6      = 0x2592; // byte_2AA72: palette-anim timer slot 6
+constexpr uint16_t DS_PAL_ANIM_TIMER_7      = 0x2593; // byte_2AA73: palette-anim timer slot 7
+constexpr uint16_t DS_DAC_R_SAVE            = 0x25A8; // word_2AA88: saved DAC R (from DS_DAC_R at page flip)
+constexpr uint16_t DS_DAC_B_SAVE            = 0x25AA; // word_2AA8A: saved DAC B (from DS_DAC_B)
+constexpr uint16_t DS_CHUNK_CUR             = 0x25E1; // word_2AAC1: current level chunk id
+constexpr uint16_t DS_CHUNK_TILE            = 0x25E3; // word_2AAC3: tile-layer chunk id
+constexpr uint16_t DS_CHUNK_BG              = 0x25E5; // word_2AAC5: background-layer chunk id
+constexpr uint16_t DS_DECOMP_SIZE           = 0x2BBC; // word_2B09C: last decompressed chunk size (LZSS output length)
+constexpr uint16_t DS_SEG_TILEDATA          = 0x2E5D; // word_2B33D: tile-data resource segment (-> v2_vm_shadow_gs_tiledata)
+constexpr uint16_t DS_DECOMP_DI_END         = 0x2E65; // word_2B345: di offset after decompression (end cursor)
+constexpr uint16_t DS_SEG_SOUND             = 0x2E6B; // word_2B34B: sound resource segment (-> v2_vm_shadow_sound)
+constexpr uint16_t DS_SEG_SOUND2            = 0x2E6D; // word_2B34D: sound buffer segment 2 (sound_buf_seg + off>>4)
+constexpr uint16_t DS_SEG_SOUND3            = 0x2E6F; // word_2B34F: sound buffer segment 3 (sound_buf_seg + off>>4)
+constexpr uint16_t DS_TEMPLATE_CHUNK        = 0x2E71; // word_2B351: current template chunk id (init 0x1C6)
+constexpr uint16_t DS_ANIM_INIT_OFF         = 0x2E75; // word_2B355: initial anim dword offset (-> DS_ANIM_PTR_LO)
+constexpr uint16_t DS_PROBE_414D            = 0x414D; // word_2C62D: divergence-probe field (debug print)
+constexpr uint16_t DS_DAC_R                 = 0x7F0B; // byte_303EB: VGA DAC write R component
+constexpr uint16_t DS_DAC_G                 = 0x7F0C; // byte_303EC: VGA DAC write G component
+constexpr uint16_t DS_DAC_B                 = 0x7F0D; // byte_303ED: VGA DAC write B component
+constexpr uint16_t DS_STARTUP_CX            = 0x863B; // word_30B1B: startup probe field (set 0x1234)
+constexpr uint16_t DS_INT24_VECTOR          = 0x86AC; // word_30B8C: saved DOS INT 24h critical-error vector
+constexpr uint16_t DS_INT24_VECTOR_HI       = 0x86AE; // word_30B8E: saved DOS INT 24h vector (segment word)
+constexpr uint16_t DS_MUSIC_MUTE_SRC        = 0x86B2; // word_30B92: config music-mute source (-> DS_MUSIC_MUTE)
+constexpr uint16_t DS_SFX_MUTE_SRC          = 0x86B4; // word_30B94: config sfx-mute source (-> DS_SFX_MUTE)
+constexpr uint16_t DS_SOUND_CARD            = 0x86B6; // word_30B96: sound-card/driver select (==8 gate)
+constexpr uint16_t DS_MUSIC_CARD            = 0x86B8; // word_30B98: music-card/driver select (==3 gate)
+constexpr uint16_t DS_DATADAT_MAGIC         = 0x86C4; // word_30BA4: DATA.DAT magic word (expected 0x6969)
+constexpr uint16_t DS_BIOS_CHECKSUM         = 0x86D0; // word_30BB0: BIOS checksum probe (#95)
+constexpr uint16_t DS_JOYSTICK_PRESENT      = 0x86DA; // word_30BBA: joystick present flag (0 = no joystick)
+constexpr uint16_t DS_CMD_HANDLER_TBL       = 0x86E6; // word_30BC6: command handler jump table base (handler=[+cmd*2])
+constexpr uint16_t DS_VM_DISPATCH_TBL       = 0x87AE; // word_30C8E: VM opcode runtime dispatch table base (off_30C8E)
+constexpr uint16_t DS_ROW38_8FB4            = 0x8FB4; // word_31494: verify-probed field (row38; no orig symbol reader)
+constexpr uint16_t DS_CLIP_LIMIT_X          = 0x9168; // word_31648: sprite clip limit X (CMP cx; JGE skip)
+constexpr uint16_t DS_CLIP_LIMIT_Y          = 0x916A; // word_3164A: sprite clip limit Y (CMP dx; JGE skip)
+constexpr uint16_t DS_SPEC_KEY_Y            = 0x9181; // byte_31661: spec key Y state (SDL INT9 mirror)
+constexpr uint16_t DS_SPEC_KEY_S            = 0x918B; // byte_3166B: spec key S state (SDL INT9; ==1 gate)
+constexpr uint16_t DS_SPEC_KEY_N            = 0x919D; // byte_3167D: spec key N state (SDL INT9; live atomic)
+constexpr uint16_t DS_SPEC_KEY_M            = 0x919E; // byte_3167E: spec key M state (SDL INT9; ==1 gate)
+constexpr uint16_t DS_SPEC_KEY_F5           = 0x91AB; // byte_3168B: spec key F5 state (prev level; ==1)
+constexpr uint16_t DS_SPEC_KEY_F6           = 0x91AC; // byte_3168C: spec key F6 state (next level; ==1)
+constexpr uint16_t DS_SOUND_FIELD_8EA       = 0x98EA; // word_31DCA: sound-init field (set 0xFFFF)
+constexpr uint16_t DS_MUSIC_ID              = 0x990C; // word_31DEC: current music resource id (v2_id_music)
+constexpr uint16_t DS_SOUND_INIT_92A        = 0x992A; // word_31E0A: sound-init field (cleared 0)
+constexpr uint16_t DS_SEG_SOUND_BASE        = 0x992C; // word_31E0C: sound resource base segment (snd_base)
+constexpr uint16_t DS_SOUND_INIT_932        = 0x9932; // word_31E12: sound-init field (cleared 0)
+constexpr uint16_t DS_XMI_BUF_PTR           = 0x9934; // word_31E14: XMI music buffer pointer (#99)
+constexpr uint16_t DS_SOUND_FIELD_942       = 0x9942; // word_31E22: sound-init field (set 0x0E00)
+
 #endif // V2_DS_LAYOUT_H
