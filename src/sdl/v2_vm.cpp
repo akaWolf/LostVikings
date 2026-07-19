@@ -11892,7 +11892,8 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
 
     // Orig sub_15afd 0x5b01: SUB ax,[13CD]; JZ ret; JGE continue — continue iff the
     // TRUE difference (SF^OF of the SUB) is > 0, not the truncated int16.
-    int32_t y_moved = (int32_t)(int16_t)vm.ds_read(di + OBJ_WORLD_Y) - (int32_t)(int16_t)vm.ds_read(di + OBJ_Y_PREV);
+    ObjRef self0{vm, di};
+    int32_t y_moved = (int32_t)self0.world_y() - (int32_t)self0.y_prev();
     if (dbg) fprintf(stderr, "  y_moved=%d\n", (int)y_moved);
     if (y_moved > 0) {
         vm.ds_write(DS_TEXT_COL, filter_si);
@@ -11909,21 +11910,21 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
 
         if (dbg) fprintf(stderr, "  filt_val=%02X\n", filt_val);
         if (filt_val >= 0x30 && filt_val != 0xFF) {
-            uint16_t obj_x = vm.ds_read(di + OBJ_WORLD_X);
-            int16_t adj_y = (int16_t)vm.ds_read(di + OBJ_Y_PREV) - (int16_t)vm.ds_read(di + OBJ_WORLD_Y)
-                            + (int16_t)vm.ds_read(di + OBJ_BBOX_Y1);
+            uint16_t obj_x = self0.u16(OBJ_WORLD_X);
+            int16_t adj_y = (int16_t)(self0.y_prev() - self0.world_y() + self0.bbox_y1());
             uint16_t tt = (v2_vm_tile_read_141ba(vm, obj_x >> 4, (uint16_t)adj_y >> 4) & 0xFC00) >> 10;
             if (dbg) fprintf(stderr, "  obj_x=%04X adj_y=%04X tt=%02X\n", obj_x, adj_y, tt);
             if (tt >= 0x30) {
                 vm.ds_write(DS_SCRATCH_3A, tt);
                 di = vm.ds_read(DS_TEXT_ROW);
-                uint16_t cur_y_end = vm.ds_read(di + OBJ_BBOX_Y1);
+                ObjRef selfA{vm, di};
+                uint16_t cur_y_end = selfA.u16(OBJ_BBOX_Y1);
                 uint16_t tt2 = (v2_vm_tile_read_141ba(vm, obj_x >> 4, cur_y_end >> 4) & 0xFC00) >> 10;
                 if (dbg) fprintf(stderr, "  cur_y_end=%04X tt2=%02X\n", cur_y_end, tt2);
                 if (tt2 < 0x30) {
                     uint16_t saved = cur_y_end;
                     uint16_t temp = (tt2 & 0xFFF0) - 1;
-                    vm.ds_write(di + OBJ_BBOX_Y1, temp);
+                    selfA.w16(OBJ_BBOX_Y1, temp);
                     uint16_t slope_tt = vm.ds_read(DS_SCRATCH_3A);
                     uint16_t sidx = ((slope_tt & 0xF) << 4) + (obj_x & 0xF);
                     uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
@@ -11933,13 +11934,13 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
                     if (sr >= 0) {
                         // Orig eip 0x5B72: MOV ds:32h, ax (=sr from sub_16390) — used at eip 0x5B7D ADD ax, ds:32h.
                         vm.ds_write(DS_MODE_WORD, (uint16_t)sr);
-                        vm.ds_write(di + OBJ_BBOX_Y1, saved);
+                        selfA.w16(OBJ_BBOX_Y1, saved);
                         tile_ax = (int16_t)((uint16_t)((saved & 0xF) + (uint16_t)sr + 1) | 0x8000);
                         tile_found = true;
                         if (dbg) fprintf(stderr, "  PATH=A tile_ax=%04X\n", (uint16_t)tile_ax);
                     } else {
                         // Orig loc_15b84: just POP into [di+150Dh] — restore saved.
-                        vm.ds_write(di + OBJ_BBOX_Y1, saved);
+                        selfA.w16(OBJ_BBOX_Y1, saved);
                     }
                 }
             }
@@ -11957,8 +11958,9 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
         if (!tile_found && slope_filter_found) {
             // loc_15b88: check slope at current position
             di = vm.ds_read(DS_TEXT_ROW);
-            uint16_t obj_x = vm.ds_read(di + OBJ_WORLD_X);
-            uint16_t cur_y = vm.ds_read(di + OBJ_BBOX_Y1);
+            ObjRef selfB{vm, di};
+            uint16_t obj_x = selfB.u16(OBJ_WORLD_X);
+            uint16_t cur_y = selfB.u16(OBJ_BBOX_Y1);
             uint16_t tt3 = (v2_vm_tile_read_141ba(vm, obj_x >> 4, cur_y >> 4) & 0xFC00) >> 10;
             if (dbg) fprintf(stderr, "  loc_15b88: cur_y=%04X tt3=%02X\n", cur_y, tt3);
             if (tt3 >= 0x30) {
@@ -11979,13 +11981,14 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
         if (!tile_found && !skip_horizontal) {
             // loc_15bb8: horizontal tile scan
             di = vm.ds_read(DS_TEXT_ROW);
+            ObjRef selfC{vm, di};
             filter_si = vm.ds_read(DS_TEXT_COL);
-            uint16_t ye = vm.ds_read(di + OBJ_BBOX_Y1);
-            uint16_t old_ye = (uint16_t)((int16_t)ye - (int16_t)vm.ds_read(di + OBJ_WORLD_Y) + (int16_t)vm.ds_read(di + OBJ_Y_PREV));
+            uint16_t ye = selfC.u16(OBJ_BBOX_Y1);
+            uint16_t old_ye = (uint16_t)((int16_t)ye - selfC.world_y() + selfC.y_prev());
             if ((old_ye & 0xFFF0) != (ye & 0xFFF0)) {
-                uint16_t xe = vm.ds_read(di + OBJ_BBOX_X1);
+                uint16_t xe = selfC.u16(OBJ_BBOX_X1);
                 vm.ds_write(DS_SCRATCH_36, ye); vm.ds_write(DS_SCRATCH_38, xe);
-                for (uint16_t s = vm.ds_read(di + OBJ_BBOX_X0); ; ) {
+                for (uint16_t s = selfC.u16(OBJ_BBOX_X0); ; ) {
                     uint8_t al = (uint8_t)((v2_vm_tile_read_141ba(vm, s >> 4, vm.ds_read(DS_SCRATCH_36) >> 4) & 0xFC00) >> 10);
                     bool advance = false;
                     if (al >= 0x30) {
