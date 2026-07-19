@@ -1574,13 +1574,13 @@ extern "C" uint16_t v2_shadow_word_288ac() {
 
 extern "C" void v2_shadow_input_or(uint16_t bit) {
     if (!bit) return;
-    __atomic_or_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[0x86DE]),
+    __atomic_or_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[DS_INPUT_ACCUM]),
                       bit, __ATOMIC_RELAXED);
     v2_patch_all_snaps_input(bit, true);
 }
 extern "C" void v2_shadow_input_and_not(uint16_t bit) {
     if (!bit) return;
-    __atomic_and_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[0x86DE]),
+    __atomic_and_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[DS_INPUT_ACCUM]),
                       (uint16_t)~bit, __ATOMIC_RELAXED);
     v2_patch_all_snaps_input(bit, false);
 }
@@ -1672,7 +1672,7 @@ static inline uint16_t v2_input_or(uint8_t* shadow, uint16_t ax_prev) {
     // for both intro mode (writes 0xFFFF) and normal mode (OR-bit). Read shadow
     // directly — no input_keys/input mask layer needed. Race-free atomic read.
     extern uint16_t sdl_input_press_snap_get();
-    uint16_t shadow_30bbe = *(volatile uint16_t*)(shadow + 0x86DE);
+    uint16_t shadow_30bbe = *(volatile uint16_t*)(shadow + DS_INPUT_ACCUM);
     return ax_prev | shadow_30bbe | sdl_input_press_snap_get();
 #else
     return ax_prev | v2_input_snapshot;
@@ -2482,15 +2482,15 @@ static void v2_pal_rotate_fwd_10255(uint8_t* s, uint16_t si, uint16_t dx) {
     uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // AL = [si+259Ch]
     uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // AL = [si+2594h]
     uint16_t di = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // ax=cur*3; di=ax+dx
-    s[0x8504] = s[di];                                         // byte ptr word_309E4   = [di]
-    s[0x8505] = s[(uint16_t)(di + 1)];                         // byte ptr word_309E4+1 = [di+1]
-    s[0x8506] = s[(uint16_t)(di + 2)];                         // byte_309E6            = [di+2]
+    s[DS_BYTE_SAVE_0] = s[di];                                         // byte ptr word_309E4   = [di]
+    s[DS_BYTE_SAVE_1] = s[(uint16_t)(di + 1)];                         // byte ptr word_309E4+1 = [di+1]
+    s[DS_BYTE_SAVE_2] = s[(uint16_t)(di + 2)];                         // byte_309E6            = [di+2]
     uint16_t cx = (uint16_t)((uint16_t)((uint16_t)endi * 3 + dx) - di); // cx = end*3+dx - di
     uint16_t src = (uint16_t)(di + 3);                         // si = di+3
     while (cx--) { s[di] = s[src]; di++; src++; }              // REP MOVSB (DF=0)
-    s[di] = s[0x8504];                                         // [di]   = word_309E4 lo
-    s[(uint16_t)(di + 1)] = s[0x8505];                         // [di+1] = word_309E4 hi
-    s[(uint16_t)(di + 2)] = s[0x8506];                         // [di+2] = byte_309E6
+    s[di] = s[DS_BYTE_SAVE_0];                                         // [di]   = word_309E4 lo
+    s[(uint16_t)(di + 1)] = s[DS_BYTE_SAVE_1];                         // [di+1] = word_309E4 hi
+    s[(uint16_t)(di + 2)] = s[DS_BYTE_SAVE_2];                         // [di+2] = byte_309E6
 }
 
 // sub_1020f (seg000 eip 0x020F-0x0254): the inverse rotate — entry at
@@ -2502,16 +2502,16 @@ static void v2_pal_rotate_back_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
     uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // movzx ax, [si+259Ch]
     uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // movzx ax, [si+2594h]
     uint16_t di0 = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // di=cur*3+dx
-    s[0x8504] = s[di0];                                        // word_309E4 = [di] (WORD, LE)
-    s[0x8505] = s[(uint16_t)(di0 + 1)];
-    s[0x8506] = s[(uint16_t)(di0 + 2)];                        // byte_309E6 = [di+2]
+    s[DS_BYTE_SAVE_0] = s[di0];                                        // word_309E4 = [di] (WORD, LE)
+    s[DS_BYTE_SAVE_1] = s[(uint16_t)(di0 + 1)];
+    s[DS_BYTE_SAVE_2] = s[(uint16_t)(di0 + 2)];                        // byte_309E6 = [di+2]
     uint16_t cx = (uint16_t)((uint16_t)((uint16_t)cur - (uint16_t)endi) * 3); // cx=(cur-end)*3
     uint16_t sp = (uint16_t)(di0 - 1);                         // si = di-1
     uint16_t dp = (uint16_t)(di0 + 2);                         // di = di+2
     while (cx--) { s[dp] = s[sp]; dp--; sp--; }                // STD; REP MOVSB; CLD
-    s[(uint16_t)(dp - 2)] = s[0x8504];                         // [di-2] = word_309E4 (WORD, LE)
-    s[(uint16_t)(dp - 1)] = s[0x8505];
-    s[dp] = s[0x8506];                                         // [di] = byte_309E6
+    s[(uint16_t)(dp - 2)] = s[DS_BYTE_SAVE_0];                         // [di-2] = word_309E4 (WORD, LE)
+    s[(uint16_t)(dp - 1)] = s[DS_BYTE_SAVE_1];
+    s[dp] = s[DS_BYTE_SAVE_2];                                         // [di] = byte_309E6
 }
 
 // sub_101be (seg000): Palette cycling for UI elements.
@@ -2540,7 +2540,7 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
                 cur_i, end_i,
                 addr_82, s[addr_82], s[addr_82+1], s[addr_82+2],
                 addr_7f, s[addr_7f], s[addr_7f+1], s[addr_7f+2],
-                s[0x8504], s[0x8505], s[0x8506]);
+                s[DS_BYTE_SAVE_0], s[DS_BYTE_SAVE_1], s[DS_BYTE_SAVE_2]);
         }
     }
     if (s[DS_PAL_ANIM_EN] == 0) {                                           // TEST byte_2AA63, 0FFh; JZ loc_1020b
@@ -2564,7 +2564,7 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
                 (cur_i < end_i) ? "10255" : "1020F",
                 addr_82, s[addr_82], s[addr_82+1], s[addr_82+2],
                 addr_7f, s[addr_7f], s[addr_7f+1], s[addr_7f+2],
-                s[0x8504], s[0x8505], s[0x8506]);
+                s[DS_BYTE_SAVE_0], s[DS_BYTE_SAVE_1], s[DS_BYTE_SAVE_2]);
         }
         uint8_t cur_idx = s[si + 0x259C];                          // [si+259Ch] = current
         uint8_t end_idx = s[si + 0x2594];                          // [si+2594h] = end
@@ -5401,7 +5401,7 @@ static void v2_vga_modex_init_167ff(uint8_t* s) {
 // sub_12ca3: game state initialization — clear misc state variables.
 static void v2_game_state_init_12ca3(uint8_t* s) {
     s[DS_SCRATCH_32E] = 0;                        // byte ds:32Eh
-    s[0x28] = 0;                         // byte ds:28h
+    s[DS_SCRATCH_28] = 0;                // byte ds:28h
     *(uint16_t*)(s + DS_HUD_SEL_SI) = 0;         // word ds:3D4h
     *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;         // word ds:3CCh (word_288AC)
     *(uint16_t*)(s + DS_SCRATCH_336) = 0;         // word ds:336h
@@ -5766,10 +5766,10 @@ static void v2_load_level_11080(uint8_t* s) {
     *(uint16_t*)(s + DS_COLL_STATE_398) = 0; // word_28878
     *(uint16_t*)(s + DS_COLL_STATE_392) = 0; // word_28872
     *(uint16_t*)(s + DS_SCRATCH_348) = 0; // word_28828
-    *(uint16_t*)(s + 0x8734) = 0; // word_30C14
+    *(uint16_t*)(s + DS_COUNTER_8734) = 0; // word_30C14
     *(uint16_t*)(s + DS_BLINK_COUNTER) = 0; // word_288A6
-    *(uint16_t*)(s + 0x86DE) = 0; // word_30BBE
-    *(uint16_t*)(s + 0x86DC) = 0; // word_30BBC
+    *(uint16_t*)(s + DS_INPUT_ACCUM) = 0; // word_30BBE
+    *(uint16_t*)(s + DS_INPUT_JOY) = 0; // word_30BBC
     // Mirror orig sub_11080 word_30bbe clear (eip 0x10E5) on input_keys/input_keys_v2.
     // These are m2c port SDL adapter held-state trackers — not present in orig DOS,
     // but used by v2_input_intro_mask. Without this sync, held key across level
@@ -6691,11 +6691,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             }
             if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) != 0) {
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) -= 1;
-                *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
+                *(uint16_t*)(shadow + DS_INPUT_ACCUM) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
             } else {
                 // Pop from stack at ds:0x2191
                 uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                *(uint16_t*)(shadow + 0x86DE) = *(uint16_t*)(shadow + bx + 0x2191);
+                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + 0x2191);
                 *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
                 uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
@@ -7078,7 +7078,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 // sub_12352: input
                 {
                     uint16_t ax = 0;
-                    if (*(uint16_t*)(shadow + DS_JOYSTICK_PRESENT) != 0) ax = *(uint16_t*)(shadow + 0x86DC);
+                    if (*(uint16_t*)(shadow + DS_JOYSTICK_PRESENT) != 0) ax = *(uint16_t*)(shadow + DS_INPUT_JOY);
                     ax = v2_input_or(shadow, ax);
                     *(uint16_t*)(shadow + DS_INPUT_KEYS) = ax;
                     uint16_t prev = *(uint16_t*)(shadow + DS_INPUT_PREV);
@@ -7518,10 +7518,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         }
                         if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) != 0) {
                             *(uint16_t*)(shadow + DS_SCRATCH_3CE) -= 1;
-                            *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
+                            *(uint16_t*)(shadow + DS_INPUT_ACCUM) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
                         } else {
                             uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                            *(uint16_t*)(shadow + 0x86DE) = *(uint16_t*)(shadow + bx + 0x2191);
+                            *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + 0x2191);
                             *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
                             uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
                             *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
@@ -7776,7 +7776,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 {
                     uint16_t ax = 0;
                     if (*(uint16_t*)(shadow + DS_JOYSTICK_PRESENT) != 0)
-                        ax = *(uint16_t*)(shadow + 0x86DC);
+                        ax = *(uint16_t*)(shadow + DS_INPUT_JOY);
                     ax = v2_input_or(shadow, ax);
                     *(uint16_t*)(shadow + DS_INPUT_KEYS) = ax;
                     uint16_t prev = *(uint16_t*)(shadow + DS_INPUT_PREV);
@@ -9128,7 +9128,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
     if (!include_anim_queue) return;
     // VGA rendering omitted (v2 renders tiles separately). DS scratch writes preserved.
     {
-        uint16_t count = *(uint16_t*)(shadow + 0x8734);
+        uint16_t count = *(uint16_t*)(shadow + DS_COUNTER_8734);
         if (count != 0) {
             // Process queue entries (cx from count-3 down to 0, step -3)
             for (int16_t cx = (int16_t)count - 3; cx >= 0; cx -= 3) {
@@ -9735,7 +9735,7 @@ static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
     // NOTE: orig writes bp AFTER `add bp, ds:8F6Ch` (= bp_val + stride = bp2).
     // (eip 0x4035 in sub_13fc2: mov [bx-0x78CA], bp — bp here is post-add).
     uint16_t bp_after = bp_val + vm.ds_read(DS_FS_PAGE_STRIDE);
-    uint16_t cx_count = vm.ds_read(0x8734);
+    uint16_t cx_count = vm.ds_read(DS_COUNTER_8734);
     uint16_t bx_idx = cx_count << 1;
     vm.ds_write((uint16_t)(bx_idx - 0x78CA), bp_after);
     vm.ds_write((uint16_t)(bx_idx - 0x78C8), x_pix);
@@ -9752,7 +9752,7 @@ static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
     if (vx <= 0x160) {
         uint16_t vy = (uint16_t)(y_pix - vm.ds_read(DS_VIEWPORT_Y) + 0x10);
         if (vy <= 0xD0) {
-            vm.ds_write(0x8734, cx_count + 3);
+            vm.ds_write(DS_COUNTER_8734, cx_count + 3);
         }
     }
 }
@@ -14008,7 +14008,7 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
                   vm.ds_read(vm.obj + OBJ_PC),  // PC
                   vm.ds_read(DS_ACCUMULATOR),             // accumulator
                   vm.ds_read(DS_TRANSITION),
-                  vm.ds_read(0x86DE),           // input keys
+                  vm.ds_read(DS_INPUT_ACCUM),           // input keys
                   vm.ds_read(DS_INPUT_KEYS),            // current input
                   vm.ds_read(DS_INPUT_EDGES),            // edge input
                   vm.ds_read(vm.obj + OBJ_WORLD_X),  // X
@@ -16818,7 +16818,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
                   *(uint16_t*)(shadow + obj_idx + OBJ_PC),
                   *(uint16_t*)(shadow + obj_idx + OBJ_CODE_SEG),
                   *(uint16_t*)(shadow + DS_TRANSITION),
-                  *(uint16_t*)(shadow + 0x86DE),
+                  *(uint16_t*)(shadow + DS_INPUT_ACCUM),
                   *(uint16_t*)(shadow + DS_INPUT_EDGES),
                   vm.es);
             }
@@ -17976,7 +17976,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
             *(uint16_t*)(s + DS_PAL_REQ) = 2; // word_303DE = 2 (request sub_10ffc in render callback)
         }
         // word_30C14 = 0 (eip 0x00DB — end of frame marker)
-        *(uint16_t*)(s + 0x8734) = 0;
+        *(uint16_t*)(s + DS_COUNTER_8734) = 0;
 
         // sub_108c8: sound crossfade management (eip 0x00E1). Exact replica.
         // ds:0x302 (word_287E2) & ds:0x304 (word_287E4) bit 15 → skip.
@@ -18112,7 +18112,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         // sub_12352: input
                         {
                             uint16_t ax = 0;
-                            ax |= *(uint16_t*)(s + 0x86DE);
+                            ax |= *(uint16_t*)(s + DS_INPUT_ACCUM);
                             ax = v2_input_or(s, ax);
                             *(uint16_t*)(s + DS_INPUT_KEYS) = ax;
                             uint16_t prev = *(uint16_t*)(s + DS_INPUT_PREV);
@@ -18132,7 +18132,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // sub_12352 (final input read)
                     {
                         uint16_t ax = 0;
-                        ax |= *(uint16_t*)(s + 0x86DE);
+                        ax |= *(uint16_t*)(s + DS_INPUT_ACCUM);
                         ax = v2_input_or(s, ax);
                         *(uint16_t*)(s + DS_INPUT_KEYS) = ax;
                         uint16_t prev = *(uint16_t*)(s + DS_INPUT_PREV);
@@ -19358,7 +19358,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     // NO sub_10130 in this block — previously v2 had v2_vsync_wait_10130(s) here, removed
     // for orig parity (orig does NOT call sub_10130 in this phase).
     // word_30C14 = 0 (eip 0x00DB)
-    *(uint16_t*)(s + 0x8734) = 0;
+    *(uint16_t*)(s + DS_COUNTER_8734) = 0;
     // sub_108c8: sound crossfade (eip 0x00E1). Use the proper v2_audio_tick_108c8 function
     // which handles ALT+S/M toggle + actual SDL stop_xmidi_external/play_xmidi_external
     // (previously inline duplicate just toggled DS without making sound effects).
@@ -19641,8 +19641,8 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
     // dialog cmd 4 wait → instant auto-dismiss. See v2_load_level_11080 line 4339.
     uint16_t ax = 0;
     if (*(uint16_t*)(shadow + DS_JOYSTICK_PRESENT) != 0)
-        ax = *(uint16_t*)(shadow + 0x86DC);
-    ax |= *(uint16_t*)(shadow + 0x86DE);
+        ax = *(uint16_t*)(shadow + DS_INPUT_JOY);
+    ax |= *(uint16_t*)(shadow + DS_INPUT_ACCUM);
     extern uint16_t input_keys;
     uint16_t w288ac = *(uint16_t*)(shadow + DS_GAME_MODE_AC);
     ax = v2_input_intro_mask(ax, w288ac, input_keys);
@@ -19937,7 +19937,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 #else
     {
         uint16_t ax = 0;
-        if (*(uint16_t*)(s + DS_JOYSTICK_PRESENT) != 0) ax = *(uint16_t*)(s + 0x86DC);
+        if (*(uint16_t*)(s + DS_JOYSTICK_PRESENT) != 0) ax = *(uint16_t*)(s + DS_INPUT_JOY);
         ax = v2_input_or(s, ax);
         *(uint16_t*)(s + DS_INPUT_KEYS) = ax;
         uint16_t prev = *(uint16_t*)(s + DS_INPUT_PREV);
@@ -20606,10 +20606,10 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
             }
             if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) != 0) {
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) -= 1;
-                *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
+                *(uint16_t*)(shadow + DS_INPUT_ACCUM) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
             } else {
                 uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                *(uint16_t*)(shadow + 0x86DE) = *(uint16_t*)(shadow + bx + 0x2191);
+                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + 0x2191);
                 *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
                 uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;

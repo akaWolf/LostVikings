@@ -472,4 +472,16 @@ constexpr uint16_t DS_SOUND_INIT_932        = 0x9932; // word_31E12: sound-init 
 constexpr uint16_t DS_XMI_BUF_PTR           = 0x9934; // word_31E14: XMI music buffer pointer (#99)
 constexpr uint16_t DS_SOUND_FIELD_942       = 0x9942; // word_31E22: sound-init field (set 0x0E00)
 
+
+// ---------------------------------------------------------------------------
+// DS globals batch final (input-layer INT9 / byte-save temp / counter)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_BYTE_SAVE_0           = 0x8504; // word_309E4: 3-byte save/restore temp, byte 0 ([di] backup)
+constexpr uint16_t DS_BYTE_SAVE_1           = 0x8505; // word_309E5: 3-byte save/restore temp, byte 1 ([di+1] backup)
+constexpr uint16_t DS_BYTE_SAVE_2           = 0x8506; // word_309E6: 3-byte save/restore temp, byte 2 ([di+2] backup)
+constexpr uint16_t DS_INPUT_JOY             = 0x86DC; // word_30BBC: joystick/input value (INT9 async; read gated by DS_JOYSTICK_PRESENT)
+constexpr uint16_t DS_INPUT_ACCUM           = 0x86DE; // word_30BBE: INT9 async input accumulator (atomic OR; input layer, 13 sites)
+constexpr uint16_t DS_COUNTER_8734          = 0x8734; // word_30C14: counter (count/cx_count; cleared 0)
+constexpr uint16_t DS_SCRATCH_28            = 0x0028; // byte_28508: game-state init scratch byte (cleared in sub_12ca3; no orig symbol reader)
+
 #endif // V2_DS_LAYOUT_H
