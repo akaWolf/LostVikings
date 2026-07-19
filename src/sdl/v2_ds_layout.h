@@ -117,4 +117,37 @@ constexpr uint16_t OBJ_COLL_TABLE    = 0x1B25; // collision partner table ((obj<
 constexpr uint16_t VIK_PORTRAIT      = 0x15AD; // word_29A8D+vk: current portrait idx (11B0B) — aliases OBJ_RES_HANDLE column semantics on viking rows
 constexpr uint16_t VIK_HEALTH        = 0x16ED; // word_29BCD+vk row inside 120FF health calc (aliases OBJ_ANIM_IDX col)
 
+// ---------------------------------------------------------------------------
+// Static LUT bases (bytecode-index subtractive addressing: ds:[idx - BASE])
+// ---------------------------------------------------------------------------
+constexpr uint16_t LUT_SCAN_FILTER   = 0x6B34; // byte table of object types, sorted; JB/JZ scans (op 2C/2D/35, 15fb1/15fbe, 15fd0) walk ds:[i-0x6B34]
+constexpr uint16_t LUT_FIELD_OFF     = 0x6CBA; // word table: bytecode idx -> object-table column offset ([b-0x6CBA], channels/setters/field ops)
+constexpr uint16_t LUT_BIT_MASK      = 0x6C34; // word bit-mask table (collision bit idx, op 9D/9E/A1.. masks: [idx-0x6C34])
+constexpr uint16_t LUT_BIT_CLEAR     = 0x6C14; // word clear-mask table (op 9D family: AND mask [idx-0x6C14])
+constexpr uint16_t LUT_BYTE_AND      = 0x6C3C; // byte AND-mask table (op 0D: [bit-0x6C3C])
+constexpr uint16_t LUT_BYTE_OR       = 0x6C44; // byte OR-mask table (op 0E: [bit-0x6C44])
+constexpr uint16_t LUT_ROW_BASE      = 0x7098; // tile-map row base words: ds:[row*2 - 0x7098] (141ba/13fc2/render)
+
+// ---------------------------------------------------------------------------
+// HUD / portrait tracking
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_HUD_SEL        = 0x0414; // word_288F4[3]: selector value per viking (0x414/416/418)
+constexpr uint16_t DS_HUD_SEL_PREV   = 0x041A; // tracked previous selector (0x41A/41C/41E)
+constexpr uint16_t DS_HUD_ITEMS      = 0x03E4; // item table current (12 words, sub_12199 source)
+constexpr uint16_t DS_HUD_ITEMS_PREV = 0x03FC; // item table tracked copy
+constexpr uint16_t DS_HUD_HEALTH     = 0x0435; // health state per viking (0x435/437/439)
+constexpr uint16_t DS_HUD_HEALTH_PREV= 0x043B; // tracked previous health (0x43B/43D/43F)
+constexpr uint16_t DS_PORTRAIT_PREV  = 0x0423; // word_28903[3]: tracked portrait idx (11B0B prev)
+constexpr uint16_t DS_PORTRAIT_SND   = 0x0429; // word_28909[3]: portrait sound state
+constexpr uint16_t DS_PORTRAIT_SND_PREV = 0x042F; // word_2890F[3]: tracked sound state
+
+// ---------------------------------------------------------------------------
+// VGA page roles / panning (page emulator anchors)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_PAGE_DRAW      = 0x92F7; // page role: draw target this sub-frame
+constexpr uint16_t DS_PAGE_SHOWN     = 0x92F9; // page role: shown page
+constexpr uint16_t DS_PAGE_BG        = 0x92FB; // page role: clean background (1de05 latch source)
+constexpr uint16_t DS_PIXEL_PAN      = 0x92EE; // byte_317CE: CRTC pixel pan value (myPixelOffset = /2)
+constexpr uint16_t DS_PAN_GATE       = 0x92F2; // byte_317DF: pan/palette dispatch enable gate
+
 #endif // V2_DS_LAYOUT_H

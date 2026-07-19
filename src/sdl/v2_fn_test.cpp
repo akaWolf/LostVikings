@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "v2_ds_layout.h"
 
 // Thin exports from v2_vm.cpp (wrappers over file-static v2 functions/tables).
 extern "C" void v2_fntest_call_sub_15972(uint8_t* test_shadow, uint16_t ax, uint16_t di);
@@ -421,8 +422,8 @@ bool ft_synth_case_15972(uint16_t ax, uint16_t di,
 {
     st.cases++;
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-    ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), y);
-    ft_wr16(g_synth_in, (uint16_t)(di + 0x150D), y_end);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_Y), y);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), y_end);
     ft_wr16(g_synth_in, (uint16_t)(di + 0x14E5), y_start);
     ft_wr16(g_synth_in, (uint16_t)(di + 0x19E5), 0xAAAA);
 
@@ -527,15 +528,15 @@ bool ft_synth_case_161a1(uint16_t di, uint16_t si, const Ft161a1Fields& f,
 {
     st.cases++;
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-    ft_wr16(g_synth_in, (uint16_t)(di + 0x1535), f.di_x_lo);
-    ft_wr16(g_synth_in, (uint16_t)(di + 0x155D), f.di_x_hi);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1535), f.si_x_lo);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x155D), f.si_x_hi);
-    ft_wr16(g_synth_in, (uint16_t)(di + 0x150D), f.di_y_end);
-    ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), f.di_y);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), f.di_x_lo);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), f.di_x_hi);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X0), f.si_x_lo);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X1), f.si_x_hi);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), f.di_y_end);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_Y), f.di_y);
     ft_wr16(g_synth_in, (uint16_t)(di + 0x13CD), f.di_yc);
     ft_wr16(g_synth_in, (uint16_t)(si + 0x14E5), f.si_y_st);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1765), f.si_y);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_WORLD_Y), f.si_y);
     ft_wr16(g_synth_in, (uint16_t)(si + 0x13CD), f.si_yc);
     ft_wr16(g_synth_in, 0x32, 0xBBBB);   // scratch canaries: written only on
     ft_wr16(g_synth_in, 0x34, 0xBBBB);   // post-X-overlap paths — path-exact
@@ -658,8 +659,8 @@ struct FtSnapLayout {
     FtId id; uint16_t pos, lo, hi, clr;
     void (*v2call)(uint8_t*, uint16_t, uint16_t, uint16_t);
 };
-const FtSnapLayout FT_SNAP_Y = { FT_SUB_15DA8, 0x1765, 0x14E5, 0x150D, 0x19E5, v2_fntest_call_sub_15da8 };
-const FtSnapLayout FT_SNAP_X = { FT_SUB_15D6B, 0x173D, 0x1535, 0x155D, 0x19BD, v2_fntest_call_sub_15d6b };
+const FtSnapLayout FT_SNAP_Y = { FT_SUB_15DA8, OBJ_WORLD_Y, 0x14E5, OBJ_BBOX_Y1, 0x19E5, v2_fntest_call_sub_15da8 };
+const FtSnapLayout FT_SNAP_X = { FT_SUB_15D6B, OBJ_WORLD_X, OBJ_BBOX_X0, OBJ_BBOX_X1, 0x19BD, v2_fntest_call_sub_15d6b };
 
 bool ft_synth_case_snap(const FtSnapLayout& L, uint16_t ax, uint16_t di, uint16_t si,
                         uint16_t d_pos, uint16_t d_lo, uint16_t d_hi,
@@ -761,11 +762,11 @@ bool ft_synth_case_13d68(uint16_t mode, uint16_t si, uint16_t count,
     st.cases++;
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
     ft_wr16(g_synth_in, 0x374, mode);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1AD5), count);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_SUB_COUNT), count);
     for (uint16_t d = 0; d < 0x100; d += 2) {
         uint8_t o = occ128[d >> 1];
         if (o & 1) ft_wr16(g_synth_in, (uint16_t)(d + 0x44D),  0x8000);
-        if (o & 2) ft_wr16(g_synth_in, (uint16_t)(d + 0x114D), 0x204);
+        if (o & 2) ft_wr16(g_synth_in, (uint16_t)(d + OBJ_DIRTY_MODE), 0x204);
     }
     ft_wr16(g_synth_in, 0x32, 0xBBBB);
     ft_wr16(g_synth_in, 0x3A, 0xBBBB);
@@ -862,11 +863,11 @@ bool ft_synth_case_1345init(FtId id, uint16_t si, uint16_t start, uint16_t end,
 {
     st.cases++;
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1A85), start);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1AAD), end);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), flags);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_SUB_SLOT), start);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_SUB_END), end);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_FLAGS), flags);
     ft_wr16(g_synth_in, (uint16_t)(si + 0x1855), spr_base);
-    ft_wr16(g_synth_in, 0x2E73, spr_seg);
+    ft_wr16(g_synth_in, DS_SEG_SPRITE, spr_seg);
     // Pre-fill [d+0x44D] pattern so sub_13e15's OR has varied prior bits.
     for (uint16_t d = start, n = 0; n < 8; d += 2, n++)
         ft_wr16(g_synth_in, (uint16_t)(d + 0x44D), (uint16_t)(0x1110 * n));
@@ -955,11 +956,11 @@ bool ft_synth_case_13c0c(uint16_t vpx, uint16_t vpy,
     ft_wr16(g_synth_in, 0x372, (uint16_t)(6 + n_objs * 2));
     for (int i = 0; i < n_objs; i++) {
         uint16_t si = (uint16_t)(6 + i * 2);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x1355), objs[i].alive);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), objs[i].flags);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x173D), objs[i].x);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_CODE_SEG), objs[i].alive);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_FLAGS), objs[i].flags);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_WORLD_X), objs[i].x);
         ft_wr16(g_synth_in, (uint16_t)(si + 0x14BD), objs[i].hw);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x1765), objs[i].y);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_WORLD_Y), objs[i].y);
         ft_wr16(g_synth_in, (uint16_t)(si + 0x1495), objs[i].hh);
     }
     ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
@@ -1173,8 +1174,8 @@ int ft_selftest_sub_1064b() {
     auto build = [&](uint16_t vpx, uint16_t vpy, uint16_t ox, uint16_t oy) {
         ft_cam_base(vpx, vpy, 0, 0, 0x4000, 0x4000);
         ft_wr16(g_synth_in, 0x3C2, 0);                       // active viking slot 0
-        ft_wr16(g_synth_in, 0x173D, ox);
-        ft_wr16(g_synth_in, 0x1765, oy);
+        ft_wr16(g_synth_in, OBJ_WORLD_X, ox);
+        ft_wr16(g_synth_in, OBJ_WORLD_Y, oy);
         for (uint16_t a = 0; a <= 0x10; a++)
             ft_wr16(g_synth_in, (uint16_t)(a * 2 + 0x2B84), (uint16_t)(a + 1));
         ft_wr16(g_synth_in, 0x3D8, 0xBBBB); ft_wr16(g_synth_in, 0x3DA, 0xBBBB);
@@ -1211,8 +1212,8 @@ int ft_selftest_sub_1064b() {
         build(rng.w(), rng.w(), rng.w(), rng.w());
         uint16_t di = (uint16_t)((rng.next() % 3) * 2);      // slots 0/2/4
         ft_wr16(g_synth_in, 0x3C2, di);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x173D), rng.w());
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_X), rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_Y), rng.w());
         ft_cam_run(FT_SUB_1064B, 0, "fuzz", fuzz, diff_budget);
     }
     fprintf(stderr,
@@ -1460,21 +1461,21 @@ bool ft_synth_case_deltafam(FtId id, uint16_t obj_top, const FtDeltaObj* objs, i
     ft_wr16(g_synth_in, 0x372, obj_top);
     for (int i = 0; i < n_objs; i++) {
         uint16_t di = (uint16_t)(i * 2);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x1355), objs[i].alive);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x1AD5), objs[i].count);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x173D), objs[i].x);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_CODE_SEG), objs[i].alive);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_SUB_COUNT), objs[i].count);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_X), objs[i].x);
         ft_wr16(g_synth_in, (uint16_t)(di + 0x13A5), objs[i].xs);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), objs[i].y);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_Y), objs[i].y);
         ft_wr16(g_synth_in, (uint16_t)(di + 0x13CD), objs[i].ys);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x1A85), objs[i].sa);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x1AAD), objs[i].se);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_SUB_SLOT), objs[i].sa);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_SUB_END), objs[i].se);
     }
     // Slot-area background noise so += effects are visible on any slot.
     FtRng bg(bg_seed);
     for (uint32_t a = 0; a < 0x100; a += 2) {
         ft_wr16(g_synth_in, (uint16_t)(a + 0x64D), bg.w());
         ft_wr16(g_synth_in, (uint16_t)(a + 0x74D), bg.w());
-        ft_wr16(g_synth_in, (uint16_t)(a + 0x114D), bg.w());
+        ft_wr16(g_synth_in, (uint16_t)(a + OBJ_DIRTY_MODE), bg.w());
     }
 
     memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
@@ -1600,17 +1601,17 @@ bool ft_synth_case_search(FtId id, uint16_t filter, uint16_t obj,
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
     ft_wr16(g_synth_in, 0x372, 8);
     for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
-    ft_wr16(g_synth_in, 0x2E63, FT_VM_TESTSEG);          // tilemap segment
+    ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);          // tilemap segment
     ft_wr16(g_synth_in, 0x25DC, (uint16_t)tw);           // map width (tiles)
     ft_wr16(g_synth_in, 0x25DE, (uint16_t)th);           // map height
     for (int y = 0; y < th; y++)
-        ft_wr16(g_synth_in, (uint16_t)(y * 2 - 0x7098), (uint16_t)(y * tw * 2)); // row offsets
+        ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE), (uint16_t)(y * tw * 2)); // row offsets
     // canaries on the scratch protocol
     ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
     ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
     ft_wr16(g_synth_in, 0x3B2, 0xBBBB); ft_wr16(g_synth_in, 0x3B4, 0xBBBB);
     FtRng bg(bg_seed);
-    static const uint16_t SF[] = { 0x1535, 0x155D, 0x14E5, 0x150D, 0x1585, 0x17DD, 0x196D };
+    static const uint16_t SF[] = { OBJ_BBOX_X0, OBJ_BBOX_X1, 0x14E5, OBJ_BBOX_Y1, OBJ_FLAGS, OBJ_TYPE_ID, OBJ_VEL_Y };
     for (uint16_t f : SF)
         ft_wr16(g_synth_in, (uint16_t)(obj + f), bg.w());
     for (int i = 0; i < nw; i++) ft_wr16(g_synth_in, w[i].addr, w[i].val);
@@ -1654,13 +1655,13 @@ bool ft_synth_case_search(FtId id, uint16_t filter, uint16_t obj,
                 " | o6: fl=%04X X=[%04X..%04X] Y=[%04X..%04X] v=%04X cX=%04X"
                 " | o2: alive=%04X t=%04X X=[%04X..%04X] Y=[%04X..%04X]\n",
                 g_name[id], group, filter, obj, bg_seed,
-                *(uint16_t*)(g_synth_in + obj + 0x1585),
-                *(uint16_t*)(g_synth_in + obj + 0x1535), *(uint16_t*)(g_synth_in + obj + 0x155D),
-                *(uint16_t*)(g_synth_in + obj + 0x14E5), *(uint16_t*)(g_synth_in + obj + 0x150D),
-                *(uint16_t*)(g_synth_in + obj + 0x196D), *(uint16_t*)(g_synth_in + obj + 0x173D),
-                *(uint16_t*)(g_synth_in + 2 + 0x1355), *(uint16_t*)(g_synth_in + 2 + 0x17DD),
-                *(uint16_t*)(g_synth_in + 2 + 0x1535), *(uint16_t*)(g_synth_in + 2 + 0x155D),
-                *(uint16_t*)(g_synth_in + 2 + 0x14E5), *(uint16_t*)(g_synth_in + 2 + 0x150D));
+                *(uint16_t*)(g_synth_in + obj + OBJ_FLAGS),
+                *(uint16_t*)(g_synth_in + obj + OBJ_BBOX_X0), *(uint16_t*)(g_synth_in + obj + OBJ_BBOX_X1),
+                *(uint16_t*)(g_synth_in + obj + 0x14E5), *(uint16_t*)(g_synth_in + obj + OBJ_BBOX_Y1),
+                *(uint16_t*)(g_synth_in + obj + OBJ_VEL_Y), *(uint16_t*)(g_synth_in + obj + OBJ_WORLD_X),
+                *(uint16_t*)(g_synth_in + 2 + OBJ_CODE_SEG), *(uint16_t*)(g_synth_in + 2 + OBJ_TYPE_ID),
+                *(uint16_t*)(g_synth_in + 2 + OBJ_BBOX_X0), *(uint16_t*)(g_synth_in + 2 + OBJ_BBOX_X1),
+                *(uint16_t*)(g_synth_in + 2 + 0x14E5), *(uint16_t*)(g_synth_in + 2 + OBJ_BBOX_Y1));
         st.fail++; return false;
     }
 
@@ -1703,7 +1704,7 @@ int ft_selftest_search(FtId id, uint32_t seed) {
     uint16_t T[16];
     for (int i = 0; i < 16; i++) T[i] = (uint16_t)((i & 0x3F) << 10);
     // filter table at [filter-0x6B34]: filter=0 → address 0x94CC
-    const uint16_t FT_ADDR = (uint16_t)(0 - 0x6B34);
+    const uint16_t FT_ADDR = (uint16_t)(0 - LUT_SCAN_FILTER);
 
     // Directed: tile-hit / obj-hit / none / both (tile stage wins), flip
     // variants, filter chain walk (match at 2nd entry), obj JS-edge bounds.
@@ -1728,19 +1729,19 @@ int ft_selftest_search(FtId id, uint32_t seed) {
     int ci = 0;
     if (shard0 && fz_only < 0) for (const SCase& c : SC) {
         FtWr w[16]; int nw = 0;
-        w[nw++] = { (uint16_t)(OBJ + 0x1585), c.flags };
-        w[nw++] = { (uint16_t)(OBJ + 0x1535), c.xs };
-        w[nw++] = { (uint16_t)(OBJ + 0x155D), c.xe };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_FLAGS), c.flags };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X0), c.xs };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X1), c.xe };
         w[nw++] = { (uint16_t)(OBJ + 0x14E5), c.ys };
-        w[nw++] = { (uint16_t)(OBJ + 0x150D), c.ye };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_Y1), c.ye };
         w[nw++] = { FT_ADDR, (uint16_t)(c.f0 | ((c.f1 & 0xFF) << 8)) };
         if (c.o2alive) {
-            w[nw++] = { (uint16_t)(2 + 0x1355), FT_VM_TESTSEG };
-            w[nw++] = { (uint16_t)(2 + 0x17DD), c.o2t };
-            w[nw++] = { (uint16_t)(2 + 0x1535), c.o2xs };
-            w[nw++] = { (uint16_t)(2 + 0x155D), c.o2xe };
+            w[nw++] = { (uint16_t)(2 + OBJ_CODE_SEG), FT_VM_TESTSEG };
+            w[nw++] = { (uint16_t)(2 + OBJ_TYPE_ID), c.o2t };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X0), c.o2xs };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X1), c.o2xe };
             w[nw++] = { (uint16_t)(2 + 0x14E5), c.o2ys };
-            w[nw++] = { (uint16_t)(2 + 0x150D), c.o2ye };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_Y1), c.o2ye };
         }
         ft_synth_case_search(id, 0, OBJ, w, nw, T, 4, 4,
                              seed ^ (0xA0000000u + ci), "grid", grid, diff_budget);
@@ -1749,22 +1750,22 @@ int ft_selftest_search(FtId id, uint32_t seed) {
 
     // Exhaustive: the unit's own axis field over all 65536 values.
     uint16_t axis_field =
-        (id == FT_SUB_158AA) ? (uint16_t)(OBJ + 0x1535) :
-        (id == FT_SUB_158B9) ? (uint16_t)(OBJ + 0x155D) :
+        (id == FT_SUB_158AA) ? (uint16_t)(OBJ + OBJ_BBOX_X0) :
+        (id == FT_SUB_158B9) ? (uint16_t)(OBJ + OBJ_BBOX_X1) :
         (id == FT_SUB_158C8) ? (uint16_t)(OBJ + 0x14E5) :
-        (id == FT_SUB_158D7) ? (uint16_t)(OBJ + 0x150D) :
-                               (uint16_t)(OBJ + 0x155D);   // 158e6, flip=0 → X_end
+        (id == FT_SUB_158D7) ? (uint16_t)(OBJ + OBJ_BBOX_Y1) :
+                               (uint16_t)(OBJ + OBJ_BBOX_X1);   // 158e6, flip=0 → X_end
     long exh_done = 0;
     if (fz_only < 0) for (uint32_t v = 0; v <= 0xFFFF; v++) {
         if (!ft_shard_mine(v)) continue;             // FNSELFTEST_SHARD split
         if ((++exh_done % 1000) == 0)
             fprintf(stderr, "FNSELFTEST-PROG[%s]: exh %ld (v=%04X)\n", g_name[id], exh_done, v);
         FtWr w[7] = {
-            { (uint16_t)(OBJ + 0x1585), 0x8000 },
-            { (uint16_t)(OBJ + 0x1535), 0x0010 },
-            { (uint16_t)(OBJ + 0x155D), 0x0020 },
+            { (uint16_t)(OBJ + OBJ_FLAGS), 0x8000 },
+            { (uint16_t)(OBJ + OBJ_BBOX_X0), 0x0010 },
+            { (uint16_t)(OBJ + OBJ_BBOX_X1), 0x0020 },
             { (uint16_t)(OBJ + 0x14E5), 0x0008 },
-            { (uint16_t)(OBJ + 0x150D), 0x000E },
+            { (uint16_t)(OBJ + OBJ_BBOX_Y1), 0x000E },
             { FT_ADDR, 0xFF05 },                     // match type 5, stop at 0xFF
             { axis_field, (uint16_t)v },
         };
@@ -1789,19 +1790,19 @@ int ft_selftest_search(FtId id, uint32_t seed) {
             continue;
         }
         FtWr w[13]; int nw = 0;
-        w[nw++] = { (uint16_t)(OBJ + 0x1585), (uint16_t)(0x8000 | (rng.next() & 0x40)) };
-        w[nw++] = { (uint16_t)(OBJ + 0x1535), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x155D), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_FLAGS), (uint16_t)(0x8000 | (rng.next() & 0x40)) };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X0), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X1), rng.w() };
         w[nw++] = { (uint16_t)(OBJ + 0x14E5), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x150D), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_Y1), rng.w() };
         w[nw++] = { FT_ADDR, (uint16_t)(0xFF00 | (rng.next() & 0x3F)) };
         if (rng.next() & 1) {
-            w[nw++] = { (uint16_t)(2 + 0x1355), FT_VM_TESTSEG };
-            w[nw++] = { (uint16_t)(2 + 0x17DD), (uint16_t)(rng.next() & 0x013F) };
-            w[nw++] = { (uint16_t)(2 + 0x1535), rng.w() };
-            w[nw++] = { (uint16_t)(2 + 0x155D), rng.w() };
+            w[nw++] = { (uint16_t)(2 + OBJ_CODE_SEG), FT_VM_TESTSEG };
+            w[nw++] = { (uint16_t)(2 + OBJ_TYPE_ID), (uint16_t)(rng.next() & 0x013F) };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X0), rng.w() };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X1), rng.w() };
             w[nw++] = { (uint16_t)(2 + 0x14E5), rng.w() };
-            w[nw++] = { (uint16_t)(2 + 0x150D), rng.w() };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_Y1), rng.w() };
         }
         if (fz_dbg) {
             fprintf(stderr, "FNSELFTEST-FZCASE[%s i=%d]:", g_name[id], i);
@@ -1845,21 +1846,21 @@ bool ft_synth_case_scan(FtId id, uint16_t filter, uint16_t obj,
     ft_wr16(g_synth_in, 0x372, 8);                        // 4 slots: 0,2,4,6
     ft_wr16(g_synth_in, 0x42, obj);                       // self
     for (uint16_t s = 0; s < 8; s += 2)                   // controlled slot table
-        ft_wr16(g_synth_in, (uint16_t)(s + 0x1355), 0);
+        ft_wr16(g_synth_in, (uint16_t)(s + OBJ_CODE_SEG), 0);
     for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
-    ft_wr16(g_synth_in, 0x2E63, FT_VM_TESTSEG);           // tilemap segment (15afd)
+    ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);           // tilemap segment (15afd)
     ft_wr16(g_synth_in, 0x25DC, (uint16_t)tw);
     ft_wr16(g_synth_in, 0x25DE, (uint16_t)th);
     for (int y = 0; y < th; y++)
-        ft_wr16(g_synth_in, (uint16_t)(y * 2 - 0x7098), (uint16_t)(y * tw * 2));
+        ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE), (uint16_t)(y * tw * 2));
     // canaries on the scratch protocol (0x6C/0x6E belong to sub_15afd only)
     ft_wr16(g_synth_in, 0x32, 0xBBBB); ft_wr16(g_synth_in, 0x34, 0xBBBB);
     ft_wr16(g_synth_in, 0x36, 0xBBBB); ft_wr16(g_synth_in, 0x38, 0xBBBB);
     ft_wr16(g_synth_in, 0x3A, 0xBBBB);
     ft_wr16(g_synth_in, 0x6C, 0xBBBB); ft_wr16(g_synth_in, 0x6E, 0xBBBB);
     FtRng bg(bg_seed);
-    static const uint16_t SF[] = { 0x1535, 0x155D, 0x14E5, 0x150D, 0x1585, 0x17DD,
-                                   0x196D, 0x1945, 0x1765, 0x13CD, 0x173D };
+    static const uint16_t SF[] = { OBJ_BBOX_X0, OBJ_BBOX_X1, 0x14E5, OBJ_BBOX_Y1, OBJ_FLAGS, OBJ_TYPE_ID,
+                                   OBJ_VEL_Y, OBJ_VEL_X, OBJ_WORLD_Y, 0x13CD, OBJ_WORLD_X };
     for (uint16_t f : SF)
         ft_wr16(g_synth_in, (uint16_t)(obj + f), bg.w());
     for (int i = 0; i < nw; i++) ft_wr16(g_synth_in, w[i].addr, w[i].val);
@@ -1902,11 +1903,11 @@ bool ft_synth_case_scan(FtId id, uint16_t filter, uint16_t obj,
                 " | self: vY=%04X vX=%04X Y=%04X Yp=%04X Ye=%04X X=%04X"
                 " | o2: alive=%04X t=%04X vY=%04X vX=%04X\n",
                 g_name[id], group, filter, obj, bg_seed,
-                *(uint16_t*)(g_synth_in + obj + 0x196D), *(uint16_t*)(g_synth_in + obj + 0x1945),
-                *(uint16_t*)(g_synth_in + obj + 0x1765), *(uint16_t*)(g_synth_in + obj + 0x13CD),
-                *(uint16_t*)(g_synth_in + obj + 0x150D), *(uint16_t*)(g_synth_in + obj + 0x173D),
-                *(uint16_t*)(g_synth_in + 2 + 0x1355), *(uint16_t*)(g_synth_in + 2 + 0x17DD),
-                *(uint16_t*)(g_synth_in + 2 + 0x196D), *(uint16_t*)(g_synth_in + 2 + 0x1945));
+                *(uint16_t*)(g_synth_in + obj + OBJ_VEL_Y), *(uint16_t*)(g_synth_in + obj + OBJ_VEL_X),
+                *(uint16_t*)(g_synth_in + obj + OBJ_WORLD_Y), *(uint16_t*)(g_synth_in + obj + 0x13CD),
+                *(uint16_t*)(g_synth_in + obj + OBJ_BBOX_Y1), *(uint16_t*)(g_synth_in + obj + OBJ_WORLD_X),
+                *(uint16_t*)(g_synth_in + 2 + OBJ_CODE_SEG), *(uint16_t*)(g_synth_in + 2 + OBJ_TYPE_ID),
+                *(uint16_t*)(g_synth_in + 2 + OBJ_VEL_Y), *(uint16_t*)(g_synth_in + 2 + OBJ_VEL_X));
         st.fail++; return false;
     }
 
@@ -1941,7 +1942,7 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
     const uint16_t OBJ = 6;
     v2_set_m2c_base(v2_fntest_m2c_base());
     const bool shard0 = (g_shard_i == 0);
-    const uint16_t FT_ADDR = (uint16_t)(0 - 0x6B34);      // filter=0 chain
+    const uint16_t FT_ADDR = (uint16_t)(0 - LUT_SCAN_FILTER);      // filter=0 chain
     const uint16_t SLOPE_BASE = (uint16_t)(0 - 0x7684);   // slope table base
     // 4x4 tile map for sub_15afd: row-major types in bits 15..10.
     // Row 0-1: plain low types; row 2: slope types 0x30/0x31; row 3: 0x05 (match row).
@@ -1953,8 +1954,8 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
 
     const bool is_afd = (id == FT_SUB_15AFD);
     // vel field pair per unit: self field / partner field (the gate operands)
-    const uint16_t VF = is_afd ? 0x1765 :
-                        (id == FT_SUB_15C37) ? 0x1945 : 0x196D;
+    const uint16_t VF = is_afd ? OBJ_WORLD_Y :
+                        (id == FT_SUB_15C37) ? OBJ_VEL_X : OBJ_VEL_Y;
     const uint16_t VP = is_afd ? 0x13CD : VF;             // 15afd gate is self-only
 
     // --- Grid: directed branch/corner cases -------------------------------
@@ -1982,24 +1983,24 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
     int ci = 0;
     if (shard0) for (const VPair& vg : VG) for (const PBox& pb : PB) {
         FtWr w[20]; int nw = 0;
-        w[nw++] = { (uint16_t)(OBJ + 0x1535), 0x0140 };   // self X in partner range
-        w[nw++] = { (uint16_t)(OBJ + 0x155D), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X0), 0x0140 };   // self X in partner range
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X1), 0x0150 };
         w[nw++] = { (uint16_t)(OBJ + 0x14E5), 0x0140 };   // self Y overlapping
-        w[nw++] = { (uint16_t)(OBJ + 0x150D), 0x0150 };
-        w[nw++] = { (uint16_t)(OBJ + 0x196D), 0x0000 };   // default vels
-        w[nw++] = { (uint16_t)(OBJ + 0x1945), 0x0000 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_Y1), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_VEL_Y), 0x0000 };   // default vels
+        w[nw++] = { (uint16_t)(OBJ + OBJ_VEL_X), 0x0000 };
         w[nw++] = { (uint16_t)(OBJ + VF), vg.a };
-        w[nw++] = { (uint16_t)(OBJ + 0x173D), 0x0148 };   // X for 15afd probes
+        w[nw++] = { (uint16_t)(OBJ + OBJ_WORLD_X), 0x0148 };   // X for 15afd probes
         w[nw++] = { FT_ADDR, 0xFF05 };
         if (!is_afd) {
-            w[nw++] = { (uint16_t)(2 + 0x1355), 1 };      // live partner in slot 2
-            w[nw++] = { (uint16_t)(2 + 0x17DD), 0x0005 }; // type matches filter
+            w[nw++] = { (uint16_t)(2 + OBJ_CODE_SEG), 1 };      // live partner in slot 2
+            w[nw++] = { (uint16_t)(2 + OBJ_TYPE_ID), 0x0005 }; // type matches filter
             w[nw++] = { (uint16_t)(2 + VP), vg.b };
-            w[nw++] = { (uint16_t)(2 + 0x1535), pb.xs };
-            w[nw++] = { (uint16_t)(2 + 0x155D), pb.xe };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X0), pb.xs };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X1), pb.xe };
             w[nw++] = { (uint16_t)(2 + 0x14E5), pb.ys };
-            w[nw++] = { (uint16_t)(2 + 0x150D), pb.ye };
-            w[nw++] = { (uint16_t)(2 + 0x196D), pb.vy };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_Y1), pb.ye };
+            w[nw++] = { (uint16_t)(2 + OBJ_VEL_Y), pb.vy };
         } else {
             w[nw++] = { (uint16_t)(OBJ + VP), vg.b };     // 15afd: gate = self [1765]-[13CD]
         }
@@ -2025,12 +2026,12 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
         int ai = 0;
         for (const ACase& c : AC) {
             FtWr w[16]; int nw = 0;
-            w[nw++] = { (uint16_t)(OBJ + 0x1765), c.y };
+            w[nw++] = { (uint16_t)(OBJ + OBJ_WORLD_Y), c.y };
             w[nw++] = { (uint16_t)(OBJ + 0x13CD), c.yp };
-            w[nw++] = { (uint16_t)(OBJ + 0x150D), c.ye };
-            w[nw++] = { (uint16_t)(OBJ + 0x173D), c.x };
-            w[nw++] = { (uint16_t)(OBJ + 0x1535), c.xs };
-            w[nw++] = { (uint16_t)(OBJ + 0x155D), c.xe };
+            w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_Y1), c.ye };
+            w[nw++] = { (uint16_t)(OBJ + OBJ_WORLD_X), c.x };
+            w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X0), c.xs };
+            w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X1), c.xe };
             w[nw++] = { FT_ADDR, c.f0f1 };
             // slope table entry for tile type 0x30, column (x & 0xF)
             w[nw++] = { (uint16_t)(SLOPE_BASE + ((0x30 & 0xF) << 4) + (c.x & 0xF)), c.slope };
@@ -2049,26 +2050,26 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
         if ((++exh_done % 4000) == 0)
             fprintf(stderr, "FNSELFTEST-PROG[%s]: exh %ld (v=%04X)\n", g_name[id], exh_done, v);
         FtWr w[18]; int nw = 0;
-        w[nw++] = { (uint16_t)(OBJ + 0x1535), 0x0140 };
-        w[nw++] = { (uint16_t)(OBJ + 0x155D), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X0), 0x0140 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X1), 0x0150 };
         w[nw++] = { (uint16_t)(OBJ + 0x14E5), 0x0140 };
-        w[nw++] = { (uint16_t)(OBJ + 0x150D), 0x0150 };
-        w[nw++] = { (uint16_t)(OBJ + 0x196D), 0x0000 };
-        w[nw++] = { (uint16_t)(OBJ + 0x1945), 0x0000 };
-        w[nw++] = { (uint16_t)(OBJ + 0x173D), 0x0148 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_Y1), 0x0150 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_VEL_Y), 0x0000 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_VEL_X), 0x0000 };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_WORLD_X), 0x0148 };
         w[nw++] = { FT_ADDR, 0xFF05 };
         if (!is_afd) {
             w[nw++] = { (uint16_t)(OBJ + VF), 0x4220 };
-            w[nw++] = { (uint16_t)(2 + 0x1355), 1 };
-            w[nw++] = { (uint16_t)(2 + 0x17DD), 0x0005 };
+            w[nw++] = { (uint16_t)(2 + OBJ_CODE_SEG), 1 };
+            w[nw++] = { (uint16_t)(2 + OBJ_TYPE_ID), 0x0005 };
             w[nw++] = { (uint16_t)(2 + VP), (uint16_t)v };
-            w[nw++] = { (uint16_t)(2 + 0x1535), 0x0100 };
-            w[nw++] = { (uint16_t)(2 + 0x155D), 0x0200 };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X0), 0x0100 };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_X1), 0x0200 };
             w[nw++] = { (uint16_t)(2 + 0x14E5), 0x0100 };
-            w[nw++] = { (uint16_t)(2 + 0x150D), 0x0200 };
-            w[nw++] = { (uint16_t)(2 + 0x196D), 0x0000 };
+            w[nw++] = { (uint16_t)(2 + OBJ_BBOX_Y1), 0x0200 };
+            w[nw++] = { (uint16_t)(2 + OBJ_VEL_Y), 0x0000 };
         } else {
-            w[nw++] = { (uint16_t)(OBJ + 0x1765), 0x4220 };
+            w[nw++] = { (uint16_t)(OBJ + OBJ_WORLD_Y), 0x4220 };
             w[nw++] = { (uint16_t)(OBJ + 0x13CD), (uint16_t)v };
         }
         ft_synth_case_scan(id, 0, OBJ, w, nw, T, 4, 4,
@@ -2082,15 +2083,15 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
         if ((i % 500) == 0)
             fprintf(stderr, "FNSELFTEST-PROG[%s]: fuzz %d\n", g_name[id], i);
         FtWr w[24]; int nw = 0;
-        w[nw++] = { (uint16_t)(OBJ + 0x1535), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x155D), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X0), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_X1), rng.w() };
         w[nw++] = { (uint16_t)(OBJ + 0x14E5), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x150D), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x196D), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x1945), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x1765), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_BBOX_Y1), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_VEL_Y), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_VEL_X), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_WORLD_Y), rng.w() };
         w[nw++] = { (uint16_t)(OBJ + 0x13CD), rng.w() };
-        w[nw++] = { (uint16_t)(OBJ + 0x173D), rng.w() };
+        w[nw++] = { (uint16_t)(OBJ + OBJ_WORLD_X), rng.w() };
         w[nw++] = { FT_ADDR, (uint16_t)(0xFF00 | (rng.next() & 0x3F)) };
         // two random slope-table entries (15afd probes; harmless otherwise)
         w[nw++] = { (uint16_t)(SLOPE_BASE + (rng.next() & 0xFF)), (uint16_t)(rng.next() & 0xF) };
@@ -2098,10 +2099,10 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
         int live = (int)(rng.next() % 3);                  // 0-2 live partners
         for (int k = 0; k < live; k++) {
             uint16_t slot = (uint16_t)((k == 0) ? 2 : 4);
-            w[nw++] = { (uint16_t)(slot + 0x1355), 1 };
-            w[nw++] = { (uint16_t)(slot + 0x17DD), (uint16_t)(rng.next() & 0x013F) };
-            w[nw++] = { (uint16_t)(slot + 0x196D), rng.w() };
-            w[nw++] = { (uint16_t)(slot + 0x1945), rng.w() };
+            w[nw++] = { (uint16_t)(slot + OBJ_CODE_SEG), 1 };
+            w[nw++] = { (uint16_t)(slot + OBJ_TYPE_ID), (uint16_t)(rng.next() & 0x013F) };
+            w[nw++] = { (uint16_t)(slot + OBJ_VEL_Y), rng.w() };
+            w[nw++] = { (uint16_t)(slot + OBJ_VEL_X), rng.w() };
         }
         ft_synth_case_scan(id, 0, OBJ, w, nw, T, 4, 4,
                            rng.next(), "fuzz", fuzz, diff_budget);
@@ -2143,7 +2144,7 @@ bool ft_synth_case_chunk(uint16_t chunk_id, const char* group,
     memset(dest_zone, 0xCC, 0x10000);
 
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-    ft_wr16(g_synth_in, 0x2E69, FT_RING_SEG);        // FS segment = ring zone
+    ft_wr16(g_synth_in, DS_SEG_FS, FT_RING_SEG);        // FS segment = ring zone
     for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;  // header window baseline
 
     uint16_t saved_10980 = v2_fntest_get_word_10980();
@@ -2366,7 +2367,7 @@ bool ft_synth_case_rawchunk(uint16_t chunk_id, uint16_t disp_off, const char* gr
     memset(a000_zone, 0xCC, FT_A000_SPAN);
 
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-    ft_wr16(g_synth_in, 0x2E77, FT_RING_SEG);        // chunk segment = test zone
+    ft_wr16(g_synth_in, DS_SEG_CHUNK, FT_RING_SEG);        // chunk segment = test zone
     for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;
 
     uint16_t saved_10980 = v2_fntest_get_word_10980();
@@ -2551,19 +2552,19 @@ bool ft_synth_case_anim(FtId id, uint16_t obj, const uint8_t* script, int slen,
     ft_wr16(g_synth_in, 0x42, obj);
     ft_wr16(g_synth_in, 0x304, 1);                        // SFX muted (sound cmd gate)
     ft_wr16(g_synth_in, 0x302, 1);                        // music muted
-    ft_wr16(g_synth_in, (uint16_t)(obj + 0x1355), FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_CODE_SEG), FT_VM_TESTSEG);
     ft_wr16(g_synth_in, (uint16_t)(obj + 0x1A0D), FT_ANIM_PC);
     ft_wr16(g_synth_in, (uint16_t)(obj + 0x1A35), t1);
     ft_wr16(g_synth_in, (uint16_t)(obj + 0x1A5D), t2);
-    ft_wr16(g_synth_in, (uint16_t)(obj + 0x1A85), sa);
-    ft_wr16(g_synth_in, (uint16_t)(obj + 0x1AAD), se);
+    ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_SUB_SLOT), sa);
+    ft_wr16(g_synth_in, (uint16_t)(obj + OBJ_SUB_END), se);
     // slot background noise (sprite offsets, flags, dirty)
     FtRng bg(bg_seed);
     for (uint32_t a = 0; a < 0x60; a += 2) {
         ft_wr16(g_synth_in, (uint16_t)(a + 0x44D), bg.w());
         ft_wr16(g_synth_in, (uint16_t)(a + 0x54D), bg.w());
         ft_wr16(g_synth_in, (uint16_t)(a + 0x84D), bg.w());
-        ft_wr16(g_synth_in, (uint16_t)(a + 0x114D), bg.w());
+        ft_wr16(g_synth_in, (uint16_t)(a + OBJ_DIRTY_MODE), bg.w());
     }
     // canaries on interpreter globals
     ft_wr16(g_synth_in, 0x78, 0xBBBB); ft_wr16(g_synth_in, 0x7A, 0xBBBB);
@@ -2761,20 +2762,20 @@ bool ft_synth_case_vmop(uint8_t op, const uint8_t* args, int n_args,
     ft_wr16(g_synth_in, 0x372, (uint16_t)(si + 2));
     for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0); // no shadow segs
     ft_wr16(g_synth_in, 0x32F, 0);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1355), FT_VM_TESTSEG);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x132D), FT_VM_PC);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), o.flags);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x16ED), o.anim);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1715), o.timer);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x173D), o.x);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1765), o.y);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x196D), o.yvel);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_CODE_SEG), FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_PC), FT_VM_PC);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_FLAGS), o.flags);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_ANIM_IDX), o.anim);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_TIMER), o.timer);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_WORLD_X), o.x);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_WORLD_Y), o.y);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_VEL_Y), o.yvel);
     ft_wr16(g_synth_in, (uint16_t)(si + 0x14E5), o.ystart);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x150D), o.yend);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y1), o.yend);
     // Light background noise over misc object fields (deterministic)
     FtRng bg(bg_seed);
-    static const uint16_t OF[] = { 0x1305, 0x13CD, 0x1495, 0x14BD, 0x1535, 0x155D,
-                                   0x1855, 0x18AD, 0x1995, 0x19E5, 0x1AD5 };
+    static const uint16_t OF[] = { 0x1305, 0x13CD, 0x1495, 0x14BD, OBJ_BBOX_X0, OBJ_BBOX_X1,
+                                   0x1855, 0x18AD, OBJ_PARTNER, 0x19E5, OBJ_SUB_COUNT };
     for (uint16_t f : OF) ft_wr16(g_synth_in, (uint16_t)(si + f), bg.w());
     // Directed-case overrides (applied last — may override anything above)
     for (int i = 0; i < n_extra; i++) ft_wr16(g_synth_in, extra[i].addr, extra[i].val);
@@ -2878,10 +2879,10 @@ int ft_vmop_probe_vec(uint8_t op, const FtVmObj& o, const uint8_t* args16) {
     ft_wr16(g_synth_in, 0x372, (uint16_t)(si + 2));
     for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
     ft_wr16(g_synth_in, 0x32F, 0);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1355), FT_VM_TESTSEG);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x132D), FT_VM_PC);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x1585), o.flags);
-    ft_wr16(g_synth_in, (uint16_t)(si + 0x16ED), o.anim);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_CODE_SEG), FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_PC), FT_VM_PC);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_FLAGS), o.flags);
+    ft_wr16(g_synth_in, (uint16_t)(si + OBJ_ANIM_IDX), o.anim);
     memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
     g_vm_es_in[FT_VM_PC] = op;
     for (int i = 0; i < 16; i++) g_vm_es_in[FT_VM_PC + 1 + i] = args16[i];
@@ -2892,8 +2893,8 @@ int ft_vmop_probe_vec(uint8_t op, const FtVmObj& o, const uint8_t* args16) {
     v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1424C), g_synth_orig, regs);
     memcpy(zone, g_vm_es_in, FT_VM_ZONE);
     if (ft_ub_marks() != esc0) return FT_VMOP_ESCAPED;
-    uint16_t fin = (uint16_t)(g_synth_orig[(uint16_t)(si + 0x132D)]
-                 | (g_synth_orig[(uint16_t)(si + 0x132D + 1)] << 8));
+    uint16_t fin = (uint16_t)(g_synth_orig[(uint16_t)(si + OBJ_PC)]
+                 | (g_synth_orig[(uint16_t)(si + OBJ_PC + 1)] << 8));
     int len = (int)fin - (int)(FT_VM_PC + 1);
     if (len == -1) return -1;              // terminal
     if (len == 0) return 0;                // op saved PC right after itself
@@ -3076,8 +3077,8 @@ int ft_selftest_vmops() {
     {
         FtWr occ[0x14 + 1];
         for (int k = 0; k < 0x14; k++)
-            occ[k] = { (uint16_t)(k * 2 + 0x1355), 0x4000 };   // slots 0..0x26 alive
-        occ[0x14] = { (uint16_t)(6 + 0x1355), FT_VM_TESTSEG }; // keep test obj's code seg
+            occ[k] = { (uint16_t)(k * 2 + OBJ_CODE_SEG), 0x4000 };   // slots 0..0x26 alive
+        occ[0x14] = { (uint16_t)(6 + OBJ_CODE_SEG), FT_VM_TESTSEG }; // keep test obj's code seg
         uint8_t a4[16]; memcpy(a4, plan[0x14].base, 16);
         ft_synth_case_vmop(0x14, a4, 16, BASE, 0xD0000001u, "directed",
                            sweep, diff_budget, op_fail, occ, 0x14 + 1);
@@ -3122,7 +3123,7 @@ int ft_selftest_vmops() {
         for (int op = 0; op <= 0xD7; op++) {
             const FtOpPlan& pl = plan[op];
             if (pl.data_len < 0 && pl.data_len != -1) continue;
-            FtWr tr[2] = { { 0x32F, 1 }, { 0x2E67, FT_VM_TESTSEG } };
+            FtWr tr[2] = { { 0x32F, 1 }, { DS_SEG_ANIM, FT_VM_TESTSEG } };
             uint8_t a4[16]; memcpy(a4, pl.base, 16);
             // crafted header lives at zone[0..4] (anim=0): applied by the
             // runner via g_vm_es_patch after the carpet is built.
@@ -3142,7 +3143,7 @@ int ft_selftest_vmops() {
         for (int op = 0; op <= 0xD7; op++) {
             const FtOpPlan& pl = plan[op];
             if (pl.data_len < 0 && pl.data_len != -1) continue;
-            FtWr tr[1] = { { 0x2E67, FT_VM_TESTSEG } };
+            FtWr tr[1] = { { DS_SEG_ANIM, FT_VM_TESTSEG } };
             uint8_t a4[16]; memcpy(a4, pl.base, 16);
             g_vm_es_patch[0] = 0; g_vm_es_patch[1] = 0; g_vm_es_patch[2] = 0;
             g_vm_es_patch[3] = (uint8_t)((FT_VM_PC - 3) & 0xFF);
@@ -3164,17 +3165,17 @@ int ft_selftest_vmops() {
         for (uint8_t sop : SOPS) {
             FtWr second[12] = {
                 { 0x372, 8 },
-                { (uint16_t)(2 + 0x1355), FT_VM_TESTSEG },   // slot 2 alive
-                { (uint16_t)(2 + 0x17DD), 0x0100 },          // type word (hi byte set!)
-                { (uint16_t)(2 + 0x1535), 0x0100 },          // target X range
-                { (uint16_t)(2 + 0x155D), 0x0200 },
+                { (uint16_t)(2 + OBJ_CODE_SEG), FT_VM_TESTSEG },   // slot 2 alive
+                { (uint16_t)(2 + OBJ_TYPE_ID), 0x0100 },          // type word (hi byte set!)
+                { (uint16_t)(2 + OBJ_BBOX_X0), 0x0100 },          // target X range
+                { (uint16_t)(2 + OBJ_BBOX_X1), 0x0200 },
                 { (uint16_t)(2 + 0x14E5), 0x0140 },          // target Y range
-                { (uint16_t)(2 + 0x150D), 0x0160 },
-                { (uint16_t)(6 + 0x1535), 0x0110 },          // self X range (overrides noise)
-                { (uint16_t)(6 + 0x155D), 0x0130 },
+                { (uint16_t)(2 + OBJ_BBOX_Y1), 0x0160 },
+                { (uint16_t)(6 + OBJ_BBOX_X0), 0x0110 },          // self X range (overrides noise)
+                { (uint16_t)(6 + OBJ_BBOX_X1), 0x0130 },
                 { (uint16_t)(0x94CC), 0x0000 },              // filter table [0-0x6B34]: match 0
                 { (uint16_t)(6 + 0x14E5), 0x0130 },          // self Y start (bounds sanity)
-                { (uint16_t)(6 + 0x150D), 0x0150 },
+                { (uint16_t)(6 + OBJ_BBOX_Y1), 0x0150 },
             };
             uint8_t a4[16]; memset(a4, 0, 16);               // filter byte 0 + zero args
             ft_synth_case_vmop(sop, a4, 16, BASE, 0xD3000000u | (sop << 8),
@@ -3480,7 +3481,7 @@ const FtLeafSpec FT_LEAVES[] = {
     { FT_SUB_113B0, v2_fntest_call_sub_113b0,
       { 0x25DC, FT_AX_DIMS, 10 }, { 0x25DE, FT_AX_DIMS, 10 }, false, nullptr, false },
     { FT_SUB_113D8, v2_fntest_call_sub_113d8,
-      { 0x173D, FT_AX_VIKX, 10 }, { 0x1765, FT_AX_VIKY, 10 }, false, nullptr, false },
+      { OBJ_WORLD_X, FT_AX_VIKX, 10 }, { OBJ_WORLD_Y, FT_AX_VIKY, 10 }, false, nullptr, false },
     // 116e3's transition tail CALLs sub_10982 (DATA.DAT read into ds:2193) —
     // both sides need the same file context (class-D setup); fuzz images are
     // skipped for it (random [3D4] -> random chunk ids would just measure the
@@ -3815,13 +3816,13 @@ int ft_selftest_bbox2(FtId id, uint32_t seed) {
     for (auto& px : P) for (auto& py : P) {
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
         ft_wr16(g_synth_in, (uint16_t)(di + 0x14E5), px[0]);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x150D), px[1]);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), px[1]);
         ft_wr16(g_synth_in, (uint16_t)(si + 0x14E5), px[2]);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x150D), px[3]);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x1535), py[0]);
-        ft_wr16(g_synth_in, (uint16_t)(di + 0x155D), py[1]);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x1535), py[2]);
-        ft_wr16(g_synth_in, (uint16_t)(si + 0x155D), py[3]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y1), px[3]);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), py[0]);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), py[1]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X0), py[2]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X1), py[3]);
         ft_fill_tail(g_synth_in);
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
         int cf = (id == FT_SUB_15D3C)
@@ -3835,7 +3836,7 @@ int ft_selftest_bbox2(FtId id, uint32_t seed) {
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
         uint16_t d2 = (uint16_t)((rng.next() % 20) * 2);
         uint16_t s2 = (uint16_t)((rng.next() % 20) * 2);
-        static const uint16_t BASES[4] = { 0x14E5, 0x150D, 0x1535, 0x155D };
+        static const uint16_t BASES[4] = { 0x14E5, OBJ_BBOX_Y1, OBJ_BBOX_X0, OBJ_BBOX_X1 };
         for (int b = 0; b < 4; b++) {
             ft_wr16(g_synth_in, (uint16_t)(d2 + BASES[b]), rng.w());
             ft_wr16(g_synth_in, (uint16_t)(s2 + BASES[b]), rng.w());
@@ -3870,13 +3871,13 @@ void ft_spawn_build(const FtSpawnRec* recs, int n,
 {
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
     // Level context: template segment, empty object table, gates open.
-    ft_wr16(g_synth_in, 0x2E67, FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, DS_SEG_ANIM, FT_VM_TESTSEG);
     ft_wr16(g_synth_in, 0x033C, 0);
     ft_wr16(g_synth_in, 0x0372, 0);
     ft_wr16(g_synth_in, 0x032F, 0);
     for (int i = 0; i < 0x10; i++) g_synth_in[0x356 + i] = 0;
     // Clear the object-slot zone the spawn writes into (deterministic diff).
-    for (uint32_t a = 0x1355; a < 0x1B60; a++) g_synth_in[a] = 0;
+    for (uint32_t a = OBJ_CODE_SEG; a < 0x1B60; a++) g_synth_in[a] = 0;
     // Spawn table.
     uint16_t off = 0x25F6;
     for (int i = 0; i < n; i++) {
@@ -3967,8 +3968,8 @@ int ft_selftest_spawn() {
         FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
         const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},
                             {0x0372, 2},              // one live slot
-                            {(uint16_t)(0 + 0x1355), 0x1234},   // slot 0 active
-                            {(uint16_t)(0 + 0x16C5), 0} };      // from spawn idx 0
+                            {(uint16_t)(0 + OBJ_CODE_SEG), 0x1234},   // slot 0 active
+                            {(uint16_t)(0 + OBJ_ANIM_SUB), 0} };      // from spawn idx 0
         ft_spawn_build(recs, 1, T, sizeof(T), wr, 5);
         ft_spawn_case("dedup", grid, diff_budget);
     }
@@ -3991,7 +3992,7 @@ int ft_selftest_spawn() {
         FtSpawnRec recs[] = { { 0x0120, 0x0120, 8, 8, 0, 0, 0 } };
         ft_spawn_build(recs, 1, T, sizeof(T), VP, 2);
         for (uint16_t s2 = 0; s2 < 0x28; s2 += 2)
-            ft_wr16(g_synth_in, (uint16_t)(s2 + 0x1355), 0x1111);
+            ft_wr16(g_synth_in, (uint16_t)(s2 + OBJ_CODE_SEG), 0x1111);
         ft_wr16(g_synth_in, 0x0372, 0x28);
         ft_spawn_case("slots-full", grid, diff_budget);
     }
@@ -4124,11 +4125,11 @@ bool ft_synth_case_15911(uint16_t cur_y, uint16_t old_y, uint16_t filter,
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
     ft_wr16(g_synth_in, 0x372, 8);
     for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
-    ft_wr16(g_synth_in, 0x2E63, FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);
     ft_wr16(g_synth_in, 0x25DC, 4);
     ft_wr16(g_synth_in, 0x25DE, 4);
     for (int y = 0; y < 4; y++)
-        ft_wr16(g_synth_in, (uint16_t)(y * 2 - 0x7098), (uint16_t)(y * 8));
+        ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE), (uint16_t)(y * 8));
     uint16_t T[16];
     for (int i = 0; i < 16; i++) T[i] = (uint16_t)((i & 0x3F) << 10);
     memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
@@ -4137,13 +4138,13 @@ bool ft_synth_case_15911(uint16_t cur_y, uint16_t old_y, uint16_t filter,
         g_vm_es_in[i * 2 + 1] = (uint8_t)(T[i] >> 8);
     }
     memcpy(zone, g_vm_es_in, FT_VM_ZONE);
-    ft_wr16(g_synth_in, (uint16_t)(OBJ + 0x1585), 0x8000);
-    ft_wr16(g_synth_in, (uint16_t)(OBJ + 0x1535), 0x0010);
-    ft_wr16(g_synth_in, (uint16_t)(OBJ + 0x155D), 0x0020);
+    ft_wr16(g_synth_in, (uint16_t)(OBJ + OBJ_FLAGS), 0x8000);
+    ft_wr16(g_synth_in, (uint16_t)(OBJ + OBJ_BBOX_X0), 0x0010);
+    ft_wr16(g_synth_in, (uint16_t)(OBJ + OBJ_BBOX_X1), 0x0020);
     ft_wr16(g_synth_in, (uint16_t)(OBJ + 0x14E5), 0x0008);
-    ft_wr16(g_synth_in, (uint16_t)(OBJ + 0x150D), 0x000E);
-    ft_wr16(g_synth_in, (uint16_t)(0 - 0x6B34), 0xFF05);   // filter chain
-    ft_wr16(g_synth_in, (uint16_t)(OBJ + 0x1765), cur_y);
+    ft_wr16(g_synth_in, (uint16_t)(OBJ + OBJ_BBOX_Y1), 0x000E);
+    ft_wr16(g_synth_in, (uint16_t)(0 - LUT_SCAN_FILTER), 0xFF05);   // filter chain
+    ft_wr16(g_synth_in, (uint16_t)(OBJ + OBJ_WORLD_Y), cur_y);
     ft_wr16(g_synth_in, (uint16_t)(OBJ + 0x13CD), old_y);
     ft_fill_tail(g_synth_in);
 
@@ -4299,8 +4300,8 @@ bool ft_synth_case_173c7(uint16_t w, uint16_t h, uint8_t flag25cf,
     memcpy(gs_zone, gsd, sizeof(gsd));
 
     memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-    ft_wr16(g_synth_in, 0x2E63, FT_VM_TESTSEG);
-    ft_wr16(g_synth_in, 0x2E69, FT_FS_SEG);
+    ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);
     ft_wr16(g_synth_in, 0x2E5D, FT_GS_SEG);
     ft_wr16(g_synth_in, 0x25DC, w);
     ft_wr16(g_synth_in, 0x25DE, h);
@@ -4390,11 +4391,11 @@ bool ft_synth_case_14207(int nobj, uint16_t prio_n, const uint8_t* prio_q,
     ft_wr16(g_synth_in, 0x32F, 0);
     ft_wr16(g_synth_in, 0x42, 0xFFFF);
     for (int i = 0; i < nobj; i++) {
-        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1355), FT_VM_TESTSEG);
-        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x132D), (uint16_t)(FT_VM_PC + i * 8));
-        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1585), 0x8000);
-        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1945), 0x1111);  // 15517 must clear
-        ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x196D), 0x2222);
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_CODE_SEG), FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_PC), (uint16_t)(FT_VM_PC + i * 8));
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_FLAGS), 0x8000);
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_VEL_X), 0x1111);  // 15517 must clear
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_VEL_Y), 0x2222);
     }
     ft_wr16(g_synth_in, 0x376, prio_n);
     for (int i = 0; i < (int)prio_n; i++) g_synth_in[0x378 + i] = prio_q[i];
@@ -4436,9 +4437,9 @@ int ft_selftest_sub_14207() {
         ft_wr16(g_synth_in, 0x42, 0xFFFF);
         ft_wr16(g_synth_in, 0x8A, 5);               // accumulator for the op5B marker
         for (int i = 0; i < 2; i++) {
-            ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1355), FT_VM_TESTSEG);
-            ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x132D), (uint16_t)(FT_VM_PC + i * 8));
-            ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x1585), 0x8000);
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_CODE_SEG), FT_VM_TESTSEG);
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_PC), (uint16_t)(FT_VM_PC + i * 8));
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_FLAGS), 0x8000);
         }
         ft_wr16(g_synth_in, 0x376, 2);              // queue of TWO entries
         g_synth_in[0x378] = 0;                      // queue[0] = slot 0 (ch3 bytecode)
@@ -4545,11 +4546,11 @@ static bool ft_seg_loader_case(int which /*0=1167a,1=116ae*/,
     for (int e = 0; e < n; e++) { ft_wr16(g_synth_in, p, ids[e]); p = (uint16_t)(p + step); }
     ft_wr16(g_synth_in, p, 0xFFFF);
     if (which == 0) {
-        ft_wr16(g_synth_in, 0x2E73, FT_DEST_SEG);   // word_2B353: sprite segment
+        ft_wr16(g_synth_in, DS_SEG_SPRITE, FT_DEST_SEG);   // word_2B353: sprite segment
     } else {
-        ft_wr16(g_synth_in, 0x2E77, FT_DEST_SEG);   // chunk-buffer base segment
-        ft_wr16(g_synth_in, 0x2E79, start_off);     // dword_2B359 lo (offset)
-        ft_wr16(g_synth_in, 0x2E7B, FT_DEST_SEG);   // dword_2B359 hi (segment)
+        ft_wr16(g_synth_in, DS_SEG_CHUNK, FT_DEST_SEG);   // chunk-buffer base segment
+        ft_wr16(g_synth_in, DS_ANIM_PTR_LO, start_off);     // dword_2B359 lo (offset)
+        ft_wr16(g_synth_in, DS_ANIM_PTR_HI, FT_DEST_SEG);   // dword_2B359 hi (segment)
     }
     for (int i = 0; i < 10; i++) g_synth_in[0x2BB4 + i] = 0;  // 10982 header window
     ft_fill_tail(g_synth_in);
@@ -4775,16 +4776,16 @@ int ft_selftest_sub_10813(uint32_t seed) {
         ft_wr16(g_synth_in, 0x03C4, c.prev);
         ft_wr16(g_synth_in, 0x03C6, c.blink);
         // world pos for the ACTIVE slot (wrap target address like the orig)
-        ft_wr16(g_synth_in, (uint16_t)(c.act + 0x173D), c.vx);
-        ft_wr16(g_synth_in, (uint16_t)(c.act + 0x1765), c.vy);
+        ft_wr16(g_synth_in, (uint16_t)(c.act + OBJ_WORLD_X), c.vx);
+        ft_wr16(g_synth_in, (uint16_t)(c.act + OBJ_WORLD_Y), c.vy);
         ft_wr16(g_synth_in, 0x0044, c.wx);
         ft_wr16(g_synth_in, 0x0046, c.wy);
         // prev viking anim + object slots
-        ft_wr16(g_synth_in, (uint16_t)(c.prev + 0x16ED), c.anim_prev);
+        ft_wr16(g_synth_in, (uint16_t)(c.prev + OBJ_ANIM_IDX), c.anim_prev);
         for (int vk = 0; vk < 3; vk++)
-            ft_wr16(g_synth_in, 0x1A85 + vk * 2, (uint16_t)(0x10 + vk * 2));
-        ft_wr16(g_synth_in, (uint16_t)(c.prev + 0x1A85), 0x20);
-        ft_wr16(g_synth_in, (uint16_t)(c.act + 0x1A85), 0x24);
+            ft_wr16(g_synth_in, OBJ_SUB_SLOT + vk * 2, (uint16_t)(0x10 + vk * 2));
+        ft_wr16(g_synth_in, (uint16_t)(c.prev + OBJ_SUB_SLOT), 0x20);
+        ft_wr16(g_synth_in, (uint16_t)(c.act + OBJ_SUB_SLOT), 0x24);
         ft_fill_tail(g_synth_in);
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
         v2_fntest_call_sub_10813(g_scratch);
@@ -4801,15 +4802,15 @@ int ft_selftest_sub_10813(uint32_t seed) {
         ft_wr16(g_synth_in, 0x03C2, act);
         ft_wr16(g_synth_in, 0x03C4, prv);
         ft_wr16(g_synth_in, 0x03C6, (uint16_t)(rng.w() & 0x1F));
-        ft_wr16(g_synth_in, (uint16_t)(act + 0x173D), (uint16_t)rng.w());
-        ft_wr16(g_synth_in, (uint16_t)(act + 0x1765), (uint16_t)rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(act + OBJ_WORLD_X), (uint16_t)rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(act + OBJ_WORLD_Y), (uint16_t)rng.w());
         ft_wr16(g_synth_in, 0x0044, (uint16_t)rng.w());
         ft_wr16(g_synth_in, 0x0046, (uint16_t)(rng.w() & ((rng.w() & 1) ? 0xFFFF : 0)));
-        ft_wr16(g_synth_in, (uint16_t)(prv + 0x16ED), (uint16_t)rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(prv + OBJ_ANIM_IDX), (uint16_t)rng.w());
         for (int vk = 0; vk < 3; vk++)
-            ft_wr16(g_synth_in, 0x1A85 + vk * 2, (uint16_t)(0x10 + vk * 2));
-        ft_wr16(g_synth_in, (uint16_t)(prv + 0x1A85), 0x20);
-        ft_wr16(g_synth_in, (uint16_t)(act + 0x1A85), 0x24);
+            ft_wr16(g_synth_in, OBJ_SUB_SLOT + vk * 2, (uint16_t)(0x10 + vk * 2));
+        ft_wr16(g_synth_in, (uint16_t)(prv + OBJ_SUB_SLOT), 0x20);
+        ft_wr16(g_synth_in, (uint16_t)(act + OBJ_SUB_SLOT), 0x24);
         ft_fill_tail(g_synth_in);
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
         v2_fntest_call_sub_10813(g_scratch);

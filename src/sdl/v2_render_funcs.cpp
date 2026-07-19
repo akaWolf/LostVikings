@@ -212,7 +212,7 @@ void v2_draw_tiles(uint16_t ds_val) {
         // Removed: now mirrors orig (LUT read wraps via uint16_t arithmetic).
 
         // Row base from lookup table at ds-0x7098
-        uint16_t lut_off = (uint16_t)(row_scrolled * 2u - 0x7098u);
+        uint16_t lut_off = (uint16_t)(row_scrolled * 2u - LUT_ROW_BASE);
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
         for (int col_vis = 0; col_vis < 43; col_vis++) {
@@ -459,7 +459,7 @@ static void v2_emu_page_fill_bg(uint8_t* pg, int offx, int offy) {
 static void v2_emu_render_tile(uint8_t* pg, uint8_t* ds_base,
                                uint8_t* fs_base, uint8_t* tgfx_base,
                                int map_row, int map_col, int px0, int py0) {
-    uint16_t lut = (uint16_t)((uint16_t)map_row * 2u - 0x7098u);
+    uint16_t lut = (uint16_t)((uint16_t)map_row * 2u - LUT_ROW_BASE);
     uint16_t row_base = *(uint16_t*)(ds_base + lut);
     uint16_t moff = (uint16_t)(((uint16_t)(row_base + map_col)) * 2u);
     uint16_t entry = *(uint16_t*)(fs_base + moff);
@@ -597,7 +597,7 @@ void v2_emu_early(uint16_t ds_val) {
         v2_emu_base_x = nbx; v2_emu_base_y = nby;
         for (int p = 0; p < 3; p++) {
             v2_emu_page_render_full(v2_emu_page[p], ds_base);
-            if (p != v2_emu_slot(ds_base, 0x92FB)) {
+            if (p != v2_emu_slot(ds_base, DS_PAGE_BG)) {
                 v2_blit_to_page(v2_emu_page[p], offx, offy);
                 v2_draw_sprites(ds_val);
             }
@@ -689,8 +689,8 @@ void v2_emu_early(uint16_t ds_val) {
         // sub_1cdef scan tests the same fs bit0), mirrored by v2_emu_late.
         // Roles read BEFORE this sub-frame's v2_sub_165aa rotation — same as
         // orig where sub_1de05 (0xBB) runs before sub_165aa (0xC0).
-        uint8_t* drw = v2_emu_page[v2_emu_slot(ds_base, 0x92F7)];
-        uint8_t* bgr = v2_emu_page[v2_emu_slot(ds_base, 0x92FB)];
+        uint8_t* drw = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_DRAW)];
+        uint8_t* bgr = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_BG)];
         int trace_cells = 0;   // latch cells inside the traced object's area
         int16_t t_ox = 0, t_oy = 0;
         if (v2_objtrace_di != 0xFFFF) {
@@ -698,7 +698,7 @@ void v2_emu_early(uint16_t ds_val) {
             t_oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_Y));
             // Shadow FS letter-cell word dynamics (pairs with orig A2WP-FS).
             uint16_t row = (uint16_t)((t_oy + 8) >> 3);
-            uint16_t rb = *(uint16_t*)(ds_base + (uint16_t)(row * 2 - 0x7098));
+            uint16_t rb = *(uint16_t*)(ds_base + (uint16_t)(row * 2 - LUT_ROW_BASE));
             uint16_t moff = (uint16_t)((rb + (uint16_t)((t_ox + 8) >> 3)) * 2u);
             uint16_t w = *(uint16_t*)(fs_base + moff);
             static uint16_t prev_w = 0xFFFF;
@@ -706,7 +706,7 @@ void v2_emu_early(uint16_t ds_val) {
         }
         for (int rv = 0; rv < 25; rv++) {
             uint16_t rs = (uint16_t)(rv + scroll_row);
-            uint16_t lut = (uint16_t)(rs * 2u - 0x7098u);
+            uint16_t lut = (uint16_t)(rs * 2u - LUT_ROW_BASE);
             uint16_t row_base = *(uint16_t*)(ds_base + lut);
             for (int cv = 0; cv < 43; cv++) {
                 uint16_t cs2 = (uint16_t)(cv + scroll_col);
@@ -731,8 +731,8 @@ void v2_emu_early(uint16_t ds_val) {
             }
         }
         if (trace_cells)
-            v2_objtrace("e:latch", v2_emu_slot(ds_base, 0x92F7),
-                        v2_emu_slot(ds_base, 0x92FB), trace_cells, 0);
+            v2_objtrace("e:latch", v2_emu_slot(ds_base, DS_PAGE_DRAW),
+                        v2_emu_slot(ds_base, DS_PAGE_BG), trace_cells, 0);
     }
 }
 
@@ -757,11 +757,11 @@ extern "C" void v2_emu_df6a(uint16_t ds_val) {
 #endif
     uint16_t scroll_row = *(uint16_t*)(ds_base + 0x2581);
     uint16_t scroll_col = *(uint16_t*)(ds_base + 0x257F);
-    uint8_t* shown = v2_emu_page[v2_emu_slot(ds_base, 0x92F9)];
-    uint8_t* bgr   = v2_emu_page[v2_emu_slot(ds_base, 0x92FB)];
+    uint8_t* shown = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
+    uint8_t* bgr   = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_BG)];
     for (int rv = 0; rv < 25; rv++) {
         uint16_t rs = (uint16_t)(rv + scroll_row);
-        uint16_t lut = (uint16_t)(rs * 2u - 0x7098u);
+        uint16_t lut = (uint16_t)(rs * 2u - LUT_ROW_BASE);
         uint16_t row_base = *(uint16_t*)(ds_base + lut);
         for (int cv = 0; cv < 43; cv++) {
             uint16_t cs2 = (uint16_t)(cv + scroll_col);
@@ -837,8 +837,8 @@ extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_
     // pos_y>>3) and the stored bp map offset covers rows (pos_y>>3)..+1,
     // columns (pos_x>>3)..+1 — the 2x2 block starts AT pos, not around it.
     int row0 = (int)pos_y >> 3, col0 = (int)pos_x >> 3;
-    uint8_t* pages[2] = { v2_emu_page[v2_emu_slot(ds_base, 0x92F9)],
-                          v2_emu_page[v2_emu_slot(ds_base, 0x92FB)] };
+    uint8_t* pages[2] = { v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)],
+                          v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_BG)] };
     static const uint16_t qbit[4] = { 8, 4, 2, 1 };   // UL UR LL LR
     for (int pi = 0; pi < 2; pi++)
         for (int q = 0; q < 4; q++) {
@@ -855,7 +855,7 @@ extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val) {
     static uint8_t win[320 * 176];
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, 0x92F9)];
+    uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
     int xe, ye;
     v2_emu_eff(ds_base, &xe, &ye);
     int offx = xe - v2_emu_base_x, offy = ye - v2_emu_base_y;
@@ -936,7 +936,7 @@ void v2_emu_late_begin(uint16_t ds_val) {
     {
         int xe, ye;
         v2_emu_eff(ds_base, &xe, &ye);
-        v2_blit_to_page(v2_emu_page[v2_emu_slot(ds_base, 0x92F9)],
+        v2_blit_to_page(v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)],
                         xe - v2_emu_base_x, ye - v2_emu_base_y);
     }
     v2_dd9c_pixel_ds = ds_val;   // enable the per-object cascade in v2_sub_1DD9C
@@ -966,7 +966,7 @@ void v2_emu_late_end(uint16_t ds_val) {
                         sums[p] += v2_emu_page[p][Y * V2_EMU_W + X];
                 }
         v2_objtrace("e:pg", (int16_t)sums[0], (int16_t)sums[1], (int16_t)sums[2],
-                    v2_emu_slot(ds_base, 0x92F7) * 16 + v2_emu_slot(ds_base, 0x92F9));
+                    v2_emu_slot(ds_base, DS_PAGE_DRAW) * 16 + v2_emu_slot(ds_base, DS_PAGE_SHOWN));
         // Display-side checksum of the same area (v2_render_buf holds the
         // full clean frame after the early full sprite pass) — tells whether
         // the display layer carries a DIFFERENT phase than the page layer.
@@ -1089,7 +1089,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                         if (dxv >= vh) visible = false;
                         else {
                             uint16_t bx = (uint16_t)dxv << 1;
-                            si_off += (int16_t)*(uint16_t*)(ds_base + (uint16_t)(bx - 0x7098));
+                            si_off += (int16_t)*(uint16_t*)(ds_base + (uint16_t)(bx - LUT_ROW_BASE));
                             int16_t ov = dxv + ax_h - vh; if (ov > 0) ax_h -= ov;
                         }
                     }
@@ -1137,7 +1137,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                     int16_t oy2 = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_Y);
                     int16_t ox2 = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_X);
                     uint16_t row2 = (uint16_t)((oy2 + 8) >> 3);
-                    uint16_t rb2 = *(uint16_t*)(ds_base + (uint16_t)(row2 * 2 - 0x7098));
+                    uint16_t rb2 = *(uint16_t*)(ds_base + (uint16_t)(row2 * 2 - LUT_ROW_BASE));
                     uint16_t moff2 = (uint16_t)((rb2 + (uint16_t)((ox2 + 8) >> 3)) * 2u);
                     fs_word = *(uint16_t*)(fsb2 + moff2);
                 }
@@ -1507,7 +1507,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
         // doesn't clip rows beyond LUT; v2 hardcode caused tiles missing on
         // large maps when scrolled past row 64.
 
-        uint16_t lut_off = (uint16_t)(row_scrolled * 2u - 0x7098u);
+        uint16_t lut_off = (uint16_t)(row_scrolled * 2u - LUT_ROW_BASE);
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
         for (int col_vis = 0; col_vis < 43; col_vis++) {

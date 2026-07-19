@@ -699,9 +699,9 @@ void v2_verify_render_buf(int frame) {
             extern uint16_t v2_a2_snap_pg;
             fprintf(stderr, "BAND[f%d]: orig=%d v2=%d dsp=%d | emu=%d/%d/%d snap_pg=%04X roles=%04X/%04X/%04X\n",
                 frame, so, sv, sd, se[0], se[1], se[2], v2_a2_snap_pg,
-                *(uint16_t*)(_shd + 0x92F7),
-                *(uint16_t*)(_shd + 0x92F9),
-                *(uint16_t*)(_shd + 0x92FB));
+                *(uint16_t*)(_shd + DS_PAGE_DRAW),
+                *(uint16_t*)(_shd + DS_PAGE_SHOWN),
+                *(uint16_t*)(_shd + DS_PAGE_BG));
         }
     }
     // Tile-anim phase parity (task #21 f459 class): checksum tile 0xC0's 64
@@ -855,7 +855,7 @@ void v2_verify_render_buf(int frame) {
                 "vp=(%d,%d) shake=(%d,%d) sc=(%04X,%04X)\n",
                 frame, hard_diff, lag_diff, first_hard_x, first_hard_y, h_orig, h_v2, page_offset,
                 (int)v2_emu_valid,
-                *(uint16_t*)(shd + 0x92F7), *(uint16_t*)(shd + 0x92F9), *(uint16_t*)(shd + 0x92FB),
+                *(uint16_t*)(shd + DS_PAGE_DRAW), *(uint16_t*)(shd + DS_PAGE_SHOWN), *(uint16_t*)(shd + DS_PAGE_BG),
                 v2_a2_snap_pg,
                 *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
                 *(int16_t*)(shd + 0x39E), *(int16_t*)(shd + 0x3A0),
@@ -983,7 +983,7 @@ void v2_verify_render_buf(int frame) {
                 uint16_t gfxseg = *(uint16_t*)(rds + DS_SEG_TILEGFX);
                 int trow = (first_diff_y >> 3) + row_sc;
                 int tcol = (first_diff_x >> 3) + col_sc;
-                uint16_t row_base = *(uint16_t*)(rds + (uint16_t)(trow * 2 - 0x7098));
+                uint16_t row_base = *(uint16_t*)(rds + (uint16_t)(trow * 2 - LUT_ROW_BASE));
                 uint16_t map_off = (uint16_t)((row_base + tcol) * 2u);
                 uint8_t* fs_real = v2_m2c_base + (uint32_t)fsseg * 16;
                 uint16_t mapw_real = *(uint16_t*)(fs_real + map_off);
@@ -2169,7 +2169,7 @@ static void v2_sub_10ffc(uint8_t* s) {
     *(uint16_t*)(s + 0x7EFE) = 0; // word_303DE = 0
     uint16_t pal_base = *(uint16_t*)(s + 0x7F00); // word_303E0 = palette data pointer
     for (int16_t bx = 7; bx >= 0; bx--) {
-        uint8_t mask = s[(uint16_t)(bx - 0x6C44)]; // bit mask from table
+        uint8_t mask = s[(uint16_t)(bx - LUT_BYTE_OR)]; // bit mask from table
         if (!(s[0x2583] & mask)) continue;          // byte_2AA63: animation enable bits
         if (s[bx + 0x258C] != 0) continue;          // timer not zero → skip
         s[bx + 0x258C] = s[bx + 0x2584];            // reset timer from reload value
@@ -2424,7 +2424,7 @@ static void v2_sub_101be(uint8_t* s) {
     }
     for (int16_t si = 7; si >= 0; si--) {                           // si=7; DEC si; JNS
         uint8_t mask = s[0x2583];                                    // byte_2AA63
-        if (!(s[(uint16_t)(si - 0x6C44)] & mask)) continue;        // TEST [si-6C44h], al; JZ
+        if (!(s[(uint16_t)(si - LUT_BYTE_OR)] & mask)) continue;        // TEST [si-6C44h], al; JZ
         if (s[si + 0x258C] == 0) continue;                         // TEST [si+258Ch]; JZ
         s[si + 0x258C]--;                                           // DEC [si+258Ch]
         if (s[si + 0x258C] != 0) continue;                         // JNZ skip
@@ -2908,7 +2908,7 @@ static void v2_sub_1C8F1(uint8_t* s, uint16_t ax_mask) {
     // line 36-40: di = row_offset_table[ds:0x2581] + ds:0x257F, scaled
     uint16_t di_base = *(uint16_t*)(s + 0x2581);                    // MOV di, ds:2581h
     di_base <<= 1;                                                    // SHL di, 1
-    di_base = *(uint16_t*)(s + (uint16_t)(di_base - 0x7098));       // MOV di, [di-7098h]
+    di_base = *(uint16_t*)(s + (uint16_t)(di_base - LUT_ROW_BASE));       // MOV di, [di-7098h]
     di_base += *(uint16_t*)(s + 0x257F);                             // ADD di, ds:257Fh
     di_base <<= 1;                                                    // SHL di, 1
     // line 41-43: bp = ds:0x25DC * 4 - 0x56 (row skip)
@@ -2980,7 +2980,7 @@ static void v2_sub_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t si_h, i
         if (dx_y >= (int16_t)*(uint16_t*)(s + 0x916A)) return;     // CMP dx, ds:916Ah; JGE return
         // line 656-658: si += row_offset_table[dx]
         uint16_t bx = (uint16_t)dx_y << 1;
-        si_off += (int16_t)*(uint16_t*)(s + (uint16_t)(bx - 0x7098));  // ADD si, [bx-7098h]
+        si_off += (int16_t)*(uint16_t*)(s + (uint16_t)(bx - LUT_ROW_BASE));  // ADD si, [bx-7098h]
         // line 659-662: clip bottom
         int16_t overflow = dx_y + ax_h - (int16_t)*(uint16_t*)(s + 0x916A);
         if (overflow > 0) ax_h -= overflow;                          // SUB ax, dx
@@ -3067,13 +3067,13 @@ static void v2_sub_1E0C7(uint8_t* s) {
         uint16_t di = ax;
         di <<= 1;                                                    // SHL di, 1
         // line 3073: bp = ds:[di - 0x7098]                         ; row offset from tile map row table
-        uint16_t bp = *(uint16_t*)(s + (uint16_t)(di - 0x7098));    // MOV bp, [di-7098h]
+        uint16_t bp = *(uint16_t*)(s + (uint16_t)(di - LUT_ROW_BASE));    // MOV bp, [di-7098h]
         // line 3074: bp += dx                                       ; add column
         bp += dx;                                                    // ADD bp, dx
         // line 3075: SHL bp, 1                                      ; word offset for fs
         bp <<= 1;                                                    // SHL bp, 1
         // line 3076: di += ds:0x92F9                                ; add page offset
-        di += *(uint16_t*)(s + 0x92F9);                              // ADD di, ds:92F9h
+        di += *(uint16_t*)(s + DS_PAGE_SHOWN);                              // ADD di, ds:92F9h
         // line 3077: di = ds:[di - 0x7608]                          ; VGA row base from page table
         di = *(uint16_t*)(s + (uint16_t)(di - 0x7608));             // MOV di, [di-7608h]
         // line 3078-3080: dx = (dx + 4) * 2; di += dx              ; VGA column offset
@@ -3161,7 +3161,7 @@ static void v2_sub_1DE05(uint8_t* s) {
         uint16_t bx = 0x19;                                             // 38097 mov bx, 19h
         uint16_t di_fs = *(uint16_t*)(s + 0x2581);                     // 38098 mov di, ds:2581h
         di_fs <<= 1;                                                    // 38099 shl di, 1
-        di_fs = *(uint16_t*)(s + (uint16_t)(di_fs - 0x7098));          // 38100 mov di, [di-7098h]
+        di_fs = *(uint16_t*)(s + (uint16_t)(di_fs - LUT_ROW_BASE));          // 38100 mov di, [di-7098h]
         di_fs += *(uint16_t*)(s + 0x257F);                             // 38101 add di, ds:257Fh
         di_fs <<= 1;                                                    // 38102 shl di, 1
         int16_t bp_fs = (int16_t)*(uint16_t*)(s + 0x25DC);            // 38103 mov bp, ds:25DCh
@@ -3286,7 +3286,7 @@ static void v2_sub_1DD9C(uint8_t* s) {
                     else {
                         // ADD si, [bx-7098h] where bx=dx*2          ; row offset in fs
                         uint16_t bx = (uint16_t)dx << 1;
-                        si_off += (int16_t)*(uint16_t*)(s + (uint16_t)(bx - 0x7098));
+                        si_off += (int16_t)*(uint16_t*)(s + (uint16_t)(bx - LUT_ROW_BASE));
                         int16_t overflow = dx + ax_h - vh;          // bottom edge overflow
                         if (overflow > 0) ax_h -= overflow;         // clip bottom
                     }
@@ -3338,7 +3338,7 @@ static void v2_sub_1DD9C(uint8_t* s) {
               int16_t _dx2 = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y) >> 3;
               int16_t _soff = 0;
               if (_cx2 >= 0) _soff += _cx2;
-              if (_dx2 >= 0) { uint16_t _bx2 = (uint16_t)_dx2 << 1; _soff += (int16_t)*(uint16_t*)(s + (uint16_t)(_bx2 - 0x7098)); }
+              if (_dx2 >= 0) { uint16_t _bx2 = (uint16_t)_dx2 << 1; _soff += (int16_t)*(uint16_t*)(s + (uint16_t)(_bx2 - LUT_ROW_BASE)); }
               uint16_t _fso = (uint16_t)(_soff * 2);
               fprintf(stderr,"V2-CDEF-VIS[%d]: di=%02X fsoff=%04X fs[off]=%04X (bit0=%d)\n",
                 _vis2e,(uint16_t)di,_fso,
@@ -3567,7 +3567,7 @@ static void v2_sub_1DF6A(uint8_t* s) {
 // Writes: ds:[(uint16_t)(si + ds:[di*2 + 0x9346] + 0x956C)] = al, then si++
 static void v2_sub_1241e(uint8_t* s, uint8_t ch, uint16_t& si_col, uint16_t di_row) {
     uint16_t di2 = di_row << 1;                                      // SHL di, 1
-    uint16_t row_off = *(uint16_t*)(s + (uint16_t)(di2 - 0x6CBA));   // [di-6CBAh]
+    uint16_t row_off = *(uint16_t*)(s + (uint16_t)(di2 - LUT_FIELD_OFF));   // [di-6CBAh]
     uint16_t addr = (uint16_t)(si_col + row_off - 0x6A94);           // ADD si,[...]; [si-6A94h]
     s[addr] = ch;                                                     // MOV [si-6A94h], al
     if (addr >= 0x8200 && addr <= 0x82FF) {
@@ -3948,10 +3948,10 @@ static void v2_sub_11439(uint8_t* s) {
         int16_t di_y = (int16_t)*(uint16_t*)(s + 0x2581) - 1;
         if (di_y < 0) di_y = 0;
         uint16_t di2 = (uint16_t)di_y << 1;
-        uint16_t bx = *(uint16_t*)(s + (uint16_t)(di2 - 0x7098)); // row LUT
-        *(uint16_t*)(s + 0x9305) = di2 + *(uint16_t*)(s + 0x92F9); // page 2
-        *(uint16_t*)(s + 0x9307) = di2 + *(uint16_t*)(s + 0x92FB); // page 3
-        *(uint16_t*)(s + 0x9309) = di2 + *(uint16_t*)(s + 0x92F7); // page 1
+        uint16_t bx = *(uint16_t*)(s + (uint16_t)(di2 - LUT_ROW_BASE)); // row LUT
+        *(uint16_t*)(s + 0x9305) = di2 + *(uint16_t*)(s + DS_PAGE_SHOWN); // page 2
+        *(uint16_t*)(s + 0x9307) = di2 + *(uint16_t*)(s + DS_PAGE_BG); // page 3
+        *(uint16_t*)(s + 0x9309) = di2 + *(uint16_t*)(s + DS_PAGE_DRAW); // page 1
         int16_t dx_x = (int16_t)*(uint16_t*)(s + 0x257F) - 1;
         if (dx_x < 0) dx_x = 0;
         bx += (uint16_t)dx_x;
@@ -4309,17 +4309,17 @@ static void v2_sub_10813(uint8_t* shadow) {
 //   [0x42F+2k] = [0x429+2k]; [0x423+2k] = [0x15AD+2k].
 static void v2_sub_11b0b(uint8_t* s) {
     for (int vk = 0; vk < 3; vk++) {
-        uint16_t snd  = *(uint16_t*)(s + 0x0429 + vk * 2); // word_28909/0B/0D
-        uint16_t psnd = *(uint16_t*)(s + 0x042F + vk * 2); // word_2890F/11/13
+        uint16_t snd  = *(uint16_t*)(s + (DS_PORTRAIT_SND) + vk * 2); // word_28909/0B/0D
+        uint16_t psnd = *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2); // word_2890F/11/13
         uint16_t por  = *(uint16_t*)(s + VIK_PORTRAIT + vk * 2); // word_29A8D/8F/91
-        uint16_t ppor = *(uint16_t*)(s + 0x0423 + vk * 2); // word_28903/05/07
+        uint16_t ppor = *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2); // word_28903/05/07
         if (snd == psnd && por == ppor) continue;           // JNZ/JZ skip pair
         uint16_t portrait_si = por;                         // re-read [0x15AD+2k]
         if (snd != 0) portrait_si += 4;                     // CMP word,0; ADD si,4
         // orig v2 hook + CALL sub_11AA4 (VGA portrait render → v2_hud_buf)
         v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
-        *(uint16_t*)(s + 0x042F + vk * 2) = snd;            // sync sound tracking
-        *(uint16_t*)(s + 0x0423 + vk * 2) = por;            // sync portrait tracking
+        *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2) = snd;            // sync sound tracking
+        *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2) = por;            // sync portrait tracking
     }
 }
 
@@ -4414,7 +4414,7 @@ static void v2_sub_11446(uint8_t* s) {
     }
 loc_1154a:
     // Copy sound state, set mode 6
-    *(uint16_t*)(s + VIK_PORTRAIT) = *(uint16_t*)(s + 0x0423); // word_29A8D = word_28903
+    *(uint16_t*)(s + VIK_PORTRAIT) = *(uint16_t*)(s + (DS_PORTRAIT_PREV)); // word_29A8D = word_28903
     *(uint16_t*)(s + 0x15AF) = *(uint16_t*)(s + 0x0425); // word_29A8F = word_28905
     *(uint16_t*)(s + 0x15B1) = *(uint16_t*)(s + 0x0427); // word_29A91 = word_28907
     *(uint16_t*)(s + 0x033C) = 6;    // word_2881C
@@ -4553,16 +4553,16 @@ static void v2_sub_16880(uint8_t* s) {
 // sub_12ce4: viking health init. Exact replica.
 static void v2_sub_12ce4(uint8_t* s) {
     { static int _n = 0; if (++_n <= 8)   // capped: selftest calls this thousands of times
-        fprintf(stderr, "V2-12CE4: called, 0x423 before=%02X\n", s[0x423]); }
-    *(uint16_t*)(s + 0x414) = 0;
-    *(uint16_t*)(s + 0x416) = 0;
-    *(uint16_t*)(s + 0x418) = 0;
+        fprintf(stderr, "V2-12CE4: called, 0x423 before=%02X\n", s[(DS_PORTRAIT_PREV)]); }
+    *(uint16_t*)(s + (DS_HUD_SEL)) = 0;
+    *(uint16_t*)(s + (DS_HUD_SEL+2)) = 0;
+    *(uint16_t*)(s + (DS_HUD_SEL+4)) = 0;
     for (uint16_t si = 0; si < 0x18; si += 2)
-        *(uint16_t*)(s + si + 0x3E4) = 0;
-    *(uint16_t*)(s + 0x423) = 6;
+        *(uint16_t*)(s + si + (DS_HUD_ITEMS)) = 0;
+    *(uint16_t*)(s + (DS_PORTRAIT_PREV)) = 6;
     *(uint16_t*)(s + 0x425) = 6;
     *(uint16_t*)(s + 0x427) = 6;
-    *(uint16_t*)(s + 0x429) = 0;
+    *(uint16_t*)(s + (DS_PORTRAIT_SND)) = 0;
     *(uint16_t*)(s + 0x42B) = 0;
     *(uint16_t*)(s + 0x42D) = 0;
 }
@@ -4722,7 +4722,7 @@ static bool v2_sub_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
     if (di_spawn != 0xFFFF) {
         uint16_t bit = di_spawn & 7;
         uint16_t boff = di_spawn >> 3;
-        if (s[boff + 0x356] & s[(uint16_t)(bit - 0x6C44)]) return false;
+        if (s[boff + 0x356] & s[(uint16_t)(bit - LUT_BYTE_OR)]) return false;
     }
     // sub_13d52: find free object slot
     uint16_t new_si = 0xFFFF;
@@ -5665,9 +5665,9 @@ static void v2_sub_11080(uint8_t* s) {
     v2_sub_12816(s);
 
     // VGA page init
-    *(uint16_t*)(s + 0x92F7) = 0;    // word_317D7
-    *(uint16_t*)(s + 0x92F9) = 0x34; // word_317D9
-    *(uint16_t*)(s + 0x92FB) = 0x68; // word_317DB
+    *(uint16_t*)(s + DS_PAGE_DRAW) = 0;    // word_317D7
+    *(uint16_t*)(s + DS_PAGE_SHOWN) = 0x34; // word_317D9
+    *(uint16_t*)(s + DS_PAGE_BG) = 0x68; // word_317DB
 
     // Reset animation buffer pointer (dword_2B359) from initial values
     // Original: mov ax, word_2B355; mov dword_2B359, ax; mov ax, word_2B357; mov dword_2B359+2, ax
@@ -5703,7 +5703,7 @@ static void v2_sub_11080(uint8_t* s) {
     fprintf(stderr, "V2-3BA: before 12ce4: 0x3BA=%04X\n", *(uint16_t*)(s + DS_INPUT_PREV));
     if (new_level != 0x25) {
         v2_sub_12ce4(s);
-        fprintf(stderr, "V2-HEALTH: after 12ce4: 0x423=%02X 0x3BA=%04X\n", s[0x423], *(uint16_t*)(s + DS_INPUT_PREV));
+        fprintf(stderr, "V2-HEALTH: after 12ce4: 0x423=%02X 0x3BA=%04X\n", s[(DS_PORTRAIT_PREV)], *(uint16_t*)(s + DS_INPUT_PREV));
     }
 
     // sub_117ad: word_28820=2, then if flag &1: display init chain
@@ -5722,13 +5722,13 @@ static void v2_sub_11080(uint8_t* s) {
             }
         }
         // sub_1200a: clear previous health tracking
-        *(uint16_t*)(s + 0x0435) = 0xFFFF; // word_28915
+        *(uint16_t*)(s + (DS_HUD_HEALTH)) = 0xFFFF; // word_28915
         *(uint16_t*)(s + 0x0437) = 0xFFFF; // word_28917
         *(uint16_t*)(s + 0x0439) = 0xFFFF; // word_28919
         // sub_1201d: copy HUD items + render each (sub_1183d)
         for (uint16_t di2 = 0; di2 < 0x18; di2 += 2) {
-            uint16_t item = *(uint16_t*)(s + di2 + 0x3E4);
-            *(uint16_t*)(s + di2 + 0x3FC) = item;
+            uint16_t item = *(uint16_t*)(s + di2 + (DS_HUD_ITEMS));
+            *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)) = item;
             // sub_1183d: draw HUD item to v2_hud_buf
             v2_draw_hud_item(v2_current_ds_val, di2, item);
         }
@@ -5737,16 +5737,16 @@ static void v2_sub_11080(uint8_t* s) {
         // Critical: sub_11B0B runs as tail call from sub_12034, NOT from sub_11792.
         // On level 0x2C, sub_11792 skips sub_11B0B (level==0x2C check), but sub_12034's
         // tail call still runs it — syncing portrait tracking with current state.
-        *(uint16_t*)(s + 0x0423) = 0xFFFF; // word_28903
+        *(uint16_t*)(s + (DS_PORTRAIT_PREV)) = 0xFFFF; // word_28903
         *(uint16_t*)(s + 0x0425) = 0xFFFF; // word_28905
         *(uint16_t*)(s + 0x0427) = 0xFFFF; // word_28907
-        *(uint16_t*)(s + 0x042F) = 0xFFFF; // word_2890F
+        *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) = 0xFFFF; // word_2890F
         *(uint16_t*)(s + 0x0431) = 0xFFFF; // word_28911
         *(uint16_t*)(s + 0x0433) = 0xFFFF; // word_28913
         // JMP sub_11B0B: portrait/sound state sync (tail call from sub_12034)
         v2_sub_11b0b(s);
         // sub_120d1: HUD selector state sync + render
-        uint16_t sel1 = *(uint16_t*)(s + 0x0414);
+        uint16_t sel1 = *(uint16_t*)(s + (DS_HUD_SEL));
         *(uint16_t*)(s + 0x041A) = sel1;
         v2_draw_hud_selector(v2_current_ds_val, sel1 * 2);
         uint16_t sel2 = *(uint16_t*)(s + 0x0416);
@@ -6056,14 +6056,14 @@ static void v2_sub_11080(uint8_t* s) {
             if ((s[DS_LEVEL_FLAGS] & 1) && *(uint16_t*)(s + DS_LEVEL) != 0x2C) {
                 // sub_120ff: healthbar state tracking (3 vikings)
                 for (int vk = 0; vk < 3; vk++) {
-                    uint16_t prev = *(uint16_t*)(s + 0x0435 + vk * 2);
-                    *(uint16_t*)(s + 0x043B + vk * 2) = prev;
+                    uint16_t prev = *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2);
+                    *(uint16_t*)(s + (DS_HUD_HEALTH_PREV) + vk * 2) = prev;
                     int16_t health_val = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX + vk * 2);
                     uint16_t ax;
                     if (health_val < 0) ax = 2;
                     else if (*(uint16_t*)(s + DS_ACTIVE_VIKING) != (uint16_t)(vk * 2)) ax = 1;
                     else ax = 0;
-                    *(uint16_t*)(s + 0x0435 + vk * 2) = ax;
+                    *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2) = ax;
                     if (ax != prev)
                         v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
                 }
@@ -6072,7 +6072,7 @@ static void v2_sub_11080(uint8_t* s) {
                 // Compares word_288F4/F6/F8 with word_288FA/FC/FE. If different: update + render.
                 // DS writes: word_288FA (0x041A), word_288FC (0x041C), word_288FE (0x041E).
                 for (int vk_s = 0; vk_s < 3; vk_s++) {
-                    uint16_t cur = *(uint16_t*)(s + 0x0414 + vk_s * 2);  // word_288F4/F6/F8
+                    uint16_t cur = *(uint16_t*)(s + (DS_HUD_SEL) + vk_s * 2);  // word_288F4/F6/F8
                     uint16_t prev = *(uint16_t*)(s + 0x041A + vk_s * 2); // word_288FA/FC/FE
                     if (cur != prev) {
                         // sub_1183d: render old selector (clear). sub_118ad: render new selector.
@@ -6180,7 +6180,7 @@ static void v2_sub_11080(uint8_t* s) {
     { extern int v2_pageflip_count;
     fprintf(stderr, "V2: sub_11080 level init complete for level %d, pageflip_count=%d, 92F7=%04X 92F9=%04X 92FB=%04X\n",
         new_level, v2_pageflip_count,
-        *(uint16_t*)(s + 0x92F7), *(uint16_t*)(s + 0x92F9), *(uint16_t*)(s + 0x92FB)); }
+        *(uint16_t*)(s + DS_PAGE_DRAW), *(uint16_t*)(s + DS_PAGE_SHOWN), *(uint16_t*)(s + DS_PAGE_BG)); }
     if (new_level == 0x002B) {
         v2_hw_wp_drain(); // uncomment arm above to enable
         fprintf(stderr, "V2-POST-INIT-002B: s[117D]=%04X s[117F]=%04X r[117D]=%04X r[117F]=%04X\n",
@@ -6435,13 +6435,13 @@ void v2_render_callback() {
     //   m2c-added: myDrawInfo->myPixelOffset = al / 2
     //   DEC word_3287C
     //   palette dispatch via off_17974[word_303DE]
-    if (s[0x92F2] != 0) {                    // byte_317df at ds:0x92F2 (gate)
+    if (s[DS_PAN_GATE] != 0) {                    // byte_317df at ds:0x92F2 (gate)
         // CRTC pixel pan mirror — update v2 render buffer offset.
         // orig writes to VGA hardware via OUT(0x3C0); m2c port mirrors via
         // myDrawInfo->myPixelOffset. v2 mirrors via myDrawInfo_v2->myPixelOffset
         // so v2 render output also reflects pan adjustment.
         if (myDrawInfo_v2) {
-            uint8_t al = s[0x92EE];          // byte_317CE at ds:0x92EE
+            uint8_t al = s[DS_PIXEL_PAN];          // byte_317CE at ds:0x92EE
             myDrawInfo_v2->myPixelOffset = al / 2;
         }
     }
@@ -6913,12 +6913,12 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         {
             // Compute initial slot from active viking
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);          // word_288A2
-            uint16_t si_item = *(uint16_t*)(shadow + di_v + 0x414);// [di+414h]
+            uint16_t si_item = *(uint16_t*)(shadow + di_v + (DS_HUD_SEL));// [di+414h]
             di_v <<= 1;                                              // SHL di, 1
             si_item += di_v;                                          // ADD si, di
             *(uint16_t*)(shadow + 0x0443) = si_item;                 // word_28923
             si_item <<= 1;                                            // SHL si, 1
-            *(uint16_t*)(shadow + 0x0441) = *(uint16_t*)(shadow + si_item + 0x3E4); // word_28921
+            *(uint16_t*)(shadow + 0x0441) = *(uint16_t*)(shadow + si_item + (DS_HUD_ITEMS)); // word_28921
             // sub_11F47: proximity check. DS: [449]=FFFF, [44B]=FF, conditionally [449+n]=0
             *(uint16_t*)(shadow + 0x0449) = 0xFFFF;                 // word_28929
             shadow[0x044B] = 0xFF;                                    // byte_2892B
@@ -6981,7 +6981,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                 else {
                                     uint16_t di_i = di_cat << 3; nc = false;
                                     for (int cx = 0; cx < 4; cx++) {
-                                        if (*(uint16_t*)(shadow + di_i + 0x3E4) == 0) {
+                                        if (*(uint16_t*)(shadow + di_i + (DS_HUD_ITEMS)) == 0) {
                                             ax_r = di_i; nc = true; break;
                                         }
                                         di_i += 2;
@@ -7003,7 +7003,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                 else {
                                     uint16_t di_i = di_cat << 3; nc = false;
                                     for (int cx = 0; cx < 4; cx++) {
-                                        if (*(uint16_t*)(shadow + di_i + 0x3E4) == 0) {
+                                        if (*(uint16_t*)(shadow + di_i + (DS_HUD_ITEMS)) == 0) {
                                             ax_r = di_i; nc = true; break;
                                         }
                                         di_i += 2;
@@ -7034,28 +7034,28 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     // Mirror orig sub_11f93 loc_11fc2 eip 0x1FC2-0x1FC5: MOV ax, 2; CALL sub_177bb
                                     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 2);
                                     uint16_t ax = *(uint16_t*)(shadow + 0x441);
-                                    *(uint16_t*)(shadow + di + 0x3E4) = ax; // [di+3E4] = item
+                                    *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax; // [di+3E4] = item
                                     uint16_t si = *(uint16_t*)(shadow + 0x443);
                                     si &= 0xFFFC; si >>= 1; // viking index * 2
-                                    uint16_t di2 = *(uint16_t*)(shadow + si + 0x414);
+                                    uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
                                     uint16_t si2 = si << 1;
                                     di2 += si2; si2 >>= 1; di2 <<= 1;
-                                    if (*(uint16_t*)(shadow + di2 + 0x3E4) == 0) {
+                                    if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
                                         // sub_1183d(ax=0) — VGA only
                                         uint16_t ax2 = *(uint16_t*)(shadow + 0x443) & 3;
-                                        *(uint16_t*)(shadow + si2 + 0x414) = ax2;
+                                        *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
                                     }
                                 }
                                 if (!f93_carry) {
                                     // loc_11FFB: sub_121F6(di=word_28901) + mode=1
                                     uint16_t di_r = *(uint16_t*)(shadow + 0x421);
-                                    uint16_t ax_r = *(uint16_t*)(shadow + di_r + 0x414);
+                                    uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
                                     uint16_t di_s = (di_r << 1) + ax_r;
                                     *(uint16_t*)(shadow + 0x443) = di_s; // word_28923
                                     uint16_t di_b = (di_s << 1) & 0xFFF8;
                                     bool found = false; uint16_t found_di = 0;
                                     for (int cx = 0; cx < 4; cx++) {
-                                        if (*(uint16_t*)(shadow + di_b + 0x3E4) != 0) {
+                                        if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
                                             found = true; found_di = di_b; break;
                                         }
                                         di_b += 2;
@@ -7063,16 +7063,16 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     if (!found) {
                                         *(uint16_t*)(shadow + 0x441) = 0;
                                     } else {
-                                        *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + 0x3E4);
+                                        *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
                                         uint16_t saved = found_di;
                                         uint16_t di3 = *(uint16_t*)(shadow + 0x421);
-                                        uint16_t ax3 = *(uint16_t*)(shadow + di3 + 0x414);
+                                        uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
                                         di3 = ((di3 << 1) + ax3) << 1;
                                         // sub_1183d(ax=0, di3) — VGA only
                                         uint16_t si_v = saved >> 1;
                                         di3 = (di3 >> 2) & 0xFFFE;
-                                        *(uint16_t*)(shadow + di3 + 0x414) = si_v;
-                                        *(uint16_t*)(shadow + di3 + 0x414) &= 3;
+                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
+                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
                                         *(uint16_t*)(shadow + 0x443) = si_v;
                                     }
                                     *(uint16_t*)(shadow + 0x447) = 1; // mode = carrying
@@ -7091,26 +7091,26 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     }
                                 } else {
                                     uint16_t ax = *(uint16_t*)(shadow + 0x441);
-                                    *(uint16_t*)(shadow + di + 0x3E4) = ax;
+                                    *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax;
                                     uint16_t si = *(uint16_t*)(shadow + 0x443);
                                     si &= 0xFFFC; si >>= 1;
-                                    uint16_t di2 = *(uint16_t*)(shadow + si + 0x414);
+                                    uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
                                     uint16_t si2 = si << 1;
                                     di2 += si2; si2 >>= 1; di2 <<= 1;
-                                    if (*(uint16_t*)(shadow + di2 + 0x3E4) == 0) {
+                                    if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
                                         uint16_t ax2 = *(uint16_t*)(shadow + 0x443) & 3;
-                                        *(uint16_t*)(shadow + si2 + 0x414) = ax2;
+                                        *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
                                     }
                                 }
                                 if (!f93_carry) {
                                     uint16_t di_r = *(uint16_t*)(shadow + 0x421);
-                                    uint16_t ax_r = *(uint16_t*)(shadow + di_r + 0x414);
+                                    uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
                                     uint16_t di_s = (di_r << 1) + ax_r;
                                     *(uint16_t*)(shadow + 0x443) = di_s;
                                     uint16_t di_b = (di_s << 1) & 0xFFF8;
                                     bool found = false; uint16_t found_di = 0;
                                     for (int cx = 0; cx < 4; cx++) {
-                                        if (*(uint16_t*)(shadow + di_b + 0x3E4) != 0) {
+                                        if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
                                             found = true; found_di = di_b; break;
                                         }
                                         di_b += 2;
@@ -7118,15 +7118,15 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                     if (!found) {
                                         *(uint16_t*)(shadow + 0x441) = 0;
                                     } else {
-                                        *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + 0x3E4);
+                                        *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
                                         uint16_t saved = found_di;
                                         uint16_t di3 = *(uint16_t*)(shadow + 0x421);
-                                        uint16_t ax3 = *(uint16_t*)(shadow + di3 + 0x414);
+                                        uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
                                         di3 = ((di3 << 1) + ax3) << 1;
                                         uint16_t si_v = saved >> 1;
                                         di3 = (di3 >> 2) & 0xFFFE;
-                                        *(uint16_t*)(shadow + di3 + 0x414) = si_v;
-                                        *(uint16_t*)(shadow + di3 + 0x414) &= 3;
+                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
+                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
                                         *(uint16_t*)(shadow + 0x443) = si_v;
                                     }
                                     *(uint16_t*)(shadow + 0x447) = 1;
@@ -7148,14 +7148,14 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                 if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
-                                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
+                                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + (DS_HUD_SEL));
                                     uint16_t di_s = (di_v << 1) + ax_i;
                                     *(uint16_t*)(shadow + 0x443) = di_s;
-                                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + 0x3E4);
+                                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + (DS_HUD_ITEMS));
                                     // sub_120D1
-                                    *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                                    *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                                    *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                                     *(uint16_t*)(shadow + 0x445) = 0x11;
                                     // sub_11F47: full proximity check
                                     *(uint16_t*)(shadow + 0x449) = 0xFFFF;
@@ -7184,14 +7184,14 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                 if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
-                                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
+                                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + (DS_HUD_SEL));
                                     uint16_t di_s = (di_v << 1) + ax_i;
                                     *(uint16_t*)(shadow + 0x443) = di_s;
-                                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + 0x3E4);
+                                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + (DS_HUD_ITEMS));
                                     // sub_120D1
-                                    *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                                    *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                                    *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                                     *(uint16_t*)(shadow + 0x445) = 0x11;
                                     // sub_11F47: full proximity check
                                     *(uint16_t*)(shadow + 0x449) = 0xFFFF;
@@ -7216,11 +7216,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             // Left: clear bit 0 (seg000 3889-3906)
                             // sub_1183d(di=word_28923*2, ax=word_28921) — VGA only
                             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-                            if (*(uint16_t*)(shadow + di_v + 0x414) & 1) {
-                                *(uint16_t*)(shadow + di_v + 0x414) &= 0xFFFE;
+                            if (*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 1) {
+                                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) &= 0xFFFE;
                                 *(uint16_t*)(shadow + 0x443) &= 0xFFFE;
                                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                                 *(uint16_t*)(shadow + 0x445) = 0x11;
                             }
                         }
@@ -7228,11 +7228,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             // Right: set bit 0 (seg000 3910-3927)
                             // sub_1183d — VGA only
                             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-                            if (!(*(uint16_t*)(shadow + di_v + 0x414) & 1)) {
-                                *(uint16_t*)(shadow + di_v + 0x414) |= 1;
+                            if (!(*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 1)) {
+                                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) |= 1;
                                 *(uint16_t*)(shadow + 0x443) |= 1;
                                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                                 *(uint16_t*)(shadow + 0x445) = 0x11;
                             }
                         }
@@ -7240,11 +7240,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             // Up: clear bit 1 (seg000 3931-3948)
                             // sub_1183d — VGA only
                             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-                            if (*(uint16_t*)(shadow + di_v + 0x414) & 2) {
-                                *(uint16_t*)(shadow + di_v + 0x414) &= 0xFFFD;
+                            if (*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 2) {
+                                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) &= 0xFFFD;
                                 *(uint16_t*)(shadow + 0x443) &= 0xFFFD;
                                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                                 *(uint16_t*)(shadow + 0x445) = 0x11;
                             }
                         }
@@ -7252,11 +7252,11 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             // Down: set bit 1 (seg000 3952-3969)
                             // sub_1183d — VGA only
                             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-                            if (!(*(uint16_t*)(shadow + di_v + 0x414) & 2)) {
-                                *(uint16_t*)(shadow + di_v + 0x414) |= 2;
+                            if (!(*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 2)) {
+                                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) |= 2;
                                 *(uint16_t*)(shadow + 0x443) |= 2;
                                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                                 *(uint16_t*)(shadow + 0x445) = 0x11;
                             }
                         }
@@ -7265,12 +7265,12 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             {
                                 uint16_t di_b = *(uint16_t*)(shadow + DS_ACTIVE_VIKING); // word_288A2
                                 *(uint16_t*)(shadow + 0x421) = di_b; // word_28901
-                                uint16_t ax_b = *(uint16_t*)(shadow + di_b + 0x414);
+                                uint16_t ax_b = *(uint16_t*)(shadow + di_b + (DS_HUD_SEL));
                                 di_b = ((di_b << 1) + ax_b) << 1;
-                                uint16_t item = *(uint16_t*)(shadow + di_b + 0x3E4);
+                                uint16_t item = *(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS));
                                 if (item != 0) {
                                     *(uint16_t*)(shadow + 0x441) = item; // word_28921
-                                    *(uint16_t*)(shadow + di_b + 0x3E4) = 0; // clear slot
+                                    *(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) = 0; // clear slot
                                     *(uint16_t*)(shadow + 0x443) = di_b >> 1; // word_28923
                                     *(uint16_t*)(shadow + 0x447) = 0; // word_28927 = browsing
                                     *(uint16_t*)(shadow + 0x445) = 9; // word_28925
@@ -7279,9 +7279,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                 }
                             }
                             // sub_120D1
-                            *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                            *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                            *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                         }
                         if (new_input & 0x3000) {
                             // Pause/use exit
@@ -7314,9 +7314,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         // (void)ax_item; // ax_item used by v2 render call below
                         (void)di_s; (void)ax_item;
                         // sub_120D1: DS writes [41A]=[414], [41C]=[416], [41E]=[418]
-                        *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                        *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                        *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                     }
                 }
 
@@ -7326,7 +7326,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 // Then: sub_120FF + sub_12199 + loc_1205B + sub_11B0B.
                 if ((shadow[DS_LEVEL_FLAGS] & 1) && *(uint16_t*)(shadow + DS_LEVEL) != 0x2C) {
                     // sub_120FF: healthbar tracking. DS writes: [435-439] state, [43B-43F] previous.
-                    *(uint16_t*)(shadow + 0x043B) = *(uint16_t*)(shadow + 0x0435);
+                    *(uint16_t*)(shadow + (DS_HUD_HEALTH_PREV)) = *(uint16_t*)(shadow + (DS_HUD_HEALTH));
                     *(uint16_t*)(shadow + 0x043D) = *(uint16_t*)(shadow + 0x0437);
                     *(uint16_t*)(shadow + 0x043F) = *(uint16_t*)(shadow + 0x0439);
                     // Compute new health state: word_29BCD/CF/D1 → DS:0x16ED/EF/F1
@@ -7336,37 +7336,37 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         if ((int16_t)*(uint16_t*)(shadow + health_addr) < 0) new_state = 2;
                         else if (*(uint16_t*)(shadow + DS_ACTIVE_VIKING) == (uint16_t)(vk * 2)) new_state = 0;
                         else new_state = 1;
-                        *(uint16_t*)(shadow + 0x0435 + vk * 2) = new_state;
+                        *(uint16_t*)(shadow + (DS_HUD_HEALTH) + vk * 2) = new_state;
                     }
                     // sub_12199: item display sync (loop [3E4] vs [3FC])
                     for (uint16_t di_c = 0; di_c < 0x18; di_c += 2) {
-                        uint16_t ax_r = *(uint16_t*)(shadow + di_c + 0x3E4);
-                        if (ax_r != *(uint16_t*)(shadow + di_c + 0x3FC)) {
-                            *(uint16_t*)(shadow + di_c + 0x3FC) = ax_r;
-                            *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                            *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                            *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                        uint16_t ax_r = *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS));
+                        if (ax_r != *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV))) {
+                            *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV)) = ax_r;
+                            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                         }
                     }
                     // loc_1205B: selector tracking (seg000 4139-4182)
                     // Viking 0: if [414] != [41A] → [41A] = [414]
-                    if (*(uint16_t*)(shadow + 0x414) != *(uint16_t*)(shadow + 0x41A))
-                        *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
+                    if (*(uint16_t*)(shadow + (DS_HUD_SEL)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)))
+                        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
                     // Viking 1: if [416] != [41C] → [41C] = [416]
-                    if (*(uint16_t*)(shadow + 0x416) != *(uint16_t*)(shadow + 0x41C))
-                        *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
+                    if (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)))
+                        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
                     // Viking 2: if [418] != [41E] → [41E] = [418]
-                    if (*(uint16_t*)(shadow + 0x418) != *(uint16_t*)(shadow + 0x41E))
-                        *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                    if (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)))
+                        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                     // sub_11B0B: portrait/sound tracking sync
                     for (int vk = 0; vk < 3; vk++) {
                         uint16_t port = *(uint16_t*)(shadow + VIK_PORTRAIT + vk * 2);
-                        uint16_t prev_port = *(uint16_t*)(shadow + 0x0423 + vk * 2);
-                        uint16_t snd = *(uint16_t*)(shadow + 0x0429 + vk * 2);
-                        uint16_t prev_snd = *(uint16_t*)(shadow + 0x042F + vk * 2);
+                        uint16_t prev_port = *(uint16_t*)(shadow + (DS_PORTRAIT_PREV) + vk * 2);
+                        uint16_t snd = *(uint16_t*)(shadow + (DS_PORTRAIT_SND) + vk * 2);
+                        uint16_t prev_snd = *(uint16_t*)(shadow + (DS_PORTRAIT_SND_PREV) + vk * 2);
                         if (port != prev_port || snd != prev_snd) {
-                            *(uint16_t*)(shadow + 0x042F + vk * 2) = snd;
-                            *(uint16_t*)(shadow + 0x0423 + vk * 2) = port;
+                            *(uint16_t*)(shadow + (DS_PORTRAIT_SND_PREV) + vk * 2) = snd;
+                            *(uint16_t*)(shadow + (DS_PORTRAIT_PREV) + vk * 2) = port;
                         }
                     }
                 }
@@ -7431,14 +7431,14 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // sub_12199: exit cleanup. Verified with seg000 lines 4302-4317.
             // Loop di=0..0x16: if [di+3E4] != [di+3FC] → sync + draw + select
             for (uint16_t di_c = 0; di_c < 0x18; di_c += 2) {
-                uint16_t ax_real = *(uint16_t*)(shadow + di_c + 0x3E4);
-                if (ax_real != *(uint16_t*)(shadow + di_c + 0x3FC)) {
-                    *(uint16_t*)(shadow + di_c + 0x3FC) = ax_real; // MOV [di+3FC], ax
+                uint16_t ax_real = *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS));
+                if (ax_real != *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV))) {
+                    *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV)) = ax_real; // MOV [di+3FC], ax
                     // sub_1183d: VGA item draw (rendering only, DS write already done above)
                     // sub_120D1: selector tracking DS writes
-                    *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                    *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                    *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                 }
             }
         }
@@ -7873,7 +7873,7 @@ static bool v2_gameloop_sub_15fbe(uint8_t* ds, uint16_t filter_si, uint16_t obj_
         uint16_t flt = filter_si;
         bool match = false;
         while (true) {
-            uint8_t fval = *(uint8_t*)(ds + (uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(ds + (uint16_t)(flt - LUT_SCAN_FILTER));
             if (obj_type < fval) break;
             if (obj_type == fval) { match = true; break; }
             flt++;
@@ -8080,7 +8080,7 @@ static const uint16_t v2_psnap_watch[] = {
     0x13D1, // Y_prev viking 4
     // === Tier 1: level/page/HUD state ===
     DS_LEVEL, 0x25AF, 0x25C9, DS_LEVEL_FLAGS, 0x25A4, 0x25A6, 0x25B7,    // level + dimensions
-    0x92EE, 0x92EF, 0x92F1, 0x92F7, 0x92F9, 0x92FB,            // page state + saved scroll
+    DS_PIXEL_PAN, 0x92EF, 0x92F1, DS_PAGE_DRAW, DS_PAGE_SHOWN, DS_PAGE_BG,            // page state + saved scroll
     0x257B, 0x257D, 0x257F, 0x2581,                            // saved/current viewport
     // 0xA39C (word_3287C, vsync counter) — EXCLUDED from watch.
     // Set to 1 by sub_16775 (page flip), DEC'd by VBL render callback (sub_1797b)
@@ -8458,7 +8458,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
             if (sx >= *(uint16_t*)(shadow + 0x25DC)) return 1;  // OOB right: 0x400 → type 1
             if (sy >= *(uint16_t*)(shadow + 0x25DE)) return 0;  // OOB bottom: 0 → type 0
             uint16_t d2 = sy << 1, s2 = sx << 1;
-            s2 += *(uint16_t*)(shadow + (uint16_t)(d2 - 0x7098));
+            s2 += *(uint16_t*)(shadow + (uint16_t)(d2 - LUT_ROW_BASE));
             uint16_t tv = *(uint16_t*)(v2_vm_shadow_tilemap + s2);
             return (tv & 0xFC00) >> 10;
         };
@@ -8693,18 +8693,18 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 // v2_game_loop_post_render also runs. Bit-exact match to orig.
 static void v2_sub_165aa(uint8_t* shadow) {
         static int rot_dbg = 0; rot_dbg++;
-        uint16_t ax = *(uint16_t*)(shadow + 0x92F9);
+        uint16_t ax = *(uint16_t*)(shadow + DS_PAGE_SHOWN);
         if (rot_dbg <= 6) {
             uint16_t si_lk = (*(uint16_t*)(shadow + DS_VIEWPORT_Y) & 0xFFF8) >> 2;
             printf("V2-ROT[%d]: 92F9=%04X 92FB=%04X si=%04X tab_a=%04X tab_b=%04X\n",
-                rot_dbg, ax, *(uint16_t*)(shadow+0x92FB), si_lk,
+                rot_dbg, ax, *(uint16_t*)(shadow+DS_PAGE_BG), si_lk,
                 *(uint16_t*)(shadow + (uint16_t)(si_lk - 0x75D6)),
                 *(uint16_t*)(shadow + (uint16_t)(si_lk - 0x75A4)));
         }
         { static int _rot=0; _rot++;
           if(_rot<=80)
           fprintf(stderr,"V2-165aa[%d]: IN 92F9=%04X 92FB=%04X vp_y=%04X level=%04X\n",
-            _rot, ax, *(uint16_t*)(shadow+0x92FB), *(uint16_t*)(shadow+0x46), *(uint16_t*)(shadow+DS_LEVEL));
+            _rot, ax, *(uint16_t*)(shadow+DS_PAGE_BG), *(uint16_t*)(shadow+0x46), *(uint16_t*)(shadow+DS_LEVEL));
           // Log rotation count at each level change + output state
           static uint16_t _prev_level = 0xFFFF;
           uint16_t _cur_level = *(uint16_t*)(shadow + DS_LEVEL);
@@ -8715,45 +8715,45 @@ static void v2_sub_165aa(uint8_t* shadow) {
           // Log output for rotations around level 0x28 init (expect #63-#66)
           if (_rot >= 80 && _rot <= 95)
             fprintf(stderr, "V2-165aa-OUT[%d]: 92F7=%04X 92F9=%04X 92FB=%04X\n", _rot,
-              *(uint16_t*)(shadow+0x92F7), *(uint16_t*)(shadow+0x92F9), *(uint16_t*)(shadow+0x92FB));
+              *(uint16_t*)(shadow+DS_PAGE_DRAW), *(uint16_t*)(shadow+DS_PAGE_SHOWN), *(uint16_t*)(shadow+DS_PAGE_BG));
         }
-        *(uint16_t*)(shadow + 0x92F7) = ax;
-        uint16_t dx = *(uint16_t*)(shadow + 0x92FB);
+        *(uint16_t*)(shadow + DS_PAGE_DRAW) = ax;
+        uint16_t dx = *(uint16_t*)(shadow + DS_PAGE_BG);
         uint16_t si = (*(uint16_t*)(shadow + DS_VIEWPORT_Y) & 0xFFF8) >> 2;
 
         if (ax == 0) {
             // loc_165ef: state 0 → next pair (0x34, 0x68)
-            *(uint16_t*)(shadow + 0x92F9) = 0x34;
-            *(uint16_t*)(shadow + 0x92FB) = 0x68;
+            *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x34;
+            *(uint16_t*)(shadow + DS_PAGE_BG) = 0x68;
             uint16_t a = *(uint16_t*)(shadow + (uint16_t)(si - 0x75D6));
             uint16_t b = *(uint16_t*)(shadow + (uint16_t)(si - 0x75A4));
             if (a >= b) {
-                *(uint16_t*)(shadow + 0x92F9) = 0x68;
-                *(uint16_t*)(shadow + 0x92FB) = 0x34;
+                *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x68;
+                *(uint16_t*)(shadow + DS_PAGE_BG) = 0x34;
             }
         } else if (ax == 0x34) {
             // loc_16620: state 0x34 → next pair (0x68, 0)
-            *(uint16_t*)(shadow + 0x92F9) = 0x68;
-            *(uint16_t*)(shadow + 0x92FB) = 0;
+            *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x68;
+            *(uint16_t*)(shadow + DS_PAGE_BG) = 0;
             uint16_t a = *(uint16_t*)(shadow + (uint16_t)(si - 0x75A2));
             uint16_t b = *(uint16_t*)(shadow + (uint16_t)(si - 0x7570));
             if (a >= b) {
-                *(uint16_t*)(shadow + 0x92F9) = 0;
-                *(uint16_t*)(shadow + 0x92FB) = 0x68;
+                *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0;
+                *(uint16_t*)(shadow + DS_PAGE_BG) = 0x68;
             }
         } else {
             // default: state other → next pair (0, 0x34)
-            *(uint16_t*)(shadow + 0x92F9) = 0;
-            *(uint16_t*)(shadow + 0x92FB) = 0x34;
+            *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0;
+            *(uint16_t*)(shadow + DS_PAGE_BG) = 0x34;
             uint16_t a = *(uint16_t*)(shadow + (uint16_t)(si - 0x760A));
             uint16_t b = *(uint16_t*)(shadow + (uint16_t)(si - 0x75D8));
             if (a >= b) {
-                *(uint16_t*)(shadow + 0x92F9) = 0x34;
-                *(uint16_t*)(shadow + 0x92FB) = 0;
+                *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x34;
+                *(uint16_t*)(shadow + DS_PAGE_BG) = 0;
             }
         }
         // loc_1664f: if page changed → call sub_1df6a + flag dirty
-        if (dx != *(uint16_t*)(shadow + 0x92FB)) {
+        if (dx != *(uint16_t*)(shadow + DS_PAGE_BG)) {
             // Original: CALLF sub_1DF6A (position copy + VGA redraw)
             v2_sub_1DF6A(shadow);
             // Page-emu pixel side of sub_1df6a: bit1 cells shown→background
@@ -8789,8 +8789,8 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     uint16_t di_r = *(uint16_t*)(shadow + 0x92F1);
                     if ((int16_t)di_r > 0) di_r--; else di_r = 0;
                     di_r <<= 1;
-                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - 0x7098));
-                    uint16_t di_pg1 = di_r + *(uint16_t*)(shadow + 0x92F9);
+                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - LUT_ROW_BASE));
+                    uint16_t di_pg1 = di_r + *(uint16_t*)(shadow + DS_PAGE_SHOWN);
                     uint8_t cl_v = 0x9C;
                     uint16_t div_r1 = di_pg1;
                     shadow[0x9311] = cl_v - (uint8_t)(div_r1 % cl_v);
@@ -8801,7 +8801,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                         shadow[0x9311] <<= 2; shadow[0x9312] <<= 2;
                         *(uint16_t*)(shadow + 0x9319) = *(uint16_t*)(shadow + 0x89F8);
                     } else { shadow[0x9311] = 0xC8; shadow[0x9312] = 0; }
-                    uint16_t di_pg2 = di_r + *(uint16_t*)(shadow + 0x92FB);
+                    uint16_t di_pg2 = di_r + *(uint16_t*)(shadow + DS_PAGE_BG);
                     shadow[0x9313] = cl_v - (uint8_t)(di_pg2 % cl_v);
                     *(uint16_t*)(shadow + 0x931B) = *(uint16_t*)(shadow + (uint16_t)(di_pg2 - 0x7608));
                     if (shadow[0x9313] < 0x32) {
@@ -8809,7 +8809,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                         shadow[0x9313] <<= 2; shadow[0x9314] <<= 2;
                         *(uint16_t*)(shadow + 0x931D) = *(uint16_t*)(shadow + 0x89F8);
                     } else { shadow[0x9313] = 0xC8; shadow[0x9314] = 0; }
-                    uint16_t di_pg3 = di_r + *(uint16_t*)(shadow + 0x92F7);
+                    uint16_t di_pg3 = di_r + *(uint16_t*)(shadow + DS_PAGE_DRAW);
                     uint16_t di_vga3 = *(uint16_t*)(shadow + (uint16_t)(di_pg3 - 0x7608));
                     uint16_t ax_col = *(uint16_t*)(shadow + 0x92EF);
                     if ((int16_t)ax_col > 0) ax_col--; else { /* JL locret: skip all */ goto skip_16e75; }
@@ -8839,9 +8839,9 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     uint16_t di_r = *(uint16_t*)(shadow + 0x92F1);
                     if ((int16_t)di_r > 0) di_r--; else di_r = 0;        // DEC di; JGE; MOV di,0
                     di_r <<= 1;                                            // SHL di, 1
-                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - 0x7098)); // [di-7098h]
+                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - LUT_ROW_BASE)); // [di-7098h]
                     // Page offset computations for ds:0x9311-0x931D
-                    uint16_t di_pg1 = di_r + *(uint16_t*)(shadow + 0x92F9);
+                    uint16_t di_pg1 = di_r + *(uint16_t*)(shadow + DS_PAGE_SHOWN);
                     uint8_t cl_v = 0x9C;
                     uint16_t div_r1 = di_pg1; uint8_t q1 = (uint8_t)(div_r1 / cl_v); uint8_t r1 = (uint8_t)(div_r1 % cl_v);
                     shadow[0x9311] = cl_v - r1;                            // ds:9311h
@@ -8855,7 +8855,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                         shadow[0x9311] = 0xC8; shadow[0x9312] = 0;
                     }
                     // Second page
-                    uint16_t di_pg2 = di_r + *(uint16_t*)(shadow + 0x92FB);
+                    uint16_t di_pg2 = di_r + *(uint16_t*)(shadow + DS_PAGE_BG);
                     uint16_t div_r2 = di_pg2; uint8_t q2 = (uint8_t)(div_r2 / cl_v); uint8_t r2_ = (uint8_t)(div_r2 % cl_v);
                     shadow[0x9313] = cl_v - r2_;
                     uint16_t di_vga2 = *(uint16_t*)(shadow + (uint16_t)(di_pg2 - 0x7608));
@@ -8868,7 +8868,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                         shadow[0x9313] = 0xC8; shadow[0x9314] = 0;
                     }
                     // Third page + final offset
-                    uint16_t di_pg3 = di_r + *(uint16_t*)(shadow + 0x92F7);
+                    uint16_t di_pg3 = di_r + *(uint16_t*)(shadow + DS_PAGE_DRAW);
                     uint16_t di_vga3 = *(uint16_t*)(shadow + (uint16_t)(di_pg3 - 0x7608));
                     uint16_t ax_col = *(uint16_t*)(shadow + 0x92EF) + 0x29;
                     bx_r += ax_col; bx_r <<= 1; ax_col <<= 1;
@@ -8902,10 +8902,10 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     uint16_t di_r = *(uint16_t*)(shadow + 0x92F1);            // ds:92F1h
                     if ((int16_t)di_r > 0) di_r--; else di_r = 0;            // DEC; JGE; MOV 0
                     di_r <<= 1;                                                // SHL di, 1
-                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - 0x7098)); // [di-7098h]
-                    *(uint16_t*)(shadow + 0x9305) = di_r + *(uint16_t*)(shadow + 0x92F9); // page 1
-                    *(uint16_t*)(shadow + 0x9307) = di_r + *(uint16_t*)(shadow + 0x92FB); // page 2
-                    *(uint16_t*)(shadow + 0x9309) = di_r + *(uint16_t*)(shadow + 0x92F7); // page 3
+                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - LUT_ROW_BASE)); // [di-7098h]
+                    *(uint16_t*)(shadow + 0x9305) = di_r + *(uint16_t*)(shadow + DS_PAGE_SHOWN); // page 1
+                    *(uint16_t*)(shadow + 0x9307) = di_r + *(uint16_t*)(shadow + DS_PAGE_BG); // page 2
+                    *(uint16_t*)(shadow + 0x9309) = di_r + *(uint16_t*)(shadow + DS_PAGE_DRAW); // page 3
                     uint16_t dx_col = *(uint16_t*)(shadow + 0x92EF);
                     if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;
                     bx_r += dx_col; bx_r <<= 1;
@@ -8934,10 +8934,10 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     uint16_t di_r = *(uint16_t*)(shadow + 0x92F1) + 0x17;   // ADD di, 17h
                     if ((int16_t)di_r < 0) di_r = 0;                        // JGE; MOV 0
                     di_r <<= 1;
-                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - 0x7098));
-                    *(uint16_t*)(shadow + 0x9305) = di_r + *(uint16_t*)(shadow + 0x92F9);
-                    *(uint16_t*)(shadow + 0x9307) = di_r + *(uint16_t*)(shadow + 0x92FB);
-                    *(uint16_t*)(shadow + 0x9309) = di_r + *(uint16_t*)(shadow + 0x92F7);
+                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - LUT_ROW_BASE));
+                    *(uint16_t*)(shadow + 0x9305) = di_r + *(uint16_t*)(shadow + DS_PAGE_SHOWN);
+                    *(uint16_t*)(shadow + 0x9307) = di_r + *(uint16_t*)(shadow + DS_PAGE_BG);
+                    *(uint16_t*)(shadow + 0x9309) = di_r + *(uint16_t*)(shadow + DS_PAGE_DRAW);
                     uint16_t dx_col = *(uint16_t*)(shadow + 0x92EF);
                     if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;
                     bx_r += dx_col; bx_r <<= 1;
@@ -9132,7 +9132,7 @@ struct V2VM {
                 if (_v23fc <= 100)
                     fprintf(stderr,
                       "V2-3FC-WR[%d]: addr=%04X(slot=%d mirror) old=%04X new=%04X obj=%02X pc=%04X\n",
-                      _v23fc, addr, (addr - 0x3FC) / 2,
+                      _v23fc, addr, (addr - (DS_HUD_ITEMS_PREV)) / 2,
                       *(uint16_t*)(shadow + addr), val, obj, pc);
             }
             // V2-ERIK-WR: trap writes to Erik vel_X_field (0x164D), vel_Y_field (0x1675),
@@ -9252,7 +9252,7 @@ static bool v2_sub_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, uint16_t& ou
         uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
         uint16_t f = filter_si; bool match = false;
         while (true) {
-            uint8_t fv = vm.shadow[(uint16_t)(f - 0x6B34)];
+            uint8_t fv = vm.shadow[(uint16_t)(f - LUT_SCAN_FILTER)];
             if (obj_type < fv) break;
             if (obj_type == fv) { match = true; break; }
             f++;
@@ -9484,7 +9484,7 @@ static uint16_t v2_vm_sub_141ba(V2VM& vm, uint16_t si, uint16_t di) {
     if (di >= vm.ds_read(0x25DE)) return 0;
     uint16_t di2 = di << 1;
     uint16_t si2 = si << 1;
-    si2 += vm.ds_read((uint16_t)(di2 - 0x7098));
+    si2 += vm.ds_read((uint16_t)(di2 - LUT_ROW_BASE));
     vm.di_track = di2;   // orig SHL di,1 on the success path (task #15)
     vm.si_track = si2;   // orig si*2 + row base
     // fn-test parity: like v2_resolve_segment, read the tilemap segment
@@ -9512,7 +9512,7 @@ static void v2_vm_sub_141e0(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
     // Write to shadow tile map (not real memory — original handles the real tile map).
     uint16_t di2 = di << 1;
     uint16_t si2 = si << 1;
-    si2 += vm.ds_read((uint16_t)(di2 - 0x7098));
+    si2 += vm.ds_read((uint16_t)(di2 - LUT_ROW_BASE));
     if (v2_tilemap_shadow_valid && si2 < V2_TILEMAP_SHADOW_SIZE - 1) {
         *(uint16_t*)(v2_vm_shadow_tilemap + si2) = ax;
     }
@@ -9534,7 +9534,7 @@ static void v2_vm_sub_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
     // Compute tile position for VGA page
     uint16_t di_q = y_pix >> 2;
     uint16_t si_q = x_pix >> 2;
-    uint16_t row_base = vm.ds_read((uint16_t)(di_q - 0x7098));
+    uint16_t row_base = vm.ds_read((uint16_t)(di_q - LUT_ROW_BASE));
     uint16_t bp_val = (row_base << 1) + si_q;
 
     // FS writes: original reads 4 tile words from ES (tilemap), writes to FS (render tilemap)
@@ -9952,7 +9952,7 @@ static void v2_vm_sub_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     uint16_t flt = filter_si;
     bool tile_found = false;
     while (true) {
-        uint8_t fv = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+        uint8_t fv = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
         if (tt < fv) break;
         if (tt == fv) { vm.ds_write(0x3B2, tt); tile_found = true; break; }
         flt++;
@@ -9972,7 +9972,7 @@ static void v2_vm_sub_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
         uint16_t f2 = filter_si;
         bool m2 = false;
         while (true) {
-            uint8_t fv2 = *(uint8_t*)(rds + (uint16_t)(f2 - 0x6B34));
+            uint8_t fv2 = *(uint8_t*)(rds + (uint16_t)(f2 - LUT_SCAN_FILTER));
             if (ot < fv2) break;
             if (ot == fv2) { m2 = true; break; }
             f2++;
@@ -10034,7 +10034,7 @@ static void v2_vm_op_1B(V2VM& vm) {
 // Pattern A address: indexed byte → off_30CA2 lookup → + [si+0x1995] → addr
 static uint16_t v2_field_addr_A(V2VM& vm) {
     uint8_t idx = vm.read_u8();
-    uint16_t off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+    uint16_t off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t di = (uint16_t)(off + vm.ds_read(si + OBJ_PARTNER));
     vm.si_track = si;               // orig: MOV si,ds:42h
@@ -10044,7 +10044,7 @@ static uint16_t v2_field_addr_A(V2VM& vm) {
 // Pattern B address: indexed byte → off_30CA2 lookup → + ds:0x42 → addr
 static uint16_t v2_field_addr_B(V2VM& vm) {
     uint8_t idx = vm.read_u8();
-    uint16_t off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+    uint16_t off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     return (uint16_t)(off + vm.global_r(DS_CUR_OBJ));
 }
 // Direct address: 2-byte literal address from bytecode
@@ -10164,7 +10164,7 @@ static void v2_vm_op_0D(V2VM& vm) {
     vm.di_track = bit;                          // AND di, 7
     uint16_t byte_off = val >> 3;
     vm.si_track = byte_off;                     // MOV si,[16C5]; SHR si,3
-    uint8_t mask = *(vm.shadow + (uint16_t)(bit - 0x6C3C));
+    uint8_t mask = *(vm.shadow + (uint16_t)(bit - LUT_BYTE_AND));
     uint16_t addr = byte_off + 0x356;
     if (addr < V2_VM_SHADOW_SIZE)
         vm.shadow[addr] &= mask;
@@ -10180,7 +10180,7 @@ static void v2_vm_op_0E(V2VM& vm) {
     vm.di_track = bit;                          // AND di, 7
     uint16_t byte_off = val >> 3;
     vm.si_track = byte_off;                     // SHR si, 3
-    uint8_t mask = *(vm.shadow + (uint16_t)(bit - 0x6C44));
+    uint8_t mask = *(vm.shadow + (uint16_t)(bit - LUT_BYTE_OR));
     uint16_t addr = byte_off + 0x356;
     if (addr < V2_VM_SHADOW_SIZE)
         vm.shadow[addr] |= mask;
@@ -10205,10 +10205,10 @@ static void v2_vm_op_load_alt_pc(V2VM& vm) {
 static void v2_vm_op_9C(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0)
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
-    uint16_t dx = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C14));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
+    uint16_t dx = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_CLEAR));
     uint8_t idx2 = vm.read_u8();
-    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_FIELD_BASE);
     vm.ds_write(addr, (vm.ds_read(addr) & dx) | v2_vm_accumulator);
@@ -10256,7 +10256,7 @@ static bool v2_vm_tile_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uin
         // Compare al with filter table at ds:[filter_si - 0x6B34]
         uint16_t flt = filter_si;
         while (true) {
-            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
             if (al < fval) break;
             if (al == fval) {
                 // Debug: compare shadow tilemap vs real tilemap
@@ -10265,9 +10265,9 @@ static bool v2_vm_tile_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uin
                     loc15a70_dbg = true;
                     uint16_t real_tile_seg = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_TILEMAP);
                     uint16_t di2 = di_div16 << 1, si2 = si_div16 << 1;
-                    uint16_t row_off_s = *(uint16_t*)(vm.shadow + (uint16_t)(di2 - 0x7098));
+                    uint16_t row_off_s = *(uint16_t*)(vm.shadow + (uint16_t)(di2 - LUT_ROW_BASE));
                     uint16_t shadow_tile = *(uint16_t*)(v2_vm_shadow_tilemap + si2 + row_off_s);
-                    uint16_t row_off_r = *(uint16_t*)(v2_vm_real_ds_ptr + (uint16_t)(di2 - 0x7098));
+                    uint16_t row_off_r = *(uint16_t*)(v2_vm_real_ds_ptr + (uint16_t)(di2 - LUT_ROW_BASE));
                     uint8_t* real_tm = v2_m2c_base + (uint32_t)real_tile_seg * 16;
                     uint16_t real_tile = *(uint16_t*)(real_tm + si2 + row_off_r);
                     printf("V2-DBG-15A70: MATCH! si=%d di=%d al=%d fval=%d shadow_tile=0x%04X real_tile=0x%04X filter=%d obj=%d\n",
@@ -10329,7 +10329,7 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
         // Type match search
         bool match = false;
         while (true) {
-            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
             if (obj_type < fval) break;
             if (obj_type == fval) { match = true; break; }
             flt++;
@@ -10373,7 +10373,7 @@ static bool v2_vm_sub_15ae9(V2VM& vm, uint16_t filter_si) {
     // Filter comparison
     uint16_t flt = filter_si;
     while (true) {
-        uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+        uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
         if (al < fval) break;
         if (al == fval) {
             vm.ds_write(0x3B2, al);
@@ -10405,7 +10405,7 @@ static bool v2_vm_sub_160cf(V2VM& vm, uint16_t filter_si) {
         uint16_t flt = filter_si;
         bool match = false;
         while (true) {
-            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
             if (obj_type < fval) break;
             if (obj_type == fval) { match = true; break; }
             flt++;
@@ -10477,7 +10477,7 @@ static bool v2_vm_loc_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint1
         // Filter comparison
         uint16_t flt = filter_si;
         while (true) {
-            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
             if (al < fval) break;
             if (al == fval) {
                 vm.ds_write(0x3B2, al);
@@ -10518,7 +10518,7 @@ static bool v2_vm_loc_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint1
         uint16_t flt = filter_si;
         bool match = false;
         while (true) {
-            uint8_t fval = *(uint8_t*)(rds + (uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(rds + (uint16_t)(flt - LUT_SCAN_FILTER));
             if (obj_type < fval) break;
             if (obj_type == fval) { match = true; break; }
             flt++;
@@ -11222,7 +11222,7 @@ static void v2_vm_op_40(V2VM& vm) {
 // 0x5C (sub_1474b): Subtract acc from indexed field. 1 byte.
 static void v2_vm_op_5C(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
@@ -11653,7 +11653,7 @@ static bool v2_vm_sub_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
         uint16_t flt = filter_si;
         bool match = false;
         while (true) {
-            uint8_t fv = *(uint8_t*)(rds + (uint16_t)(flt - 0x6B34));
+            uint8_t fv = *(uint8_t*)(rds + (uint16_t)(flt - LUT_SCAN_FILTER));
             if (obj_type < fv) break;
             if (obj_type == fv) { match = true; break; }
             flt++;
@@ -11743,7 +11743,7 @@ static bool v2_vm_sub_15afd(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& 
         uint16_t flt = filter_si;
         uint8_t filt_val;
         while (true) {
-            filt_val = vm.shadow[(uint16_t)(flt - 0x6B34)];
+            filt_val = vm.shadow[(uint16_t)(flt - LUT_SCAN_FILTER)];
             if (filt_val == 0xFF || filt_val >= 0x30) break;
             flt++;
         }
@@ -11837,7 +11837,7 @@ static bool v2_vm_sub_15afd(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& 
                         // Filter scan (loc_15c00): cmp al with each filter byte until match or above.
                         uint16_t f = filter_si; bool m = false; bool below = false;
                         while (true) {
-                            uint8_t fv = vm.shadow[(uint16_t)(f - 0x6B34)];
+                            uint8_t fv = vm.shadow[(uint16_t)(f - LUT_SCAN_FILTER)];
                             // JB (al < fv) → loc_15c0b (advance)
                             if (al < fv) { below = true; break; }
                             // JZ (al == fv) → loc_15c20 (match)
@@ -11889,7 +11889,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         uint16_t di = vm.global_r(DS_CUR_OBJ);
         vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - LUT_BIT_MASK));
         uint16_t flags = vm.ds_read(di + OBJ_COLL_BITS);
         if (flags & mask) {
             return true;   // STC — collision
@@ -11936,7 +11936,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         if (collision_found) {
             // loc_15875: set collision bit
             uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-            uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+            uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
             vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
         }
         return false; // ALWAYS CLC
@@ -11954,7 +11954,7 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
         uint16_t di = vm.global_r(DS_CUR_OBJ);
         vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - LUT_BIT_MASK));
         if (vm.ds_read(di + OBJ_COLL_BITS) & mask) return true;
         return false;
     }
@@ -11994,7 +11994,7 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
     if (collision_found) {
         di = vm.global_r(DS_CUR_OBJ);
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
         vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
     }
     return false; // ALWAYS CLC
@@ -12016,7 +12016,7 @@ static void v2_vm_op_B2(V2VM& vm) {
     // sub_153ea: byte idx + word VALUE (bytecode literal!) → bit test
     uint8_t idx1 = vm.read_u8();
     uint16_t val = vm.read_u16();  // bytecode literal, NOT ds:[addr]
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
@@ -12066,10 +12066,10 @@ static void v2_vm_op_91(V2VM& vm) {
 static void v2_vm_op_98(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     uint8_t idx2 = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = field_off + vm.global_r(DS_CUR_OBJ);
     uint16_t val = vm.ds_read(si + OBJ_BBOX_Y0);
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     v2_vm_accumulator = (val & mask) ? 1 : 0;
 }
 
@@ -12079,7 +12079,7 @@ static void v2_vm_op_AD(V2VM& vm) {
     // sub_153ea: bytecode literal bit test
     uint8_t idx1 = vm.read_u8();
     uint16_t val = vm.read_u16();  // bytecode literal, NOT ds:[addr]
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -12140,7 +12140,7 @@ static void v2_vm_op_94(V2VM& vm) {
 static void v2_vm_op_A8(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     uint16_t val = vm.read_u16();  // bytecode literal VALUE
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -12149,10 +12149,10 @@ static void v2_vm_op_A8(V2VM& vm) {
 static void v2_vm_op_B3(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     uint8_t idx2 = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = field_off + vm.global_r(DS_CUR_OBJ); // pattern B: NO +0x1995
     uint16_t val = vm.ds_read(si + OBJ_BBOX_Y0);
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
@@ -12241,7 +12241,7 @@ static void v2_vm_op_2C(V2VM& vm) {
         uint16_t di = filter_idx;
         bool matched = false;
         for (;;) {
-            uint8_t filt = vm.shadow[(uint16_t)(di - 0x6B34)];
+            uint8_t filt = vm.shadow[(uint16_t)(di - LUT_SCAN_FILTER)];
             if (obj_type < filt) break;     // below range → no match
             if (obj_type == filt) { matched = true; break; }
             di++;  // scan next entry
@@ -12317,7 +12317,7 @@ static void v2_vm_op_35(V2VM& vm) {
         uint16_t di = filter_idx;
         bool matched = false;
         for (;;) {
-            uint8_t filt = vm.shadow[(uint16_t)(di - 0x6B34)];
+            uint8_t filt = vm.shadow[(uint16_t)(di - LUT_SCAN_FILTER)];
             if (obj_type < filt) break;       // JB: unsigned below
             if (obj_type == filt) { matched = true; break; }
             di++;
@@ -12363,7 +12363,7 @@ static void v2_vm_op_2D(V2VM& vm) {
         uint16_t di = filter_idx;
         bool matched = false;
         for (;;) {
-            uint8_t filt = vm.shadow[(uint16_t)(di - 0x6B34)];
+            uint8_t filt = vm.shadow[(uint16_t)(di - LUT_SCAN_FILTER)];
             if (obj_type < filt) break;
             if (obj_type == filt) { matched = true; break; }
             di++;
@@ -12437,7 +12437,7 @@ static void v2_vm_sub_10e99(V2VM& vm) {
 // Used by 0x5B (ADD), 0x5E (SUB), 0x64 (OR), 0x67 (AND) indexed+1995 variants.
 static uint16_t v2_vm_indexed_1995_target(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;               // orig: MOV si,ds:42h
@@ -12475,7 +12475,7 @@ static void v2_vm_op_66(V2VM& vm) {
 // Used by 0x90, 0x93 conditional ADD/SUB variants.
 static uint16_t v2_vm_indexed_field_b_target(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
     return (uint16_t)(si + OBJ_BBOX_Y0);
 }
@@ -12763,7 +12763,7 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
         uint16_t flt = vm.ds_read(0x3AA);
         bool match = false;
         while (true) {
-            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
             if (obj_type < fval) break;
             if (obj_type == fval) { match = true; break; }
             flt++;
@@ -12819,7 +12819,7 @@ static void v2_vm_op_D1(V2VM& vm) {
         uint16_t flt = vm.ds_read(0x3AA);
         bool match = false;
         while (true) {
-            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - 0x6B34));
+            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
             if (obj_type < fval) break;  // JB (unsigned)
             if (obj_type == fval) { match = true; break; }
             flt++;
@@ -13149,10 +13149,10 @@ static void v2_vm_op_8F(V2VM& vm) {
 static void v2_vm_op_9F(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0) {
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     }
     uint8_t idx2 = vm.read_u8();
-    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) & v2_vm_accumulator);
@@ -13163,7 +13163,7 @@ static void v2_vm_op_9F(V2VM& vm) {
 static void v2_vm_op_A0(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0) {
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     }
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, vm.ds_read(addr) & v2_vm_accumulator);
@@ -13176,12 +13176,12 @@ static void v2_vm_op_A1(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     uint16_t ax_val = v2_vm_accumulator; // save for ax tracking
     if (v2_vm_accumulator != 0) {
-        ax_val = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        ax_val = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
         v2_vm_accumulator = ax_val;
     }
     vm.read_u8(); // byte2 consumed but discarded (MOV si,ax overwrites)
     // si = ax (mask value), then field lookup
-    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(ax_val - 0x6CBA));
+    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(ax_val - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
@@ -13195,9 +13195,9 @@ static void v2_vm_op_A1(V2VM& vm) {
 static void v2_vm_op_A2(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0)
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint8_t idx2 = vm.read_u8();
-    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
@@ -13208,9 +13208,9 @@ static void v2_vm_op_A2(V2VM& vm) {
 static void v2_vm_op_A4(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0)
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint8_t idx2 = vm.read_u8();
-    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
@@ -13224,9 +13224,9 @@ static void v2_vm_op_A4(V2VM& vm) {
 static void v2_vm_op_A5(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0)
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint8_t idx2 = vm.read_u8();
-    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
@@ -13237,7 +13237,7 @@ static void v2_vm_op_A5(V2VM& vm) {
 static void v2_vm_op_A6(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0)
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
 }
@@ -13247,9 +13247,9 @@ static void v2_vm_op_A6(V2VM& vm) {
 static void v2_vm_op_A7(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0)
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint8_t idx2 = vm.read_u8();
-    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
@@ -13270,7 +13270,7 @@ static void v2_vm_op_B1(V2VM& vm) {
 static void v2_vm_op_B4(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t addr = vm.read_u16();
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     uint16_t result = (vm.ds_read(addr) & mask) ? 1 : 0;
     if (result == v2_vm_accumulator) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
@@ -13280,7 +13280,7 @@ static void v2_vm_op_B4(V2VM& vm) {
 static void v2_vm_op_B7(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t val = vm.read_u16();
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
@@ -13290,7 +13290,7 @@ static void v2_vm_op_B7(V2VM& vm) {
 static void v2_vm_op_B9(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t addr = vm.read_u16();
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     uint16_t result = (vm.ds_read(addr) & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
@@ -13300,11 +13300,11 @@ static void v2_vm_op_B9(V2VM& vm) {
 static void v2_vm_op_BA(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     uint8_t idx2 = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - 0x6CBA));
+    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     field_off += vm.ds_read(si + OBJ_PARTNER);
     uint16_t val = vm.ds_read((uint16_t)(field_off + OBJ_BBOX_Y0));
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
@@ -13423,7 +13423,7 @@ static void v2_vm_op_B0(V2VM& vm) {
 static void v2_vm_op_BC(V2VM& vm) {
     v2_vm_accumulator <<= 8;
     uint8_t idx = vm.read_u8();
-    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
     vm.ds_write((uint16_t)(si + OBJ_BBOX_Y0), v2_vm_accumulator);
 }
@@ -13499,9 +13499,9 @@ static void v2_vm_op_7D(V2VM& vm) {
 static void v2_vm_op_9D(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     if (v2_vm_accumulator != 0) {
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     }
-    uint16_t clear_mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C14));
+    uint16_t clear_mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_CLEAR));
     uint16_t addr = vm.read_u16();
     uint16_t val = vm.ds_read(addr);
     val &= clear_mask;
@@ -13514,9 +13514,9 @@ static void v2_vm_op_9D(V2VM& vm) {
 static void v2_vm_op_9E(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0) {
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     }
-    uint16_t clear_mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C14));
+    uint16_t clear_mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_CLEAR));
     // idx2 → indexed+1995 field (pattern A)
     uint16_t addr = v2_vm_indexed_1995_target(vm); // reads 1 byte
     uint16_t val = vm.ds_read(addr);
@@ -13535,7 +13535,7 @@ static void v2_vm_op_B5(V2VM& vm) {
 // ds:[si+0x14E5] &= acc, where si = lookup[idx] + ds:0x42.
 static void v2_vm_op_5F(V2VM& vm) {
     uint8_t idx = vm.read_u8();
-    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+    uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_FIELD_BASE);
     vm.ds_write(addr, vm.ds_read(addr) & v2_vm_accumulator);
@@ -13547,7 +13547,7 @@ static void v2_vm_op_AA(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t addr = vm.read_u16();
     uint16_t val = vm.ds_read(addr);
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -13579,7 +13579,7 @@ static void v2_vm_op_27(V2VM& vm) {
 // 0x59 (sub_146de): Add acc to indexed field. 1 byte.
 static void v2_vm_op_59(V2VM& vm) {
     uint8_t idx = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_FIELD_BASE);
@@ -13611,7 +13611,7 @@ static void v2_vm_op_36(V2VM& vm) {
         // Search filter table
         bool type_match = false;
         while (true) {
-            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(filter_idx - 0x6B34));
+            uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(filter_idx - LUT_SCAN_FILTER));
             if ((uint8_t)obj_type < fval) break;           // below range
             if ((uint8_t)obj_type == fval) { type_match = true; break; }
             filter_idx++;
@@ -14588,7 +14588,7 @@ static void v2_vm_op_96(V2VM& vm) {
 // 0x56 (sub_14686): Store acc to indexed field. 1 byte.
 static void v2_vm_op_56(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
     vm.ds_write((uint16_t)(si + OBJ_FIELD_BASE), v2_vm_accumulator);
@@ -14597,7 +14597,7 @@ static void v2_vm_op_56(V2VM& vm) {
 // 0x58 (sub_146b4): Store acc to indexed+0x1995 field. 1 byte.
 static void v2_vm_op_58(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     di += vm.ds_read(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER);
     vm.ds_write((uint16_t)(di + OBJ_FIELD_BASE), v2_vm_accumulator);
@@ -14620,7 +14620,7 @@ static void v2_vm_op_60(V2VM& vm) {
 // 0x62 (sub_147e7): OR indexed field with acc. 1 byte.
 static void v2_vm_op_62(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t addr = (uint16_t)(si + OBJ_BBOX_Y0);
@@ -14631,7 +14631,7 @@ static void v2_vm_op_62(V2VM& vm) {
 // Original: XOR [di+14E5h], ax (NOT AND!)
 static void v2_vm_op_67(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     di += vm.ds_read(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER);
     uint16_t addr = (uint16_t)(di + OBJ_FIELD_BASE);
@@ -14656,12 +14656,12 @@ static void v2_vm_op_18(V2VM& vm) {
 static void v2_vm_op_bit_test_indexed(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();  // bitmask index
     uint8_t idx2 = vm.read_u8();  // field index
-    uint16_t lookup = (uint16_t)(idx2 - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx2 - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     di += *(uint16_t*)(vm.shadow +obj + OBJ_PARTNER);
     uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(di + OBJ_BBOX_Y0));
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     v2_vm_accumulator = (val & mask) ? 1 : 0;
 }
 
@@ -14675,7 +14675,7 @@ static void v2_vm_op_bit_test_indexed(V2VM& vm) {
 static void v2_vm_op_bit_test(V2VM& vm) {
     uint8_t idx = vm.read_u8();          // 1 byte consumed
     uint16_t val = vm.read_u16();        // 2 bytes consumed — VALUE from bytecode!
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     v2_vm_accumulator = (val & mask) ? 1 : 0;
 }
 
@@ -14685,7 +14685,7 @@ static void v2_vm_op_bit_test_addr(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t addr = vm.read_u16();
     uint16_t val = vm.ds_read(addr);  // dereference: read from DS at addr
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     v2_vm_accumulator = (val & mask) ? 1 : 0;
 
 }
@@ -14694,7 +14694,7 @@ static void v2_vm_op_bit_test_addr(V2VM& vm) {
 // Like sub_15485 but adds ds:[obj+0x1995] to the table lookup result.
 static void v2_vm_op_load_acc_indexed_1995(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t lookup_addr = (uint16_t)(idx - 0x6CBA);
+    uint16_t lookup_addr = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup_addr);
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     di += *(uint16_t*)(vm.shadow +obj + OBJ_PARTNER);
@@ -14712,7 +14712,7 @@ static void v2_vm_op_57(V2VM& vm) {
         if (_op57 <= 500)
             fprintf(stderr,
               "V2-OP57-3E4[%d]: obj=%02X pc=%04X addr=%04X(slot=%d) val=%04X lvl=%04X\n",
-              _op57, vm.obj, (uint16_t)(vm.pc - 2), addr, (addr - 0x3E4) / 2,
+              _op57, vm.obj, (uint16_t)(vm.pc - 2), addr, (addr - (DS_HUD_ITEMS)) / 2,
               v2_vm_accumulator,
               *(uint16_t*)(vm.shadow + DS_LEVEL));
     }
@@ -14753,7 +14753,7 @@ static uint16_t v2_vm_read_literal(V2VM& vm) {
 //   ax = ds:[si + 0x14E5]                 ← read field value (in shadow range)
 static uint16_t v2_vm_read_indexed_field(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t lookup_addr = (uint16_t)(idx - 0x6CBA); // 16-bit wrap — outside shadow range
+    uint16_t lookup_addr = (uint16_t)(idx - LUT_FIELD_OFF); // 16-bit wrap — outside shadow range
     uint16_t si = *(uint16_t*)(vm.shadow +lookup_addr);
     si += vm.global_r(DS_CUR_OBJ);
     vm.si_track = si;               // orig ch1 leaves the field address in SI
@@ -14772,7 +14772,7 @@ static uint16_t v2_vm_read_indirect(V2VM& vm) {
 //           di += ds:[si+0x1995]; ax = ds:[di+0x14E5]
 static uint16_t v2_vm_read_indexed_field_1995(V2VM& vm) {
     uint16_t idx = vm.read_u8();
-    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     di += vm.ds_read(si + OBJ_PARTNER);
     vm.si_track = si;               // orig ch3: MOV si,ds:42h stays in SI
@@ -14850,7 +14850,7 @@ static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
         // word (there was no matching PUSH); MOV [si+14E5],ax; RETN → returns
         // through the caller frame.
         uint16_t idx = vm.read_u8();
-        uint16_t si = *(uint16_t*)(vm.shadow + (uint16_t)(idx - 0x6CBA));
+        uint16_t si = *(uint16_t*)(vm.shadow + (uint16_t)(idx - LUT_FIELD_OFF));
         si = (uint16_t)(si + vm.global_r(DS_CUR_OBJ));
         vm.ds_write((uint16_t)(si + OBJ_BBOX_Y0), site_ret_ip);
         vm.si_track = si;     // escape getter leaves the store address in SI
@@ -15215,12 +15215,12 @@ static void v2_vm_op_88(V2VM& vm) {
 static uint16_t v2_vm_read_indexed_field_15403(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     uint8_t idx2 = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx2 - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx2 - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
     si += vm.global_r(DS_CUR_OBJ);
     uint16_t val = vm.ds_read((uint16_t)(si + OBJ_FIELD_BASE));
     // AND with mask from idx1 table, return 0 or 1
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     return (val & mask) ? 1 : 0;
 }
 
@@ -15234,14 +15234,14 @@ static void v2_vm_op_A9(V2VM& vm) {
 static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     uint8_t idx2 = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx2 - 0x6CBA);
+    uint16_t lookup = (uint16_t)(idx2 - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     di += vm.ds_read(obj + OBJ_PARTNER);
     vm.di_track = di;               // orig leaves the field address in DI
     uint16_t val = vm.ds_read((uint16_t)(di + OBJ_FIELD_BASE));
     vm.si_track = idx1;             // orig 15445 tail: POP si → first byte
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     return (val & mask) ? 1 : 0;
 }
 
@@ -15290,7 +15290,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
         vm.di_track = di;   // orig 0x566B: MOV di,ds:42h (task #15)
         // loc_1566a: check if collision bit was previously set
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
         uint16_t flags = vm.ds_read(di + OBJ_COLL_BITS);
         if (flags & mask) {
             // sub_16243: read collided object from table
@@ -15333,7 +15333,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
 
         // Collision found! Set bit in [di+0x13F5]
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
         vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
         // sub_16235: store collided object in table
         // di_idx = di * 16 + ds:0x38E; ds:[di_idx + 0x1B25] = si
@@ -15359,7 +15359,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
         vm.pc += 2;
         vm.di_track = di;   // orig 0x5757: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
         uint16_t flags = vm.ds_read(di + OBJ_COLL_BITS);
         if (flags & mask) {
             // sub_16243: read stored partner from ds:[(di<<4) + ds:38E + 0x1B25],
@@ -15403,7 +15403,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
 
         // Collision: set bit + CLC
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
         vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
         // sub_16235: stash collided partner at ds:[(di<<4) + ds:38E + 0x1B25].
         // (orig eips 0x573F → 0x6235..0x6242). Missed in original v2 port.
@@ -15435,7 +15435,7 @@ static bool v2_vm_sub_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
         uint16_t f = filter_si;
         bool match = false;
         while (true) {
-            uint8_t fv = *(uint8_t*)(rds + (uint16_t)(f - 0x6B34));
+            uint8_t fv = *(uint8_t*)(rds + (uint16_t)(f - LUT_SCAN_FILTER));
             if (obj_type < fv) break;
             if (obj_type == fv) { match = true; break; }
             f++;
@@ -15499,7 +15499,7 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
         vm.pc += 1;
         vm.di_track = di;   // orig 0x57C1: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
         if (vm.ds_read(di + OBJ_COLL_BITS) & mask) {
             return true;  // STC
         }
@@ -15575,7 +15575,7 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     if (found) {
         // loc_157af: set collision bit
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
-        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - 0x6C34));
+        uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
         vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
     }
     return false; // ALWAYS CLC — collision recorded via bits only
@@ -15661,7 +15661,7 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         // MOV si, es:[bx]; INC bx; AND si,0xFF; MOV si,[si-0x6CBA]; ADD si,ds:0x42
         // POP ax; MOV [si+0x14E5], ax
         uint8_t idx = vm.read_u8();
-        uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+        uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
         uint16_t target = field_off + vm.global_r(DS_CUR_OBJ);
         vm.si_track = target;          // orig leaves the slot base in SI
         vm.ds_write(target + OBJ_BBOX_Y0, ax_val);
@@ -15680,7 +15680,7 @@ static void v2_vm_sub_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         // MOV si, es:[bx]; INC bx; AND si,0xFF; MOV di,[si-0x6CBA];
         // MOV si,ds:0x42; ADD di,[si+0x1995]; POP ax; MOV [di+0x14E5], ax
         uint8_t idx = vm.read_u8();
-        uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6CBA));
+        uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
         uint16_t si_obj = vm.global_r(DS_CUR_OBJ);
         uint16_t di_addr = field_off + vm.ds_read(si_obj + OBJ_PARTNER);
         vm.si_track = si_obj;          // orig: MOV si,ds:42h
@@ -15891,7 +15891,7 @@ static void v2_vm_op_16(V2VM& vm) {
 static void v2_vm_op_A3(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     if (v2_vm_accumulator != 0) {
-        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+        v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     }
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
@@ -15903,7 +15903,7 @@ static void v2_vm_op_AF(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t addr = vm.read_u16();
     uint16_t val = vm.ds_read(addr);
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     // cmp result, acc: equal → skip 2, not equal → jump
     if (result == v2_vm_accumulator) {
@@ -15993,10 +15993,10 @@ static void v2_vm_op_B8(V2VM& vm) {
     // sub_15403: 2 bytes
     uint8_t mask_idx = vm.read_u8();
     uint8_t field_idx = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(field_idx - 0x6CBA));
+    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(field_idx - LUT_FIELD_OFF));
     field_off += vm.global_r(DS_CUR_OBJ);
     uint16_t val = vm.ds_read((uint16_t)(field_off + OBJ_FIELD_BASE));
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(mask_idx - 0x6C34));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(mask_idx - LUT_BIT_MASK));
     uint16_t ax = (val & mask) ? 1 : 0;
     if (ax == v2_vm_accumulator) {
         vm.pc += 2; // skip
@@ -16735,9 +16735,9 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
     uint8_t* real = v2_vm_real_ds_ptr;
     uint8_t* shadow = v2_vm_shadow_ds;
     printf("V2-INIT-VERIFY: shadow 92F7=%04X 92F9=%04X 92FB=%04X\n",
-           *(uint16_t*)(shadow+0x92F7), *(uint16_t*)(shadow+0x92F9), *(uint16_t*)(shadow+0x92FB));
+           *(uint16_t*)(shadow+DS_PAGE_DRAW), *(uint16_t*)(shadow+DS_PAGE_SHOWN), *(uint16_t*)(shadow+DS_PAGE_BG));
     printf("V2-INIT-VERIFY: real   92F7=%04X 92F9=%04X 92FB=%04X\n",
-           *(uint16_t*)(real+0x92F7), *(uint16_t*)(real+0x92F9), *(uint16_t*)(real+0x92FB));
+           *(uint16_t*)(real+DS_PAGE_DRAW), *(uint16_t*)(real+DS_PAGE_SHOWN), *(uint16_t*)(real+DS_PAGE_BG));
     printf("V2-INIT-VERIFY: Comparing all segments after init...\n");
     int ds_diffs = 0;
     int ds_expected = 0;
@@ -17142,15 +17142,15 @@ static void v2_vm_verify_object_consistency(uint8_t* shadow) {
 
 // #6: VGA page state consistency
 static void v2_vm_verify_page_state(uint8_t* shadow) {
-    uint16_t p1 = *(uint16_t*)(shadow + 0x92F9);
-    uint16_t p2 = *(uint16_t*)(shadow + 0x92FB);
+    uint16_t p1 = *(uint16_t*)(shadow + DS_PAGE_SHOWN);
+    uint16_t p2 = *(uint16_t*)(shadow + DS_PAGE_BG);
     static int page_err = 0;
     if (p1 != 0 && p1 != 0x34 && p1 != 0x68 && page_err < 5) {
-        printf("V2-PAGE: ds:0x92F9 = 0x%04X (expected 0/0x34/0x68)\n", p1);
+        printf("V2-PAGE: ds:DS_PAGE_SHOWN = 0x%04X (expected 0/0x34/0x68)\n", p1);
         page_err++;
     }
     if (p2 != 0 && p2 != 0x34 && p2 != 0x68 && page_err < 5) {
-        printf("V2-PAGE: ds:0x92FB = 0x%04X (expected 0/0x34/0x68)\n", p2);
+        printf("V2-PAGE: ds:DS_PAGE_BG = 0x%04X (expected 0/0x34/0x68)\n", p2);
         page_err++;
     }
 }
@@ -17392,7 +17392,7 @@ static void v2_sub_16775(uint8_t* s) {
         if (x_offset > x_level_size)
             x_offset = x_disp - x_some;
         uint8_t x_low_bits = x_offset & 0x3;
-        s[0x92EE] = x_low_bits * 2;
+        s[DS_PIXEL_PAN] = x_low_bits * 2;
     }
     *(uint16_t*)(s + DS_VSYNC_COUNT) = 1;                                     // word_3287C = 1
     *(uint16_t*)(s + 0x257B) = *(uint16_t*)(s + DS_VIEWPORT_X);               // save viewport X
@@ -17615,8 +17615,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
             uint8_t flag = sd[DS_LEVEL_FLAGS];
             uint16_t lvl = *(uint16_t*)(sd + DS_LEVEL);
             bool entered = (flag & 1) && (lvl != 0x2C);
-            uint16_t cur_3e4 = *(uint16_t*)(sd + 0x3E4);
-            uint16_t cur_3fc = *(uint16_t*)(sd + 0x3FC);
+            uint16_t cur_3e4 = *(uint16_t*)(sd + (DS_HUD_ITEMS));
+            uint16_t cur_3fc = *(uint16_t*)(sd + (DS_HUD_ITEMS_PREV));
             trap_call_count++;
             if (trap_call_count <= 3 || cur_3e4 != prev_3e4 || cur_3fc != prev_3fc) {
                 fprintf(stderr,
@@ -17633,14 +17633,14 @@ void v2_run_animation_vm(uint16_t ds_val) {
             // if changed: update previous + render via v2_draw_hud_healthbar.
             // Viking 1 (ds:0x0435/0x043B)
             {
-                uint16_t prev = *(uint16_t*)(s + 0x0435);
-                *(uint16_t*)(s + 0x043B) = prev;
+                uint16_t prev = *(uint16_t*)(s + (DS_HUD_HEALTH));
+                *(uint16_t*)(s + (DS_HUD_HEALTH_PREV)) = prev;
                 int16_t health_val = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX); // word_29BCD (obj0 code_seg)
                 uint16_t ax;
                 if (health_val < 0) ax = 2;
                 else if (*(uint16_t*)(s + DS_ACTIVE_VIKING) != 0) ax = 1;
                 else ax = 0;
-                *(uint16_t*)(s + 0x0435) = ax;
+                *(uint16_t*)(s + (DS_HUD_HEALTH)) = ax;
                 if (ax != prev)
                     v2_draw_hud_healthbar(v2_current_ds_val, ax, 0, 0);
             }
@@ -17673,44 +17673,44 @@ void v2_run_animation_vm(uint16_t ds_val) {
             // sub_12199: item/HUD redraw — reads current items and re-renders
             // DS writes: [di+0x3FC] = [di+0x3E4] (copy current→previous for 12 entries)
             for (uint16_t di2 = 0; di2 < 0x18; di2 += 2) {
-                uint16_t item = *(uint16_t*)(s + di2 + 0x3E4);
-                if (item != *(uint16_t*)(s + di2 + 0x3FC)) {
-                    *(uint16_t*)(s + di2 + 0x3FC) = item;
+                uint16_t item = *(uint16_t*)(s + di2 + (DS_HUD_ITEMS));
+                if (item != *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV))) {
+                    *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)) = item;
                     v2_draw_hud_item(v2_current_ds_val, di2, item);
                 }
             }
             // loc_1205b: HUD selector sync (same logic as sub_120d1 but with change detection)
             // Viking 1: compare word_288F4 (ds:0x414) vs word_288FA (ds:0x41A)
-            if (*(uint16_t*)(s + 0x0414) != *(uint16_t*)(s + 0x041A)) {
+            if (*(uint16_t*)(s + (DS_HUD_SEL)) != *(uint16_t*)(s + 0x041A)) {
                 // Draw OLD selector (clear), then update + draw new
                 uint16_t old_di = *(uint16_t*)(s + 0x041A) * 2;
-                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + 0x3E4));
-                *(uint16_t*)(s + 0x041A) = *(uint16_t*)(s + 0x0414);
-                v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + 0x0414) * 2);
+                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
+                *(uint16_t*)(s + 0x041A) = *(uint16_t*)(s + (DS_HUD_SEL));
+                v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + (DS_HUD_SEL)) * 2);
             }
             // Viking 2
             if (*(uint16_t*)(s + 0x0416) != *(uint16_t*)(s + 0x041C)) {
                 uint16_t old_di = (*(uint16_t*)(s + 0x041C) + 4) * 2;
-                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + 0x3E4));
+                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
                 *(uint16_t*)(s + 0x041C) = *(uint16_t*)(s + 0x0416);
                 v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + 0x0416) + 4) * 2);
             }
             // Viking 3
             if (*(uint16_t*)(s + 0x0418) != *(uint16_t*)(s + 0x041E)) {
                 uint16_t old_di = (*(uint16_t*)(s + 0x041E) + 8) * 2;
-                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + 0x3E4));
+                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
                 *(uint16_t*)(s + 0x041E) = *(uint16_t*)(s + 0x0418);
                 v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + 0x0418) + 8) * 2);
             }
             // sub_11b0b: portrait/sound state sync (3 vikings). Exact replica.
             // Viking 1: compare ds:0x429 vs ds:0x42F AND ds:0x15AD vs ds:0x423
-            if (*(uint16_t*)(s + 0x0429) != *(uint16_t*)(s + 0x042F) ||
-                *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + 0x0423)) {
+            if (*(uint16_t*)(s + (DS_PORTRAIT_SND)) != *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) ||
+                *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + (DS_PORTRAIT_PREV))) {
                 uint16_t ps = *(uint16_t*)(s + VIK_PORTRAIT);
-                if (*(uint16_t*)(s + 0x0429) != 0) ps += 4;
+                if (*(uint16_t*)(s + (DS_PORTRAIT_SND)) != 0) ps += 4;
                 v2_draw_hud_portrait(v2_current_ds_val, 0, ps);
-                *(uint16_t*)(s + 0x042F) = *(uint16_t*)(s + 0x0429);
-                *(uint16_t*)(s + 0x0423) = *(uint16_t*)(s + VIK_PORTRAIT);
+                *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) = *(uint16_t*)(s + (DS_PORTRAIT_SND));
+                *(uint16_t*)(s + (DS_PORTRAIT_PREV)) = *(uint16_t*)(s + VIK_PORTRAIT);
             }
             // Viking 2
             if (*(uint16_t*)(s + 0x042B) != *(uint16_t*)(s + 0x0431) ||
@@ -17736,7 +17736,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
         // 8 slots (si=7→0). When timer hits 0: rotate palette in BOTH ds:0x8202 and ds:0x7F02.
         if (s[0x2583] != 0) { // byte_2AA63 — any animation enabled?
             for (int16_t si_pal = 7; si_pal >= 0; si_pal--) {
-                uint8_t mask = s[(uint16_t)(si_pal - 0x6C44)];
+                uint8_t mask = s[(uint16_t)(si_pal - LUT_BYTE_OR)];
                 if (!(s[0x2583] & mask)) continue;
                 if (s[si_pal + 0x258C] == 0) continue; // already expired
                 s[si_pal + 0x258C]--;                   // DEC timer
@@ -18128,10 +18128,10 @@ static void v2_sub_11b0b_per_frame(uint8_t* s) {
     // Same gating as orig sub_11792: only run if HUD active and not on level 0x2C.
     if (!(s[DS_LEVEL_FLAGS] & 1) || *(uint16_t*)(s + DS_LEVEL) == 0x2C) return;
     // Viking 1
-    if (*(uint16_t*)(s + 0x0429) != *(uint16_t*)(s + 0x042F) ||
-        *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + 0x0423)) {
-        *(uint16_t*)(s + 0x042F) = *(uint16_t*)(s + 0x0429);
-        *(uint16_t*)(s + 0x0423) = *(uint16_t*)(s + VIK_PORTRAIT);
+    if (*(uint16_t*)(s + (DS_PORTRAIT_SND)) != *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) ||
+        *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + (DS_PORTRAIT_PREV))) {
+        *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) = *(uint16_t*)(s + (DS_PORTRAIT_SND));
+        *(uint16_t*)(s + (DS_PORTRAIT_PREV)) = *(uint16_t*)(s + VIK_PORTRAIT);
     }
     // Viking 2
     if (*(uint16_t*)(s + 0x042B) != *(uint16_t*)(s + 0x0431) ||
@@ -18886,19 +18886,19 @@ void v2_phase_post_flip2(uint16_t ds_val) {
               "V2-11792-ENTRY[%d]: lvl=%04X 25CF=%02X enter=%d 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
               _v211792, *(uint16_t*)(s + DS_LEVEL), s[DS_LEVEL_FLAGS],
               ((s[DS_LEVEL_FLAGS] & 1) && *(uint16_t*)(s + DS_LEVEL) != 0x2C) ? 1 : 0,
-              *(uint16_t*)(s + 0x3FC + 8),
-              *(uint16_t*)(s + 0x3FC + 16),
-              *(uint16_t*)(s + 0x3E4 + 8),
-              *(uint16_t*)(s + 0x3E4 + 16));
+              *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 8),
+              *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 16),
+              *(uint16_t*)(s + (DS_HUD_ITEMS) + 8),
+              *(uint16_t*)(s + (DS_HUD_ITEMS) + 16));
     }
     if ((s[DS_LEVEL_FLAGS] & 1) && *(uint16_t*)(s + DS_LEVEL) != 0x2C) {
         // sub_120FF: healthbar state tracking + rendering (3 vikings)
         for (int vk = 0; vk < 3; vk++) {
-            uint16_t prev = *(uint16_t*)(s + 0x0435 + vk * 2);
-            *(uint16_t*)(s + 0x043B + vk * 2) = prev;
+            uint16_t prev = *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2);
+            *(uint16_t*)(s + (DS_HUD_HEALTH_PREV) + vk * 2) = prev;
             int16_t hv = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX + vk * 2);
             uint16_t ax = (hv < 0) ? 2 : (*(uint16_t*)(s + DS_ACTIVE_VIKING) != (uint16_t)(vk * 2)) ? 1 : 0;
-            *(uint16_t*)(s + 0x0435 + vk * 2) = ax;
+            *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2) = ax;
             if (ax != prev) v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
         }
         // sub_12199 (eip 0x2199): item display sync. Loop slot 0..0x18 step 2:
@@ -18910,10 +18910,10 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                 fprintf(stderr,
                   "V2-12199-ENTRY[%d]: lvl=%04X 25CF=%02X 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
                   _v212199, *(uint16_t*)(s + DS_LEVEL), s[DS_LEVEL_FLAGS],
-                  *(uint16_t*)(s + 0x3FC + 8),
-                  *(uint16_t*)(s + 0x3FC + 16),
-                  *(uint16_t*)(s + 0x3E4 + 8),
-                  *(uint16_t*)(s + 0x3E4 + 16));
+                  *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 8),
+                  *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 16),
+                  *(uint16_t*)(s + (DS_HUD_ITEMS) + 8),
+                  *(uint16_t*)(s + (DS_HUD_ITEMS) + 16));
         }
         // ====================================================================
         // ORIG BUG REPLICATION: sub_12199 loop has a register-clobber bug.
@@ -18957,15 +18957,15 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             if (++_iter > 13) {
                 fprintf(stderr,
                     "FATAL v2 sub_12199 loop runaway: iter=%d di2=%04X "
-                    "s[0x418]=%04X (clobber would be %04X). "
+                    "s[(DS_HUD_SEL+4)]=%04X (clobber would be %04X). "
                     "shadow DS corrupted at level=%04X.\n",
                     _iter, di2, *(uint16_t*)(s + 0x0418),
                     (uint16_t)((*(uint16_t*)(s + 0x0418) + 8) * 2),
                     *(uint16_t*)(s + DS_LEVEL));
                 abort();
             }
-            uint16_t item = *(uint16_t*)(s + di2 + 0x3E4);
-            if (item != *(uint16_t*)(s + di2 + 0x3FC)) {
+            uint16_t item = *(uint16_t*)(s + di2 + (DS_HUD_ITEMS));
+            if (item != *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV))) {
                 {
                     // V2-12199-SYNC: log when v2 sub_12199 syncs a slot
                     static int _v2sync = 0; _v2sync++;
@@ -18973,15 +18973,15 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                         fprintf(stderr,
                           "V2-12199-SYNC[%d]: di=%04X(slot=%d) item=%04X prev_3FC=%04X\n",
                           _v2sync, di2, di2/2, item,
-                          *(uint16_t*)(s + di2 + 0x3FC));
+                          *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)));
                 }
-                *(uint16_t*)(s + di2 + 0x3FC) = item;
+                *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)) = item;
                 v2_draw_hud_item(v2_current_ds_val, di2, item);
                 // sub_120d1 (eip 0x20D1): redraw 3 viking selectors AND unconditionally
                 // sync 0x41A=0x414, 0x41C=0x416, 0x41E=0x418. Called on every item change.
                 {
                     // viking 1: word_288fa (0x41A) = word_288f4 (0x414)
-                    uint16_t v1 = *(uint16_t*)(s + 0x0414);
+                    uint16_t v1 = *(uint16_t*)(s + (DS_HUD_SEL));
                     *(uint16_t*)(s + 0x041A) = v1;
                     v2_draw_hud_selector(v2_current_ds_val, v1 * 2);
                     // viking 2: word_288fc (0x41C) = word_288f6 (0x416)
@@ -19007,23 +19007,23 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             uint16_t prev_off = 0x041A + vk * 2;
             if (*(uint16_t*)(s + cur_off) != *(uint16_t*)(s + prev_off)) {
                 uint16_t old_di = *(uint16_t*)(s + prev_off) * 2;
-                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + 0x3E4));
+                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
                 *(uint16_t*)(s + prev_off) = *(uint16_t*)(s + cur_off);
                 v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + cur_off) * 2);
             }
         }
         // sub_11B0B: portrait/sound state sync (3 vikings) — same logic as init at sub_11080.
         for (int vk = 0; vk < 3; vk++) {
-            uint16_t sound_prev = *(uint16_t*)(s + 0x0429 + vk * 2);
-            uint16_t sound_cur  = *(uint16_t*)(s + 0x042F + vk * 2);
+            uint16_t sound_prev = *(uint16_t*)(s + (DS_PORTRAIT_SND) + vk * 2);
+            uint16_t sound_cur  = *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2);
             uint16_t port_prev  = *(uint16_t*)(s + VIK_PORTRAIT + vk * 2);
-            uint16_t port_cur   = *(uint16_t*)(s + 0x0423 + vk * 2);
+            uint16_t port_cur   = *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2);
             if (sound_prev != sound_cur || port_prev != port_cur) {
                 uint16_t portrait_si = port_prev;
                 if (sound_prev != 0) portrait_si += 4;
                 v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
-                *(uint16_t*)(s + 0x042F + vk * 2) = sound_prev;
-                *(uint16_t*)(s + 0x0423 + vk * 2) = port_prev;
+                *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2) = sound_prev;
+                *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2) = port_prev;
             }
         }
     }
@@ -19795,7 +19795,7 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 else {
                     uint16_t di_i = di_cat << 3; nc = false;
                     for (int cx = 0; cx < 4; cx++) {
-                        if (*(uint16_t*)(shadow + di_i + 0x3E4) == 0) {
+                        if (*(uint16_t*)(shadow + di_i + (DS_HUD_ITEMS)) == 0) {
                             ax_r = di_i; nc = true; break;
                         }
                         di_i += 2;
@@ -19820,7 +19820,7 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 else {
                     uint16_t di_i = di_cat << 3; nc = false;
                     for (int cx = 0; cx < 4; cx++) {
-                        if (*(uint16_t*)(shadow + di_i + 0x3E4) == 0) {
+                        if (*(uint16_t*)(shadow + di_i + (DS_HUD_ITEMS)) == 0) {
                             ax_r = di_i; nc = true; break;
                         }
                         di_i += 2;
@@ -19848,28 +19848,28 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
             } else {
                 if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 2);
                 uint16_t ax = *(uint16_t*)(shadow + 0x441);
-                *(uint16_t*)(shadow + di + 0x3E4) = ax;
+                *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax;
                 uint16_t si = *(uint16_t*)(shadow + 0x443);
                 si &= 0xFFFC; si >>= 1;
-                uint16_t di2 = *(uint16_t*)(shadow + si + 0x414);
+                uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
                 uint16_t si2 = si << 1;
                 di2 += si2; si2 >>= 1; di2 <<= 1;
-                if (*(uint16_t*)(shadow + di2 + 0x3E4) == 0) {
+                if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
                     // orig sub_11f93 eip 0x1FEE: sub_1183d(di=di2, ax=0) — clear slot render
                     v2_draw_hud_item(v2_current_ds_val, di2, 0);
                     uint16_t ax2 = *(uint16_t*)(shadow + 0x443) & 3;
-                    *(uint16_t*)(shadow + si2 + 0x414) = ax2;
+                    *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
                 }
             }
             if (!f93_carry) {
                 uint16_t di_r = *(uint16_t*)(shadow + 0x421);
-                uint16_t ax_r = *(uint16_t*)(shadow + di_r + 0x414);
+                uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
                 uint16_t di_s = (di_r << 1) + ax_r;
                 *(uint16_t*)(shadow + 0x443) = di_s;
                 uint16_t di_b = (di_s << 1) & 0xFFF8;
                 bool found = false; uint16_t found_di = 0;
                 for (int cx = 0; cx < 4; cx++) {
-                    if (*(uint16_t*)(shadow + di_b + 0x3E4) != 0) {
+                    if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
                         found = true; found_di = di_b; break;
                     }
                     di_b += 2;
@@ -19877,17 +19877,17 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 if (!found) {
                     *(uint16_t*)(shadow + 0x441) = 0;
                 } else {
-                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + 0x3E4);
+                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
                     uint16_t saved = found_di;
                     uint16_t di3 = *(uint16_t*)(shadow + 0x421);
-                    uint16_t ax3 = *(uint16_t*)(shadow + di3 + 0x414);
+                    uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
                     di3 = ((di3 << 1) + ax3) << 1;
                     // orig sub_121f6 eip 0x2236: sub_1183d(di=di3, ax=0) — render new slot
                     v2_draw_hud_item(v2_current_ds_val, di3, 0);
                     uint16_t si_v = saved >> 1;
                     di3 = (di3 >> 2) & 0xFFFE;
-                    *(uint16_t*)(shadow + di3 + 0x414) = si_v;
-                    *(uint16_t*)(shadow + di3 + 0x414) &= 3;
+                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
+                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
                     *(uint16_t*)(shadow + 0x443) = si_v;
                 }
                 *(uint16_t*)(shadow + 0x447) = 1; // mode = carrying
@@ -19902,28 +19902,28 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 if (shadow[(uint16_t)(item + 0x8592)] == 0) f93_carry = true;
             } else {
                 uint16_t ax = *(uint16_t*)(shadow + 0x441);
-                *(uint16_t*)(shadow + di + 0x3E4) = ax;
+                *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax;
                 uint16_t si = *(uint16_t*)(shadow + 0x443);
                 si &= 0xFFFC; si >>= 1;
-                uint16_t di2 = *(uint16_t*)(shadow + si + 0x414);
+                uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
                 uint16_t si2 = si << 1;
                 di2 += si2; si2 >>= 1; di2 <<= 1;
-                if (*(uint16_t*)(shadow + di2 + 0x3E4) == 0) {
+                if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
                     // orig sub_11f93 eip 0x1FEE: sub_1183d(di=di2, ax=0) — clear slot render
                     v2_draw_hud_item(v2_current_ds_val, di2, 0);
                     uint16_t ax2 = *(uint16_t*)(shadow + 0x443) & 3;
-                    *(uint16_t*)(shadow + si2 + 0x414) = ax2;
+                    *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
                 }
             }
             if (!f93_carry) {
                 uint16_t di_r = *(uint16_t*)(shadow + 0x421);
-                uint16_t ax_r = *(uint16_t*)(shadow + di_r + 0x414);
+                uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
                 uint16_t di_s = (di_r << 1) + ax_r;
                 *(uint16_t*)(shadow + 0x443) = di_s;
                 uint16_t di_b = (di_s << 1) & 0xFFF8;
                 bool found = false; uint16_t found_di = 0;
                 for (int cx = 0; cx < 4; cx++) {
-                    if (*(uint16_t*)(shadow + di_b + 0x3E4) != 0) {
+                    if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
                         found = true; found_di = di_b; break;
                     }
                     di_b += 2;
@@ -19931,17 +19931,17 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 if (!found) {
                     *(uint16_t*)(shadow + 0x441) = 0;
                 } else {
-                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + 0x3E4);
+                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
                     uint16_t saved = found_di;
                     uint16_t di3 = *(uint16_t*)(shadow + 0x421);
-                    uint16_t ax3 = *(uint16_t*)(shadow + di3 + 0x414);
+                    uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
                     di3 = ((di3 << 1) + ax3) << 1;
                     // orig sub_121f6 eip 0x2236: sub_1183d(di=di3, ax=0) — render new slot
                     v2_draw_hud_item(v2_current_ds_val, di3, 0);
                     uint16_t si_v = saved >> 1;
                     di3 = (di3 >> 2) & 0xFFFE;
-                    *(uint16_t*)(shadow + di3 + 0x414) = si_v;
-                    *(uint16_t*)(shadow + di3 + 0x414) &= 3;
+                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
+                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
                     *(uint16_t*)(shadow + 0x443) = si_v;
                 }
                 *(uint16_t*)(shadow + 0x447) = 1;
@@ -19958,13 +19958,13 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
-                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
+                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + (DS_HUD_SEL));
                     uint16_t di_s = (di_v << 1) + ax_i;
                     *(uint16_t*)(shadow + 0x443) = di_s;
-                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + 0x3E4);
-                    *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                    *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                    *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + (DS_HUD_ITEMS));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                     *(uint16_t*)(shadow + 0x445) = 0x11;
                     *(uint16_t*)(shadow + 0x449) = 0xFFFF;
                     shadow[0x44B] = 0xFF;
@@ -19994,13 +19994,13 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
                 if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
                     di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
                     *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
-                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + 0x414);
+                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + (DS_HUD_SEL));
                     uint16_t di_s = (di_v << 1) + ax_i;
                     *(uint16_t*)(shadow + 0x443) = di_s;
-                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + 0x3E4);
-                    *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-                    *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-                    *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
+                    *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + (di_s << 1) + (DS_HUD_ITEMS));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
                     *(uint16_t*)(shadow + 0x445) = 0x11;
                     *(uint16_t*)(shadow + 0x449) = 0xFFFF;
                     shadow[0x44B] = 0xFF;
@@ -20033,48 +20033,48 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
         };
         if (new_input & 0x200) {
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (*(uint16_t*)(shadow + di_v + 0x414) & 1) {
+            if (*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 1) {
                 erase_old_slot();
-                *(uint16_t*)(shadow + di_v + 0x414) &= 0xFFFE;
+                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) &= 0xFFFE;
                 *(uint16_t*)(shadow + 0x443) &= 0xFFFE;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                 *(uint16_t*)(shadow + 0x445) = 0x11;
                 if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
         }
         if (new_input & 0x100) {
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (!(*(uint16_t*)(shadow + di_v + 0x414) & 1)) {
+            if (!(*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 1)) {
                 erase_old_slot();
-                *(uint16_t*)(shadow + di_v + 0x414) |= 1;
+                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) |= 1;
                 *(uint16_t*)(shadow + 0x443) |= 1;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                 *(uint16_t*)(shadow + 0x445) = 0x11;
                 if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
         }
         if (new_input & 0x800) {
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (*(uint16_t*)(shadow + di_v + 0x414) & 2) {
+            if (*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 2) {
                 erase_old_slot();
-                *(uint16_t*)(shadow + di_v + 0x414) &= 0xFFFD;
+                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) &= 0xFFFD;
                 *(uint16_t*)(shadow + 0x443) &= 0xFFFD;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                 *(uint16_t*)(shadow + 0x445) = 0x11;
                 if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
         }
         if (new_input & 0x400) {
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (!(*(uint16_t*)(shadow + di_v + 0x414) & 2)) {
+            if (!(*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 2)) {
                 erase_old_slot();
-                *(uint16_t*)(shadow + di_v + 0x414) |= 2;
+                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) |= 2;
                 *(uint16_t*)(shadow + 0x443) |= 2;
                 uint16_t bx = *(uint16_t*)(shadow + 0x443) << 1;
-                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + 0x3E4);
+                *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
                 *(uint16_t*)(shadow + 0x445) = 0x11;
                 if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
             }
@@ -20083,12 +20083,12 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
             // sub_121B9 (seg000 4326-4345) + sub_120D1
             uint16_t di_b = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
             *(uint16_t*)(shadow + 0x421) = di_b;
-            uint16_t ax_b = *(uint16_t*)(shadow + di_b + 0x414);
+            uint16_t ax_b = *(uint16_t*)(shadow + di_b + (DS_HUD_SEL));
             di_b = ((di_b << 1) + ax_b) << 1;
-            uint16_t item = *(uint16_t*)(shadow + di_b + 0x3E4);
+            uint16_t item = *(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS));
             if (item != 0) {
                 *(uint16_t*)(shadow + 0x441) = item;
-                *(uint16_t*)(shadow + di_b + 0x3E4) = 0;
+                *(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) = 0;
                 *(uint16_t*)(shadow + 0x443) = di_b >> 1;
                 *(uint16_t*)(shadow + 0x447) = 0;
                 *(uint16_t*)(shadow + 0x445) = 9;
@@ -20099,12 +20099,12 @@ static bool v2_sub_11cbb(uint8_t* shadow) {
             // (after pickup mode→0) overdraws selector frame via item draw,
             // and loc_1205B doesn't redraw (prev==cur now). User sees selector
             // disappear from selected item after F-pickup.
-            *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(shadow + 0x414) << 1);
-            *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + 0x416) + 4) << 1);
-            *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + 0x418) + 8) << 1);
+            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1);
+            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1);
+            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1);
         }
         if (new_input & 0x3000) {
             *(uint16_t*)(shadow + 0x445) = 0x11;
@@ -20126,17 +20126,17 @@ static void v2_sub_11792(uint8_t* shadow) {
     // sub_120FF: healthbar tracking. DS writes: [435-439] state, [43B-43F] previous.
     // Save old state, compute new, render ONLY if changed (mirrors orig sub_120ff
     // eip 0x2127 CMP ax, word_2891B; JZ skip-render).
-    *(uint16_t*)(shadow + 0x043B) = *(uint16_t*)(shadow + 0x0435);
+    *(uint16_t*)(shadow + (DS_HUD_HEALTH_PREV)) = *(uint16_t*)(shadow + (DS_HUD_HEALTH));
     *(uint16_t*)(shadow + 0x043D) = *(uint16_t*)(shadow + 0x0437);
     *(uint16_t*)(shadow + 0x043F) = *(uint16_t*)(shadow + 0x0439);
     for (int vk = 0; vk < 3; vk++) {
         uint16_t health_addr = OBJ_ANIM_IDX + vk * 2;
-        uint16_t prev_state = *(uint16_t*)(shadow + 0x043B + vk * 2);
+        uint16_t prev_state = *(uint16_t*)(shadow + (DS_HUD_HEALTH_PREV) + vk * 2);
         uint16_t new_state;
         if ((int16_t)*(uint16_t*)(shadow + health_addr) < 0) new_state = 2;
         else if (*(uint16_t*)(shadow + DS_ACTIVE_VIKING) == (uint16_t)(vk * 2)) new_state = 0;
         else new_state = 1;
-        *(uint16_t*)(shadow + 0x0435 + vk * 2) = new_state;
+        *(uint16_t*)(shadow + (DS_HUD_HEALTH) + vk * 2) = new_state;
         // Conditional render — orig only draws when state transitions.
         if (new_state != prev_state) {
             // Mirror orig sub_117d0 args: ax=new_state, bx=vk, di=vk
@@ -20152,13 +20152,13 @@ static void v2_sub_11792(uint8_t* shadow) {
         uint16_t di_c = 0;
         while (di_c < 0x18) {
             if (++_iter > 13) break;  // safety
-            uint16_t ax_r = *(uint16_t*)(shadow + di_c + 0x3E4);
-            if (ax_r != *(uint16_t*)(shadow + di_c + 0x3FC)) {
-                *(uint16_t*)(shadow + di_c + 0x3FC) = ax_r;
+            uint16_t ax_r = *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS));
+            if (ax_r != *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV))) {
+                *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV)) = ax_r;
                 // sub_12199 calls sub_1183d(di_c, ax_r) — mirror via v2_draw_hud_item
                 v2_draw_hud_item(v2_current_ds_val, di_c, ax_r);
                 // sub_120d1 (eip 0x20D1): redraw 3 viking selectors + sync 0x41A/0x41C/0x41E.
-                uint16_t v1 = *(uint16_t*)(shadow + 0x0414);
+                uint16_t v1 = *(uint16_t*)(shadow + (DS_HUD_SEL));
                 *(uint16_t*)(shadow + 0x041A) = v1;
                 v2_draw_hud_selector(v2_current_ds_val, v1 << 1);
                 uint16_t v2v = *(uint16_t*)(shadow + 0x0416);
@@ -20179,41 +20179,41 @@ static void v2_sub_11792(uint8_t* shadow) {
     // draws NEW selector frame (sub_118ad at new pos). v2: mirror via
     // v2_draw_hud_item (erase) + v2_draw_hud_selector (new frame).
     // Viking 0: ds:0x414 (cur) vs ds:0x41A (prev), slot di range 0-7.
-    if (*(uint16_t*)(shadow + 0x414) != *(uint16_t*)(shadow + 0x41A)) {
-        uint16_t old_di = *(uint16_t*)(shadow + 0x41A) << 1;
-        uint16_t old_item = *(uint16_t*)(shadow + old_di + 0x3E4);
+    if (*(uint16_t*)(shadow + (DS_HUD_SEL)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV))) {
+        uint16_t old_di = *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) << 1;
+        uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
         v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
-        *(uint16_t*)(shadow + 0x41A) = *(uint16_t*)(shadow + 0x414);
-        uint16_t new_di = *(uint16_t*)(shadow + 0x414) << 1;
+        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
+        uint16_t new_di = *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1;
         v2_draw_hud_selector(v2_current_ds_val, new_di);
     }
     // Viking 1: ds:0x416 (cur) vs ds:0x41C (prev), slot di range +4 → 8-15.
-    if (*(uint16_t*)(shadow + 0x416) != *(uint16_t*)(shadow + 0x41C)) {
-        uint16_t old_di = (*(uint16_t*)(shadow + 0x41C) + 4) << 1;
-        uint16_t old_item = *(uint16_t*)(shadow + old_di + 0x3E4);
+    if (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2))) {
+        uint16_t old_di = (*(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) + 4) << 1;
+        uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
         v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
-        *(uint16_t*)(shadow + 0x41C) = *(uint16_t*)(shadow + 0x416);
-        uint16_t new_di = (*(uint16_t*)(shadow + 0x416) + 4) << 1;
+        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
+        uint16_t new_di = (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1;
         v2_draw_hud_selector(v2_current_ds_val, new_di);
     }
     // Viking 2: ds:0x418 (cur) vs ds:0x41E (prev), slot di range +8 → 16-23.
-    if (*(uint16_t*)(shadow + 0x418) != *(uint16_t*)(shadow + 0x41E)) {
-        uint16_t old_di = (*(uint16_t*)(shadow + 0x41E) + 8) << 1;
-        uint16_t old_item = *(uint16_t*)(shadow + old_di + 0x3E4);
+    if (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4))) {
+        uint16_t old_di = (*(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) + 8) << 1;
+        uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
         v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
-        *(uint16_t*)(shadow + 0x41E) = *(uint16_t*)(shadow + 0x418);
-        uint16_t new_di = (*(uint16_t*)(shadow + 0x418) + 8) << 1;
+        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
+        uint16_t new_di = (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1;
         v2_draw_hud_selector(v2_current_ds_val, new_di);
     }
     // sub_11B0B: portrait/sound tracking sync + portrait render
     for (int vk = 0; vk < 3; vk++) {
         uint16_t port = *(uint16_t*)(shadow + VIK_PORTRAIT + vk * 2);
-        uint16_t prev_port = *(uint16_t*)(shadow + 0x0423 + vk * 2);
-        uint16_t snd = *(uint16_t*)(shadow + 0x0429 + vk * 2);
-        uint16_t prev_snd = *(uint16_t*)(shadow + 0x042F + vk * 2);
+        uint16_t prev_port = *(uint16_t*)(shadow + (DS_PORTRAIT_PREV) + vk * 2);
+        uint16_t snd = *(uint16_t*)(shadow + (DS_PORTRAIT_SND) + vk * 2);
+        uint16_t prev_snd = *(uint16_t*)(shadow + (DS_PORTRAIT_SND_PREV) + vk * 2);
         if (port != prev_port || snd != prev_snd) {
-            *(uint16_t*)(shadow + 0x042F + vk * 2) = snd;
-            *(uint16_t*)(shadow + 0x0423 + vk * 2) = port;
+            *(uint16_t*)(shadow + (DS_PORTRAIT_SND_PREV) + vk * 2) = snd;
+            *(uint16_t*)(shadow + (DS_PORTRAIT_PREV) + vk * 2) = port;
             // sub_11b0b internally renders portrait via v2_draw_hud_portrait
             v2_draw_hud_portrait(v2_current_ds_val, (uint16_t)(vk * 2), port);
         }
@@ -20244,12 +20244,12 @@ static void v2_sub_11c52(uint8_t* s) {
             // viking selectors (orig line 5471-5491) — needed because v2_draw_hud_item
             // 16x16 overdraws selector frame area. Without this redraw, selector
             // disappears after first blink phase.
-            *(uint16_t*)(s + 0x41A) = *(uint16_t*)(s + 0x414);
-            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + 0x414) << 1);
-            *(uint16_t*)(s + 0x41C) = *(uint16_t*)(s + 0x416);
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + 0x416) + 4) << 1);
-            *(uint16_t*)(s + 0x41E) = *(uint16_t*)(s + 0x418);
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + 0x418) + 8) << 1);
+            *(uint16_t*)(s + (DS_HUD_SEL_PREV)) = *(uint16_t*)(s + (DS_HUD_SEL));
+            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + (DS_HUD_SEL)) << 1);
+            *(uint16_t*)(s + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(s + (DS_HUD_SEL+2));
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + (DS_HUD_SEL+2)) + 4) << 1);
+            *(uint16_t*)(s + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(s + (DS_HUD_SEL+4));
+            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + (DS_HUD_SEL+4)) + 8) << 1);
         }
     } else {
         // Mode 1: alternate blink path (loc_11c8f) — selector mode
@@ -20323,12 +20323,12 @@ void v2_run_pause_entry(uint8_t* shadow) {
     //   word_28923 = si; si <<= 1; word_28921 = [si+0x3E4]
     {
         uint16_t di = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-        uint16_t si = *(uint16_t*)(shadow + di + 0x414);
+        uint16_t si = *(uint16_t*)(shadow + di + (DS_HUD_SEL));
         di <<= 1;
         si += di;
         *(uint16_t*)(shadow + 0x443) = si;                            // word_28923
         si <<= 1;
-        *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + si + 0x3E4); // word_28921
+        *(uint16_t*)(shadow + 0x441) = *(uint16_t*)(shadow + si + (DS_HUD_ITEMS)); // word_28921
     }
     // sub_11f47: proximity check (word_28929 = 0xFFFF; byte_2892B = 0xFF;
     //   for each viking 0..2: if alive AND |dx|+|dy| < 0x40 → byte[viking>>1+0x449] = 0)
