@@ -652,7 +652,18 @@ void v2_pixwatch_stage(const char* stage) {
         _pw_last = cur;
     }
 }
+int v2_render_frame = 0;   // #32: deterministic render-frame index (see below)
 void v2_verify_render_buf(int frame) {
+    // #32 determinism: the caller passes v2_dbg_pre_vm_iter, which is inflated
+    // by v2_blocking_loop_tick() inside the viking-switch / pause blocking loops
+    // (#180 max-frames guard). Those loops spin a WALL-CLOCK-variable number of
+    // times, so the same replay produced different frame labels across runs even
+    // though the pixel content is identical (proven: hard-diff multisets match
+    // run-to-run). This counter advances once per render3 comparison — one per
+    // real game frame, deterministic per replay — and drives every divergence /
+    // A2 label below. v2_dbg_pre_vm_iter is left untouched (input-replay tagging
+    // and the headless max-frames guard still need its blocking-loop cadence).
+    frame = ++v2_render_frame;
     extern uint8_t v2_render_buf[320*200];
     if (!myDrawInfo) return;
     uint32_t page_offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
