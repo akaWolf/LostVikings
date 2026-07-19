@@ -30,6 +30,7 @@
 #include <SDL2/SDL.h>
 #include "render_v2.h"
 #include "v2_ds_layout.h"
+#include "v2_obj_view.h"
 
 // Access to emulated memory
 extern uint8_t* v2_m2c_base;
@@ -9188,6 +9189,12 @@ struct V2VM {
     void     global_w(uint16_t offset, uint16_t val) { ds_write(offset, val); }
 };
 
+// ObjRef backend (declared in v2_obj_view.h): forwards through the VM
+// accessors so every diagnostic trap in ds_read/ds_write keeps firing.
+uint16_t ObjRef::u16(uint16_t col) const { return vm.ds_read((uint16_t)(slot + col)); }
+void     ObjRef::w16(uint16_t col, uint16_t v) const { vm.ds_write((uint16_t)(slot + col), v); }
+
+
 // ============================================================================
 // Opcode handler type
 // ============================================================================
@@ -12325,21 +12332,22 @@ static void v2_vm_op_35(V2VM& vm) {
         vm.di_track = di;   // orig: filter-scan stop position stays in DI
         if (!matched) continue;
 
-        // Y bounds: signed JL comparisons
+        // Y bounds: signed JL comparisons (phase-B pilot: ObjRef views)
+        ObjRef cand{vm, si};
         int16_t y_ref = (int16_t)vm.ds_read(0x3AE);
-        if (y_ref < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)(uint16_t)(y_ref - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
+        if (y_ref < cand.bbox_y0()) continue;
+        if ((int16_t)(uint16_t)(y_ref - 1) < cand.bbox_y1()) continue;
 
         // X bounds: signed JL comparisons
-        uint16_t di2 = self_si;
-        vm.di_track = di2;  // orig 0x5EE3: MOV di,ds:42h before the X bbox
-        if ((int16_t)vm.ds_read(di2 + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
-        if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di2 + OBJ_BBOX_X0)) continue;
+        ObjRef self{vm, self_si};
+        vm.di_track = self.slot;  // orig 0x5EE3: MOV di,ds:42h before the X bbox
+        if (self.bbox_x1() < cand.bbox_x0()) continue;
+        if (cand.bbox_x1() < self.bbox_x0()) continue;
 
         // Match found
         vm.ds_write(0x3B0, si);
-        vm.ds_write(di2 + OBJ_PARTNER, si);
-        vm.ds_write(di2 + OBJ_ALT_PC, vm.pc);
+        self.set_partner(si);
+        self.set_alt_pc(vm.pc);
         vm.pc = jump_target;
         return;
     }
