@@ -260,4 +260,73 @@ constexpr uint16_t DS_SCROLL_AMT_RIGHT  = 0x03DA; // word_288BA: pending scroll 
 constexpr uint16_t DS_SCROLL_AMT_DOWN   = 0x03DC; // word_288BC: pending scroll amount, down
 constexpr uint16_t DS_SCROLL_AMT_UP     = 0x03DE; // word_288BE: pending scroll amount, up
 
+
+// ---------------------------------------------------------------------------
+// DS globals batch 2 (level / scroll-state / palette-anim / sound / spawn-table)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_SAVED_VP_X          = 0x257B; // word_2AA5B: viewport X saved at page flip (16775)
+constexpr uint16_t DS_SAVED_VP_Y          = 0x257D; // word_2AA5D: viewport Y saved at page flip
+constexpr uint16_t DS_SCROLL_COL          = 0x257F; // word_2AA5F: tile-column scroll state (vp_x>>3)
+constexpr uint16_t DS_SCROLL_ROW          = 0x2581; // word_2AA61: tile-row scroll state (vp_y>>3)
+constexpr uint16_t DS_PAL_ANIM_EN         = 0x2583; // byte_2AA63: palette-animation enable bits (pal_anim 10ffc)
+constexpr uint16_t DS_PAL_ANIM_RELOAD     = 0x2584; // byte[8] @2AA64: palette-anim per-slot timer reload values
+constexpr uint16_t DS_PAL_ANIM_TIMER      = 0x258C; // byte[8] @2AA6C: palette-anim per-slot countdown timers
+constexpr uint16_t DS_PAL_ANIM_START      = 0x2594; // byte[8] @2AA74: palette-anim per-slot start color
+constexpr uint16_t DS_PAL_ANIM_END        = 0x259C; // byte[8] @2AA7C: palette-anim per-slot end color
+constexpr uint16_t DS_SCROLL_LIMIT_X      = 0x25A4; // word_2AA84: viewport scroll X limit (level width*16-0x140)
+constexpr uint16_t DS_SCROLL_LIMIT_Y      = 0x25A6; // word_2AA86: viewport scroll Y limit (level height*16-0xB0)
+constexpr uint16_t DS_LEVEL_PREV          = 0x25AB; // word_2AA8B: previous level id (saved before transition)
+constexpr uint16_t DS_MUSIC_TRACK         = 0x25AF; // word_2AA8F: current music track (0xFFFF = none)
+constexpr uint16_t DS_ANIM_SCROLL_DX      = 0x25B3; // word_2AA93: anim scroll delta X (135cf adds to OBJ_ANIM_DX)
+constexpr uint16_t DS_ANIM_SCROLL_DY      = 0x25B5; // word_2AA95: anim scroll delta Y (135cf adds to OBJ_ANIM_DY)
+constexpr uint16_t DS_SND_TYPE            = 0x25B7; // byte_2AA97: level-enter sound dispatch type (music_dispatch)
+constexpr uint16_t DS_SND_TRACK           = 0x25B8; // word_2AA98: sound track index
+constexpr uint16_t DS_SND_FLAG            = 0x25B9; // byte_2AA99: sound state flag (1 = skip music slot)
+constexpr uint16_t DS_ACTIVE_VK_SEL       = 0x25BA; // byte_2AA9A: active-viking selector (nonzero -> use word_288A2)
+constexpr uint16_t DS_SPAWN_X             = 0x25BB; // word_2AA9B: level-spawn X (copied to ds:0x6C)
+constexpr uint16_t DS_SPAWN_Y             = 0x25BD; // word_2AA9D: level-spawn Y (copied to ds:0x6E)
+constexpr uint16_t DS_SPAWN_CODE          = 0x25BF; // word_2AA9F: level-spawn code-seg idx (13809 arg)
+constexpr uint16_t DS_SPAWN_ANIM          = 0x25C1; // word_2AAA1: level-spawn anim/flags (13809 arg)
+constexpr uint16_t DS_SPAWN_POOL0         = 0x25C3; // word_2AAA3: level-spawn initial pool value -> ds:0x374
+constexpr uint16_t DS_LEVEL_LOAD          = 0x25C9; // word_2AAA9: level index being loaded (load_level; spawn-table writes)
+constexpr uint16_t DS_LEVEL_LOAD_AUX      = 0x25CB; // word_2AAAB: aux level-load field (di_val in load_level)
+constexpr uint16_t DS_MAP_BP              = 0x25DC; // word_2AABC: tile-map bp cursor (1C8F1 flagged-tile scan)
+constexpr uint16_t DS_MAP_HEIGHT          = 0x25DE; // word_2AABE: level map height in tiles
+
+
+// ---------------------------------------------------------------------------
+// DS globals batch 3 (search/collision scratch, shake, pan, pw-chars, spawn-table)
+// ---------------------------------------------------------------------------
+constexpr uint16_t DS_CMD_ACTIVE          = 0x0308; // byte_287E8: command-loop active flag (set 1 at 2867 / 0 at 2874)
+constexpr uint16_t DS_PW_CHAR1            = 0x0312; // word_287F2: password char slot 1 (continuation of DS_PW_CHAR0 area)
+constexpr uint16_t DS_PW_CHAR2            = 0x0314; // word_287F4: password char slot 2
+constexpr uint16_t DS_PW_CHAR3            = 0x0316; // word_287F6: password char slot 3
+constexpr uint16_t DS_SCRATCH_32E         = 0x032E; // byte_2880E: init-cleared scratch (no distinct orig reader)
+constexpr uint16_t DS_SCRATCH_331         = 0x0331; // word_28811: init-cleared scratch
+constexpr uint16_t DS_SCRATCH_336         = 0x0336; // word_28816: init-cleared scratch
+constexpr uint16_t DS_OBJ_SCAN_START      = 0x033C; // word_2881C: object-loop start index (game_mode_init sets 0/2)
+constexpr uint16_t DS_HUD_DISP_MODE       = 0x0340; // word_28820: HUD/portrait display mode (sub_117ad sets 2)
+constexpr uint16_t DS_SCRATCH_348         = 0x0348; // word_28828: init-cleared scratch
+constexpr uint16_t DS_SCRATCH_34A         = 0x034A; // word_2882A: init-cleared scratch
+constexpr uint16_t DS_SCRATCH_34C         = 0x034C; // word_2882C: init-cleared scratch
+constexpr uint16_t DS_COLL_STATE_392      = 0x0392; // word_28872: collision state field (init-cleared)
+constexpr uint16_t DS_COLL_STATE_398      = 0x0398; // word_28878: collision state field (set 1)
+constexpr uint16_t DS_SHAKE_SRC_X         = 0x039A; // word_2887A: shake source X (XORed into DS_SHAKE_X)
+constexpr uint16_t DS_SHAKE_SRC_Y         = 0x039C; // word_2887C: shake source Y (XORed into DS_SHAKE_Y)
+constexpr uint16_t DS_SHAKE_GATE_X        = 0x03A2; // word_28882: shake enable gate X
+constexpr uint16_t DS_SHAKE_GATE_Y        = 0x03A4; // word_28884: shake enable gate Y
+constexpr uint16_t DS_PAN_X               = 0x03A6; // word_28886: horizontal pan (from LUT [di-0x7AC2])
+constexpr uint16_t DS_PAN_Y               = 0x03A8; // word_28888: vertical pan (from LUT [di-0x7ABC])
+constexpr uint16_t DS_SEARCH_FILTER       = 0x03AA; // word_2888A: object-search filter index scratch
+constexpr uint16_t DS_SEARCH_JUMP         = 0x03AC; // word_2888C: object-search jump-target scratch
+constexpr uint16_t DS_SEARCH_Y            = 0x03AE; // word_2888E: object-search Y scratch (bbox_y0-1)
+constexpr uint16_t DS_SEARCH_SI           = 0x03B0; // word_28890: object-search current slot scratch
+constexpr uint16_t DS_SEARCH_BEST         = 0x03CA; // word_288AA: object-search best-match slot
+constexpr uint16_t DS_SCRATCH_3CE         = 0x03CE; // word_288AE: init-cleared scratch
+constexpr uint16_t DS_SCRATCH_3D0         = 0x03D0; // word_288B0: init-cleared scratch
+constexpr uint16_t DS_HUD_SEL_SI          = 0x03D4; // word_288B4: HUD selector slot scratch
+constexpr uint16_t DS_SCRATCH_3D6         = 0x03D6; // word_288B6: init-cleared scratch
+constexpr uint16_t DS_SPAWN_TBL_LO        = 0x03E0; // word_288C0: level spawn-table field (di+0x25FA)
+constexpr uint16_t DS_SPAWN_TBL_HI        = 0x03E2; // word_288C2: level spawn-table field (di+0x25FC)
+
 #endif // V2_DS_LAYOUT_H

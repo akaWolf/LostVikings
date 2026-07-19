@@ -1466,7 +1466,7 @@ static void v2_music_start_178d6_v2(uint8_t* s) {
 // "Production" impl — no replay knowledge. v2 callers go through fx::stop_all_sfx.
 static void v2_seq_stop_all_17912_v2(uint8_t* s) {
     if (*(uint16_t*)(s + DS_MUSIC_MUTE) != 0 && *(uint16_t*)(s + DS_SFX_MUTE) != 0) return;
-    uint16_t si = (s[0x25B9] == 1) ? 2 : 0;
+    uint16_t si = (s[DS_SND_FLAG] == 1) ? 2 : 0;
     while ((int16_t)si < 0x0A) {
         uint16_t handle_off = (uint16_t)(si - 0x66F4); // wraps to 0x990C+
         uint16_t handle = *(uint16_t*)(s + handle_off);
@@ -2294,7 +2294,7 @@ static void v2_pal_anim_10ffc(uint8_t* s) {
     uint16_t pal_base = *(uint16_t*)(s + DS_PAL_SRC_PTR); // word_303E0 = palette data pointer
     for (int16_t bx = 7; bx >= 0; bx--) {
         uint8_t mask = s[(uint16_t)(bx - LUT_BYTE_OR)]; // bit mask from table
-        if (!(s[0x2583] & mask)) continue;          // byte_2AA63: animation enable bits
+        if (!(s[DS_PAL_ANIM_EN] & mask)) continue;          // byte_2AA63: animation enable bits
         if (s[bx + 0x258C] != 0) continue;          // timer not zero → skip
         s[bx + 0x258C] = s[bx + 0x2584];            // reset timer from reload value
         uint8_t end_color = s[bx + 0x259C];
@@ -2525,7 +2525,7 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
     static int _dbg_calls = 0, _dbg_rotations = 0;
     _dbg_calls++;
     // ROOT-CAUSE diag: shadow counters + palette state at slot 1 cur_idx.
-    if (s[0x2583] != 0) {
+    if (s[DS_PAL_ANIM_EN] != 0) {
         static int _printed = 0;
         if (_printed < 300) {
             _printed++;
@@ -2534,8 +2534,8 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
             uint16_t addr_82 = (uint16_t)cur_i * 3 + DS_PAL_OUT;
             uint16_t addr_7f = (uint16_t)cur_i * 3 + DS_PAL_SRC;
             fprintf(stderr, "V2-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X | slot1 cur=%02X end=%02X r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch=%02X%02X%02X\n",
-                _dbg_calls, s[0x2583],
-                s[0x258C], s[0x258D], s[0x258E], s[0x258F],
+                _dbg_calls, s[DS_PAL_ANIM_EN],
+                s[DS_PAL_ANIM_TIMER], s[0x258D], s[0x258E], s[0x258F],
                 s[0x2590], s[0x2591], s[0x2592], s[0x2593],
                 cur_i, end_i,
                 addr_82, s[addr_82], s[addr_82+1], s[addr_82+2],
@@ -2543,12 +2543,12 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
                 s[0x8504], s[0x8505], s[0x8506]);
         }
     }
-    if (s[0x2583] == 0) {                                           // TEST byte_2AA63, 0FFh; JZ loc_1020b
+    if (s[DS_PAL_ANIM_EN] == 0) {                                           // TEST byte_2AA63, 0FFh; JZ loc_1020b
         if (_dbg_calls % 60 == 1) fprintf(stderr, "V2-101BE[%d]: EARLY-EXIT 2583=0\n", _dbg_calls);
         return;                                                      // early exit — NO word_303DE write
     }
     for (int16_t si = 7; si >= 0; si--) {                           // si=7; DEC si; JNS
-        uint8_t mask = s[0x2583];                                    // byte_2AA63
+        uint8_t mask = s[DS_PAL_ANIM_EN];                                    // byte_2AA63
         if (!(s[(uint16_t)(si - LUT_BYTE_OR)] & mask)) continue;        // TEST [si-6C44h], al; JZ
         if (s[si + 0x258C] == 0) continue;                         // TEST [si+258Ch]; JZ
         s[si + 0x258C]--;                                           // DEC [si+258Ch]
@@ -3031,13 +3031,13 @@ static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
     uint16_t cx = 0x2B;                                              // MOV cx, 2Bh (columns)
     uint16_t bx = 0x19;                                              // MOV bx, 19h (rows)
     // line 36-40: di = row_offset_table[ds:0x2581] + ds:0x257F, scaled
-    uint16_t di_base = *(uint16_t*)(s + 0x2581);                    // MOV di, ds:2581h
+    uint16_t di_base = *(uint16_t*)(s + DS_SCROLL_ROW);                    // MOV di, ds:2581h
     di_base <<= 1;                                                    // SHL di, 1
     di_base = *(uint16_t*)(s + (uint16_t)(di_base - LUT_ROW_BASE));       // MOV di, [di-7098h]
-    di_base += *(uint16_t*)(s + 0x257F);                             // ADD di, ds:257Fh
+    di_base += *(uint16_t*)(s + DS_SCROLL_COL);                             // ADD di, ds:257Fh
     di_base <<= 1;                                                    // SHL di, 1
     // line 41-43: bp = ds:0x25DC * 4 - 0x56 (row skip)
-    uint16_t bp = *(uint16_t*)(s + 0x25DC);                         // MOV bp, ds:25DCh
+    uint16_t bp = *(uint16_t*)(s + DS_MAP_BP);                         // MOV bp, ds:25DCh
     bp <<= 2;                                                        // SHL bp, 2
     bp -= 0x56;                                                       // SUB bp, 56h
 
@@ -3183,9 +3183,9 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
         uint16_t dx = (uint16_t)col;                                 // MOVZX dx, ah
         ax = (uint16_t)row;                                          // XOR ah, ah
         // line 3069: dx += ds:0x257F                                ; add viewport column scroll
-        dx += *(uint16_t*)(s + 0x257F);                              // ADD dx, ds:257Fh
+        dx += *(uint16_t*)(s + DS_SCROLL_COL);                              // ADD dx, ds:257Fh
         // line 3070: ax += ds:0x2581                                ; add viewport row scroll
-        ax += *(uint16_t*)(s + 0x2581);                              // ADD ax, ds:2581h
+        ax += *(uint16_t*)(s + DS_SCROLL_ROW);                              // ADD ax, ds:2581h
 
         // Tile map lookup:
         // line 3071-3072: di = ax; SHL di, 1                       ; row word index
@@ -3287,12 +3287,12 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
     {
         uint16_t cx = 0x2B;                                             // 38096 mov cx, 2Bh
         uint16_t bx = 0x19;                                             // 38097 mov bx, 19h
-        uint16_t di_fs = *(uint16_t*)(s + 0x2581);                     // 38098 mov di, ds:2581h
+        uint16_t di_fs = *(uint16_t*)(s + DS_SCROLL_ROW);                     // 38098 mov di, ds:2581h
         di_fs <<= 1;                                                    // 38099 shl di, 1
         di_fs = *(uint16_t*)(s + (uint16_t)(di_fs - LUT_ROW_BASE));          // 38100 mov di, [di-7098h]
-        di_fs += *(uint16_t*)(s + 0x257F);                             // 38101 add di, ds:257Fh
+        di_fs += *(uint16_t*)(s + DS_SCROLL_COL);                             // 38101 add di, ds:257Fh
         di_fs <<= 1;                                                    // 38102 shl di, 1
-        int16_t bp_fs = (int16_t)*(uint16_t*)(s + 0x25DC);            // 38103 mov bp, ds:25DCh
+        int16_t bp_fs = (int16_t)*(uint16_t*)(s + DS_MAP_BP);            // 38103 mov bp, ds:25DCh
         bp_fs <<= 2;                                                    // 38104 shl bp, 2
         bp_fs -= 0x56;                                                  // 38105 sub bp, 56h
 
@@ -3320,8 +3320,8 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
                 *(uint16_t*)(v2_vm_shadow_fs + di_fs) &= 0xFFFD;        // 38121 and fs:[di], 0FFFDh
             di_fs += 2;                                                  // 38122 add di, 2
             uint16_t dx_tl = 2;                                         // 38123 mov dx, 2
-            uint16_t si_row = 0x19 - bx + *(uint16_t*)(s + 0x2581);    // 38124-38126
-            uint16_t ax_col = 0x2B - cx + *(uint16_t*)(s + 0x257F);    // 38127-38129
+            uint16_t si_row = 0x19 - bx + *(uint16_t*)(s + DS_SCROLL_ROW);    // 38124-38126
+            uint16_t ax_col = 0x2B - cx + *(uint16_t*)(s + DS_SCROLL_COL);    // 38127-38129
             cx--;                                                        // 38130 dec cx
             if (cx == 0) goto de05_end_row;                              // 38131 jcxz loc_1DEDE
 
@@ -3909,7 +3909,7 @@ static void v2_clear_viking_state_111df(uint8_t* s) {
     s[DS_PAL_SHADE_R2] = 0; // byte_28825
     s[DS_PAL_SHADE_G2] = 0; // byte_28826
     s[DS_PAL_SHADE_B2] = 0; // byte_28827
-    *(uint16_t*)(s + 0x0348) = 0; // word_28828
+    *(uint16_t*)(s + DS_SCRATCH_348) = 0; // word_28828
 }
 
 // sub_12816: clear UI glyph list — byte_31A4B=0, clear 0x1B8 words at ds:0x956C
@@ -3925,7 +3925,7 @@ static void v2_glyph_list_clear_12816(uint8_t* s) {
 // Reads viking type + item data for each viking from spawn table.
 static uint16_t v2_hud_init_1133a(uint8_t* s, uint16_t di) {
     uint16_t ax = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
-    s[0x2583] = (uint8_t)ax; // byte_2AA63
+    s[DS_PAL_ANIM_EN] = (uint8_t)ax; // byte_2AA63
     di += 2;
     for (uint16_t si = 0; ; si++) {
         ax = *(uint16_t*)(s + (uint16_t)(di + 0x25F6)) & 0xFF;
@@ -3962,17 +3962,17 @@ static void v2_clear_sprite_res_12fb3(uint8_t* s) {
 
 // sub_113b0: init scroll limits from map dimensions (word_2AABC/word_2AABE = ds:0x25DC/0x25DE).
 static void v2_scroll_limits_113b0(uint8_t* s) {
-    uint16_t width = *(uint16_t*)(s + 0x25DC);   // word_2AABC (map width in tiles)
+    uint16_t width = *(uint16_t*)(s + DS_MAP_BP);   // word_2AABC (map width in tiles)
     *(uint16_t*)(s + 0x9168) = width * 2;         // word_31648
-    *(uint16_t*)(s + 0x25A4) = width * 16 - 0x140; // word_2AA84 (scroll X limit)
-    uint16_t height = *(uint16_t*)(s + 0x25DE);   // word_2AABE (map height in tiles)
+    *(uint16_t*)(s + DS_SCROLL_LIMIT_X) = width * 16 - 0x140; // word_2AA84 (scroll X limit)
+    uint16_t height = *(uint16_t*)(s + DS_MAP_HEIGHT);   // word_2AABE (map height in tiles)
     *(uint16_t*)(s + 0x916A) = height * 2;        // word_3164A
-    *(uint16_t*)(s + 0x25A6) = height * 16 - 0xB0; // word_2AA86 (scroll Y limit)
+    *(uint16_t*)(s + DS_SCROLL_LIMIT_Y) = height * 16 - 0xB0; // word_2AA86 (scroll Y limit)
     // jmp loc_16595: build row lookup table at ds:0x8F68 (256 entries).
     // ax = ds:0x25DC (from above), shl 1 = row stride in tilemap words.
     // ds:[0x8F68 + i*2] = i * stride for i=0..255.
     {
-        uint16_t stride = *(uint16_t*)(s + 0x25DC) * 2; // ax was already ds:0x25DC, shl 1
+        uint16_t stride = *(uint16_t*)(s + DS_MAP_BP) * 2; // ax was already ds:0x25DC, shl 1
         uint16_t dx_val = 0;
         for (uint16_t i = 0; i < 0x100; i++) {
             *(uint16_t*)(s + 0x8F68 + i * 2) = dx_val;
@@ -3985,27 +3985,27 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
 // Centers viewport on viking, clamps to scroll limits.
 static void v2_viewport_init_113d8(uint8_t* s) {
     uint16_t si = 0;
-    if (s[0x25BA] != 0) si = *(uint16_t*)(s + 0x03C2); // byte_2AA9A, word_288A2
+    if (s[DS_ACTIVE_VK_SEL] != 0) si = *(uint16_t*)(s + 0x03C2); // byte_2AA9A, word_288A2
 
     // X: center on viking, clamp to [0, scroll_X_limit]
     int16_t ax = (int16_t)*(uint16_t*)(s + (uint16_t)(si + OBJ_WORLD_X)) - 0xA0;   // 16-bit wrap (unit 46, div #21)
     if (ax < 0) ax = 0;
-    if (ax > (int16_t)*(uint16_t*)(s + 0x25A4)) ax = (int16_t)*(uint16_t*)(s + 0x25A4);
+    if (ax > (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_X)) ax = (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_X);
     *(uint16_t*)(s + 0x0044) = (uint16_t)ax;   // word_28524 (viewport X)
-    *(uint16_t*)(s + 0x257B) = (uint16_t)ax;   // word_2AA5B
+    *(uint16_t*)(s + DS_SAVED_VP_X) = (uint16_t)ax;   // word_2AA5B
     uint16_t scroll_x = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + 0x257F) = scroll_x;        // word_2AA5F
+    *(uint16_t*)(s + DS_SCROLL_COL) = scroll_x;        // word_2AA5F
     *(uint16_t*)(s + 0x92EF) = scroll_x;        // word_317CF
     *(uint16_t*)(s + 0x92F3) = scroll_x >> 1;   // word_317D3
 
     // Y: center on viking, clamp to [0, scroll_Y_limit]
     ax = (int16_t)*(uint16_t*)(s + (uint16_t)(si + OBJ_WORLD_Y)) - 0x58;   // 16-bit wrap
     if (ax < 0) ax = 0;
-    if (ax > (int16_t)*(uint16_t*)(s + 0x25A6)) ax = (int16_t)*(uint16_t*)(s + 0x25A6);
+    if (ax > (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_Y)) ax = (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_Y);
     *(uint16_t*)(s + 0x0046) = (uint16_t)ax;   // word_28526 (viewport Y)
-    *(uint16_t*)(s + 0x257D) = (uint16_t)ax;   // word_2AA5D
+    *(uint16_t*)(s + DS_SAVED_VP_Y) = (uint16_t)ax;   // word_2AA5D
     uint16_t scroll_y = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + 0x2581) = scroll_y;        // word_2AA61
+    *(uint16_t*)(s + DS_SCROLL_ROW) = scroll_y;        // word_2AA61
     *(uint16_t*)(s + 0x92F1) = scroll_y;        // word_317D1
     *(uint16_t*)(s + 0x92F5) = scroll_y >> 1;   // word_317D5
 }
@@ -4023,9 +4023,9 @@ static void v2_scroll_init_173c7(uint8_t* s) {
         return;
     }
     // Normal tile level: build FS from ES (tilemap) + GS (tile masks)
-    uint16_t cols = *(uint16_t*)(s + 0x25DC);  // map width in tiles
-    printf("V2-173C7: cols=%d rows=%d bp=%d flag=%02X\n", cols, *(uint16_t*)(s + 0x25DE), cols*4, s[DS_LEVEL_FLAGS]);
-    uint16_t rows = *(uint16_t*)(s + 0x25DE);  // map height in tiles
+    uint16_t cols = *(uint16_t*)(s + DS_MAP_BP);  // map width in tiles
+    printf("V2-173C7: cols=%d rows=%d bp=%d flag=%02X\n", cols, *(uint16_t*)(s + DS_MAP_HEIGHT), cols*4, s[DS_LEVEL_FLAGS]);
+    uint16_t rows = *(uint16_t*)(s + DS_MAP_HEIGHT);  // map height in tiles
     uint16_t bp = cols * 4;  // FS row stride (4 bytes per tile in FS)
     uint8_t* es = v2_vm_shadow_tilemap;       // tilemap (ES = ds:0x2E63)
     uint8_t* fs = v2_vm_shadow_fs;            // render tilemap (FS = ds:0x2E69)
@@ -4074,14 +4074,14 @@ static void v2_render_flag_init_11439(uint8_t* s) {
     if (!(s[DS_LEVEL_FLAGS] & 0x42)) {
         // sub_16ded: exact DS writes from VGA tile row init.
         // VGA rendering (sub_16dc1 + sub_171dc) skipped — v2 renders each frame.
-        int16_t di_y = (int16_t)*(uint16_t*)(s + 0x2581) - 1;
+        int16_t di_y = (int16_t)*(uint16_t*)(s + DS_SCROLL_ROW) - 1;
         if (di_y < 0) di_y = 0;
         uint16_t di2 = (uint16_t)di_y << 1;
         uint16_t bx = *(uint16_t*)(s + (uint16_t)(di2 - LUT_ROW_BASE)); // row LUT
         *(uint16_t*)(s + 0x9305) = di2 + *(uint16_t*)(s + DS_PAGE_SHOWN); // page 2
         *(uint16_t*)(s + 0x9307) = di2 + *(uint16_t*)(s + DS_PAGE_BG); // page 3
         *(uint16_t*)(s + 0x9309) = di2 + *(uint16_t*)(s + DS_PAGE_DRAW); // page 1
-        int16_t dx_x = (int16_t)*(uint16_t*)(s + 0x257F) - 1;
+        int16_t dx_x = (int16_t)*(uint16_t*)(s + DS_SCROLL_COL) - 1;
         if (dx_x < 0) dx_x = 0;
         bx += (uint16_t)dx_x;
         bx <<= 1;
@@ -4125,8 +4125,8 @@ static void v2_spawn_table_13ba5(uint8_t* s) {
         *(uint16_t*)(s + DS_MODE_WORD) = si;
         *(uint16_t*)(s + DS_TEXT_COL) = spawn_x;
         *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + (uint16_t)(di + 0x25F8));
-        *(uint16_t*)(s + 0x3E0) = *(uint16_t*)(s + (uint16_t)(di + 0x25FA));
-        *(uint16_t*)(s + 0x3E2) = *(uint16_t*)(s + (uint16_t)(di + 0x25FC));
+        *(uint16_t*)(s + DS_SPAWN_TBL_LO) = *(uint16_t*)(s + (uint16_t)(di + 0x25FA));
+        *(uint16_t*)(s + DS_SPAWN_TBL_HI) = *(uint16_t*)(s + (uint16_t)(di + 0x25FC));
         *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di + 0x2602));
         uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di + 0x25FE));
         uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di + 0x2600));
@@ -4210,7 +4210,7 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
         *(uint16_t*)(s + DS_MODE_WORD) = si_idx;
         bool already = false;
         uint16_t table_end = *(uint16_t*)(s + DS_OBJ_COUNT);
-        for (uint16_t si2 = *(uint16_t*)(s + 0x33C); (int16_t)si2 < (int16_t)table_end; si2 += 2) {
+        for (uint16_t si2 = *(uint16_t*)(s + DS_OBJ_SCAN_START); (int16_t)si2 < (int16_t)table_end; si2 += 2) {
             if (*(uint16_t*)(s + (uint16_t)(si2 + OBJ_CODE_SEG)) == 0) continue;   // 16-bit wrap
             if (*(uint16_t*)(s + (uint16_t)(si2 + OBJ_ANIM_SUB)) == si_idx) { already = true; break; }
         }
@@ -4223,8 +4223,8 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
         *(uint16_t*)(s + DS_MODE_WORD) = si_idx;
         *(uint16_t*)(s + DS_TEXT_COL) = sx;
         *(uint16_t*)(s + DS_TEXT_ROW) = sy;
-        *(uint16_t*)(s + 0x3E0) = hw;
-        *(uint16_t*)(s + 0x3E2) = hh;
+        *(uint16_t*)(s + DS_SPAWN_TBL_LO) = hw;
+        *(uint16_t*)(s + DS_SPAWN_TBL_HI) = hh;
         *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di_off + 0x2602));
         uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FE));
         uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di_off + 0x2600));
@@ -4346,7 +4346,7 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
     uint16_t active = *(uint16_t*)(shadow + 0x03C2); // word_288A2
     uint16_t prev = *(uint16_t*)(shadow + 0x03C4);   // word_288A4
 
-    uint8_t flag_9a = shadow[0x25BA]; // byte_2AA9A
+    uint8_t flag_9a = shadow[DS_ACTIVE_VK_SEL]; // byte_2AA9A
     if (flag_9a == 0) return;          // TEST ...,0xFF; JZ locret_1081C
 
     { uint16_t _lv = *(uint16_t*)(shadow+DS_LEVEL); static int _dm2=0;
@@ -4455,9 +4455,9 @@ static void v2_portrait_sync_11b0b(uint8_t* s) {
 // sub_11397: init collision type lookup from level table.
 // Does NOT use di passthrough — reads from word_2AAAB (ds:0x25CB).
 static void v2_collision_lut_init_11397(uint8_t* s) {
-    uint16_t di_val = *(uint16_t*)(s + 0x25CB); // word_2AAAB
-    *(uint16_t*)(s + 0x03A6) = *(uint16_t*)(s + (uint16_t)(di_val - 0x7AC2)) & 0xFF; // word_28886
-    *(uint16_t*)(s + 0x03A8) = *(uint16_t*)(s + (uint16_t)(di_val - 0x7ABC)) & 0xFF; // word_28888
+    uint16_t di_val = *(uint16_t*)(s + DS_LEVEL_LOAD_AUX); // word_2AAAB
+    *(uint16_t*)(s + DS_PAN_X) = *(uint16_t*)(s + (uint16_t)(di_val - 0x7AC2)) & 0xFF; // word_28886
+    *(uint16_t*)(s + DS_PAN_Y) = *(uint16_t*)(s + (uint16_t)(di_val - 0x7ABC)) & 0xFF; // word_28888
 }
 
 // sub_11446: game mode init. NOT just sound — creates game objects based on mode.
@@ -4470,40 +4470,40 @@ static void v2_spawn_vikings_11569(uint8_t* s, uint16_t di_table) {
     // First viking (code_seg = 1)
     *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + di_table);
     *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + di_table + 2);
-    uint16_t si_anim = *(uint16_t*)(s + di_table + 4) | *(uint16_t*)(s + 0x25C1);
+    uint16_t si_anim = *(uint16_t*)(s + di_table + 4) | *(uint16_t*)(s + DS_SPAWN_ANIM);
     *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
     v2_spawn_object_13809(s, 1, 0xFFFF, si_anim,
                  *(uint16_t*)(s + DS_TEXT_COL), *(uint16_t*)(s + DS_TEXT_ROW));
     // Second viking (code_seg = 0)
     *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + di_table + 6);
     *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + di_table + 8);
-    si_anim = *(uint16_t*)(s + di_table + 0xA) | *(uint16_t*)(s + 0x25C1);
+    si_anim = *(uint16_t*)(s + di_table + 0xA) | *(uint16_t*)(s + DS_SPAWN_ANIM);
     *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
     v2_spawn_object_13809(s, 0, 0xFFFF, si_anim,
                  *(uint16_t*)(s + DS_TEXT_COL), *(uint16_t*)(s + DS_TEXT_ROW));
     // Third viking (code_seg = 2) — tail call (jmp sub_13809)
     *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + di_table + 0xC);
     *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + di_table + 0xE);
-    si_anim = *(uint16_t*)(s + di_table + 0x10) | *(uint16_t*)(s + 0x25C1);
+    si_anim = *(uint16_t*)(s + di_table + 0x10) | *(uint16_t*)(s + DS_SPAWN_ANIM);
     *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
     v2_spawn_object_13809(s, 2, 0xFFFF, si_anim,
                  *(uint16_t*)(s + DS_TEXT_COL), *(uint16_t*)(s + DS_TEXT_ROW));
 }
 
 static void v2_game_mode_init_11446(uint8_t* s) {
-    *(uint16_t*)(s + 0x033C) = 0; // word_2881C = 0
-    uint16_t mode = s[0x25BA] & 0xFF; // byte_2AA9A, zero-extended to word
+    *(uint16_t*)(s + DS_OBJ_SCAN_START) = 0; // word_2881C = 0
+    uint16_t mode = s[DS_ACTIVE_VK_SEL] & 0xFF; // byte_2AA9A, zero-extended to word
     fprintf(stderr, "V2-11446: mode=%d 0x423=%04X OBJ_RES_HANDLE=%04X level=%04X\n",
             mode, *(uint16_t*)(s+0x423), *(uint16_t*)(s+OBJ_RES_HANDLE), *(uint16_t*)(s+DS_LEVEL));
     if (mode == 0) {
         // loc_1146a: Normal gameplay
-        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + 0x25C3);
-        *(uint16_t*)(s + 0x006C) = *(uint16_t*)(s + 0x25BB);
-        *(uint16_t*)(s + 0x006E) = *(uint16_t*)(s + 0x25BD);
+        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + DS_SPAWN_POOL0);
+        *(uint16_t*)(s + 0x006C) = *(uint16_t*)(s + DS_SPAWN_X);
+        *(uint16_t*)(s + 0x006E) = *(uint16_t*)(s + DS_SPAWN_Y);
         *(uint16_t*)(s + 0x0042) = 0xFFFF;
-        v2_spawn_object_13809(s, *(uint16_t*)(s + 0x25BF), 0xFFFF, *(uint16_t*)(s + 0x25C1),
+        v2_spawn_object_13809(s, *(uint16_t*)(s + DS_SPAWN_CODE), 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM),
                      *(uint16_t*)(s + 0x006C), *(uint16_t*)(s + 0x006E));
-        *(uint16_t*)(s + 0x033C) = 2;
+        *(uint16_t*)(s + DS_OBJ_SCAN_START) = 2;
         return; // RETN before loc_1154a
     }
     if (mode == 2) { v2_spawn_vikings_11569(s, 0x8508); goto loc_1154a; }
@@ -4515,30 +4515,30 @@ static void v2_game_mode_init_11446(uint8_t* s) {
         if (mode == 0x10) { y_off_3 = 0xFFF8; y_off_2 = 0xFFF0; }
         else              { y_off_3 = 0;      y_off_2 = 0;      }
         // loc_114bd: first viking (code_seg = 1) at base position
-        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + 0x25C3);
-        *(uint16_t*)(s + 0x006C) = *(uint16_t*)(s + 0x25BB);
-        *(uint16_t*)(s + 0x006E) = *(uint16_t*)(s + 0x25BD);
+        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + DS_SPAWN_POOL0);
+        *(uint16_t*)(s + 0x006C) = *(uint16_t*)(s + DS_SPAWN_X);
+        *(uint16_t*)(s + 0x006E) = *(uint16_t*)(s + DS_SPAWN_Y);
         *(uint16_t*)(s + 0x0042) = 0xFFFF;
-        v2_spawn_object_13809(s, 1, 0xFFFF, *(uint16_t*)(s + 0x25C1),
+        v2_spawn_object_13809(s, 1, 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM),
                      *(uint16_t*)(s + 0x006C), *(uint16_t*)(s + 0x006E));
         // Second viking (code_seg = 0): X ± 0x20, Y + y_off_2
-        uint16_t base_x = *(uint16_t*)(s + 0x25BB);
-        if (*(uint16_t*)(s + 0x25C1) & 0x40)
+        uint16_t base_x = *(uint16_t*)(s + DS_SPAWN_X);
+        if (*(uint16_t*)(s + DS_SPAWN_ANIM) & 0x40)
             *(uint16_t*)(s + 0x006C) = base_x + 0x20;
         else
             *(uint16_t*)(s + 0x006C) = base_x - 0x20;
-        *(uint16_t*)(s + 0x006E) = y_off_2 + *(uint16_t*)(s + 0x25BD);
+        *(uint16_t*)(s + 0x006E) = y_off_2 + *(uint16_t*)(s + DS_SPAWN_Y);
         *(uint16_t*)(s + 0x0042) = 0xFFFF;
-        v2_spawn_object_13809(s, 0, 0xFFFF, *(uint16_t*)(s + 0x25C1),
+        v2_spawn_object_13809(s, 0, 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM),
                      *(uint16_t*)(s + 0x006C), *(uint16_t*)(s + 0x006E));
         // Third viking (code_seg = 2): X ± 0x40, Y + y_off_3
-        if (*(uint16_t*)(s + 0x25C1) & 0x40)
+        if (*(uint16_t*)(s + DS_SPAWN_ANIM) & 0x40)
             *(uint16_t*)(s + 0x006C) = base_x + 0x40;
         else
             *(uint16_t*)(s + 0x006C) = base_x - 0x40;
-        *(uint16_t*)(s + 0x006E) = y_off_3 + *(uint16_t*)(s + 0x25BD);
+        *(uint16_t*)(s + 0x006E) = y_off_3 + *(uint16_t*)(s + DS_SPAWN_Y);
         *(uint16_t*)(s + 0x0042) = 0xFFFF;
-        v2_spawn_object_13809(s, 2, 0xFFFF, *(uint16_t*)(s + 0x25C1),
+        v2_spawn_object_13809(s, 2, 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM),
                      *(uint16_t*)(s + 0x006C), *(uint16_t*)(s + 0x006E));
     }
 loc_1154a:
@@ -4546,7 +4546,7 @@ loc_1154a:
     *(uint16_t*)(s + VIK_PORTRAIT) = *(uint16_t*)(s + (DS_PORTRAIT_PREV)); // word_29A8D = word_28903
     *(uint16_t*)(s + 0x15AF) = *(uint16_t*)(s + 0x0425); // word_29A8F = word_28905
     *(uint16_t*)(s + 0x15B1) = *(uint16_t*)(s + 0x0427); // word_29A91 = word_28907
-    *(uint16_t*)(s + 0x033C) = 6;    // word_2881C
+    *(uint16_t*)(s + DS_OBJ_SCAN_START) = 6;    // word_2881C
     *(uint16_t*)(s + 0x03C4) = 0xFFFF; // word_288A4
 }
 
@@ -4589,19 +4589,19 @@ static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
 // (eips 0x2D2C..0x2D6B). Extracted from two identical inline copies
 // (POST_FLIP1 + the sub_115d2 pass block).
 static void v2_flash_timers_12d2c(uint8_t* s) {
-    if (*(uint16_t*)(s + 0x3A2) != 0) {
-        *(uint16_t*)(s + 0x3A2) -= 1;
-        if (*(uint16_t*)(s + 0x39A) != 0)
-            *(uint16_t*)(s + DS_SHAKE_X) ^= *(uint16_t*)(s + 0x39A);
+    if (*(uint16_t*)(s + DS_SHAKE_GATE_X) != 0) {
+        *(uint16_t*)(s + DS_SHAKE_GATE_X) -= 1;
+        if (*(uint16_t*)(s + DS_SHAKE_SRC_X) != 0)
+            *(uint16_t*)(s + DS_SHAKE_X) ^= *(uint16_t*)(s + DS_SHAKE_SRC_X);
         else
             *(uint16_t*)(s + DS_SHAKE_X) = 0;
     } else {
         *(uint16_t*)(s + DS_SHAKE_X) = 0;
     }
-    if (*(uint16_t*)(s + 0x3A4) != 0) {
-        *(uint16_t*)(s + 0x3A4) -= 1;
-        if (*(uint16_t*)(s + 0x39C) != 0)
-            *(uint16_t*)(s + DS_SHAKE_Y) ^= *(uint16_t*)(s + 0x39C);
+    if (*(uint16_t*)(s + DS_SHAKE_GATE_Y) != 0) {
+        *(uint16_t*)(s + DS_SHAKE_GATE_Y) -= 1;
+        if (*(uint16_t*)(s + DS_SHAKE_SRC_Y) != 0)
+            *(uint16_t*)(s + DS_SHAKE_Y) ^= *(uint16_t*)(s + DS_SHAKE_SRC_Y);
         else
             *(uint16_t*)(s + DS_SHAKE_Y) = 0;
     } else {
@@ -4698,9 +4698,9 @@ static void v2_viking_health_init_12ce4(uint8_t* s) {
 
 static void v2_level_desc_init_116e3(uint8_t* s) {
     *(uint16_t*)(s + 0x0352) = 0x1E;  // word_28832
-    *(uint16_t*)(s + 0x03CE) = 0;     // word_288AE
-    *(uint16_t*)(s + 0x03D0) = 0;     // word_288B0
-    uint16_t level = *(uint16_t*)(s + 0x25C9); // word_2AAA9
+    *(uint16_t*)(s + DS_SCRATCH_3CE) = 0;     // word_288AE
+    *(uint16_t*)(s + DS_SCRATCH_3D0) = 0;     // word_288B0
+    uint16_t level = *(uint16_t*)(s + DS_LEVEL_LOAD); // word_2AAA9
     // Check special levels
     if (level == 0x2D || level == 0x2E || level == 0x2F) {
         goto transition;
@@ -4726,9 +4726,9 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
     }
 transition:
     // loc_11733: set transition state
-    *(uint16_t*)(s + 0x0398) = 1;      // word_28878
+    *(uint16_t*)(s + DS_COLL_STATE_398) = 1;      // word_28878
     *(uint16_t*)(s + 0x03CC) = 0x8000; // word_288AC
-    level = *(uint16_t*)(s + 0x25C9);  // reload
+    level = *(uint16_t*)(s + DS_LEVEL_LOAD);  // reload
     uint16_t chunk_ax;
     if (level == 0x2B) {
         chunk_ax = 0x1BB;
@@ -4736,8 +4736,8 @@ transition:
         chunk_ax = 0x1BC;
     } else {
         // Read from transition table
-        uint16_t si = *(uint16_t*)(s + 0x03D4); // word_288B4
-        *(uint16_t*)(s + 0x25C9) = *(uint16_t*)(s + (uint16_t)(si + 0x2B66));  // 16-bit wrap
+        uint16_t si = *(uint16_t*)(s + DS_HUD_SEL_SI); // word_288B4
+        *(uint16_t*)(s + DS_LEVEL_LOAD) = *(uint16_t*)(s + (uint16_t)(si + 0x2B66));  // 16-bit wrap
         chunk_ax = *(uint16_t*)(s + (uint16_t)(si + 0x2B74));                  // 16-bit wrap
     }
     // loc_11774: load transition chunk → ds:0x2193
@@ -4931,13 +4931,13 @@ static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di
     obj.w16(OBJ_BBOX_X1, pos_x - (w >> 1) + w - 1);
     obj.w16(OBJ_BBOX_Y0, pos_y - (h >> 1));
     obj.w16(OBJ_BBOX_Y1, pos_y - (h >> 1) + h - 1);
-    int16_t off_val = (int16_t)*(uint16_t*)(s + 0x3E0);
+    int16_t off_val = (int16_t)*(uint16_t*)(s + DS_SPAWN_TBL_LO);
     if (off_val < 0) {
-        *(uint16_t*)(s + 0x3E2) = h >> 1;
+        *(uint16_t*)(s + DS_SPAWN_TBL_HI) = h >> 1;
         off_val = (int16_t)(w >> 1);
     }
     obj.w16(OBJ_HALF_W, (uint16_t)off_val);
-    obj.w16(OBJ_HALF_H, *(uint16_t*)(s + 0x3E2));
+    obj.w16(OBJ_HALF_H, *(uint16_t*)(s + DS_SPAWN_TBL_HI));
     // sub_13d68 + sub_13dd6 + sub_13e15: sub-sprite allocation + init.
     // Extracted shared functions (see definitions above) — this used to be an
     // inline copy that drifted from the op_14 one (task #176): pre-tested
@@ -5273,9 +5273,9 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
     // Post-chunk init: "STRT" marker + VGA/rendering constants
     // Original: lines 6454-6478 in seg000 (eip 0x2C12..0x2CA2)
     *(uint16_t*)(s + 0x0310) = 0x53; // 'S'
-    *(uint16_t*)(s + 0x0312) = 0x54; // 'T'
-    *(uint16_t*)(s + 0x0314) = 0x52; // 'R'
-    *(uint16_t*)(s + 0x0316) = 0x54; // 'T'
+    *(uint16_t*)(s + DS_PW_CHAR1) = 0x54; // 'T'
+    *(uint16_t*)(s + DS_PW_CHAR2) = 0x52; // 'R'
+    *(uint16_t*)(s + DS_PW_CHAR3) = 0x54; // 'T'
     *(uint16_t*)(s + 0x927C) = 0x800;
     *(uint16_t*)(s + 0x9282) = 0x200;
     *(uint16_t*)(s + 0x9286) = 0x100;
@@ -5400,16 +5400,16 @@ static void v2_vga_modex_init_167ff(uint8_t* s) {
 
 // sub_12ca3: game state initialization — clear misc state variables.
 static void v2_game_state_init_12ca3(uint8_t* s) {
-    s[0x32E] = 0;                        // byte ds:32Eh
+    s[DS_SCRATCH_32E] = 0;                        // byte ds:32Eh
     s[0x28] = 0;                         // byte ds:28h
-    *(uint16_t*)(s + 0x3D4) = 0;         // word ds:3D4h
+    *(uint16_t*)(s + DS_HUD_SEL_SI) = 0;         // word ds:3D4h
     *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;         // word ds:3CCh (word_288AC)
-    *(uint16_t*)(s + 0x336) = 0;         // word ds:336h
-    *(uint16_t*)(s + 0x34A) = 0;         // word ds:34Ah
-    *(uint16_t*)(s + 0x34C) = 0;         // word ds:34Ch
+    *(uint16_t*)(s + DS_SCRATCH_336) = 0;         // word ds:336h
+    *(uint16_t*)(s + DS_SCRATCH_34A) = 0;         // word ds:34Ah
+    *(uint16_t*)(s + DS_SCRATCH_34C) = 0;         // word ds:34Ch
     *(uint16_t*)(s + DS_FRAME_FLAGS) = 0;         // word ds:334h
-    *(uint16_t*)(s + 0x331) = 0;         // word ds:331h
-    *(uint16_t*)(s + 0x25AF) = 0xFFFF;   // word ds:25AFh (current music track = none)
+    *(uint16_t*)(s + DS_SCRATCH_331) = 0;         // word ds:331h
+    *(uint16_t*)(s + DS_MUSIC_TRACK) = 0xFFFF;   // word ds:25AFh (current music track = none)
     *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0xFFFF;    // word ds:3C2h (active viking = none)
 }
 
@@ -5417,7 +5417,7 @@ static void v2_game_state_init_12ca3(uint8_t* s) {
 // Calls sub_12ce4 (health init), sets word_2AAA9 = 0x27 (level 39), word_288A2 = 0.
 static void v2_start_level_set_108b8(uint8_t* s) {
     v2_viking_health_init_12ce4(s);                      // sub_12CE4: health init
-    *(uint16_t*)(s + 0x25C9) = 0x27;     // word_2AAA9 = starting level (39 = 0x27)
+    *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x27;     // word_2AAA9 = starting level (39 = 0x27)
     *(uint16_t*)(s + 0x03C2) = 0;        // word_288A2 = active viking = 0
 }
 
@@ -5463,10 +5463,10 @@ static void v2_startup(uint8_t* s) {
 // into es:di = ds:0x2E6B:0 via sub_10982; v2 writes shadow_sound + (es-snd_base)*16.
 static void v2_music_load_1775d_helper(uint8_t* s) {
     if (*(uint16_t*)(s + DS_MUSIC_MUTE) & 0x8000) return;
-    uint16_t new_track = *(uint16_t*)(s + 0x25B8) & 0xFF;
-    if (new_track == *(uint16_t*)(s + 0x25AF)) return;
+    uint16_t new_track = *(uint16_t*)(s + DS_SND_TRACK) & 0xFF;
+    if (new_track == *(uint16_t*)(s + DS_MUSIC_TRACK)) return;
     if (new_track == 0xFFFF) return;
-    *(uint16_t*)(s + 0x25AF) = new_track;
+    *(uint16_t*)(s + DS_MUSIC_TRACK) = new_track;
     uint16_t chunk_table_idx = new_track * 2;
     uint16_t chunk_rel = *(uint16_t*)(s + (uint16_t)(chunk_table_idx - 0x5C7C));
     uint16_t chunk_id = chunk_rel + *(uint16_t*)(s + 0x86B8);
@@ -5510,8 +5510,8 @@ static void v2_music_fade_178f1_helper(const uint8_t* s) {
 static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
     uint16_t snd_type = *(uint16_t*)(s + type_byte_offset) & 0xFF;
     fprintf(stderr, "V2-MUSIC-DISPATCH: off=%04X snd_type=%u 25B7=%02X 25B8=%02X 25B9=%02X 25AF=%04X 302=%04X\n",
-        type_byte_offset, snd_type, s[0x25B7], s[0x25B8], s[0x25B9],
-        *(uint16_t*)(s + 0x25AF), *(uint16_t*)(s + DS_MUSIC_MUTE));
+        type_byte_offset, snd_type, s[DS_SND_TYPE], s[DS_SND_TRACK], s[DS_SND_FLAG],
+        *(uint16_t*)(s + DS_MUSIC_TRACK), *(uint16_t*)(s + DS_MUSIC_MUTE));
     switch (snd_type) {
         case 0:  // loc_17791: sub_1775d + sub_176bd
             if (*(uint16_t*)(s + DS_MUSIC_MUTE) & 0x8000) break;
@@ -5743,7 +5743,7 @@ static void v2_load_level_11080(uint8_t* s) {
     { static int _sc = 0; if (++_sc <= 10)
         fprintf(stderr, "V2-sub_11080[%d]: pre=%d post=%d rec=%d cur_25AD=%04X next_25C9=%04X\n",
             _sc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
-            *(uint16_t*)(s + DS_LEVEL), *(uint16_t*)(s + 0x25C9)); }
+            *(uint16_t*)(s + DS_LEVEL), *(uint16_t*)(s + DS_LEVEL_LOAD)); }
     // Invalidate cross-scenario snapshots: when sub_11080 runs (level transition),
     // orig main loop is bypassed, so the orig_post_vm_entry snapshot from a previous
     // frame's main loop becomes invalid for comparison against v2_level_init_render_115d2 internal
@@ -5758,14 +5758,14 @@ static void v2_load_level_11080(uint8_t* s) {
     *(uint16_t*)(s + DS_CMD_READ) = 0; // word_2B044
     *(uint16_t*)(s + DS_CMD_WRITE) = 0; // word_2A66F
     s[DS_GLYPH_DIRTY] = 0;                // byte_31A4B
-    *(uint16_t*)(s + 0x039A) = 0; // word_2887A
-    *(uint16_t*)(s + 0x039C) = 0; // word_2887C
-    *(uint16_t*)(s + 0x03A2) = 0; // word_28882
-    *(uint16_t*)(s + 0x03A4) = 0; // word_28884
-    *(uint16_t*)(s + 0x03D6) = 0; // word_288B6
-    *(uint16_t*)(s + 0x0398) = 0; // word_28878
-    *(uint16_t*)(s + 0x0392) = 0; // word_28872
-    *(uint16_t*)(s + 0x0348) = 0; // word_28828
+    *(uint16_t*)(s + DS_SHAKE_SRC_X) = 0; // word_2887A
+    *(uint16_t*)(s + DS_SHAKE_SRC_Y) = 0; // word_2887C
+    *(uint16_t*)(s + DS_SHAKE_GATE_X) = 0; // word_28882
+    *(uint16_t*)(s + DS_SHAKE_GATE_Y) = 0; // word_28884
+    *(uint16_t*)(s + DS_SCRATCH_3D6) = 0; // word_288B6
+    *(uint16_t*)(s + DS_COLL_STATE_398) = 0; // word_28878
+    *(uint16_t*)(s + DS_COLL_STATE_392) = 0; // word_28872
+    *(uint16_t*)(s + DS_SCRATCH_348) = 0; // word_28828
     *(uint16_t*)(s + 0x8734) = 0; // word_30C14
     *(uint16_t*)(s + 0x03C6) = 0; // word_288A6
     *(uint16_t*)(s + 0x86DE) = 0; // word_30BBE
@@ -5811,18 +5811,18 @@ static void v2_load_level_11080(uint8_t* s) {
     // sub_16880: clear VGA / render buffer
     v2_clear_pages_16880(s);
     // sub_111a1: clear sprite table
-    if (*(uint16_t*)(s + 0x25C9) == 0x002B)
+    if (*(uint16_t*)(s + DS_LEVEL_LOAD) == 0x002B)
         fprintf(stderr, "V2-117D: BEFORE sub_111a1: 0x%02X\n", s[0x117D]);
     v2_clear_sprite_table_111a1(s);
-    if (*(uint16_t*)(s + 0x25C9) == 0x002B)
+    if (*(uint16_t*)(s + DS_LEVEL_LOAD) == 0x002B)
         fprintf(stderr, "V2-117D: AFTER sub_111a1: 0x%02X\n", s[0x117D]);
     // sub_11192: clear bit flags
     v2_clear_bit_flags_11192(s);
 
     // Save level number
     uint16_t old_level = *(uint16_t*)(s + DS_LEVEL); // word_2AA8D
-    *(uint16_t*)(s + 0x25AB) = old_level; // word_2AA8B = old
-    uint16_t new_level = *(uint16_t*)(s + 0x25C9); // word_2AAA9
+    *(uint16_t*)(s + DS_LEVEL_PREV) = old_level; // word_2AA8B = old
+    uint16_t new_level = *(uint16_t*)(s + DS_LEVEL_LOAD); // word_2AAA9
     *(uint16_t*)(s + DS_LEVEL) = new_level; // word_2AA8D = new
 
     // sub_111b1: template + level header load (NOT tile chunks — those come after sub_117ad)
@@ -5837,7 +5837,7 @@ static void v2_load_level_11080(uint8_t* s) {
     }
 
     // sub_117ad: word_28820=2, then if flag &1: display init chain
-    *(uint16_t*)(s + 0x0340) = 2; // word_28820
+    *(uint16_t*)(s + DS_HUD_DISP_MODE) = 2; // word_28820
     if (s[DS_LEVEL_FLAGS] & 1) {
         // sub_10cd8(ax=1, di=0): read raw background chunk → chunk buffer → VGA.
         // Original: fseek + fread plane_size + fread raw data into chunk_addr.
@@ -5949,8 +5949,8 @@ static void v2_load_level_11080(uint8_t* s) {
     // FS compare with SNAPSHOT (taken right after orig sub_173c7, before game loop modifies it)
     if (v2_orig_fs_after_173c7_valid && new_level == 0x002B) {
         v2_orig_fs_after_173c7_valid = false;
-        uint16_t cols = *(uint16_t*)(s + 0x25DC);
-        uint16_t rows = *(uint16_t*)(s + 0x25DE);
+        uint16_t cols = *(uint16_t*)(s + DS_MAP_BP);
+        uint16_t rows = *(uint16_t*)(s + DS_MAP_HEIGHT);
         uint32_t fs_size = (uint32_t)cols * rows * 8;
         if (fs_size > 0x6000) fs_size = 0x6000;
         int d = 0;
@@ -5997,7 +5997,7 @@ static void v2_load_level_11080(uint8_t* s) {
     if (v2_vm_real_ds_ptr && new_level == 0x002B) {
         uint16_t s_row38 = *(uint16_t*)(s + 0x8FB4);
         uint16_t r_row38 = *(uint16_t*)(v2_vm_real_ds_ptr + 0x8FB4);
-        uint16_t s_width = *(uint16_t*)(s + 0x25DC);
+        uint16_t s_width = *(uint16_t*)(s + DS_MAP_BP);
         uint16_t r_width = *(uint16_t*)(v2_vm_real_ds_ptr + 0x25DC);
         uint16_t s_9168 = *(uint16_t*)(s + 0x9168);
         uint16_t r_9168 = *(uint16_t*)(v2_vm_real_ds_ptr + 0x9168);
@@ -6027,8 +6027,8 @@ static void v2_load_level_11080(uint8_t* s) {
         uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_FS);
         if (!fs_seg) return;
         uint8_t* rfs = v2_m2c_base + (uint32_t)fs_seg * 16;
-        uint16_t cols = *(uint16_t*)(s + 0x25DC);
-        uint16_t rows = *(uint16_t*)(s + 0x25DE);
+        uint16_t cols = *(uint16_t*)(s + DS_MAP_BP);
+        uint16_t rows = *(uint16_t*)(s + DS_MAP_HEIGHT);
         uint32_t fs_size = (uint32_t)cols * rows * 8;
         if (fs_size > V2_FS_SHADOW_SIZE) fs_size = V2_FS_SHADOW_SIZE;
         int diffs = 0, bit0_diffs = 0, bit1_diffs = 0;
@@ -6391,7 +6391,7 @@ static uint16_t v2_current_level = 0xFFFF;
 
 // sub_111b1: load template chunk + level header chunk
 static void v2_load_template(uint8_t* shadow) {
-    uint16_t level = *(uint16_t*)(shadow + 0x25C9); // word_2AAA9
+    uint16_t level = *(uint16_t*)(shadow + DS_LEVEL_LOAD); // word_2AAA9
     v2_current_level = level;
     uint16_t di_idx = level * 2;
     uint16_t level_chunk = *(uint16_t*)(shadow + (uint16_t)(di_idx - 0x6BF4));
@@ -6408,9 +6408,9 @@ static void v2_load_template(uint8_t* shadow) {
     }
 
     // Load level chunk → DS at offset 0x25B3 (level header)
-    uint32_t lsz = v2_read_chunk(level_chunk, shadow + 0x25B3, 0x10000 - 0x25B3, shadow);  // ds_ctx (class #22)
+    uint32_t lsz = v2_read_chunk(level_chunk, shadow + DS_ANIM_SCROLL_DX, 0x10000 - 0x25B3, shadow);  // ds_ctx (class #22)
     printf("V2-TEMPLATE: loaded level chunk %d bytes. byte_2AA9A(0x25BA)=%02X, level_id=%04X\n",
-           lsz, shadow[0x25BA], *(uint16_t*)(shadow + DS_LEVEL));
+           lsz, shadow[DS_ACTIVE_VK_SEL], *(uint16_t*)(shadow + DS_LEVEL));
 }
 
 // sub_11204: load level data chunks (tile graphics, tilemap, etc.)
@@ -6494,7 +6494,7 @@ tile_load:
 
 // Combined loader for backward compatibility (called from game loop)
 static void v2_load_level(uint8_t* shadow) {
-    uint16_t level = *(uint16_t*)(shadow + 0x25C9);
+    uint16_t level = *(uint16_t*)(shadow + DS_LEVEL_LOAD);
     if (level == v2_current_level) return;
     v2_load_template(shadow);
     v2_load_level_data(shadow);
@@ -6686,33 +6686,33 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         } else if (ax == (int16_t)0x8000 || ax == (int16_t)0x8002) {
             // loc_12dd2: countdown transition
             if (*(uint16_t*)(shadow + DS_INPUT_KEYS) & 0x1000) {
-                *(uint16_t*)(shadow + 0x3CE) = 0xFFFF;
-                *(uint16_t*)(shadow + 0x3D0) = 0xFFFF;
+                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 0xFFFF;
+                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = 0xFFFF;
             }
-            if (*(uint16_t*)(shadow + 0x3CE) != 0) {
-                *(uint16_t*)(shadow + 0x3CE) -= 1;
-                *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + 0x3D0);
+            if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) != 0) {
+                *(uint16_t*)(shadow + DS_SCRATCH_3CE) -= 1;
+                *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
             } else {
                 // Pop from stack at ds:0x2191
                 uint16_t bx = *(uint16_t*)(shadow + 0x2191);
                 *(uint16_t*)(shadow + 0x86DE) = *(uint16_t*)(shadow + bx + 0x2191);
-                *(uint16_t*)(shadow + 0x3D0) = *(uint16_t*)(shadow + bx + 0x2191);
+                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
                 uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
-                *(uint16_t*)(shadow + 0x3CE) = cnt - 1;
+                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                 *(uint16_t*)(shadow + 0x2191) = bx + 4;
             }
         } else {
             // Other negative: active viking tracking
-            if (*(uint16_t*)(shadow + 0x3CE) == 0) {
+            if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) == 0) {
                 // loc_12dc4: init tracking
-                *(uint16_t*)(shadow + 0x3D0) = *(uint16_t*)(shadow + DS_INPUT_KEYS);
-                *(uint16_t*)(shadow + 0x3CE) = 1;
+                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + DS_INPUT_KEYS);
+                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
             } else {
                 // Check if active viking changed
                 uint16_t cur = *(uint16_t*)(shadow + DS_INPUT_KEYS);
-                uint16_t prev = *(uint16_t*)(shadow + 0x3D0);
+                uint16_t prev = *(uint16_t*)(shadow + DS_SCRATCH_3D0);
                 if (cur == prev) {
-                    *(uint16_t*)(shadow + 0x3CE) += 1;
+                    *(uint16_t*)(shadow + DS_SCRATCH_3CE) += 1;
                 } else {
                     // Push previous state to stack at ds:0x2191
                     // bx = ds:0x2191 (stack pointer, loaded ONCE)
@@ -6725,10 +6725,10 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     uint16_t bx = *(uint16_t*)(shadow + 0x2191);
                     *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = prev;
                     *(uint16_t*)(shadow + 0x2191) += 2;
-                    *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = *(uint16_t*)(shadow + 0x3CE);
+                    *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = *(uint16_t*)(shadow + DS_SCRATCH_3CE);
                     *(uint16_t*)(shadow + 0x2191) += 2;
-                    *(uint16_t*)(shadow + 0x3D0) = cur;
-                    *(uint16_t*)(shadow + 0x3CE) = 1;
+                    *(uint16_t*)(shadow + DS_SCRATCH_3D0) = cur;
+                    *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
                 }
             }
         }
@@ -6750,7 +6750,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             // loc_10344: word_288AC = 1
                             *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 1;
                         } else {
-                            *(uint16_t*)(shadow + 0x25C9) = 0; // word_2AAA9 = 0
+                            *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0; // word_2AAA9 = 0
                             // fall through to loc_10317
                             *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = 0;  // word_288A2 = 0
                             *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0;  // word_288AC = 0 (loc_1033c)
@@ -6764,22 +6764,22 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 1;
                     } else if (level == 0x2E) {
                         // loc_10336: word_2AAA9 = 0x27; → loc_1033c
-                        *(uint16_t*)(shadow + 0x25C9) = 0x27;
+                        *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0x27;
                         *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0; // loc_1033c
                     } else {
                         // loc_1031f: table lookup
-                        uint16_t si = *(uint16_t*)(shadow + 0x3D4); // word_288B4
+                        uint16_t si = *(uint16_t*)(shadow + DS_HUD_SEL_SI); // word_288B4
                         si += 2;
                         uint16_t ax = *(uint16_t*)(shadow + si + 0x2B66);
                         if (ax == 0xFFFF) si = 0;
-                        *(uint16_t*)(shadow + 0x3D4) = si; // word_288B4
+                        *(uint16_t*)(shadow + DS_HUD_SEL_SI) = si; // word_288B4
                         // loc_10336: word_2AAA9 = 0x27; → loc_1033c
-                        *(uint16_t*)(shadow + 0x25C9) = 0x27;
+                        *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0x27;
                         *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0; // loc_1033c
                     }
                 } else if (ac_u == 0x8002) {
                     // loc_102e8: reload current level
-                    *(uint16_t*)(shadow + 0x25C9) = *(uint16_t*)(shadow + DS_LEVEL);
+                    *(uint16_t*)(shadow + DS_LEVEL_LOAD) = *(uint16_t*)(shadow + DS_LEVEL);
                 } else {
                     // First time: write command buffer, set 0x8002, fall through to loc_102e8
                     uint16_t bx = *(uint16_t*)(shadow + 0x2191); // word_2A671
@@ -6788,7 +6788,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     *(uint16_t*)(shadow + 0x2191) += 2;
                     *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0x8002; // word_288AC
                     // loc_102e8: reload current level
-                    *(uint16_t*)(shadow + 0x25C9) = *(uint16_t*)(shadow + DS_LEVEL);
+                    *(uint16_t*)(shadow + DS_LEVEL_LOAD) = *(uint16_t*)(shadow + DS_LEVEL);
                 }
                 // loc_1034a: OR(word_28814, 1)
                 *(uint16_t*)(shadow + 0x0334) |= 1;
@@ -6809,7 +6809,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // helpers, no logic duplication — just structural difference (signal
     // dispatch vs inline spin).
 #ifdef V2_ONLY
-    if (shadow[0x25BA] != 0 &&                                  // byte_2AA9A
+    if (shadow[DS_ACTIVE_VK_SEL] != 0 &&                                  // byte_2AA9A
         (*(uint16_t*)(shadow + DS_FRAME_FLAGS) & 3) == 0 &&             // word_28814 & 3
         (*(uint16_t*)(shadow + DS_INPUT_EDGES) & 0x1000) &&             // word_28898 ESC
         *(uint16_t*)(shadow + DS_CMD_WRITE) == 0)                     // word_2A66F
@@ -6851,7 +6851,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         uint16_t buttons = *(uint16_t*)(shadow + 0x0334);
         if (buttons & 2) {
             // bit 2: set word_2AAA9=0x25, then fall through to bit 1 processing.
-            *(uint16_t*)(shadow + 0x25C9) = 0x25; // word_2AAA9
+            *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0x25; // word_2AAA9
             // fall through
         }
         // Check bit 1 (also reached by bit 2 fall-through):
@@ -6861,7 +6861,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
               if (++_vt <= 10)
                 fprintf(stderr, "V2-TRANS-ENTRY[%d]: pre=%d post=%d rec=%d buttons=%04X cur_lv=%04X next_lv=%04X\n",
                     _vt, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame, buttons,
-                    *(uint16_t*)(shadow + DS_LEVEL), *(uint16_t*)(shadow + 0x25C9));
+                    *(uint16_t*)(shadow + DS_LEVEL), *(uint16_t*)(shadow + DS_LEVEL_LOAD));
             }
             // Original: clear buttons, sub_1774f, INC word_2880F, sub_14207, JMP sub_11080.
             *(uint16_t*)(shadow + 0x0334) = 0;
@@ -6941,7 +6941,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // Do sub_1673c here, then return to skip remaining pre_vm (sub_10813 etc).
             {
                 // sub_1673c: compare scroll Y/X with tracking, spawn/despawn on change
-                uint16_t scroll_y = *(uint16_t*)(shadow + 0x257F) >> 1;
+                uint16_t scroll_y = *(uint16_t*)(shadow + DS_SCROLL_COL) >> 1;
                 uint16_t track_y = *(uint16_t*)(shadow + 0x92F3);
                 if (scroll_y != track_y) {
                     *(uint16_t*)(shadow + 0x92F3) = scroll_y;
@@ -6965,7 +6965,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         v2_spawn_bounds_scan_13a94(shadow);
                     }
                 }
-                uint16_t scroll_x = *(uint16_t*)(shadow + 0x2581) >> 1;
+                uint16_t scroll_x = *(uint16_t*)(shadow + DS_SCROLL_ROW) >> 1;
                 uint16_t track_x = *(uint16_t*)(shadow + 0x92F5);
                 if (scroll_x != track_x) {
                     *(uint16_t*)(shadow + 0x92F5) = scroll_x;
@@ -7513,37 +7513,37 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     int16_t ax_t = (int16_t)*(uint16_t*)(shadow + DS_GAME_MODE_AC);
                     if (ax_t == (int16_t)0x8000 || ax_t == (int16_t)0x8002) {
                         if (*(uint16_t*)(shadow + DS_INPUT_KEYS) & 0x1000) {
-                            *(uint16_t*)(shadow + 0x3CE) = 0xFFFF;
-                            *(uint16_t*)(shadow + 0x3D0) = 0xFFFF;
+                            *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 0xFFFF;
+                            *(uint16_t*)(shadow + DS_SCRATCH_3D0) = 0xFFFF;
                         }
-                        if (*(uint16_t*)(shadow + 0x3CE) != 0) {
-                            *(uint16_t*)(shadow + 0x3CE) -= 1;
-                            *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + 0x3D0);
+                        if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) != 0) {
+                            *(uint16_t*)(shadow + DS_SCRATCH_3CE) -= 1;
+                            *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
                         } else {
                             uint16_t bx = *(uint16_t*)(shadow + 0x2191);
                             *(uint16_t*)(shadow + 0x86DE) = *(uint16_t*)(shadow + bx + 0x2191);
-                            *(uint16_t*)(shadow + 0x3D0) = *(uint16_t*)(shadow + bx + 0x2191);
+                            *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
                             uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
-                            *(uint16_t*)(shadow + 0x3CE) = cnt - 1;
+                            *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                             *(uint16_t*)(shadow + 0x2191) = bx + 4;
                         }
                     } else {
-                        if (*(uint16_t*)(shadow + 0x3CE) == 0) {
-                            *(uint16_t*)(shadow + 0x3D0) = *(uint16_t*)(shadow + DS_INPUT_KEYS);
-                            *(uint16_t*)(shadow + 0x3CE) = 1;
+                        if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) == 0) {
+                            *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + DS_INPUT_KEYS);
+                            *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
                         } else {
                             uint16_t cur = *(uint16_t*)(shadow + DS_INPUT_KEYS);
-                            uint16_t prev = *(uint16_t*)(shadow + 0x3D0);
+                            uint16_t prev = *(uint16_t*)(shadow + DS_SCRATCH_3D0);
                             if (cur == prev) {
-                                *(uint16_t*)(shadow + 0x3CE) += 1;
+                                *(uint16_t*)(shadow + DS_SCRATCH_3CE) += 1;
                             } else {
                                 uint16_t bx = *(uint16_t*)(shadow + 0x2191);
                                 *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = prev;
                                 *(uint16_t*)(shadow + 0x2191) += 2;
-                                *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = *(uint16_t*)(shadow + 0x3CE);
+                                *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = *(uint16_t*)(shadow + DS_SCRATCH_3CE);
                                 *(uint16_t*)(shadow + 0x2191) += 2;
-                                *(uint16_t*)(shadow + 0x3D0) = cur;
-                                *(uint16_t*)(shadow + 0x3CE) = 1;
+                                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = cur;
+                                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
                             }
                         }
                     }
@@ -7580,7 +7580,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // bit 0x20 in ds:0x3B8 → PREV viking (SUB si, 2). bit 0x10 → NEXT viking (ADD si, 2).
     // Skip slots where [si+0x15AD] == 0 (inactive).
     // DS writes: [di+0x44D] &= 0xDFFF, byte [di+0x114D]=2, ds:0x3C2=si, ds:0x34E=5, ds:0x350=5.
-    if (shadow[0x25BA] != 0) {
+    if (shadow[DS_ACTIVE_VK_SEL] != 0) {
         uint16_t new_input = *(uint16_t*)(shadow + DS_INPUT_EDGES);
         int16_t si_v = -1;
         if (new_input & 0x20) {
@@ -7805,7 +7805,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     {
         auto loc_13a94 = [&shadow]() { v2_spawn_bounds_scan_13a94(shadow); };
 
-        uint16_t scroll_y = *(uint16_t*)(shadow + 0x257F) >> 1;
+        uint16_t scroll_y = *(uint16_t*)(shadow + DS_SCROLL_COL) >> 1;
         uint16_t track_y = *(uint16_t*)(shadow + 0x92F3);
         if (scroll_y != track_y) {
             *(uint16_t*)(shadow + 0x92F3) = scroll_y;
@@ -7829,7 +7829,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 loc_13a94();
             }
         }
-        uint16_t scroll_x = *(uint16_t*)(shadow + 0x2581) >> 1;
+        uint16_t scroll_x = *(uint16_t*)(shadow + DS_SCROLL_ROW) >> 1;
         uint16_t track_x = *(uint16_t*)(shadow + 0x92F5);
         if (scroll_x != track_x) {
             *(uint16_t*)(shadow + 0x92F5) = scroll_x;
@@ -7865,7 +7865,7 @@ static void v2_scroll_left_17496(uint8_t* s, int16_t si_speed) {
     if (ax < 0) ax = 0;
     int16_t dx = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) - ax;
     *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;
-    *(uint16_t*)(s + 0x257F) = (uint16_t)ax >> 3;
+    *(uint16_t*)(s + DS_SCROLL_COL) = (uint16_t)ax >> 3;
     *(uint16_t*)(s + DS_SCROLL_DELTA_X) = (uint16_t)dx;
 }
 
@@ -7874,11 +7874,11 @@ static void v2_scroll_right_1746c(uint8_t* s, int16_t si_speed) {
     if (*(uint16_t*)(s + DS_SCROLL_LOCK_X)) return;
     int16_t ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X);
     ax += si_speed;
-    uint16_t limit = *(uint16_t*)(s + 0x25A4);
+    uint16_t limit = *(uint16_t*)(s + DS_SCROLL_LIMIT_X);
     if ((uint16_t)ax >= limit) ax = (int16_t)limit;
     int16_t dx = ax - (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X);
     *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;
-    *(uint16_t*)(s + 0x257F) = (uint16_t)ax >> 3;
+    *(uint16_t*)(s + DS_SCROLL_COL) = (uint16_t)ax >> 3;
     *(uint16_t*)(s + DS_SCROLL_DELTA_X) = (uint16_t)dx;
 }
 
@@ -7890,7 +7890,7 @@ static void v2_scroll_up_174e9(uint8_t* s, int16_t si_speed) {
     if (ax < 0) ax = 0;
     int16_t dx = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) - ax;
     *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;
-    *(uint16_t*)(s + 0x2581) = (uint16_t)ax >> 3;
+    *(uint16_t*)(s + DS_SCROLL_ROW) = (uint16_t)ax >> 3;
     *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = (uint16_t)dx;
 }
 
@@ -7899,11 +7899,11 @@ static void v2_scroll_down_174bf(uint8_t* s, int16_t si_speed) {
     if (*(uint16_t*)(s + DS_SCROLL_LOCK_Y)) return;
     int16_t ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y);
     ax += si_speed;
-    uint16_t limit = *(uint16_t*)(s + 0x25A6);
+    uint16_t limit = *(uint16_t*)(s + DS_SCROLL_LIMIT_Y);
     if ((uint16_t)ax >= limit) ax = (int16_t)limit;
     int16_t dx = ax - (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y);
     *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;
-    *(uint16_t*)(s + 0x2581) = (uint16_t)ax >> 3;
+    *(uint16_t*)(s + DS_SCROLL_ROW) = (uint16_t)ax >> 3;
     *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = (uint16_t)dx;
 }
 
@@ -8611,8 +8611,8 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
         // sub_14199 equivalent: tile type at pixel (x, y)
         auto tile_type_at = [&](uint16_t x, uint16_t y) -> uint16_t {
             uint16_t sx = x >> 4, sy = y >> 4;
-            if (sx >= *(uint16_t*)(shadow + 0x25DC)) return 1;  // OOB right: 0x400 → type 1
-            if (sy >= *(uint16_t*)(shadow + 0x25DE)) return 0;  // OOB bottom: 0 → type 0
+            if (sx >= *(uint16_t*)(shadow + DS_MAP_BP)) return 1;  // OOB right: 0x400 → type 1
+            if (sy >= *(uint16_t*)(shadow + DS_MAP_HEIGHT)) return 0;  // OOB bottom: 0 → type 0
             uint16_t d2 = sy << 1, s2 = sx << 1;
             s2 += *(uint16_t*)(shadow + (uint16_t)(d2 - LUT_ROW_BASE));
             uint16_t tv = *(uint16_t*)(v2_vm_shadow_tilemap + s2);
@@ -8934,7 +8934,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
     // Compares scroll tracking (ds:0x92EF/0x92F1) with current scroll (ds:0x257F/0x2581).
     // When scroll changes: create new objects entering viewport, destroy those leaving.
     {
-        uint16_t ax_y = *(uint16_t*)(shadow + 0x257F);
+        uint16_t ax_y = *(uint16_t*)(shadow + DS_SCROLL_COL);
         uint16_t cx_y = *(uint16_t*)(shadow + 0x92EF);
         if (ax_y != cx_y) {
             if ((int16_t)ax_y < (int16_t)cx_y) {
@@ -9048,7 +9048,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
             }
         }
 
-        uint16_t ax_x = *(uint16_t*)(shadow + 0x2581);
+        uint16_t ax_x = *(uint16_t*)(shadow + DS_SCROLL_ROW);
         uint16_t cx_x = *(uint16_t*)(shadow + 0x92F1);
         if (ax_x != cx_x) {
             if ((int16_t)ax_x < (int16_t)cx_x) {
@@ -9642,8 +9642,8 @@ static void v2_vm_op_sound1(V2VM& vm) {
 // Bounds-checks si against ds:0x25DC, di against ds:0x25DE.
 // Out of bounds: returns 0x400 (si) or 0 (di).
 static uint16_t v2_vm_tile_read_141ba(V2VM& vm, uint16_t si, uint16_t di) {
-    if (si >= vm.ds_read(0x25DC)) return 0x400;   // bounds exits leave DI
-    if (di >= vm.ds_read(0x25DE)) return 0;
+    if (si >= vm.ds_read(DS_MAP_BP)) return 0x400;   // bounds exits leave DI
+    if (di >= vm.ds_read(DS_MAP_HEIGHT)) return 0;
     uint16_t di2 = di << 1;
     uint16_t si2 = si << 1;
     si2 += vm.ds_read((uint16_t)(di2 - LUT_ROW_BASE));
@@ -10793,7 +10793,7 @@ static void v2_vm_op_14(V2VM& vm) {
 
     // Step 5: sub_13809 — create object
     // Inputs: ax = anim_type, di = 0xFFFF, si = flags
-    vm.ds_write(0x3E0, 0xFFFF);
+    vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
 
     // sub_13809 prologue (eip 0x3809-0x3810): the scratch trio is written
     // BEFORE the 13d30/13d52 gates — it must appear in DS on fail paths too.
@@ -10931,16 +10931,16 @@ static void v2_vm_op_14(V2VM& vm) {
 
     // sub_13e52 eip 0x3F9D..0x3FBB: exact replica
     {
-        uint16_t ax = vm.ds_read(0x3E0);
+        uint16_t ax = vm.ds_read(DS_SPAWN_TBL_LO);
         if ((int16_t)ax < 0) {
             // height/2 → ds:0x3E2, width/2 → ax
             ax = newobj.u16(OBJ_HEIGHT) >> 1;
-            vm.ds_write(0x3E2, ax); // MOV ds:3E2h, ax
+            vm.ds_write(DS_SPAWN_TBL_HI, ax); // MOV ds:3E2h, ax
             ax = newobj.u16(OBJ_WIDTH) >> 1;
         }
         // loc_13fb4:
         newobj.w16(OBJ_HALF_W, ax);// [si+14BDh] = ax
-        newobj.w16(OBJ_HALF_H, vm.ds_read(0x3E2));// [si+1495h] = ds:3E2h
+        newobj.w16(OBJ_HALF_H, vm.ds_read(DS_SPAWN_TBL_HI));// [si+1495h] = ds:3E2h
     }
 
     // sub_13d68 + sub_13dd6 + sub_13e15: sub-sprite allocation + init.
@@ -11332,8 +11332,8 @@ static void v2_vm_op_10(V2VM& vm) {
                 if (in_vp) {
                     *(uint16_t*)(s + DS_TEXT_COL) = sx;
                     *(uint16_t*)(s + DS_TEXT_ROW) = sy;
-                    *(uint16_t*)(s + 0x3E0) = hw;
-                    *(uint16_t*)(s + 0x3E2) = hh;
+                    *(uint16_t*)(s + DS_SPAWN_TBL_LO) = hw;
+                    *(uint16_t*)(s + DS_SPAWN_TBL_HI) = hh;
                     *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + di_off + 0x2602);
                     v2_spawn_object_13809(s, *(uint16_t*)(s + di_off + 0x25FE),
                                  spawn_idx, *(uint16_t*)(s + di_off + 0x2600), sx, sy);
@@ -12394,14 +12394,14 @@ static void v2_vm_op_29(V2VM& vm) {
 static void v2_vm_op_2C(V2VM& vm) {
     // ds:0x3AE = ds:[si+0x14E5] - 1 (self Y - 1)
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(0x3AE, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
+    vm.ds_write(DS_SEARCH_Y, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
 
     // Read params: filter type index (1 byte) + jump target word (2 bytes)
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint16_t filter_idx = ax_word & 0xFF;
-    vm.ds_write(0x3AA, filter_idx);
+    vm.ds_write(DS_SEARCH_FILTER, filter_idx);
     uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
-    vm.ds_write(0x3AC, jump_target);
+    vm.ds_write(DS_SEARCH_JUMP, jump_target);
 
     // Search objects 0, 2, 4
     for (uint16_t si = 0; si < 6; si += 2) {
@@ -12422,7 +12422,7 @@ static void v2_vm_op_2C(V2VM& vm) {
         if (!matched) continue;
 
         // Y bounds: 3AE >= [si+14E5] AND (3AE-1) < [si+150D]
-        uint16_t y_ref = vm.ds_read(0x3AE);
+        uint16_t y_ref = vm.ds_read(DS_SEARCH_Y);
         if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;
 
@@ -12433,7 +12433,7 @@ static void v2_vm_op_2C(V2VM& vm) {
         if (vm.ds_read(si + OBJ_BBOX_X1) < vm.ds_read(di2 + OBJ_BBOX_X0)) continue;
 
         // Match found
-        vm.ds_write(0x3B0, si);
+        vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(di2 + OBJ_PARTNER, si);
         vm.ds_write(di2 + OBJ_ALT_PC, vm.pc);
         vm.pc = jump_target;
@@ -12472,13 +12472,13 @@ static void v2_vm_op_48(V2VM& vm) {
 // Verified with seg000 lines 14143-14201.
 static void v2_vm_op_35(V2VM& vm) {
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(0x3AE, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
+    vm.ds_write(DS_SEARCH_Y, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
 
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint16_t filter_idx = ax_word & 0xFF;
-    vm.ds_write(0x3AA, filter_idx);
+    vm.ds_write(DS_SEARCH_FILTER, filter_idx);
     uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
-    vm.ds_write(0x3AC, jump_target);
+    vm.ds_write(DS_SEARCH_JUMP, jump_target);
 
     uint16_t max_obj = vm.ds_read(DS_OBJ_COUNT);
     for (uint16_t si = 0; (int16_t)si < (int16_t)max_obj; si += 2) {
@@ -12499,7 +12499,7 @@ static void v2_vm_op_35(V2VM& vm) {
 
         // Y bounds: signed JL comparisons (phase-B pilot: ObjRef views)
         ObjRef cand{vm, si};
-        int16_t y_ref = (int16_t)vm.ds_read(0x3AE);
+        int16_t y_ref = (int16_t)vm.ds_read(DS_SEARCH_Y);
         if (y_ref < cand.bbox_y0()) continue;
         if ((int16_t)(uint16_t)(y_ref - 1) < cand.bbox_y1()) continue;
 
@@ -12510,7 +12510,7 @@ static void v2_vm_op_35(V2VM& vm) {
         if (cand.bbox_x1() < self.bbox_x0()) continue;
 
         // Match found
-        vm.ds_write(0x3B0, si);
+        vm.ds_write(DS_SEARCH_SI, si);
         self.set_partner(si);
         self.set_alt_pc(vm.pc);
         vm.pc = jump_target;
@@ -12525,8 +12525,8 @@ static void v2_vm_op_2D(V2VM& vm) {
     // DEC bx (original decrements PC by 1)
     vm.pc -= 1;
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
-    uint16_t start_si = vm.ds_read(0x3B0);
-    uint16_t filter_idx = vm.ds_read(0x3AA);
+    uint16_t start_si = vm.ds_read(DS_SEARCH_SI);
+    uint16_t filter_idx = vm.ds_read(DS_SEARCH_FILTER);
 
     for (uint16_t si = start_si + 2; si < 6; si += 2) {
         if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
@@ -12544,7 +12544,7 @@ static void v2_vm_op_2D(V2VM& vm) {
         vm.di_track = di;   // orig: filter-scan stop position stays in DI
         if (!matched) continue;
 
-        uint16_t y_ref = vm.ds_read(0x3AE);
+        uint16_t y_ref = vm.ds_read(DS_SEARCH_Y);
         if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;
 
@@ -12553,10 +12553,10 @@ static void v2_vm_op_2D(V2VM& vm) {
         if (vm.ds_read(di2 + OBJ_BBOX_X1) < vm.ds_read(si + OBJ_BBOX_X0)) continue;
         if (vm.ds_read(si + OBJ_BBOX_X1) < vm.ds_read(di2 + OBJ_BBOX_X0)) continue;
 
-        vm.ds_write(0x3B0, si);
+        vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(di2 + OBJ_PARTNER, si);
         vm.ds_write(di2 + OBJ_ALT_PC, vm.pc);  // bx = B-1
-        vm.pc = vm.ds_read(0x3AC);
+        vm.pc = vm.ds_read(DS_SEARCH_JUMP);
         return;
     }
     // No match — INC bx restores PC
@@ -12828,9 +12828,9 @@ static void v2_vm_op_4D(V2VM& vm) {
 // ds:0x39C = ax & 0xFF; ds:0x3A0 = 0; ds:0x3A4 = (ax >> 6) & 0x3FC
 static void v2_vm_op_3B(V2VM& vm) {
     uint16_t ax = vm.read_u16();
-    vm.ds_write(0x39C, ax & 0xFF);
+    vm.ds_write(DS_SHAKE_SRC_Y, ax & 0xFF);
     vm.ds_write(DS_SHAKE_Y, 0);
-    vm.ds_write(0x3A4, (ax >> 6) & 0x3FC);
+    vm.ds_write(DS_SHAKE_GATE_Y, (ax >> 6) & 0x3FC);
 }
 
 // 0x2A (sub_15078): Tilemap modification — set lower bits. 2 mode bytes + 3 dispatches.
@@ -12933,7 +12933,7 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
         if (si == di) continue;
         // Type match
         uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
-        uint16_t flt = vm.ds_read(0x3AA);
+        uint16_t flt = vm.ds_read(DS_SEARCH_FILTER);
         bool match = false;
         while (true) {
             uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
@@ -12943,15 +12943,15 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
         }
         if (!match) continue;
         // Bounds check
-        if ((int16_t)vm.ds_read(0x3AE) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)(vm.ds_read(0x3AE) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
+        if ((int16_t)vm.ds_read(DS_SEARCH_Y) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
+        if ((int16_t)(vm.ds_read(DS_SEARCH_Y) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
         if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
         if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) continue;
         // Match found
-        vm.ds_write(0x3B0, si);
+        vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(di + OBJ_PARTNER, si);
         vm.ds_write(di + OBJ_ALT_PC, vm.pc);
-        vm.pc = vm.ds_read(0x3AC);
+        vm.pc = vm.ds_read(DS_SEARCH_JUMP);
         return;
     }
     // No match: INC bx (extra byte consumed — original has INC bx after loop exit)
@@ -12962,13 +12962,13 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
 // Sets up ds:0x3AE (Y bound), ds:0x3AA (filter), ds:0x3AC (jump target), then searches.
 static void v2_vm_op_D0(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(0x3AE, vm.ds_read(si + OBJ_BBOX_Y1) + 1);
+    vm.ds_write(DS_SEARCH_Y, vm.ds_read(si + OBJ_BBOX_Y1) + 1);
     // Read 1 byte filter → ds:0x3AA
     uint8_t filter = vm.read_u8();
-    vm.ds_write(0x3AA, filter);
+    vm.ds_write(DS_SEARCH_FILTER, filter);
     // Read 2 bytes jump target → ds:0x3AC
     uint16_t target = vm.read_u16();
-    vm.ds_write(0x3AC, target);
+    vm.ds_write(DS_SEARCH_JUMP, target);
     // Search from si=0
     v2_vm_collision_search_loop(vm, 0xFFFE); // -2 so first iteration = 0
 }
@@ -12978,18 +12978,18 @@ static void v2_vm_op_D0(V2VM& vm) {
 // inverted second Y check (JNB = skip if >=, NOT JL = skip if <).
 static void v2_vm_op_D1(V2VM& vm) {
     uint16_t si_self = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(0x3AE, vm.ds_read(si_self + OBJ_BBOX_Y1) + 1);
+    vm.ds_write(DS_SEARCH_Y, vm.ds_read(si_self + OBJ_BBOX_Y1) + 1);
     uint8_t filter = vm.read_u8();
-    vm.ds_write(0x3AA, filter);
+    vm.ds_write(DS_SEARCH_FILTER, filter);
     uint16_t target = vm.read_u16();
-    vm.ds_write(0x3AC, target);
+    vm.ds_write(DS_SEARCH_JUMP, target);
     // D1 search loop: vikings only (si<6), unsigned comparisons
     for (uint16_t si = 0; si < 6; si += 2) {
         if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
         if (si == si_self) continue;
         // Type match (same as D0)
         uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
-        uint16_t flt = vm.ds_read(0x3AA);
+        uint16_t flt = vm.ds_read(DS_SEARCH_FILTER);
         bool match = false;
         while (true) {
             uint8_t fval = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
@@ -12999,17 +12999,17 @@ static void v2_vm_op_D1(V2VM& vm) {
         }
         if (!match) continue;
         // Y bounds: unsigned, inverted second check
-        uint16_t y_ref = vm.ds_read(0x3AE);
+        uint16_t y_ref = vm.ds_read(DS_SEARCH_Y);
         if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;  // JB: unsigned <
         if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;  // JNB: unsigned >=
         // X bounds: unsigned
         if (vm.ds_read(si_self + OBJ_BBOX_X1) < vm.ds_read(si + OBJ_BBOX_X0)) continue;  // JB
         if (vm.ds_read(si + OBJ_BBOX_X1) < vm.ds_read(si_self + OBJ_BBOX_X0)) continue;  // JB
         // Match found
-        vm.ds_write(0x3B0, si);
+        vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(si_self + OBJ_PARTNER, si);
         vm.ds_write(si_self + OBJ_ALT_PC, vm.pc);
-        vm.pc = vm.ds_read(0x3AC);
+        vm.pc = vm.ds_read(DS_SEARCH_JUMP);
         return;
     }
     // No match: INC bx (skip 1 extra byte)
@@ -13159,9 +13159,9 @@ static void v2_vm_op_D3(V2VM& vm) {
     // Search table at ds:[(uint16_t)(si - 0x7A5B)] for 4-byte match
     // with word_287F0..287F6 (at ds:0x0310..0x0316, offset = 0x287F0 - 0x284E0)
     uint16_t pw0 = vm.ds_read(DS_PW_CHAR0);
-    uint16_t pw1 = vm.ds_read(0x0312);
-    uint16_t pw2 = vm.ds_read(0x0314);
-    uint16_t pw3 = vm.ds_read(0x0316);
+    uint16_t pw1 = vm.ds_read(DS_PW_CHAR1);
+    uint16_t pw2 = vm.ds_read(DS_PW_CHAR2);
+    uint16_t pw3 = vm.ds_read(DS_PW_CHAR3);
 
     for (uint16_t si = 0; (int16_t)si < 0x94; si += 4) {
         uint16_t addr_base = (uint16_t)(si - 0x7A5B);
@@ -13175,22 +13175,22 @@ static void v2_vm_op_D3(V2VM& vm) {
             // Found: level = si / 4
             uint16_t level = si >> 2;
             // word_2AAA9 at ds:0x25C9
-            vm.ds_write(0x25C9, level);
+            vm.ds_write(DS_LEVEL_LOAD, level);
             // byte_287E8 at ds:0x0308
-            vm.ds_write_b(0x0308, 0);
+            vm.ds_write_b(DS_CMD_ACTIVE, 0);
             return;
         }
     }
     // Not found: byte_287E8 at ds:0x0308
-    vm.ds_write_b(0x0308, 1);
+    vm.ds_write_b(DS_CMD_ACTIVE, 1);
 }
 
 // 0x2E (sub_1522c): Set collision search params. 2 bytes consumed.
 static void v2_vm_op_2E(V2VM& vm) {
     uint16_t word = vm.read_u16();
-    vm.ds_write(0x39A, word & 0xFF);
+    vm.ds_write(DS_SHAKE_SRC_X, word & 0xFF);
     vm.ds_write(DS_SHAKE_X, 0);
-    vm.ds_write(0x3A2, (word >> 7) & 0x1FE);
+    vm.ds_write(DS_SHAKE_GATE_X, (word >> 7) & 0x1FE);
 }
 
 // 0x50 (sub_126a9): Text position cmd. 2 mode bytes + 3 off_30C98 dispatches.
@@ -13770,7 +13770,7 @@ static void v2_vm_op_AE(V2VM& vm) {
 // If no match: INC bx (net 0 bytes).
 static void v2_vm_op_36(V2VM& vm) {
     vm.pc -= 1; // DEC bx
-    uint16_t si = vm.ds_read(0x3B0);
+    uint16_t si = vm.ds_read(DS_SEARCH_SI);
     uint16_t table_end = vm.global_r(DS_OBJ_COUNT);
     uint16_t di = vm.global_r(DS_CUR_OBJ);
 
@@ -13779,7 +13779,7 @@ static void v2_vm_op_36(V2VM& vm) {
         if (si == di) continue;
         // Type match: compare ds:[si+0x17DD] with filter table at ds:0x3AA
         uint16_t obj_type = vm.ds_read(si + OBJ_TYPE_ID);
-        uint16_t filter_idx = vm.ds_read(0x3AA);
+        uint16_t filter_idx = vm.ds_read(DS_SEARCH_FILTER);
         // Search filter table
         bool type_match = false;
         while (true) {
@@ -13791,7 +13791,7 @@ static void v2_vm_op_36(V2VM& vm) {
         if (!type_match) continue;
 
         // Y bounds check
-        int16_t ds_3AE = (int16_t)vm.ds_read(0x3AE);
+        int16_t ds_3AE = (int16_t)vm.ds_read(DS_SEARCH_Y);
         if (ds_3AE < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
         if (ds_3AE - 1 < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) {} else continue; // actually: ds_3AE-1 < 150D → skip
         // Wait, re-read: CMP ax, [si+150D]; JL → skip. So if (ds_3AE-1) < [si+150D] → skip
@@ -13810,18 +13810,18 @@ static void v2_vm_op_36(V2VM& vm) {
 
         // Actually I'll just do it literally without over-thinking:
         // (already checked type match)
-        if ((int16_t)vm.ds_read(0x3AE) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)(vm.ds_read(0x3AE) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
+        if ((int16_t)vm.ds_read(DS_SEARCH_Y) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
+        if ((int16_t)(vm.ds_read(DS_SEARCH_Y) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
 
         // X bounds: di=ds:0x42
         if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
         if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) continue;
 
         // Match found!
-        vm.ds_write(0x3B0, si);
+        vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(di + OBJ_PARTNER, si);
         vm.ds_write(di + OBJ_ALT_PC, vm.pc); // save current PC as alt_pc
-        vm.pc = vm.ds_read(0x3AC);        // jump to ds:0x3AC
+        vm.pc = vm.ds_read(DS_SEARCH_JUMP);        // jump to ds:0x3AC
         return;
     }
 
@@ -13920,9 +13920,9 @@ static void v2_vm_op_D2(V2VM& vm) {
     uint8_t c3 = *(vm.shadow + (uint16_t)(si - 0x7A58)) & 0x7F;
     // Write to password display words: word_287F0..287F6 = DS:0x0310..0x0316
     vm.ds_write(DS_PW_CHAR0, c0);
-    vm.ds_write(0x0312, c1);
-    vm.ds_write(0x0314, c2);
-    vm.ds_write(0x0316, c3);
+    vm.ds_write(DS_PW_CHAR1, c1);
+    vm.ds_write(DS_PW_CHAR2, c2);
+    vm.ds_write(DS_PW_CHAR3, c3);
 }
 
 // 0x25 (sub_14487): Animation load + off_30C8E dispatch. 1 byte + dispatch.
@@ -14733,10 +14733,10 @@ static void v2_vm_anim_tail_135cf(V2VM& vm) {
 
     // Add scroll delta if flags set
     if (self.flags() & 0x8000) {
-        self.w16(OBJ_ANIM_DY, self.u16(OBJ_ANIM_DY) + vm.ds_read(0x25B5));
+        self.w16(OBJ_ANIM_DY, self.u16(OBJ_ANIM_DY) + vm.ds_read(DS_ANIM_SCROLL_DY));
     }
     if (self.flags() & 0x4000) {
-        self.w16(OBJ_ANIM_DX, self.u16(OBJ_ANIM_DX) + vm.ds_read(0x25B3));
+        self.w16(OBJ_ANIM_DX, self.u16(OBJ_ANIM_DX) + vm.ds_read(DS_ANIM_SCROLL_DX));
     }
 
     // Clamp X velocity (164D) to [-178D, +178D]
@@ -16026,7 +16026,7 @@ static void v2_vm_op_34(V2VM& vm) {
             best_si = si;
         }
     }
-    vm.ds_write(0x3CA, best_si);
+    vm.ds_write(DS_SEARCH_BEST, best_si);
     uint16_t si_sub = best_si; // nearest player is the "sub-object" for delta computation
 
     // loc_1510E: same as 0x16
@@ -17033,8 +17033,8 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
     // FS: v2_scroll_init_173c7 fills rows*cols*8 bytes. Rest is VGA 3-page data (sub_16ded).
     // Compare only the portion v2 fills: rows * (cols*4 + cols*4) = rows * cols * 8.
     {
-        uint16_t fs_cols = *(uint16_t*)(shadow + 0x25DC);
-        uint16_t fs_rows = *(uint16_t*)(shadow + 0x25DE);
+        uint16_t fs_cols = *(uint16_t*)(shadow + DS_MAP_BP);
+        uint16_t fs_rows = *(uint16_t*)(shadow + DS_MAP_HEIGHT);
         uint32_t fs_used = (uint32_t)fs_rows * fs_cols * 8;
         if (fs_used > 0xC080) fs_used = 0xC080;
         cmp_seg("FS(used)", v2_vm_shadow_fs, fs_used, DS_SEG_FS);
@@ -17591,7 +17591,7 @@ static void v2_page_flip_16775(uint8_t* s) {
     {
         uint16_t x_disp = *(uint16_t*)(s + DS_VIEWPORT_X);
         uint16_t x_some = *(uint16_t*)(s + DS_SHAKE_X);
-        uint16_t x_level_size = *(uint16_t*)(s + 0x25A4);
+        uint16_t x_level_size = *(uint16_t*)(s + DS_SCROLL_LIMIT_X);
         uint16_t x_offset = x_disp + x_some;
         if (x_offset > x_level_size)
             x_offset = x_disp - x_some;
@@ -17599,10 +17599,10 @@ static void v2_page_flip_16775(uint8_t* s) {
         s[DS_PIXEL_PAN] = x_low_bits * 2;
     }
     *(uint16_t*)(s + DS_VSYNC_COUNT) = 1;                                     // word_3287C = 1
-    *(uint16_t*)(s + 0x257B) = *(uint16_t*)(s + DS_VIEWPORT_X);               // save viewport X
-    *(uint16_t*)(s + 0x257D) = *(uint16_t*)(s + DS_VIEWPORT_Y);               // save viewport Y
-    *(uint16_t*)(s + 0x92EF) = *(uint16_t*)(s + 0x257F);             // scroll row state
-    *(uint16_t*)(s + 0x92F1) = *(uint16_t*)(s + 0x2581);             // scroll col state
+    *(uint16_t*)(s + DS_SAVED_VP_X) = *(uint16_t*)(s + DS_VIEWPORT_X);               // save viewport X
+    *(uint16_t*)(s + DS_SAVED_VP_Y) = *(uint16_t*)(s + DS_VIEWPORT_Y);               // save viewport Y
+    *(uint16_t*)(s + 0x92EF) = *(uint16_t*)(s + DS_SCROLL_COL);             // scroll row state
+    *(uint16_t*)(s + 0x92F1) = *(uint16_t*)(s + DS_SCROLL_ROW);             // scroll col state
     // VGA buffer swap (equivalent of page flip)
     v2_swap_render_buf();
 }
@@ -17938,10 +17938,10 @@ void v2_run_animation_vm(uint16_t ds_val) {
 
         // sub_101be: palette animation timer — per-slot timer decrement + palette rotation
         // 8 slots (si=7→0). When timer hits 0: rotate palette in BOTH ds:0x8202 and ds:0x7F02.
-        if (s[0x2583] != 0) { // byte_2AA63 — any animation enabled?
+        if (s[DS_PAL_ANIM_EN] != 0) { // byte_2AA63 — any animation enabled?
             for (int16_t si_pal = 7; si_pal >= 0; si_pal--) {
                 uint8_t mask = s[(uint16_t)(si_pal - LUT_BYTE_OR)];
-                if (!(s[0x2583] & mask)) continue;
+                if (!(s[DS_PAL_ANIM_EN] & mask)) continue;
                 if (s[si_pal + 0x258C] == 0) continue; // already expired
                 s[si_pal + 0x258C]--;                   // DEC timer
                 if (s[si_pal + 0x258C] != 0) continue;  // not yet 0
@@ -18088,9 +18088,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // sub_1241e × 4: draw password characters from ds:0x310-0x316
                     { uint16_t si_pw = 0x12, di_pw = 0x11;
                       v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + DS_PW_CHAR0), si_pw, di_pw);
-                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x312), si_pw, di_pw);
-                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x314), si_pw, di_pw);
-                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + 0x316), si_pw, di_pw); }
+                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + DS_PW_CHAR1), si_pw, di_pw);
+                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + DS_PW_CHAR2), si_pw, di_pw);
+                      v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + DS_PW_CHAR3), si_pw, di_pw); }
                     s[DS_GLYPH_DIRTY] = 1;                                       // byte_31A4B = 1
                     // sub_104a1: blocking input wait. Verified with seg000 lines 2447-2515.
                     // Sets word_28925=0x11, word_28923=1, byte_31A4B=1.
@@ -18960,12 +18960,12 @@ void v2_phase_post_flip1(uint16_t ds_val) {
                 if (ax < 0) ax = 0;
             } else {
                 ax = *(uint16_t*)(s + DS_VIEWPORT_X) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A4);
+                uint16_t limit = *(uint16_t*)(s + DS_SCROLL_LIMIT_X);
                 if ((uint16_t)ax >= limit) ax = limit;
             }
             uint16_t dx = (dir < 0) ? (*(uint16_t*)(s + DS_VIEWPORT_X) - (uint16_t)ax) : ((uint16_t)ax - *(uint16_t*)(s + DS_VIEWPORT_X));
             *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;
-            *(uint16_t*)(s + 0x257F) = (uint16_t)ax >> 3;
+            *(uint16_t*)(s + DS_SCROLL_COL) = (uint16_t)ax >> 3;
             *(uint16_t*)(s + DS_SCROLL_DELTA_X) = dx;
         };
         auto scroll_ud = [&](int dir, uint16_t amount) {
@@ -18976,12 +18976,12 @@ void v2_phase_post_flip1(uint16_t ds_val) {
                 if (ax < 0) ax = 0;
             } else {
                 ax = *(uint16_t*)(s + DS_VIEWPORT_Y) + amount;
-                uint16_t limit = *(uint16_t*)(s + 0x25A6);
+                uint16_t limit = *(uint16_t*)(s + DS_SCROLL_LIMIT_Y);
                 if ((uint16_t)ax >= limit) ax = limit;
             }
             uint16_t dx = (dir < 0) ? (*(uint16_t*)(s + DS_VIEWPORT_Y) - (uint16_t)ax) : ((uint16_t)ax - *(uint16_t*)(s + DS_VIEWPORT_Y));
             *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;
-            *(uint16_t*)(s + 0x2581) = (uint16_t)ax >> 3;
+            *(uint16_t*)(s + DS_SCROLL_ROW) = (uint16_t)ax >> 3;
             *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = dx;
         };
         uint16_t v;
@@ -19540,7 +19540,7 @@ void v2_phase_frame_end(uint16_t ds_val) {
                     int16_t ax = level;
                     ax -= 1; // DEC ax
                     if (ax < 0) ax = 0;
-                    *(uint16_t*)(s + 0x25C9) = (uint16_t)ax; // MOV word_2AAA9, ax
+                    *(uint16_t*)(s + DS_LEVEL_LOAD) = (uint16_t)ax; // MOV word_2AAA9, ax
                 } else {
                     // loc_10121: F5 didn't fire → check F6 (orig line 2177)
                     s[0x91AC] = sdl_spec_get(0x91AC);  // SDL F6 — exact orig INT9
@@ -19732,10 +19732,10 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
     // sub_101be: palette animation DEC pass (writes ds:[7EFE] = 2 if loop ran)
     // ROOT-CAUSE diag: tag this callsite (viking switch loop, mirror of eip 0x0174).
     { static int _vc = 0; _vc++;
-      if (shadow[0x2583] != 0 && _vc <= 300) {
+      if (shadow[DS_PAL_ANIM_EN] != 0 && _vc <= 300) {
         fprintf(stderr, "V2-101BE-VSW[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-            _vc, shadow[0x2583],
-            shadow[0x258C], shadow[0x258D], shadow[0x258E], shadow[0x258F],
+            _vc, shadow[DS_PAL_ANIM_EN],
+            shadow[DS_PAL_ANIM_TIMER], shadow[0x258D], shadow[0x258E], shadow[0x258F],
             shadow[0x2590], shadow[0x2591], shadow[0x2592], shadow[0x2593]);
       }
     }
@@ -19971,7 +19971,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         } else if (btns & 1) {
             v2_run_transition_chain(s);
         } else if (btns & 2) {
-            *(uint16_t*)(s + 0x25C9) = 0x25;
+            *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x25;
             v2_run_transition_chain(s);
         }
     }
@@ -20601,18 +20601,18 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
         int16_t ax = (int16_t)*(uint16_t*)(shadow + DS_GAME_MODE_AC);
         if (ax == (int16_t)0x8000 || ax == (int16_t)0x8002) {
             if (*(uint16_t*)(shadow + DS_INPUT_KEYS) & 0x1000) {
-                *(uint16_t*)(shadow + 0x3CE) = 0xFFFF;
-                *(uint16_t*)(shadow + 0x3D0) = 0xFFFF;
+                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 0xFFFF;
+                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = 0xFFFF;
             }
-            if (*(uint16_t*)(shadow + 0x3CE) != 0) {
-                *(uint16_t*)(shadow + 0x3CE) -= 1;
-                *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + 0x3D0);
+            if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) != 0) {
+                *(uint16_t*)(shadow + DS_SCRATCH_3CE) -= 1;
+                *(uint16_t*)(shadow + 0x86DE) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
             } else {
                 uint16_t bx = *(uint16_t*)(shadow + 0x2191);
                 *(uint16_t*)(shadow + 0x86DE) = *(uint16_t*)(shadow + bx + 0x2191);
-                *(uint16_t*)(shadow + 0x3D0) = *(uint16_t*)(shadow + bx + 0x2191);
+                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
                 uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
-                *(uint16_t*)(shadow + 0x3CE) = cnt - 1;
+                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                 *(uint16_t*)(shadow + 0x2191) = bx + 4;
             }
         }
@@ -20722,9 +20722,9 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     if (is_quit_path) {
         uint16_t si_pw = 0x12, di_pw = 0x11;
         v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR0), si_pw, di_pw); // word_287F0
-        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x312), si_pw, di_pw); // word_287F2
-        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x314), si_pw, di_pw); // word_287F4
-        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + 0x316), si_pw, di_pw); // word_287F6
+        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR1), si_pw, di_pw); // word_287F2
+        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR2), si_pw, di_pw); // word_287F4
+        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR3), si_pw, di_pw); // word_287F6
     }
 
     // sub_104a1 prelude: DS writes + first render pair (eip 0x04A1-0x04C0)
@@ -21032,7 +21032,7 @@ static void v2_hang_detector_func() {
             last_warn_ms = now;
             const char* phase_name = (phase >= 0 && phase <= 10) ? phase_names[phase] : "IDLE";
             uint16_t shadow_25AD = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + DS_LEVEL) : 0xDEAD;
-            uint16_t shadow_25BA = v2_vm_shadow_ds ? v2_vm_shadow_ds[0x25BA] : 0xFF;
+            uint16_t shadow_25BA = v2_vm_shadow_ds ? v2_vm_shadow_ds[DS_ACTIVE_VK_SEL] : 0xFF;
             uint16_t shadow_A39C = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + DS_VSYNC_COUNT) : 0xDEAD;
             uint16_t shadow_218F = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + DS_CMD_WRITE) : 0xDEAD;
             uint16_t shadow_2B64 = v2_vm_shadow_ds ? *(uint16_t*)(v2_vm_shadow_ds + DS_CMD_READ) : 0xDEAD;
