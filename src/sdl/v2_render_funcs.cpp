@@ -849,6 +849,46 @@ extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_
         }
 }
 
+// #39 op_13/0x11 (orig loc_14396 "text menu redraw") - PAGE-accurate mirror.
+// Orig semantics decoded via inverse LUT_PAGE_ROW (ds_static):
+//   MOVSB VGA[0..0x1600) -> 0x2ADC == (role-value 0x00 page, world row 62)
+//   MOVSB VGA[0..0x1600) -> 0x70BC == (role-value 0x34 page, world row 62)
+//   STOSB #3/#4/#5 jointly zero the VGA head + ALL THREE pages outside the
+//   two picture bands (role-value 0x68 page is zeroed entirely).
+// Slots are fixed by role VALUE (slot = value/0x34), independent of the
+// current rotation - so this is groove-independent, unlike the previous
+// screen-space scr_row0 fix which read vp at opcode time (#39 instability).
+extern "C" void v2_emu_op13_text_menu(uint16_t ds_val, const uint8_t* hud64) {
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
+    if (!ds_base) return;
+    const int WORLD_ROW = 62;   // inverse LUT: 0x2ADC/0x70BC = row 7*8+6
+    for (int p = 0; p < 3; p++) {
+        memset(v2_emu_page[p], 0, (size_t)V2_EMU_W * V2_EMU_H);
+        if (p == 2) continue;   // role-value 0x68 page: zero only
+        int pr0 = WORLD_ROW - v2_emu_base_y;
+        for (int r = 0; r < 64; r++) {
+            int pr = pr0 + r;
+            if (pr < 0 || pr >= V2_EMU_H) continue;
+            memcpy(v2_emu_page[p] + (size_t)pr * V2_EMU_W, hud64 + (size_t)r * 320, 320);
+        }
+    }
+    // Screen representation = the shown window over the updated pages
+    // (same math as v2_emu_shown), so FRAMESUM/display stay coherent.
+    {
+        int xe, ye;
+        v2_emu_eff(ds_base, &xe, &ye);
+        int offx = xe - v2_emu_base_x, offy = ye - v2_emu_base_y;
+        if (offx < 0) offx = 0; if (offx > V2_EMU_W - 320) offx = V2_EMU_W - 320;
+        if (offy < 0) offy = 0; if (offy > V2_EMU_H - 176) offy = V2_EMU_H - 176;
+        uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
+        for (int y = 0; y < 176; y++)
+            memcpy(v2_render_buf + y * 320, pg + (size_t)(y + offy) * V2_EMU_W + offx, 320);
+    }
+    memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
+    v2_chunk_bg_valid = true;
+    v2_emu_valid = true;
+}
+
 // Shown page of the current sub-frame — the A2 sensor compares against this.
 // Assembles the 320x176 window (anchor + current effective offset) into a
 // static frame buffer, like the orig CRTC unfold reads myOffset's window.

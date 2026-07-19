@@ -598,6 +598,7 @@ extern "C" void v2_emu_ring_dump(void);
 extern "C" void v2_emu_df6a(uint16_t ds_val);
 extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_y, uint16_t clip);
 extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
+extern "C" void v2_emu_op13_text_menu(uint16_t ds_val, const uint8_t* hud64);
 extern "C" void v2_emu_init_pages(uint16_t ds_val);
 extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage);
 extern "C" uint16_t v2_dd9c_pixel_ds;   // armed page-cascade DS (0xFFFF = off)
@@ -13097,41 +13098,15 @@ static void v2_vm_op_13(V2VM& vm) {
         //   - Clear v2_render_buf rows 64..176 (rest of viewport cleared)
         extern uint8_t v2_render_buf[320*200];
         extern uint8_t v2_hud_buf[320*64];
-        // #39 fix: the orig copies land at ABSOLUTE page bytes 0x2ADC/0x70BC,
-        // while the CRTC window sits at set_display_memory_addr(vp) — on the
-        // title (vp=(0,32)) that is 0x20C8, so the picture appears 30 ROWS
-        // DOWN the screen (0x2ADC-0x20C8 = 0xA14 = 30*0x56), with rows 0..29
-        // black (the STOSB-cleared source region scrolls in above it).
-        // Compute the row shift with the exact orig CRTC formula (16775).
-        int scr_row0;
-        {
-            uint8_t* sh = vm.shadow;
-            int16_t vy = (int16_t)*(uint16_t*)(sh + DS_VIEWPORT_Y);
-            int16_t ys = (int16_t)*(uint16_t*)(sh + 0x3A0);
-            int16_t ylim = (int16_t)*(uint16_t*)(sh + 0x25A6);
-            int y = vy + ys; if (y > ylim) y = vy - ys;
-            int16_t vx = (int16_t)*(uint16_t*)(sh + DS_VIEWPORT_X);
-            int16_t xs = (int16_t)*(uint16_t*)(sh + 0x39E);
-            int16_t xlim = (int16_t)*(uint16_t*)(sh + 0x25A4);
-            int x = vx + xs; if (x > xlim) x = vx - xs;
-            uint16_t role = *(uint16_t*)(sh + DS_PAGE_SHOWN);
-            uint16_t y_high = *(uint16_t*)(sh + (uint16_t)(LUT_PAGE_ROW + role + ((y >> 3) * 2)));
-            uint16_t y_low  = *(uint16_t*)(sh + (uint16_t)(0x8E58 + ((y & 7) * 2)));
-            uint16_t myOff  = (uint16_t)(y_high + y_low + (x >> 2) + 8);
-            scr_row0 = ((int)(uint16_t)(0x2ADC - myOff)) / 0x56;
-            if (scr_row0 < 0) scr_row0 = 0;
-            if (scr_row0 > 176 - 64) scr_row0 = 176 - 64;
-        }
-        // 1. Clear whole viewport first (rows above/below get the STOSB zeroes)
-        memset(v2_render_buf, 0, 320 * 176);
-        // 2. Copy HUD picture to its on-screen position (orig MOVSB dst=0x2ADC)
-        memcpy(v2_render_buf + 320 * scr_row0, v2_hud_buf, 320 * 64);
-        // 3. Clear HUD area (= orig STOSB di=0..0x2ADC clearing VGA[0..HUD_END])
+        // #39 v3 (PAGE-accurate): orig loc_14396 writes to ABSOLUTE page bytes -
+        // inverse LUT_PAGE_ROW: 0x2ADC/0x70BC == world row 62 of the role-value
+        // 0x00 / 0x34 pages; the STOSBs zero the head + everything else incl.
+        // the whole 0x68 page. The previous screen-space fix read vp at opcode
+        // time and diverged between grooves (#39). Now the pages get the
+        // picture at the fixed world row and the shown window does the rest.
+        v2_emu_op13_text_menu(v2_current_ds_val, v2_hud_buf);
+        // Clear HUD area (= orig STOSB di=0..0x2ADC head part)
         memset(v2_hud_buf, 0, 320 * 64);
-        // 4. Refresh chunk_bg backup so per-frame restore in v2_draw_tiles preserves
-        //    new static state (HUD picture at top + cleared bottom). Without this,
-        //    next frame restore would bring back vikings from old chunk_bg.
-        v2_chunk_bg_update_from_render();
     } else if (al == 0x01) {
         // Orig sub_1434c loc_143eb → JMP loc_10E35: GAME EXIT.
         // loc_10E35 (eip 0x0E35) frees all DOS memory blocks (5× INT 21h 0x4900),
