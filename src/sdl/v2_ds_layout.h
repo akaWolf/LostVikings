@@ -143,6 +143,7 @@ constexpr uint16_t OBJ_ANIM_CONT     = 0x1A5D; // per-object save of DS_ANIM_CON
 constexpr uint16_t OBJ_SUB_SLOT      = 0x1A85; // first sub-sprite slot
 constexpr uint16_t OBJ_SUB_END       = 0x1AAD; // sub-sprite slot end (exclusive)
 constexpr uint16_t OBJ_SUB_COUNT     = 0x1AD5; // sub-sprite count (0 = none; flip-loop gate)
+constexpr uint16_t OBJ_SUB_ANIM_PTR  = 0x1AFD; // sub-sprite anim pointer (verify-watch; no direct orig reader)
 constexpr uint16_t OBJ_PARTNER       = 0x1995; // partner/link slot (indexed_1995 addressing base)
 constexpr uint16_t OBJ_VEL_X         = 0x1945; // X velocity (sub_15517 clears)
 constexpr uint16_t OBJ_VEL_Y         = 0x196D; // Y velocity

@@ -8175,7 +8175,7 @@ static const uint16_t v2_psnap_watch[] = {
     OBJ_VEL_X_MAX,  // anim variation
     OBJ_VEL_Y_MAX,  // anim variation 2
     OBJ_PARTNER,  // sub-object pointer
-    0x1AFD,  // sub-sprite anim ptr
+    OBJ_SUB_ANIM_PTR,  // sub-sprite anim ptr
     DS_SPRITE_RES_BASE,  // template pointer
     0x1235,  // anim seg ref
     0x125D,  // anim chunk ref
