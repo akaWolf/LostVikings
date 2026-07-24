@@ -1614,6 +1614,37 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
 // Flip flags (bits 4,5) affect screen position, not data/mask indexing.
 // Uses jpt_1c9b1 (no flip), jpt_1caa7 (hflip), jpt_1cba1 (vflip), jpt_1cc9b (both).
 // ============================================================================
+
+// Render one 8x8 map tile with its per-plane transparency mask to `buf` at
+// screen (screen_x, screen_y). v2_put_pixel applies the emu-page blit
+// translation (v2_pp_dx/dy/pitch) when a page is the target. Shared by
+// v2_draw_flagged_tiles and the dirty channel (v2_masked_tile_1C939) so both
+// decode identically (orig sub_1C939 jpt_1c9b1/caa7/cba1/cc9b flip dispatch).
+static void v2_render_tile_masked(uint8_t* buf, const uint8_t* tgfx_base,
+                                  const uint8_t* gs_base, uint16_t tile_entry,
+                                  int screen_x, int screen_y) {
+    uint16_t tile_gfx_off = tile_entry & 0xFFC0;
+    bool hflip = (tile_entry & 0x10) != 0;
+    bool vflip = (tile_entry & 0x20) != 0;
+    const uint8_t* tile = tgfx_base + tile_gfx_off;
+    const uint8_t* mask_data = gs_base + (tile_gfx_off >> 3);
+    for (int ty = 0; ty < 8; ty++) {
+        int sy = screen_y + (vflip ? 7 - ty : ty);
+        for (int tx = 0; tx < 8; tx++) {
+            int sx = screen_x + (hflip ? 7 - tx : tx);
+            int plane = tx & 3;       // tx % 4
+            int byte_idx = tx >> 2;   // tx / 4 (0 or 1)
+            int strip = ty >> 2;      // ty / 4 (0 or 1)
+            int row = ty & 3;         // ty % 4
+            int mb = plane * 2 + strip;
+            int mbit = 7 - (row * 2 + byte_idx);
+            if (!(mask_data[mb] & (1 << mbit))) continue;
+            uint8_t color = tile[plane * 16 + strip * 8 + row * 2 + byte_idx];
+            v2_put_pixel(buf, sx, sy, color);
+        }
+    }
+}
+
 void v2_draw_flagged_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -1700,44 +1731,8 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
             // tiles every frame — only check bit 3.
             if (!(tile_entry & 8)) continue;
 
-            uint16_t tile_gfx_off = tile_entry & 0xFFC0;
-            bool hflip = (tile_entry & 0x10) != 0;
-            bool vflip = (tile_entry & 0x20) != 0;
-
-            uint8_t* tile = tgfx_base + tile_gfx_off;
-
-            uint16_t mask_off = tile_gfx_off >> 3;
-            uint8_t* mask_data = gs_base + mask_off;
-
-            int screen_x = col_vis * 8 - pix_off_x;
-            int screen_y = row_vis * 8 - pix_off_y;
-
-            // For each pixel in the 8×8 tile, check mask and draw if set
-            // (v2_put_pixel: honors the emu-page blit translation when the
-            // flagged pass targets a page).
-            for (int ty = 0; ty < 8; ty++) {
-                int sy = screen_y + (vflip ? 7 - ty : ty);
-
-                for (int tx = 0; tx < 8; tx++) {
-                    int sx = screen_x + (hflip ? 7 - tx : tx);
-
-                    // Tile data layout: plane*16 + strip*8 + row*2 + byte
-                    int plane = tx & 3;       // tx % 4
-                    int byte_idx = tx >> 2;   // tx / 4 (0 or 1)
-                    int strip = ty >> 2;      // ty / 4 (0 or 1)
-                    int row = ty & 3;         // ty % 4
-
-                    // Mask: byte index = plane*2 + strip
-                    //        bit = 7 - (row*2 + byte_idx)
-                    int mb = plane * 2 + strip;
-                    int mbit = 7 - (row * 2 + byte_idx);
-                    if (!(mask_data[mb] & (1 << mbit))) continue;
-
-                    // Pixel color from tile data
-                    uint8_t color = tile[plane * 16 + strip * 8 + row * 2 + byte_idx];
-                    v2_put_pixel(buf, sx, sy, color);
-                }
-            }
+            v2_render_tile_masked(buf, tgfx_base, gs_base, tile_entry,
+                                  col_vis * 8 - pix_off_x, row_vis * 8 - pix_off_y);
         }
     }
 }
