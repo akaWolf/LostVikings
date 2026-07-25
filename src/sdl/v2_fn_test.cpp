@@ -291,6 +291,19 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_142C1 = 156, FT_SUB_142D3 = 157, FT_SUB_142DC = 158,
             FT_SUB_142FC = 159, FT_SUB_1431C = 160, FT_SUB_14327 = 161,
             FT_SUB_14334 = 162, FT_SUB_14340 = 163, FT_SUB_141F6 = 164,
+            // Table wave 2: anim-load/timer/search-wrapper handlers.
+            FT_SUB_143F2 = 165, FT_SUB_143FE = 166, FT_SUB_14409 = 167,
+            FT_SUB_14428 = 168, FT_SUB_1443D = 169, FT_SUB_1444F = 170,
+            FT_SUB_14453 = 171, FT_SUB_14469 = 172, FT_SUB_1446D = 173,
+            FT_SUB_14483 = 174, FT_SUB_14487 = 175, FT_SUB_144A9 = 176,
+            FT_SUB_144AD = 177,
+            // Table wave 3: front/163ac probes, palette fade setters, sub-
+            // sprite flag sweeps, accumulator loads.
+            FT_SUB_144CF = 178, FT_SUB_144D3 = 179, FT_SUB_144FD = 180,
+            FT_SUB_14501 = 181, FT_SUB_14532 = 182, FT_SUB_14561 = 183,
+            FT_SUB_14590 = 184, FT_SUB_145B5 = 185, FT_SUB_145DA = 186,
+            FT_SUB_145E5 = 187, FT_SUB_14604 = 188, FT_SUB_14624 = 189,
+            FT_SUB_1462E = 190,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -371,7 +384,17 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_142b7", "sub_142c0", "sub_142cf",
                                  "sub_142c1", "sub_142d3", "sub_142dc",
                                  "sub_142fc", "sub_1431c", "sub_14327",
-                                 "sub_14334", "sub_14340", "sub_141f6" };
+                                 "sub_14334", "sub_14340", "sub_141f6",
+                                 "sub_143f2", "sub_143fe", "sub_14409",
+                                 "sub_14428", "sub_1443d", "sub_1444f",
+                                 "sub_14453", "sub_14469", "sub_1446d",
+                                 "sub_14483", "sub_14487", "sub_144a9",
+                                 "sub_144ad",
+                                 "sub_144cf", "sub_144d3", "sub_144fd",
+                                 "sub_14501", "sub_14532", "sub_14561",
+                                 "sub_14590", "sub_145b5", "sub_145da",
+                                 "sub_145e5", "sub_14604", "sub_14624",
+                                 "sub_1462e" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -7762,6 +7785,111 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
     case FT_SUB_141F6:                  // op 47: nullsub
         { static const uint8_t c[] = {0x47, 0x00}; A(c, 2, O, "grid"); }
         fuzz_op = 0x47; fuzz_alen = 1; break;
+    // ---- wave 2 ----
+    case FT_SUB_143F2:                  // op 17: [141D]=0 + anim-byte tail (loc_14415)
+        { static const uint8_t c[] = {0x17, 0x02, 0x00}; A(c, 3, O, "grid"); }
+        fuzz_op = 0x17; fuzz_alen = 2; break;
+    case FT_SUB_143FE:                  // op 1B: GLOBAL ds:141D = [42] + anim tail
+        { static const uint8_t c[] = {0x1B, 0x02, 0x00}; A(c, 3, O, "grid"); }
+        fuzz_op = 0x1B; fuzz_alen = 2; break;
+    case FT_SUB_14409: {                // op 18: [141D]=[1995] + anim tail
+        FtWr wr[] = { { (uint16_t)(si + 0x1995), 2 } };
+        static const uint8_t c[] = {0x18, 0x02, 0x00};
+        A(c, 3, O, "grid", wr, 1);
+        fuzz_op = 0x18; fuzz_alen = 2; break;
+    }
+    case FT_SUB_14428:                  // op 19: [1A0D]=word arg; [1A35]=1
+        { static const uint8_t c[] = {0x19, 0x34, 0x12, 0x00}; A(c, 4, O, "grid"); }
+        fuzz_op = 0x19; fuzz_alen = 3; break;
+    case FT_SUB_1443D: {                // op 1C: [1A35]!=0 -> skip 2; ==0 -> jump
+        uint16_t t = FT_VM_PC + 0x40;
+        uint8_t c[] = {0x1C, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
+        FtWr wr0[] = { { (uint16_t)(si + 0x1A35), 0 } };
+        A(c, 4, O, "grid", wr0, 1);     // timer 0 -> jump
+        FtWr wr1[] = { { (uint16_t)(si + 0x1A35), 3 } };
+        A(c, 4, O, "grid", wr1, 1);     // timer set -> skip
+        fuzz_op = 0x1C; fuzz_alen = 2; fuzz_target_arg = true; break;
+    }
+    case FT_SUB_1444F: case FT_SUB_14453:       // ops 1E/22: up-probe + 30C8E branch
+    case FT_SUB_14469: case FT_SUB_1446D:       // ops 1F/23: down-probe
+    case FT_SUB_14483: case FT_SUB_14487:       // ops 21/25: flip-paired probes
+    case FT_SUB_144A9: case FT_SUB_144AD: {     // ops 20/24
+        uint8_t op = (id == FT_SUB_1444F) ? 0x1E : (id == FT_SUB_14453) ? 0x22
+                   : (id == FT_SUB_14469) ? 0x1F : (id == FT_SUB_1446D) ? 0x23
+                   : (id == FT_SUB_14483) ? 0x21 : (id == FT_SUB_14487) ? 0x25
+                   : (id == FT_SUB_144A9) ? 0x20 : 0x24;
+        uint16_t t = FT_VM_PC + 0x40;
+        uint8_t c[] = {op, 0x03, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
+        A(c, 5, O, "grid");                          // plain (flags w/o 0x40)
+        FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
+        A(c, 5, o2, "grid");                         // hflip pairing
+        fuzz_op = op; fuzz_alen = 3; break;
+    }
+    // ---- wave 3 ----
+    case FT_SUB_144CF: case FT_SUB_144D3: {     // ops 30/31: front-probe 158e6
+        uint8_t op = (id == FT_SUB_144CF) ? 0x30 : 0x31;
+        uint16_t t = FT_VM_PC + 0x40;
+        uint8_t c[] = {op, 0x03, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
+        A(c, 5, O, "grid");
+        FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
+        A(c, 5, o2, "grid");
+        fuzz_op = op; fuzz_alen = 3; break;
+    }
+    case FT_SUB_144FD: case FT_SUB_14501: {     // ops 4E/4F: 163ac 3-level probe
+        uint8_t op = (id == FT_SUB_144FD) ? 0x4E : 0x4F;
+        uint16_t t = FT_VM_PC + 0x40;
+        uint8_t c[] = {op, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
+        A(c, 4, O, "grid");
+        fuzz_op = op; fuzz_alen = 2; fuzz_target_arg = true; break;
+    }
+    case FT_SUB_14532: {                // op 3D: fade-in RGB (342-344, 7EFD|=1, 10e99)
+        static const uint8_t c[] = {0x3D, 0x10, 0x20, 0x30, 0x00};
+        A(c, 5, O, "grid");
+        fuzz_op = 0x3D; fuzz_alen = 4; break;
+    }
+    case FT_SUB_14561: {                // op 4C: fade-in RGB (345-347, 7EFD|=2)
+        static const uint8_t c[] = {0x4C, 0x10, 0x20, 0x30, 0x00};
+        A(c, 5, O, "grid");
+        fuzz_op = 0x4C; fuzz_alen = 4; break;
+    }
+    case FT_SUB_14590: {                // op 3E: fade-out (342-344=0, AND 7EFD,FE)
+        static const uint8_t c[] = {0x3E, 0x00};
+        A(c, 2, O, "grid");
+        FtWr wr[] = { { 0x7EFD, 0x0003 } };   // other bit set -> JNZ skips 7F00
+        A(c, 2, O, "grid", wr, 1);
+        fuzz_op = 0x3E; fuzz_alen = 1; break;
+    }
+    case FT_SUB_145B5: {                // op 4D: fade-out (345-347=0, AND 7EFD,FD)
+        static const uint8_t c[] = {0x4D, 0x00};
+        A(c, 2, O, "grid");
+        FtWr wr[] = { { 0x7EFD, 0x0003 } };
+        A(c, 2, O, "grid", wr, 1);
+        fuzz_op = 0x4D; fuzz_alen = 1; break;
+    }
+    case FT_SUB_145DA:                  // op 39: dead reads, skip 3 bytes
+        { static const uint8_t c[] = {0x39, 0x11, 0x22, 0x33, 0x00}; A(c, 5, O, "grid"); }
+        fuzz_op = 0x39; fuzz_alen = 4; break;
+    case FT_SUB_145E5: case FT_SUB_14604: {     // ops 3F/40: sub-sprite flag sweeps
+        uint8_t op = (id == FT_SUB_145E5) ? 0x3F : 0x40;
+        uint8_t c[] = {op, 0x00};
+        FtWr wr[] = { { (uint16_t)(si + OBJ_SUB_SLOT), 0x48 },
+                      { (uint16_t)(si + OBJ_SUB_END), 0x4C } };
+        A(c, 2, O, "grid", wr, 2);
+        FtWr wr2[] = { { (uint16_t)(si + OBJ_SUB_SLOT), 0x50 },
+                       { (uint16_t)(si + OBJ_SUB_END), 0x50 } };  // empty window: do-while 1 slot
+        A(c, 2, O, "grid", wr2, 2);
+        fuzz_op = op; fuzz_alen = 1; break;
+    }
+    case FT_SUB_14624:                  // op 51: acc = word arg
+        { static const uint8_t c[] = {0x51, 0x34, 0x12, 0x00}; A(c, 4, O, "grid"); }
+        fuzz_op = 0x51; fuzz_alen = 3; break;
+    case FT_SUB_1462E: {                // op 52: acc = [LUT2[idx] + [42] + 14E5]
+        static const uint8_t c[] = {0x52, 0x00, 0x00};
+        A(c, 3, O, "grid");
+        static const uint8_t c2[] = {0x52, 0x05, 0x00};
+        A(c2, 3, O, "grid");
+        fuzz_op = 0x52; fuzz_alen = 2; break;
+    }
     default: return 1;
     }
     for (int i = 0; i < 300; i++) {
@@ -9058,6 +9186,32 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_14334")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14334, 0x14334001u); }
     if (all || strstr(env, "sub_14340")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14340, 0x14340001u); }
     if (all || strstr(env, "sub_141f6")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_141F6, 0x141F6001u); }
+    if (all || strstr(env, "sub_143f2")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_143F2, 0x143F2001u); }
+    if (all || strstr(env, "sub_143fe")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_143FE, 0x143FE001u); }
+    if (all || strstr(env, "sub_14409")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14409, 0x14409001u); }
+    if (all || strstr(env, "sub_14428")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14428, 0x14428001u); }
+    if (all || strstr(env, "sub_1443d")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1443D, 0x1443D001u); }
+    if (all || strstr(env, "sub_1444f")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1444F, 0x1444F001u); }
+    if (all || strstr(env, "sub_14453")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14453, 0x14453001u); }
+    if (all || strstr(env, "sub_14469")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14469, 0x14469001u); }
+    if (all || strstr(env, "sub_1446d")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1446D, 0x1446D001u); }
+    if (all || strstr(env, "sub_14483")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14483, 0x14483001u); }
+    if (all || strstr(env, "sub_14487")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14487, 0x14487001u); }
+    if (all || strstr(env, "sub_144a9")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_144A9, 0x144A9001u); }
+    if (all || strstr(env, "sub_144ad")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_144AD, 0x144AD001u); }
+    if (all || strstr(env, "sub_144cf")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_144CF, 0x144CF001u); }
+    if (all || strstr(env, "sub_144d3")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_144D3, 0x144D3001u); }
+    if (all || strstr(env, "sub_144fd")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_144FD, 0x144FD001u); }
+    if (all || strstr(env, "sub_14501")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14501, 0x14501001u); }
+    if (all || strstr(env, "sub_14532")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14532, 0x14532001u); }
+    if (all || strstr(env, "sub_14561")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14561, 0x14561001u); }
+    if (all || strstr(env, "sub_14590")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14590, 0x14590001u); }
+    if (all || strstr(env, "sub_145b5")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_145B5, 0x145B5001u); }
+    if (all || strstr(env, "sub_145da")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_145DA, 0x145DA001u); }
+    if (all || strstr(env, "sub_145e5")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_145E5, 0x145E5001u); }
+    if (all || strstr(env, "sub_14604")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14604, 0x14604001u); }
+    if (all || strstr(env, "sub_14624")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14624, 0x14624001u); }
+    if (all || strstr(env, "sub_1462e")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1462E, 0x1462E001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
