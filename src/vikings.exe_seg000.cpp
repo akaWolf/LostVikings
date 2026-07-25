@@ -182,6 +182,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 106: return (void*)&sub_15403;  // bit test: self field
     case 107: return (void*)&sub_1542a;  // bit test: ds:[addr]
     case 108: return (void*)&sub_15445;  // bit test: partner field
+    case 109: return (void*)&sub_15473;  // getter dispatch (ax & 7)
+    case 110: return (void*)&sub_15470;  // getter dispatch (SHR ax,3 first)
+    case 111: return (void*)&sub_154bf;  // setter dispatch (value = pushed SI)
     default: return 0;
     }
 }

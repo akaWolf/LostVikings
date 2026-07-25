@@ -12333,6 +12333,53 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Units 110-112: sub_15473 / sub_15470 (getter dispatch) / sub_154bf (setter).
+static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode, uint16_t site_ret_ip, bool* out_interrupt);
+static void v2_vm_setter_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode);
+extern "C" int32_t v2_fntest_call_getter(uint8_t* test_shadow, uint16_t pc, uint16_t ax_mode, int shr3) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_resolve_segment(0x4000, test_shadow);
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = *(uint16_t*)(test_shadow + DS_CUR_OBJ);
+    vm.pc = pc; vm.running = true;
+    uint8_t mode = (uint8_t)((shr3 ? (ax_mode >> 3) : ax_mode) & 7);
+    bool intr = false;
+    uint16_t ax = v2_vm_dispatch_30C98(vm, mode, 0xFFF0, &intr);
+    int32_t out = ((int32_t)vm.pc << 1) | (intr ? 1 : 0);
+    out = (out << 16) | ax;
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+    return out;
+}
+extern "C" int32_t v2_fntest_call_setter(uint8_t* test_shadow, uint16_t pc, uint16_t value, uint16_t ax_mode) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_resolve_segment(0x4000, test_shadow);
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = *(uint16_t*)(test_shadow + DS_CUR_OBJ);
+    vm.pc = pc; vm.running = true;
+    v2_vm_setter_154bf(vm, value, (uint8_t)(ax_mode & 7));
+    int32_t out = (int32_t)vm.pc;
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+    return out;
+}
+
 // Units 106-109: bit-test core family wrappers.
 static int32_t v2_fntest_bittest_common(uint8_t* test_shadow, uint16_t pc, int which) {
     uint8_t* saved_acc = v2_vm_acc_base;
