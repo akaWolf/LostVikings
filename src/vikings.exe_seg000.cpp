@@ -176,6 +176,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 100: return (void*)&sub_157eb;  // up collision op (15911/15972 | 15c93/15da8)
     case 101: return (void*)&sub_16235;  // collision partner stash [(di<<4)+38E+1B25]=si
     case 102: return (void*)&sub_16243;  // collision partner fetch ax=[(di<<4)+38E+1B25]
+    case 103: return (void*)&sub_16390;  // slope height diff (LUT 0x897C zone)
     default: return 0;
     }
 }

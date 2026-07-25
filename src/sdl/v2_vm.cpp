@@ -12317,6 +12317,18 @@ static int v2_fntest_coll_check_common(uint8_t* test_shadow, uint16_t pc, bool d
     v2_vm_acc_base = saved_acc;
     return out;
 }
+// sub_16390 (seg000 eips 0x6390..0x63AB): slope height diff.
+// idx = ((tile&0xF)<<4) | (x&0xF); sv = ds:[idx-0x7684] & 0xF;
+// return ([di+150D]&0xF) - sv (true difference in AX).
+static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x_si, uint16_t di) {
+    uint16_t sidx = (uint16_t)(((tile_ax & 0xF) << 4) + (x_si & 0xF));
+    uint8_t sv = shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
+    return (int16_t)((*(uint16_t*)(shadow + (uint16_t)(di + OBJ_BBOX_Y1)) & 0xF) - sv);
+}
+// Unit 104: sub_16390 wrapper.
+extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
+    return v2_slope_diff_16390(test_shadow, ax, si, di);
+}
 // Units 102-103: sub_16235 (partner stash) / sub_16243 (partner fetch).
 extern "C" void v2_fntest_call_sub_16235(uint8_t* test_shadow, uint16_t si, uint16_t di) {
     uint16_t addr = (uint16_t)((uint16_t)(di << 4) + *(uint16_t*)(test_shadow + 0x38E) + 0x1B25);
@@ -12765,11 +12777,9 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
                     uint16_t temp = (tt2 & 0xFFF0) - 1;
                     selfA.w16(OBJ_BBOX_Y1, temp);
                     uint16_t slope_tt = vm.ds_read(DS_SCRATCH_3A);
-                    uint16_t sidx = ((slope_tt & 0xF) << 4) + (obj_x & 0xF);
-                    uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
-                    int16_t sr = (int16_t)((temp & 0xF) - sv);
-                    if (dbg) fprintf(stderr, "  saved=%04X temp=%04X slope_tt=%02X sidx=%04X sv=%02X sr=%d\n",
-                        saved, temp, slope_tt, sidx, sv, sr);
+                    int16_t sr = v2_slope_diff_16390(vm.shadow, slope_tt, obj_x, (uint16_t)vm.obj);
+                    if (dbg) fprintf(stderr, "  saved=%04X temp=%04X slope_tt=%02X sr=%d\n",
+                        saved, temp, slope_tt, sr);
                     if (sr >= 0) {
                         // Orig eip 0x5B72: MOV ds:32h, ax (=sr from sub_16390) — used at eip 0x5B7D ADD ax, ds:32h.
                         vm.ds_write(DS_MODE_WORD, (uint16_t)sr);
@@ -12803,10 +12813,8 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
             uint16_t tt3 = (v2_vm_tile_read_141ba(vm, obj_x >> 4, cur_y >> 4) & 0xFC00) >> 10;
             if (dbg) fprintf(stderr, "  loc_15b88: cur_y=%04X tt3=%02X\n", cur_y, tt3);
             if (tt3 >= 0x30) {
-                uint16_t sidx = ((tt3 & 0xF) << 4) + (obj_x & 0xF);
-                uint8_t sv = vm.shadow[(uint16_t)(sidx - 0x7684)] & 0xF;
-                int16_t sr = (int16_t)((cur_y & 0xF) - sv);
-                if (dbg) fprintf(stderr, "    sidx=%04X sv=%02X sr=%d\n", sidx, sv, sr);
+                int16_t sr = v2_slope_diff_16390(vm.shadow, tt3, obj_x, di);
+                if (dbg) fprintf(stderr, "    sr=%d\n", sr);
                 if (sr >= 0) { tile_ax = (int16_t)((uint16_t)sr | 0x8000); tile_found = true;
                     if (dbg) fprintf(stderr, "    PATH=B tile_ax=%04X\n", (uint16_t)tile_ax);
                 } else {
