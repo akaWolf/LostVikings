@@ -6122,12 +6122,22 @@ void v2_flipring_dump(void) {
 // previous object's exit di / the priority-loop counter at sub_14207.
 static uint16_t v2_vm_di_track = 0;
 
+// sub_15517 (eip 0x5517-0x552F): clear X/Y velocity for all objects.
+// Orig is a do-while (MOV si,[372]; SUB si,2; body; SUB si,2; JNS body):
+// the FIRST slot is written unconditionally — with [372]=0 the body runs
+// once at si=0xFFFE, wrapping the field addresses to 0x1943/0x196B
+// (divergence #30, same class as #29).
+static void v2_clear_velocities_15517(uint8_t* ds) {
+    uint16_t si = (uint16_t)(*(uint16_t*)(ds + DS_OBJ_COUNT) - 2);
+    do {
+        *(uint16_t*)(ds + (uint16_t)(si + OBJ_VEL_X)) = 0;
+        *(uint16_t*)(ds + (uint16_t)(si + OBJ_VEL_Y)) = 0;
+        si = (uint16_t)(si - 2);
+    } while (!(si & 0x8000));   // JNS: repeat while the new si has bit 15 clear
+}
+
 static void v2_vm_pass_14207_init(uint8_t* ds) {
-    // sub_15517 (eip 0x5517-0x552F): clear X/Y velocity for all objects
-    for (int16_t si = (int16_t)*(uint16_t*)(ds + DS_OBJ_COUNT) - 2; si >= 0; si -= 2) {
-        *(uint16_t*)(ds + si + OBJ_VEL_X) = 0;  // X velocity
-        *(uint16_t*)(ds + si + OBJ_VEL_Y) = 0;  // Y velocity
-    }
+    v2_clear_velocities_15517(ds);
     *(uint16_t*)(ds + 0x376) = 0;  // word_28856 = 0 (priority count)
     *(uint16_t*)(ds + 0x390) = 0;  // word_28870 = 0 (collision flag)
 }
@@ -12239,6 +12249,17 @@ extern "C" void v2_fntest_call_sub_1592d(uint8_t* test_shadow, uint16_t ax, uint
     vm.ds = test_shadow; vm.shadow = test_shadow;
     vm.obj = di;
     v2_vm_xsnap_1592d(vm, di, ax);
+}
+// Units 92-93: sub_15505 (resource deduct) / sub_15517 (velocity clear).
+static void v2_vm_res_deduct_15505(V2VM& vm, uint16_t si, uint16_t di);
+static void v2_clear_velocities_15517(uint8_t* ds);
+extern "C" void v2_fntest_call_sub_15505(uint8_t* test_shadow, uint16_t si, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    v2_vm_res_deduct_15505(vm, si, di);
+}
+extern "C" void v2_fntest_call_sub_15517(uint8_t* test_shadow) {
+    v2_clear_velocities_15517(test_shadow);
 }
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
 extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_spawn_table_end_11383(test_shadow); }

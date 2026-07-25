@@ -115,6 +115,8 @@ extern "C" int      v2_fntest_call_sub_15fbe(uint8_t* test_shadow, uint16_t filt
 extern "C" int      v2_fntest_call_sub_1603e(uint8_t* test_shadow, uint16_t filter, uint16_t di);
 extern "C" int32_t  v2_fntest_call_sub_158f5(uint8_t* test_shadow, uint16_t filter, uint16_t di);
 extern "C" void     v2_fntest_call_sub_1592d(uint8_t* test_shadow, uint16_t ax, uint16_t di);
+extern "C" void     v2_fntest_call_sub_15505(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" void     v2_fntest_call_sub_15517(uint8_t* test_shadow);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -197,6 +199,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_159C6 = 84, FT_SUB_159D3 = 85, FT_SUB_159DF = 86,
             FT_SUB_15A57 = 87, FT_SUB_15AC4 = 88,
             FT_SUB_158F5 = 89, FT_SUB_1592D = 90,
+            FT_SUB_15505 = 91, FT_SUB_15517 = 92,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -244,7 +247,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_160cf", "sub_15ae9", "sub_1589b",
                                  "sub_159c6", "sub_159d3", "sub_159df",
                                  "sub_15a57", "sub_15ac4",
-                                 "sub_158f5", "sub_1592d" };
+                                 "sub_158f5", "sub_1592d",
+                                 "sub_15505", "sub_15517" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -4688,6 +4692,67 @@ int ft_selftest_sub_1592d(uint32_t seed) {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 92-93: sub_15505 (resource deduct) / sub_15517 (vel clear) -----
+int ft_selftest_sub_15505(uint32_t seed) {
+    FtSynthStats exh, fuzz;
+    long diff_budget = 24;
+    const uint16_t si = 4, di = 8;
+    auto run1 = [&](uint16_t a, uint16_t b, const char* group, FtSynthStats& st) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_RES_HANDLE), a);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_RES_COST),   b);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_15505(g_scratch, si, di);
+        FtRegs in{}; in.si = si; in.di = di;
+        ft_synth_case_regs(FT_SUB_15505, in, 0, -1, group, st, diff_budget);
+    };
+    // exhaustive a-axis at borrow-edge costs, plus the full b-axis at fixed a
+    static const uint16_t COSTS[] = { 0, 1, 0x8000, 0xFFFF };
+    for (uint16_t b : COSTS)
+        for (uint32_t a = 0; a <= 0xFFFF; a += 7)   // step-7 lattice x4 costs
+            run1((uint16_t)a, b, "exh", exh);
+    for (uint32_t b = 0; b <= 0xFFFF; b++)
+        run1(0x8000, (uint16_t)b, "exh", exh);
+    FtRng rng(seed);
+    for (int i = 0; i < 20000; i++) run1(rng.w(), rng.w(), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_15505]: exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        exh.pass, exh.cases, fuzz.pass, fuzz.cases, exh.cases + fuzz.cases,
+        exh.fail + fuzz.fail, (exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+int ft_selftest_sub_15517(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    auto run1 = [&](uint16_t te, const char* group, FtSynthStats& st) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, te);
+        // canaries in the wrap zone hit by the [372]=0 first-slot write
+        ft_wr16(g_synth_in, 0x1943, 0xBBBB);
+        ft_wr16(g_synth_in, 0x196B, 0xBBBB);
+        for (uint16_t s = 0; s < 12; s += 2) {
+            ft_wr16(g_synth_in, (uint16_t)(s + OBJ_VEL_X), 0xCCCC);
+            ft_wr16(g_synth_in, (uint16_t)(s + OBJ_VEL_Y), 0xCCCC);
+        }
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_15517(g_scratch);
+        FtRegs in{};
+        ft_synth_case_regs(FT_SUB_15517, in, 0, -1, group, st, diff_budget);
+    };
+    static const uint16_t TE[] = { 0, 2, 4, 8, 12, 1, 3 };   // odd te: wrap lattice
+    for (uint16_t te : TE) run1(te, "grid", grid);
+    FtRng rng(seed);
+    for (int i = 0; i < 200; i++) run1((uint16_t)(rng.next() % 16), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_15517]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -5805,6 +5870,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15ac4")) { matched = true; rc |= ft_selftest_tilewalk(FT_SUB_15AC4, 0x15AC4001u); }
     if (all || strstr(env, "sub_158f5")) { matched = true; rc |= ft_selftest_sub_158f5(0x158F5001u); }
     if (all || strstr(env, "sub_1592d")) { matched = true; rc |= ft_selftest_sub_1592d(0x1592D001u); }
+    if (all || strstr(env, "sub_15505")) { matched = true; rc |= ft_selftest_sub_15505(0x15505001u); }
+    if (all || strstr(env, "sub_15517")) { matched = true; rc |= ft_selftest_sub_15517(0x15517001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

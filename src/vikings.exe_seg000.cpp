@@ -164,6 +164,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 88: return (void*)&sub_15ac4;   // flip-aware single-point tile probe
     case 89: return (void*)&sub_158f5;   // X-dir tile-check dispatcher
     case 90: return (void*)&sub_1592d;   // X snap by direction
+    case 91: return (void*)&sub_15505;   // resource deduct (JB borrow -> wrap, else 0)
+    case 92: return (void*)&sub_15517;   // velocity clear sweep (do-while, JNS)
     default: return 0;
     }
 }
