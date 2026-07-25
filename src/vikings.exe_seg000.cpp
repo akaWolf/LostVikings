@@ -162,6 +162,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 86: return (void*)&sub_159df;   // tile X-walk (X_end+1 entry)
     case 87: return (void*)&sub_15a57;   // tile Y-walk (Y_start-1 entry)
     case 88: return (void*)&sub_15ac4;   // flip-aware single-point tile probe
+    case 89: return (void*)&sub_158f5;   // X-dir tile-check dispatcher
+    case 90: return (void*)&sub_1592d;   // X snap by direction
     default: return 0;
     }
 }

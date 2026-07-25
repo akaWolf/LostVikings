@@ -11170,6 +11170,49 @@ static bool v2_vm_tile_scan_x_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
     return false;
 }
 
+// sub_158f5 (seg000 eips 0x58F5..0x5910): X-direction tile-check dispatcher.
+// ax=[di+173D] (WORLD_X) vs [di+13A5] (prev X): JZ → CLC (ax keeps WORLD_X);
+// JL (moved left) → sub_159d3 (X-walk probe X_start), ax=1; JG (moved right)
+// → loc_159EC (X-walk probe X_end, no INC), ax=0. CF from the walk.
+static bool v2_vm_xdir_tile_check_158f5(V2VM& vm, uint16_t filter_si, uint16_t di,
+                                        int16_t& out_dir) {
+    ObjRef self{vm, di};
+    int16_t cur_x = self.world_x();
+    int16_t old_x = self.i16(OBJ_X_PREV);
+    if (cur_x == old_x) { out_dir = (int16_t)cur_x; return false; }   // JZ: CLC, ax=WORLD_X
+    if (cur_x < old_x) {
+        out_dir = 1;                                                   // MOV ax,1 (after CALL)
+        return v2_vm_tile_scan_x_159f6(vm, filter_si, di, self.u16(OBJ_BBOX_X0));
+    }
+    out_dir = 0;                                                       // MOV ax,0 (after CALL)
+    return v2_vm_tile_scan_x_159f6(vm, filter_si, di, self.u16(OBJ_BBOX_X1));
+}
+
+// sub_1592d (seg000 eips 0x592D..0x5971): X snap after a tile hit, by dir ax.
+// ax==0 (right): X1=(X1&0xFFF0)-1, delta=oldX1-newX1, [173D]-=delta,
+// [1535]-=delta, [19BD]=0. ax!=0 (left): X0=(X0|0xF)+1, delta=new-old,
+// [173D]+=delta, [155D]+=delta, [19BD]=0.
+static void v2_vm_xsnap_1592d(V2VM& vm, uint16_t di, uint16_t ax) {
+    ObjRef self{vm, di};
+    if (ax == 0) {
+        uint16_t x_end = self.u16(OBJ_BBOX_X1);
+        uint16_t snapped = (uint16_t)((x_end & 0xFFF0) - 1);
+        self.w16(OBJ_BBOX_X1, snapped);
+        uint16_t delta = (uint16_t)(x_end - snapped);
+        self.w16(OBJ_WORLD_X, (uint16_t)(self.u16(OBJ_WORLD_X) - delta));
+        self.w16(OBJ_BBOX_X0, (uint16_t)(self.u16(OBJ_BBOX_X0) - delta));
+        self.w16(OBJ_FRAC_X, 0);
+    } else {
+        uint16_t x_start = self.u16(OBJ_BBOX_X0);
+        uint16_t snapped = (uint16_t)((x_start | 0xF) + 1);
+        self.w16(OBJ_BBOX_X0, snapped);
+        uint16_t delta = (uint16_t)(snapped - x_start);
+        self.w16(OBJ_WORLD_X, (uint16_t)(self.u16(OBJ_WORLD_X) + delta));
+        self.w16(OBJ_BBOX_X1, (uint16_t)(self.u16(OBJ_BBOX_X1) + delta));
+        self.w16(OBJ_FRAC_X, 0);
+    }
+}
+
 // Entry points for loc_159f6:
 static bool v2_vm_tile_search_right_159df(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_X1) + 1);
@@ -12171,6 +12214,31 @@ extern "C" int v2_fntest_call_sub_1603e(uint8_t* test_shadow, uint16_t filter, u
     vm.shadow = test_shadow;
     vm.obj = di;
     return v2_vm_obj_probe_1603e(vm, filter, di) ? 1 : 0;
+}
+// Units 90-91: sub_158f5 (X-dir tile-check dispatcher) / sub_1592d (X snap).
+static bool v2_vm_xdir_tile_check_158f5(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& out_dir);
+static void v2_vm_xsnap_1592d(V2VM& vm, uint16_t di, uint16_t ax);
+extern "C" int32_t v2_fntest_call_sub_158f5(uint8_t* test_shadow, uint16_t filter, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = test_shadow;
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = di;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    int16_t dir = 0;
+    bool cf = v2_vm_xdir_tile_check_158f5(vm, filter, di, dir);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+    return ((int32_t)(uint16_t)dir << 1) | (cf ? 1 : 0);
+}
+extern "C" void v2_fntest_call_sub_1592d(uint8_t* test_shadow, uint16_t ax, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.obj = di;
+    v2_vm_xsnap_1592d(vm, di, ax);
 }
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
 extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_spawn_table_end_11383(test_shadow); }
@@ -16326,42 +16394,11 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     uint16_t filter_si = (uint16_t)filter; // si from bytecode
     bool found = false;
 
-    // sub_158f5: X direction tile check
+    // sub_158f5 (CF + ax=dir) → JC → sub_1592d (X snap by dir).
     {
-        int16_t cur_x = self.world_x();
-        int16_t old_x = self.i16(OBJ_X_PREV);
-        bool x_carry = false;
-        uint16_t x_dir = 0;
-        if (cur_x < old_x) {
-            // Moved left: sub_159d3 = vertical tile scan at X_start
-            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, self.u16(OBJ_BBOX_X0));
-            x_dir = 1;
-        } else if (cur_x > old_x) {
-            // Moved right: loc_159ec = vertical tile scan at X_end
-            x_carry = v2_vm_tile_search_x_159df_at(vm, filter_si, di, self.u16(OBJ_BBOX_X1));
-            x_dir = 0;
-        }
-        if (x_carry) {
-            // sub_1592d: X position snap based on direction
-            if (x_dir == 0) {
-                // Moved right: snap X_end to tile boundary
-                uint16_t x_end = self.u16(OBJ_BBOX_X1);
-                uint16_t snapped = (x_end & 0xFFF0) - 1;
-                self.w16(OBJ_BBOX_X1, snapped);
-                uint16_t delta = x_end - snapped;
-                self.w16(OBJ_WORLD_X, self.u16(OBJ_WORLD_X) - delta);
-                self.w16(OBJ_BBOX_X0, self.u16(OBJ_BBOX_X0) - delta);
-                self.w16(OBJ_FRAC_X, 0);
-            } else {
-                // Moved left: snap X_start to tile boundary
-                uint16_t x_start = self.u16(OBJ_BBOX_X0);
-                uint16_t snapped = (x_start | 0xF) + 1;
-                self.w16(OBJ_BBOX_X0, snapped);
-                uint16_t delta = snapped - x_start;
-                self.w16(OBJ_WORLD_X, self.u16(OBJ_WORLD_X) + delta);
-                self.w16(OBJ_BBOX_X1, self.u16(OBJ_BBOX_X1) + delta);
-                self.w16(OBJ_FRAC_X, 0);
-            }
+        int16_t x_dir = 0;
+        if (v2_vm_xdir_tile_check_158f5(vm, filter_si, di, x_dir)) {
+            v2_vm_xsnap_1592d(vm, di, (uint16_t)x_dir);
             found = true;
         }
     }

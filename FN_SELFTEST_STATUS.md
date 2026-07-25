@@ -317,6 +317,8 @@ anim 0x86E6/27 — юниты 25-26; zone_876E; dlg 0x2BA6 — класс E), 6 
 
 | 40 | `sub_159c6`+`sub_159d3`+`sub_159df`+`sub_15a57`+`sub_15ac4` | tile-walk entry-семейство (ядра loc_159f6 X-walk / loc_15a70 Y-walk / loc_15a93 точка) | probe: X0−1 / X0 (без DEC!) / X1+1 / Y0−1 / flip-точка(Y1+1); slope-предпроба (WORLD_X, clamp(Y1−vel)) ≥0x30 → CLC; клампы через истинную разность (int32-решение + wrapped-хранение); walk шаг 0x10, last-clamp; hit ds:3B2=тип-байт | 4 010 × 5 = grid 10 (hit первый/средний/последний шаг, off-stripe, clamp-пути, slope-kill, vel-сдвиги, SUB-wrap класс, flip) + fuzz 4 000 bounded (≤32 шагов walk) | **PASS, 0 диффов** (все пять) | exhaustive-полнота — от родителей 20-24 (полные 158xx-свипы через эти же ядра, шардированные); v2_vm_tile_probe_15ac4 экстрагирован из 158e6-инлайна (сайт → вызов); регрессия 158e6 75 542 + 158aa-шард PASS | (этот) |
 
+| 41 | `sub_158f5`+`sub_1592d` | X-dir диспетчер walk-ов + X-snap (пара 15911/15972-класса) | 158f5: [173D] vs [13A5]: JZ→CLC (**ax=WORLD_X**); JL→159d3(X0-walk) ax=1; JG→loc_159EC(X1-walk, БЕЗ INC) ax=0 — двухканальный чекер CF+AX; 1592d: ax==0: X1=(X1&FFF0)−1 + сдвиг [173D]/[1535], ax≠0: X0=(X0\|F)+1 + сдвиг [173D]/[155D]; [19BD]=0 (канарейка 0xAAAA) | 158f5: 4 008 (grid 8: JZ-wild-ax, обе walk-ветки on/off-stripe, знаковые JL/JG-края 0x7FFF/0x8000 + fuzz 4 000); 1592d: 151 094 (grid 22 + exhaustive **оба входа по 65536** + fuzz 20 000) | **PASS, 0 диффов** (оба) | экстрагированы из инлайнов v2_vm_collision_check_15788 (сайт → вызовы); vmops-регресс 21 975 fail=0 | (этот) |
+
 ## Как добавить функцию (конвейер)
 
 1. Прочитать orig asm построчно → контракт: читаемые/писаемые DS-поля,
