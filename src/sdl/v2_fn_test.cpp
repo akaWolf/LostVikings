@@ -285,6 +285,12 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_166E8 = 146, FT_SUB_16710 = 147, FT_SUB_16661 = 148,
             FT_SUB_1673C = 149, FT_SUB_1406D = 150,
             FT_SUB_13084 = 151, FT_SUB_135CF = 152,
+            // Table wave 1: op handler direct units (oracle = the 1424c
+            // dispatcher with the target opcode; no fnptr entries needed).
+            FT_SUB_142B7 = 153, FT_SUB_142C0 = 154, FT_SUB_142CF = 155,
+            FT_SUB_142C1 = 156, FT_SUB_142D3 = 157, FT_SUB_142DC = 158,
+            FT_SUB_142FC = 159, FT_SUB_1431C = 160, FT_SUB_14327 = 161,
+            FT_SUB_14334 = 162, FT_SUB_14340 = 163, FT_SUB_141F6 = 164,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -361,7 +367,11 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_14203", "sub_165aa",
                                  "sub_166e8", "sub_16710", "sub_16661",
                                  "sub_1673c", "sub_1406d",
-                                 "sub_13084", "sub_135cf" };
+                                 "sub_13084", "sub_135cf",
+                                 "sub_142b7", "sub_142c0", "sub_142cf",
+                                 "sub_142c1", "sub_142d3", "sub_142dc",
+                                 "sub_142fc", "sub_1431c", "sub_14327",
+                                 "sub_14334", "sub_14340", "sub_141f6" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -7656,6 +7666,128 @@ int ft_selftest_sub_135cf(uint32_t seed) {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Table wave 1 (units 154-165): op handlers 00/01/03/05/06/0D/0E/0F/10/
+// 11/12/47 — direct units over the vmop mechanics (oracle = 1424c dispatcher
+// running the target opcode; per-handler directed grids + light fuzz).
+int ft_selftest_op_unit(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    long opf = 0;
+    FtRng rng(seed);
+    FtVmObj O{};                        // baseline object
+    O.flags = 0x8000; O.anim = 3; O.timer = 0;
+    O.x = 0x120; O.y = 0x100; O.yvel = 0; O.ystart = 0x100; O.yend = 0x108;
+    const uint16_t si = 6;
+    auto A = [&](const uint8_t* code, int len, const FtVmObj& o,
+                 const char* tag, const FtWr* wr = nullptr, int nw = 0) {
+        ft_synth_case_vmop(code[0], code + 1, len - 1, o, rng.next(), tag,
+                           grid, diff_budget, &opf, wr, nw);
+    };
+    uint8_t fuzz_op = 0; int fuzz_alen = 0; bool fuzz_target_arg = false;
+    switch (id) {
+    case FT_SUB_142B7: {                // op 00: yield ([132D] = bx)
+        { static const uint8_t c[] = {0x00}; A(c, 1, O, "grid");
+          FtVmObj o2 = O; o2.timer = 5;   // timer path in the dispatcher prologue
+          A(c, 1, o2, "grid"); }
+        fuzz_op = 0x00; break;
+    }
+    case FT_SUB_142C0:                  // op 01: nop (plain RETN)
+        { static const uint8_t c[] = {0x01, 0x00}; A(c, 2, O, "grid"); }
+        fuzz_op = 0x01; fuzz_alen = 1; break;
+    case FT_SUB_142CF: {                // op 03: jump (bx = es:[bx])
+        uint16_t t = FT_VM_PC + 0x40;   // lands on the 00 carpet -> yield t+1
+        { uint8_t c[] = {0x03, (uint8_t)t, (uint8_t)(t >> 8)}; A(c, 3, O, "grid"); }
+        t = FT_VM_PC - 0x20;            // backward jump
+        { uint8_t c[] = {0x03, (uint8_t)t, (uint8_t)(t >> 8)}; A(c, 3, O, "grid"); }
+        fuzz_op = 0x03; fuzz_alen = 2; fuzz_target_arg = true; break;
+    }
+    case FT_SUB_142C1: {                // op 05: call ([137D]=pc+3, jump)
+        uint16_t t = FT_VM_PC + 0x40;
+        { uint8_t c[] = {0x05, (uint8_t)t, (uint8_t)(t >> 8)}; A(c, 3, O, "grid"); }
+        fuzz_op = 0x05; fuzz_alen = 2; fuzz_target_arg = true; break;
+    }
+    case FT_SUB_142D3: {                // op 06: ret (bx = [si+137D])
+        uint16_t t = FT_VM_PC + 0x30;
+        FtWr wr[] = { { (uint16_t)(si + 0x137D), t } };
+        { static const uint8_t c[] = {0x06}; A(c, 1, O, "grid", wr, 1); }
+        fuzz_op = 0x06; break;
+    }
+    case FT_SUB_142DC: {                // op 0D: clear kill bit ([16C5] index)
+        static const uint16_t IDX[] = { 0, 5, 7, 8, 15, 0x7FFF, 0x8000, 0xFFFF };
+        for (uint16_t ix : IDX) {
+            FtVmObj o2 = O; o2.anim = ix;   // JS gate on bit15
+            FtWr wr[] = { { 0x0356, 0xFFFF }, { 0x0358, 0xFFFF } };
+            static const uint8_t c[] = {0x0D, 0x00};
+            A(c, 2, o2, "grid", wr, 2);
+        }
+        fuzz_op = 0x0D; fuzz_alen = 1; break;
+    }
+    case FT_SUB_142FC: {                // op 0E: set kill bit
+        static const uint16_t IDX[] = { 0, 5, 7, 8, 15, 0x7FFF, 0x8000, 0xFFFF };
+        for (uint16_t ix : IDX) {
+            FtVmObj o2 = O; o2.anim = ix;
+            static const uint8_t c[] = {0x0E, 0x00};
+            A(c, 2, o2, "grid");
+        }
+        fuzz_op = 0x0E; fuzz_alen = 1; break;
+    }
+    case FT_SUB_1431C:                  // op 0F: exit + ds:334 |= 1
+        { static const uint8_t c[] = {0x0F}; A(c, 1, O, "grid"); }
+        fuzz_op = 0x0F; break;
+    case FT_SUB_14327: {                // op 10: despawn current (13c93 + tail)
+        { static const uint8_t c[] = {0x10}; A(c, 1, O, "grid");
+          FtVmObj o2 = O; o2.anim = 0xFFFF;   // no kill-bit write in the tail
+          A(c, 1, o2, "grid"); }
+        fuzz_op = 0x10; break;
+    }
+    case FT_SUB_14334: {                // op 11: self loses partner's cost
+        FtWr wr[] = { { (uint16_t)(si + 0x1995), 2 },
+                      { (uint16_t)(si + 0x15AD), 0x0030 },
+                      { (uint16_t)(2 + 0x15D5), 0x0010 } };
+        static const uint8_t c11[] = {0x11};
+        A(c11, 1, O, "grid", wr, 3);
+        FtWr wr2[] = { { (uint16_t)(si + 0x1995), 2 },
+                       { (uint16_t)(si + 0x15AD), 0x0008 },
+                       { (uint16_t)(2 + 0x15D5), 0x0010 } };   // borrow -> 0
+        A(c11, 1, O, "grid", wr2, 3);
+        fuzz_op = 0x11; break;
+    }
+    case FT_SUB_14340: {                // op 12: partner loses self's cost
+        FtWr wr[] = { { (uint16_t)(si + 0x1995), 2 },
+                      { (uint16_t)(2 + 0x15AD), 0x0030 },
+                      { (uint16_t)(si + 0x15D5), 0x0010 } };
+        { static const uint8_t c[] = {0x12}; A(c, 1, O, "grid", wr, 3); }
+        fuzz_op = 0x12; break;
+    }
+    case FT_SUB_141F6:                  // op 47: nullsub
+        { static const uint8_t c[] = {0x47, 0x00}; A(c, 2, O, "grid"); }
+        fuzz_op = 0x47; fuzz_alen = 1; break;
+    default: return 1;
+    }
+    for (int i = 0; i < 300; i++) {
+        FtVmObj o2;
+        o2.flags = rng.w(); o2.anim = rng.w(); o2.timer = (uint16_t)(rng.next() % 4);
+        o2.x = rng.w(); o2.y = rng.w(); o2.yvel = rng.w();
+        o2.ystart = rng.w(); o2.yend = rng.w();
+        uint8_t args[4] = { 0, 0, 0, 0 };
+        int n = fuzz_alen;
+        if (fuzz_target_arg) {
+            uint16_t t = (uint16_t)(FT_VM_PC + 8 + (rng.next() % 0x200));
+            args[0] = (uint8_t)t; args[1] = (uint8_t)(t >> 8); n = 2;
+        } else {
+            for (int j = 0; j < n; j++) args[j] = (uint8_t)rng.next();
+        }
+        ft_synth_case_vmop(fuzz_op, args, n, o2, rng.next(), "fuzz", fuzz,
+                           diff_budget, &opf);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -8914,6 +9046,18 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_1406d")) { matched = true; rc |= ft_selftest_sub_1406d(0x1406D001u); }
     if (all || strstr(env, "sub_13084")) { matched = true; rc |= ft_selftest_sub_13084(0x13084001u); }
     if (all || strstr(env, "sub_135cf")) { matched = true; rc |= ft_selftest_sub_135cf(0x135CF001u); }
+    if (all || strstr(env, "sub_142b7")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_142B7, 0x142B7001u); }
+    if (all || strstr(env, "sub_142c0")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_142C0, 0x142C0001u); }
+    if (all || strstr(env, "sub_142cf")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_142CF, 0x142CF001u); }
+    if (all || strstr(env, "sub_142c1")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_142C1, 0x142C1001u); }
+    if (all || strstr(env, "sub_142d3")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_142D3, 0x142D3001u); }
+    if (all || strstr(env, "sub_142dc")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_142DC, 0x142DC001u); }
+    if (all || strstr(env, "sub_142fc")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_142FC, 0x142FC001u); }
+    if (all || strstr(env, "sub_1431c")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1431C, 0x1431C001u); }
+    if (all || strstr(env, "sub_14327")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14327, 0x14327001u); }
+    if (all || strstr(env, "sub_14334")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14334, 0x14334001u); }
+    if (all || strstr(env, "sub_14340")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14340, 0x14340001u); }
+    if (all || strstr(env, "sub_141f6")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_141F6, 0x141F6001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

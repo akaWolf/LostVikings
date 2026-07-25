@@ -11743,52 +11743,21 @@ static void v2_despawn_13c93(V2VM& vm, uint16_t di) {
         vm.ds_write(DS_OBJ_COUNT, scan + 2);
     }
 
-    // 5. Check 0x16C5 bit flag (optional: calls sub_139ef + sub_13ae0)
-    // These modify ds:0x356 bit table — complex and rarely affects VM flow.
-    // We replicate the bit-clearing part for correctness:
-    if (ObjRef{vm, di}.u16(OBJ_ANIM_SUB) != 0xFFFF) {
-        uint16_t flags_1585 = ObjRef{vm, di}.u16(OBJ_FLAGS);
-        if (flags_1585 & 0x100) {
-            // loc_13cfc: sub_139ef (viewport bounds) + sub_13ae0 (re-spawn from table)
-            uint8_t* s = vm.shadow;   // == v2_vm_shadow_ds in combat; isolatable
-            // sub_139ef: set viewport bounds
-            uint16_t vx = *(uint16_t*)(s + DS_VIEWPORT_X) - 0x10;
-            *(uint16_t*)(s + DS_SCRATCH_34) = vx;
-            *(uint16_t*)(s + DS_SCRATCH_36) = vx + 0x160;
-            printf("V2-TRACE: sub_139ef ds:0x36=%04X (vp_x=%04X) from opcode kill path\n", (uint16_t)(vx + 0x160), *(uint16_t*)(s + DS_VIEWPORT_X));
-            uint16_t vy = *(uint16_t*)(s + DS_VIEWPORT_Y) - 0x10;
-            *(uint16_t*)(s + DS_SCRATCH_38) = vy;
-            *(uint16_t*)(s + DS_SCRATCH_3A) = vy + 0xD0;
-            // sub_13ae0: try to re-spawn object from spawn table
-            uint16_t spawn_idx = ObjRef{vm, di}.u16(OBJ_ANIM_SUB);
-            uint16_t di_off = spawn_idx * 0x0E;
-            uint16_t save_42 = *(uint16_t*)(s + DS_CUR_OBJ);
-            *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
-            // sub_13ae0 checks bounds + calls sub_13809 for matching spawn entry
-            uint16_t sx = *(uint16_t*)(s + di_off + DS_SPAWN_TABLE);
-            if (sx != 0xFFFF) {
-                uint16_t hw = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 4));
-                uint16_t sy = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 2));
-                uint16_t hh = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 6));
-                bool in_vp = true;
-                if ((int16_t)(sx + hw - *(uint16_t*)(s + DS_SCRATCH_34)) < 0) in_vp = false;
-                if ((int16_t)(sx - hw - *(uint16_t*)(s + DS_SCRATCH_36)) >= 0) in_vp = false;
-                if ((int16_t)(sy + hh - *(uint16_t*)(s + DS_SCRATCH_38)) < 0) in_vp = false;
-                if ((int16_t)(sy - hh - *(uint16_t*)(s + DS_SCRATCH_3A)) >= 0) in_vp = false;
-                if (in_vp) {
-                    *(uint16_t*)(s + DS_TEXT_COL) = sx;
-                    *(uint16_t*)(s + DS_TEXT_ROW) = sy;
-                    *(uint16_t*)(s + DS_SPAWN_TBL_LO) = hw;
-                    *(uint16_t*)(s + DS_SPAWN_TBL_HI) = hh;
-                    *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 12));
-                    v2_spawn_object_13809(s, *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 8)),
-                                 spawn_idx, *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 10)));
-                }
-            }
-            *(uint16_t*)(s + DS_CUR_OBJ) = save_42;
+    // 5. Respawn tail (orig eips 0x3cfd..0x3d2e): [16C5]==FFFF -> ret;
+    // TEST [1585],0x100 -> ret; else full viewport bounds (sub_139EF), then
+    // sub_13AE0 for THIS spawn index (di = idx*0x0E) under [42]=FFFF.
+    if (ObjRef{vm, di}.u16(OBJ_ANIM_SUB) != 0xFFFF) {              // 0x3cfd
+        if (ObjRef{vm, di}.u16(OBJ_FLAGS) & 0x100) {               // 0x3d04 TEST
+            uint8_t* s = vm.shadow;
+            v2_viewport_bounds_139ef(s);                           // 0x3d0d CALL sub_139EF
+            uint16_t spawn_idx = ObjRef{vm, di}.u16(OBJ_ANIM_SUB); // 0x3d10 si=[16C5]
+            uint16_t di_off = (uint16_t)(spawn_idx * 0x0E);        // 0x3d14 MUL 0Eh
+            uint16_t save_42 = *(uint16_t*)(s + DS_CUR_OBJ);       // 0x3d1d PUSH [42]
+            *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;                 // 0x3d21
+            v2_spawn_visible_entry_13ae0(s, spawn_idx, di_off);    // 0x3d27 CALL sub_13AE0
+            *(uint16_t*)(s + DS_CUR_OBJ) = save_42;                // 0x3d2a POP [42]
         }
     }
-
 }
 
 static void v2_vm_op_10(V2VM& vm) {
