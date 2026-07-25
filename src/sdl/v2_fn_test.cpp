@@ -103,6 +103,9 @@ extern "C" void     v2_fntest_call_sub_16dc1(uint8_t* test_shadow, uint16_t bx);
 extern "C" void     v2_fntest_call_sub_16dd9(uint8_t* test_shadow, uint16_t bx);
 extern "C" void     v2_fntest_call_sub_1712b(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_171dc(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_16ded(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_16e75(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_16f5f(uint8_t* test_shadow);
 extern "C" uint8_t* v2_fntest_vga_ptr(void);
 extern "C" uint8_t* v2_fntest_drawbuffer_ptr(void);
 extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
@@ -262,7 +265,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_13BBD = 125, FT_SUB_13FC2 = 126,
             FT_SUB_139EF = 127, FT_SUB_13A14 = 128, FT_SUB_13A34 = 129,
             FT_SUB_1689E = 130, FT_SUB_16DC1 = 131, FT_SUB_16DD9 = 132,
-            FT_SUB_1712B = 133, FT_SUB_171DC = 134,
+            FT_SUB_1712B = 133, FT_SUB_171DC = 134, FT_SUB_16DED = 135,
+            FT_SUB_16E75 = 136, FT_SUB_16F5F = 137,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -331,7 +335,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_13bbd", "sub_13fc2",
                                  "sub_139ef", "sub_13a14", "sub_13a34",
                                  "sub_1689e", "sub_16dc1", "sub_16dd9",
-                                 "sub_1712b", "sub_171dc" };
+                                 "sub_1712b", "sub_171dc", "sub_16ded",
+                                 "sub_16e75", "sub_16f5f" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -6833,6 +6838,186 @@ int ft_selftest_sub_171dc(uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Unit 136: sub_16ded — full-viewport band render ----------------------
+// Composite root: 25 x (page-address staging + 16dc1 row + 171dc copy).
+// The page-role LUTs ([cursor-0x7608]) and row LUT ([di-0x7098]) come from
+// the REAL snapshot (both sides read identical bytes); scroll fields
+// 2581/257F pick the window. fs zone carries the tile map words.
+int ft_selftest_sub_16ded(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    FtRng rng(seed);
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* tz = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    uint8_t* fz = mbase + (uint32_t)FT_FS_SEG * 16;
+    uint8_t* a000 = mbase + 0xA0000u;
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+    static uint8_t saved_tz[0x10000], saved_fz[0x10000], saved_a000[0x10000];
+    auto run1 = [&](uint16_t scroll_row, uint16_t scroll_col, uint16_t stride,
+                    const char* group, FtSynthStats& st) {
+        st.cases++;
+        memcpy(saved_tz, tz, 0x10000);
+        memcpy(saved_fz, fz, 0x10000);
+        memcpy(saved_a000, a000, 0x10000);
+        for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
+        memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
+
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);
+        ft_wr16(g_synth_in, DS_FS_PAGE_STRIDE, stride);
+        ft_wr16(g_synth_in, 0x2581, scroll_row);
+        ft_wr16(g_synth_in, 0x257F, scroll_col);
+        ft_fill_tail(g_synth_in);
+
+        memset(db, 0xCC, 65536 * 4);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        v2_fntest_fs_override = FT_FS_SEG;
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_16DED), g_synth_orig, regs);
+        v2_fntest_fs_override = 0;
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(a000, saved_a000, 0x10000);
+        memcpy(fz, saved_fz, 0x10000);
+        if (esc) {
+            st.cases--;
+            memcpy(tz, saved_tz, 0x10000);
+            fprintf(stderr, "FNSELFTEST-UB[sub_16ded %s]: escaped row=%04X col=%04X\n",
+                    group, scroll_row, scroll_col);
+            return;
+        }
+        memset(vga, 0xCC, 65536 * 4);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_16ded(g_scratch);
+        memcpy(tz, saved_tz, 0x10000);
+
+        long diffs = 0;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_16ded %s]: ds addr=%04X orig=%02X v2=%02X | row=%04X col=%04X\n",
+                        group, a, g_synth_orig[a], g_scratch[a], scroll_row, scroll_col); }
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_16ded %s]: vga lin=%06X (addr=%04X pl=%u) orig=%02X v2=%02X | row=%04X col=%04X\n",
+                        group, a, a >> 2, a & 3, db[a], vga[a], scroll_row, scroll_col); }
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    // Real-shape cases: scroll near origin (clamp paths) and mid-map, real
+    // stride (page block row = 0xAC).
+    run1(0x0000, 0x0000, 0x00AC, "grid", grid);    // both clamps hit
+    run1(0x0001, 0x0001, 0x00AC, "grid", grid);    // DEC to 0 edge
+    run1(0x0008, 0x0004, 0x00AC, "grid", grid);
+    run1(0x0020, 0x0010, 0x00AC, "grid", grid);
+    for (int i = 0; i < 60; i++)
+        run1((uint16_t)(rng.next() % 0x40), (uint16_t)(rng.next() % 0x30),
+             0x00AC, "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_16ded]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Units 137-138: sub_16e75 / sub_16f5f — scroll column bands -----------
+// Same channel as unit 136 plus the 9311-931D DS bookkeeping. Scroll fields
+// kept small: page-role words come from the real snapshot and the orig DIV cl
+// (8-bit quotient) would #DE past ~0x9B00.
+int ft_selftest_scroll_band(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    bool left = (id == FT_SUB_16E75);
+    FtRng rng(seed);
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* tz = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    uint8_t* fz = mbase + (uint32_t)FT_FS_SEG * 16;
+    uint8_t* a000 = mbase + 0xA0000u;
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+    static uint8_t saved_tz[0x10000], saved_fz[0x10000], saved_a000[0x10000];
+    auto run1 = [&](uint16_t disp_y, uint16_t disp_x, uint16_t stride,
+                    const char* group, FtSynthStats& st) {
+        st.cases++;
+        memcpy(saved_tz, tz, 0x10000);
+        memcpy(saved_fz, fz, 0x10000);
+        memcpy(saved_a000, a000, 0x10000);
+        for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
+        memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
+
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);
+        ft_wr16(g_synth_in, DS_FS_PAGE_STRIDE, stride);
+        ft_wr16(g_synth_in, 0x92F1, disp_y);       // scroll display row
+        ft_wr16(g_synth_in, 0x92EF, disp_x);       // scroll display col
+        ft_fill_tail(g_synth_in);
+
+        memset(db, 0xCC, 65536 * 4);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        v2_fntest_fs_override = FT_FS_SEG;
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+        v2_fntest_fs_override = 0;
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(a000, saved_a000, 0x10000);
+        memcpy(fz, saved_fz, 0x10000);
+        if (esc) {
+            st.cases--;
+            memcpy(tz, saved_tz, 0x10000);
+            fprintf(stderr, "FNSELFTEST-UB[%s %s]: escaped y=%04X x=%04X\n",
+                    g_name[id], group, disp_y, disp_x);
+            return;
+        }
+        memset(vga, 0xCC, 65536 * 4);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        if (left) v2_fntest_call_sub_16e75(g_scratch);
+        else      v2_fntest_call_sub_16f5f(g_scratch);
+        memcpy(tz, saved_tz, 0x10000);
+
+        long diffs = 0;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: ds addr=%04X orig=%02X v2=%02X | y=%04X x=%04X\n",
+                        g_name[id], group, a, g_synth_orig[a], g_scratch[a], disp_y, disp_x); }
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: vga lin=%06X (addr=%04X pl=%u) orig=%02X v2=%02X | y=%04X x=%04X\n",
+                        g_name[id], group, a, a >> 2, a & 3, db[a], vga[a], disp_y, disp_x); }
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    run1(0x0000, 0x0000, 0x00AC, "grid", grid);   // y clamp; left: JL bail-out
+    run1(0x0001, 0x0001, 0x00AC, "grid", grid);   // DEC edges
+    run1(0x0010, 0x0008, 0x00AC, "grid", grid);
+    run1(0x0030, 0x0018, 0x00AC, "grid", grid);
+    for (int i = 0; i < 120; i++)
+        run1((uint16_t)(rng.next() % 0x40), (uint16_t)(rng.next() % 0x28),
+             0x00AC, "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -8073,6 +8258,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_16dd9")) { matched = true; rc |= ft_selftest_tile_loop(FT_SUB_16DD9, 0x16DD9001u); }
     if (all || strstr(env, "sub_1712b")) { matched = true; rc |= ft_selftest_sub_1712b(0x1712B001u); }
     if (all || strstr(env, "sub_171dc")) { matched = true; rc |= ft_selftest_sub_171dc(0x171DC001u); }
+    if (all || strstr(env, "sub_16ded")) { matched = true; rc |= ft_selftest_sub_16ded(0x16DED001u); }
+    if (all || strstr(env, "sub_16e75")) { matched = true; rc |= ft_selftest_scroll_band(FT_SUB_16E75, 0x16E75001u); }
+    if (all || strstr(env, "sub_16f5f")) { matched = true; rc |= ft_selftest_scroll_band(FT_SUB_16F5F, 0x16F5F001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

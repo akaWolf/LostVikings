@@ -208,6 +208,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 132: return (void*)&sub_16dd9;  // tile column x25 (bx += ds:8F6C stride)
     case 133: return (void*)&sub_1712b;  // VGA page copy (3+1 phases, drawBuffer quirk i<=cl)
     case 134: return (void*)&sub_171dc;  // column page copy (930B -> 930D/930F, 0x2B0 bytes)
+    case 135: return (void*)&sub_16ded;  // full-viewport band render (25x43x3 pages)
+    case 136: return (void*)&sub_16e75;  // scroll band: left column (JL bail-out)
+    case 137: return (void*)&sub_16f5f;  // scroll band: right column ([92EF]+0x29)
     default: return 0;
     }
 }
