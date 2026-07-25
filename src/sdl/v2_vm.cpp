@@ -5282,25 +5282,36 @@ static void v2_slot_size_init_13e15(uint8_t* s, uint16_t si) {
 
 // sub_13809: shared object creation function.
 // ax = code_seg_idx, di_spawn = spawn index (0xFFFF for non-spawn), si_anim = animation flags.
+// sub_13d30 (seg000 eips 0x3D30..0x3D51): spawn-permission gate. STC when
+// ds:0x32F (transition) is set, or when di != 0xFFFF and the kill-bit table
+// byte ds:[di>>3 + 0x356] has bit LUT_BYTE_OR[di&7] set. CLC = allowed.
+static bool v2_spawn_gate_13d30(uint8_t* s, uint16_t di_spawn) {
+    if (*(uint16_t*)(s + DS_TRANSITION) != 0) return true;      // 0x3D30 JNZ → STC
+    if (di_spawn == 0xFFFF) return false;                       // 0x3D37 JZ → CLC
+    uint16_t bit = di_spawn & 7;
+    uint16_t boff = di_spawn >> 3;
+    if (s[(uint16_t)(boff + 0x356)] & s[(uint16_t)(bit - LUT_BYTE_OR)]) return true;
+    return false;
+}
+// sub_13d52 (seg000 eips 0x3D52..0x3D67): first free slot in 0..0x28.
+// Returns si with CLC, or -1 for the STC full-table exit.
+static int32_t v2_spawn_slot_13d52(uint8_t* s) {
+    for (uint16_t s2 = 0; s2 < 0x28; s2 += 2)
+        if (*(uint16_t*)(s + s2 + OBJ_CODE_SEG) == 0) return (int32_t)s2;
+    return -1;
+}
+
 // pos_x/pos_y = world position. Returns true if created, false if failed.
 static bool v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
                           uint16_t si_anim, uint16_t pos_x, uint16_t pos_y) {
     *(uint16_t*)(s + DS_SCRATCH_34) = code_seg_idx;
     *(uint16_t*)(s + DS_SCRATCH_36) = di_spawn;
     *(uint16_t*)(s + DS_SCRATCH_38) = si_anim;
-    // sub_13d30: check creation allowed
-    if (*(uint16_t*)(s + DS_TRANSITION) != 0) return false;
-    if (di_spawn != 0xFFFF) {
-        uint16_t bit = di_spawn & 7;
-        uint16_t boff = di_spawn >> 3;
-        if (s[boff + 0x356] & s[(uint16_t)(bit - LUT_BYTE_OR)]) return false;
-    }
-    // sub_13d52: find free object slot
-    uint16_t new_si = 0xFFFF;
-    for (uint16_t s2 = 0; s2 < 0x28; s2 += 2) {
-        if (*(uint16_t*)(s + s2 + OBJ_CODE_SEG) == 0) { new_si = s2; break; }
-    }
-    if (new_si == 0xFFFF) return false;
+    // sub_13d30 gate + sub_13d52 slot probe (extracted, units 121-122).
+    if (v2_spawn_gate_13d30(s, di_spawn)) return false;   // STC = creation denied
+    int32_t slot = v2_spawn_slot_13d52(s);
+    if (slot < 0) return false;                           // STC = table full
+    uint16_t new_si = (uint16_t)slot;
     ObjMem obj{s, new_si};   // #38: spawned object slot view
     // Original: es = ds:0x2E67 (animation data segment), bx = code_seg_idx * 0x15
     // For v2: read from shadow animdata (template data loaded by v2_load_template)
@@ -12312,6 +12323,16 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Units 121-122: sub_13d30 (spawn gate) / sub_13d52 (free-slot probe).
+static bool v2_spawn_gate_13d30(uint8_t* s, uint16_t di_spawn);
+static int32_t v2_spawn_slot_13d52(uint8_t* s);
+extern "C" int v2_fntest_call_sub_13d30(uint8_t* test_shadow, uint16_t di) {
+    return v2_spawn_gate_13d30(test_shadow, di) ? 1 : 0;
+}
+extern "C" int32_t v2_fntest_call_sub_13d52(uint8_t* test_shadow) {
+    return v2_spawn_slot_13d52(test_shadow);
+}
+
 // Unit 120: sub_13c93 — despawn (subs clear, unlink, 372 shrink, respawn tail).
 static void v2_despawn_13c93(V2VM& vm, uint16_t di);
 extern "C" void v2_fntest_call_sub_13c93(uint8_t* test_shadow, uint16_t di) {

@@ -193,6 +193,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 117: return (void*)&sub_13916;  // collision resolve sweep
     case 118: return (void*)&sub_12fe5;  // per-obj sub-sprite catch-up (bx = delta-fn idx)
     case 119: return (void*)&sub_13c93;  // despawn (unlink + 372 shrink + respawn tail)
+    case 120: return (void*)&sub_13d30;  // spawn gate (transition + kill-bit table)
+    case 121: return (void*)&sub_13d52;  // first free slot probe (0..0x28)
     default: return 0;
     }
 }

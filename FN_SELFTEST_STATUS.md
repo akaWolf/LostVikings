@@ -358,6 +358,8 @@ sub_1625d (ground snap). Все шесть → do-while форма. Урок а�
 
 | 57 | `sub_13c93` | despawn: суб-клир (do-while), unlink 1805/182D, kill+[1A0D]=FFFF, ds:0x372 backward-shrink (JS), respawn-хвост (16C5+флаг 0x100 → 139ef/13ae0-проба) | 6 007 = grid 7 (subs/unlink/16C5-гейты/shrink-через-дыру/shrink-в-ноль JS) + fuzz 6 000; spawn-ветка хвоста транзитивна юнитом 54 + vmops op-10 | **PASS, 0 диффов** | v2_despawn_13c93 экстрагирован из op_10 (сайт → вызов); respawn-хвост переведён на vm.shadow (изолируемость) | (этот) |
 
+| 58 | `sub_13d30`+`sub_13d52` | spawn-гейт (transition [32F] + kill-бит: [di>>3+0x356] TEST LUT_BYTE_OR[di&7]) и проба свободного слота (первый code_seg==0 в 0..0x28, STC=full) | CF-каналы; 13d52 CLC-выход несёт слот в SI | 27 287 + 45 580 = grid + exhaustive **di-ось /9** и **occupancy-маска /41** + fuzz 20 000 | **PASS, 0 диффов** (оба) | экстрагированы из v2_spawn_object_13809 (сайт → вызовы); регрессы 13a0e/13ba5/vmops PASS | (этот) |
+
 ## Как добавить функцию (конвейер)
 
 1. Прочитать orig asm построчно → контракт: читаемые/писаемые DS-поля,

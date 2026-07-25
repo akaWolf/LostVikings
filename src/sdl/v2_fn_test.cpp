@@ -86,6 +86,8 @@ extern "C" uint8_t* v2_fntest_tilemap_ptr(void);
 extern "C" void     v2_fntest_call_sub_13916(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_12fe5(uint8_t* test_shadow, uint16_t di, uint16_t bx_type);
 extern "C" void     v2_fntest_call_sub_13c93(uint8_t* test_shadow, uint16_t di);
+extern "C" int      v2_fntest_call_sub_13d30(uint8_t* test_shadow, uint16_t di);
+extern "C" int32_t  v2_fntest_call_sub_13d52(uint8_t* test_shadow);
 extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
 extern "C" uint8_t* v2_fntest_fs_ptr(void);
 extern "C" void     v2_fntest_clear_fs(uint8_t fill);
@@ -238,6 +240,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1386B = 115, FT_SUB_1625D = 116,
             FT_SUB_13916 = 117, FT_SUB_12FE5 = 118,
             FT_SUB_13C93 = 119,
+            FT_SUB_13D30 = 120, FT_SUB_13D52 = 121,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -300,7 +303,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_136a0", "sub_13757",
                                  "sub_1386b", "sub_1625d",
                                  "sub_13916", "sub_12fe5",
-                                 "sub_13c93" };
+                                 "sub_13c93",
+                                 "sub_13d30", "sub_13d52" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -5915,6 +5919,63 @@ int ft_selftest_sub_13c93(uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 121-122: sub_13d30 (spawn gate) / sub_13d52 (slot probe) -------
+int ft_selftest_spawn_gate(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    bool gate = (id == FT_SUB_13D30);
+    auto run1 = [&](uint16_t trans, uint16_t di, uint8_t tblbyte, uint8_t lutbyte,
+                    uint16_t occ_mask, const char* group, FtSynthStats& st) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x32F, trans);
+        if (di != 0xFFFF) {
+            g_synth_in[(uint16_t)((di >> 3) + 0x356)] = tblbyte;
+            g_synth_in[(uint16_t)((di & 7) - LUT_BYTE_OR)] = lutbyte;
+        }
+        for (uint16_t s2 = 0; s2 < 0x28; s2 += 2)
+            ft_wr16(g_synth_in, (uint16_t)(s2 + OBJ_CODE_SEG),
+                    (uint16_t)((occ_mask >> (s2 / 2)) & 1));
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t v2ret; int ret_reg;
+        if (gate) { v2ret = (uint16_t)v2_fntest_call_sub_13d30(g_scratch, di); ret_reg = 7; }
+        else {
+            int32_t r = v2_fntest_call_sub_13d52(g_scratch);
+            // oracle: CF in regs[7]; SI holds the found slot on CLC
+            if (r < 0) { v2ret = 1; ret_reg = 7; }
+            else       { v2ret = (uint16_t)r; ret_reg = 4; }
+        }
+        FtRegs in{}; in.di = di;
+        ft_synth_case_regs(id, in, v2ret, ret_reg, group, st, diff_budget);
+    };
+    if (gate) {
+        run1(1, 0x0000, 0, 0, 0, "grid", grid);            // transition STC
+        run1(0, 0xFFFF, 0, 0, 0, "grid", grid);            // FFFF pass
+        run1(0, 0x0005, 0xFF, 0x20, 0, "grid", grid);      // bit set → STC
+        run1(0, 0x0005, 0x00, 0x20, 0, "grid", grid);      // bit clear → CLC
+        run1(0, 0x0005, 0xDF, 0x20, 0, "grid", grid);      // TEST miss → CLC
+        for (uint32_t d = 0; d <= 0xFFFF; d += 9)
+            run1(0, (uint16_t)d, 0xA5, 0x5A, 0, "exh", exh);
+    } else {
+        run1(0, 0, 0, 0, 0x00000, "grid", grid);           // slot 0 free
+        run1(0, 0, 0, 0, 0x00001, "grid", grid);           // slot 2 free
+        run1(0, 0, 0, 0, 0xFFFFF, "grid", grid);           // full → STC
+        run1(0, 0, 0, 0, 0x7FFFF, "grid", grid);           // only last free
+        for (uint32_t m = 0; m < 0x100000; m += 41)
+            run1(0, 0, 0, 0, (uint16_t)m, "exh", exh);
+    }
+    FtRng rng(seed);
+    for (int i = 0; i < 20000; i++)
+        run1((uint16_t)(rng.next() & 1), (uint16_t)(rng.next() & 1 ? 0xFFFF : rng.w()),
+             (uint8_t)rng.next(), (uint8_t)rng.next(), (uint16_t)rng.w(), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -7061,6 +7122,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_13916")) { matched = true; rc |= ft_selftest_sub_13916(0x13916001u); }
     if (all || strstr(env, "sub_12fe5")) { matched = true; rc |= ft_selftest_sub_12fe5(0x12FE5001u); }
     if (all || strstr(env, "sub_13c93")) { matched = true; rc |= ft_selftest_sub_13c93(0x13C93001u); }
+    if (all || strstr(env, "sub_13d30")) { matched = true; rc |= ft_selftest_spawn_gate(FT_SUB_13D30, 0x13D30001u); }
+    if (all || strstr(env, "sub_13d52")) { matched = true; rc |= ft_selftest_spawn_gate(FT_SUB_13D52, 0x13D52001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
