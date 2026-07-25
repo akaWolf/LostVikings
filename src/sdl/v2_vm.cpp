@@ -12401,6 +12401,36 @@ extern "C" void v2_fntest_call_sub_16661(uint8_t* test_shadow) {
     v2_replay_verify_active = saved_rv;
     v2_vm_acc_base = saved_acc;
 }
+// Units 152-153: sub_13084 (anim command interpreter core) / sub_135cf
+// (anim velocity tail).
+static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx);
+static void v2_vm_anim_tail_135cf(V2VM& vm);
+extern "C" uint16_t v2_fntest_call_sub_13084(uint8_t* test_shadow, uint16_t bx, uint16_t obj) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = test_shadow;            // oracle runs with es == ds (script in DS image)
+    vm.obj = obj;
+    uint16_t anim_bx = bx;
+    v2_vm_run_anim_frame(vm, anim_bx);
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+    return anim_bx;
+}
+extern "C" void v2_fntest_call_sub_135cf(uint8_t* test_shadow, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.obj = di;
+    v2_vm_anim_tail_135cf(vm);
+}
 // Unit 151: sub_1406d — animation queue quadrant redraw.
 static void v2_anim_queue_1406d(uint8_t* shadow);
 extern "C" void v2_fntest_call_sub_1406d(uint8_t* test_shadow) {
@@ -15821,32 +15851,39 @@ static void v2_vm_anim_tail_135cf(V2VM& vm) {
         self.w16(OBJ_ANIM_DX, self.u16(OBJ_ANIM_DX) + vm.ds_read(DS_ANIM_SCROLL_DX));
     }
 
-    // Clamp X velocity (164D) to [-178D, +178D]
+    // Clamp X velocity (164D) to ±[178D]. The negative arm is NEG / CMP /
+    // JL keep / NEG back — 8086 NEG leaves 0x8000 unchanged, so vx = -32768
+    // stays -32768 (divergence #38: C `-vx` promotes to +32768 and clamped).
     int16_t vx = self.i16(OBJ_ANIM_DX);
     int16_t max_vx = self.i16(OBJ_VEL_X_MAX);
-    if (vx >= 0) {
-        if (vx >= max_vx) vx = max_vx;
+    if (vx >= 0) {                                   // 0x35fc JL
+        if (vx >= max_vx) vx = max_vx;               // 0x3602 JL keep
     } else {
-        if (-vx >= max_vx) vx = -max_vx;
+        int16_t nx = (int16_t)(uint16_t)(0u - (uint16_t)vx);   // 0x360a NEG
+        if (nx >= max_vx) nx = max_vx;               // 0x3610 JL keep
+        vx = (int16_t)(uint16_t)(0u - (uint16_t)nx); // 0x3616 NEG
     }
-    self.w16(OBJ_ANIM_DX, (uint16_t)vx);
+    self.w16(OBJ_ANIM_DX, (uint16_t)vx);             // 0x3618
 
-    // Clamp Y velocity (1675) to [-17B5, +17B5]
+    // Clamp Y velocity (1675) to ±[17B5] — same NEG shape.
     int16_t vy = self.i16(OBJ_ANIM_DY);
     int16_t max_vy = self.i16(OBJ_VEL_Y_MAX);
-    if (vy >= 0) {
-        if (vy >= max_vy) vy = max_vy;
+    if (vy >= 0) {                                   // 0x3623 JL
+        if (vy >= max_vy) vy = max_vy;               // 0x3629 JL keep
     } else {
-        if (-vy >= max_vy) vy = -max_vy;
+        int16_t ny = (int16_t)(uint16_t)(0u - (uint16_t)vy);   // 0x3631 NEG
+        if (ny >= max_vy) ny = max_vy;               // 0x3637 JL keep
+        vy = (int16_t)(uint16_t)(0u - (uint16_t)ny); // 0x363d NEG
     }
-    self.w16(OBJ_ANIM_DY, (uint16_t)vy);
+    self.w16(OBJ_ANIM_DY, (uint16_t)vy);             // 0x363f
 
-    // Apply velocity to accumulators with flip
-    int16_t dx_acc = (self.flags() & 0x40) ? -vx : vx;
-    self.w16(OBJ_VEL_X, self.u16(OBJ_VEL_X) + (uint16_t)dx_acc);
-
-    int16_t dy_acc = (self.flags() & 0x80) ? -vy : vy;
-    self.w16(OBJ_VEL_Y, self.u16(OBJ_VEL_Y) + (uint16_t)dy_acc);
+    // Apply velocity to accumulators with flip (NEG shape: 0x8000 stays).
+    uint16_t dx_acc = (self.flags() & 0x40)
+        ? (uint16_t)(0u - (uint16_t)vx) : (uint16_t)vx;   // 0x3643/0x3655
+    self.w16(OBJ_VEL_X, self.u16(OBJ_VEL_X) + dx_acc);    // 0x3657
+    uint16_t dy_acc = (self.flags() & 0x80)
+        ? (uint16_t)(0u - (uint16_t)vy) : (uint16_t)vy;   // 0x365b/0x366d
+    self.w16(OBJ_VEL_Y, self.u16(OBJ_VEL_Y) + dy_acc);    // 0x366f
 }
 
 static void v2_vm_op_2F(V2VM& vm) {

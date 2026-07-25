@@ -224,6 +224,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 148: return (void*)&sub_16661;  // scroll tracker (bands + dirty marks)
     case 149: return (void*)&sub_1673c;  // spawn tracker (>>1 axes + 13a14/34/54/74)
     case 150: return (void*)&sub_1406d;  // anim queue quadrant redraw (JCXZ + JNS loop)
+    case 151: return (void*)&sub_13084;  // anim command interpreter core (ds:78 gate)
+    case 152: return (void*)&sub_135cf;  // anim velocity tail (gravity + clamps + flip)
     default: return 0;
     }
 }
