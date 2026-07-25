@@ -5323,15 +5323,15 @@ static void v2_ail_init_17561(uint8_t* s) {
     // Every DS write replicated instruction-by-instruction.
 
     // 1. ds:A39Ah = 0 (entry)
-    *(uint16_t*)(s + 0xA39A) = 0;
+    *(uint16_t*)(s + DS_AIL_INIT_DONE) = 0;
     // 2. ds:A378h = 0
-    *(uint16_t*)(s + 0xA378) = 0;
+    *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 0;
     // 3. CALLF sub_1C1EA — AIL startup detect. NOP for v2.
 
     // 4. Sound check: (ds:302 & ds:304) & 0x8000
     if ((*(uint16_t*)(s + DS_MUSIC_MUTE) & *(uint16_t*)(s + DS_SFX_MUTE)) & 0x8000) {
         // Sound disabled → loc_17693: just set ds:A39A = 1 and return
-        *(uint16_t*)(s + 0xA39A) = 1;
+        *(uint16_t*)(s + DS_AIL_INIT_DONE) = 1;
         return;
     }
 
@@ -5350,7 +5350,7 @@ static void v2_ail_init_17561(uint8_t* s) {
     *(uint16_t*)(s + DS_SOUND_FIELD_942) = 0x0E00;
 
     // 10. ds:A39A = 1
-    *(uint16_t*)(s + 0xA39A) = 1;
+    *(uint16_t*)(s + DS_AIL_INIT_DONE) = 1;
 
     // 11. sub_10D96(bx=0xE00, ax=0) → DosMemAlloc → ds:9934 = segment
     *(uint16_t*)(s + DS_XMI_BUF_PTR) = v2_alloc_recorded_10d9f(0xE1);
@@ -5361,16 +5361,16 @@ static void v2_ail_init_17561(uint8_t* s) {
 
     // 14. If ds:86B6h == 8 → ds:A378 = 1
     if (*(uint16_t*)(s + DS_SOUND_CARD) == 8) {
-        *(uint16_t*)(s + 0xA378) = 1;
+        *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 1;
         // 15. If also ds:86B8h == 3 → decompress chunk 0x215, play music
         if (*(uint16_t*)(s + DS_MUSIC_CARD) == 3) {
-            *(uint16_t*)(s + 0xA378) = 0;
+            *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 0;
             // INT 21h print string — NOP
             // Decompress chunk 0x215 → sound data segment ds:2E6B
             // For v2: chunk already loaded by v2_alloc_segments_12ab8 (sound chunk path)
             // Mirror orig sub_176bd(ax=0, bx=ds:2E6B, si=0) — play music
             fx::play_music(s, *(uint16_t*)(s + DS_SEG_SOUND));
-            *(uint16_t*)(s + 0xA378) = 1;
+            *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 1;
         }
     }
     // locret_17678: return (success)

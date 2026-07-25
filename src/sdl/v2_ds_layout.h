@@ -482,6 +482,8 @@ constexpr uint16_t DS_SEG_SOUND_BASE        = 0x992C; // word_31E0C: sound resou
 constexpr uint16_t DS_SOUND_INIT_932        = 0x9932; // word_31E12: sound-init field (cleared 0)
 constexpr uint16_t DS_XMI_BUF_PTR           = 0x9934; // word_31E14: XMI music buffer pointer (#99)
 constexpr uint16_t DS_SOUND_FIELD_942       = 0x9942; // word_31E22: sound-init field (set 0x0E00)
+constexpr uint16_t DS_AIL_MUSIC_STATE       = 0xA378; // AIL music/card-8 driver state flag (v2_ail_init_17561: gated on DS_SOUND_CARD==8 / DS_MUSIC_CARD==3, toggled around play_music)
+constexpr uint16_t DS_AIL_INIT_DONE         = 0xA39A; // AIL sound-init complete flag (v2_ail_init_17561: 0 at entry, 1 when ready or sound disabled)
 
 
 // ---------------------------------------------------------------------------
