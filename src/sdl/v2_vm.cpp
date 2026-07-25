@@ -12317,6 +12317,15 @@ static int v2_fntest_coll_check_common(uint8_t* test_shadow, uint16_t pc, bool d
     v2_vm_acc_base = saved_acc;
     return out;
 }
+// Units 102-103: sub_16235 (partner stash) / sub_16243 (partner fetch).
+extern "C" void v2_fntest_call_sub_16235(uint8_t* test_shadow, uint16_t si, uint16_t di) {
+    uint16_t addr = (uint16_t)((uint16_t)(di << 4) + *(uint16_t*)(test_shadow + 0x38E) + 0x1B25);
+    *(uint16_t*)(test_shadow + addr) = si;
+}
+extern "C" uint16_t v2_fntest_call_sub_16243(uint8_t* test_shadow, uint16_t di) {
+    uint16_t addr = (uint16_t)((uint16_t)(di << 4) + *(uint16_t*)(test_shadow + 0x38E) + 0x1B25);
+    return *(uint16_t*)(test_shadow + addr);
+}
 static bool v2_vm_collision_check_1584e(V2VM& vm);
 static bool v2_vm_collision_check_157eb(V2VM& vm);
 extern "C" int v2_fntest_call_sub_1584e(uint8_t* test_shadow, uint16_t pc) {

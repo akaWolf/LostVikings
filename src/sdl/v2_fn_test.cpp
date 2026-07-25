@@ -125,6 +125,8 @@ extern "C" int      v2_fntest_call_sub_155d6(uint8_t* test_shadow, uint16_t pc);
 extern "C" int      v2_fntest_call_sub_156c0(uint8_t* test_shadow, uint16_t pc);
 extern "C" int      v2_fntest_call_sub_1584e(uint8_t* test_shadow, uint16_t pc);
 extern "C" int      v2_fntest_call_sub_157eb(uint8_t* test_shadow, uint16_t pc);
+extern "C" void     v2_fntest_call_sub_16235(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" uint16_t v2_fntest_call_sub_16243(uint8_t* test_shadow, uint16_t di);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -212,6 +214,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_15530 = 95, FT_SUB_15546 = 96,
             FT_SUB_155D6 = 97, FT_SUB_156C0 = 98,
             FT_SUB_1584E = 99, FT_SUB_157EB = 100,
+            FT_SUB_16235 = 101, FT_SUB_16243 = 102,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -264,7 +267,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_1555c", "sub_15569",
                                  "sub_15530", "sub_15546",
                                  "sub_155d6", "sub_156c0",
-                                 "sub_1584e", "sub_157eb" };
+                                 "sub_1584e", "sub_157eb",
+                                 "sub_16235", "sub_16243" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -5130,6 +5134,37 @@ int ft_selftest_coll_dir(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 102-103: sub_16235 / sub_16243 (collision partner table) -------
+int ft_selftest_colltab(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    bool wr = (id == FT_SUB_16235);
+    auto run1 = [&](uint16_t si, uint16_t di, uint16_t e38, const char* group, FtSynthStats& st) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x38E, e38);
+        uint16_t addr = (uint16_t)((uint16_t)(di << 4) + e38 + 0x1B25);
+        ft_wr16(g_synth_in, addr, 0xCAFE);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t ax_v2 = 0;
+        if (wr) v2_fntest_call_sub_16235(g_scratch, si, di);
+        else    ax_v2 = v2_fntest_call_sub_16243(g_scratch, di);
+        FtRegs in{}; in.si = si; in.di = di;
+        ft_synth_case_regs(id, in, ax_v2, wr ? -1 : 0, group, st, diff_budget);
+    };
+    static const uint16_t DI[] = { 0, 2, 4, 0x100, 0x0FFF, 0x8000, 0xFFFF };
+    static const uint16_t E38[] = { 0, 2, 14, 0x8000, 0xFFFF };
+    for (uint16_t d : DI) for (uint16_t e : E38) run1(0x1234, d, e, "grid", grid);
+    FtRng rng(seed);
+    for (int i = 0; i < 20000; i++) run1(rng.w(), rng.w(), rng.w(), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -6257,6 +6292,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_156c0")) { matched = true; rc |= ft_selftest_coll_check(FT_SUB_156C0, 0x156C0001u); }
     if (all || strstr(env, "sub_1584e")) { matched = true; rc |= ft_selftest_coll_dir(FT_SUB_1584E, 0x1584E001u); }
     if (all || strstr(env, "sub_157eb")) { matched = true; rc |= ft_selftest_coll_dir(FT_SUB_157EB, 0x157EB001u); }
+    if (all || strstr(env, "sub_16235")) { matched = true; rc |= ft_selftest_colltab(FT_SUB_16235, 0x16235001u); }
+    if (all || strstr(env, "sub_16243")) { matched = true; rc |= ft_selftest_colltab(FT_SUB_16243, 0x16243001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

@@ -174,6 +174,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 98: return (void*)&sub_156c0;   // per-op collision check (variant)
     case 99: return (void*)&sub_1584e;   // down collision op (15afd/15972 | 1614e/15da8)
     case 100: return (void*)&sub_157eb;  // up collision op (15911/15972 | 15c93/15da8)
+    case 101: return (void*)&sub_16235;  // collision partner stash [(di<<4)+38E+1B25]=si
+    case 102: return (void*)&sub_16243;  // collision partner fetch ax=[(di<<4)+38E+1B25]
     default: return 0;
     }
 }
