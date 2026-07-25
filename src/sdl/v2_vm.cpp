@@ -2293,6 +2293,10 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue = 
 static void v2_vm_execute_object(uint8_t* ds, uint16_t si);
 static void v2_run_collision_vm(uint8_t* shadow, uint16_t si);
 static void v2_coll_sweep_15530(uint8_t* shadow);
+static uint16_t v2_vm_bittest_153ea(V2VM& vm);
+static uint16_t v2_vm_bittest_15403(V2VM& vm);
+static uint16_t v2_vm_bittest_1542a(V2VM& vm);
+static uint16_t v2_vm_bittest_15445(V2VM& vm);
 static uint32_t v2_ds_hash(uint8_t* ds);
 static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx);
 static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx);
@@ -12329,6 +12333,34 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Units 106-109: bit-test core family wrappers.
+static int32_t v2_fntest_bittest_common(uint8_t* test_shadow, uint16_t pc, int which) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_resolve_segment(0x4000 /*FT_VM_TESTSEG*/, test_shadow);
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = *(uint16_t*)(test_shadow + DS_CUR_OBJ);
+    vm.pc = pc; vm.running = true;
+    uint16_t ax = 0;
+    switch (which) {
+    case 0: ax = v2_vm_bittest_153ea(vm); break;
+    case 1: ax = v2_vm_bittest_15403(vm); break;
+    case 2: ax = v2_vm_bittest_1542a(vm); break;
+    default: ax = v2_vm_bittest_15445(vm); break;
+    }
+    int32_t out = ((int32_t)vm.pc << 1) | (int32_t)(ax & 1);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+    return out;
+}
+extern "C" int32_t v2_fntest_call_bittest(uint8_t* test_shadow, uint16_t pc, int which) {
+    return v2_fntest_bittest_common(test_shadow, pc, which);
+}
+
 // Unit 105: sub_163ac — platform/step probe (three-level tile checks).
 static bool v2_vm_platform_check_163ac(V2VM& vm);
 extern "C" int v2_fntest_call_sub_163ac(uint8_t* test_shadow) {
@@ -13037,11 +13069,7 @@ static void v2_vm_op_3C(V2VM& vm) {
 // 0xB2 (sub_14e37): sub_153ea (3 bytes bit test) + conditional.
 // If ne → skip 2, eq → call-jump.
 static void v2_vm_op_B2(V2VM& vm) {
-    // sub_153ea: byte idx + word VALUE (bytecode literal!) → bit test
-    uint8_t idx1 = vm.read_u8();
-    uint16_t val = vm.read_u16();  // bytecode literal, NOT ds:[addr]
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_bittest_153ea(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
@@ -13088,23 +13116,13 @@ static void v2_vm_op_91(V2VM& vm) {
 // sub_15403: byte idx1 (mask), byte idx2 (field) → pattern B (ds:0x42-relative).
 // si = ds:[idx2 - 0x6CBA] + ds:0x42; ax = ds:[si + 0x14E5] & ds:[idx1 - 0x6C34]; acc = 0 or 1.
 static void v2_vm_op_98(V2VM& vm) {
-    uint8_t idx1 = vm.read_u8();
-    uint8_t idx2 = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
-    uint16_t si = field_off + vm.global_r(DS_CUR_OBJ);
-    uint16_t val = ObjRef{vm, si}.u16(OBJ_BBOX_Y0);
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    v2_vm_accumulator = (val & mask) ? 1 : 0;
+    v2_vm_accumulator = v2_vm_bittest_15403(vm);
 }
 
 // 0xAD (sub_14de4): sub_153ea bit test (3 bytes) + if eq → skip 2, ne → jump.
 // Opposite of 0xB2 (which does call-jump instead of jump).
 static void v2_vm_op_AD(V2VM& vm) {
-    // sub_153ea: bytecode literal bit test
-    uint8_t idx1 = vm.read_u8();
-    uint16_t val = vm.read_u16();  // bytecode literal, NOT ds:[addr]
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_bittest_153ea(vm);
     if (result == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
@@ -13162,22 +13180,13 @@ static void v2_vm_op_94(V2VM& vm) {
 // 0xA8 (sub_14d91): sub_153ea bit test (3 bytes). If ne → skip 2, eq → jump.
 // sub_153ea: byte idx + word VALUE (bytecode literal, NOT ds:[addr]!) → test
 static void v2_vm_op_A8(V2VM& vm) {
-    uint8_t idx1 = vm.read_u8();
-    uint16_t val = vm.read_u16();  // bytecode literal VALUE
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_bittest_153ea(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
 // 0xB3 (sub_14e47): sub_15403 bit test (2B, pattern B). If ne → skip 2, eq → call-jump.
 static void v2_vm_op_B3(V2VM& vm) {
-    uint8_t idx1 = vm.read_u8();
-    uint8_t idx2 = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
-    uint16_t si = field_off + vm.global_r(DS_CUR_OBJ); // pattern B: NO +0x1995
-    uint16_t val = ObjRef{vm, si}.u16(OBJ_BBOX_Y0);
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_bittest_15403(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
@@ -14307,10 +14316,7 @@ static void v2_vm_op_B4(V2VM& vm) {
 // 0xB7 (sub_14e8a): sub_153ea literal bit, ne → call-jump, eq → skip.
 // Verified: seg000 lines 11424-11432. sub_153ea: idx + literal → mask=[idx-6C34], test.
 static void v2_vm_op_B7(V2VM& vm) {
-    uint8_t idx = vm.read_u8();
-    uint16_t val = vm.read_u16();
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_bittest_153ea(vm);
     if (result != v2_vm_accumulator) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
 
@@ -14327,14 +14333,7 @@ static void v2_vm_op_B9(V2VM& vm) {
 // 0xBA (sub_14eba): sub_15445 indexed+1995 bit, ne → call-jump, eq → skip.
 // Verified: seg000 lines 11475-11483. sub_15445: 2 bytes → field_A + 14E5, mask, test.
 static void v2_vm_op_BA(V2VM& vm) {
-    uint8_t idx1 = vm.read_u8();
-    uint8_t idx2 = vm.read_u8();
-    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
-    uint16_t si = vm.global_r(DS_CUR_OBJ);
-    field_off += ObjRef{vm, si}.u16(OBJ_PARTNER);
-    uint16_t val = vm.ds_read((uint16_t)(field_off + OBJ_BBOX_Y0));
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_bittest_15445(vm);
     if (result != v2_vm_accumulator) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
 
@@ -14572,12 +14571,7 @@ static void v2_vm_op_5F(V2VM& vm) {
 
 // 0xAA (sub_14db1): sub_1542a (ds:[addr] bit test, 3 bytes). ne → skip 2, eq → jump.
 static void v2_vm_op_AA(V2VM& vm) {
-    // sub_1542a: byte idx + word addr → val=ds:[addr], mask=ds:[idx-0x6C34]
-    uint8_t idx = vm.read_u8();
-    uint16_t addr = vm.read_u16();
-    uint16_t val = vm.ds_read(addr);
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
-    uint16_t result = (val & mask) ? 1 : 0;
+    uint16_t result = v2_vm_bittest_1542a(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
@@ -15709,20 +15703,49 @@ static void v2_vm_op_18(V2VM& vm) {
     vm.field_w(OBJ_VEL_Y, (uint16_t)(int16_t)vy);
 }
 
+// sub_153ea / sub_15403 / sub_1542a / sub_15445 — bit-test core family.
+// Each reads a mask byte (LUT word at [idx1-0x6C34]) plus one operand and
+// returns AX = (operand & mask) ? 1 : 0 (the JZ path keeps the AND's zero).
+// The ds:0x8A accumulator write belongs to the CALLERS (sub_14b4b/59/60).
+static uint16_t v2_vm_bittest_153ea(V2VM& vm) {           // literal word, bx+=3
+    uint8_t idx1 = vm.read_u8();
+    uint16_t val = vm.read_u16();
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
+    return (val & mask) ? 1 : 0;
+}
+static uint16_t v2_vm_bittest_15403(V2VM& vm) {           // self field, bx+=2
+    uint8_t idx1 = vm.read_u8();
+    uint8_t idx2 = vm.read_u8();
+    uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
+    uint16_t si = (uint16_t)(field_off + vm.global_r(DS_CUR_OBJ));
+    uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(si + OBJ_BBOX_Y0));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
+    return (val & mask) ? 1 : 0;
+}
+static uint16_t v2_vm_bittest_1542a(V2VM& vm) {           // ds:[addr], bx+=3
+    uint8_t idx1 = vm.read_u8();
+    uint16_t addr = vm.read_u16();
+    uint16_t val = vm.ds_read(addr);
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
+    return (val & mask) ? 1 : 0;
+}
+static uint16_t v2_vm_bittest_15445(V2VM& vm) {           // partner field, bx+=2
+    uint8_t idx1 = vm.read_u8();
+    uint8_t idx2 = vm.read_u8();
+    uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
+    uint16_t obj = vm.global_r(DS_CUR_OBJ);
+    di = (uint16_t)(di + *(uint16_t*)(vm.shadow + (uint16_t)(obj + OBJ_PARTNER)));
+    uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(di + OBJ_BBOX_Y0));
+    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
+    return (val & mask) ? 1 : 0;
+}
+
 // 0x9A (sub_14b60→sub_15445): Bit test with indexed field + 0x1995. 2 bytes consumed. Sets acc.
 // Reads: byte idx1 (bitmask), byte idx2 (field index)
 // di = table[idx2] + ds:[obj+0x1995]; val = ds:[di+0x14E5]; mask = ds:[idx1-0x6C34]
 // acc = (val & mask) ? 1 : 0
 static void v2_vm_op_bit_test_indexed(V2VM& vm) {
-    uint8_t idx1 = vm.read_u8();  // bitmask index
-    uint8_t idx2 = vm.read_u8();  // field index
-    uint16_t lookup = (uint16_t)(idx2 - LUT_FIELD_OFF);
-    uint16_t di = *(uint16_t*)(vm.shadow +lookup);
-    uint16_t obj = vm.global_r(DS_CUR_OBJ);
-    di += *(uint16_t*)(vm.shadow +obj + OBJ_PARTNER);
-    uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(di + OBJ_BBOX_Y0));
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    v2_vm_accumulator = (val & mask) ? 1 : 0;
+    v2_vm_accumulator = v2_vm_bittest_15445(vm);
 }
 
 // 0x99 (sub_14b59→sub_1542a): Bit test. 3 bytes consumed (1+2). Sets acc to 0 or 1.
@@ -15733,21 +15756,13 @@ static void v2_vm_op_bit_test_indexed(V2VM& vm) {
 // POP si=idx; AND ax, ds:[si-0x6C34] → bit test of bytecode value
 // JZ → ax=0; else ax=1; MOV ds:8A, ax
 static void v2_vm_op_bit_test(V2VM& vm) {
-    uint8_t idx = vm.read_u8();          // 1 byte consumed
-    uint16_t val = vm.read_u16();        // 2 bytes consumed — VALUE from bytecode!
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
-    v2_vm_accumulator = (val & mask) ? 1 : 0;
+    v2_vm_accumulator = v2_vm_bittest_153ea(vm);
 }
 
 // 0x99 (sub_14b59→sub_1542a): bit test of ds:[addr]. 3 bytes.
 // byte idx + word addr → val=ds:[addr], mask=ds:[idx-0x6C34], acc=(val&mask)?1:0
 static void v2_vm_op_bit_test_addr(V2VM& vm) {
-    uint8_t idx = vm.read_u8();
-    uint16_t addr = vm.read_u16();
-    uint16_t val = vm.ds_read(addr);  // dereference: read from DS at addr
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
-    v2_vm_accumulator = (val & mask) ? 1 : 0;
-
+    v2_vm_accumulator = v2_vm_bittest_1542a(vm);
 }
 
 // 0x54 (sub_14652): Load accumulator from indexed field + ds:[obj+0x1995] offset. 1 byte.
