@@ -12292,6 +12292,35 @@ static void v2_fntest_coll_pass_common(uint8_t* test_shadow, uint16_t si, bool f
     v2_fntest_vm_soft = saved_soft;
     v2_vm_acc_base = saved_acc;
 }
+static void v2_clear_coll_run_vm_15546(uint8_t* shadow);
+extern "C" void v2_fntest_call_sub_15530(uint8_t* test_shadow) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    v2_coll_sweep_15530(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+}
+extern "C" void v2_fntest_call_sub_15546(uint8_t* test_shadow) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    v2_clear_coll_run_vm_15546(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+}
 extern "C" void v2_fntest_call_sub_1555c(uint8_t* test_shadow, uint16_t si) {
     v2_fntest_coll_pass_common(test_shadow, si, true);
 }
