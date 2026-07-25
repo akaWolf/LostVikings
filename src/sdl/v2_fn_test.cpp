@@ -310,6 +310,11 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1469E = 197, FT_SUB_146A3 = 198, FT_SUB_146AF = 199,
             FT_SUB_146B4 = 200, FT_SUB_146D0 = 201, FT_SUB_146DE = 202,
             FT_SUB_146F6 = 203,
+            // Table wave 5: acc arithmetic (ADD/SUB/AND) + flip redirects.
+            FT_SUB_14704 = 204, FT_SUB_14713 = 205, FT_SUB_14721 = 206,
+            FT_SUB_1473D = 207, FT_SUB_1474B = 208, FT_SUB_14763 = 209,
+            FT_SUB_14771 = 210, FT_SUB_1477D = 211, FT_SUB_1478B = 212,
+            FT_SUB_147A7 = 213, FT_SUB_147BF = 214, FT_SUB_147CB = 215,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -405,7 +410,11 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_14675", "sub_14681", "sub_14686",
                                  "sub_1469e", "sub_146a3", "sub_146af",
                                  "sub_146b4", "sub_146d0", "sub_146de",
-                                 "sub_146f6" };
+                                 "sub_146f6",
+                                 "sub_14704", "sub_14713", "sub_14721",
+                                 "sub_1473d", "sub_1474b", "sub_14763",
+                                 "sub_14771", "sub_1477d", "sub_1478b",
+                                 "sub_147a7", "sub_147bf", "sub_147cb" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -7953,6 +7962,68 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         A(c, 3, o2, "grid");
         fuzz_op = 0x91; fuzz_alen = 2; break;
     }
+    // ---- wave 5: acc arithmetic + flip redirects ----
+    case FT_SUB_14704:                  // op 5A: acc = [word addr] + acc
+        { static const uint8_t c[] = {0x5A, 0x00, 0x05, 0x00}; A(c, 4, O, "grid"); }
+        fuzz_op = 0x5A; fuzz_alen = 3; break;
+    case FT_SUB_14713: {                // op 92: flip redirect 5B <-> 5E
+        static const uint8_t c[] = {0x92, 0x05, 0x00};
+        A(c, 3, O, "grid");
+        FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
+        A(c, 3, o2, "grid");
+        fuzz_op = 0x92; fuzz_alen = 2; break;
+    }
+    case FT_SUB_14721: {                // op 5B: [LUT2+[1995]+14E5] -= acc? (partner add)
+        FtWr wr[] = { { (uint16_t)(si + 0x1995), 2 } };
+        static const uint8_t c[] = {0x5B, 0x05, 0x00};
+        A(c, 3, O, "grid", wr, 1);
+        fuzz_op = 0x5B; fuzz_alen = 2; break;
+    }
+    case FT_SUB_1473D: {                // op 93: flip redirect 5C <-> 59
+        static const uint8_t c[] = {0x93, 0x05, 0x00};
+        A(c, 3, O, "grid");
+        FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
+        A(c, 3, o2, "grid");
+        fuzz_op = 0x93; fuzz_alen = 2; break;
+    }
+    case FT_SUB_1474B:                  // op 5C: [LUT2+[42]+14E5] -= acc
+        { static const uint8_t c[] = {0x5C, 0x05, 0x00}; A(c, 3, O, "grid"); }
+        fuzz_op = 0x5C; fuzz_alen = 2; break;
+    case FT_SUB_14763: {                // op 94: flip redirect 5D <-> 5A
+        static const uint8_t c[] = {0x94, 0x00, 0x05, 0x00};
+        A(c, 4, O, "grid");
+        FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
+        A(c, 4, o2, "grid");
+        fuzz_op = 0x94; fuzz_alen = 3; break;
+    }
+    case FT_SUB_14771:                  // op 5D: [word addr] -= acc
+        { static const uint8_t c[] = {0x5D, 0x00, 0x05, 0x00}; A(c, 4, O, "grid"); }
+        fuzz_op = 0x5D; fuzz_alen = 3; break;
+    case FT_SUB_1477D: {                // op 95: flip redirect 5E <-> 5B
+        static const uint8_t c[] = {0x95, 0x05, 0x00};
+        A(c, 3, O, "grid");
+        FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
+        A(c, 3, o2, "grid");
+        fuzz_op = 0x95; fuzz_alen = 2; break;
+    }
+    case FT_SUB_1478B: {                // op 5E: partner field -= acc
+        FtWr wr[] = { { (uint16_t)(si + 0x1995), 2 } };
+        static const uint8_t c[] = {0x5E, 0x05, 0x00};
+        A(c, 3, O, "grid", wr, 1);
+        fuzz_op = 0x5E; fuzz_alen = 2; break;
+    }
+    case FT_SUB_147A7:                  // op 5F: [LUT2+[42]+14E5] &= acc
+        { static const uint8_t c[] = {0x5F, 0x05, 0x00}; A(c, 3, O, "grid"); }
+        fuzz_op = 0x5F; fuzz_alen = 2; break;
+    case FT_SUB_147BF:                  // op 60: [word addr] &= acc
+        { static const uint8_t c[] = {0x60, 0x00, 0x05, 0x00}; A(c, 4, O, "grid"); }
+        fuzz_op = 0x60; fuzz_alen = 3; break;
+    case FT_SUB_147CB: {                // op 61: partner field &= acc
+        FtWr wr[] = { { (uint16_t)(si + 0x1995), 2 } };
+        static const uint8_t c[] = {0x61, 0x05, 0x00};
+        A(c, 3, O, "grid", wr, 1);
+        fuzz_op = 0x61; fuzz_alen = 2; break;
+    }
     default: return 1;
     }
     for (int i = 0; i < 300; i++) {
@@ -9288,6 +9359,18 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_146d0")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_146D0, 0x146D0001u); }
     if (all || strstr(env, "sub_146de")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_146DE, 0x146DE001u); }
     if (all || strstr(env, "sub_146f6")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_146F6, 0x146F6001u); }
+    if (all || strstr(env, "sub_14704")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14704, 0x14704001u); }
+    if (all || strstr(env, "sub_14713")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14713, 0x14713001u); }
+    if (all || strstr(env, "sub_14721")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14721, 0x14721001u); }
+    if (all || strstr(env, "sub_1473d")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1473D, 0x1473D001u); }
+    if (all || strstr(env, "sub_1474b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1474B, 0x1474B001u); }
+    if (all || strstr(env, "sub_14763")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14763, 0x14763001u); }
+    if (all || strstr(env, "sub_14771")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14771, 0x14771001u); }
+    if (all || strstr(env, "sub_1477d")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1477D, 0x1477D001u); }
+    if (all || strstr(env, "sub_1478b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1478B, 0x1478B001u); }
+    if (all || strstr(env, "sub_147a7")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_147A7, 0x147A7001u); }
+    if (all || strstr(env, "sub_147bf")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_147BF, 0x147BF001u); }
+    if (all || strstr(env, "sub_147cb")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_147CB, 0x147CB001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
