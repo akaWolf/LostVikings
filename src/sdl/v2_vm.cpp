@@ -951,9 +951,9 @@ void v2_verify_render_buf(int frame) {
                     "sh vp=(%d,%d) sc=(%04X,%04X) | rl vp=(%d,%d) sc=(%04X,%04X)\n",
                     frame, hard_diff, first_hard_x, first_hard_y, myDrawInfo->myOffset,
                     *(int16_t*)(sh + 0x44), *(int16_t*)(sh + 0x46),
-                    *(uint16_t*)(sh + 0x257F), *(uint16_t*)(sh + 0x2581),
+                    *(uint16_t*)(sh + DS_SCROLL_COL), *(uint16_t*)(sh + DS_SCROLL_ROW),
                     rl ? *(int16_t*)(rl + 0x44) : -1, rl ? *(int16_t*)(rl + 0x46) : -1,
-                    rl ? *(uint16_t*)(rl + 0x257F) : 0xDEAD, rl ? *(uint16_t*)(rl + 0x2581) : 0xDEAD);
+                    rl ? *(uint16_t*)(rl + DS_SCROLL_COL) : 0xDEAD, rl ? *(uint16_t*)(rl + DS_SCROLL_ROW) : 0xDEAD);
             for (int obj = 0; obj <= 0xFE; obj += 2) {
                 uint16_t sf = *(uint16_t*)(sh + obj + OBJ_SPRITE_FLAGS);
                 uint16_t rf = rl ? *(uint16_t*)(rl + obj + OBJ_SPRITE_FLAGS) : 0;
@@ -994,7 +994,7 @@ void v2_verify_render_buf(int frame) {
                 v2_a2_snap_pg,
                 *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
                 *(int16_t*)(shd + DS_SHAKE_X), *(int16_t*)(shd + DS_SHAKE_Y),
-                *(uint16_t*)(shd + 0x257F), *(uint16_t*)(shd + 0x2581));
+                *(uint16_t*)(shd + DS_SCROLL_COL), *(uint16_t*)(shd + DS_SCROLL_ROW));
         // Task #23: pixel dump of the traced object's 24x16 area, orig vs v2,
         // on divergent frames (event-based, first 3).
         if (v2_objtrace_di != 0xFFFF) {
@@ -1112,8 +1112,8 @@ void v2_verify_render_buf(int frame) {
                 uint8_t* rds = v2_m2c_base + v2_fntest_game_ds_linear();
                 // v2_draw_tiles semantics: 8x8 tiles; scroll_x = ds:0x2581 is
                 // the ROW scroll, scroll_y = ds:0x257F the COLUMN scroll.
-                uint16_t row_sc = *(uint16_t*)(rds + 0x2581);
-                uint16_t col_sc = *(uint16_t*)(rds + 0x257F);
+                uint16_t row_sc = *(uint16_t*)(rds + DS_SCROLL_ROW);
+                uint16_t col_sc = *(uint16_t*)(rds + DS_SCROLL_COL);
                 uint16_t fsseg = *(uint16_t*)(rds + DS_SEG_FS);
                 uint16_t gfxseg = *(uint16_t*)(rds + DS_SEG_TILEGFX);
                 int trow = (first_diff_y >> 3) + row_sc;
@@ -17557,8 +17557,8 @@ static void v2_do_render() {
                dbg_cnt, v2_current_level, active,
                *(int16_t*)(v2_vm_shadow_ds + DS_VIEWPORT_X),
                *(int16_t*)(v2_vm_shadow_ds + DS_VIEWPORT_Y),
-               *(uint16_t*)(v2_vm_shadow_ds + 0x2581),
-               *(uint16_t*)(v2_vm_shadow_ds + 0x257F));
+               *(uint16_t*)(v2_vm_shadow_ds + DS_SCROLL_ROW),
+               *(uint16_t*)(v2_vm_shadow_ds + DS_SCROLL_COL));
     }
 }
 
