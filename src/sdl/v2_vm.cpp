@@ -688,7 +688,7 @@ void v2_verify_render_buf(int frame) {
         // Screen-space band top: world − effective viewport (vp+shake clamp).
         int oy;
         {
-            int16_t vy = *(int16_t*)(_shd + 0x46), ysh = *(int16_t*)(_shd + 0x3A0);
+            int16_t vy = *(int16_t*)(_shd + 0x46), ysh = *(int16_t*)(_shd + DS_SHAKE_Y);
             int16_t ylv = *(int16_t*)(_shd + 0x25A6);
             int ye = (int)vy + ysh; if (ye > (int)ylv) ye = (int)vy - ysh;
             oy = (int)oy_w - ye;
@@ -858,7 +858,7 @@ void v2_verify_render_buf(int frame) {
                     fprintf(stderr, "\n");
                     extern uint8_t* v2_vm_get_shadow_chunk();
                     uint8_t* shc2 = v2_vm_get_shadow_chunk();
-                    uint16_t psz = *(uint16_t*)(shd2 + 0x2BBC);
+                    uint16_t psz = *(uint16_t*)(shd2 + DS_DECOMP_SIZE);
                     fprintf(stderr, "V2-A2-CHUNKROW0: plane_size=%04X planes:", psz);
                     for (int p = 0; p < 4 && shc2; p++) {
                         fprintf(stderr, " p%d=", p);
@@ -993,7 +993,7 @@ void v2_verify_render_buf(int frame) {
                 *(uint16_t*)(shd + DS_PAGE_DRAW), *(uint16_t*)(shd + DS_PAGE_SHOWN), *(uint16_t*)(shd + DS_PAGE_BG),
                 v2_a2_snap_pg,
                 *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
-                *(int16_t*)(shd + 0x39E), *(int16_t*)(shd + 0x3A0),
+                *(int16_t*)(shd + DS_SHAKE_X), *(int16_t*)(shd + DS_SHAKE_Y),
                 *(uint16_t*)(shd + 0x257F), *(uint16_t*)(shd + 0x2581));
         // Task #23: pixel dump of the traced object's 24x16 area, orig vs v2,
         // on divergent frames (event-based, first 3).
@@ -2080,7 +2080,7 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
     // Original: fread(raddr(ds,0x2BBC), 2, 1, data_handle)
     uint16_t decompressed_size;
     if (fread(&decompressed_size, 2, 1, v2_data_handle) != 1) return 0;
-    *(uint16_t*)(dctx + 0x2BBC) = decompressed_size;
+    *(uint16_t*)(dctx + DS_DECOMP_SIZE) = decompressed_size;
 
     // Original sub_10982: ecx = compressed_size (including 2-byte header already read).
     // After reading the 2-byte header, file position = chunk_offset + 2.
@@ -2306,10 +2306,10 @@ static void v2_pal_anim_10ffc(uint8_t* s) {
     for (int16_t bx = 7; bx >= 0; bx--) {
         uint8_t mask = s[(uint16_t)(bx - LUT_BYTE_OR)]; // bit mask from table
         if (!(s[DS_PAL_ANIM_EN] & mask)) continue;          // byte_2AA63: animation enable bits
-        if (s[bx + 0x258C] != 0) continue;          // timer not zero → skip
-        s[bx + 0x258C] = s[bx + 0x2584];            // reset timer from reload value
-        uint8_t end_color = s[bx + 0x259C];
-        uint8_t start_color = s[bx + 0x2594];
+        if (s[bx + DS_PAL_ANIM_TIMER] != 0) continue;          // timer not zero → skip
+        s[bx + DS_PAL_ANIM_TIMER] = s[bx + DS_PAL_ANIM_RELOAD];            // reset timer from reload value
+        uint8_t end_color = s[bx + DS_PAL_ANIM_END];
+        uint8_t start_color = s[bx + DS_PAL_ANIM_START];
         // Orig 0x1023: MOVZX cx,byte[259C]; SUB cl,[2594] — 8-bit SUB (CH stays 0);
         // JZ next (ZF of the BYTE) / JS loc_1104d (SF = BIT 7 of the byte result).
         // NOT an int16 model: end=0x00,start=0xFF gives diff8=0x01, SF=0 → the
@@ -2490,8 +2490,8 @@ static std::atomic<bool> v2_render_cb_enabled{false};
 // the REP MOVSB model: 16-bit pointer wrap included, so orig-UB inputs
 // (end < cur → huge wrapped count) replicate exactly too.
 static void v2_pal_rotate_fwd_10255(uint8_t* s, uint16_t si, uint16_t dx) {
-    uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // AL = [si+259Ch]
-    uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // AL = [si+2594h]
+    uint8_t cur = s[(uint16_t)(si + DS_PAL_ANIM_END)];                  // AL = [si+259Ch]
+    uint8_t endi = s[(uint16_t)(si + DS_PAL_ANIM_START)];                 // AL = [si+2594h]
     uint16_t di = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // ax=cur*3; di=ax+dx
     s[DS_BYTE_SAVE_0] = s[di];                                         // byte ptr word_309E4   = [di]
     s[DS_BYTE_SAVE_1] = s[(uint16_t)(di + 1)];                         // byte ptr word_309E4+1 = [di+1]
@@ -2510,8 +2510,8 @@ static void v2_pal_rotate_fwd_10255(uint8_t* s, uint16_t si, uint16_t dx) {
 // wrapped, si=di-1, di=di+2), then the saved entry is written at [di-2]
 // (WORD) / [di] (byte) where di ended at end*3+dx+2.
 static void v2_pal_rotate_back_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
-    uint8_t cur = s[(uint16_t)(si + 0x259C)];                  // movzx ax, [si+259Ch]
-    uint8_t endi = s[(uint16_t)(si + 0x2594)];                 // movzx ax, [si+2594h]
+    uint8_t cur = s[(uint16_t)(si + DS_PAL_ANIM_END)];                  // movzx ax, [si+259Ch]
+    uint8_t endi = s[(uint16_t)(si + DS_PAL_ANIM_START)];                 // movzx ax, [si+2594h]
     uint16_t di0 = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // di=cur*3+dx
     s[DS_BYTE_SAVE_0] = s[di0];                                        // word_309E4 = [di] (WORD, LE)
     s[DS_BYTE_SAVE_1] = s[(uint16_t)(di0 + 1)];
@@ -2540,8 +2540,8 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
         static int _printed = 0;
         if (_printed < 300) {
             _printed++;
-            uint8_t cur_i = s[1 + 0x259C];
-            uint8_t end_i = s[1 + 0x2594];
+            uint8_t cur_i = s[1 + DS_PAL_ANIM_END];
+            uint8_t end_i = s[1 + DS_PAL_ANIM_START];
             uint16_t addr_82 = (uint16_t)cur_i * 3 + DS_PAL_OUT;
             uint16_t addr_7f = (uint16_t)cur_i * 3 + DS_PAL_SRC;
             fprintf(stderr, "V2-101BE-CALL[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X | slot1 cur=%02X end=%02X r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch=%02X%02X%02X\n",
@@ -2561,13 +2561,13 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
     for (int16_t si = 7; si >= 0; si--) {                           // si=7; DEC si; JNS
         uint8_t mask = s[DS_PAL_ANIM_EN];                                    // byte_2AA63
         if (!(s[(uint16_t)(si - LUT_BYTE_OR)] & mask)) continue;        // TEST [si-6C44h], al; JZ
-        if (s[si + 0x258C] == 0) continue;                         // TEST [si+258Ch]; JZ
-        s[si + 0x258C]--;                                           // DEC [si+258Ch]
-        if (s[si + 0x258C] != 0) continue;                         // JNZ skip
+        if (s[si + DS_PAL_ANIM_TIMER] == 0) continue;                         // TEST [si+258Ch]; JZ
+        s[si + DS_PAL_ANIM_TIMER]--;                                           // DEC [si+258Ch]
+        if (s[si + DS_PAL_ANIM_TIMER] != 0) continue;                         // JNZ skip
         // Counter reached 0: rotate palette entries
         _dbg_rotations++;
         if (_dbg_rotations <= 20) {
-            uint8_t cur_i = s[si + 0x259C], end_i = s[si + 0x2594];
+            uint8_t cur_i = s[si + DS_PAL_ANIM_END], end_i = s[si + DS_PAL_ANIM_START];
             uint16_t addr_82 = cur_i * 3 + DS_PAL_OUT;
             uint16_t addr_7f = cur_i * 3 + DS_PAL_SRC;
             fprintf(stderr, "V2-101BE-ROT[%d call=%d si=%d cur=%02X end=%02X path=%s | r82[%04X]=%02X%02X%02X r7f[%04X]=%02X%02X%02X scratch_before=%02X%02X%02X]\n",
@@ -2577,8 +2577,8 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
                 addr_7f, s[addr_7f], s[addr_7f+1], s[addr_7f+2],
                 s[DS_BYTE_SAVE_0], s[DS_BYTE_SAVE_1], s[DS_BYTE_SAVE_2]);
         }
-        uint8_t cur_idx = s[si + 0x259C];                          // [si+259Ch] = current
-        uint8_t end_idx = s[si + 0x2594];                          // [si+2594h] = end
+        uint8_t cur_idx = s[si + DS_PAL_ANIM_END];                          // [si+259Ch] = current
+        uint8_t end_idx = s[si + DS_PAL_ANIM_START];                          // [si+2594h] = end
         // word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
         if (cur_idx < end_idx) {
             // orig: mov dx,8202h; call sub_10255; mov dx,7F02h; call sub_10255
@@ -3941,10 +3941,10 @@ static uint16_t v2_hud_init_1133a(uint8_t* s, uint16_t di) {
     for (uint16_t si = 0; ; si++) {
         ax = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE)) & 0xFF;
         if (ax == 0) { di++; break; }
-        s[(uint16_t)(si + 0x2584)] = (uint8_t)ax;
-        s[(uint16_t)(si + 0x258C)] = (uint8_t)ax;
-        s[(uint16_t)(si + 0x2594)] = s[(uint16_t)(di + 0x25F7)];
-        s[(uint16_t)(si + 0x259C)] = s[(uint16_t)(di + 0x25F8)];
+        s[(uint16_t)(si + DS_PAL_ANIM_RELOAD)] = (uint8_t)ax;
+        s[(uint16_t)(si + DS_PAL_ANIM_TIMER)] = (uint8_t)ax;
+        s[(uint16_t)(si + DS_PAL_ANIM_START)] = s[(uint16_t)(di + (DS_SPAWN_TABLE + 1))];
+        s[(uint16_t)(si + DS_PAL_ANIM_END)] = s[(uint16_t)(di + (DS_SPAWN_TABLE + 2))];
         di += 3;
         // Skip sub-entries until 0xFFFF
         while (*(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE)) != 0xFFFF) di += 2;
@@ -4131,16 +4131,16 @@ static void v2_spawn_table_13ba5(uint8_t* s) {
     for (uint16_t si = 0, di = 0; ; si++, di += 0x0E) {
         uint16_t spawn_x = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE));   // 16-bit wrap
         if (spawn_x == 0xFFFF) break; // end of table → STC
-        if (!(*(uint16_t*)(s + (uint16_t)(di + 0x2600)) & 0x800)) continue; // not permanent
+        if (!(*(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 10))) & 0x800)) continue; // not permanent
         // sub_13bbd: setup params and call sub_13809
         *(uint16_t*)(s + DS_MODE_WORD) = si;
         *(uint16_t*)(s + DS_TEXT_COL) = spawn_x;
-        *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + (uint16_t)(di + 0x25F8));
-        *(uint16_t*)(s + DS_SPAWN_TBL_LO) = *(uint16_t*)(s + (uint16_t)(di + 0x25FA));
-        *(uint16_t*)(s + DS_SPAWN_TBL_HI) = *(uint16_t*)(s + (uint16_t)(di + 0x25FC));
-        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di + 0x2602));
-        uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di + 0x25FE));
-        uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di + 0x2600));
+        *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 2)));
+        *(uint16_t*)(s + DS_SPAWN_TBL_LO) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 4)));
+        *(uint16_t*)(s + DS_SPAWN_TBL_HI) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 6)));
+        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 12)));
+        uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 8)));
+        uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 10)));
         // Original: ax=[di+25FE], si=[di+2600], di=ds:32 (saved spawn index)
         v2_spawn_object_13809(s, code_seg_idx, si, anim_idx,
                      *(uint16_t*)(s + DS_TEXT_COL), *(uint16_t*)(s + DS_TEXT_ROW));
@@ -4207,14 +4207,14 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
     for (uint16_t si_idx = 0, di_off = 0; ; si_idx++, di_off += 0x0E) {
         uint16_t sx = *(uint16_t*)(s + (uint16_t)(di_off + DS_SPAWN_TABLE));   // 16-bit wrap
         if (sx == 0xFFFF) break;
-        uint16_t hw = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FA));
+        uint16_t hw = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 4)));
         // orig: ADD ax,hw (wraps); SUB ax,[34]; JGE — a SIGNED OPERAND compare
         // of the wrapped sum vs the bound (class #16: not the sign of the
         // truncated full difference).
         if ((int16_t)(uint16_t)(sx + hw) <  (int16_t)*(uint16_t*)(s + DS_SCRATCH_34)) continue;
         if ((int16_t)(uint16_t)(sx - hw) >= (int16_t)*(uint16_t*)(s + DS_SCRATCH_36)) continue;
-        uint16_t sy = *(uint16_t*)(s + (uint16_t)(di_off + 0x25F8));
-        uint16_t hh = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FC));
+        uint16_t sy = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 2)));
+        uint16_t hh = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 6)));
         if ((int16_t)(uint16_t)(sy + hh) <  (int16_t)*(uint16_t*)(s + DS_SCRATCH_38)) continue;
         if ((int16_t)(uint16_t)(sy - hh) >= (int16_t)*(uint16_t*)(s + DS_SCRATCH_3A)) continue;
         // In viewport — check if already spawned
@@ -4236,9 +4236,9 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
         *(uint16_t*)(s + DS_TEXT_ROW) = sy;
         *(uint16_t*)(s + DS_SPAWN_TBL_LO) = hw;
         *(uint16_t*)(s + DS_SPAWN_TBL_HI) = hh;
-        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di_off + 0x2602));
-        uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FE));
-        uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di_off + 0x2600));
+        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 12)));
+        uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 8)));
+        uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 10)));
         v2_spawn_object_13809(s, code_seg_idx, si_idx, anim_idx, sx, sy);
         *(uint16_t*)(s + DS_SCRATCH_3A) = save_3A;
         *(uint16_t*)(s + DS_SCRATCH_38) = save_38;
@@ -4727,7 +4727,7 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
         if (ac == 0x8001) {
             // loc_11720: clear 0x800 words at ds:0x2191
             for (uint16_t di = 0; di < 0x800; di += 2) {
-                *(uint16_t*)(s + di + 0x2191) = 0;
+                *(uint16_t*)(s + di + DS_OBJ_QUEUE_HEAD) = 0;
             }
             return;
         }
@@ -6706,8 +6706,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             } else {
                 // Pop from stack at ds:0x2191
                 uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + 0x2191);
-                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
+                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
+                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
                 uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                 *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
@@ -6734,9 +6734,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     // Actually: bx+0x2191 for first, (bx)+0x2191 for second (bx unchanged)
                     // The ADD changes ds:0x2191 memory, not bx register.
                     uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                    *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = prev;
+                    *(uint16_t*)(shadow + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = prev;
                     *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
-                    *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = *(uint16_t*)(shadow + DS_SCRATCH_3CE);
+                    *(uint16_t*)(shadow + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = *(uint16_t*)(shadow + DS_SCRATCH_3CE);
                     *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
                     *(uint16_t*)(shadow + DS_SCRATCH_3D0) = cur;
                     *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
@@ -7532,8 +7532,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             *(uint16_t*)(shadow + DS_INPUT_ACCUM) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
                         } else {
                             uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                            *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + 0x2191);
-                            *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
+                            *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
+                            *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
                             uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
                             *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                             *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
@@ -7549,9 +7549,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) += 1;
                             } else {
                                 uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                                *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = prev;
+                                *(uint16_t*)(shadow + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = prev;
                                 *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
-                                *(uint16_t*)(shadow + (uint16_t)(bx + 0x2191)) = *(uint16_t*)(shadow + DS_SCRATCH_3CE);
+                                *(uint16_t*)(shadow + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = *(uint16_t*)(shadow + DS_SCRATCH_3CE);
                                 *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
                                 *(uint16_t*)(shadow + DS_SCRATCH_3D0) = cur;
                                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
@@ -11345,9 +11345,9 @@ static void v2_vm_op_10(V2VM& vm) {
             // sub_13ae0 checks bounds + calls sub_13809 for matching spawn entry
             uint16_t sx = *(uint16_t*)(s + di_off + DS_SPAWN_TABLE);
             if (sx != 0xFFFF) {
-                uint16_t hw = *(uint16_t*)(s + di_off + 0x25FA);
-                uint16_t sy = *(uint16_t*)(s + di_off + 0x25F8);
-                uint16_t hh = *(uint16_t*)(s + di_off + 0x25FC);
+                uint16_t hw = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 4));
+                uint16_t sy = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 2));
+                uint16_t hh = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 6));
                 bool in_vp = true;
                 if ((int16_t)(sx + hw - *(uint16_t*)(s + DS_SCRATCH_34)) < 0) in_vp = false;
                 if ((int16_t)(sx - hw - *(uint16_t*)(s + DS_SCRATCH_36)) >= 0) in_vp = false;
@@ -11358,9 +11358,9 @@ static void v2_vm_op_10(V2VM& vm) {
                     *(uint16_t*)(s + DS_TEXT_ROW) = sy;
                     *(uint16_t*)(s + DS_SPAWN_TBL_LO) = hw;
                     *(uint16_t*)(s + DS_SPAWN_TBL_HI) = hh;
-                    *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + di_off + 0x2602);
-                    v2_spawn_object_13809(s, *(uint16_t*)(s + di_off + 0x25FE),
-                                 spawn_idx, *(uint16_t*)(s + di_off + 0x2600), sx, sy);
+                    *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 12));
+                    v2_spawn_object_13809(s, *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 8)),
+                                 spawn_idx, *(uint16_t*)(s + di_off + (DS_SPAWN_TABLE + 10)), sx, sy);
                 }
             }
             *(uint16_t*)(s + DS_CUR_OBJ) = save_42;
@@ -17315,9 +17315,9 @@ static void v2_vm_verify_spawn_coverage(uint8_t* shadow) {
     for (uint16_t di_off = 0; ; di_off += 0x0E) {
         uint16_t sx = *(uint16_t*)(shadow + di_off + DS_SPAWN_TABLE);
         if (sx == 0xFFFF) break;
-        uint16_t sy = *(uint16_t*)(shadow + di_off + 0x25F8);
-        uint16_t hw = *(uint16_t*)(shadow + di_off + 0x25FA);
-        uint16_t hh = *(uint16_t*)(shadow + di_off + 0x25FC);
+        uint16_t sy = *(uint16_t*)(shadow + di_off + (DS_SPAWN_TABLE + 2));
+        uint16_t hw = *(uint16_t*)(shadow + di_off + (DS_SPAWN_TABLE + 4));
+        uint16_t hh = *(uint16_t*)(shadow + di_off + (DS_SPAWN_TABLE + 6));
         // Check if in viewport (rough)
         if ((int16_t)(sx + hw) < (int16_t)vp_x) continue;
         if ((int16_t)(sx - hw) > (int16_t)(vp_x + 0x140)) continue;
@@ -17971,12 +17971,12 @@ void v2_run_animation_vm(uint16_t ds_val) {
             for (int16_t si_pal = 7; si_pal >= 0; si_pal--) {
                 uint8_t mask = s[(uint16_t)(si_pal - LUT_BYTE_OR)];
                 if (!(s[DS_PAL_ANIM_EN] & mask)) continue;
-                if (s[si_pal + 0x258C] == 0) continue; // already expired
-                s[si_pal + 0x258C]--;                   // DEC timer
-                if (s[si_pal + 0x258C] != 0) continue;  // not yet 0
+                if (s[si_pal + DS_PAL_ANIM_TIMER] == 0) continue; // already expired
+                s[si_pal + DS_PAL_ANIM_TIMER]--;                   // DEC timer
+                if (s[si_pal + DS_PAL_ANIM_TIMER] != 0) continue;  // not yet 0
                 // Timer just hit 0 — rotate palette
-                uint8_t end_color = s[si_pal + 0x259C];
-                uint8_t start_color = s[si_pal + 0x2594];
+                uint8_t end_color = s[si_pal + DS_PAL_ANIM_END];
+                uint8_t start_color = s[si_pal + DS_PAL_ANIM_START];
                 // Rotate in both shaded (0x8202) and source (0x7F02) palettes
                 auto rotate_palette = [&](uint16_t pal_base) {
                     uint16_t end_off = (uint16_t)end_color * 3 + pal_base;
@@ -20638,8 +20638,8 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
                 *(uint16_t*)(shadow + DS_INPUT_ACCUM) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
             } else {
                 uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + 0x2191);
-                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + 0x2191);
+                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
+                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
                 uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                 *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
