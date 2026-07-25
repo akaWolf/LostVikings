@@ -4422,20 +4422,22 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
             // Bit 1 set after decrement: extra DEC + hide sprite
             blink -= 1;
             *(uint16_t*)(shadow + DS_BLINK_COUNTER) = blink;
-            uint16_t sub_di = *(uint16_t*)(shadow + (uint16_t)(di + OBJ_SUB_SLOT));
+            uint16_t sub_di = ObjMem{shadow, di}.sub_slot();
+            ObjMem sub{shadow, sub_di};                          // hidden sub-sprite slot
             { uint16_t _ta = (uint16_t)(sub_di + OBJ_DIRTY_MODE);
               if (_ta >= 0x117D && _ta <= 0x1181) { static int _bh=0; if(_bh<5){_bh++;
                 fprintf(stderr,"V2-BLINK-HIDE: sub_di=%04X addr=%04X was=%04X\n",sub_di,_ta,*(uint16_t*)(shadow+_ta));} } }
-            *(uint16_t*)(shadow + (uint16_t)(sub_di + OBJ_SPRITE_FLAGS)) |= 0x2000;
-            *(uint16_t*)(shadow + (uint16_t)(sub_di + OBJ_DIRTY_MODE)) = 0x200;
+            sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x2000);
+            sub.w16(OBJ_DIRTY_MODE, 0x200);
         } else {
             // Bit 1 clear: show sprite
-            uint16_t sub_di = *(uint16_t*)(shadow + (uint16_t)(di + OBJ_SUB_SLOT));
+            uint16_t sub_di = ObjMem{shadow, di}.sub_slot();
+            ObjMem sub{shadow, sub_di};                          // shown sub-sprite slot
             { uint16_t _ta = (uint16_t)(sub_di + OBJ_DIRTY_MODE);
               if (_ta >= 0x117D && _ta <= 0x1181) { static int _bs=0; if(_bs<5){_bs++;
                 fprintf(stderr,"V2-BLINK-SHOW: sub_di=%04X addr=%04X was=%04X\n",sub_di,_ta,*(uint16_t*)(shadow+_ta));} } }
-            *(uint16_t*)(shadow + (uint16_t)(sub_di + OBJ_SPRITE_FLAGS)) &= 0xDFFF;
-            *(uint16_t*)(shadow + (uint16_t)(sub_di + OBJ_DIRTY_MODE)) = 2;
+            sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0xDFFF);
+            sub.w16(OBJ_DIRTY_MODE, 2);
         }
     }
 }
@@ -4791,8 +4793,8 @@ static bool v2_slot_alloc_13d68(uint8_t* s, uint16_t si) {
     for (;;) {
         // loc_13d95: slot check runs BEFORE the limit compare (orig order:
         // test slot, advance, JL back) — the start slot is always tested.
-        while ((*(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_FLAGS)) |
-                *(uint16_t*)(s + (uint16_t)(di + OBJ_DIRTY_MODE))) != 0) {
+        while ((ObjMem{s, di}.u16(OBJ_SPRITE_FLAGS) |
+                ObjMem{s, di}.u16(OBJ_DIRTY_MODE)) != 0) {
             di += 2;
             if ((int16_t)di >= (int16_t)lim) return true;   // loc_13da8: STC
         }
@@ -4806,8 +4808,8 @@ static bool v2_slot_alloc_13d68(uint8_t* s, uint16_t si) {
             di += 2;
             if (di == end) return false;                    // loc_13dd4: CLC
             if (di == *(uint16_t*)(s + DS_MODE_WORD)) return true;  // loc_13da8: STC
-            if ((*(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_FLAGS)) |
-                 *(uint16_t*)(s + (uint16_t)(di + OBJ_DIRTY_MODE))) == 0) continue;
+            if ((ObjMem{s, di}.u16(OBJ_SPRITE_FLAGS) |
+                 ObjMem{s, di}.u16(OBJ_DIRTY_MODE)) == 0) continue;
             break;   // occupied -> jmp loc_13d95 (restart full scan from here)
         }
     }
