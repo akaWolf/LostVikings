@@ -157,6 +157,11 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 81: return (void*)&sub_160cf;   // obj search at ds:6C/6E point
     case 82: return (void*)&sub_15ae9;   // tile check at ds:6C/6E point
     case 83: return (void*)&sub_1589b;   // combined at-pos probe (15ae9 -> 160cf)
+    case 84: return (void*)&sub_159c6;   // tile X-walk (X_start-1 entry)
+    case 85: return (void*)&sub_159d3;   // tile X-walk (X_start entry, no DEC)
+    case 86: return (void*)&sub_159df;   // tile X-walk (X_end+1 entry)
+    case 87: return (void*)&sub_15a57;   // tile Y-walk (Y_start-1 entry)
+    case 88: return (void*)&sub_15ac4;   // flip-aware single-point tile probe
     default: return 0;
     }
 }

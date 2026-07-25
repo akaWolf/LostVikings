@@ -192,6 +192,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_15FB1 = 78, FT_SUB_15FBE = 79,
             FT_SUB_1603E = 80,
             FT_SUB_160CF = 81, FT_SUB_15AE9 = 82, FT_SUB_1589B = 83,
+            FT_SUB_159C6 = 84, FT_SUB_159D3 = 85, FT_SUB_159DF = 86,
+            FT_SUB_15A57 = 87, FT_SUB_15AC4 = 88,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -236,7 +238,9 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_15de5", "sub_15df2",
                                  "sub_15fb1", "sub_15fbe",
                                  "sub_1603e",
-                                 "sub_160cf", "sub_15ae9", "sub_1589b" };
+                                 "sub_160cf", "sub_15ae9", "sub_1589b",
+                                 "sub_159c6", "sub_159d3", "sub_159df",
+                                 "sub_15a57", "sub_15ac4" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -4439,6 +4443,105 @@ int ft_selftest_atpos(FtId id, uint32_t seed) {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 85-89: tile-walk entries 159c6/159d3/159df/15a57/15ac4 ---------
+// X-walk core loc_159f6 (entries: X0-1 / X0 / X1+1): slope pre-probe at
+// (WORLD_X, clamp(Y1-vel)) >= 0x30 -> CLC; walk probe column from
+// clamp0(Y0-vel) down to clamp0(Y1-vel) step 0x10 with last-step clamp;
+// filter chain per tile; hit ds:3B2 = type byte. Y-walk core loc_15a70
+// (15a57: Y0-1 entry) walks X across [X0..X1]. 15ac4: flip single point at
+// (flip-X, Y1+1). Exhaustive completeness lives in parent units 20-24
+// (full 158xx sweeps); these direct units isolate every branch per entry.
+int ft_selftest_tilewalk(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    const uint16_t di = 8, FLT = 0x7000;
+    int which = 8 + (int)(id - FT_SUB_159C6);
+    // 16x16 map; type-0x30 stripe on tile column 4 (x 0x40..0x4F) and tile
+    // row 4 (y 0x40..0x4F) for the Y-walk twin; slope tile placed on demand.
+    auto ctx = [&](uint16_t sx0, uint16_t sx1, uint16_t sy0, uint16_t sy1,
+                   uint16_t vel, uint16_t flags, uint16_t wx, int slope_cell) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, 0);
+        ft_wr16(g_synth_in, 0x42, 0xFFFE);
+        ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
+        ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+        ft_wr16(g_synth_in, 0x3B2, 0xBBBB); ft_wr16(g_synth_in, 0x3B4, 0xBBBB);
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER)]     = 0x30;
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER + 1)] = 0xFF;
+        for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+        ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, 0x25DC, 16);
+        ft_wr16(g_synth_in, 0x25DE, 16);
+        for (int y = 0; y < 16; y++)
+            ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE), (uint16_t)(y * 32));
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), sx0);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), sx1);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), sy0);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), sy1);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y),   vel);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_FLAGS),   flags);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_X), wx);
+        memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
+        for (int y = 0; y < 16; y++) {   // stripe column 4
+            uint16_t tw = (uint16_t)(0x30 << 10);
+            g_vm_es_in[(y * 16 + 4) * 2]     = (uint8_t)(tw & 0xFF);
+            g_vm_es_in[(y * 16 + 4) * 2 + 1] = (uint8_t)(tw >> 8);
+        }
+        for (int x = 0; x < 16; x++) {   // stripe row 4
+            uint16_t tw = (uint16_t)(0x30 << 10);
+            g_vm_es_in[(4 * 16 + x) * 2]     = (uint8_t)(tw & 0xFF);
+            g_vm_es_in[(4 * 16 + x) * 2 + 1] = (uint8_t)(tw >> 8);
+        }
+        if (slope_cell >= 0) {           // slope tile >= 0x30 for the pre-probe
+            uint16_t tw = (uint16_t)(0x31 << 10);
+            g_vm_es_in[slope_cell * 2]     = (uint8_t)(tw & 0xFF);
+            g_vm_es_in[slope_cell * 2 + 1] = (uint8_t)(tw >> 8);
+        }
+    };
+    auto run1 = [&](const char* group, FtSynthStats& st) {
+        ft_fill_tail(g_synth_in);
+        uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = v2_fntest_call_search(g_scratch, which, FLT, di);
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        FtRegs in{}; in.si = FLT; in.di = di;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, group, st, diff_budget);
+    };
+    // Grid: probe on/off the stripe; hit at first/mid/last walk step; walk
+    // clamp (start past top: single clamped attempt); slope pre-probe kill;
+    // vel shifting the window; zero window; flip for 15ac4.
+    struct GC { uint16_t sx0, sx1, sy0, sy1, vel, flags, wx; int slope; };
+    static const GC G[] = {
+        { 0x0041, 0x0030, 0x0080, 0x00A0, 0x0000, 0x0000, 0x0090, -1 },  // 159c6: probe 0x40 on stripe, hit mid-walk
+        { 0x0051, 0x0040, 0x0080, 0x00A0, 0x0000, 0x0000, 0x0090, -1 },  // probe off stripe (0x50) → CLC walk-out
+        { 0x0041, 0x0030, 0x00A0, 0x0080, 0x0000, 0x0000, 0x0090, -1 },  // start below top → clamp path
+        { 0x0041, 0x0030, 0x0080, 0x00A0, 0x0000, 0x0000, 0x0048, 8*16+4 }, // slope pre-probe kills (X-walk twins)
+        { 0x0041, 0x0030, 0x0080, 0x00A0, 0x0030, 0x0000, 0x0090, -1 },  // vel shifts window up
+        { 0x0041, 0x0030, 0x0010, 0x0010, 0x0100, 0x0000, 0x0090, -1 },  // clamp0 both (vel > Y)
+        { 0x0041, 0x0030, 0x0080, 0x0080, 0x0000, 0x0000, 0x0090, -1 },  // single-step window
+        { 0x0041, 0x0040, 0x0080, 0x0041, 0x0000, 0x0000, 0x0090, -1 },  // 15a57: X-range over stripe row 4
+        { 0x0041, 0x0040, 0x0080, 0x0041, 0x0000, 0x0040, 0x0090, -1 },  // flip set (15ac4 X0-1 path)
+        { 0x8000, 0x8000, 0x8000, 0x8010, 0x7FFF, 0x0000, 0x0090, -1 },  // SUB-wrap class on clamps
+    };
+    for (auto& g : G) { ctx(g.sx0, g.sx1, g.sy0, g.sy1, g.vel, g.flags, g.wx, g.slope); run1("grid", grid); }
+    FtRng rng(seed);
+    for (int i = 0; i < 4000; i++) {
+        // bounded ranges keep the oracle walk short (<= 32 steps)
+        ctx((uint16_t)(rng.w() & 0x1FF), (uint16_t)(rng.w() & 0x1FF),
+            (uint16_t)(rng.w() & 0x1FF), (uint16_t)(rng.w() & 0x1FF),
+            (uint16_t)((rng.w() & 0x3F) - 0x20), (uint16_t)(rng.next() & 1 ? 0x40 : 0),
+            (uint16_t)(rng.w() & 0x1FF), (rng.next() & 3) == 0 ? (int)(rng.next() % 256) : -1);
+        run1("fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -5549,6 +5652,11 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_160cf")) { matched = true; rc |= ft_selftest_atpos(FT_SUB_160CF, 0x160CF001u); }
     if (all || strstr(env, "sub_15ae9")) { matched = true; rc |= ft_selftest_atpos(FT_SUB_15AE9, 0x15AE9001u); }
     if (all || strstr(env, "sub_1589b")) { matched = true; rc |= ft_selftest_atpos(FT_SUB_1589B, 0x1589B001u); }
+    if (all || strstr(env, "sub_159c6")) { matched = true; rc |= ft_selftest_tilewalk(FT_SUB_159C6, 0x159C6001u); }
+    if (all || strstr(env, "sub_159d3")) { matched = true; rc |= ft_selftest_tilewalk(FT_SUB_159D3, 0x159D3001u); }
+    if (all || strstr(env, "sub_159df")) { matched = true; rc |= ft_selftest_tilewalk(FT_SUB_159DF, 0x159DF001u); }
+    if (all || strstr(env, "sub_15a57")) { matched = true; rc |= ft_selftest_tilewalk(FT_SUB_15A57, 0x15A57001u); }
+    if (all || strstr(env, "sub_15ac4")) { matched = true; rc |= ft_selftest_tilewalk(FT_SUB_15AC4, 0x15AC4001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

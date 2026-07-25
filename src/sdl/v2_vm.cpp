@@ -10629,34 +10629,41 @@ static bool v2_vm_obj_probe_1603e(V2VM& vm, uint16_t filter_si, uint16_t obj_di)
     return false;
 }
 
+// sub_15ac4 (seg000 eips 0x5AC4..0x5AE7): flip-aware SINGLE-POINT tile probe.
+// ds:0x34=filter; probe X = [di+1535]-1 if flags&0x40 else [di+155D]+1;
+// Y = [di+150D]+1; falls into the loc_15a93 single-point core (si==cx):
+// one sub_14199 tile read + filter chain. Hit: ds:0x3B2 = type AND 0xFF
+// (word write of the zero-extended byte), NO 0x3B4 write, STC.
+static bool v2_vm_tile_probe_15ac4(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    ObjRef self{vm, obj_di};
+    vm.ds_write(DS_SCRATCH_34, filter_si);                         // 0x5AC6
+    uint16_t x;
+    if (self.flags() & 0x40) {                                      // 0x5ACA TEST [di+1585],40
+        x = (uint16_t)(self.u16(OBJ_BBOX_X0) - 1);                  // 0x5AD9..0x5ADD
+    } else {
+        x = (uint16_t)(self.u16(OBJ_BBOX_X1) + 1);                  // 0x5AD2..0x5AD6
+    }
+    uint16_t y = (uint16_t)(self.u16(OBJ_BBOX_Y1) + 1);             // loc_15ade: dx=[di+150D]+1
+    uint16_t tile_val = v2_vm_tile_read_141ba(vm, x >> 4, y >> 4);  // loc_15a93: sub_14199
+    uint8_t tt = (uint8_t)((tile_val & 0xFC00) >> 10);
+    uint16_t flt = filter_si;
+    while (true) {                                                  // loc_15a9c chain
+        uint8_t fv = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
+        if (tt < fv) return false;   // JB → single point (si==cx) → CLC
+        if (tt == fv) {
+            vm.ds_write(DS_SEARCH_RES_TYPE, tt);                    // loc_15ab6: AND ax,0xFF
+            return true;
+        }
+        flt++;
+    }
+}
+
 // sub_158e6: animation load using flip-aware SINGLE-POINT search.
 // sub_15ac4: single tile check at (X_flip_edge, Y_end+1).
 // sub_1603e: object search at X_flip_edge (own prologue re-writes 34/36/38).
 static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
-    ObjRef self{vm, obj_di};
-    // Determine X based on flip
-    uint16_t x;
-    if (self.flags() & 0x40) {
-        x = self.u16(OBJ_BBOX_X0) - 1;
-    } else {
-        x = self.u16(OBJ_BBOX_X1) + 1;
-    }
-    // sub_15ac4: single tile check at (x, Y_end+1)
-    vm.ds_write(DS_SCRATCH_34, filter_si);
-    uint16_t y = self.u16(OBJ_BBOX_Y1) + 1;
-    uint16_t tile_val = v2_vm_tile_read_141ba(vm, x >> 4, y >> 4);
-    uint8_t tt = (uint8_t)((tile_val & 0xFC00) >> 10);
-    // Filter comparison (single point)
-    uint16_t flt = filter_si;
-    bool tile_found = false;
-    while (true) {
-        uint8_t fv = *(uint8_t*)(vm.shadow +(uint16_t)(flt - LUT_SCAN_FILTER));
-        if (tt < fv) break;
-        if (tt == fv) { vm.ds_write(DS_SEARCH_RES_TYPE, tt); tile_found = true; break; }
-        flt++;
-    }
-    if (tile_found) { vm.carry = true; return; }
+    if (v2_vm_tile_probe_15ac4(vm, filter_si, obj_di)) { vm.carry = true; return; }
     vm.carry = v2_vm_obj_probe_1603e(vm, filter_si, obj_di);
 }
 
@@ -12234,6 +12241,13 @@ extern "C" int v2_fntest_call_search(uint8_t* test_shadow, int which,
     case 5: vm.carry = v2_vm_tile_at_pos_15ae9(vm, filter); break;   // unit 83
     case 6: vm.carry = v2_vm_obj_at_pos_160cf(vm, filter); break;    // unit 82
     case 7: v2_vm_probe_at_pos_1589b(vm, filter); break;             // unit 84
+    case 8:  vm.carry = v2_vm_tile_scan_x_159f6(vm, filter, obj,     // unit 85: sub_159c6
+                 (uint16_t)(*(uint16_t*)(test_shadow + (uint16_t)(obj + OBJ_BBOX_X0)) - 1)); break;
+    case 9:  vm.carry = v2_vm_tile_scan_x_159f6(vm, filter, obj,     // unit 86: sub_159d3
+                 *(uint16_t*)(test_shadow + (uint16_t)(obj + OBJ_BBOX_X0))); break;
+    case 10: vm.carry = v2_vm_tile_search_right_159df(vm, filter, obj); break; // unit 87
+    case 11: vm.carry = v2_vm_tile_search_up_15a57(vm, filter, obj); break;    // unit 88
+    case 12: vm.carry = v2_vm_tile_probe_15ac4(vm, filter, obj); break;        // unit 89
     default: v2_vm_probe_front_158e6(vm, filter, obj); break;
     }
     v2_replay_verify_active = saved_rv;
