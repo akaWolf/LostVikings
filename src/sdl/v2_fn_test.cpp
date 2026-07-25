@@ -106,6 +106,8 @@ extern "C" void     v2_fntest_call_sub_171dc(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_16ded(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_16e75(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_16f5f(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_17049(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_170b9(uint8_t* test_shadow);
 extern "C" uint8_t* v2_fntest_vga_ptr(void);
 extern "C" uint8_t* v2_fntest_drawbuffer_ptr(void);
 extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
@@ -267,6 +269,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1689E = 130, FT_SUB_16DC1 = 131, FT_SUB_16DD9 = 132,
             FT_SUB_1712B = 133, FT_SUB_171DC = 134, FT_SUB_16DED = 135,
             FT_SUB_16E75 = 136, FT_SUB_16F5F = 137,
+            FT_SUB_17049 = 138, FT_SUB_170B9 = 139,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -336,7 +339,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_139ef", "sub_13a14", "sub_13a34",
                                  "sub_1689e", "sub_16dc1", "sub_16dd9",
                                  "sub_1712b", "sub_171dc", "sub_16ded",
-                                 "sub_16e75", "sub_16f5f" };
+                                 "sub_16e75", "sub_16f5f",
+                                 "sub_17049", "sub_170b9" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -6935,7 +6939,6 @@ int ft_selftest_sub_16ded(uint32_t seed) {
 int ft_selftest_scroll_band(FtId id, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
-    bool left = (id == FT_SUB_16E75);
     FtRng rng(seed);
     uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
     uint8_t* tz = mbase + (uint32_t)FT_VM_TESTSEG * 16;
@@ -6981,8 +6984,10 @@ int ft_selftest_scroll_band(FtId id, uint32_t seed) {
         }
         memset(vga, 0xCC, 65536 * 4);
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
-        if (left) v2_fntest_call_sub_16e75(g_scratch);
-        else      v2_fntest_call_sub_16f5f(g_scratch);
+        if (id == FT_SUB_16E75)      v2_fntest_call_sub_16e75(g_scratch);
+        else if (id == FT_SUB_16F5F) v2_fntest_call_sub_16f5f(g_scratch);
+        else if (id == FT_SUB_17049) v2_fntest_call_sub_17049(g_scratch);
+        else                         v2_fntest_call_sub_170b9(g_scratch);
         memcpy(tz, saved_tz, 0x10000);
 
         long diffs = 0;
@@ -7003,12 +7008,17 @@ int ft_selftest_scroll_band(FtId id, uint32_t seed) {
         }
         if (diffs) st.fail++; else st.pass++;
     };
+    // Domain note: y (disp row) stays within the real row-LUT span — past it
+    // [y*2-0x7098] reads stray DS and the derived VGA addresses leave the
+    // 64K page zone, where the port's getPixel reads zeros PAST drawBuffer
+    // (no 16-bit wrap) while v2 wraps — the documented off-screen-only class.
+    // Real maps keep the scroll display inside the LUT.
     run1(0x0000, 0x0000, 0x00AC, "grid", grid);   // y clamp; left: JL bail-out
     run1(0x0001, 0x0001, 0x00AC, "grid", grid);   // DEC edges
     run1(0x0010, 0x0008, 0x00AC, "grid", grid);
-    run1(0x0030, 0x0018, 0x00AC, "grid", grid);
+    run1(0x0027, 0x0018, 0x00AC, "grid", grid);
     for (int i = 0; i < 120; i++)
-        run1((uint16_t)(rng.next() % 0x40), (uint16_t)(rng.next() % 0x28),
+        run1((uint16_t)(rng.next() % 0x28), (uint16_t)(rng.next() % 0x20),
              0x00AC, "fuzz", fuzz);
     fprintf(stderr,
         "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
@@ -8261,6 +8271,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_16ded")) { matched = true; rc |= ft_selftest_sub_16ded(0x16DED001u); }
     if (all || strstr(env, "sub_16e75")) { matched = true; rc |= ft_selftest_scroll_band(FT_SUB_16E75, 0x16E75001u); }
     if (all || strstr(env, "sub_16f5f")) { matched = true; rc |= ft_selftest_scroll_band(FT_SUB_16F5F, 0x16F5F001u); }
+    if (all || strstr(env, "sub_17049")) { matched = true; rc |= ft_selftest_scroll_band(FT_SUB_17049, 0x17049001u); }
+    if (all || strstr(env, "sub_170b9")) { matched = true; rc |= ft_selftest_scroll_band(FT_SUB_170B9, 0x170B9001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

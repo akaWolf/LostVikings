@@ -4623,6 +4623,59 @@ static void v2_vga_scroll_col_right_16f5f(uint8_t* s) {
     v2_page_copy_row_1712b(s);                                       // CALL sub_1712B
 }
 
+// sub_17049 (seg000 eips 0x7049..0x7048+): scroll-top band — one fresh tile
+// ROW at the top viewport edge; the single-row half of the 16ded shape:
+// cursor trio 9305/9307/9309 + page VGA words 930D/930F/930B, then
+// sub_16dc1 + sub_171dc (JMP tail).
+static void v2_vga_scroll_row_top_17049(uint8_t* s) {
+    uint16_t di_r = *(uint16_t*)(s + DS_SCROLL_DISP_Y);              // 0x7049 di=[92F1]
+    if ((int16_t)di_r > 0) di_r--; else di_r = 0;                    // 0x704d DEC/JGE
+    di_r <<= 1;                                                      // 0x7053
+    uint16_t bx_r = *(uint16_t*)(s + (uint16_t)(di_r - LUT_ROW_BASE)); // 0x7057
+    *(uint16_t*)(s + DS_PAGE_ROWCUR_2) = di_r + *(uint16_t*)(s + DS_PAGE_SHOWN); // 0x705b -> 9305
+    *(uint16_t*)(s + DS_PAGE_ROWCUR_3) = di_r + *(uint16_t*)(s + DS_PAGE_BG);    // 0x7064 -> 9307
+    *(uint16_t*)(s + DS_PAGE_ROWCUR_1) = di_r + *(uint16_t*)(s + DS_PAGE_DRAW);  // 0x706d -> 9309
+    uint16_t dx_col = *(uint16_t*)(s + DS_SCROLL_DISP_X);            // 0x7075 dx=[92EF]
+    if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;              // 0x7079 DEC/JGE
+    bx_r += dx_col; bx_r <<= 1;                                      // 0x707f/0x7081
+    dx_col = dx_col * 2 + 8;                                         // 0x7083/0x7085
+    uint16_t pg1 = *(uint16_t*)(s + DS_PAGE_ROWCUR_2);               // 0x7088
+    *(uint16_t*)(s + DS_PAGE_VGA_3) = *(uint16_t*)(s + (uint16_t)(pg1 - 0x7608)) + dx_col; // 930D
+    uint16_t pg2 = *(uint16_t*)(s + DS_PAGE_ROWCUR_3);               // 0x7096
+    *(uint16_t*)(s + DS_PAGE_VGA_1) = *(uint16_t*)(s + (uint16_t)(pg2 - 0x7608)) + dx_col; // 930F
+    uint16_t pg3 = *(uint16_t*)(s + DS_PAGE_ROWCUR_1);               // 0x70a4
+    *(uint16_t*)(s + DS_PAGE_VGA_2) = *(uint16_t*)(s + (uint16_t)(pg3 - 0x7608)) + dx_col; // 930B
+    v2_tile_row_16dc1(s, bx_r, 0);                                   // 0x70b2 CALL sub_16DC1
+    v2_page_copy_col_171dc(s);                                       // 0x70b5 JMP sub_171DC
+}
+
+// sub_170b9 (seg000 eips 0x70b9..0x7127): scroll-bottom band — same shape,
+// row = [92F1]+0x17 (bottom viewport edge).
+static void v2_vga_scroll_row_bottom_170b9(uint8_t* s) {
+    // 0x70bd ADD di,17h; 0x70c0 JGE: taken when the TRUE (un-truncated) sum
+    // is >= 0 (SF==OF after ADD) — int32 model, not the sign of the wrapped
+    // result (divergence #35 class: differs only for [92F1] >= 0x7FE9).
+    int32_t sum = (int32_t)(int16_t)*(uint16_t*)(s + DS_SCROLL_DISP_Y) + 0x17;
+    uint16_t di_r = (sum >= 0) ? (uint16_t)sum : 0;                  // JGE / MOV di,0
+    di_r <<= 1;                                                      // 0x70c5
+    uint16_t bx_r = *(uint16_t*)(s + (uint16_t)(di_r - LUT_ROW_BASE)); // 0x70c9
+    *(uint16_t*)(s + DS_PAGE_ROWCUR_2) = di_r + *(uint16_t*)(s + DS_PAGE_SHOWN); // 0x70cd -> 9305
+    *(uint16_t*)(s + DS_PAGE_ROWCUR_3) = di_r + *(uint16_t*)(s + DS_PAGE_BG);    // 0x70d6 -> 9307
+    *(uint16_t*)(s + DS_PAGE_ROWCUR_1) = di_r + *(uint16_t*)(s + DS_PAGE_DRAW);  // 0x70df -> 9309
+    uint16_t dx_col = *(uint16_t*)(s + DS_SCROLL_DISP_X);            // 0x70e7 dx=[92EF]
+    if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;              // 0x70eb DEC/JGE
+    bx_r += dx_col; bx_r <<= 1;                                      // 0x70f1/0x70f3
+    dx_col = dx_col * 2 + 8;                                         // 0x70f5/0x70f7
+    uint16_t pg1 = *(uint16_t*)(s + DS_PAGE_ROWCUR_2);               // 0x70fa
+    *(uint16_t*)(s + DS_PAGE_VGA_3) = *(uint16_t*)(s + (uint16_t)(pg1 - 0x7608)) + dx_col; // 930D
+    uint16_t pg2 = *(uint16_t*)(s + DS_PAGE_ROWCUR_3);               // 0x7108
+    *(uint16_t*)(s + DS_PAGE_VGA_1) = *(uint16_t*)(s + (uint16_t)(pg2 - 0x7608)) + dx_col; // 930F
+    uint16_t pg3 = *(uint16_t*)(s + DS_PAGE_ROWCUR_1);               // 0x7116
+    *(uint16_t*)(s + DS_PAGE_VGA_2) = *(uint16_t*)(s + (uint16_t)(pg3 - 0x7608)) + dx_col; // 930B
+    v2_tile_row_16dc1(s, bx_r, 0);                                   // 0x7124 CALL sub_16DC1
+    v2_page_copy_col_171dc(s);                                       // 0x7127 JMP sub_171DC
+}
+
 // sub_11439: init word_3287C rendering flag
 // sub_11439: init render flag + first page flip.
 // if !(byte_2AAAF & 0x42): call sub_16ded (VGA tile row rendering)
@@ -9556,28 +9609,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
             if ((int16_t)ax_x < (int16_t)cx_x) {
                 // Scrolled left: sub_17049 (VGA scroll tile render) + loc_16694 (dirty mark)
                 if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V17049 f%d\n", v2_dbg_pre_vm_iter);} }
-                // sub_17049: full DS side effects (verified with seg000 lines 14607-14652)
-                {
-                    uint16_t di_r = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y);            // ds:92F1h
-                    if ((int16_t)di_r > 0) di_r--; else di_r = 0;            // DEC; JGE; MOV 0
-                    di_r <<= 1;                                                // SHL di, 1
-                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - LUT_ROW_BASE)); // [di-7098h]
-                    *(uint16_t*)(shadow + DS_PAGE_ROWCUR_2) = di_r + *(uint16_t*)(shadow + DS_PAGE_SHOWN); // page 1
-                    *(uint16_t*)(shadow + DS_PAGE_ROWCUR_3) = di_r + *(uint16_t*)(shadow + DS_PAGE_BG); // page 2
-                    *(uint16_t*)(shadow + DS_PAGE_ROWCUR_1) = di_r + *(uint16_t*)(shadow + DS_PAGE_DRAW); // page 3
-                    uint16_t dx_col = *(uint16_t*)(shadow + DS_SCROLL_DISP_X);
-                    if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;
-                    bx_r += dx_col; bx_r <<= 1;
-                    dx_col = dx_col * 2 + 8;                                  // SHL dx,1; ADD dx,8
-                    uint16_t pg1 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_2);
-                    *(uint16_t*)(shadow + DS_PAGE_VGA_3) = *(uint16_t*)(shadow + (uint16_t)(pg1 - 0x7608)) + dx_col;
-                    uint16_t pg2 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_3);
-                    *(uint16_t*)(shadow + DS_PAGE_VGA_1) = *(uint16_t*)(shadow + (uint16_t)(pg2 - 0x7608)) + dx_col;
-                    uint16_t pg3 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_1);
-                    *(uint16_t*)(shadow + DS_PAGE_VGA_2) = *(uint16_t*)(shadow + (uint16_t)(pg3 - 0x7608)) + dx_col;
-                    v2_tile_row_16dc1(shadow, bx_r, 0); // VGA tile row render
-                    v2_page_copy_col_171dc(shadow);       // VGA page copy
-                }
+                v2_vga_scroll_row_top_17049(shadow);    // CALL sub_17049 (extracted, unit 139)
                 // loc_16694: mark sprites dirty if Y < viewport_Y
                 uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_Y);
                 for (int16_t di = 0xFE; di >= 0; di -= 2) {
@@ -9589,27 +9621,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
             } else {
                 // Scrolled right: sub_170b9 (VGA scroll tile render) + loc_166bc (dirty mark)
                 if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V170B9 f%d\n", v2_dbg_pre_vm_iter);} }
-                // sub_170b9: full DS side effects (verified with seg000 lines 14656-14702)
-                {
-                    uint16_t di_r = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y) + 0x17;   // ADD di, 17h
-                    if ((int16_t)di_r < 0) di_r = 0;                        // JGE; MOV 0
-                    di_r <<= 1;
-                    uint16_t bx_r = *(uint16_t*)(shadow + (uint16_t)(di_r - LUT_ROW_BASE));
-                    *(uint16_t*)(shadow + DS_PAGE_ROWCUR_2) = di_r + *(uint16_t*)(shadow + DS_PAGE_SHOWN);
-                    *(uint16_t*)(shadow + DS_PAGE_ROWCUR_3) = di_r + *(uint16_t*)(shadow + DS_PAGE_BG);
-                    *(uint16_t*)(shadow + DS_PAGE_ROWCUR_1) = di_r + *(uint16_t*)(shadow + DS_PAGE_DRAW);
-                    uint16_t dx_col = *(uint16_t*)(shadow + DS_SCROLL_DISP_X);
-                    if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;
-                    bx_r += dx_col; bx_r <<= 1;
-                    dx_col = dx_col * 2 + 8;
-                    uint16_t pg1 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_2);
-                    *(uint16_t*)(shadow + DS_PAGE_VGA_3) = *(uint16_t*)(shadow + (uint16_t)(pg1 - 0x7608)) + dx_col;
-                    uint16_t pg2 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_3);
-                    *(uint16_t*)(shadow + DS_PAGE_VGA_1) = *(uint16_t*)(shadow + (uint16_t)(pg2 - 0x7608)) + dx_col;
-                    uint16_t pg3 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_1);
-                    *(uint16_t*)(shadow + DS_PAGE_VGA_2) = *(uint16_t*)(shadow + (uint16_t)(pg3 - 0x7608)) + dx_col;
-                    v2_tile_row_16dc1(shadow, bx_r, 0); v2_page_copy_col_171dc(shadow); // VGA tile row + page copy
-                }
+                v2_vga_scroll_row_bottom_170b9(shadow); // CALL sub_170B9 (extracted, unit 140)
                 // loc_166bc: mark sprites dirty if Y > viewport_Y + 0x91
                 uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_Y) + 0x91;
                 for (int16_t di = 0xFE; di >= 0; di -= 2) {
@@ -12267,9 +12279,29 @@ static void v2_page_copy_col_171dc(uint8_t* s);
 extern "C" void v2_fntest_call_sub_171dc(uint8_t* test_shadow) {
     v2_page_copy_col_171dc(test_shadow);
 }
-// Units 137-138: sub_16e75 / sub_16f5f — scroll column bands (left/right edge).
+// Units 137-140: scroll bands (column left/right, row top/bottom).
 static void v2_vga_scroll_col_left_16e75(uint8_t* s);
 static void v2_vga_scroll_col_right_16f5f(uint8_t* s);
+static void v2_vga_scroll_row_top_17049(uint8_t* s);
+static void v2_vga_scroll_row_bottom_170b9(uint8_t* s);
+extern "C" void v2_fntest_call_sub_17049(uint8_t* test_shadow) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    v2_vga_scroll_row_top_17049(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+}
+extern "C" void v2_fntest_call_sub_170b9(uint8_t* test_shadow) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    v2_vga_scroll_row_bottom_170b9(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+}
 extern "C" void v2_fntest_call_sub_16e75(uint8_t* test_shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;

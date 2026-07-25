@@ -211,6 +211,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 135: return (void*)&sub_16ded;  // full-viewport band render (25x43x3 pages)
     case 136: return (void*)&sub_16e75;  // scroll band: left column (JL bail-out)
     case 137: return (void*)&sub_16f5f;  // scroll band: right column ([92EF]+0x29)
+    case 138: return (void*)&sub_17049;  // scroll band: top row
+    case 139: return (void*)&sub_170b9;  // scroll band: bottom row ([92F1]+0x17)
     default: return 0;
     }
 }
