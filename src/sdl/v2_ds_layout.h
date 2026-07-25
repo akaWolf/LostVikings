@@ -263,6 +263,9 @@ constexpr uint16_t DS_SCROLL_AMT_LEFT   = 0x03D8; // word_288B8: pending scroll 
 constexpr uint16_t DS_SCROLL_AMT_RIGHT  = 0x03DA; // word_288BA: pending scroll amount, right
 constexpr uint16_t DS_SCROLL_AMT_DOWN   = 0x03DC; // word_288BC: pending scroll amount, down
 constexpr uint16_t DS_SCROLL_AMT_UP     = 0x03DE; // word_288BE: pending scroll amount, up
+constexpr uint16_t DS_SCROLL_STEP2_TBL  = 0x2B80; // scroll step-2 pixel LUT (v2_scroll_step2_10753, after flip 2)
+constexpr uint16_t DS_SCROLL_STEP1_TBL  = 0x2B82; // scroll step-1 pixel LUT (v2_scroll_step1_10704 + scroll_lr/ud, indexed by amount*2)
+constexpr uint16_t DS_SCROLL_AMT_TBL    = 0x2B84; // scroll amount->pixel LUT (camera_follow_1064b + scroll movers, indexed by amt*2)
 
 
 // ---------------------------------------------------------------------------

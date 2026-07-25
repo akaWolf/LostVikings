@@ -7938,8 +7938,8 @@ static void v2_scroll_apply(uint8_t* s, uint16_t table_off) {
         if (v != 0) v2_scroll_down_174bf(s, *(int16_t*)(s + (uint16_t)(v * 2 + table_off)));
     }
 }
-static void v2_scroll_step1_10704(uint8_t* s) { v2_scroll_apply(s, 0x2B82); }
-static void v2_scroll_step2_10753(uint8_t* s) { v2_scroll_apply(s, 0x2B80); }
+static void v2_scroll_step1_10704(uint8_t* s) { v2_scroll_apply(s, DS_SCROLL_STEP1_TBL); }
+static void v2_scroll_step2_10753(uint8_t* s) { v2_scroll_apply(s, DS_SCROLL_STEP2_TBL); }
 
 // sub_1064b (orig eips 0x64B-0x702): camera follow — compute per-axis scroll
 // amounts toward the active viking and move the viewport via the speed table
@@ -7967,14 +7967,14 @@ static void v2_camera_follow_1064b(uint8_t* s) {
             uint16_t amt = (uint16_t)(sum - obj);          // wrapped SUB value
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10; // CMP si,10h; JL
             *(uint16_t*)(s + DS_SCROLL_AMT_LEFT) = amt;
-            v2_scroll_left_17496(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+            v2_scroll_left_17496(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
         } else {                                           // loc_10698
             uint16_t diff = (uint16_t)(obj - *(uint16_t*)(s + DS_VIEWPORT_X));
             if ((int16_t)diff > (int16_t)0xB0) {           // SUB si,0B0h; JLE
                 uint16_t amt = (uint16_t)(diff - 0xB0);
                 if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
                 *(uint16_t*)(s + DS_SCROLL_AMT_RIGHT) = amt;
-                v2_scroll_right_1746c(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+                v2_scroll_right_1746c(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
             }
         }
     }
@@ -7986,14 +7986,14 @@ static void v2_camera_follow_1064b(uint8_t* s) {
             uint16_t amt = (uint16_t)(sum - obj);
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
             *(uint16_t*)(s + DS_SCROLL_AMT_UP) = amt;
-            v2_scroll_up_174e9(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+            v2_scroll_up_174e9(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
         } else {
             uint16_t diff = (uint16_t)(obj - *(uint16_t*)(s + DS_VIEWPORT_Y));
             if ((int16_t)diff > (int16_t)0x60) {
                 uint16_t amt = (uint16_t)(diff - 0x60);
                 if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
                 *(uint16_t*)(s + DS_SCROLL_AMT_DOWN) = amt;
-                v2_scroll_down_174bf(s, *(int16_t*)(s + (uint16_t)(amt * 2 + 0x2B84)));
+                v2_scroll_down_174bf(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
             }
         }
     }
@@ -18537,7 +18537,7 @@ void v2_phase_vm(uint16_t ds_val) {
         uint8_t* real = v2_vm_real_ds_ptr;
         uint8_t* shad = v2_vm_shadow_ds;
         fprintf(stderr, "V2-INIT-CMP: table_end real=%04X shadow=%04X\n",
-               *(uint16_t*)(real + DS_OBJ_COUNT), *(uint16_t*)(shad + 0x372));
+               *(uint16_t*)(real + DS_OBJ_COUNT), *(uint16_t*)(shad + DS_OBJ_COUNT));
         uint16_t te = *(uint16_t*)(real + DS_OBJ_COUNT);
         for (uint16_t si = 0; si < te && si < 20; si += 2) {
             uint16_t r_pc = *(uint16_t*)(real + si + OBJ_PC);
@@ -19015,11 +19015,11 @@ void v2_phase_post_flip1(uint16_t ds_val) {
         };
         uint16_t v;
         v = *(uint16_t*)(s + DS_SCROLL_AMT_LEFT);
-        if (v != 0) scroll_lr(-1, *(uint16_t*)(s + v * 2 + 0x2B82));
-        else { v = *(uint16_t*)(s + DS_SCROLL_AMT_RIGHT); if (v != 0) scroll_lr(1, *(uint16_t*)(s + v * 2 + 0x2B82)); }
+        if (v != 0) scroll_lr(-1, *(uint16_t*)(s + v * 2 + DS_SCROLL_STEP1_TBL));
+        else { v = *(uint16_t*)(s + DS_SCROLL_AMT_RIGHT); if (v != 0) scroll_lr(1, *(uint16_t*)(s + v * 2 + DS_SCROLL_STEP1_TBL)); }
         v = *(uint16_t*)(s + DS_SCROLL_AMT_UP);
-        if (v != 0) scroll_ud(-1, *(uint16_t*)(s + v * 2 + 0x2B82));
-        else { v = *(uint16_t*)(s + DS_SCROLL_AMT_DOWN); if (v != 0) scroll_ud(1, *(uint16_t*)(s + v * 2 + 0x2B82)); }
+        if (v != 0) scroll_ud(-1, *(uint16_t*)(s + v * 2 + DS_SCROLL_STEP1_TBL));
+        else { v = *(uint16_t*)(s + DS_SCROLL_AMT_DOWN); if (v != 0) scroll_ud(1, *(uint16_t*)(s + v * 2 + DS_SCROLL_STEP1_TBL)); }
     }
     // sub_12fcb: sub-sprite position update, delta type 1 — consolidated.
     v2_subsprite_walk_12fcb(s);
