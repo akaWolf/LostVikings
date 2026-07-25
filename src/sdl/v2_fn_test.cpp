@@ -88,6 +88,23 @@ extern "C" void     v2_fntest_call_sub_12fe5(uint8_t* test_shadow, uint16_t di, 
 extern "C" void     v2_fntest_call_sub_13c93(uint8_t* test_shadow, uint16_t di);
 extern "C" int      v2_fntest_call_sub_13d30(uint8_t* test_shadow, uint16_t di);
 extern "C" int32_t  v2_fntest_call_sub_13d52(uint8_t* test_shadow);
+extern "C" int32_t  v2_fntest_call_sub_12f82(uint8_t* test_shadow, uint16_t ax);
+extern "C" int      v2_fntest_call_sub_13e52(uint8_t* test_shadow, uint16_t si, uint16_t bx);
+extern "C" int32_t  v2_fntest_call_sub_13809(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di);
+extern "C" int      v2_fntest_call_sub_13bbd(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" uint32_t v2_fntest_call_sub_13fc2(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di);
+extern "C" uint8_t* v2_fntest_tilemap_ptr(void);
+extern "C" uint16_t v2_fntest_fs_override;
+extern "C" void     v2_fntest_call_sub_139ef(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_13a14(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_13a34(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_1689e(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" void     v2_fntest_call_sub_16dc1(uint8_t* test_shadow, uint16_t bx);
+extern "C" void     v2_fntest_call_sub_16dd9(uint8_t* test_shadow, uint16_t bx);
+extern "C" void     v2_fntest_call_sub_1712b(uint8_t* test_shadow);
+extern "C" void     v2_fntest_call_sub_171dc(uint8_t* test_shadow);
+extern "C" uint8_t* v2_fntest_vga_ptr(void);
+extern "C" uint8_t* v2_fntest_drawbuffer_ptr(void);
 extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
 extern "C" uint8_t* v2_fntest_fs_ptr(void);
 extern "C" void     v2_fntest_clear_fs(uint8_t fill);
@@ -241,6 +258,11 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_13916 = 117, FT_SUB_12FE5 = 118,
             FT_SUB_13C93 = 119,
             FT_SUB_13D30 = 120, FT_SUB_13D52 = 121,
+            FT_SUB_12F82 = 122, FT_SUB_13E52 = 123, FT_SUB_13809 = 124,
+            FT_SUB_13BBD = 125, FT_SUB_13FC2 = 126,
+            FT_SUB_139EF = 127, FT_SUB_13A14 = 128, FT_SUB_13A34 = 129,
+            FT_SUB_1689E = 130, FT_SUB_16DC1 = 131, FT_SUB_16DD9 = 132,
+            FT_SUB_1712B = 133, FT_SUB_171DC = 134,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -304,7 +326,12 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_1386b", "sub_1625d",
                                  "sub_13916", "sub_12fe5",
                                  "sub_13c93",
-                                 "sub_13d30", "sub_13d52" };
+                                 "sub_13d30", "sub_13d52",
+                                 "sub_12f82", "sub_13e52", "sub_13809",
+                                 "sub_13bbd", "sub_13fc2",
+                                 "sub_139ef", "sub_13a14", "sub_13a34",
+                                 "sub_1689e", "sub_16dc1", "sub_16dd9",
+                                 "sub_1712b", "sub_171dc" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -342,6 +369,8 @@ struct FtWr { uint16_t addr, val; };   // extra DS word for directed cases
 // Shared 64KB test code/tile segment (class B + search units). See the
 // class-B section for the placement rationale (heap area of m2c::m).
 const uint16_t FT_VM_TESTSEG = 0x4000;
+const uint16_t FT_GS_SEG = 0x5000;   // 32K zone 0x50000..0x57FFF (173c7 GS tiledata)
+const uint16_t FT_FS_SEG = 0x5800;   // FS zone; reuses the chunk DEST zone (saved/restored)
 const uint32_t FT_VM_ZONE = 0x10000;        // full 64KB segment
 const uint16_t FT_VM_PC = 0x0100;
 uint8_t g_vm_es_in[FT_VM_ZONE], g_vm_es_orig[FT_VM_ZONE];
@@ -5976,6 +6005,834 @@ int ft_selftest_spawn_gate(FtId id, uint32_t seed) {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Unit 123: sub_12f82 — sprite resource lookup (chunk id -> base) ------
+// Channels: CLC -> AX = base (ret_reg 0); STC -> CF (ret_reg 7; orig AX keeps
+// the chunk id). RES_BASE values are generated with bit15 set while chunk ids
+// stay below 0x8000, so a CF divergence can never alias into an AX match.
+int ft_selftest_sub_12f82(uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    auto run1 = [&](uint16_t chunk, const uint16_t* ids, const uint16_t* bases,
+                    uint16_t pool374, const char* group, FtSynthStats& st) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, DS_SPAWN_POOL_SEL, pool374);
+        for (uint16_t i = 0; i < 0x20; i++) {
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + DS_SPRITE_RES_ID), ids[i]);
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + DS_SPRITE_RES_BASE), bases[i]);
+        }
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int32_t packed = v2_fntest_call_sub_12f82(g_scratch, chunk);
+        uint16_t v2ret; int ret_reg;
+        if (packed & 1) { v2ret = 1; ret_reg = 7; }
+        else            { v2ret = (uint16_t)(packed >> 1); ret_reg = 0; }
+        FtRegs in{}; in.ax = chunk;
+        ft_synth_case_regs(FT_SUB_12F82, in, v2ret, ret_reg, group, st, diff_budget);
+    };
+    uint16_t ids[0x20], bases[0x20];
+    FtRng rng(seed);
+    auto fill_tables = [&](uint16_t hole) {
+        for (int i = 0; i < 0x20; i++) {
+            ids[i] = (uint16_t)(rng.w() & 0x7FFF);
+            if (ids[i] == hole) ids[i] ^= 1;
+            bases[i] = (uint16_t)(rng.w() | 0x8000);
+        }
+    };
+    fill_tables(0x1234);
+    run1(0xFFFF, ids, bases, 5, "grid", grid);        // no-sprite: ax=0 CLC
+    run1(0xFFFE, ids, bases, 5, "grid", grid);        // pool bump: INC 374
+    ids[0] = 0x1234;  run1(0x1234, ids, bases, 0, "grid", grid);   // hit at slot 0
+    fill_tables(0x4321);
+    ids[0x1F] = 0x4321; run1(0x4321, ids, bases, 0, "grid", grid); // hit at last slot
+    fill_tables(0x2222);
+    run1(0x2222, ids, bases, 9, "grid", grid);        // miss -> STC
+    // exh: hit position sweep + duplicate id (first match wins).
+    for (int pos = 0; pos < 0x20; pos++) {
+        fill_tables(0x3000);
+        ids[pos] = 0x3000;
+        run1(0x3000, ids, bases, (uint16_t)pos, "exh", exh);
+        if (pos < 0x1F) {
+            ids[pos + 1] = 0x3000;   // duplicate later — must not shadow
+            run1(0x3000, ids, bases, (uint16_t)pos, "exh", exh);
+        }
+    }
+    for (int i = 0; i < 20000; i++) {
+        fill_tables(0);
+        uint16_t chunk;
+        uint32_t k = rng.next() & 7;
+        if (k == 0) chunk = 0xFFFF;
+        else if (k == 1) chunk = 0xFFFE;
+        else if (k < 5) chunk = ids[rng.next() & 0x1F];      // guaranteed hit
+        else chunk = (uint16_t)(rng.w() & 0x7FFF);           // random (mostly miss)
+        run1(chunk, ids, bases, (uint16_t)(rng.next() & 0xFF), "fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_12f82]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Units 124-125: sub_13e52 (template init) / sub_13809 (spawn object) --
+// Shared context builder: template block visible to BOTH channels (oracle via
+// es=[2E67]=FT_VM_TESTSEG, v2 via v2_fntest_set_animdata), spawn scratch and
+// resource table staged in DS, object zone cleared for a deterministic diff.
+struct FtTmplCtx {
+    uint16_t scratch34, scratch36, scratch38;   // ds:34/36/38 (13e52 reads)
+    uint16_t pos_x, pos_y;                      // ds:6C/6E
+    uint16_t pool374, cur42;                    // ds:374, ds:42
+    uint16_t tbl_lo, tbl_hi;                    // ds:3E0, ds:3E2
+    uint16_t trans32F;                          // ds:32F (13d30 gate)
+    uint32_t occ_mask;                          // OBJ_CODE_SEG occupancy (20 slots)
+    uint16_t obj_count;                         // ds:372
+    uint8_t  kill_fill;                         // fill byte for ds:356..365 (13d30 kill bits)
+};
+static void ft_tmpl_build(const FtTmplCtx& c, const uint8_t* tmpl, int tmpl_len,
+                          const uint16_t* res_ids, const uint16_t* res_bases) {
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, DS_SEG_ANIM, FT_VM_TESTSEG);
+    ft_wr16(g_synth_in, DS_SCRATCH_34, c.scratch34);
+    ft_wr16(g_synth_in, DS_SCRATCH_36, c.scratch36);
+    ft_wr16(g_synth_in, DS_SCRATCH_38, c.scratch38);
+    ft_wr16(g_synth_in, 0x006C, c.pos_x);
+    ft_wr16(g_synth_in, 0x006E, c.pos_y);
+    ft_wr16(g_synth_in, DS_SPAWN_POOL_SEL, c.pool374);
+    ft_wr16(g_synth_in, 0x0042, c.cur42);
+    ft_wr16(g_synth_in, 0x03E0, c.tbl_lo);
+    ft_wr16(g_synth_in, 0x03E2, c.tbl_hi);
+    ft_wr16(g_synth_in, 0x032F, c.trans32F);
+    ft_wr16(g_synth_in, 0x0372, c.obj_count);
+    for (int i = 0; i < 0x10; i++) g_synth_in[0x356 + i] = c.kill_fill;
+    for (uint16_t i = 0; i < 0x20; i++) {
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + DS_SPRITE_RES_ID), res_ids[i]);
+        ft_wr16(g_synth_in, (uint16_t)(i * 2 + DS_SPRITE_RES_BASE), res_bases[i]);
+    }
+    // Clear the object-slot zone the init writes into, then stamp occupancy.
+    for (uint32_t a = OBJ_CODE_SEG; a < 0x1B60; a++) g_synth_in[a] = 0;
+    for (uint16_t s2 = 0; s2 < 0x28; s2 += 2)
+        ft_wr16(g_synth_in, (uint16_t)(s2 + OBJ_CODE_SEG),
+                (uint16_t)((c.occ_mask >> (s2 / 2)) & 1));
+    uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+    memset(zone, 0, 0x200);
+    memcpy(zone, tmpl, tmpl_len);
+    v2_fntest_set_animdata(tmpl, (uint32_t)tmpl_len);
+    ft_fill_tail(g_synth_in);
+}
+// Base 3-template block (0x15 bytes each): 0 = FFFF chunk (no sprite),
+// 1 = table-lookup chunk 0x1234, 2 = FFFE chunk + ss bit7 + 2 sub-sprites.
+static int ft_tmpl_base(uint8_t* T /*0x3F bytes*/) {
+    memset(T, 0, 0x15 * 3);
+    auto w16 = [&](int off, uint16_t v){ T[off] = (uint8_t)v; T[off+1] = (uint8_t)(v>>8); };
+    w16(0x00, 0xFFFF); T[0x02] = 0; w16(0x03, 0x10);
+    w16(0x07, 0x1111); T[0x09] = 0x10; T[0x0A] = 0x18;
+    w16(0x0B, 0x2222); w16(0x0D, 0x3333); w16(0x0F, 0x4444);
+    w16(0x11, 0x5555); w16(0x13, 0x6666);
+    int b = 0x15;
+    w16(b+0x00, 0x1234); T[b+0x02] = 0; w16(b+0x03, 0x20);
+    w16(b+0x07, 0x7777); T[b+0x09] = 0x20; T[b+0x0A] = 0x08;
+    w16(b+0x0B, 0x0102); w16(b+0x0D, 0x0304); w16(b+0x0F, 0x0506);
+    w16(b+0x11, 0x0708); w16(b+0x13, 0x090A);
+    b = 0x2A;
+    w16(b+0x00, 0xFFFE); T[b+0x02] = 0x82; w16(b+0x03, 0x08);
+    T[b+0x09] = 0x08; T[b+0x0A] = 0x08;
+    return 0x15 * 3;
+}
+int ft_selftest_sub_13e52(uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    uint8_t T[0x15 * 3];
+    int tlen = ft_tmpl_base(T);
+    uint16_t ids[0x20], bases[0x20];
+    FtRng rng(seed);
+    auto fill_tables = [&](bool with_1234) {
+        for (int i = 0; i < 0x20; i++) {
+            ids[i] = (uint16_t)(rng.w() & 0x7FFF);
+            if (!with_1234 && ids[i] == 0x1234) ids[i] ^= 1;
+            bases[i] = rng.w();
+        }
+        if (with_1234) ids[rng.next() & 0x1F] = 0x1234;
+    };
+    auto run1 = [&](uint16_t si, uint16_t code_idx, const FtTmplCtx& c,
+                    const char* group, FtSynthStats& st) {
+        ft_tmpl_build(c, T, tlen, ids, bases);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t bx = (uint16_t)(code_idx * 0x15);
+        uint16_t cf_v2 = (uint16_t)v2_fntest_call_sub_13e52(g_scratch, si, bx);
+        FtRegs in{}; in.si = si; in.bx = bx;
+        ft_synth_case_regs(FT_SUB_13E52, in, cf_v2, 7, group, st, diff_budget);
+    };
+    FtTmplCtx C{};
+    C.scratch34 = 1; C.scratch36 = 0xFFFF; C.scratch38 = 0x8001;
+    C.pos_x = 0x0120; C.pos_y = 0x00E0; C.pool374 = 3; C.cur42 = 0xFFFF;
+    C.tbl_lo = 8; C.tbl_hi = 6;
+    fill_tables(true);
+    run1(0, 0, C, "grid", grid);                       // FFFF chunk, 3E0>=0
+    run1(2, 1, C, "grid", grid);                       // lookup hit
+    { FtTmplCtx c2 = C; c2.tbl_lo = 0xFFFF; run1(4, 1, c2, "grid", grid); }  // 3E0<0 halves
+    run1(6, 2, C, "grid", grid);                       // FFFE + bit7: 374 = 0+1+2
+    fill_tables(false);
+    run1(0, 1, C, "grid", grid);                       // lookup miss -> CF, partial DS
+    // exh: slot axis x template x 3E0 sign.
+    fill_tables(true);
+    for (uint16_t si = 0; si < 0x28; si += 2)
+        for (uint16_t code = 0; code < 3; code++) {
+            FtTmplCtx c2 = C;
+            if ((si ^ code) & 1) c2.tbl_lo = 0x8000 | si;
+            run1(si, code, c2, "exh", exh);
+        }
+    for (int i = 0; i < 20000; i++) {
+        fill_tables((rng.next() & 3) != 0);
+        FtTmplCtx cf{};
+        cf.scratch34 = rng.w(); cf.scratch36 = rng.w(); cf.scratch38 = rng.w();
+        cf.pos_x = rng.w(); cf.pos_y = rng.w();
+        cf.pool374 = (uint16_t)(rng.next() & 0xFF); cf.cur42 = rng.w();
+        cf.tbl_lo = rng.w(); cf.tbl_hi = rng.w();
+        run1((uint16_t)((rng.next() % 20) * 2), (uint16_t)(rng.next() % 3), cf,
+             "fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_13e52]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+int ft_selftest_sub_13809(uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    uint8_t T[0x15 * 3];
+    int tlen = ft_tmpl_base(T);
+    uint16_t ids[0x20], bases[0x20];
+    FtRng rng(seed);
+    auto fill_tables = [&](bool with_1234) {
+        for (int i = 0; i < 0x20; i++) {
+            ids[i] = (uint16_t)(rng.w() & 0x7FFF);
+            if (!with_1234 && ids[i] == 0x1234) ids[i] ^= 1;
+            bases[i] = rng.w();
+        }
+        if (with_1234) ids[rng.next() & 0x1F] = 0x1234;
+    };
+    auto run1 = [&](uint16_t code_ax, uint16_t anim_si, uint16_t spawn_di,
+                    const FtTmplCtx& c, const char* group, FtSynthStats& st) {
+        ft_tmpl_build(c, T, tlen, ids, bases);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int32_t slot = v2_fntest_call_sub_13809(g_scratch, code_ax, anim_si, spawn_di);
+        uint16_t v2ret; int ret_reg;
+        // orig: CLC -> DI = new slot; STC -> DI = 0 (loc_13866).
+        if (slot < 0) { v2ret = 1; ret_reg = 7; }
+        else          { v2ret = (uint16_t)slot; ret_reg = 5; }
+        FtRegs in{}; in.ax = code_ax; in.si = anim_si; in.di = spawn_di;
+        ft_synth_case_regs(FT_SUB_13809, in, v2ret, ret_reg, group, st, diff_budget);
+    };
+    FtTmplCtx C{};
+    C.pos_x = 0x0140; C.pos_y = 0x00C8; C.pool374 = 2; C.cur42 = 0xFFFF;
+    C.tbl_lo = 0xFFFF; C.tbl_hi = 0; C.trans32F = 0; C.occ_mask = 0;
+    C.obj_count = 0;
+    fill_tables(true);
+    run1(0, 0x8001, 0xFFFF, C, "grid", grid);          // simplest spawn, slot 0
+    run1(1, 0x8001, 0xFFFF, C, "grid", grid);          // lookup-hit template
+    run1(2, 0x8001, 0xFFFF, C, "grid", grid);          // FFFE+bit7+2 subs (13d68 chain)
+    { FtTmplCtx c2 = C; c2.trans32F = 1; run1(0, 0, 0xFFFF, c2, "grid", grid); }   // gate STC
+    { FtTmplCtx c2 = C; c2.occ_mask = 0xFFFFF; run1(0, 0, 0xFFFF, c2, "grid", grid); } // full
+    { FtTmplCtx c2 = C; c2.occ_mask = 0x00003; c2.obj_count = 4;
+      run1(0, 0, 0xFFFF, c2, "grid", grid); }          // slot 4, no 372 bump... (si=4 >= 4 -> bump to 6)
+    fill_tables(false);
+    run1(1, 0, 0xFFFF, C, "grid", grid);               // 13e52 miss -> slot freed, STC
+    fill_tables(true);
+    run1(0, 0, 0x0005, C, "grid", grid);               // di!=FFFF, kill bits clear -> spawns
+    { FtTmplCtx c2 = C; c2.kill_fill = 0xFF;
+      run1(0, 0, 0x0005, c2, "grid", grid); }          // kill bit set -> gate STC
+    // exh: occupancy sweep (first free slot + 372 interaction).
+    fill_tables(true);
+    for (uint32_t m = 0; m < 0x100000; m += 2731) {
+        FtTmplCtx c2 = C; c2.occ_mask = m;
+        c2.obj_count = (uint16_t)((m & 7) * 2);
+        run1((uint16_t)(m % 3), 0x8001, 0xFFFF, c2, "exh", exh);
+    }
+    for (int i = 0; i < 20000; i++) {
+        fill_tables((rng.next() & 3) != 0);
+        FtTmplCtx cf{};
+        cf.pos_x = rng.w(); cf.pos_y = rng.w();
+        cf.pool374 = (uint16_t)(rng.next() & 0xFF);
+        cf.cur42 = (uint16_t)(rng.next() & 1 ? 0xFFFF : (rng.next() % 20) * 2);
+        cf.tbl_lo = rng.w(); cf.tbl_hi = rng.w();
+        cf.trans32F = (uint16_t)((rng.next() & 15) == 0);
+        cf.occ_mask = rng.next() & 0xFFFFF;
+        cf.obj_count = (uint16_t)((rng.next() % 21) * 2);
+        run1((uint16_t)(rng.next() % 3), rng.w(),
+             (uint16_t)(rng.next() & 1 ? 0xFFFF : rng.w()), cf, "fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_13809]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Unit 126: sub_13bbd — spawn one permanent spawn-table entry ----------
+// Entry (0x0E bytes at [di+25F6]): x,y,hw,hh,code,anim,extra. STC on x==FFFF;
+// non-permanent (anim bit 0x800 clear) is a DS no-op; else stage scratch and
+// call sub_13809 with di = spawn index (the caller's si).
+int ft_selftest_sub_13bbd(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    uint8_t T[0x15 * 3];
+    int tlen = ft_tmpl_base(T);
+    uint16_t ids[0x20], bases[0x20];
+    FtRng rng(seed);
+    auto fill_tables = [&](bool with_1234) {
+        for (int i = 0; i < 0x20; i++) {
+            ids[i] = (uint16_t)(rng.w() & 0x7FFF);
+            if (!with_1234 && ids[i] == 0x1234) ids[i] ^= 1;
+            bases[i] = rng.w();
+        }
+        if (with_1234) ids[rng.next() & 0x1F] = 0x1234;
+    };
+    auto run1 = [&](const uint16_t* rec /*x,y,hw,hh,code,anim,extra*/,
+                    uint16_t si, uint16_t di, const FtTmplCtx& c,
+                    const char* group, FtSynthStats& st) {
+        ft_tmpl_build(c, T, tlen, ids, bases);
+        for (int k = 0; k < 7; k++)
+            ft_wr16(g_synth_in, (uint16_t)(di + k * 2 + 0x25F6), rec[k]);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t cf_v2 = (uint16_t)v2_fntest_call_sub_13bbd(g_scratch, si, di);
+        FtRegs in{}; in.si = si; in.di = di;
+        ft_synth_case_regs(FT_SUB_13BBD, in, cf_v2, 7, group, st, diff_budget);
+    };
+    FtTmplCtx C{};
+    C.pos_x = 0; C.pos_y = 0; C.pool374 = 2; C.cur42 = 0xFFFF;
+    C.tbl_lo = 0xFFFF; C.tbl_hi = 0; C.trans32F = 0; C.occ_mask = 0;
+    C.obj_count = 0;
+    fill_tables(true);
+    { const uint16_t r[7] = {0xFFFF,0,0,0,0,0,0};
+      run1(r, 0, 0, C, "grid", grid); }                       // terminator -> STC
+    { const uint16_t r[7] = {0x100,0x80,8,8,1,0x0001,0};
+      run1(r, 0, 0, C, "grid", grid); }                       // not permanent -> no-op
+    { const uint16_t r[7] = {0x100,0x80,8,8,1,0x0801,5};
+      run1(r, 0, 0, C, "grid", grid); }                       // permanent spawn (code 1)
+    { const uint16_t r[7] = {0x200,0x1C0,0xFFFF,4,2,0x0800,0};
+      run1(r, 3, 0x2A, C, "grid", grid); }                    // entry #3, halves<0, subs
+    { const uint16_t r[7] = {0x140,0xC0,6,6,0,0x0800,0};
+      FtTmplCtx c2 = C; c2.occ_mask = 0xFFFFF;
+      run1(r, 1, 0x0E, c2, "grid", grid); }                   // 13809 full -> CLC anyway
+    for (int i = 0; i < 20000; i++) {
+        fill_tables((rng.next() & 3) != 0);
+        FtTmplCtx cf{};
+        cf.pool374 = (uint16_t)(rng.next() & 0xFF);
+        cf.cur42 = (uint16_t)(rng.next() & 1 ? 0xFFFF : (rng.next() % 20) * 2);
+        cf.tbl_lo = rng.w(); cf.tbl_hi = rng.w();
+        cf.trans32F = (uint16_t)((rng.next() & 15) == 0);
+        cf.occ_mask = rng.next() & 0xFFFFF;
+        cf.obj_count = (uint16_t)((rng.next() % 21) * 2);
+        uint16_t rec[7];
+        rec[0] = (uint16_t)(rng.next() & 7 ? (rng.w() | 1) & 0x7FFF : 0xFFFF); // mostly valid X
+        rec[1] = rng.w(); rec[2] = rng.w(); rec[3] = rng.w();
+        rec[4] = (uint16_t)(rng.next() % 3);
+        rec[5] = (uint16_t)(rng.w() & (rng.next() & 1 ? 0xFFFF : 0xF7FF));    // bit 800 mixed
+        rec[6] = rng.w();
+        run1(rec, (uint16_t)(rng.next() % 40),
+             (uint16_t)((rng.next() % 40) * 0x0E), cf, "fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_13bbd]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Unit 127: sub_13fc2 — mark tile dirty (FS quad + tracking arrays) ----
+// Reads a 4-word tile quad from es=[2E63] at (ax&0x3FF)*8+[2E65], ORs bit 0
+// and writes it to fs=[2E69] at bp / bp+[8F6C] (bp from the row LUT
+// [y*4/4*2-0x7098]*2 + x*4). Tracking triple at [([8734])*2-78CA..], then a
+// viewport visibility check bumps [8734] by 3. Oracle zones: tilemap =
+// FT_VM_TESTSEG (also copied into the v2 shadow tilemap), FS = FT_FS_SEG
+// (v2 writes its own shadow FS; both compared byte-wise).
+int ft_selftest_sub_13fc2(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    FtRng rng(seed);
+    auto run1 = [&](uint16_t ax, uint16_t si, uint16_t di, uint16_t gs_off,
+                    uint16_t stride, uint16_t count, uint16_t vx, uint16_t vy,
+                    const char* group, FtSynthStats& st) {
+        st.cases++;
+        uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+        uint8_t* tm_zone = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+        uint8_t* fs_zone = mbase + (uint32_t)FT_FS_SEG * 16;
+        static uint8_t saved_tm[0x10000], saved_fs[0x10000], orig_fs[0x10000];
+        memcpy(saved_tm, tm_zone, 0x10000);
+        memcpy(saved_fs, fs_zone, 0x10000);
+        // Tile-quad source content: deterministic per-case pattern.
+        for (uint32_t a = 0; a < 0x10000; a += 2) {
+            uint16_t w = (uint16_t)(rng.w() & ~1u);   // bit 0 clear: OR 1 must show
+            g_vm_es_in[a] = (uint8_t)w; g_vm_es_in[a + 1] = (uint8_t)(w >> 8);
+        }
+        memcpy(tm_zone, g_vm_es_in, 0x10000);
+        memcpy(v2_fntest_tilemap_ptr(), g_vm_es_in, 0x10000);
+        memset(fs_zone, 0xCC, 0x10000);
+        v2_fntest_clear_fs(0xCC);
+
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);   // ds:2E63
+        ft_wr16(g_synth_in, 0x2E65, gs_off);                  // GS copy offset
+        ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);            // ds:2E69
+        ft_wr16(g_synth_in, 0x8F6C, stride);                  // FS page stride
+        ft_wr16(g_synth_in, 0x8734, count);                   // dirty counter
+        ft_wr16(g_synth_in, 0x0044, vx);                      // viewport X
+        ft_wr16(g_synth_in, 0x0046, vy);                      // viewport Y
+        // Row LUT for bp: the function reads [di*4 - 0x7098] (small 8px rows,
+        // index 2*di into the word LUT). Base the synthetic rows at tile-Y
+        // 0x80..0xC0 so the LUT words (0x9168+) stay clear of the DS fields
+        // around 0x8F6C (FS page stride).
+        for (int y = 0x100; y < 0x180; y++)
+            ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE),
+                    (uint16_t)((y & 0x3F) * 0x100));
+        ft_fill_tail(g_synth_in);
+
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { ax, 0, 0, 0, si, di, 0, 0 };
+        v2_fntest_fs_override = FT_FS_SEG;   // orig fs is caller-loaded (ds:2E69)
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_13FC2), g_synth_orig, regs);
+        v2_fntest_fs_override = 0;
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(orig_fs, fs_zone, 0x10000);
+        memcpy(fs_zone, saved_fs, 0x10000);
+        memcpy(tm_zone, saved_tm, 0x10000);
+        if (esc) {
+            st.cases--;
+            fprintf(stderr, "FNSELFTEST-UB[sub_13fc2 %s]: escaped ax=%04X si=%04X di=%04X\n",
+                    group, ax, si, di);
+            return;
+        }
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint32_t packed = v2_fntest_call_sub_13fc2(g_scratch, ax, si, di);
+        uint16_t si_v2 = (uint16_t)packed, di_v2 = (uint16_t)(packed >> 16);
+
+        long diffs = 0;
+        if (regs[4] != si_v2 || regs[5] != di_v2) {
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_13fc2 %s]: regs si orig=%04X v2=%04X di orig=%04X v2=%04X\n",
+                        group, regs[4], si_v2, regs[5], di_v2); }
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_13fc2 %s]: ds addr=%04X orig=%02X v2=%02X (in=%02X) | ax=%04X si=%04X di=%04X\n",
+                        group, a, g_synth_orig[a], g_scratch[a], g_synth_in[a], ax, si, di); }
+            diffs++;
+        }
+        uint8_t* v2fs = v2_fntest_fs_ptr();
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (orig_fs[a] == v2fs[a]) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_13fc2 %s]: fs addr=%04X orig=%02X v2=%02X | ax=%04X si=%04X di=%04X\n",
+                        group, a, orig_fs[a], v2fs[a], ax, si, di); }
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    // grid: visible tile (counter bump), invisible X, invisible Y, counter
+    // offset, gs_off edge, tile id masked to 0x3FF. Tile-Y (di) in
+    // [0x80,0xC0) to hit the synthetic LUT rows.
+    run1(0x0005, 5, 0x83, 0x1000, 0x2000, 0, 0x40, 0x820, "grid", grid);
+    run1(0x0005, 40, 0x83, 0x1000, 0x2000, 4, 0x40, 0x820, "grid", grid);   // x far -> no bump
+    run1(0x0005, 5, 0x83, 0x1000, 0x2000, 4, 0x40, 0x20, "grid", grid);     // y far -> no bump
+    run1(0xFC05, 5, 0x83, 0x1000, 0x2000, 7, 0x40, 0x820, "grid", grid);    // id bits 15..10 masked
+    run1(0x03FF, 63, 0xBF, 0xE000, 0x6FF0, 0x20, 0x400, 0xC00, "grid", grid); // edges
+    for (int i = 0; i < 8000; i++) {
+        run1(rng.w(), (uint16_t)(rng.next() & 63),
+             (uint16_t)(0x80 + (rng.next() & 0x3F)),
+             (uint16_t)(rng.next() % 0xE000), (uint16_t)(rng.next() % 0x7000),
+             (uint16_t)(rng.next() & 0xFF),
+             (uint16_t)(rng.next() & 0x3FF), (uint16_t)(rng.next() & 0xFFF),
+             "fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_13fc2]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Unit 128: sub_139ef — full viewport spawn bounds (pure DS leaf) ------
+int ft_selftest_sub_139ef(uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    auto run1 = [&](uint16_t vx, uint16_t vy, const char* group, FtSynthStats& st) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x0044, vx);
+        ft_wr16(g_synth_in, 0x0046, vy);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_139ef(g_scratch);
+        FtRegs in{};
+        ft_synth_case_regs(FT_SUB_139EF, in, 0, -1, group, st, diff_budget);
+    };
+    run1(0x0100, 0x0080, "grid", grid);
+    run1(0x0000, 0x0000, "grid", grid);        // wraps below zero
+    run1(0xFFF0, 0xFFF0, "grid", grid);        // wraps above 0xFFFF
+    for (uint32_t v = 0; v <= 0xFFFF; v += 257)
+        run1((uint16_t)v, (uint16_t)(0xFFFF - v), "exh", exh);
+    FtRng rng(seed);
+    for (int i = 0; i < 4000; i++)
+        run1(rng.w(), rng.w(), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_139ef]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Units 129-130: sub_13a14 / sub_13a34 — scroll-band spawn scans -------
+// Same synthetic context as unit 54 (ft_spawn_build); only the band bounds
+// differ (up: x in [vx-0x10, vx+0x10), down: x in [vx+0x130, vx+0x150)).
+int ft_selftest_spawn_band(FtId id, uint32_t seed);
+
+// ---- Unit 131 (K3 render): sub_1689e — VGA tile blit ----------------------
+// Pixel channel: the oracle draws via drawPixel into myDrawInfo->drawBuffer
+// (linear = vga_addr*4 + plane), v2 draws into the shadow VGA (same layout).
+// Both start from a 0xCC baseline and are compared over the full 256K.
+// Tile gfx source: 64K zone at FT_VM_TESTSEG, shared by both channels
+// (oracle ds = [2E5F], v2 verify-active resolve of DS_SEG_TILEGFX).
+// Oracle also writes the real es=A000 words in m2c memory — saved/restored.
+// di kept below 0xF000: the port's drawPixel does NOT 16-bit-wrap row offsets
+// (guard-drops out-of-range) while v2 wraps — an off-screen-only divergence
+// class; real pages never reach the wrap zone.
+int ft_selftest_sub_1689e(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    FtRng rng(seed);
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* tz = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    uint8_t* a000 = mbase + 0xA0000u;
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+    static uint8_t saved_tz[0x10000], saved_a000[0x10000];
+    auto run1 = [&](uint16_t tile_word, uint16_t di, const char* group, FtSynthStats& st) {
+        st.cases++;
+        memcpy(saved_tz, tz, 0x10000);
+        memcpy(saved_a000, a000, 0x10000);
+        for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);   // ds:2E5F
+        ft_fill_tail(g_synth_in);
+
+        memset(db, 0xCC, 65536 * 4);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, tile_word, di, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1689E), g_synth_orig, regs);
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(a000, saved_a000, 0x10000);
+        if (esc) {
+            st.cases--;
+            memcpy(tz, saved_tz, 0x10000);
+            fprintf(stderr, "FNSELFTEST-UB[sub_1689e %s]: escaped si=%04X di=%04X\n",
+                    group, tile_word, di);
+            return;
+        }
+        memset(vga, 0xCC, 65536 * 4);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_1689e(g_scratch, tile_word, di);
+        memcpy(tz, saved_tz, 0x10000);
+
+        long diffs = 0;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_1689e %s]: ds addr=%04X orig=%02X v2=%02X\n",
+                        group, a, g_synth_orig[a], g_scratch[a]); }
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_1689e %s]: vga lin=%06X (addr=%04X pl=%u) orig=%02X v2=%02X | si=%04X di=%04X\n",
+                        group, a, a >> 2, a & 3, db[a], vga[a], tile_word, di); }
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    // grid: all 4 flips at a plain offset; tile index edges; odd di.
+    run1(0x0000, 0x1000, "grid", grid);            // normal, tile 0
+    run1(0x0010, 0x1000, "grid", grid);            // hflip
+    run1(0x0020, 0x1000, "grid", grid);            // vflip
+    run1(0x0030, 0x1000, "grid", grid);            // hflip+vflip
+    run1(0xFFC0, 0x0000, "grid", grid);            // last tile, di 0
+    run1(0xFFF0, 0x2001, "grid", grid);            // last tile + both flips, odd di
+    run1(0x0040, 0x7FFE, "grid", grid);            // tile 1, mid-range di
+    for (int i = 0; i < 4000; i++)
+        run1(rng.w(), (uint16_t)(rng.next() % 0xF000), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_1689e]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Units 132-133: sub_16dc1 (tile row x43) / sub_16dd9 (tile col x25) ---
+// Same pixel channel as unit 131. Extra context: FS zone (FT_FS_SEG) holds
+// the tile words the loop walks (oracle fs:[bx] via fs-override; the v2
+// mirrors read the shadow FS — filled with the same bytes); the v2 loops
+// take di from ds:930B (row) / ds:9315 (col) — the caller-staged copy of
+// the entry di register; the runner stages both identically.
+int ft_selftest_tile_loop(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    bool row = (id == FT_SUB_16DC1);
+    FtRng rng(seed);
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* tz = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    uint8_t* fz = mbase + (uint32_t)FT_FS_SEG * 16;
+    uint8_t* a000 = mbase + 0xA0000u;
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+    static uint8_t saved_tz[0x10000], saved_fz[0x10000], saved_a000[0x10000];
+    auto run1 = [&](uint16_t bx, uint16_t di, uint16_t stride,
+                    const char* group, FtSynthStats& st) {
+        st.cases++;
+        memcpy(saved_tz, tz, 0x10000);
+        memcpy(saved_fz, fz, 0x10000);
+        memcpy(saved_a000, a000, 0x10000);
+        for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
+        memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
+
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);   // ds:2E5F
+        ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);            // ds:2E69 (context)
+        ft_wr16(g_synth_in, DS_FS_PAGE_STRIDE, stride);       // ds:8F6C
+        ft_wr16(g_synth_in, (uint16_t)(row ? 0x930B : 0x9315), di); // staged di copy
+        ft_fill_tail(g_synth_in);
+
+        memset(db, 0xCC, 65536 * 4);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, bx, 0, 0, 0, di, 0, 0 };
+        v2_fntest_fs_override = FT_FS_SEG;   // orig fs is caller-loaded
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+        v2_fntest_fs_override = 0;
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(a000, saved_a000, 0x10000);
+        memcpy(fz, saved_fz, 0x10000);
+        if (esc) {
+            st.cases--;
+            memcpy(tz, saved_tz, 0x10000);
+            fprintf(stderr, "FNSELFTEST-UB[%s %s]: escaped bx=%04X di=%04X\n",
+                    g_name[id], group, bx, di);
+            return;
+        }
+        memset(vga, 0xCC, 65536 * 4);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        if (row) v2_fntest_call_sub_16dc1(g_scratch, bx);
+        else     v2_fntest_call_sub_16dd9(g_scratch, bx);
+        memcpy(tz, saved_tz, 0x10000);
+
+        long diffs = 0;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: ds addr=%04X orig=%02X v2=%02X\n",
+                        g_name[id], group, a, g_synth_orig[a], g_scratch[a]); }
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: vga lin=%06X (addr=%04X pl=%u) orig=%02X v2=%02X | bx=%04X di=%04X\n",
+                        g_name[id], group, a, a >> 2, a & 3, db[a], vga[a], bx, di); }
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    // Bounds: row reads fs words bx..bx+0x54, draws di..di+0x54+0x25A;
+    // col reads bx + 24*stride (16-bit wrap legit on the oracle regs), draws
+    // di + 24*0x2B0 + 0x25B. Keep draw targets clear of the 0xF000 wrap zone.
+    if (row) {
+        run1(0x0100, 0x1000, 0x00AC, "grid", grid);
+        run1(0x0000, 0x0000, 0x00AC, "grid", grid);
+        run1(0xFF00, 0x8000, 0x00AC, "grid", grid);     // bx near top (reads to 0xFF54)
+        run1(0x0101, 0x2001, 0x00AC, "grid", grid);     // odd bx/di
+        for (int i = 0; i < 300; i++)
+            run1((uint16_t)(rng.next() % 0xFF00), (uint16_t)(rng.next() % 0xB000),
+                 0x00AC, "fuzz", fuzz);
+    } else {
+        run1(0x0100, 0x1000, 0x00AC, "grid", grid);     // real stride (0x2B*2*2)
+        run1(0x0000, 0x0000, 0x0002, "grid", grid);     // tiny stride
+        run1(0xF000, 0x0800, 0x1000, "grid", grid);     // bx wraps mid-loop
+        run1(0x0055, 0x2001, 0x00AC, "grid", grid);     // odd bx/di
+        for (int i = 0; i < 300; i++)
+            run1(rng.w(), (uint16_t)(rng.next() % 0x1000),
+                 (uint16_t)(rng.next() % 0x800), "fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Unit 134: sub_1712b — VGA page copy (3+1 phases, port quirk) ---------
+// The oracle's pixel channel is a closed loop here: getPixel reads the same
+// drawBuffer drawPixel writes, so both sides start from ONE shared random
+// baseline (drawBuffer content == shadow VGA content) and must produce the
+// same 256K afterwards. The real es=A000 LOOP copies are outside the compare
+// (saved/restored). Port quirk `i <= cl` (one extra row vs DOS LOOP) is the
+// parity target — the v2 mirror replicates it.
+int ft_selftest_sub_1712b(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    FtRng rng(seed);
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* a000 = mbase + 0xA0000u;
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+    static uint8_t saved_a000[0x10000];
+    auto run1 = [&](uint16_t si, uint16_t di1, uint16_t di2, uint16_t di3, uint16_t di4,
+                    uint8_t c1, uint8_t c2, uint8_t c3, uint8_t c4,
+                    const char* group, FtSynthStats& st) {
+        st.cases++;
+        memcpy(saved_a000, a000, 0x10000);
+        for (uint32_t a = 0; a < 65536u * 4; a++) db[a] = (uint8_t)rng.next();
+        memcpy(vga, db, 65536u * 4);
+
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        g_synth_in[0x9311] = c1; g_synth_in[0x9312] = c2;
+        g_synth_in[0x9313] = c3; g_synth_in[0x9314] = c4;
+        ft_wr16(g_synth_in, 0x9315, si);
+        ft_wr16(g_synth_in, 0x9317, di1);
+        ft_wr16(g_synth_in, 0x9319, di2);
+        ft_wr16(g_synth_in, 0x931B, di3);
+        ft_wr16(g_synth_in, 0x931D, di4);
+        ft_fill_tail(g_synth_in);
+
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1712B), g_synth_orig, regs);
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(a000, saved_a000, 0x10000);
+        if (esc) {
+            st.cases--;
+            fprintf(stderr, "FNSELFTEST-UB[sub_1712b %s]: escaped\n", group);
+            return;
+        }
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_1712b(g_scratch);
+
+        long diffs = 0;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_1712b %s]: ds addr=%04X orig=%02X v2=%02X\n",
+                        group, a, g_synth_orig[a], g_scratch[a]); }
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_1712b %s]: vga lin=%06X (addr=%04X pl=%u) orig=%02X v2=%02X | si=%04X c=%u/%u/%u/%u\n",
+                        group, a, a >> 2, a & 3, db[a], vga[a], si, c1, c2, c3, c4); }
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    // grid: full 4-phase copy; JCXZ phase 2/4 off; overlapping src/dst;
+    // cl=0 phase 1 (LOOP-64K pathology: quirk hook still writes one row,
+    // bx ends 0 either way — pixel channels agree).
+    run1(0x1000, 0x3000, 0x5000, 0x7000, 0x9000, 8, 4, 8, 4, "grid", grid);
+    run1(0x1000, 0x3000, 0x5000, 0x7000, 0x9000, 8, 0, 8, 0, "grid", grid);
+    run1(0x1000, 0x1002, 0x1004, 0x1006, 0x1008, 5, 3, 5, 3, "grid", grid);  // overlap
+    run1(0x2000, 0x4000, 0x6000, 0x8000, 0xA000, 0, 2, 0, 2, "grid", grid);  // cl1/cl3 = 0
+    run1(0xD000, 0xD100, 0xD200, 0xD300, 0xD400, 0x19, 0x19, 0x19, 0x19, "grid", grid);
+    for (int i = 0; i < 400; i++)
+        run1((uint16_t)(rng.next() % 0xD000), (uint16_t)(rng.next() % 0xD000),
+             (uint16_t)(rng.next() % 0xD000), (uint16_t)(rng.next() % 0xD000),
+             (uint16_t)(rng.next() % 0xD000),
+             (uint8_t)(rng.next() % 0x30), (uint8_t)(rng.next() % 0x30),
+             (uint8_t)(rng.next() % 0x30), (uint8_t)(rng.next() % 0x30),
+             "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_1712b]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Unit 135: sub_171dc — column page copy (930B -> 930D / 930F) --------
+// Same closed drawBuffer loop as unit 134. Both 0x2B0-byte copies read the
+// ORIGINAL 930B source (the second one is NOT chained off the first dest) —
+// overlap cases pin that.
+int ft_selftest_sub_171dc(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    FtRng rng(seed);
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* a000 = mbase + 0xA0000u;
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+    static uint8_t saved_a000[0x10000];
+    auto run1 = [&](uint16_t src, uint16_t d1, uint16_t d2,
+                    const char* group, FtSynthStats& st) {
+        st.cases++;
+        memcpy(saved_a000, a000, 0x10000);
+        for (uint32_t a = 0; a < 65536u * 4; a++) db[a] = (uint8_t)rng.next();
+        memcpy(vga, db, 65536u * 4);
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x930B, src);
+        ft_wr16(g_synth_in, 0x930D, d1);
+        ft_wr16(g_synth_in, 0x930F, d2);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_171DC), g_synth_orig, regs);
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(a000, saved_a000, 0x10000);
+        if (esc) { st.cases--; fprintf(stderr, "FNSELFTEST-UB[sub_171dc %s]\n", group); return; }
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_171dc(g_scratch);
+        long diffs = 0;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_171dc %s]: ds addr=%04X orig=%02X v2=%02X\n",
+                        group, a, g_synth_orig[a], g_scratch[a]); }
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            if (diff_budget > 0) { diff_budget--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_171dc %s]: vga lin=%06X (addr=%04X pl=%u) orig=%02X v2=%02X | src=%04X d1=%04X d2=%04X\n",
+                        group, a, a >> 2, a & 3, db[a], vga[a], src, d1, d2); }
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    run1(0x1000, 0x3000, 0x5000, "grid", grid);
+    run1(0x1000, 0x1100, 0x1200, "grid", grid);   // overlap: d1 inside src span
+    run1(0x1000, 0x0F00, 0x1080, "grid", grid);   // overlaps both directions
+    run1(0x0000, 0x2000, 0x4000, "grid", grid);
+    for (int i = 0; i < 500; i++)
+        run1((uint16_t)(rng.next() % 0xF000), (uint16_t)(rng.next() % 0xF000),
+             (uint16_t)(rng.next() % 0xF000), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_171dc]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -6230,6 +7087,86 @@ int ft_selftest_spawn2() {
     return rc;
 }
 
+// ---- Units 129-130 impl: sub_13a14 / sub_13a34 scroll-band spawn scans ----
+// Bands for vp=(0x100,0x100): up x in [F0,110), down x in [230,250);
+// both y in [F0,1C0). Entries straddle each edge (JGE/JL signed edges).
+int ft_selftest_spawn_band(FtId id, uint32_t seed) {
+    (void)seed;
+    FtSynthStats grid;
+    long diff_budget = 24;
+    uint8_t T[0x15 * 3];
+    int tlen = ft_tmpl_base(T);
+    const FtWr VP[] = { {0x0044, 0x0100}, {0x0046, 0x0100} };
+    bool up = (id == FT_SUB_13A14);
+    auto run_case = [&](const char* tag) {
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        if (up) v2_fntest_call_sub_13a14(g_scratch);
+        else    v2_fntest_call_sub_13a34(g_scratch);
+        FtRegs in{};
+        ft_synth_case_regs(id, in, 0, -1, tag, grid, diff_budget);
+    };
+    // In-band + out-of-band pair on each side of the strip.
+    uint16_t x_in  = up ? 0x0100 : 0x0240;
+    uint16_t x_lo  = up ? 0x00D0 : 0x0210;   // left of band (x+hw < lo bound)
+    uint16_t x_hi  = up ? 0x0130 : 0x0270;   // right of band (x-hw >= hi bound)
+    {
+        FtSpawnRec recs[] = {
+            { x_in, 0x0120, 8, 8, 0, 0x11, 0 },
+            { x_lo, 0x0120, 8, 8, 1, 0x22, 0 },
+            { x_hi, 0x0120, 8, 8, 2, 0x33, 0 },
+        };
+        ft_spawn_build(recs, 3, T, (int)tlen, VP, 2);
+        run_case("band");
+    }
+    // Edge-touch: x+hw == band-lo (visible) / band-lo - 1 (out);
+    // x-hw == band-hi (out) / band-hi - 1 (visible).
+    {
+        uint16_t lo = up ? 0x00F0 : 0x0230, hi = up ? 0x0110 : 0x0250;
+        FtSpawnRec recs[] = {
+            { (uint16_t)(lo - 8),     0x0120, 8, 8, 0, 0, 0 },   // x+hw == lo: visible
+            { (uint16_t)(lo - 9),     0x0120, 8, 8, 0, 0, 0 },   // x+hw == lo-1: out
+            { (uint16_t)(hi + 8),     0x0120, 8, 8, 0, 0, 0 },   // x-hw == hi: out
+            { (uint16_t)(hi + 7),     0x0120, 8, 8, 0, 0, 0 },   // x-hw == hi-1: visible
+        };
+        ft_spawn_build(recs, 4, T, (int)tlen, VP, 2);
+        run_case("edges");
+    }
+    // Y band edges (shared clamp tail): y+hh == F0 visible / EF out.
+    {
+        FtSpawnRec recs[] = {
+            { x_in, 0x00E8, 8, 8, 0, 0, 0 },
+            { x_in, 0x00E7, 8, 8, 0, 0, 0 },
+            { x_in, 0x01C8, 8, 8, 0, 0, 0 },   // y-hh == 1C0: out
+            { x_in, 0x01C7, 8, 8, 0, 0, 0 },   // y-hh == 1BF: visible
+        };
+        ft_spawn_build(recs, 4, T, (int)tlen, VP, 2);
+        run_case("y-edges");
+    }
+    // Empty table + creation gate.
+    {
+        ft_spawn_build(nullptr, 0, T, (int)tlen, VP, 2);
+        run_case("empty");
+    }
+    {
+        FtSpawnRec recs[] = { { x_in, 0x0120, 8, 8, 0, 0, 0 } };
+        const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},{0x032F,1} };
+        ft_spawn_build(recs, 1, T, (int)tlen, wr, 3);
+        run_case("gate-32F");
+    }
+    // Negative-clamp path: viewport near zero wraps bounds below 0 -> clamped.
+    {
+        FtSpawnRec recs[] = { { 0x0008, 0x0008, 8, 8, 0, 0, 0 } };
+        const FtWr wr[] = { {0x0044, 0x0008}, {0x0046, 0x0008} };
+        ft_spawn_build(recs, 1, T, (int)tlen, wr, 2);
+        run_case("clamp-zero");
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
 // ---- Unit 63: sub_15911 — Y-move search dispatcher --------------------------
 // cur=[di+1765] vs old=[di+13CD]: == -> CLC, ax=cur (untouched path);
 // < -> loc_15a64 tail (Y_start-1 probe), ax=1; > -> loc_15a7d tail, ax=0.
@@ -6386,9 +7323,8 @@ int ft_selftest_sub_11cbb() {
 // Zones: tilemap = FT_VM_TESTSEG, GS tiledata = FT_GS_SEG, FS = FT_FS_SEG
 // (m2c::m scratch, save/restored per case). v2 reads/writes its shadow
 // buffers via the v2_fntest_set_* helpers; the FS zone comparison is a NEW
-// compare channel (poison-protocol tested).
-const uint16_t FT_GS_SEG = 0x5000;   // 32K zone 0x50000..0x57FFF
-const uint16_t FT_FS_SEG = 0x5800;   // reuses the chunk DEST zone (saved/restored)
+// compare channel (poison-protocol tested). FT_GS_SEG/FT_FS_SEG declared
+// next to FT_VM_TESTSEG (unit 127 reuses the FS zone).
 
 bool ft_synth_case_173c7(uint16_t w, uint16_t h, uint8_t flag25cf,
                          uint32_t seed, const char* group,
@@ -7124,6 +8060,19 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_13c93")) { matched = true; rc |= ft_selftest_sub_13c93(0x13C93001u); }
     if (all || strstr(env, "sub_13d30")) { matched = true; rc |= ft_selftest_spawn_gate(FT_SUB_13D30, 0x13D30001u); }
     if (all || strstr(env, "sub_13d52")) { matched = true; rc |= ft_selftest_spawn_gate(FT_SUB_13D52, 0x13D52001u); }
+    if (all || strstr(env, "sub_12f82")) { matched = true; rc |= ft_selftest_sub_12f82(0x12F82001u); }
+    if (all || strstr(env, "sub_13e52")) { matched = true; rc |= ft_selftest_sub_13e52(0x13E52001u); }
+    if (all || strstr(env, "sub_13809")) { matched = true; rc |= ft_selftest_sub_13809(0x13809001u); }
+    if (all || strstr(env, "sub_13bbd")) { matched = true; rc |= ft_selftest_sub_13bbd(0x13BBD001u); }
+    if (all || strstr(env, "sub_13fc2")) { matched = true; rc |= ft_selftest_sub_13fc2(0x13FC2001u); }
+    if (all || strstr(env, "sub_139ef")) { matched = true; rc |= ft_selftest_sub_139ef(0x139EF001u); }
+    if (all || strstr(env, "sub_13a14")) { matched = true; rc |= ft_selftest_spawn_band(FT_SUB_13A14, 0x13A14001u); }
+    if (all || strstr(env, "sub_13a34")) { matched = true; rc |= ft_selftest_spawn_band(FT_SUB_13A34, 0x13A34001u); }
+    if (all || strstr(env, "sub_1689e")) { matched = true; rc |= ft_selftest_sub_1689e(0x1689E001u); }
+    if (all || strstr(env, "sub_16dc1")) { matched = true; rc |= ft_selftest_tile_loop(FT_SUB_16DC1, 0x16DC1001u); }
+    if (all || strstr(env, "sub_16dd9")) { matched = true; rc |= ft_selftest_tile_loop(FT_SUB_16DD9, 0x16DD9001u); }
+    if (all || strstr(env, "sub_1712b")) { matched = true; rc |= ft_selftest_sub_1712b(0x1712B001u); }
+    if (all || strstr(env, "sub_171dc")) { matched = true; rc |= ft_selftest_sub_171dc(0x171DC001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

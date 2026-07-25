@@ -216,7 +216,14 @@ void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes) {
         }
     }
     uint32_t ds_end = (uint32_t)dst + nbytes, ss_end = (uint32_t)src + nbytes;
-    if (ds_end <= 0x10000u && ss_end <= 0x10000u) {
+    // REP MOVSB (DF=0) copies bytes FORWARD: a forward-overlapping copy
+    // (src < dst < src+n) re-reads bytes it has just written, replicating the
+    // [src..dst) prefix with period dst-src — memmove would preserve the
+    // original source bytes instead (divergence #34, caught by unit 135's
+    // overlap case; real pages never overlap, so replays never saw it).
+    // Backward/no overlap keeps the memmove fast path (identical result).
+    bool fwd_overlap = dst > src && (uint32_t)dst < ss_end;
+    if (!fwd_overlap && ds_end <= 0x10000u && ss_end <= 0x10000u) {
         memmove(v2_vga     + (uint32_t)dst * 4u, v2_vga     + (uint32_t)src * 4u, (size_t)nbytes * 4u);
         memmove(v2_vga_cov + (uint32_t)dst * 4u, v2_vga_cov + (uint32_t)src * 4u, (size_t)nbytes * 4u);
         return;

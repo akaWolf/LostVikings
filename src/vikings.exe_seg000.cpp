@@ -195,6 +195,19 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 119: return (void*)&sub_13c93;  // despawn (unlink + 372 shrink + respawn tail)
     case 120: return (void*)&sub_13d30;  // spawn gate (transition + kill-bit table)
     case 121: return (void*)&sub_13d52;  // first free slot probe (0..0x28)
+    case 122: return (void*)&sub_12f82;  // sprite resource lookup (chunk id -> base)
+    case 123: return (void*)&sub_13e52;  // object template init (0x15-byte anim header)
+    case 124: return (void*)&sub_13809;  // spawn object (gate+slot+template+subs)
+    case 125: return (void*)&sub_13bbd;  // spawn one permanent spawn-table entry
+    case 126: return (void*)&sub_13fc2;  // mark tile dirty (FS quad + tracking arrays)
+    case 127: return (void*)&sub_139ef;  // full viewport spawn bounds (leaf)
+    case 128: return (void*)&sub_13a14;  // scroll-up spawn band + 13a94 scan
+    case 129: return (void*)&sub_13a34;  // scroll-down spawn band + 13a94 scan
+    case 130: return (void*)&sub_1689e;  // VGA tile blit (4 flips, 4 planes x 8 rows)
+    case 131: return (void*)&sub_16dc1;  // tile row x43 (fs:[bx] words -> 1689e)
+    case 132: return (void*)&sub_16dd9;  // tile column x25 (bx += ds:8F6C stride)
+    case 133: return (void*)&sub_1712b;  // VGA page copy (3+1 phases, drawBuffer quirk i<=cl)
+    case 134: return (void*)&sub_171dc;  // column page copy (930B -> 930D/930F, 0x2B0 bytes)
     default: return 0;
     }
 }
@@ -314,6 +327,9 @@ extern "C" void v2_fntest_arm_signals(void) {
 // DATA.DAT for both the oracle and v2 (the oracle's file layer is the port's
 // SDL-inlined fread/fseek on the static `data_handle`).
 extern "C" uint16_t v2_fntest_es_override = 0;
+// fs for orig functions that rely on a caller-loaded fs (e.g. sub_13fc2:
+// fs = ds:2E69 is loaded by the caller, not the function itself).
+extern "C" uint16_t v2_fntest_fs_override = 0;
 extern "C" int v2_fntest_set_data_file(const char* path) {
     if (data_handle) { fclose(data_handle); data_handle = 0; }
     data_handle = fopen(path, "rb");
@@ -346,6 +362,9 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     cs = 0x1a2;
     ds = (dw)(ds_lin >> 4);
     es = v2_fntest_es_override ? v2_fntest_es_override : ds;
+    // fs default stays 0 (the _STATE memset) — matching the pre-override
+    // behavior of every earlier unit; only explicit tests set it.
+    if (v2_fntest_fs_override) fs = v2_fntest_fs_override;
     ss = seg_offset(m2c::stack);
     esp = 0; sp = (dw)(STACK_SIZE / 2);
     ax = io_regs[0]; bx = io_regs[1]; cx = io_regs[2]; dx = io_regs[3];
@@ -453,6 +472,12 @@ extern "C" void v2_fntest_ensure_drawinfo(void) {
     if (!myDrawInfo)
         myDrawInfo = (struct myDrawInfoS*)calloc(1, sizeof(struct myDrawInfoS));
 }
+// K3 render units: the oracle's pixel channel (drawPixel target, 256K,
+// linear = vga_byte_addr*4 + plane — same layout as the v2 shadow VGA).
+extern "C" uint8_t* v2_fntest_drawbuffer_ptr(void) {
+    v2_fntest_ensure_drawinfo();
+    return myDrawInfo->drawBuffer;
+}
 
 #include "sdl/render_v2.h"
 extern void v2_swap_render_buf();
@@ -515,16 +540,6 @@ void drawPixel(uint32_t offset, uint8_t color)
       }
     }
   }
-  // ONE-SHOT: check if drawBuffer aliases VGA memory
-  {
-    static bool checked = false;
-    if (!checked) {
-      checked = true;
-      void* vga = (void*)raddr(0xA000, 0);
-      void* db = (void*)myDrawInfo->drawBuffer;
-      printf("ALIAS-CHECK: drawBuffer=%p raddr(A000,0)=%p diff=%ld\n", db, vga, (long)((char*)db - (char*)vga));
-    }
-  }
   myDrawInfo->drawBuffer[offset] = color;
 
 }
@@ -545,18 +560,6 @@ void drawPixel(uint8_t plane, uint32_t plane_offset, uint32_t color)
 }
 void drawPixel(uint8_t plane, uint32_t plane_offset, uint16_t color)
 {
-  {
-    uint32_t dw0 = plane_offset;
-    if ((dw0 == 0x20C8 || dw0 == 0x2ADC) && plane == 0) {
-      extern int v2_dbg_pre_vm_iter;
-      static int n = 0;
-      if (n < 24) { n++;
-        fprintf(stderr, "CHRONO2[%02d] f=%d dw=%04X val=%04X caller=%p\n",
-                n, v2_dbg_pre_vm_iter, dw0, (unsigned)color, __builtin_return_address(0));
-      }
-    }
-  }
-
   //printf("DRW: %x %x %x\n", plane, plane_offset, color);
   drawPixel(plane4_to_linear(plane, plane_offset + 0), color & 0xFF);
   drawPixel(plane4_to_linear(plane, plane_offset + 1), color >> 8);
