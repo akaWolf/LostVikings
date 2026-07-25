@@ -12304,6 +12304,12 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Unit 119: sub_12fe5 — per-object sub-sprite catch-up (delta-fn via bx).
+static void v2_subsprite_catchup_12fe5(uint8_t* s, uint16_t di, int type);
+extern "C" void v2_fntest_call_sub_12fe5(uint8_t* test_shadow, uint16_t di, uint16_t bx_type) {
+    v2_subsprite_catchup_12fe5(test_shadow, di, (int)(bx_type / 2));
+}
+
 // Unit 118: sub_13916 — collision resolve sweep.
 static void v2_collision_resolve_13916(uint8_t* shadow);
 extern "C" void v2_fntest_call_sub_13916(uint8_t* test_shadow) {
