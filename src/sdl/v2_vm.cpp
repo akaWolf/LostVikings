@@ -8442,7 +8442,7 @@ static bool v2_gameloop_obj_search_down_15fbe(uint8_t* ds, uint16_t filter_si, u
     *(uint16_t*)(ds + 0x34) = filter_si;
     *(uint16_t*)(ds + 0x36) = y_check;
     uint16_t table_end = *(uint16_t*)(ds + DS_OBJ_COUNT);
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         if (*(uint16_t*)(ds + si + OBJ_CODE_SEG) == 0) continue;
         if (si == *(uint16_t*)(ds + DS_CUR_OBJ)) continue;
         *(uint16_t*)(ds + 0x3A) = si;
@@ -9150,7 +9150,7 @@ static void v2_ground_snap_1625d(uint8_t* shadow) {
 static void v2_clear_coll_run_vm_15546(uint8_t* shadow) {
         *(uint16_t*)(shadow + DS_COLL_PHASE) = 1;
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
-        for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+        for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
             // sub_1555c: clear [si+0x13F5], then if [si+0x141D]==0xFFFF → run collision VM
             *(uint16_t*)(shadow + si + OBJ_COLL_BITS) = 0;
             if (*(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) != 0xFFFF) continue;
@@ -9163,7 +9163,7 @@ static void v2_clear_coll_run_vm_15546(uint8_t* shadow) {
 // collision resolution: velocity apply + hflip/vflip push-apart (orig sub_13916)
 static void v2_collision_resolve_13916(uint8_t* shadow) {
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
-        for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+        for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
             if (*(uint16_t*)(shadow + si + OBJ_CODE_SEG) == 0) continue;
             uint16_t coll_state = *(uint16_t*)(shadow + si + OBJ_ANIM_TABLE);
             if (coll_state == 0xFFFF) continue; // no collision
@@ -9893,7 +9893,7 @@ static bool v2_y_overlap_end_15d42(V2VM& vm, uint16_t si, uint16_t di) {
 static bool v2_yvel_obj_search_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, uint16_t& out_dir) {
     vm.ds_write(DS_SCRATCH_3A, filter_si);
     uint16_t table_end = vm.ds_read(DS_OBJ_COUNT);
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == vm.global_r(DS_CUR_OBJ)) continue;
         vm.ds_write(DS_SCRATCH_38, si);
@@ -10613,7 +10613,7 @@ static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
     uint8_t* rds = vm.shadow;
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
     bool obj_found = false;
-    for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)table_end; si2 += 2) {
+    for (uint16_t si2 = 0; si2 == 0 || (int16_t)si2 < (int16_t)table_end; si2 += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         ObjMem cand{rds, si2};
         if (cand.code_seg() == 0) continue;
         if (si2 == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
@@ -10971,7 +10971,7 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
     vm.ds_write(DS_SCRATCH_36, y_check);
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
 
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         if (*(uint16_t*)(rds + si + OBJ_CODE_SEG) == 0) continue;
         if (si == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
         vm.ds_write(DS_SCRATCH_3A, si);
@@ -11046,7 +11046,7 @@ static bool v2_vm_obj_at_pos_160cf(V2VM& vm, uint16_t filter_si) {
     uint8_t* rds = vm.shadow;
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
 
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         if (*(uint16_t*)(rds + si + OBJ_CODE_SEG) == 0) continue;
         if (si == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
         vm.ds_write(DS_SCRATCH_3A, si);
@@ -11161,7 +11161,7 @@ static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di
     vm.ds_write(DS_SCRATCH_36, x_search);
     uint8_t* rds = vm.shadow;
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         if (*(uint16_t*)(rds + si + OBJ_CODE_SEG) == 0) continue;
         if (si == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
         vm.ds_write(DS_SCRATCH_3A, si);
@@ -12083,6 +12083,10 @@ extern "C" int v2_fntest_call_sub_15d42(uint8_t* test_shadow, uint16_t si, uint1
 // Units 75-76: sub_15cef / sub_15cf5 — X bbox probe with Y-velocity
 // adjustment (bbox check of the sub_15c37 X-vel search). CF + ds:0x32.
 static bool v2_x_bbox_vel_15cef(V2VM& vm, uint16_t si, uint16_t di, bool use_x1);
+// Units 77-78: sub_15de5 / sub_15df2 — X-axis object search (shared core
+// loc_15dfd). DS: 0x34=filter, 0x36=probe X, 0x3A slot cursor, on hit
+// 0x3B2=[si+17DD] full word + 0x3B4=slot. CF.
+static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
 extern "C" int v2_fntest_call_sub_15cef(uint8_t* test_shadow, uint16_t si, uint16_t di) {
     V2VM vm{};
     vm.ds = test_shadow;
@@ -12096,6 +12100,45 @@ extern "C" int v2_fntest_call_sub_15cf5(uint8_t* test_shadow, uint16_t si, uint1
     vm.shadow = test_shadow;
     vm.obj = di;
     return v2_x_bbox_vel_15cef(vm, si, di, /*use_x1=*/true) ? 1 : 0;
+}
+extern "C" int v2_fntest_call_sub_15de5(uint8_t* test_shadow, uint16_t filter, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    // sub_15de5 entry: probe X = [di+0x1535] - 1
+    uint16_t x = (uint16_t)(*(uint16_t*)(test_shadow + (uint16_t)(di + OBJ_BBOX_X0)) - 1);
+    return v2_vm_obj_scan_x_15dfd(vm, filter, di, x) ? 1 : 0;
+}
+extern "C" int v2_fntest_call_sub_15df2(uint8_t* test_shadow, uint16_t filter, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    // sub_15df2 entry: probe X = [di+0x155D] + 1
+    uint16_t x = (uint16_t)(*(uint16_t*)(test_shadow + (uint16_t)(di + OBJ_BBOX_X1)) + 1);
+    return v2_vm_obj_scan_x_15dfd(vm, filter, di, x) ? 1 : 0;
+}
+// Units 79-80: sub_15fb1 / sub_15fbe — Y-axis object search (shared core
+// loc_15fc9; X overlap gates are the JS class — bit 15 of the wrapped diff).
+static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t y_check);
+extern "C" int v2_fntest_call_sub_15fb1(uint8_t* test_shadow, uint16_t filter, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    // sub_15fb1 entry: probe Y = [di+0x14E5] - 1
+    uint16_t y = (uint16_t)(*(uint16_t*)(test_shadow + (uint16_t)(di + OBJ_BBOX_Y0)) - 1);
+    return v2_vm_obj_search(vm, filter, di, y) ? 1 : 0;
+}
+extern "C" int v2_fntest_call_sub_15fbe(uint8_t* test_shadow, uint16_t filter, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    // sub_15fbe entry: probe Y = [di+0x150D] + 1
+    uint16_t y = (uint16_t)(*(uint16_t*)(test_shadow + (uint16_t)(di + OBJ_BBOX_Y1)) + 1);
+    return v2_vm_obj_search(vm, filter, di, y) ? 1 : 0;
 }
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
 extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_spawn_table_end_11383(test_shadow); }
@@ -12314,7 +12357,7 @@ static bool v2_vm_obj_coll_scan_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj
     ObjRef self{vm, obj_di};
     uint8_t* rds = vm.shadow;
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         ObjMem cand{rds, si};
         if (cand.code_seg() == 0) continue;
         if (si == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
@@ -16031,7 +16074,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
     vm.ds_write(DS_SCRATCH_3A, y_bot);                      // MOV ds:3Ah, ax
 
     uint16_t table_end = vm.global_r(DS_OBJ_COUNT);
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         ObjRef cand{vm, si};
         if (cand.code_seg() == 0) continue;                        // inactive
         if (cand.u16(OBJ_STATE_IDX) != filter) continue;           // wrong type
@@ -16102,7 +16145,7 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     vm.ds_write(DS_SCRATCH_3A, y_bot);
 
     uint16_t table_end = vm.global_r(DS_OBJ_COUNT);
-    for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         ObjRef cand{vm, si};
         if (cand.code_seg() == 0) continue;
         if (!(cand.u16(OBJ_CLASS_BITS) & dx_filter)) continue;     // TEST, not CMP
@@ -16170,7 +16213,7 @@ static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t d
     ObjRef self{vm, di};
     uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
     vm.ds_write(DS_SCRATCH_3A, filter_si);
-    for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)table_end; si2 += 2) {
+    for (uint16_t si2 = 0; si2 == 0 || (int16_t)si2 < (int16_t)table_end; si2 += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         ObjMem cand{rds, si2};
         if (cand.code_seg() == 0) continue;
         if (si2 == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;

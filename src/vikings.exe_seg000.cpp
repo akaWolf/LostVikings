@@ -149,6 +149,10 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 73: return (void*)&sub_10813;   // viking blink (JMP loc_107A2 tail)
     case 74: return (void*)&sub_15cef;   // X bbox probe (X_start entry)
     case 75: return (void*)&sub_15cf5;   // X bbox probe (X_end entry)
+    case 76: return (void*)&sub_15de5;   // X-axis obj search (X_start-1 entry)
+    case 77: return (void*)&sub_15df2;   // X-axis obj search (X_end+1 entry)
+    case 78: return (void*)&sub_15fb1;   // Y-axis obj search (Y_start-1 entry)
+    case 79: return (void*)&sub_15fbe;   // Y-axis obj search (Y_end+1 entry)
     default: return 0;
     }
 }

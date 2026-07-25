@@ -108,6 +108,10 @@ extern "C" int      v2_fntest_call_sub_15d3c(uint8_t* test_shadow, uint16_t si, 
 extern "C" int      v2_fntest_call_sub_15d42(uint8_t* test_shadow, uint16_t si, uint16_t di);
 extern "C" int      v2_fntest_call_sub_15cef(uint8_t* test_shadow, uint16_t si, uint16_t di);
 extern "C" int      v2_fntest_call_sub_15cf5(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" int      v2_fntest_call_sub_15de5(uint8_t* test_shadow, uint16_t filter, uint16_t di);
+extern "C" int      v2_fntest_call_sub_15df2(uint8_t* test_shadow, uint16_t filter, uint16_t di);
+extern "C" int      v2_fntest_call_sub_15fb1(uint8_t* test_shadow, uint16_t filter, uint16_t di);
+extern "C" int      v2_fntest_call_sub_15fbe(uint8_t* test_shadow, uint16_t filter, uint16_t di);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -183,6 +187,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1167A = 70, FT_SUB_116AE = 71, FT_SUB_11B0B = 72,
             FT_SUB_10813 = 73,
             FT_SUB_15CEF = 74, FT_SUB_15CF5 = 75,
+            FT_SUB_15DE5 = 76, FT_SUB_15DF2 = 77,
+            FT_SUB_15FB1 = 78, FT_SUB_15FBE = 79,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -223,7 +229,9 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_112ae", "sub_12d2c",
                                  "sub_1167a", "sub_116ae", "sub_11b0b",
                                  "sub_10813",
-                                 "sub_15cef", "sub_15cf5" };
+                                 "sub_15cef", "sub_15cf5",
+                                 "sub_15de5", "sub_15df2",
+                                 "sub_15fb1", "sub_15fbe" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3980,6 +3988,266 @@ int ft_selftest_bbox_vel(FtId id, uint32_t seed) {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 77-78: sub_15de5 / sub_15df2 (X-axis object search) ------------
+// Shared core loc_15dfd: probe X = self.X0-1 (15de5) / self.X1+1 (15df2);
+// slot loop: [s+1355]!=0, s!=ds:42, ds:3A=s; filter chain al=[s+17DD].lo vs
+// bytes at [f-0x6B34] (JB miss / JZ match / INC); X gates JL + DEC/JGE on
+// target span; Y gates: self.Y1-vel >= target.Y0 (JL) and self.Y0-vel <=
+// target.Y1 (JZ hit + JGE skip). Hit: ds:3B2=[s+17DD] FULL WORD, ds:3B4=s,
+// STC. DS: 0x34=filter, 0x36=probe (written unconditionally up front).
+static void ft_objscan_ctx(uint16_t di, uint16_t filter,
+                           uint16_t self_x0, uint16_t self_x1,
+                           uint16_t self_y0, uint16_t self_y1, uint16_t self_vel,
+                           uint16_t table_end, uint16_t cur_obj) {
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    ft_wr16(g_synth_in, 0x372, table_end);
+    ft_wr16(g_synth_in, 0x42, cur_obj);
+    // scratch canaries (0x38 must stay untouched by this family)
+    ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
+    ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+    ft_wr16(g_synth_in, 0x3B2, 0xBBBB); ft_wr16(g_synth_in, 0x3B4, 0xBBBB);
+    // filter chain at [filter-0x6B34]: single type 0x30, terminator 0xFF
+    g_synth_in[(uint16_t)(filter - LUT_SCAN_FILTER)]     = 0x30;
+    g_synth_in[(uint16_t)(filter - LUT_SCAN_FILTER + 1)] = 0xFF;
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), self_x0);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), self_x1);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), self_y0);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), self_y1);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y),   self_vel);
+}
+static void ft_objscan_target(uint16_t slot, uint16_t alive, uint16_t type_word,
+                              uint16_t x0, uint16_t x1, uint16_t y0, uint16_t y1) {
+    ft_wr16(g_synth_in, (uint16_t)(slot + OBJ_CODE_SEG), alive);
+    ft_wr16(g_synth_in, (uint16_t)(slot + 0x17DD),       type_word);
+    ft_wr16(g_synth_in, (uint16_t)(slot + OBJ_BBOX_X0),  x0);
+    ft_wr16(g_synth_in, (uint16_t)(slot + OBJ_BBOX_X1),  x1);
+    ft_wr16(g_synth_in, (uint16_t)(slot + OBJ_BBOX_Y0),  y0);
+    ft_wr16(g_synth_in, (uint16_t)(slot + OBJ_BBOX_Y1),  y1);
+}
+int ft_selftest_objscan_x(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    const uint16_t di = 8, FLT = 0x7000;   // chain bytes at ds:0x4CC
+    auto run1 = [&](const char* group, FtSynthStats& st) {
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = (id == FT_SUB_15DE5)
+                 ? v2_fntest_call_sub_15de5(g_scratch, FLT, di)
+                 : v2_fntest_call_sub_15df2(g_scratch, FLT, di);
+        FtRegs in{}; in.si = FLT; in.di = di;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, group, st, diff_budget);
+    };
+    // Probe geometry: for 15de5 probe = self_x0-1, for 15df2 probe = self_x1+1.
+    // Self span picked so probe==0x0105 in both twins.
+    const uint16_t SX0 = 0x0106, SX1 = 0x0104;   // 15de5: 0x0106-1; 15df2: 0x0104+1
+    struct GC { uint16_t alive, type, tx0, tx1, ty0, ty1, s_y0, s_y1, s_vel, tend, cur; };
+    static const GC G[] = {
+        // basic hit: probe 0x105 in [0x100,0x110), Y overlap, vel 0
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // dead slot → CLC
+        { 0, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // self-skip: cur_obj == slot 2 → CLC
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 2 },
+        // filter miss: type below chain head (JB)
+        { 1, 0x0010, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // filter miss: type above terminator path (INC walk into 0xFF stop)
+        { 1, 0x0031, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // X JL edge: target.X0 == probe+1 → JL rejects
+        { 1, 0x0030, 0x0106, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // X JL edge pass: target.X0 == probe
+        { 1, 0x0030, 0x0105, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // X JGE edge: probe-1 == target.X1 → JGE rejects
+        { 1, 0x0030, 0x0100, 0x0104, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // Y gate 1 edge: self.Y1-vel == target.Y0-1 → JL rejects
+        { 1, 0x0030, 0x0100, 0x0110, 0x0111, 0x0120, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // Y gate 1 edge pass: self.Y1-vel == target.Y0
+        { 1, 0x0030, 0x0100, 0x0110, 0x0110, 0x0120, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // Y gate 2 JZ hit: self.Y0-vel == target.Y1 (equality passes via JZ)
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0110, 0x0120, 0x0000, 4, 8 },
+        // Y gate 2 JGE reject: self.Y0-vel == target.Y1+1
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x010F, 0x0110, 0x0120, 0x0000, 4, 8 },
+        // vel SUB-wrap: self.Y0=0x8000 vel=0x7FFF → adj wraps to +1
+        { 1, 0x0030, 0x0100, 0x0110, 0x0000, 0x0110, 0x8000, 0x8010, 0x7FFF, 4, 8 },
+        // full-word 0x3B2 channel: type high byte set, hit
+        { 1, 0x1230, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 4, 8 },
+        // empty table
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0x0000, 0, 8 },
+    };
+    for (auto& g : G) {
+        ft_objscan_ctx(di, FLT, SX0, SX1, g.s_y0, g.s_y1, g.s_vel, g.tend, g.cur);
+        ft_objscan_target(2, g.alive, g.type, g.tx0, g.tx1, g.ty0, g.ty1);
+        run1("grid", grid);
+    }
+    // two-slot restore-path case: slot 0 filter-miss (walk), slot 2 hits;
+    // then slot 0 X-miss, slot 2 hits (3A-протокол restore).
+    {
+        ft_objscan_ctx(di, FLT, SX0, SX1, 0x0100, 0x0110, 0, 4, 8);
+        ft_objscan_target(0, 1, 0x0010, 0x0100, 0x0110, 0x0100, 0x0110); // JB miss
+        ft_objscan_target(2, 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110);
+        run1("grid", grid);
+        ft_objscan_ctx(di, FLT, SX0, SX1, 0x0100, 0x0110, 0, 4, 8);
+        ft_objscan_target(0, 1, 0x0030, 0x0200, 0x0210, 0x0100, 0x0110); // X miss
+        ft_objscan_target(2, 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110);
+        run1("grid", grid);
+        // probe wrap: 15de5 self.X0=0 → probe 0xFFFF; 15df2 self.X1=0xFFFF → probe 0
+        ft_objscan_ctx(di, FLT, 0x0000, 0xFFFF, 0x0100, 0x0110, 0, 4, 8);
+        ft_objscan_target(2, 1, 0x0030, 0xFFF0, 0x0010, 0x0100, 0x0110);
+        run1("grid", grid);
+    }
+    // Exhaustive 1: target.X0 axis over 65536 (probe fixed at 0x0105).
+    // Exhaustive 2: self Y-velocity axis over 65536 (X pass, Y spans fixed).
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t x = 0; x <= 0xFFFF; x++) {
+            if (pass == 0) {
+                ft_objscan_ctx(di, FLT, SX0, SX1, 0x0100, 0x0110, 0, 4, 8);
+                ft_objscan_target(2, 1, 0x0030, (uint16_t)x, 0x0110, 0x0100, 0x0110);
+            } else {
+                ft_objscan_ctx(di, FLT, SX0, SX1, 0x0100, 0x0110, (uint16_t)x, 4, 8);
+                ft_objscan_target(2, 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110);
+            }
+            run1("exh", exh);
+        }
+    }
+    FtRng rng(seed);
+    for (int i = 0; i < 20000; i++) {
+        ft_objscan_ctx(di, FLT, rng.w(), rng.w(), rng.w(), rng.w(), rng.w(),
+                       (uint16_t)((rng.next() % 5) * 2), (uint16_t)((rng.next() % 6) * 2));
+        for (uint16_t slot = 0; slot < 8; slot += 2)
+            ft_objscan_target(slot, (uint16_t)(rng.next() & 1),
+                              (uint16_t)(rng.w() & 0x0FFF ? rng.w() : 0x0030),
+                              rng.w(), rng.w(), rng.w(), rng.w());
+        run1("fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
+// ---- Units 79-80: sub_15fb1 / sub_15fbe (Y-axis object search) ------------
+// Shared core loc_15fc9: probe Y = self.Y0-1 (15fb1) / self.Y1+1 (15fbe);
+// same slot/filter protocol as loc_15dfd; Y gates JL + DEC/JGE on the target
+// span; X overlap gates are the JS CLASS (bit 15 of the WRAPPED difference,
+// no vel adjust): [di+155D]-[si+1535] and [si+155D]-[di+1535]. Hit: ds:3B2 =
+// [s+17DD] full word, ds:3B4 = slot, STC.
+int ft_selftest_objscan_y(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    const uint16_t di = 8, FLT = 0x7000;
+    auto run1 = [&](const char* group, FtSynthStats& st) {
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = (id == FT_SUB_15FB1)
+                 ? v2_fntest_call_sub_15fb1(g_scratch, FLT, di)
+                 : v2_fntest_call_sub_15fbe(g_scratch, FLT, di);
+        FtRegs in{}; in.si = FLT; in.di = di;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, group, st, diff_budget);
+    };
+    // Self spans picked so probe==0x0105 in both twins (Y0=0x0106 / Y1=0x0104).
+    const uint16_t SY0 = 0x0106, SY1 = 0x0104;
+    struct GC { uint16_t alive, type, ty0, ty1, tx0, tx1, s_x0, s_x1, tend, cur; };
+    static const GC G[] = {
+        // basic hit
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        // dead / self-skip / filter JB / filter walk-to-terminator
+        { 0, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 2 },
+        { 1, 0x0010, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        { 1, 0x0031, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        // Y JL edge reject / pass, DEC/JGE edge
+        { 1, 0x0030, 0x0106, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        { 1, 0x0030, 0x0105, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        { 1, 0x0030, 0x0100, 0x0104, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        // X JS gate 1: self.X1 - target.X0 wraps bit15 SET (true diff +32768!)
+        //   self.X1=0x7FFF, target.X0=0xFFFF: wrapped 0x8000 → JS skips
+        //   (JL would NOT skip — the divergence point of the JS class)
+        { 1, 0x0030, 0x0100, 0x0110, 0xFFFF, 0x0010, 0x0100, 0x7FFF, 4, 8 },
+        // X JS gate 1 mirror: bit15 CLEAR via wrap (self.X1=0x8000, t.X0=1)
+        { 1, 0x0030, 0x0100, 0x0110, 0x0001, 0x0110, 0x0100, 0x8000, 4, 8 },
+        // X JS gate 2: target.X1 - self.X0 bit15 set
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x7FFF, 0xFFFF, 0x0010, 4, 8 },
+        // touching spans (diff 0 → bit15 clear → pass)
+        { 1, 0x0030, 0x0100, 0x0110, 0x0110, 0x0110, 0x0110, 0x0110, 4, 8 },
+        // full-word 0x3B2, empty table
+        { 1, 0x1230, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 },
+        { 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0x0100, 0x0110, 0, 8 },
+    };
+    for (auto& g : G) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, g.tend);
+        ft_wr16(g_synth_in, 0x42, g.cur);
+        ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
+        ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+        ft_wr16(g_synth_in, 0x3B2, 0xBBBB); ft_wr16(g_synth_in, 0x3B4, 0xBBBB);
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER)]     = 0x30;
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER + 1)] = 0xFF;
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), SY0);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), SY1);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), g.s_x0);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), g.s_x1);
+        ft_objscan_target(2, g.alive, g.type, g.tx0, g.tx1, g.ty0, g.ty1);
+        // ft_objscan_target writes (x0,x1,y0,y1) in that order — fix Y fields:
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_Y0), g.ty0);
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_Y1), g.ty1);
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X0), g.tx0);
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X1), g.tx1);
+        run1("grid", grid);
+    }
+    // Exhaustive 1: target.Y0 axis 65536 (probe fixed 0x0105, X pass).
+    // Exhaustive 2: target.X0 axis 65536 (Y pass; sweeps the JS gate-1 wrap
+    // point across the whole 16-bit ring with self.X1=0x0110).
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t x = 0; x <= 0xFFFF; x++) {
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+            ft_wr16(g_synth_in, 0x372, 4);
+            ft_wr16(g_synth_in, 0x42, 8);
+            ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
+            ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+            ft_wr16(g_synth_in, 0x3B2, 0xBBBB); ft_wr16(g_synth_in, 0x3B4, 0xBBBB);
+            g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER)]     = 0x30;
+            g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER + 1)] = 0xFF;
+            ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), SY0);
+            ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), SY1);
+            ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), 0x0100);
+            ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), 0x0110);
+            if (pass == 0) {
+                ft_objscan_target(2, 1, 0x0030, 0x0100, 0x0110, (uint16_t)x, 0x0110);
+            } else {
+                ft_objscan_target(2, 1, 0x0030, (uint16_t)x, 0x0110, 0x0100, 0x0110);
+            }
+            run1("exh", exh);
+        }
+    }
+    FtRng rng(seed);
+    for (int i = 0; i < 20000; i++) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, (uint16_t)((rng.next() % 5) * 2));
+        ft_wr16(g_synth_in, 0x42, (uint16_t)((rng.next() % 6) * 2));
+        ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
+        ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+        ft_wr16(g_synth_in, 0x3B2, 0xBBBB); ft_wr16(g_synth_in, 0x3B4, 0xBBBB);
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER)]     = 0x30;
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER + 1)] = 0xFF;
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), rng.w());
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), rng.w());
+        for (uint16_t slot = 0; slot < 8; slot += 2)
+            ft_objscan_target(slot, (uint16_t)(rng.next() & 1),
+                              (uint16_t)(rng.w() & 0x0FFF ? rng.w() : 0x0030),
+                              rng.w(), rng.w(), rng.w(), rng.w());
+        run1("fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -5082,6 +5350,10 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10813")) { matched = true; rc |= ft_selftest_sub_10813(0); }
     if (all || strstr(env, "sub_15cef")) { matched = true; rc |= ft_selftest_bbox_vel(FT_SUB_15CEF, 0x15CEF001u); }
     if (all || strstr(env, "sub_15cf5")) { matched = true; rc |= ft_selftest_bbox_vel(FT_SUB_15CF5, 0x15CF5001u); }
+    if (all || strstr(env, "sub_15de5")) { matched = true; rc |= ft_selftest_objscan_x(FT_SUB_15DE5, 0x15DE5001u); }
+    if (all || strstr(env, "sub_15df2")) { matched = true; rc |= ft_selftest_objscan_x(FT_SUB_15DF2, 0x15DF2001u); }
+    if (all || strstr(env, "sub_15fb1")) { matched = true; rc |= ft_selftest_objscan_y(FT_SUB_15FB1, 0x15FB1001u); }
+    if (all || strstr(env, "sub_15fbe")) { matched = true; rc |= ft_selftest_objscan_y(FT_SUB_15FBE, 0x15FBE001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
