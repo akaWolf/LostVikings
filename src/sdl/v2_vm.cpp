@@ -11385,15 +11385,14 @@ static void v2_vm_op_1C(V2VM& vm) {
 // Orig loop is a DO-WHILE with NO [0x1AD5] gate (loc_145F1: body first,
 // CMP si,cx / JL at end) — the body runs at least once unconditionally.
 static void v2_vm_op_3F(V2VM& vm) {
-    uint16_t obj = vm.global_r(DS_CUR_OBJ);
-    uint16_t cx = vm.ds_read(obj + OBJ_SUB_END);
-    uint16_t si = vm.ds_read(obj + OBJ_SUB_SLOT);
+    ObjRef self{vm, vm.global_r(DS_CUR_OBJ)};
+    uint16_t cx = self.u16(OBJ_SUB_END);
+    uint16_t si = self.u16(OBJ_SUB_SLOT);
     do {
-        vm.ds_write((uint16_t)(si + OBJ_SPRITE_FLAGS),
-                    vm.ds_read((uint16_t)(si + OBJ_SPRITE_FLAGS)) | 0x4000);
+        ObjRef sub{vm, si};                              // sub-sprite slot (cursor)
+        sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x4000);
         // OR byte at [si+0x114E] with 2 — high byte of word at 0x114D
-        vm.ds_write((uint16_t)(si + OBJ_DIRTY_MODE),
-                    vm.ds_read((uint16_t)(si + OBJ_DIRTY_MODE)) | 0x0200);
+        sub.w16(OBJ_DIRTY_MODE, sub.u16(OBJ_DIRTY_MODE) | 0x0200);
         si += 2;
     } while ((int16_t)si < (int16_t)cx);                 // CMP si,cx / JL
 }
@@ -11401,13 +11400,13 @@ static void v2_vm_op_3F(V2VM& vm) {
 // 0x40 (sub_14604): Clear bits 13-14 on all sub-sprites. 0 bytes.
 // Same DO-WHILE shape as sub_145e5 (loc_14610) — at least one iteration.
 static void v2_vm_op_40(V2VM& vm) {
-    uint16_t obj = vm.global_r(DS_CUR_OBJ);
-    uint16_t cx = vm.ds_read(obj + OBJ_SUB_END);
-    uint16_t si = vm.ds_read(obj + OBJ_SUB_SLOT);
+    ObjRef self{vm, vm.global_r(DS_CUR_OBJ)};
+    uint16_t cx = self.u16(OBJ_SUB_END);
+    uint16_t si = self.u16(OBJ_SUB_SLOT);
     do {
-        vm.ds_write((uint16_t)(si + OBJ_SPRITE_FLAGS),
-                    vm.ds_read((uint16_t)(si + OBJ_SPRITE_FLAGS)) & 0x9FFF);
-        vm.ds_write((uint16_t)(si + OBJ_DIRTY_MODE), 2);
+        ObjRef sub{vm, si};                              // sub-sprite slot (cursor)
+        sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF);
+        sub.w16(OBJ_DIRTY_MODE, 2);
         si += 2;
     } while ((int16_t)si < (int16_t)cx);                 // CMP si,cx / JL
 }
