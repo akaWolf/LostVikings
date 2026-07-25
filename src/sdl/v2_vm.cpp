@@ -4400,11 +4400,12 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
     // loc_107A2: if active changed, clear previous viking's blink + reset counter
     if (active != prev) {
         if ((int16_t)prev < 6) { // SIGNED compare: CMP ax,6; JGE (0xFFFF=-1 < 6 -> enters)
-            int16_t p_anim = (int16_t)*(uint16_t*)(shadow + (uint16_t)(prev + OBJ_ANIM_IDX));
+            int16_t p_anim = ObjMem{shadow, prev}.i16(OBJ_ANIM_IDX);
             if (p_anim >= 0) {
-                uint16_t p_di = *(uint16_t*)(shadow + (uint16_t)(prev + OBJ_SUB_SLOT));
-                *(uint16_t*)(shadow + (uint16_t)(p_di + OBJ_SPRITE_FLAGS)) &= 0xDFFF;
-                *(uint16_t*)(shadow + (uint16_t)(p_di + OBJ_DIRTY_MODE)) = 2; // word write
+                uint16_t p_di = ObjMem{shadow, prev}.sub_slot();
+                ObjMem psub{shadow, p_di};                       // previous viking's sub-sprite slot
+                psub.w16(OBJ_SPRITE_FLAGS, psub.u16(OBJ_SPRITE_FLAGS) & 0xDFFF);
+                psub.w16(OBJ_DIRTY_MODE, 2); // word write
             }
         }
         // loc_107c9: update prev + reset counter
@@ -7620,7 +7621,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
         if (si_v >= 0) {
             // loc_12ecd: found valid viking
-            uint16_t di_v = *(uint16_t*)(shadow + (uint16_t)si_v + OBJ_SUB_SLOT);
+            uint16_t di_v = ObjMem{shadow, si_v}.sub_slot();
             *(uint16_t*)(shadow + di_v + OBJ_SPRITE_FLAGS) &= 0xDFFF;      // AND [di+44Dh], 0DFFFh
             shadow[di_v + OBJ_DIRTY_MODE] = 2;                            // MOV byte [di+114Dh], 2
             *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = (uint16_t)si_v;       // MOV ds:3C2h, si
