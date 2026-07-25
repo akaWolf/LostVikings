@@ -2292,6 +2292,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow);
 static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue = true);
 static void v2_vm_execute_object(uint8_t* ds, uint16_t si);
 static void v2_run_collision_vm(uint8_t* shadow, uint16_t si);
+static void v2_coll_sweep_15530(uint8_t* shadow);
 static uint32_t v2_ds_hash(uint8_t* ds);
 static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx);
 static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx);
@@ -6599,14 +6600,7 @@ static void v2_load_level_11080(uint8_t* s) {
         // PSNAP compare: after PF2 (eip 0x1608).
         v2_compare_phase_snap(V2_PSNAP_T_SF1_PF2_END, "v2_level_init_render_115d2 SF1 post-PF2");
         // sub_15530: collision detection pass 2 (ds:0x390 = 0xFFFF)
-        *(uint16_t*)(s + DS_COLL_PHASE) = 0xFFFF;
-        {
-            uint16_t te = *(uint16_t*)(s + DS_OBJ_COUNT);
-            for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)te; si2 += 2) {
-                if (*(uint16_t*)(s + si2 + OBJ_CODE_SEG) == 0) continue;
-                v2_run_collision_vm(s, si2);
-            }
-        }
+        v2_coll_sweep_15530(s);
         // sub_10704: apply pending scroll, step 1 (speed table 0x2B82) — consolidated into v2_scroll_step1_10704
         // (v2_scroll_apply + the v2_scroll_left_17496 mover family; lambdas removed)
         {
@@ -8997,7 +8991,7 @@ static void v2_postvm_check_hash(uint8_t* shadow, const char* label, int idx) {
 // backup X/Y prev + clamp/apply per-object velocity to world+bbox (orig sub_1386b)
 static void v2_apply_velocity_1386b(uint8_t* shadow) {
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
-        for (uint16_t di = 0; (int16_t)di < (int16_t)table_end; di += 2) {
+        for (uint16_t di = 0; di == 0 || (int16_t)di < (int16_t)table_end; di += 2) {   // orig do-while (ADD di,2; CMP di,[372]; JL)
             if (*(uint16_t*)(shadow + di + OBJ_CODE_SEG) == 0) continue;
             // Backup current X/Y
             *(uint16_t*)(shadow + di + OBJ_X_PREV) = *(uint16_t*)(shadow + di + OBJ_WORLD_X);
@@ -9081,7 +9075,7 @@ static void v2_ground_snap_1625d(uint8_t* shadow) {
         };
 
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
-        for (uint16_t di = 0; (int16_t)di < (int16_t)table_end; di += 2) {
+        for (uint16_t di = 0; di == 0 || (int16_t)di < (int16_t)table_end; di += 2) {   // orig do-while (ADD di,2; CMP di,[372]; JL)
             *(uint16_t*)(shadow + DS_CUR_OBJ) = di;
             if (*(uint16_t*)(shadow + di + OBJ_CODE_SEG) == 0) continue;       // loc_16260
             if (!(*(uint16_t*)(shadow + di + OBJ_FLAGS) & 0x2000)) continue; // loc_1626e
@@ -9156,17 +9150,35 @@ static void v2_ground_snap_1625d(uint8_t* shadow) {
         }
 }
 
-// clear per-object collision-result field + run collision-detect VM (orig sub_15546/15569)
+// sub_15569 (seg000 eip 0x5569): alive gate + the collision-VM interpret loop
+// (terminator opcode 0x01; PC is NOT written back to [si+132D]).
+static void v2_coll_pass_15569(uint8_t* shadow, uint16_t si) {
+    if (*(uint16_t*)(shadow + si + OBJ_CODE_SEG) == 0) return;   // 0x5569 JZ
+    v2_run_collision_vm(shadow, si);
+}
+// sub_1555c (seg000 eip 0x555C): [si+13F5]=0; [141D]==FFFF gate; falls into
+// the sub_15569 body.
+static void v2_coll_pass_1555c(uint8_t* shadow, uint16_t si) {
+    *(uint16_t*)(shadow + si + OBJ_COLL_BITS) = 0;               // 0x555C
+    if (*(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) != 0xFFFF) return; // 0x5562 JNZ
+    v2_coll_pass_15569(shadow, si);
+}
+
+// sub_15530 (seg000 eip 0x5530): collision pass 2 — [0x390]=0xFFFF, then the
+// slot do-while calling sub_15569 per slot (alive gate inside the callee).
+static void v2_coll_sweep_15530(uint8_t* shadow) {
+    *(uint16_t*)(shadow + DS_COLL_PHASE) = 0xFFFF;
+    uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2)   // orig do-while
+        v2_coll_pass_15569(shadow, si);
+}
+
+// clear per-object collision-result field + run collision-detect VM (orig sub_15546/1555c)
 static void v2_clear_coll_run_vm_15546(uint8_t* shadow) {
         *(uint16_t*)(shadow + DS_COLL_PHASE) = 1;
         uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
         for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
-            // sub_1555c: clear [si+0x13F5], then if [si+0x141D]==0xFFFF → run collision VM
-            *(uint16_t*)(shadow + si + OBJ_COLL_BITS) = 0;
-            if (*(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) != 0xFFFF) continue;
-            // sub_15569: run collision detection bytecodes from [si+0x132D]
-            if (*(uint16_t*)(shadow + si + OBJ_CODE_SEG) == 0) continue;
-            v2_run_collision_vm(shadow, si);
+            v2_coll_pass_1555c(shadow, si);
         }
 }
 
@@ -12261,6 +12273,31 @@ extern "C" void v2_fntest_call_sub_15505(uint8_t* test_shadow, uint16_t si, uint
 extern "C" void v2_fntest_call_sub_15517(uint8_t* test_shadow) {
     v2_clear_velocities_15517(test_shadow);
 }
+// Units 94-95: sub_1555c / sub_15569 — per-object collision-VM passes.
+static void v2_coll_pass_1555c(uint8_t* shadow, uint16_t si);
+static void v2_coll_pass_15569(uint8_t* shadow, uint16_t si);
+static void v2_vm_init_table();
+static void v2_fntest_coll_pass_common(uint8_t* test_shadow, uint16_t si, bool full_1555c) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;   // VM FATALs become soft aborts
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    if (full_1555c) v2_coll_pass_1555c(test_shadow, si);
+    else            v2_coll_pass_15569(test_shadow, si);
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+}
+extern "C" void v2_fntest_call_sub_1555c(uint8_t* test_shadow, uint16_t si) {
+    v2_fntest_coll_pass_common(test_shadow, si, true);
+}
+extern "C" void v2_fntest_call_sub_15569(uint8_t* test_shadow, uint16_t si) {
+    v2_fntest_coll_pass_common(test_shadow, si, false);
+}
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
 extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_spawn_table_end_11383(test_shadow); }
 extern "C" uint16_t v2_fntest_call_sub_1133a(uint8_t* test_shadow, uint16_t di) { return v2_hud_init_1133a(test_shadow, di); }
@@ -13158,7 +13195,7 @@ static void v2_vm_op_35(V2VM& vm) {
     vm.ds_write(DS_SEARCH_JUMP, jump_target);
 
     uint16_t max_obj = vm.ds_read(DS_OBJ_COUNT);
-    for (uint16_t si = 0; (int16_t)si < (int16_t)max_obj; si += 2) {
+    for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)max_obj; si += 2) {   // orig do-while (sub_15e91 tail: ADD si,2; CMP si,[372]; JL)
         if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == self_si) continue;
 
@@ -18430,14 +18467,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
         }
 
         // sub_15530: collision detection pass 2 (ds:0x390 = 0xFFFF)
-        *(uint16_t*)(s + DS_COLL_PHASE) = 0xFFFF;
-        {
-            uint16_t te = *(uint16_t*)(s + DS_OBJ_COUNT);
-            for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)te; si2 += 2) {
-                if (*(uint16_t*)(s + si2 + OBJ_CODE_SEG) == 0) continue;
-                v2_run_collision_vm(s, si2);
-            }
-        }
+        v2_coll_sweep_15530(s);
 
         // sub_10704: apply pending scroll, step 1 — reads scroll amounts from ds:0x3D8-0x3DE,
         // looks up pixel amount from ds:[si*2+0x2B82], calls scroll functions.
@@ -19626,14 +19656,7 @@ void v2_phase_post_flip1(uint16_t ds_val) {
         if (si == 0xFFFF) *(uint16_t*)(s + DS_FRAME_FLAGS) |= 2;
     }
     // sub_15530: collision pass 2
-    *(uint16_t*)(s + DS_COLL_PHASE) = 0xFFFF;
-    {
-        uint16_t te = *(uint16_t*)(s + DS_OBJ_COUNT);
-        for (uint16_t si2 = 0; (int16_t)si2 < (int16_t)te; si2 += 2) {
-            if (*(uint16_t*)(s + si2 + OBJ_CODE_SEG) == 0) continue;
-            v2_run_collision_vm(s, si2);
-        }
-    }
+    v2_coll_sweep_15530(s);
     // sub_10704: scroll clamp 1
     {
         auto scroll_lr = [&](int dir, uint16_t amount) {

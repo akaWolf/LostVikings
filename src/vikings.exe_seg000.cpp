@@ -166,6 +166,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 90: return (void*)&sub_1592d;   // X snap by direction
     case 91: return (void*)&sub_15505;   // resource deduct (JB borrow -> wrap, else 0)
     case 92: return (void*)&sub_15517;   // velocity clear sweep (do-while, JNS)
+    case 93: return (void*)&sub_1555c;   // collision pass: 13F5 clear + 141D gate + VM
+    case 94: return (void*)&sub_15569;   // collision pass: alive gate + VM loop
     default: return 0;
     }
 }
