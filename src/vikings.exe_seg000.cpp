@@ -190,6 +190,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 114: return (void*)&sub_13757;  // vflip body (Y twin)
     case 115: return (void*)&sub_1386b;  // velocity apply sweep (FRAC accumulators)
     case 116: return (void*)&sub_1625d;  // ground snap (flag 0x2000, slope)
+    case 117: return (void*)&sub_13916;  // collision resolve sweep
     default: return 0;
     }
 }

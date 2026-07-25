@@ -2293,6 +2293,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue = 
 static void v2_vm_execute_object(uint8_t* ds, uint16_t si);
 static void v2_run_collision_vm(uint8_t* shadow, uint16_t si);
 static void v2_coll_sweep_15530(uint8_t* shadow);
+static void v2_flip_pair_for_resolve(uint8_t* shadow, uint16_t si, uint16_t flags_xor);
 static uint16_t v2_vm_bittest_153ea(V2VM& vm);
 static uint16_t v2_vm_bittest_15403(V2VM& vm);
 static uint16_t v2_vm_bittest_1542a(V2VM& vm);
@@ -9213,50 +9214,11 @@ static void v2_collision_resolve_13916(uint8_t* shadow) {
                 // Check flip flags XOR between objects
                 uint16_t flags_xor = *(uint16_t*)(shadow + di_coll + OBJ_FLAGS) ^
                                      *(uint16_t*)(shadow + si + OBJ_FLAGS);
-                // If flag 0x40 differs → horizontal flip (sub_136a0)
-                if (flags_xor & 0x40) {
-                    *(uint16_t*)(shadow + si + OBJ_FLAGS) ^= 0x40;
-                    uint16_t x2 = *(uint16_t*)(shadow + si + OBJ_WORLD_X) * 2;
-                    uint16_t new_1535 = x2 - *(uint16_t*)(shadow + si + OBJ_BBOX_X1) - 1;
-                    uint16_t new_155D = x2 - *(uint16_t*)(shadow + si + OBJ_BBOX_X0) - 1;
-                    *(uint16_t*)(shadow + si + OBJ_BBOX_X1) = new_155D;
-                    *(uint16_t*)(shadow + si + OBJ_BBOX_X0) = new_1535;
-                    // Sub-sprite hflip loop
-                    if (*(uint16_t*)(shadow + si + OBJ_SUB_COUNT) != 0) {
-                        uint16_t dx2 = x2;
-                        uint16_t cx_end = *(uint16_t*)(shadow + si + OBJ_SUB_END);
-                        for (uint16_t sdi = *(uint16_t*)(shadow + si + OBJ_SUB_SLOT);
-                             (int16_t)sdi < (int16_t)cx_end; sdi += 2) {
-                            uint16_t new_x = dx2 - *(uint16_t*)(shadow + sdi + OBJ_SPRITE_X)
-                                             - *(uint16_t*)(shadow + sdi + OBJ_STRIP_COUNT);
-                            *(uint16_t*)(shadow + sdi + OBJ_SPRITE_X) = new_x;
-                            *(uint16_t*)(shadow + sdi + OBJ_SPRITE_FLAGS) ^= 0x200;
-                            *(uint16_t*)(shadow + sdi + OBJ_DIRTY_MODE) = 0x202;
-                        }
-                    }
-                }
-                // If flag 0x80 differs → vertical flip (sub_13757)
-                if (flags_xor & 0x80) {
-                    *(uint16_t*)(shadow + si + OBJ_FLAGS) ^= 0x80;
-                    uint16_t y2 = *(uint16_t*)(shadow + si + OBJ_WORLD_Y) * 2;
-                    uint16_t new_14E5 = y2 - *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) - 1;
-                    uint16_t new_150D = y2 - *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) - 1;
-                    *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) = new_150D;
-                    *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) = new_14E5;
-                    // Sub-sprite vflip loop
-                    if (*(uint16_t*)(shadow + si + OBJ_SUB_COUNT) != 0) {
-                        uint16_t dy2 = y2;
-                        uint16_t cx_end = *(uint16_t*)(shadow + si + OBJ_SUB_END);
-                        for (uint16_t sdi = *(uint16_t*)(shadow + si + OBJ_SUB_SLOT);
-                             (int16_t)sdi < (int16_t)cx_end; sdi += 2) {
-                            *(uint16_t*)(shadow + sdi + OBJ_SPRITE_Y) = dy2
-                                - *(uint16_t*)(shadow + sdi + OBJ_SPRITE_Y)
-                                - *(uint16_t*)(shadow + sdi + OBJ_STRIP_COUNT);
-                            *(uint16_t*)(shadow + sdi + OBJ_SPRITE_FLAGS) ^= 0x400;
-                            *(uint16_t*)(shadow + sdi + OBJ_DIRTY_MODE) = 0x202;
-                        }
-                    }
-                }
+                // Flag 0x40 differs → CALL sub_136a0; 0x80 → CALL sub_13757.
+                // Divergence #32: the old inlines duplicated the flip bodies
+                // with PRE-TEST sub-sprite loops — orig calls the do-while
+                // bodies (units 114-115): empty/inverted ranges write 1 slot.
+                v2_flip_pair_for_resolve(shadow, si, flags_xor);
 
                 // Position delta: bx = partner.X - self.X, cx = partner.Y - self.Y
                 int16_t bx_delta = (int16_t)*(uint16_t*)(shadow + di_coll + OBJ_WORLD_X) -
@@ -10848,6 +10810,15 @@ static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si) {
     }
 }
 
+// Bridge for the shadow-side sub_13916 mirror (defined before V2VM exists):
+// flag-XOR-directed calls of the do-while flip bodies (divergence #32).
+static void v2_flip_pair_for_resolve(uint8_t* shadow, uint16_t si, uint16_t flags_xor) {
+    V2VM fvm{};
+    fvm.ds = shadow; fvm.shadow = shadow; fvm.obj = si;
+    if (flags_xor & 0x40) v2_vm_hflip_body_136a0(fvm, si);
+    if (flags_xor & 0x80) v2_vm_vflip_body_13757(fvm, si);
+}
+
 static void v2_vm_op_0C(V2VM& vm) {
     // sub_13753: MOV si, ds:42h; falls through to sub_13757.
     uint16_t si = vm.global_r(DS_CUR_OBJ);
@@ -12333,6 +12304,12 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Unit 118: sub_13916 — collision resolve sweep.
+static void v2_collision_resolve_13916(uint8_t* shadow);
+extern "C" void v2_fntest_call_sub_13916(uint8_t* test_shadow) {
+    v2_collision_resolve_13916(test_shadow);
+}
+
 // Units 116-117: sub_1386b (velocity apply sweep) / sub_1625d (ground snap).
 static void v2_apply_velocity_1386b(uint8_t* shadow);
 static void v2_ground_snap_1625d(uint8_t* shadow);
