@@ -15757,6 +15757,7 @@ static void v2_vm_op_18(V2VM& vm) {
 static uint16_t v2_vm_bittest_153ea(V2VM& vm) {           // literal word, bx+=3
     uint8_t idx1 = vm.read_u8();
     uint16_t val = vm.read_u16();
+    vm.si_track = idx1;             // orig tail: POP si → the mask byte
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     return (val & mask) ? 1 : 0;
 }
@@ -15766,6 +15767,7 @@ static uint16_t v2_vm_bittest_15403(V2VM& vm) {           // self field, bx+=2
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = (uint16_t)(field_off + vm.global_r(DS_CUR_OBJ));
     uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(si + OBJ_BBOX_Y0));
+    vm.si_track = idx1;             // orig tail: POP si → the mask byte
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     return (val & mask) ? 1 : 0;
 }
@@ -15773,6 +15775,7 @@ static uint16_t v2_vm_bittest_1542a(V2VM& vm) {           // ds:[addr], bx+=3
     uint8_t idx1 = vm.read_u8();
     uint16_t addr = vm.read_u16();
     uint16_t val = vm.ds_read(addr);
+    vm.si_track = idx1;             // orig tail: POP si → the mask byte
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     return (val & mask) ? 1 : 0;
 }
@@ -15782,7 +15785,9 @@ static uint16_t v2_vm_bittest_15445(V2VM& vm) {           // partner field, bx+=
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     di = (uint16_t)(di + *(uint16_t*)(vm.shadow + (uint16_t)(obj + OBJ_PARTNER)));
+    vm.di_track = di;               // orig leaves the field address in DI
     uint16_t val = *(uint16_t*)(vm.shadow +(uint16_t)(di + OBJ_BBOX_Y0));
+    vm.si_track = idx1;             // orig 15445 tail: POP si → first byte
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     return (val & mask) ? 1 : 0;
 }
@@ -16335,15 +16340,7 @@ static void v2_vm_op_88(V2VM& vm) {
 // sub_15403 helper: reads 2 bytes (two INC bx), pattern B (ds:0x42, NO 0x1995).
 // idx1=mask index, idx2=field index. val = ds:[ds:[idx2-0x6CBA] + ds:0x42 + 0x14E5] & ds:[idx1-0x6C34].
 static uint16_t v2_vm_read_indexed_field_15403(V2VM& vm) {
-    uint8_t idx1 = vm.read_u8();
-    uint8_t idx2 = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx2 - LUT_FIELD_OFF);
-    uint16_t si = *(uint16_t*)(vm.shadow +lookup);
-    si += vm.global_r(DS_CUR_OBJ);
-    uint16_t val = vm.ds_read((uint16_t)(si + OBJ_FIELD_BASE));
-    // AND with mask from idx1 table, return 0 or 1
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    return (val & mask) ? 1 : 0;
+    return v2_vm_bittest_15403(vm);
 }
 
 // --- 0xA9: sub_15403 (2B indexed), if ne skip else jump ---
@@ -16354,17 +16351,7 @@ static void v2_vm_op_A9(V2VM& vm) {
 
 // sub_15445 helper: reads 2 bytes (two INC bx), indexed + 0x1995
 static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm) {
-    uint8_t idx1 = vm.read_u8();
-    uint8_t idx2 = vm.read_u8();
-    uint16_t lookup = (uint16_t)(idx2 - LUT_FIELD_OFF);
-    uint16_t di = *(uint16_t*)(vm.shadow +lookup);
-    uint16_t obj = vm.global_r(DS_CUR_OBJ);
-    di += ObjRef{vm, obj}.u16(OBJ_PARTNER);
-    vm.di_track = di;               // orig leaves the field address in DI
-    uint16_t val = vm.ds_read((uint16_t)(di + OBJ_FIELD_BASE));
-    vm.si_track = idx1;             // orig 15445 tail: POP si → first byte
-    uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
-    return (val & mask) ? 1 : 0;
+    return v2_vm_bittest_15445(vm);
 }
 
 // --- 0xAB: sub_15445 (2B indexed+1995), if ne skip else jump ---
