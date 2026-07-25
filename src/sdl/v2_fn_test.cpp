@@ -326,6 +326,28 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1491B = 232, FT_SUB_14933 = 233, FT_SUB_1494B = 234,
             FT_SUB_14963 = 235, FT_SUB_1497B = 236, FT_SUB_14993 = 237,
             FT_SUB_149AB = 238, FT_SUB_149C3 = 239, FT_SUB_149DB = 240,
+            // Table wave 8: equality channel-compare jump/call forms (72-8F).
+            FT_SUB_149F3 = 241,
+            FT_SUB_14A0B = 242,
+            FT_SUB_14A1B = 243,
+            FT_SUB_14A2B = 244,
+            FT_SUB_14A3B = 245,
+            FT_SUB_14A4B = 246,
+            FT_SUB_14A5B = 247,
+            FT_SUB_14A6B = 248,
+            FT_SUB_14A7B = 249,
+            FT_SUB_14A8B = 250,
+            FT_SUB_14A9B = 251,
+            FT_SUB_14AAB = 252,
+            FT_SUB_14ABB = 253,
+            FT_SUB_14ACB = 254,
+            FT_SUB_14ADB = 255,
+            FT_SUB_14AEB = 256,
+            FT_SUB_14AFB = 257,
+            FT_SUB_14B0B = 258,
+            FT_SUB_14B1B = 259,
+            FT_SUB_14B2B = 260,
+            FT_SUB_14B3B = 261,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -434,7 +456,14 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_148e5", "sub_148f7", "sub_14909",
                                  "sub_1491b", "sub_14933", "sub_1494b",
                                  "sub_14963", "sub_1497b", "sub_14993",
-                                 "sub_149ab", "sub_149c3", "sub_149db" };
+                                 "sub_149ab", "sub_149c3", "sub_149db",
+                                 "sub_149f3", "sub_14a0b", "sub_14a1b",
+                                 "sub_14a2b", "sub_14a3b", "sub_14a4b",
+                                 "sub_14a5b", "sub_14a6b", "sub_14a7b",
+                                 "sub_14a8b", "sub_14a9b", "sub_14aab",
+                                 "sub_14abb", "sub_14acb", "sub_14adb",
+                                 "sub_14aeb", "sub_14afb", "sub_14b0b",
+                                 "sub_14b1b", "sub_14b2b", "sub_14b3b" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -8100,6 +8129,34 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         A(c, 5, O, "grid");
         fuzz_op = op; fuzz_alen = 3; break;
     }
+    // ---- wave 8: equality channel-compare jump/call forms ----
+    case FT_SUB_149F3:
+    case FT_SUB_14A0B:
+    case FT_SUB_14A1B:
+    case FT_SUB_14A2B:
+    case FT_SUB_14A3B:
+    case FT_SUB_14A4B:
+    case FT_SUB_14A5B:
+    case FT_SUB_14A6B:
+    case FT_SUB_14A7B:
+    case FT_SUB_14A8B:
+    case FT_SUB_14A9B:
+    case FT_SUB_14AAB:
+    case FT_SUB_14ABB:
+    case FT_SUB_14ACB:
+    case FT_SUB_14ADB:
+    case FT_SUB_14AEB:
+    case FT_SUB_14AFB:
+    case FT_SUB_14B0B:
+    case FT_SUB_14B1B:
+    case FT_SUB_14B2B:
+    case FT_SUB_14B3B: {
+        uint8_t op = (id == FT_SUB_149F3) ? 0x85 : (id == FT_SUB_14A0B) ? 0x72 : (id == FT_SUB_14A1B) ? 0x73 : (id == FT_SUB_14A2B) ? 0x74 : (id == FT_SUB_14A3B) ? 0x75 : (id == FT_SUB_14A4B) ? 0x76 : (id == FT_SUB_14A5B) ? 0x77 : (id == FT_SUB_14A6B) ? 0x78 : (id == FT_SUB_14A7B) ? 0x79 : (id == FT_SUB_14A8B) ? 0x7A : (id == FT_SUB_14A9B) ? 0x7B : (id == FT_SUB_14AAB) ? 0x86 : (id == FT_SUB_14ABB) ? 0x87 : (id == FT_SUB_14ACB) ? 0x88 : (id == FT_SUB_14ADB) ? 0x89 : (id == FT_SUB_14AEB) ? 0x8A : (id == FT_SUB_14AFB) ? 0x8B : (id == FT_SUB_14B0B) ? 0x8C : (id == FT_SUB_14B1B) ? 0x8D : (id == FT_SUB_14B2B) ? 0x8E : 0x8F;
+        uint16_t t = FT_VM_PC + 0x40;
+        uint8_t c[] = {op, 0x01, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
+        A(c, 5, O, "grid");
+        fuzz_op = op; fuzz_alen = 3; break;
+    }
     default: return 1;
     }
     for (int i = 0; i < 300; i++) {
@@ -9472,6 +9529,27 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_149ab")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_149AB, 0x149AB001u); }
     if (all || strstr(env, "sub_149c3")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_149C3, 0x149C3001u); }
     if (all || strstr(env, "sub_149db")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_149DB, 0x149DB001u); }
+    if (all || strstr(env, "sub_149f3")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_149F3, 0x149F3001u); }
+    if (all || strstr(env, "sub_14a0b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A0B, 0x14A0B001u); }
+    if (all || strstr(env, "sub_14a1b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A1B, 0x14A1B001u); }
+    if (all || strstr(env, "sub_14a2b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A2B, 0x14A2B001u); }
+    if (all || strstr(env, "sub_14a3b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A3B, 0x14A3B001u); }
+    if (all || strstr(env, "sub_14a4b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A4B, 0x14A4B001u); }
+    if (all || strstr(env, "sub_14a5b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A5B, 0x14A5B001u); }
+    if (all || strstr(env, "sub_14a6b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A6B, 0x14A6B001u); }
+    if (all || strstr(env, "sub_14a7b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A7B, 0x14A7B001u); }
+    if (all || strstr(env, "sub_14a8b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A8B, 0x14A8B001u); }
+    if (all || strstr(env, "sub_14a9b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14A9B, 0x14A9B001u); }
+    if (all || strstr(env, "sub_14aab")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14AAB, 0x14AAB001u); }
+    if (all || strstr(env, "sub_14abb")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14ABB, 0x14ABB001u); }
+    if (all || strstr(env, "sub_14acb")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14ACB, 0x14ACB001u); }
+    if (all || strstr(env, "sub_14adb")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14ADB, 0x14ADB001u); }
+    if (all || strstr(env, "sub_14aeb")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14AEB, 0x14AEB001u); }
+    if (all || strstr(env, "sub_14afb")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14AFB, 0x14AFB001u); }
+    if (all || strstr(env, "sub_14b0b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14B0B, 0x14B0B001u); }
+    if (all || strstr(env, "sub_14b1b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14B1B, 0x14B1B001u); }
+    if (all || strstr(env, "sub_14b2b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14B2B, 0x14B2B001u); }
+    if (all || strstr(env, "sub_14b3b")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_14B3B, 0x14B3B001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
