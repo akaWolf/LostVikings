@@ -185,6 +185,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 109: return (void*)&sub_15473;  // getter dispatch (ax & 7)
     case 110: return (void*)&sub_15470;  // getter dispatch (SHR ax,3 first)
     case 111: return (void*)&sub_154bf;  // setter dispatch (value = pushed SI)
+    case 112: return (void*)&sub_15788;  // X-dir full collision op (triage)
     default: return 0;
     }
 }

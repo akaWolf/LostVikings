@@ -132,6 +132,7 @@ extern "C" int      v2_fntest_call_sub_163ac(uint8_t* test_shadow);
 extern "C" int32_t  v2_fntest_call_bittest(uint8_t* test_shadow, uint16_t pc, int which);
 extern "C" int32_t  v2_fntest_call_getter(uint8_t* test_shadow, uint16_t pc, uint16_t ax_mode, int shr3);
 extern "C" int32_t  v2_fntest_call_setter(uint8_t* test_shadow, uint16_t pc, uint16_t value, uint16_t ax_mode);
+extern "C" int32_t  v2_fntest_call_sub_15788(uint8_t* test_shadow, uint16_t pc);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -224,6 +225,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_153EA = 105, FT_SUB_15403 = 106,
             FT_SUB_1542A = 107, FT_SUB_15445 = 108,
             FT_SUB_15473 = 109, FT_SUB_15470 = 110, FT_SUB_154BF = 111,
+            FT_SUB_15788 = 112,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -281,7 +283,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_16390", "sub_163ac",
                                  "sub_153ea", "sub_15403",
                                  "sub_1542a", "sub_15445",
-                                 "sub_15473", "sub_15470", "sub_154bf" };
+                                 "sub_15473", "sub_15470", "sub_154bf",
+                                 "sub_15788" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -5443,6 +5446,111 @@ int ft_selftest_chan(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Unit 113: sub_15788 (X-dir full collision op) ------------------------
+// Triage: state==0 -> pc+=1 + mask STC/CLC; state<0 -> pc+=1 CLC; state>0 ->
+// consume filter, 158f5->1592d tile path | 15c37->15d6b object path, OR bit,
+// ALWAYS CLC. All callees are verified units (90/91/28/4); the zeroed map
+// forces the tile path to miss so the object branch drives DS effects.
+int ft_selftest_sub_15788(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    const uint16_t di = 8, PC0 = 0x0100;
+    auto ctx = [&](uint16_t st390, uint16_t coll_bits, uint16_t bit38e,
+                   uint16_t wx, uint16_t px, int with_obj) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, 4);
+        ft_wr16(g_synth_in, 0x390, st390);
+        ft_wr16(g_synth_in, 0x42, di);
+        ft_wr16(g_synth_in, 0x38E, bit38e);
+        ft_wr16(g_synth_in, (uint16_t)(bit38e - 0x6C34), (uint16_t)(1u << (bit38e / 2)));
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_COLL_BITS), coll_bits);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), 0x0100);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), 0x0110);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), 0x0100);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), 0x0110);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_X), wx);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_X_PREV),  px);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_X),   0);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y),   0);
+        for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+        ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, 0x25DC, 16);
+        ft_wr16(g_synth_in, 0x25DE, 16);
+        for (int y = 0; y < 16; y++)
+            ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE), (uint16_t)(y * 32));
+        if (with_obj) {
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_CODE_SEG), 1);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_TYPE_ID), 0x0030);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X0), 0x0100);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X1), 0x0110);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_Y0), 0x0100);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_Y1), 0x0110);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_VEL_X), 0x0010);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_VEL_Y), 0);
+        }
+        uint16_t ca = (uint16_t)(0x70 - LUT_SCAN_FILTER);
+        g_synth_in[ca] = 0x30; g_synth_in[(uint16_t)(ca + 1)] = 0xFF;
+        memset(g_vm_es_in, 0, 0x200);
+        g_vm_es_in[PC0] = 0x70;
+    };
+    auto run1 = [&](const char* group, FtSynthStats& st) {
+        ft_fill_tail(g_synth_in);
+        uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int32_t packed = v2_fntest_call_sub_15788(g_scratch, PC0);
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        int cf_v2 = (int)(packed & 1);
+        uint16_t pc_v2 = (uint16_t)((uint32_t)packed >> 1);
+        st.cases++;
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, PC0, 0, 0, 0, 0, 0, 0 };
+        v2_fntest_es_override = FT_VM_TESTSEG;
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_15788), g_synth_orig, regs);
+        v2_fntest_es_override = 0;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        if (ft_ub_marks() != esc0) { st.cases--; return; }
+        long diffs = 0;
+        if ((regs[7] & 1) != (uint16_t)cf_v2) { if (diff_budget-- > 0)
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_15788 %s]: CF orig=%d v2=%d\n",
+                    group, regs[7] & 1, cf_v2); diffs++; }
+        if (regs[1] != pc_v2) { if (diff_budget-- > 0)
+            fprintf(stderr, "FNSELFTEST-DIFF[sub_15788 %s]: BX orig=%04X v2=%04X\n",
+                    group, regs[1], pc_v2); diffs++; }
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_15788 %s]: addr=%04X orig=%02X v2=%02X\n",
+                        group, a, g_synth_orig[a], g_scratch[a]);
+            diffs++;
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    ctx(0x0000, 0xFFFF, 4, 0x0100, 0x0100, 0); run1("grid", grid);   // state0 mask hit
+    ctx(0x0000, 0x0000, 4, 0x0100, 0x0100, 0); run1("grid", grid);   // state0 miss
+    ctx(0xFFFF, 0xCCCC, 4, 0x0100, 0x0100, 0); run1("grid", grid);   // state<0 skip
+    ctx(0x0001, 0x0000, 4, 0x0100, 0x0100, 0); run1("grid", grid);   // state>0 both-miss
+    ctx(0x0001, 0x0000, 4, 0x0108, 0x0100, 1); run1("grid", grid);   // moved right + obj
+    ctx(0x0001, 0x0000, 4, 0x0100, 0x0108, 1); run1("grid", grid);   // moved left + obj
+    ctx(0x0001, 0x0000, 4, 0x0100, 0x0100, 1); run1("grid", grid);   // vel-scan path
+    FtRng rng(seed);
+    for (int i = 0; i < 300; i++) {
+        uint16_t stv = (uint16_t)((rng.next() % 3 == 0) ? 0
+                       : (rng.next() & 1) ? 0xFFFF : 1);
+        ctx(stv, rng.w(), (uint16_t)((rng.next() % 8) * 2),
+            (uint16_t)(0x0F0 + (rng.next() % 0x30)),
+            (uint16_t)(0x0F0 + (rng.next() % 0x30)), (int)(rng.next() & 1));
+        run1("fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_15788]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
+        grid.fail + fuzz.fail, (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -6581,6 +6689,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15473")) { matched = true; rc |= ft_selftest_chan(FT_SUB_15473, 0x15473001u); }
     if (all || strstr(env, "sub_15470")) { matched = true; rc |= ft_selftest_chan(FT_SUB_15470, 0x15470001u); }
     if (all || strstr(env, "sub_154bf")) { matched = true; rc |= ft_selftest_chan(FT_SUB_154BF, 0x154BF001u); }
+    if (all || strstr(env, "sub_15788")) { matched = true; rc |= ft_selftest_sub_15788(0x15788001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

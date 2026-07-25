@@ -12333,6 +12333,31 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Unit 113: sub_15788 — X-direction full collision op (triage skeleton).
+static bool v2_vm_collision_check_15788(V2VM& vm);
+extern "C" int32_t v2_fntest_call_sub_15788(uint8_t* test_shadow, uint16_t pc) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_resolve_segment(0x4000, test_shadow);
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = *(uint16_t*)(test_shadow + DS_CUR_OBJ);
+    vm.pc = pc; vm.running = true; vm.carry = false;
+    bool cf = v2_vm_collision_check_15788(vm);
+    int32_t out = ((int32_t)vm.pc << 1) | (cf ? 1 : 0);
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+    return out;
+}
+
 // Units 110-112: sub_15473 / sub_15470 (getter dispatch) / sub_154bf (setter).
 static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode, uint16_t site_ret_ip, bool* out_interrupt);
 static void v2_vm_setter_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode);
