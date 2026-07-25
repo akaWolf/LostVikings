@@ -154,6 +154,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 78: return (void*)&sub_15fb1;   // Y-axis obj search (Y_start-1 entry)
     case 79: return (void*)&sub_15fbe;   // Y-axis obj search (Y_end+1 entry)
     case 80: return (void*)&sub_1603e;   // flip-aware single-point obj search
+    case 81: return (void*)&sub_160cf;   // obj search at ds:6C/6E point
+    case 82: return (void*)&sub_15ae9;   // tile check at ds:6C/6E point
+    case 83: return (void*)&sub_1589b;   // combined at-pos probe (15ae9 -> 160cf)
     default: return 0;
     }
 }

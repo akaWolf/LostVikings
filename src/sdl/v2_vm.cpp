@@ -12231,6 +12231,9 @@ extern "C" int v2_fntest_call_search(uint8_t* test_shadow, int which,
     case 1: v2_vm_probe_right_158b9(vm, filter, obj); break;
     case 2: v2_vm_probe_up_158c8(vm, filter, obj); break;
     case 3: v2_vm_probe_down_158d7(vm, filter, obj); break;
+    case 5: vm.carry = v2_vm_tile_at_pos_15ae9(vm, filter); break;   // unit 83
+    case 6: vm.carry = v2_vm_obj_at_pos_160cf(vm, filter); break;    // unit 82
+    case 7: v2_vm_probe_at_pos_1589b(vm, filter); break;             // unit 84
     default: v2_vm_probe_front_158e6(vm, filter, obj); break;
     }
     v2_replay_verify_active = saved_rv;

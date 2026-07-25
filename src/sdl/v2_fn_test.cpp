@@ -191,6 +191,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_15DE5 = 76, FT_SUB_15DF2 = 77,
             FT_SUB_15FB1 = 78, FT_SUB_15FBE = 79,
             FT_SUB_1603E = 80,
+            FT_SUB_160CF = 81, FT_SUB_15AE9 = 82, FT_SUB_1589B = 83,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -234,7 +235,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_15cef", "sub_15cf5",
                                  "sub_15de5", "sub_15df2",
                                  "sub_15fb1", "sub_15fbe",
-                                 "sub_1603e" };
+                                 "sub_1603e",
+                                 "sub_160cf", "sub_15ae9", "sub_1589b" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -4342,6 +4344,101 @@ int ft_selftest_probe_1603e(uint32_t seed) {
     return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 82-84: sub_160cf / sub_15ae9 / sub_1589b (at-pos probes) -------
+// Probe point = ds:0x6C / ds:0x6E. sub_15ae9: single tile at (x>>4, y>>4) via
+// sub_14199, filter chain; hit writes ds:0x3B2 = type AND 0xFF ONLY (no 3B4).
+// sub_160cf: object scan (34/36/38 prologue, do-while slots, X/Y JL+DEC/JGE
+// gates on the target span, hit 3B2 word + 3B4). sub_1589b: 3B4=0xFFFF, tile
+// probe first (JC -> ret), else object probe. v2 which-map: 5/6/7.
+int ft_selftest_atpos(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    const uint16_t FLT = 0x7000;
+    int which = (id == FT_SUB_15AE9) ? 5 : (id == FT_SUB_160CF) ? 6 : 7;
+    // Tile zone: 8x8 map, all tiles type 0 except (1,1)=0x30 (bits 15..10).
+    auto ctx = [&](uint16_t px, uint16_t py, uint16_t tile_type,
+                   uint16_t tend, uint16_t cur) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, tend);
+        ft_wr16(g_synth_in, 0x42, cur);
+        ft_wr16(g_synth_in, 0x6C, px);
+        ft_wr16(g_synth_in, 0x6E, py);
+        ft_wr16(g_synth_in, 0x34, 0xBBBB); ft_wr16(g_synth_in, 0x36, 0xBBBB);
+        ft_wr16(g_synth_in, 0x38, 0xBBBB); ft_wr16(g_synth_in, 0x3A, 0xBBBB);
+        ft_wr16(g_synth_in, 0x3B2, 0xBBBB); ft_wr16(g_synth_in, 0x3B4, 0xBBBB);
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER)]     = 0x30;
+        g_synth_in[(uint16_t)(FLT - LUT_SCAN_FILTER + 1)] = 0xFF;
+        for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+        ft_wr16(g_synth_in, DS_SEG_TILEMAP, FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, 0x25DC, 8);
+        ft_wr16(g_synth_in, 0x25DE, 8);
+        for (int y = 0; y < 8; y++)
+            ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE), (uint16_t)(y * 16));
+        memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
+        uint16_t tw = (uint16_t)(tile_type << 10);
+        g_vm_es_in[(1 * 8 + 1) * 2]     = (uint8_t)(tw & 0xFF);
+        g_vm_es_in[(1 * 8 + 1) * 2 + 1] = (uint8_t)(tw >> 8);
+    };
+    auto run1 = [&](const char* group, FtSynthStats& st) {
+        ft_fill_tail(g_synth_in);
+        uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = v2_fntest_call_search(g_scratch, which, FLT, 8);
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);   // zone read-only for this family
+        FtRegs in{}; in.si = FLT;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, group, st, diff_budget);
+    };
+    // grid: tile hit at (0x10..0x1F, 0x10..0x1F) → type 0x30 in cell (1,1);
+    // tile miss (type 0 cell); obj hit/miss combos; probe edges.
+    struct GC { uint16_t px, py, tt, alive, otype, tx0, tx1, ty0, ty1, tend, cur; };
+    static const GC G[] = {
+        { 0x0015, 0x0015, 0x30, 0, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 }, // tile hit
+        { 0x0015, 0x0015, 0x00, 0, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 }, // tile miss, no obj
+        { 0x0105, 0x0105, 0x00, 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 }, // obj hit
+        { 0x0105, 0x0105, 0x00, 1, 0x0010, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 }, // obj filter JB
+        { 0x0105, 0x0105, 0x00, 1, 0x0030, 0x0106, 0x0110, 0x0100, 0x0110, 4, 8 }, // X JL reject
+        { 0x0105, 0x0105, 0x00, 1, 0x0030, 0x0100, 0x0105, 0x0100, 0x0110, 4, 8 }, // X JGE reject
+        { 0x0105, 0x0105, 0x00, 1, 0x0030, 0x0100, 0x0110, 0x0106, 0x0110, 4, 8 }, // Y JL reject
+        { 0x0105, 0x0105, 0x00, 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0105, 4, 8 }, // Y JGE reject
+        { 0x0105, 0x0105, 0x00, 1, 0x1230, 0x0100, 0x0110, 0x0100, 0x0110, 4, 8 }, // word 3B2 (obj)
+        { 0x0015, 0x0015, 0x30, 1, 0x1230, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 4, 8 }, // tile hit shadows obj (1589b order)
+        { 0x0105, 0x0105, 0x00, 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110, 0, 8 }, // empty table
+        { 0x0000, 0x0000, 0x00, 1, 0x0030, 0x0000, 0x0010, 0x0000, 0x0010, 4, 8 }, // probe 0/0 (DEC wrap)
+    };
+    for (auto& g : G) {
+        ctx(g.px, g.py, g.tt, g.tend, g.cur);
+        ft_objscan_target(2, g.alive, g.otype, g.tx0, g.tx1, g.ty0, g.ty1);
+        run1("grid", grid);
+    }
+    // Exhaustive: probe-X axis 65536 vs a fixed object span (tile cell empty);
+    // second pass: probe-Y axis.
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t x = 0; x <= 0xFFFF; x++) {
+            if (pass == 0) ctx((uint16_t)x, 0x0105, 0, 4, 8);
+            else           ctx(0x0105, (uint16_t)x, 0, 4, 8);
+            ft_objscan_target(2, 1, 0x0030, 0x0100, 0x0110, 0x0100, 0x0110);
+            run1("exh", exh);
+        }
+    }
+    FtRng rng(seed);
+    for (int i = 0; i < 12000; i++) {
+        ctx(rng.w(), rng.w(), (uint16_t)(rng.next() & 1 ? 0x30 : 0),
+            (uint16_t)((rng.next() % 5) * 2), (uint16_t)((rng.next() % 6) * 2));
+        for (uint16_t slot = 0; slot < 8; slot += 2)
+            ft_objscan_target(slot, (uint16_t)(rng.next() & 1),
+                              (uint16_t)(rng.w() & 0x0FFF ? rng.w() : 0x0030),
+                              rng.w(), rng.w(), rng.w(), rng.w());
+        run1("fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -5449,6 +5546,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15fb1")) { matched = true; rc |= ft_selftest_objscan_y(FT_SUB_15FB1, 0x15FB1001u); }
     if (all || strstr(env, "sub_15fbe")) { matched = true; rc |= ft_selftest_objscan_y(FT_SUB_15FBE, 0x15FBE001u); }
     if (all || strstr(env, "sub_1603e")) { matched = true; rc |= ft_selftest_probe_1603e(0x1603E001u); }
+    if (all || strstr(env, "sub_160cf")) { matched = true; rc |= ft_selftest_atpos(FT_SUB_160CF, 0x160CF001u); }
+    if (all || strstr(env, "sub_15ae9")) { matched = true; rc |= ft_selftest_atpos(FT_SUB_15AE9, 0x15AE9001u); }
+    if (all || strstr(env, "sub_1589b")) { matched = true; rc |= ft_selftest_atpos(FT_SUB_1589B, 0x1589B001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
