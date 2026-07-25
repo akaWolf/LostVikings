@@ -3999,7 +3999,7 @@ static void v2_viewport_init_113d8(uint8_t* s) {
     if (s[DS_ACTIVE_VK_SEL] != 0) si = *(uint16_t*)(s + DS_ACTIVE_VIKING); // byte_2AA9A, word_288A2
 
     // X: center on viking, clamp to [0, scroll_X_limit]
-    int16_t ax = (int16_t)*(uint16_t*)(s + (uint16_t)(si + OBJ_WORLD_X)) - 0xA0;   // 16-bit wrap (unit 46, div #21)
+    int16_t ax = ObjMem{s, si}.i16(OBJ_WORLD_X) - 0xA0;   // 16-bit wrap (unit 46, div #21)
     if (ax < 0) ax = 0;
     if (ax > (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_X)) ax = (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_X);
     *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;   // word_28524 (viewport X)
@@ -4010,7 +4010,7 @@ static void v2_viewport_init_113d8(uint8_t* s) {
     *(uint16_t*)(s + DS_SCROLL_DISP_X2) = scroll_x >> 1;   // word_317D3
 
     // Y: center on viking, clamp to [0, scroll_Y_limit]
-    ax = (int16_t)*(uint16_t*)(s + (uint16_t)(si + OBJ_WORLD_Y)) - 0x58;   // 16-bit wrap
+    ax = ObjMem{s, si}.i16(OBJ_WORLD_Y) - 0x58;   // 16-bit wrap
     if (ax < 0) ax = 0;
     if (ax > (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_Y)) ax = (int16_t)*(uint16_t*)(s + DS_SCROLL_LIMIT_Y);
     *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;   // word_28526 (viewport Y)
@@ -4222,8 +4222,9 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
         bool already = false;
         uint16_t table_end = *(uint16_t*)(s + DS_OBJ_COUNT);
         for (uint16_t si2 = *(uint16_t*)(s + DS_OBJ_SCAN_START); (int16_t)si2 < (int16_t)table_end; si2 += 2) {
-            if (*(uint16_t*)(s + (uint16_t)(si2 + OBJ_CODE_SEG)) == 0) continue;   // 16-bit wrap
-            if (*(uint16_t*)(s + (uint16_t)(si2 + OBJ_ANIM_SUB)) == si_idx) { already = true; break; }
+            ObjMem o{s, si2};                                        // scanned object slot (cursor)
+            if (o.code_seg() == 0) continue;   // 16-bit wrap
+            if (o.u16(OBJ_ANIM_SUB) == si_idx) { already = true; break; }
         }
         if (already) continue;
         // sub_13ae0: save viewport bounds, setup params, call sub_13809, restore bounds
@@ -4369,14 +4370,15 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
     // loc_1081D: on-screen bounds. SIGNED CMP di,6; JGE loc_10862.
     bool on_screen = false;
     if ((int16_t)active < 6) {
-        int16_t vx = (int16_t)*(uint16_t*)(shadow + (uint16_t)(active + OBJ_WORLD_X)); // world X (64K wrap)
+        ObjMem av{shadow, active};                                   // active viking object
+        int16_t vx = (int16_t)av.u16(OBJ_WORLD_X); // world X (64K wrap)
         int16_t wx = (int16_t)*(uint16_t*)(shadow + DS_VIEWPORT_X);                       // word_28524
         if ((int16_t)(vx - wx + 0x0C) >= 0 && (int16_t)(wx + 0x14C - vx) >= 0) {
             uint16_t wy = *(uint16_t*)(shadow + DS_VIEWPORT_Y); // word_28526
             if (wy == 0) {
                 on_screen = true; // CMP,0; JZ loc_1085F
             } else {
-                int16_t vy = (int16_t)*(uint16_t*)(shadow + (uint16_t)(active + OBJ_WORLD_Y)); // 64K wrap
+                int16_t vy = (int16_t)av.u16(OBJ_WORLD_Y); // 64K wrap
                 if ((int16_t)(vy - (int16_t)wy + 0x0C) >= 0 && (int16_t)((int16_t)wy + 0x0B0 - vy) >= 0)
                     on_screen = true;
             }
@@ -7967,7 +7969,7 @@ static void v2_camera_follow_1064b(uint8_t* s) {
     // X (orig eips 0x66F-0x6B8)
     {
         uint16_t sum = (uint16_t)(*(uint16_t*)(s + DS_VIEWPORT_X) + 0x90);
-        uint16_t obj = *(uint16_t*)(s + (uint16_t)(di + OBJ_WORLD_X));
+        uint16_t obj = ObjMem{s, di}.u16(OBJ_WORLD_X);
         if ((int16_t)sum > (int16_t)obj) {                 // JLE not taken
             uint16_t amt = (uint16_t)(sum - obj);          // wrapped SUB value
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10; // CMP si,10h; JL
@@ -7986,7 +7988,7 @@ static void v2_camera_follow_1064b(uint8_t* s) {
     // Y (orig eips 0x6BB-0x702; up/down are tail-jumps into the movers)
     {
         uint16_t sum = (uint16_t)(*(uint16_t*)(s + DS_VIEWPORT_Y) + 0x50);
-        uint16_t obj = *(uint16_t*)(s + (uint16_t)(di + OBJ_WORLD_Y));
+        uint16_t obj = ObjMem{s, di}.u16(OBJ_WORLD_Y);
         if ((int16_t)sum > (int16_t)obj) {
             uint16_t amt = (uint16_t)(sum - obj);
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
@@ -11293,8 +11295,9 @@ static void v2_vm_op_10(V2VM& vm) {
         uint16_t ax = vm.ds_read(di + OBJ_SUB_END);
         uint16_t si = vm.ds_read(di + OBJ_SUB_SLOT);
         do {
-            vm.ds_write((uint16_t)(si + OBJ_SPRITE_FLAGS), 0);       // clear flags
-            vm.ds_write((uint16_t)(si + OBJ_DIRTY_MODE), 0x400);  // set dirty = 0x400
+            ObjRef sub{vm, si};                          // sub-sprite slot (cursor)
+            sub.w16(OBJ_SPRITE_FLAGS, 0);       // clear flags
+            sub.w16(OBJ_DIRTY_MODE, 0x400);  // set dirty = 0x400
             si += 2;
         } while ((int16_t)si < (int16_t)ax);              // CMP si,ax / JL
     }
