@@ -3986,7 +3986,7 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
         uint16_t stride = *(uint16_t*)(s + DS_MAP_BP) * 2; // ax was already ds:0x25DC, shl 1
         uint16_t dx_val = 0;
         for (uint16_t i = 0; i < 0x100; i++) {
-            *(uint16_t*)(s + 0x8F68 + i * 2) = dx_val;
+            *(uint16_t*)(s + DS_FS_ROW_OFF_TBL + i * 2) = dx_val;
             dx_val += stride;
         }
     }
@@ -4748,8 +4748,8 @@ transition:
     } else {
         // Read from transition table
         uint16_t si = *(uint16_t*)(s + DS_HUD_SEL_SI); // word_288B4
-        *(uint16_t*)(s + DS_LEVEL_LOAD) = *(uint16_t*)(s + (uint16_t)(si + 0x2B66));  // 16-bit wrap
-        chunk_ax = *(uint16_t*)(s + (uint16_t)(si + 0x2B74));                  // 16-bit wrap
+        *(uint16_t*)(s + DS_LEVEL_LOAD) = *(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_LEVEL_TBL));  // 16-bit wrap
+        chunk_ax = *(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_CHUNK_TBL));                  // 16-bit wrap
     }
     // loc_11774: load transition chunk → ds:0x2193
     *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) = 2; // word_2A671
@@ -6214,11 +6214,11 @@ static void v2_load_level_11080(uint8_t* s) {
                 // DS writes: word_288FA (0x041A), word_288FC (0x041C), word_288FE (0x041E).
                 for (int vk_s = 0; vk_s < 3; vk_s++) {
                     uint16_t cur = *(uint16_t*)(s + (DS_HUD_SEL) + vk_s * 2);  // word_288F4/F6/F8
-                    uint16_t prev = *(uint16_t*)(s + 0x041A + vk_s * 2); // word_288FA/FC/FE
+                    uint16_t prev = *(uint16_t*)(s + DS_HUD_SEL_PREV + vk_s * 2); // word_288FA/FC/FE
                     if (cur != prev) {
                         // sub_1183d: render old selector (clear). sub_118ad: render new selector.
                         // These are VGA HUD rendering — v2 uses v2_draw_hud_selector instead.
-                        *(uint16_t*)(s + 0x041A + vk_s * 2) = cur;
+                        *(uint16_t*)(s + DS_HUD_SEL_PREV + vk_s * 2) = cur;
                         v2_draw_hud_selector(v2_current_ds_val, (cur + vk_s * 4) * 2);
                     }
                 }
@@ -6708,7 +6708,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
                 *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
                 *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
-                uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
+                uint16_t cnt = *(uint16_t*)(shadow + bx + DS_TRANSITION_CHUNK_BUF);
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                 *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
             }
@@ -6781,7 +6781,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                         // loc_1031f: table lookup
                         uint16_t si = *(uint16_t*)(shadow + DS_HUD_SEL_SI); // word_288B4
                         si += 2;
-                        uint16_t ax = *(uint16_t*)(shadow + si + 0x2B66);
+                        uint16_t ax = *(uint16_t*)(shadow + si + DS_TRANSITION_LEVEL_TBL);
                         if (ax == 0xFFFF) si = 0;
                         *(uint16_t*)(shadow + DS_HUD_SEL_SI) = si; // word_288B4
                         // loc_10336: word_2AAA9 = 0x27; → loc_1033c
@@ -6794,7 +6794,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                 } else {
                     // First time: write command buffer, set 0x8002, fall through to loc_102e8
                     uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD); // word_2A671
-                    *(uint16_t*)(shadow + (uint16_t)(bx + 0x2193)) = 0x1000;
+                    *(uint16_t*)(shadow + (uint16_t)(bx + DS_TRANSITION_CHUNK_BUF)) = 0x1000;
                     *(uint16_t*)(shadow + (uint16_t)(bx + 0x2195)) = 0xFFFF;
                     *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
                     *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0x8002; // word_288AC
@@ -7534,7 +7534,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
                             *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
                             *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
-                            uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
+                            uint16_t cnt = *(uint16_t*)(shadow + bx + DS_TRANSITION_CHUNK_BUF);
                             *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                             *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
                         }
@@ -19239,7 +19239,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
         //   if ds:[414+vk*2] != ds:[41A+vk*2]: redraw old selector slot, update tracking.
         for (int vk = 0; vk < 3; vk++) {
             uint16_t cur_off = 0x0414 + vk * 2;
-            uint16_t prev_off = 0x041A + vk * 2;
+            uint16_t prev_off = DS_HUD_SEL_PREV + vk * 2;
             if (*(uint16_t*)(s + cur_off) != *(uint16_t*)(s + prev_off)) {
                 uint16_t old_di = *(uint16_t*)(s + prev_off) * 2;
                 v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
@@ -20640,7 +20640,7 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
                 uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
                 *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
                 *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
-                uint16_t cnt = *(uint16_t*)(shadow + bx + 0x2193);
+                uint16_t cnt = *(uint16_t*)(shadow + bx + DS_TRANSITION_CHUNK_BUF);
                 *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
                 *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
             }

@@ -54,6 +54,8 @@ constexpr uint16_t DS_LEVEL_FLAGS    = 0x25CF; // byte_2AAAF: level flags (bit0 
 constexpr uint16_t DS_SPAWN_TABLE    = 0x25F6; // level object spawn/descriptor table: 14-byte (0x0E) entries, 0xFFFF-terminated (chunk_id/type/x/...); VM ops C7-CA index by OBJ_ANIM_SUB
 constexpr uint16_t DS_CMD_WRITE      = 0x218F; // word_2A66F: command-buffer write offset
 constexpr uint16_t DS_CMD_READ       = 0x2B64; // word_2B044: command-buffer read offset
+constexpr uint16_t DS_TRANSITION_LEVEL_TBL = 0x2B66; // level-transition table: level-id field (indexed by DS_HUD_SEL_SI)
+constexpr uint16_t DS_TRANSITION_CHUNK_TBL = 0x2B74; // level-transition table: chunk-id field (indexed by DS_HUD_SEL_SI)
 constexpr uint16_t DS_CMD_BUF        = 0x1DA7; // command entry base (type/si/di/param/text fields)
 constexpr uint16_t DS_CMD_ENTRY_SI   = 0x1DA9; // command entry +2: si/value1 field (base DS_CMD_BUF+2)
 constexpr uint16_t DS_CMD_ENTRY_DI   = 0x1DAB; // command entry +4: di/value2 field
@@ -196,6 +198,7 @@ constexpr uint16_t DS_PAN_GATE       = 0x92F2; // byte_317DF: pan/palette dispat
 // DATA.DAT chunk loading / FS
 // ---------------------------------------------------------------------------
 constexpr uint16_t DS_CHUNK_HDR      = 0x2BB4; // chunk header read buffer: fread 8B, dword@+0 = data offset
+constexpr uint16_t DS_FS_ROW_OFF_TBL = 0x8F68; // FS row->byte-offset LUT (0x100 entries, built as i*stride where stride=DS_MAP_BP*2)
 constexpr uint16_t DS_FS_PAGE_STRIDE = 0x8F6C; // FS page stride word (added to FS cursor per page)
 
 // ---------------------------------------------------------------------------
@@ -426,6 +429,7 @@ constexpr uint16_t DS_VK_PORTRAIT_SND_3     = 0x15B1; // word_29A91: viking-3 HU
 constexpr uint16_t DS_VK_HEALTH_2           = 0x16EF; // word_29BCF: viking-2 HUD row health value
 constexpr uint16_t DS_VK_HEALTH_3           = 0x16F1; // word_29BD1: viking-3 HUD row health value
 constexpr uint16_t DS_OBJ_QUEUE_HEAD        = 0x2191; // word_2A671: head index of 0x800-word queue at ds:0x2191 (init 2; ADD 2 push)
+constexpr uint16_t DS_TRANSITION_CHUNK_BUF  = 0x2193; // transition-chunk load buffer (v2_read_chunk target, 0x10000-0x2193 bytes; = queue body region)
 constexpr uint16_t DS_PAL_ANIM_TIMER_1      = 0x258D; // byte_2AA6D: palette-anim timer slot 1
 constexpr uint16_t DS_PAL_ANIM_TIMER_2      = 0x258E; // byte_2AA6E: palette-anim timer slot 2
 constexpr uint16_t DS_PAL_ANIM_TIMER_3      = 0x258F; // byte_2AA6F: palette-anim timer slot 3
