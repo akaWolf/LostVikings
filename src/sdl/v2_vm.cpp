@@ -12333,6 +12333,20 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Units 114-115: sub_136a0 / sub_13757 — h/v-flip bodies.
+static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si);
+static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);
+extern "C" void v2_fntest_call_sub_136a0(uint8_t* test_shadow, uint16_t si) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow; vm.obj = si;
+    v2_vm_hflip_body_136a0(vm, si);
+}
+extern "C" void v2_fntest_call_sub_13757(uint8_t* test_shadow, uint16_t si) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow; vm.obj = si;
+    v2_vm_vflip_body_13757(vm, si);
+}
+
 // Unit 113: sub_15788 — X-direction full collision op (triage skeleton).
 static bool v2_vm_collision_check_15788(V2VM& vm);
 extern "C" int32_t v2_fntest_call_sub_15788(uint8_t* test_shadow, uint16_t pc) {

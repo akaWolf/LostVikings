@@ -186,6 +186,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 110: return (void*)&sub_15470;  // getter dispatch (SHR ax,3 first)
     case 111: return (void*)&sub_154bf;  // setter dispatch (value = pushed SI)
     case 112: return (void*)&sub_15788;  // X-dir full collision op (triage)
+    case 113: return (void*)&sub_136a0;  // hflip body (bounds mirror + sub-sprite do-while)
+    case 114: return (void*)&sub_13757;  // vflip body (Y twin)
     default: return 0;
     }
 }

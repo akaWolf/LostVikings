@@ -133,6 +133,8 @@ extern "C" int32_t  v2_fntest_call_bittest(uint8_t* test_shadow, uint16_t pc, in
 extern "C" int32_t  v2_fntest_call_getter(uint8_t* test_shadow, uint16_t pc, uint16_t ax_mode, int shr3);
 extern "C" int32_t  v2_fntest_call_setter(uint8_t* test_shadow, uint16_t pc, uint16_t value, uint16_t ax_mode);
 extern "C" int32_t  v2_fntest_call_sub_15788(uint8_t* test_shadow, uint16_t pc);
+extern "C" void     v2_fntest_call_sub_136a0(uint8_t* test_shadow, uint16_t si);
+extern "C" void     v2_fntest_call_sub_13757(uint8_t* test_shadow, uint16_t si);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -226,6 +228,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1542A = 107, FT_SUB_15445 = 108,
             FT_SUB_15473 = 109, FT_SUB_15470 = 110, FT_SUB_154BF = 111,
             FT_SUB_15788 = 112,
+            FT_SUB_136A0 = 113, FT_SUB_13757 = 114,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -284,7 +287,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_153ea", "sub_15403",
                                  "sub_1542a", "sub_15445",
                                  "sub_15473", "sub_15470", "sub_154bf",
-                                 "sub_15788" };
+                                 "sub_15788",
+                                 "sub_136a0", "sub_13757" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -5551,6 +5555,58 @@ int ft_selftest_sub_15788(uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 114-115: sub_136a0 / sub_13757 (flip bodies) -------------------
+// XOR flag 0x40/0x80; bounds mirror around 2*WORLD; sub-sprite DO-WHILE
+// (>=1 iteration whenever [1AD5]!=0, even with an empty/inverted range).
+int ft_selftest_flip(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    const uint16_t si = 8;
+    bool h = (id == FT_SUB_136A0);
+    auto run1 = [&](uint16_t world, uint16_t b0, uint16_t b1, uint16_t cnt,
+                    uint16_t slot, uint16_t send, const char* group, FtSynthStats& st) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_FLAGS), 0x1234);
+        ft_wr16(g_synth_in, (uint16_t)(si + (h ? OBJ_WORLD_X : OBJ_WORLD_Y)), world);
+        ft_wr16(g_synth_in, (uint16_t)(si + (h ? OBJ_BBOX_X0 : OBJ_BBOX_Y0)), b0);
+        ft_wr16(g_synth_in, (uint16_t)(si + (h ? OBJ_BBOX_X1 : OBJ_BBOX_Y1)), b1);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_SUB_COUNT), cnt);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_SUB_SLOT), slot);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_SUB_END), send);
+        for (uint16_t d = 0x30; d < 0x40; d += 2) {
+            ft_wr16(g_synth_in, (uint16_t)(d + (h ? OBJ_SPRITE_X : OBJ_SPRITE_Y)), (uint16_t)(0x400 + d));
+            ft_wr16(g_synth_in, (uint16_t)(d + OBJ_STRIP_COUNT), 8);
+            ft_wr16(g_synth_in, (uint16_t)(d + OBJ_SPRITE_FLAGS), 0x0AAA);
+            ft_wr16(g_synth_in, (uint16_t)(d + OBJ_DIRTY_MODE), 0xCCCC);
+        }
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        if (h) v2_fntest_call_sub_136a0(g_scratch, si);
+        else   v2_fntest_call_sub_13757(g_scratch, si);
+        FtRegs in{}; in.si = si;
+        ft_synth_case_regs(id, in, 0, -1, group, st, diff_budget);
+    };
+    run1(0x0100, 0x00F0, 0x0110, 0, 0, 0, "grid", grid);          // no subs
+    run1(0x0100, 0x00F0, 0x0110, 1, 0x30, 0x38, "grid", grid);    // 4 subs
+    run1(0x0100, 0x00F0, 0x0110, 1, 0x38, 0x30, "grid", grid);    // inverted → 1 iter (do-while)
+    run1(0x0100, 0x00F0, 0x0110, 1, 0x30, 0x30, "grid", grid);    // empty → 1 iter
+    run1(0x8000, 0x7FF0, 0x8010, 1, 0x30, 0x34, "grid", grid);    // sign/wrap bounds
+    run1(0x0000, 0xFFF0, 0x0010, 0, 0, 0, "grid", grid);          // wrap mirror
+    for (uint32_t x = 0; x <= 0xFFFF; x += 3)
+        run1((uint16_t)x, 0x00F0, 0x0110, 1, 0x30, 0x34, "exh", exh);
+    FtRng rng(seed);
+    for (int i = 0; i < 20000; i++)
+        run1(rng.w(), rng.w(), rng.w(), (uint16_t)(rng.next() & 1),
+             (uint16_t)(0x30 + (rng.next() % 4) * 2),
+             (uint16_t)(0x30 + (rng.next() % 6) * 2), "fuzz", fuzz);
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -6690,6 +6746,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15470")) { matched = true; rc |= ft_selftest_chan(FT_SUB_15470, 0x15470001u); }
     if (all || strstr(env, "sub_154bf")) { matched = true; rc |= ft_selftest_chan(FT_SUB_154BF, 0x154BF001u); }
     if (all || strstr(env, "sub_15788")) { matched = true; rc |= ft_selftest_sub_15788(0x15788001u); }
+    if (all || strstr(env, "sub_136a0")) { matched = true; rc |= ft_selftest_flip(FT_SUB_136A0, 0x136A0001u); }
+    if (all || strstr(env, "sub_13757")) { matched = true; rc |= ft_selftest_flip(FT_SUB_13757, 0x13757001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
