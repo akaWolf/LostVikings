@@ -625,7 +625,7 @@ struct V2ObjTrace { uint32_t seq; char tag[12]; int16_t a, b, c, d; };
 static V2ObjTrace v2_objtrace_ring[256];
 static uint32_t v2_objtrace_n = 0;
 // Traced object index (env V2_OBJTRACE_DI, default 0x48).
-extern "C" int v2_objtrace_di = 0x48;
+extern "C" int v2_objtrace_di = 0xFFFF;  // #40 flag: default OFF (was 0x48); env V2_OBJTRACE_DI re-enables the per-object diagnostic trace
 extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d) {
     static int _init = 0;
     if (!_init) {
@@ -9332,8 +9332,10 @@ struct V2VM {
                 (addr == OBJ_ANIM_DX || addr == OBJ_ANIM_DY || addr == OBJ_FLAGS || addr == OBJ_ANIM_IDX ||
                  addr == OBJ_VEL_X || addr == OBJ_VEL_Y) &&
                 val != *(uint16_t*)(shadow + addr)) {
-                static int _ew = 0; _ew++;
-                if (_ew <= 300) {
+                static int _ew = 0, _ew_en = -1;   // #40 flag: gate Erik-write trap behind V2_TRACE
+                if (_ew_en < 0) _ew_en = getenv("V2_TRACE") ? 1 : 0;
+                _ew++;
+                if (_ew_en && _ew <= 300) {
                     const char* fname =
                         addr == OBJ_ANIM_DX ? "vel_X_field" :
                         addr == OBJ_ANIM_DY ? "vel_Y_field" :
@@ -14031,8 +14033,9 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
         // controller — object that writes other obj's anim_id at 0x16ED).
         // Shows pre-state; companion trap below logs writes to *any* obj's 0x16ED.
         if (*(uint16_t*)(vm.shadow + DS_LEVEL) == 0x002B) {
-            static int _v2_op_trace = 0;
-            if (++_v2_op_trace <= 1500) {
+            static int _v2_op_trace = 0, _v2_op_en = -1;   // #40 flag: gate the per-op cutscene trace behind V2_TRACE
+            if (_v2_op_en < 0) _v2_op_en = getenv("V2_TRACE") ? 1 : 0;
+            if (_v2_op_en && ++_v2_op_trace <= 1500) {
                 fprintf(stderr,
                   "V2-OP[%d] obj=%02X: bx=%04X cmd=%02X hdlr=%04X anim=%04X PC=%04X "
                   "acc=%04X 32F=%04X 86DE=%04X 3B6=%04X 3B8=%04X "
