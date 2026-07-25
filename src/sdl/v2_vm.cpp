@@ -12333,6 +12333,16 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Units 116-117: sub_1386b (velocity apply sweep) / sub_1625d (ground snap).
+static void v2_apply_velocity_1386b(uint8_t* shadow);
+static void v2_ground_snap_1625d(uint8_t* shadow);
+extern "C" void v2_fntest_call_sub_1386b(uint8_t* test_shadow) {
+    v2_apply_velocity_1386b(test_shadow);
+}
+extern "C" void v2_fntest_call_sub_1625d(uint8_t* test_shadow) {
+    v2_ground_snap_1625d(test_shadow);
+}
+
 // Units 114-115: sub_136a0 / sub_13757 — h/v-flip bodies.
 static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si);
 static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);

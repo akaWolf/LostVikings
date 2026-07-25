@@ -188,6 +188,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 112: return (void*)&sub_15788;  // X-dir full collision op (triage)
     case 113: return (void*)&sub_136a0;  // hflip body (bounds mirror + sub-sprite do-while)
     case 114: return (void*)&sub_13757;  // vflip body (Y twin)
+    case 115: return (void*)&sub_1386b;  // velocity apply sweep (FRAC accumulators)
+    case 116: return (void*)&sub_1625d;  // ground snap (flag 0x2000, slope)
     default: return 0;
     }
 }
