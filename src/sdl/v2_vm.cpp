@@ -5562,12 +5562,14 @@ static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
 // even if [di+1A85h] >= [di+1AADh]. Callers replicate the gates
 // ([di+1355h]!=0, [di+1AD5h]!=0, (tx|ty)!=0) before calling.
 static void v2_subsprite_delta_apply(uint8_t* s, uint16_t di, uint16_t tx, uint16_t ty) {
-    uint16_t cx = *(uint16_t*)(s + di + OBJ_SUB_END);
-    uint16_t si = *(uint16_t*)(s + di + OBJ_SUB_SLOT);
+    ObjMem self{s, di};
+    uint16_t cx = self.sub_end();
+    uint16_t si = self.sub_slot();
     do {
-        *(uint16_t*)(s + (uint16_t)(si + OBJ_SPRITE_X)) += tx;     // ADD [si+64Dh], ax
-        *(uint16_t*)(s + (uint16_t)(si + OBJ_SPRITE_Y)) += ty;     // ADD [si+74Dh], dx
-        *(uint16_t*)(s + (uint16_t)(si + OBJ_DIRTY_MODE)) = 0x202;  // MOV [si+114Dh], 202h
+        ObjMem sub{s, si};                                        // sub-sprite slot (cursor)
+        sub.w16(OBJ_SPRITE_X, sub.u16(OBJ_SPRITE_X) + tx);        // ADD [si+64Dh], ax
+        sub.w16(OBJ_SPRITE_Y, sub.u16(OBJ_SPRITE_Y) + ty);        // ADD [si+74Dh], dx
+        sub.w16(OBJ_DIRTY_MODE, 0x202);                           // MOV [si+114Dh], 202h
         si += 2;
     } while ((int16_t)si < (int16_t)cx);                     // CMP si,cx / JL
 }
