@@ -153,6 +153,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 77: return (void*)&sub_15df2;   // X-axis obj search (X_end+1 entry)
     case 78: return (void*)&sub_15fb1;   // Y-axis obj search (Y_start-1 entry)
     case 79: return (void*)&sub_15fbe;   // Y-axis obj search (Y_end+1 entry)
+    case 80: return (void*)&sub_1603e;   // flip-aware single-point obj search
     default: return 0;
     }
 }

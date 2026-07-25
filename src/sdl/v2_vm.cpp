@@ -10579,9 +10579,59 @@ static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t o
 static void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
 static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
 
+// sub_1603e (seg000 eips 0x603E..0x60CE): flip-aware single-point object
+// search. Own prologue: ds:0x34=filter; probe X = [di+1535]-1 if flags&0x40
+// else [di+155D]+1 → ds:0x36; ds:0x38 = [di+150D]+1 (self Y_end+1). Slot
+// do-while loop (loc_16067), filter chain, then TARGET-span gates on both
+// axes (JL + DEC/JGE, probe values from 0x36/0x38). Hit: ds:3B2 = [s+17DD]
+// FULL word, ds:3B4 = slot, STC (ax leaves holding the type word).
+static bool v2_vm_obj_probe_1603e(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+    ObjRef self{vm, obj_di};
+    vm.ds_write(DS_SCRATCH_34, filter_si);                        // 0x6040
+    uint16_t x;
+    if (self.flags() & 0x40) {                                     // 0x6044 TEST [di+1585],40
+        x = (uint16_t)(self.u16(OBJ_BBOX_X0) - 1);                 // loc_16053
+    } else {
+        x = (uint16_t)(self.u16(OBJ_BBOX_X1) + 1);                 // 0x604C
+    }
+    vm.ds_write(DS_SCRATCH_36, x);                                 // loc_16058
+    uint16_t y = (uint16_t)(self.u16(OBJ_BBOX_Y1) + 1);            // 0x605C..0x6060
+    vm.ds_write(DS_SCRATCH_38, y);                                 // 0x6061
+    uint8_t* rds = vm.shadow;
+    uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
+    for (uint16_t si2 = 0; si2 == 0 || (int16_t)si2 < (int16_t)table_end; si2 += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
+        ObjMem cand{rds, si2};
+        if (cand.code_seg() == 0) continue;
+        if (si2 == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
+        vm.ds_write(DS_SCRATCH_3A, si2);
+        uint8_t ot = (uint8_t)cand.type_id();
+        uint16_t f2 = filter_si;
+        bool m2 = false;
+        while (true) {
+            uint8_t fv2 = *(uint8_t*)(rds + (uint16_t)(f2 - LUT_SCAN_FILTER));
+            if (ot < fv2) break;
+            if (ot == fv2) { m2 = true; break; }
+            f2++;
+        }
+        if (!m2) continue;
+        // X: ds:0x36 in [target.X_start, target.X_end)
+        if ((int16_t)x < cand.bbox_x0()) continue;
+        if ((int16_t)(uint16_t)(x - 1) >= cand.bbox_x1()) continue;
+        // Y: ds:0x38 in [target.Y_start, target.Y_end)
+        if ((int16_t)y < cand.bbox_y0()) continue;
+        if ((int16_t)(uint16_t)(y - 1) >= cand.bbox_y1()) continue;
+        // orig 0x60AF: MOV ax,[si+17DDh]; MOV ds:3B2h, ax — FULL word, not the
+        // low byte used for the filter compare.
+        vm.ds_write(DS_SEARCH_RES_TYPE, cand.type_id());
+        vm.ds_write(DS_SEARCH_RES_SLOT, si2);
+        return true;
+    }
+    return false;
+}
+
 // sub_158e6: animation load using flip-aware SINGLE-POINT search.
 // sub_15ac4: single tile check at (X_flip_edge, Y_end+1).
-// sub_1603e: object search at X_flip_edge.
+// sub_1603e: object search at X_flip_edge (own prologue re-writes 34/36/38).
 static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     ObjRef self{vm, obj_di};
@@ -10607,41 +10657,7 @@ static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
         flt++;
     }
     if (tile_found) { vm.carry = true; return; }
-    // sub_1603e: object search — X point in target X range, Y_end+1 in target Y range
-    vm.ds_write(DS_SCRATCH_36, x);
-    vm.ds_write(DS_SCRATCH_38, y); // Y_end + 1
-    uint8_t* rds = vm.shadow;
-    uint16_t table_end = *(uint16_t*)(rds + DS_OBJ_COUNT);
-    bool obj_found = false;
-    for (uint16_t si2 = 0; si2 == 0 || (int16_t)si2 < (int16_t)table_end; si2 += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
-        ObjMem cand{rds, si2};
-        if (cand.code_seg() == 0) continue;
-        if (si2 == *(uint16_t*)(rds + DS_CUR_OBJ)) continue;
-        vm.ds_write(DS_SCRATCH_3A, si2);
-        uint8_t ot = (uint8_t)cand.type_id();
-        uint16_t f2 = filter_si;
-        bool m2 = false;
-        while (true) {
-            uint8_t fv2 = *(uint8_t*)(rds + (uint16_t)(f2 - LUT_SCAN_FILTER));
-            if (ot < fv2) break;
-            if (ot == fv2) { m2 = true; break; }
-            f2++;
-        }
-        if (!m2) continue;
-        // X: ds:0x36 in [target.X_start, target.X_end)
-        if ((int16_t)x < cand.bbox_x0()) continue;
-        if ((int16_t)(x - 1) >= cand.bbox_x1()) continue;
-        // Y: ds:0x38 in [target.Y_start, target.Y_end)
-        if ((int16_t)y < cand.bbox_y0()) continue;
-        if ((int16_t)(y - 1) >= cand.bbox_y1()) continue;
-        // orig 0x60AF: MOV ax,[si+17DDh]; MOV ds:3B2h, ax — FULL word, not the
-        // low byte used for the filter compare.
-        vm.ds_write(DS_SEARCH_RES_TYPE, cand.type_id());
-        vm.ds_write(DS_SEARCH_RES_SLOT, si2);
-        obj_found = true;
-        break;
-    }
-    vm.carry = obj_found;
+    vm.carry = v2_vm_obj_probe_1603e(vm, filter_si, obj_di);
 }
 
 // sub_158aa: animation load using X_start-1 search (sub_159c6 tile + sub_15de5 obj).
@@ -12139,6 +12155,15 @@ extern "C" int v2_fntest_call_sub_15fbe(uint8_t* test_shadow, uint16_t filter, u
     // sub_15fbe entry: probe Y = [di+0x150D] + 1
     uint16_t y = (uint16_t)(*(uint16_t*)(test_shadow + (uint16_t)(di + OBJ_BBOX_Y1)) + 1);
     return v2_vm_obj_search(vm, filter, di, y) ? 1 : 0;
+}
+// Unit 81: sub_1603e — flip-aware single-point object search (own prologue).
+static bool v2_vm_obj_probe_1603e(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+extern "C" int v2_fntest_call_sub_1603e(uint8_t* test_shadow, uint16_t filter, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    return v2_vm_obj_probe_1603e(vm, filter, di) ? 1 : 0;
 }
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
 extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_spawn_table_end_11383(test_shadow); }
