@@ -170,6 +170,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 94: return (void*)&sub_15569;   // collision pass: alive gate + VM loop
     case 95: return (void*)&sub_15530;   // collision sweep pass 2 ([390]=FFFF)
     case 96: return (void*)&sub_15546;   // collision sweep pass 1 ([390]=1)
+    case 97: return (void*)&sub_155d6;   // per-op collision check (typed scan)
+    case 98: return (void*)&sub_156c0;   // per-op collision check (variant)
     default: return 0;
     }
 }
