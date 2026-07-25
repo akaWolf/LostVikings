@@ -9421,20 +9421,20 @@ static bool v2_vm_tile_search_bottom_15a7d(V2VM& vm, uint16_t filter_si, uint16_
 
 // sub_15d3c (seg000): Y bbox overlap (Y_start). Verified seg000 13933-13963. No DS writes.
 static bool v2_y_overlap_start_15d3c(V2VM& vm, uint16_t si, uint16_t di) {
-    int16_t ax = (int16_t)vm.ds_read(di + OBJ_BBOX_Y0);
-    if (ax < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) return false;
-    if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) return false;
-    if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) return false;
-    if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) return false;
+    int16_t ax = (int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_Y0);
+    if (ax < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) return false;
+    if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) return false;
+    if ((int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X0)) return false;
+    if ((int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X0)) return false;
     return true;
 }
 // sub_15d42 (seg000): Y bbox overlap (Y_end). Verified seg000 13942-13963.
 static bool v2_y_overlap_end_15d42(V2VM& vm, uint16_t si, uint16_t di) {
-    int16_t ax = (int16_t)vm.ds_read(di + OBJ_BBOX_Y1);
-    if (ax < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) return false;
-    if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) return false;
-    if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) return false;
-    if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) return false;
+    int16_t ax = (int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_Y1);
+    if (ax < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) return false;
+    if ((int16_t)(uint16_t)(ax - 1) >= (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) return false;
+    if ((int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X0)) return false;
+    if ((int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X0)) return false;
     return true;
 }
 // sub_15c93 (seg000): Object Y-velocity collision search. DS: [3A],[38]. Verified seg000 13831-13879.
@@ -9442,10 +9442,10 @@ static bool v2_yvel_obj_search_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, 
     vm.ds_write(DS_SCRATCH_3A, filter_si);
     uint16_t table_end = vm.ds_read(DS_OBJ_COUNT);
     for (uint16_t si = 0; (int16_t)si < (int16_t)table_end; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
+        if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == vm.global_r(DS_CUR_OBJ)) continue;
         vm.ds_write(DS_SCRATCH_38, si);
-        uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
+        uint8_t obj_type = (uint8_t)ObjRef{vm, si}.u16(OBJ_TYPE_ID);
         uint16_t f = filter_si; bool match = false;
         while (true) {
             uint8_t fv = vm.shadow[(uint16_t)(f - LUT_SCAN_FILTER)];
@@ -9454,7 +9454,7 @@ static bool v2_yvel_obj_search_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, 
             f++;
         }
         if (!match) continue;
-        int16_t vel_diff = (int16_t)vm.ds_read(di + OBJ_VEL_Y) - (int16_t)vm.ds_read(si + OBJ_VEL_Y);
+        int16_t vel_diff = (int16_t)ObjRef{vm, di}.u16(OBJ_VEL_Y) - (int16_t)ObjRef{vm, si}.u16(OBJ_VEL_Y);
         if (vel_diff == 0) continue;
         if (vel_diff < 0) {
             if (v2_y_overlap_start_15d3c(vm, si, di)) { out_dir = 1; return true; }
@@ -9468,8 +9468,8 @@ static bool v2_yvel_obj_search_15c93(V2VM& vm, uint16_t filter_si, uint16_t di, 
 static bool v2_tile_coll_y_15911(V2VM& vm, uint16_t di, uint16_t filter_si, uint16_t& out_dir) {
     // Orig: caller passes filter via SI register; orig sub_157eb does NOT write ds:0x3A.
     // v2 takes filter_si as parameter to avoid touching ds:0x3A scratch.
-    uint16_t cur_y = vm.ds_read(di + OBJ_WORLD_Y);
-    uint16_t old_y = vm.ds_read(di + OBJ_Y_PREV);
+    uint16_t cur_y = ObjRef{vm, di}.u16(OBJ_WORLD_Y);
+    uint16_t old_y = ObjRef{vm, di}.u16(OBJ_Y_PREV);
     if (cur_y == old_y) return false;
     if ((int16_t)cur_y > (int16_t)old_y) {
         vm.carry = v2_vm_tile_search_bottom_15a7d(vm, filter_si, di);
@@ -9800,15 +9800,15 @@ static void v2_vm_op_0C(V2VM& vm);
 
 // sub_15505: [si+0x15AD] -= [di+0x15D5]; if no borrow → 0. 0 bytes.
 static void v2_vm_res_deduct_15505(V2VM& vm, uint16_t si, uint16_t di) {
-    uint16_t a = vm.ds_read(si + OBJ_RES_HANDLE);
-    uint16_t b = vm.ds_read(di + OBJ_RES_COST);
+    uint16_t a = ObjRef{vm, si}.u16(OBJ_RES_HANDLE);
+    uint16_t b = ObjRef{vm, di}.u16(OBJ_RES_COST);
     vm.ds_write(si + OBJ_RES_HANDLE, (a < b) ? (uint16_t)(a - b) : 0);
 }
 
 // 0x11 (sub_14334): si=ds:0x42, di=[si+0x1995] → sub_15505. 0 bytes.
 static void v2_vm_op_11(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    uint16_t di = vm.ds_read(si + OBJ_PARTNER);
+    uint16_t di = ObjRef{vm, si}.u16(OBJ_PARTNER);
     vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
     v2_vm_res_deduct_15505(vm, si, di);
 }
@@ -9817,7 +9817,7 @@ static void v2_vm_op_11(V2VM& vm) {
 // Note: si/di SWAPPED vs 0x11.
 static void v2_vm_op_3A(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
-    uint16_t si = vm.ds_read(di + OBJ_PARTNER);
+    uint16_t si = ObjRef{vm, di}.u16(OBJ_PARTNER);
     vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
     v2_vm_res_deduct_15505(vm, si, di);
 }
@@ -9827,13 +9827,13 @@ static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);  // vertical-flip bod
 // 0x09 (sub_13743): Conditional vflip — if flag 0x80 NOT set → call sub_13757. 0 bytes.
 static void v2_vm_op_09(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (!(vm.ds_read(si + OBJ_FLAGS) & 0x80)) v2_vm_vflip_body_13757(vm, si);
+    if (!(ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x80)) v2_vm_vflip_body_13757(vm, si);
 }
 
 // 0x0A (sub_13733): Conditional vflip — if flag 0x80 set → call sub_13757. 0 bytes.
 static void v2_vm_op_0A(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x80) v2_vm_vflip_body_13757(vm, si);
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x80) v2_vm_vflip_body_13757(vm, si);
 }
 
 // 0xD4 (sub_1531c): velocity direction from position delta. Exact replica.
@@ -9852,14 +9852,14 @@ static void v2_vm_op_D4(V2VM& vm) {
     uint16_t target_x = v2_vm_dispatch_30C98(vm, mode & 7, 0x532F, &ch_intr);
     if (ch_intr) return;   // ch6/7: RETN lands on the dispatcher's return word — opcode exits
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    int16_t delta_x = (int16_t)(target_x - vm.ds_read(si + OBJ_WORLD_X));
+    int16_t delta_x = (int16_t)(target_x - ObjRef{vm, si}.u16(OBJ_WORLD_X));
     if (delta_x < 0) { delta_x = -delta_x; vm.ds_write(DS_AIM_SIGN_X, 1); }
     vm.ds_write(DS_TEXT_COL, (uint16_t)delta_x);
     // Y target: dispatch off_30C98 with (mode >> 3) & 7
     uint16_t target_y = v2_vm_dispatch_30C98(vm, (vm.ds_read(DS_SCRATCH_34) >> 3) & 7, 0x5348, &ch_intr);
     if (ch_intr) return;   // clean exit (no pushes live at loc_15342's site)
     si = vm.global_r(DS_CUR_OBJ);
-    int16_t delta_y = (int16_t)(target_y - vm.ds_read(si + OBJ_WORLD_Y));
+    int16_t delta_y = (int16_t)(target_y - ObjRef{vm, si}.u16(OBJ_WORLD_Y));
     if (delta_y < 0) { delta_y = -delta_y; vm.ds_write(DS_AIM_SIGN_Y, 1); }
     vm.ds_write(DS_TEXT_ROW, (uint16_t)delta_y);
     // max: orig 0x535E: ax=dy; CMP ax,[6Ch]; JGE keep → SIGNED compare of the
@@ -9889,8 +9889,8 @@ static void v2_vm_op_D4(V2VM& vm) {
     }
     // Flip flag adjustments
     si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x40) vm.ds_write(DS_AIM_SIGN_X, vm.ds_read(DS_AIM_SIGN_X) ^ 1);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x80) vm.ds_write(DS_AIM_SIGN_Y, vm.ds_read(DS_AIM_SIGN_Y) ^ 1);
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40) vm.ds_write(DS_AIM_SIGN_X, vm.ds_read(DS_AIM_SIGN_X) ^ 1);
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x80) vm.ds_write(DS_AIM_SIGN_Y, vm.ds_read(DS_AIM_SIGN_Y) ^ 1);
     // Combine: orig 0x53B7: ax=(ds:34h & FF00h); OR ax, ds:6Ch — the OR takes
     // the FULL word at 0x6C (it exceeds a byte when the halving loop didn't
     // run), NOT just its low byte. Then XCHG ah,al.
@@ -9958,8 +9958,8 @@ static void v2_vm_op_D7(V2VM& vm) {
 
 // Viewport check helper (used by 0xCC, 0xCD, 0xCE)
 static bool v2_vm_viewport_check(V2VM& vm, uint16_t si) {
-    uint16_t obj_x = vm.ds_read(si + OBJ_WORLD_X);
-    uint16_t obj_y = vm.ds_read(si + OBJ_WORLD_Y);
+    uint16_t obj_x = ObjRef{vm, si}.u16(OBJ_WORLD_X);
+    uint16_t obj_y = ObjRef{vm, si}.u16(OBJ_WORLD_Y);
     uint16_t vp_x = vm.ds_read(DS_VIEWPORT_X);
     uint16_t vp_y = vm.ds_read(DS_VIEWPORT_Y);
     int16_t ax = (int16_t)(vp_x + 0x1F);
@@ -9983,7 +9983,7 @@ static void v2_vm_op_CC(V2VM& vm) {
 // 0xCD (sub_152ca): viewport check (linked obj). PUSH 0: within→off_30C92[0]=0x42CF (simple jump), outside→off_30C94[0]=0x5318 (skip2). 2 bytes.
 static void v2_vm_op_CD(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    si = vm.ds_read(si + OBJ_PARTNER);
+    si = ObjRef{vm, si}.u16(OBJ_PARTNER);
     if (v2_vm_viewport_check(vm, si)) { v2_vm_do_jump(vm); }
     else { vm.pc += 2; }
 }
@@ -10069,11 +10069,11 @@ static void v2_vm_op_C1(V2VM& vm) {
     uint16_t saved = vm.ds_read(DS_OBJ_COUNT);
     vm.ds_write(DS_OBJ_COUNT, 6);
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    bool flag40 = vm.ds_read(si + OBJ_FLAGS) & 0x40;
+    bool flag40 = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (flag40) {
-        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, ObjRef{vm, di}.u16(OBJ_BBOX_X1) + 1);
     } else {
         vm.carry = v2_vm_obj_search_left_15de5(vm, filter, di);
     }
@@ -10088,11 +10088,11 @@ static void v2_vm_op_C5(V2VM& vm) {
     uint16_t saved = vm.ds_read(DS_OBJ_COUNT);
     vm.ds_write(DS_OBJ_COUNT, 6);
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    bool flag40 = vm.ds_read(si + OBJ_FLAGS) & 0x40;
+    bool flag40 = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (flag40) {
-        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, ObjRef{vm, di}.u16(OBJ_BBOX_X1) + 1);
     } else {
         vm.carry = v2_vm_obj_search_left_15de5(vm, filter, di);
     }
@@ -10108,11 +10108,11 @@ static void v2_vm_op_C6(V2VM& vm) {
     uint16_t saved = vm.ds_read(DS_OBJ_COUNT);
     vm.ds_write(DS_OBJ_COUNT, 6);
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    bool flag40 = vm.ds_read(si + OBJ_FLAGS) & 0x40;
+    bool flag40 = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (!flag40) {
-        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter, di, ObjRef{vm, di}.u16(OBJ_BBOX_X1) + 1);
     } else {
         vm.carry = v2_vm_obj_search_left_15de5(vm, filter, di);
     }
@@ -10195,7 +10195,7 @@ static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
 // sub_158aa: animation load using X_start-1 search (sub_159c6 tile + sub_15de5 obj).
 static void v2_vm_probe_left_158aa(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
-    bool found = v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X0) - 1);
+    bool found = v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_X0) - 1);
     if (found) { vm.carry = true; return; }
     vm.carry = v2_vm_obj_search_left_15de5(vm, filter_si, obj_di);
 }
@@ -10208,7 +10208,7 @@ static void v2_vm_op_24(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; scans PUSH/POP-clean (task #15)
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x40) {
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40) {
         v2_vm_probe_right_158b9(vm, anim_idx, di);
     } else {
         v2_vm_probe_left_158aa(vm, anim_idx, di);
@@ -10234,7 +10234,7 @@ static uint16_t v2_field_addr_A(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    uint16_t di = (uint16_t)(off + vm.ds_read(si + OBJ_PARTNER));
+    uint16_t di = (uint16_t)(off + ObjRef{vm, si}.u16(OBJ_PARTNER));
     vm.si_track = si;               // orig: MOV si,ds:42h
     vm.di_track = di;               // orig: slot address left in DI (task #15)
     return di;
@@ -10251,9 +10251,9 @@ static uint16_t v2_field_addr_D(V2VM& vm) {
 }
 
 // 0x61 (sub_147cb): AND [field_A + 0x14E5], acc. 1 byte.
-static void v2_vm_op_61(V2VM& vm) { uint16_t a = v2_field_addr_A(vm); vm.ds_write(a + OBJ_FIELD_BASE, vm.ds_read(a + OBJ_FIELD_BASE) & v2_vm_accumulator); }
+static void v2_vm_op_61(V2VM& vm) { uint16_t a = v2_field_addr_A(vm); vm.ds_write(a + OBJ_FIELD_BASE, ObjRef{vm, a}.u16(OBJ_FIELD_BASE) & v2_vm_accumulator); }
 // 0x65 (sub_14827): XOR [field_B + 0x14E5], acc. 1 byte.
-static void v2_vm_op_65(V2VM& vm) { uint16_t a = v2_field_addr_B(vm); vm.ds_write(a + OBJ_BBOX_Y0, vm.ds_read(a + OBJ_BBOX_Y0) ^ v2_vm_accumulator); }
+static void v2_vm_op_65(V2VM& vm) { uint16_t a = v2_field_addr_B(vm); vm.ds_write(a + OBJ_BBOX_Y0, ObjRef{vm, a}.u16(OBJ_BBOX_Y0) ^ v2_vm_accumulator); }
 
 // 0x15 (sub_150fc): Relative position to active viking → 2 sub_154bf writes. 1 byte.
 static void v2_vm_op_15(V2VM& vm) {
@@ -10261,18 +10261,18 @@ static void v2_vm_op_15(V2VM& vm) {
     uint16_t si = vm.ds_read(DS_ACTIVE_VIKING); // active viking
     // X: direction-aware delta
     int16_t rel_x;
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x40) {
-        rel_x = (int16_t)(vm.ds_read(di + OBJ_WORLD_X) - vm.ds_read(si + OBJ_WORLD_X));
+    if (ObjRef{vm, di}.u16(OBJ_FLAGS) & 0x40) {
+        rel_x = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_X) - ObjRef{vm, si}.u16(OBJ_WORLD_X));
     } else {
-        rel_x = (int16_t)(vm.ds_read(si + OBJ_WORLD_X) - vm.ds_read(di + OBJ_WORLD_X));
+        rel_x = (int16_t)(ObjRef{vm, si}.u16(OBJ_WORLD_X) - ObjRef{vm, di}.u16(OBJ_WORLD_X));
     }
     vm.ds_write(DS_TEXT_COL, (uint16_t)rel_x);
     // Y: direction-aware delta
     int16_t rel_y;
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x80) {
-        rel_y = (int16_t)(vm.ds_read(di + OBJ_WORLD_Y) - vm.ds_read(si + OBJ_WORLD_Y));
+    if (ObjRef{vm, di}.u16(OBJ_FLAGS) & 0x80) {
+        rel_y = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_Y) - ObjRef{vm, si}.u16(OBJ_WORLD_Y));
     } else {
-        rel_y = (int16_t)(vm.ds_read(si + OBJ_WORLD_Y) - vm.ds_read(di + OBJ_WORLD_Y));
+        rel_y = (int16_t)(ObjRef{vm, si}.u16(OBJ_WORLD_Y) - ObjRef{vm, di}.u16(OBJ_WORLD_Y));
     }
     vm.ds_write(DS_TEXT_ROW, (uint16_t)rel_y);
     // Read mode byte, dispatch twice
@@ -10389,7 +10389,7 @@ static void v2_vm_op_0E(V2VM& vm) {
 // 0x06 = sub_142d3: si = ds:0x42; bx = [si+0x137D]
 static void v2_vm_op_load_alt_pc(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    vm.pc = vm.ds_read(si + OBJ_ALT_PC);  // read alt_pc from shadow DS
+    vm.pc = ObjRef{vm, si}.u16(OBJ_ALT_PC);  // read alt_pc from shadow DS
 }
 
 // 0x9C (sub_14b71): Conditional acc load + AND/OR indexed field. 2 bytes.
@@ -10419,7 +10419,7 @@ static void v2_vm_op_12(V2VM& vm) {
     // sub_14340: di=ds:0x42; si=[di+0x1995]; CALL sub_15505
     // sub_15505: [si+15AD] -= [di+15D5]; if no borrow → 0
     uint16_t di = vm.global_r(DS_CUR_OBJ);
-    uint16_t si = vm.ds_read(di + OBJ_PARTNER);
+    uint16_t si = ObjRef{vm, di}.u16(OBJ_PARTNER);
     vm.si_track = si; vm.di_track = di;   // orig regs at RETN (15505 is di-clean)
     v2_vm_res_deduct_15505(vm, si, di);
 }
@@ -10491,22 +10491,22 @@ static bool v2_vm_tile_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uin
 // Entry point wrappers for tile search
 static bool v2_vm_tile_search_up_15a57(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A59
-    uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y0) - 1;
+    uint16_t y = ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y0) - 1;
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_tile_search_top_15a64(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A66
-    uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y0);
+    uint16_t y = ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y0);
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_tile_search_down_15A70(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A72
-    uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y1) + 1;
+    uint16_t y = ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y1) + 1;
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 static bool v2_vm_tile_search_bottom_15a7d(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SCRATCH_34, filter_si);  // MOV ds:34h, si ;~ 01A2:5A7F
-    uint16_t y = vm.ds_read(obj_di + OBJ_BBOX_Y1);
+    uint16_t y = ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y1);
     return v2_vm_tile_search(vm, filter_si, obj_di, y);
 }
 
@@ -10551,10 +10551,10 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
 
 // Entry point wrappers for object search
 static bool v2_vm_obj_search_up_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-    return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_FIELD_BASE) - 1);
+    return v2_vm_obj_search(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_FIELD_BASE) - 1);
 }
 static bool v2_vm_obj_search_down_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-    return v2_vm_obj_search(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_Y1) + 1);
+    return v2_vm_obj_search(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y1) + 1);
 }
 
 // sub_15ae9: tile search at ds:0x6C, ds:0x6E (single point, not range).
@@ -10649,13 +10649,13 @@ static bool v2_vm_tile_scan_x_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
     // compare and mis-clamps on signed overflow (e.g. (-15850)-(+16928):
     // orig clamps to 0, a truncated +32758 didn't — endless walk, caught
     // by the unit-20 fuzz under the v2 watchdog).
-    int32_t y_top32 = (int32_t)(int16_t)vm.ds_read(obj_di + OBJ_BBOX_Y1)
-                    - (int32_t)(int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
+    int32_t y_top32 = (int32_t)(int16_t)ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y1)
+                    - (int32_t)(int16_t)ObjRef{vm, obj_di}.u16(OBJ_VEL_Y);
     uint16_t cx = (y_top32 >= 0) ? (uint16_t)y_top32 : 0;
 
     // First check: tile at (obj.X, y_top) — if slope (>= 0x30) → exit no match
     {
-        uint16_t obj_x = vm.ds_read(obj_di + OBJ_WORLD_X);
+        uint16_t obj_x = ObjRef{vm, obj_di}.u16(OBJ_WORLD_X);
         uint16_t tile_val = v2_vm_tile_read_141ba(vm, obj_x >> 4, cx >> 4);
         uint16_t tt = (tile_val & 0xFC00) >> 10;
         if (tt >= 0x30) return false;
@@ -10664,8 +10664,8 @@ static bool v2_vm_tile_scan_x_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
     // Y_start for vertical scan — orig 0x5A1B: SUB + JG (same SF^OF rule as
     // the y_top clamp above: decide on the true 32-bit difference, keep the
     // wrapped 16-bit value).
-    int32_t y_start32 = (int32_t)(int16_t)vm.ds_read(obj_di + OBJ_BBOX_Y0)
-                      - (int32_t)(int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
+    int32_t y_start32 = (int32_t)(int16_t)ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y0)
+                      - (int32_t)(int16_t)ObjRef{vm, obj_di}.u16(OBJ_VEL_Y);
     uint16_t y_start = (y_start32 > 0) ? (uint16_t)y_start32 : 0;
 
     // Vertical scan from y_start to y_top
@@ -10697,7 +10697,7 @@ static bool v2_vm_tile_scan_x_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_d
 
 // Entry points for loc_159f6:
 static bool v2_vm_tile_search_right_159df(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-    return v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X1) + 1);
+    return v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_X1) + 1);
 }
 static bool v2_vm_tile_search_x_159df_at(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x) {
     return v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, x);
@@ -10728,10 +10728,10 @@ static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di
         if ((int16_t)(x_search - 1) >= (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_X1)) continue;
         // Y bounds: self adjusted Y range overlaps target Y range
         // self.Y_end - self.vel_Y >= target.Y_start
-        int16_t self_y_end_adj = (int16_t)vm.ds_read(obj_di + OBJ_BBOX_Y1) - (int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
+        int16_t self_y_end_adj = (int16_t)ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y1) - (int16_t)ObjRef{vm, obj_di}.u16(OBJ_VEL_Y);
         if (self_y_end_adj < (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y0)) continue;
         // self.Y_start - self.vel_Y <= target.Y_end (equal counts as match)
-        int16_t self_y_start_adj = (int16_t)vm.ds_read(obj_di + OBJ_BBOX_Y0) - (int16_t)vm.ds_read(obj_di + OBJ_VEL_Y);
+        int16_t self_y_start_adj = (int16_t)ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y0) - (int16_t)ObjRef{vm, obj_di}.u16(OBJ_VEL_Y);
         int16_t target_y_end = (int16_t)*(uint16_t*)(rds + si + OBJ_BBOX_Y1);
         if (self_y_start_adj > target_y_end) continue; // jz passes, jge skips
         // Found!
@@ -10744,7 +10744,7 @@ static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di
 
 // sub_15de5/sub_15df2 wrappers:
 static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
-    return v2_vm_obj_scan_x_15dfd(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X0) - 1);
+    return v2_vm_obj_scan_x_15dfd(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_X0) - 1);
 }
 
 // sub_158b9: animation load using X-axis search paths (X_end + 1).
@@ -10755,7 +10755,7 @@ static void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_d
         vm.carry = true;
         return;
     }
-    vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter_si, obj_di, vm.ds_read(obj_di + OBJ_BBOX_X1) + 1);
+    vm.carry = v2_vm_obj_scan_x_15dfd(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_X1) + 1);
 }
 
 // sub_158c8: animation load using Y_start-1 search paths.
@@ -10820,7 +10820,7 @@ static void v2_vm_op_14(V2VM& vm) {
 
     // Step 3: Compute flags (si) = (current_obj.flags & 0xFE) | ds:0x32
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
-    uint16_t si_flags = (vm.ds_read(cur_obj + OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD);
+    uint16_t si_flags = (ObjRef{vm, cur_obj}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD);
 
     // Step 4: Read animation type byte (1 byte)
     uint8_t anim_type = vm.read_u8();
@@ -10841,7 +10841,7 @@ static void v2_vm_op_14(V2VM& vm) {
     // sub_13d52: find free slot (0 to 0x28, step 2)
     int16_t new_slot = -1;
     for (uint16_t s = 0; s < 0x28; s += 2) {
-        if (vm.ds_read(s + OBJ_CODE_SEG) == 0) {
+        if (ObjRef{vm, s}.u16(OBJ_CODE_SEG) == 0) {
             new_slot = s;
             break;
         }
@@ -11053,16 +11053,16 @@ static void v2_vm_op_C2(V2VM& vm) {
     uint16_t saved_372 = vm.ds_read(DS_OBJ_COUNT);
     vm.ds_write(DS_OBJ_COUNT, 6); // limit search to players
     uint16_t si_obj = vm.global_r(DS_CUR_OBJ);
-    bool flipped = vm.ds_read(si_obj + OBJ_FLAGS) & 0x40;
+    bool flipped = ObjRef{vm, si_obj}.u16(OBJ_FLAGS) & 0x40;
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     bool found;
     if (!flipped) {
         // sub_15df2: x_search = [di+0x155D] + 1
-        found = v2_vm_obj_scan_x_15dfd(vm, anim_idx, di, vm.ds_read(di + OBJ_BBOX_X1) + 1);
+        found = v2_vm_obj_scan_x_15dfd(vm, anim_idx, di, ObjRef{vm, di}.u16(OBJ_BBOX_X1) + 1);
     } else {
         // sub_15de5: x_search = [di+0x1535] - 1
-        found = v2_vm_obj_scan_x_15dfd(vm, anim_idx, di, vm.ds_read(di + OBJ_BBOX_X0) - 1);
+        found = v2_vm_obj_scan_x_15dfd(vm, anim_idx, di, ObjRef{vm, di}.u16(OBJ_BBOX_X0) - 1);
     }
     vm.carry = found;
     vm.ds_write(DS_OBJ_COUNT, saved_372); // restore
@@ -11105,7 +11105,7 @@ static void v2_vm_op_1E(V2VM& vm) {
 // else loc_144bb (sub_158aa path).
 static void v2_vm_op_20(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    bool flipped = vm.ds_read(si + OBJ_FLAGS) & 0x40;
+    bool flipped = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (!flipped) {
@@ -11130,7 +11130,7 @@ static void v2_vm_op_20(V2VM& vm) {
 // NOT flipped → sub_158b9, flipped → sub_158aa.
 static void v2_vm_op_21(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    bool flipped = vm.ds_read(si + OBJ_FLAGS) & 0x40;
+    bool flipped = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     if (!flipped) {
@@ -11217,7 +11217,7 @@ static void v2_vm_op_23(V2VM& vm) {
 static void v2_vm_op_08(V2VM& vm) {
     // sub_1367c: TEST [si+1585h], 40h / JZ ret → call sub_136a0 when set
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (!(vm.ds_read(si + OBJ_FLAGS) & 0x40)) return;
+    if (!(ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)) return;
     v2_vm_hflip_body_136a0(vm, si);
 }
 
@@ -11294,9 +11294,9 @@ static void v2_vm_op_10(V2VM& vm) {
     // === sub_13c93 logic ===
     // 1. Clear all sub-sprites if 0x1AD5 != 0. Orig loop loc_13CA2 is a
     // DO-WHILE (body first, CMP si,ax / JL at end) — at least one iteration.
-    if (vm.ds_read(di + OBJ_SUB_COUNT) != 0) {
-        uint16_t ax = vm.ds_read(di + OBJ_SUB_END);
-        uint16_t si = vm.ds_read(di + OBJ_SUB_SLOT);
+    if (ObjRef{vm, di}.u16(OBJ_SUB_COUNT) != 0) {
+        uint16_t ax = ObjRef{vm, di}.u16(OBJ_SUB_END);
+        uint16_t si = ObjRef{vm, di}.u16(OBJ_SUB_SLOT);
         do {
             ObjRef sub{vm, si};                          // sub-sprite slot (cursor)
             sub.w16(OBJ_SPRITE_FLAGS, 0);       // clear flags
@@ -11306,11 +11306,11 @@ static void v2_vm_op_10(V2VM& vm) {
     }
 
     // 2. Unlink from linked list (0x1805 = prev, 0x182D = next)
-    uint16_t prev = vm.ds_read(di + OBJ_PARENT);
+    uint16_t prev = ObjRef{vm, di}.u16(OBJ_PARENT);
     if (prev != 0xFFFF) {
         vm.ds_write(prev + OBJ_CHILD, 0xFFFF);
     }
-    uint16_t next = vm.ds_read(di + OBJ_CHILD);
+    uint16_t next = ObjRef{vm, di}.u16(OBJ_CHILD);
     if (next != 0xFFFF) {
         vm.ds_write(next + OBJ_PARENT, 0xFFFF);
     }
@@ -11327,7 +11327,7 @@ static void v2_vm_op_10(V2VM& vm) {
         while (true) {
             scan -= 2;
             if ((int16_t)scan < 0) break;
-            if (vm.ds_read(scan + OBJ_CODE_SEG) != 0) break;
+            if (ObjRef{vm, scan}.u16(OBJ_CODE_SEG) != 0) break;
         }
         vm.ds_write(DS_OBJ_COUNT, scan + 2);
     }
@@ -11335,8 +11335,8 @@ static void v2_vm_op_10(V2VM& vm) {
     // 5. Check 0x16C5 bit flag (optional: calls sub_139ef + sub_13ae0)
     // These modify ds:0x356 bit table — complex and rarely affects VM flow.
     // We replicate the bit-clearing part for correctness:
-    if (vm.ds_read(di + OBJ_ANIM_SUB) != 0xFFFF) {
-        uint16_t flags_1585 = vm.ds_read(di + OBJ_FLAGS);
+    if (ObjRef{vm, di}.u16(OBJ_ANIM_SUB) != 0xFFFF) {
+        uint16_t flags_1585 = ObjRef{vm, di}.u16(OBJ_FLAGS);
         if (flags_1585 & 0x100) {
             // loc_13cfc: sub_139ef (viewport bounds) + sub_13ae0 (re-spawn from table)
             uint8_t* s = v2_vm_shadow_ds;
@@ -11349,7 +11349,7 @@ static void v2_vm_op_10(V2VM& vm) {
             *(uint16_t*)(s + DS_SCRATCH_38) = vy;
             *(uint16_t*)(s + DS_SCRATCH_3A) = vy + 0xD0;
             // sub_13ae0: try to re-spawn object from spawn table
-            uint16_t spawn_idx = vm.ds_read(di + OBJ_ANIM_SUB);
+            uint16_t spawn_idx = ObjRef{vm, di}.u16(OBJ_ANIM_SUB);
             uint16_t di_off = spawn_idx * 0x0E;
             uint16_t save_42 = *(uint16_t*)(s + DS_CUR_OBJ);
             *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
@@ -11441,28 +11441,28 @@ static void v2_vm_y_snap_tile_15972(V2VM& vm, int16_t ax, uint16_t di) {
     }
     if (ax == 0) {
         // loc_15984: snap Y_end to tile boundary
-        uint16_t y_end = vm.ds_read(di + OBJ_BBOX_Y1);
+        uint16_t y_end = ObjRef{vm, di}.u16(OBJ_BBOX_Y1);
         uint16_t snapped = (y_end & 0xFFF0) - 1;
         vm.ds_write(di + OBJ_BBOX_Y1, snapped);
         dx = y_end - snapped;
     } else if (ax < 0) {
         // ax < 0: slope adjustment. dx = ax & 0xFF. Y_end -= dx.
         dx = (uint16_t)(ax & 0xFF);
-        vm.ds_write(di + OBJ_BBOX_Y1, vm.ds_read(di + OBJ_BBOX_Y1) - dx);
+        vm.ds_write(di + OBJ_BBOX_Y1, ObjRef{vm, di}.u16(OBJ_BBOX_Y1) - dx);
     } else {
         // ax > 0: snap Y_start up to next tile boundary
-        uint16_t y_start = vm.ds_read(di + OBJ_BBOX_Y0);
+        uint16_t y_start = ObjRef{vm, di}.u16(OBJ_BBOX_Y0);
         uint16_t snapped = (y_start | 0xF) + 1;
         vm.ds_write(di + OBJ_BBOX_Y0, snapped);
         dx = y_start - snapped; // negative (wraps as uint16_t)
-        vm.ds_write(di + OBJ_WORLD_Y, vm.ds_read(di + OBJ_WORLD_Y) - dx);
-        vm.ds_write(di + OBJ_BBOX_Y1, vm.ds_read(di + OBJ_BBOX_Y1) - dx);
+        vm.ds_write(di + OBJ_WORLD_Y, ObjRef{vm, di}.u16(OBJ_WORLD_Y) - dx);
+        vm.ds_write(di + OBJ_BBOX_Y1, ObjRef{vm, di}.u16(OBJ_BBOX_Y1) - dx);
         vm.ds_write(di + OBJ_FRAC_Y, 0);
         return;
     }
     // Common path for ax == 0 and ax < 0
-    vm.ds_write(di + OBJ_WORLD_Y, vm.ds_read(di + OBJ_WORLD_Y) - dx);
-    vm.ds_write(di + OBJ_BBOX_Y0, vm.ds_read(di + OBJ_BBOX_Y0) - dx);
+    vm.ds_write(di + OBJ_WORLD_Y, ObjRef{vm, di}.u16(OBJ_WORLD_Y) - dx);
+    vm.ds_write(di + OBJ_BBOX_Y0, ObjRef{vm, di}.u16(OBJ_BBOX_Y0) - dx);
     vm.ds_write(di + OBJ_FRAC_Y, 0);
 }
 
@@ -11883,7 +11883,7 @@ static void v2_vm_y_snap_obj_15DA8(V2VM& vm, int16_t ax_dir, uint16_t si_partner
         static int _s15da8 = 0; if (++_s15da8 <= 30)
             fprintf(stderr, "V2-15DA8[%d]: di=0 ax_dir=%d si=%04X Y=%04X Y_end=%04X p_Y_end=%04X p_Y_start=%04X\n",
                 _s15da8, ax_dir, si_partner, vm.ds_read(OBJ_WORLD_Y), vm.ds_read(OBJ_BBOX_Y1),
-                vm.ds_read(si_partner + OBJ_BBOX_Y1), vm.ds_read(si_partner + OBJ_BBOX_Y0));
+                ObjRef{vm, si_partner}.u16(OBJ_BBOX_Y1), ObjRef{vm, si_partner}.u16(OBJ_BBOX_Y0));
     }
     ObjRef self{vm, di}, partner{vm, si_partner};
     if (ax_dir == 0) {
@@ -12096,7 +12096,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - LUT_BIT_MASK));
-        uint16_t flags = vm.ds_read(di + OBJ_COLL_BITS);
+        uint16_t flags = ObjRef{vm, di}.u16(OBJ_COLL_BITS);
         if (flags & mask) {
             return true;   // STC — collision
         }
@@ -12143,7 +12143,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
             // loc_15875: set collision bit
             uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
             uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-            vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
+            vm.ds_write(di + OBJ_COLL_BITS, ObjRef{vm, di}.u16(OBJ_COLL_BITS) | mask);
         }
         return false; // ALWAYS CLC
     }
@@ -12161,7 +12161,7 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
         vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si - LUT_BIT_MASK));
-        if (vm.ds_read(di + OBJ_COLL_BITS) & mask) return true;
+        if (ObjRef{vm, di}.u16(OBJ_COLL_BITS) & mask) return true;
         return false;
     }
     if (state < 0) {
@@ -12201,7 +12201,7 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
         di = vm.global_r(DS_CUR_OBJ);
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
-        vm.ds_write(di + OBJ_COLL_BITS, vm.ds_read(di + OBJ_COLL_BITS) | mask);
+        vm.ds_write(di + OBJ_COLL_BITS, ObjRef{vm, di}.u16(OBJ_COLL_BITS) | mask);
     }
     return false; // ALWAYS CLC
 }
@@ -12257,7 +12257,7 @@ static void v2_vm_op_83(V2VM& vm) {
 static void v2_vm_op_91(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t addr = vm.read_u16();
-    if (!(vm.ds_read(si + OBJ_FLAGS) & 0x40)) {
+    if (!(ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)) {
         // sub_14704: ds:[addr] += acc
         vm.ds_write(addr, vm.ds_read(addr) + v2_vm_accumulator);
     } else {
@@ -12274,7 +12274,7 @@ static void v2_vm_op_98(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = field_off + vm.global_r(DS_CUR_OBJ);
-    uint16_t val = vm.ds_read(si + OBJ_BBOX_Y0);
+    uint16_t val = ObjRef{vm, si}.u16(OBJ_BBOX_Y0);
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     v2_vm_accumulator = (val & mask) ? 1 : 0;
 }
@@ -12295,12 +12295,12 @@ static void v2_vm_op_AD(V2VM& vm) {
 // PUSH 2 → if within: off_30C92[2] = skip 2, if outside: off_30C94[2] = jump
 static void v2_vm_op_CF(V2VM& vm) {
     uint16_t si_obj = vm.global_r(DS_CUR_OBJ);
-    uint16_t si = vm.ds_read(si_obj + OBJ_PARTNER); // sub-object
+    uint16_t si = ObjRef{vm, si_obj}.u16(OBJ_PARTNER); // sub-object
 
     uint16_t vp_x = vm.ds_read(DS_VIEWPORT_X);
     uint16_t vp_y = vm.ds_read(DS_VIEWPORT_Y);
-    uint16_t obj_x = vm.ds_read(si + OBJ_WORLD_X);
-    uint16_t obj_y = vm.ds_read(si + OBJ_WORLD_Y);
+    uint16_t obj_x = ObjRef{vm, si}.u16(OBJ_WORLD_X);
+    uint16_t obj_y = ObjRef{vm, si}.u16(OBJ_WORLD_Y);
 
     bool within = true;
     // X bounds: vp_x + 0x1F <= obj_x AND vp_x + 0x1F + 0x102 >= obj_x
@@ -12332,7 +12332,7 @@ static void v2_vm_op_6A(V2VM& vm) {
 static void v2_vm_op_94(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t addr = vm.read_u16();
-    if (!(vm.ds_read(si + OBJ_FLAGS) & 0x40)) {
+    if (!(ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)) {
         // sub_14771: ds:[addr] -= acc
         vm.ds_write(addr, vm.ds_read(addr) - v2_vm_accumulator);
     } else {
@@ -12357,7 +12357,7 @@ static void v2_vm_op_B3(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = field_off + vm.global_r(DS_CUR_OBJ); // pattern B: NO +0x1995
-    uint16_t val = vm.ds_read(si + OBJ_BBOX_Y0);
+    uint16_t val = ObjRef{vm, si}.u16(OBJ_BBOX_Y0);
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
@@ -12428,7 +12428,7 @@ static void v2_vm_op_29(V2VM& vm) {
 static void v2_vm_op_2C(V2VM& vm) {
     // ds:0x3AE = ds:[si+0x14E5] - 1 (self Y - 1)
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(DS_SEARCH_Y, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
+    vm.ds_write(DS_SEARCH_Y, ObjRef{vm, self_si}.u16(OBJ_BBOX_Y0) - 1);
 
     // Read params: filter type index (1 byte) + jump target word (2 bytes)
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
@@ -12439,11 +12439,11 @@ static void v2_vm_op_2C(V2VM& vm) {
 
     // Search objects 0, 2, 4
     for (uint16_t si = 0; si < 6; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;  // inactive
+        if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;  // inactive
         if (si == self_si) continue;                   // skip self
 
         // Type match via sorted filter table at ds:[(uint16_t)(di - 0x6B34)]
-        uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
+        uint8_t obj_type = (uint8_t)ObjRef{vm, si}.u16(OBJ_TYPE_ID);
         uint16_t di = filter_idx;
         bool matched = false;
         for (;;) {
@@ -12457,14 +12457,14 @@ static void v2_vm_op_2C(V2VM& vm) {
 
         // Y bounds: 3AE >= [si+14E5] AND (3AE-1) < [si+150D]
         uint16_t y_ref = vm.ds_read(DS_SEARCH_Y);
-        if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;
+        if (y_ref < ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) continue;
+        if ((uint16_t)(y_ref - 1) >= ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) continue;
 
         // X bounds: [di+155D] >= [si+1535] AND [si+155D] >= [di+1535]
         uint16_t di2 = self_si;
         vm.di_track = di2;  // orig: MOV di,ds:42h before the X bbox
-        if (vm.ds_read(di2 + OBJ_BBOX_X1) < vm.ds_read(si + OBJ_BBOX_X0)) continue;
-        if (vm.ds_read(si + OBJ_BBOX_X1) < vm.ds_read(di2 + OBJ_BBOX_X0)) continue;
+        if (ObjRef{vm, di2}.u16(OBJ_BBOX_X1) < ObjRef{vm, si}.u16(OBJ_BBOX_X0)) continue;
+        if (ObjRef{vm, si}.u16(OBJ_BBOX_X1) < ObjRef{vm, di2}.u16(OBJ_BBOX_X0)) continue;
 
         // Match found
         vm.ds_write(DS_SEARCH_SI, si);
@@ -12491,12 +12491,12 @@ static void v2_vm_op_48(V2VM& vm) {
     if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op48/X@0x4FF1: RETN onto PUSHed mode word"); return; }
     // MOV si, ds:42h; SUB ax, [si+173Dh]; MOV [si+1945h], ax
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(si + OBJ_VEL_X, x_pos - vm.ds_read(si + OBJ_WORLD_X));
+    vm.ds_write(si + OBJ_VEL_X, x_pos - ObjRef{vm, si}.u16(OBJ_WORLD_X));
     // POP ax; CALL sub_15470 — dispatch Y (SHR ax,3 then dispatch)
     uint16_t y_pos = v2_vm_dispatch_30C98(vm, mode >> 3, 0x5001, &ch_intr);
     if (ch_intr) return;   // clean
     // MOV si, ds:42h; SUB ax, [si+1765h]; MOV [si+196Dh], ax
-    vm.ds_write(si + OBJ_VEL_Y, y_pos - vm.ds_read(si + OBJ_WORLD_Y));
+    vm.ds_write(si + OBJ_VEL_Y, y_pos - ObjRef{vm, si}.u16(OBJ_WORLD_Y));
     // MOV [si+141Dh], 100h
     vm.ds_write(si + OBJ_ANIM_TABLE, 0x100);
 }
@@ -12506,7 +12506,7 @@ static void v2_vm_op_48(V2VM& vm) {
 // Verified with seg000 lines 14143-14201.
 static void v2_vm_op_35(V2VM& vm) {
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(DS_SEARCH_Y, vm.ds_read(self_si + OBJ_BBOX_Y0) - 1);
+    vm.ds_write(DS_SEARCH_Y, ObjRef{vm, self_si}.u16(OBJ_BBOX_Y0) - 1);
 
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint16_t filter_idx = ax_word & 0xFF;
@@ -12516,10 +12516,10 @@ static void v2_vm_op_35(V2VM& vm) {
 
     uint16_t max_obj = vm.ds_read(DS_OBJ_COUNT);
     for (uint16_t si = 0; (int16_t)si < (int16_t)max_obj; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
+        if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == self_si) continue;
 
-        uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
+        uint8_t obj_type = (uint8_t)ObjRef{vm, si}.u16(OBJ_TYPE_ID);
         uint16_t di = filter_idx;
         bool matched = false;
         for (;;) {
@@ -12563,10 +12563,10 @@ static void v2_vm_op_2D(V2VM& vm) {
     uint16_t filter_idx = vm.ds_read(DS_SEARCH_FILTER);
 
     for (uint16_t si = start_si + 2; si < 6; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
+        if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == self_si) continue;
 
-        uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
+        uint8_t obj_type = (uint8_t)ObjRef{vm, si}.u16(OBJ_TYPE_ID);
         uint16_t di = filter_idx;
         bool matched = false;
         for (;;) {
@@ -12579,13 +12579,13 @@ static void v2_vm_op_2D(V2VM& vm) {
         if (!matched) continue;
 
         uint16_t y_ref = vm.ds_read(DS_SEARCH_Y);
-        if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;
+        if (y_ref < ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) continue;
+        if ((uint16_t)(y_ref - 1) >= ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) continue;
 
         uint16_t di2 = self_si;
         vm.di_track = di2;  // orig: MOV di,ds:42h before the X bbox
-        if (vm.ds_read(di2 + OBJ_BBOX_X1) < vm.ds_read(si + OBJ_BBOX_X0)) continue;
-        if (vm.ds_read(si + OBJ_BBOX_X1) < vm.ds_read(di2 + OBJ_BBOX_X0)) continue;
+        if (ObjRef{vm, di2}.u16(OBJ_BBOX_X1) < ObjRef{vm, si}.u16(OBJ_BBOX_X0)) continue;
+        if (ObjRef{vm, si}.u16(OBJ_BBOX_X1) < ObjRef{vm, di2}.u16(OBJ_BBOX_X0)) continue;
 
         vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(di2 + OBJ_PARTNER, si);
@@ -12646,7 +12646,7 @@ static uint16_t v2_vm_indexed_1995_target(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    di += vm.ds_read(si + OBJ_PARTNER);
+    di += ObjRef{vm, si}.u16(OBJ_PARTNER);
     vm.si_track = si;               // orig: MOV si,ds:42h
     vm.di_track = di;               // orig: slot address left in DI (task #15)
     return (uint16_t)(di + OBJ_FIELD_BASE);
@@ -12748,7 +12748,7 @@ static void v2_vm_op_84(V2VM& vm) {
 // If bit 0x40 clear → ADD (sub_146de). If set → SUB (sub_1474b).
 static void v2_vm_op_90(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x40)
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)
         v2_vm_field_sub_1474b(vm);
     else
         v2_vm_field_add_146de(vm);
@@ -12758,7 +12758,7 @@ static void v2_vm_op_90(V2VM& vm) {
 // If bit 0x40 clear → SUB (sub_1474b). If set → ADD (sub_146de).
 static void v2_vm_op_93(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x40)
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)
         v2_vm_field_add_146de(vm);
     else
         v2_vm_field_sub_1474b(vm);
@@ -12769,7 +12769,7 @@ static void v2_vm_op_93(V2VM& vm) {
 // bit 0x40 clear → ADD (v2_vm_op_5B), bit 0x40 set → SUB (v2_vm_op_5E)
 static void v2_vm_op_92(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x40)
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)
         v2_vm_op_5E(vm); // SUB indexed+1995
     else
         v2_vm_op_5B(vm); // ADD indexed+1995
@@ -12779,7 +12779,7 @@ static void v2_vm_op_92(V2VM& vm) {
 // Verified with seg000 lines 9854-9857.
 static void v2_vm_op_95(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x40)
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)
         v2_vm_op_5B(vm); // ADD indexed+1995
     else
         v2_vm_op_5E(vm); // SUB indexed+1995
@@ -12791,8 +12791,8 @@ static void v2_vm_op_95(V2VM& vm) {
 // Viewport check: (ds:0x44+0x1F < obj_X < ds:0x44+0x121) AND (ds:0x46+0x1F < obj_Y < ds:0x46+0x91)
 static void v2_vm_op_CE(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    uint16_t obj_x = vm.ds_read(si + OBJ_WORLD_X);
-    uint16_t obj_y = vm.ds_read(si + OBJ_WORLD_Y);
+    uint16_t obj_x = ObjRef{vm, si}.u16(OBJ_WORLD_X);
+    uint16_t obj_y = ObjRef{vm, si}.u16(OBJ_WORLD_Y);
     uint16_t vp_x = vm.ds_read(DS_VIEWPORT_X);
     uint16_t vp_y = vm.ds_read(DS_VIEWPORT_Y);
 
@@ -12963,10 +12963,10 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
 
     for (uint16_t si = si_start + 2; (int16_t)si < (int16_t)table_end; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
+        if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == di) continue;
         // Type match
-        uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
+        uint8_t obj_type = (uint8_t)ObjRef{vm, si}.u16(OBJ_TYPE_ID);
         uint16_t flt = vm.ds_read(DS_SEARCH_FILTER);
         bool match = false;
         while (true) {
@@ -12977,10 +12977,10 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
         }
         if (!match) continue;
         // Bounds check
-        if ((int16_t)vm.ds_read(DS_SEARCH_Y) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)(vm.ds_read(DS_SEARCH_Y) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
-        if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
-        if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) continue;
+        if ((int16_t)vm.ds_read(DS_SEARCH_Y) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) continue;
+        if ((int16_t)(vm.ds_read(DS_SEARCH_Y) - 1) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) continue;
+        if ((int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X0)) continue;
+        if ((int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X0)) continue;
         // Match found
         vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(di + OBJ_PARTNER, si);
@@ -12996,7 +12996,7 @@ static void v2_vm_collision_search_loop(V2VM& vm, uint16_t si_start) {
 // Sets up ds:0x3AE (Y bound), ds:0x3AA (filter), ds:0x3AC (jump target), then searches.
 static void v2_vm_op_D0(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(DS_SEARCH_Y, vm.ds_read(si + OBJ_BBOX_Y1) + 1);
+    vm.ds_write(DS_SEARCH_Y, ObjRef{vm, si}.u16(OBJ_BBOX_Y1) + 1);
     // Read 1 byte filter → ds:0x3AA
     uint8_t filter = vm.read_u8();
     vm.ds_write(DS_SEARCH_FILTER, filter);
@@ -13012,17 +13012,17 @@ static void v2_vm_op_D0(V2VM& vm) {
 // inverted second Y check (JNB = skip if >=, NOT JL = skip if <).
 static void v2_vm_op_D1(V2VM& vm) {
     uint16_t si_self = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(DS_SEARCH_Y, vm.ds_read(si_self + OBJ_BBOX_Y1) + 1);
+    vm.ds_write(DS_SEARCH_Y, ObjRef{vm, si_self}.u16(OBJ_BBOX_Y1) + 1);
     uint8_t filter = vm.read_u8();
     vm.ds_write(DS_SEARCH_FILTER, filter);
     uint16_t target = vm.read_u16();
     vm.ds_write(DS_SEARCH_JUMP, target);
     // D1 search loop: vikings only (si<6), unsigned comparisons
     for (uint16_t si = 0; si < 6; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
+        if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == si_self) continue;
         // Type match (same as D0)
-        uint8_t obj_type = (uint8_t)vm.ds_read(si + OBJ_TYPE_ID);
+        uint8_t obj_type = (uint8_t)ObjRef{vm, si}.u16(OBJ_TYPE_ID);
         uint16_t flt = vm.ds_read(DS_SEARCH_FILTER);
         bool match = false;
         while (true) {
@@ -13034,11 +13034,11 @@ static void v2_vm_op_D1(V2VM& vm) {
         if (!match) continue;
         // Y bounds: unsigned, inverted second check
         uint16_t y_ref = vm.ds_read(DS_SEARCH_Y);
-        if (y_ref < vm.ds_read(si + OBJ_BBOX_Y0)) continue;  // JB: unsigned <
-        if ((uint16_t)(y_ref - 1) >= vm.ds_read(si + OBJ_BBOX_Y1)) continue;  // JNB: unsigned >=
+        if (y_ref < ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) continue;  // JB: unsigned <
+        if ((uint16_t)(y_ref - 1) >= ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) continue;  // JNB: unsigned >=
         // X bounds: unsigned
-        if (vm.ds_read(si_self + OBJ_BBOX_X1) < vm.ds_read(si + OBJ_BBOX_X0)) continue;  // JB
-        if (vm.ds_read(si + OBJ_BBOX_X1) < vm.ds_read(si_self + OBJ_BBOX_X0)) continue;  // JB
+        if (ObjRef{vm, si_self}.u16(OBJ_BBOX_X1) < ObjRef{vm, si}.u16(OBJ_BBOX_X0)) continue;  // JB
+        if (ObjRef{vm, si}.u16(OBJ_BBOX_X1) < ObjRef{vm, si_self}.u16(OBJ_BBOX_X0)) continue;  // JB
         // Match found
         vm.ds_write(DS_SEARCH_SI, si);
         vm.ds_write(si_self + OBJ_PARTNER, si);
@@ -13062,12 +13062,12 @@ static void v2_vm_op_43(V2VM& vm) {
 static bool v2_vm_platform_check_163ac(V2VM& vm) {
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     uint16_t si_x;
-    if (!(vm.ds_read(obj + OBJ_FLAGS) & 0x40)) {
-        si_x = vm.ds_read(obj + OBJ_WORLD_X) + 0x10;
+    if (!(ObjRef{vm, obj}.u16(OBJ_FLAGS) & 0x40)) {
+        si_x = ObjRef{vm, obj}.u16(OBJ_WORLD_X) + 0x10;
     } else {
-        si_x = vm.ds_read(obj + OBJ_WORLD_X) - 0x10;
+        si_x = ObjRef{vm, obj}.u16(OBJ_WORLD_X) - 0x10;
     }
-    uint16_t di_y = vm.ds_read(obj + OBJ_BBOX_Y1);
+    uint16_t di_y = ObjRef{vm, obj}.u16(OBJ_BBOX_Y1);
 
     // Helper: tile type at (si, di) via sub_14199
     auto tile_type_at = [&](uint16_t sx, uint16_t dy) -> uint16_t {
@@ -13389,7 +13389,7 @@ static void v2_vm_op_A1(V2VM& vm) {
     // si = ax (mask value), then field lookup
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(ax_val - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    di += vm.ds_read(si + OBJ_PARTNER);
+    di += ObjRef{vm, si}.u16(OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
     vm.di_track = di;   // orig: slot address in DI (task #15)
     uint16_t addr = (uint16_t)(di + OBJ_BBOX_Y0);
@@ -13418,7 +13418,7 @@ static void v2_vm_op_A4(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    di += vm.ds_read(si + OBJ_PARTNER);
+    di += ObjRef{vm, si}.u16(OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
     vm.di_track = di;   // orig: slot address in DI (task #15)
     uint16_t addr = (uint16_t)(di + OBJ_FIELD_BASE);
@@ -13457,7 +13457,7 @@ static void v2_vm_op_A7(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    di += vm.ds_read(si + OBJ_PARTNER);
+    di += ObjRef{vm, si}.u16(OBJ_PARTNER);
     vm.si_track = si;   // orig: MOV si,ds:42h
     vm.di_track = di;   // orig: slot address in DI (task #15)
     uint16_t addr = (uint16_t)(di + OBJ_FIELD_BASE);
@@ -13508,7 +13508,7 @@ static void v2_vm_op_BA(V2VM& vm) {
     uint8_t idx2 = vm.read_u8();
     uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx2 - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    field_off += vm.ds_read(si + OBJ_PARTNER);
+    field_off += ObjRef{vm, si}.u16(OBJ_PARTNER);
     uint16_t val = vm.ds_read((uint16_t)(field_off + OBJ_BBOX_Y0));
     uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
     uint16_t result = (val & mask) ? 1 : 0;
@@ -13555,7 +13555,7 @@ static void v2_vm_op_9B(V2VM& vm) {
 // 0xC8 (sub_1527b): write acc to state[idx*14+2]. 0 bytes.
 static void v2_vm_op_C8(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
+    uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
     vm.ds_write(idx * 0x0E + 2 + DS_SPAWN_TABLE, v2_vm_accumulator);
 }
@@ -13563,7 +13563,7 @@ static void v2_vm_op_C8(V2VM& vm) {
 // 0xCA (sub_152b3): write acc to state[idx*14+0xC]. 0 bytes.
 static void v2_vm_op_CA(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
+    uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
     vm.ds_write(idx * 0x0E + 0x0C + DS_SPAWN_TABLE, v2_vm_accumulator);
 }
@@ -13607,7 +13607,7 @@ static void v2_vm_op_55(V2VM& vm) {
 static void v2_vm_op_C9(V2VM& vm) {
     v2_vm_accumulator &= 0xCDFF;
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
+    uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
     vm.ds_write(idx * 0x0E + 0x0A + DS_SPAWN_TABLE, v2_vm_accumulator);
 }
@@ -13647,7 +13647,7 @@ static void v2_vm_op_BE(V2VM& vm) {
 static void v2_vm_op_07(V2VM& vm) {
     // sub_1368c: TEST [si+1585h], 40h / JNZ ret → call sub_136a0 when clear
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    if (vm.ds_read(si + OBJ_FLAGS) & 0x40) return;
+    if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40) return;
     v2_vm_hflip_body_136a0(vm, si);
 }
 
@@ -13809,10 +13809,10 @@ static void v2_vm_op_36(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
 
     for (si += 2; (int16_t)si < (int16_t)table_end; si += 2) {
-        if (vm.ds_read(si + OBJ_CODE_SEG) == 0) continue;
+        if (ObjRef{vm, si}.u16(OBJ_CODE_SEG) == 0) continue;
         if (si == di) continue;
         // Type match: compare ds:[si+0x17DD] with filter table at ds:0x3AA
-        uint16_t obj_type = vm.ds_read(si + OBJ_TYPE_ID);
+        uint16_t obj_type = ObjRef{vm, si}.u16(OBJ_TYPE_ID);
         uint16_t filter_idx = vm.ds_read(DS_SEARCH_FILTER);
         // Search filter table
         bool type_match = false;
@@ -13826,8 +13826,8 @@ static void v2_vm_op_36(V2VM& vm) {
 
         // Y bounds check
         int16_t ds_3AE = (int16_t)vm.ds_read(DS_SEARCH_Y);
-        if (ds_3AE < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if (ds_3AE - 1 < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) {} else continue; // actually: ds_3AE-1 < 150D → skip
+        if (ds_3AE < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) continue;
+        if (ds_3AE - 1 < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) {} else continue; // actually: ds_3AE-1 < 150D → skip
         // Wait, re-read: CMP ax, [si+150D]; JL → skip. So if (ds_3AE-1) < [si+150D] → skip
 
         // Actually let me re-read the comparisons:
@@ -13844,12 +13844,12 @@ static void v2_vm_op_36(V2VM& vm) {
 
         // Actually I'll just do it literally without over-thinking:
         // (already checked type match)
-        if ((int16_t)vm.ds_read(DS_SEARCH_Y) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y0)) continue;
-        if ((int16_t)(vm.ds_read(DS_SEARCH_Y) - 1) < (int16_t)vm.ds_read(si + OBJ_BBOX_Y1)) continue;
+        if ((int16_t)vm.ds_read(DS_SEARCH_Y) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y0)) continue;
+        if ((int16_t)(vm.ds_read(DS_SEARCH_Y) - 1) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_Y1)) continue;
 
         // X bounds: di=ds:0x42
-        if ((int16_t)vm.ds_read(di + OBJ_BBOX_X1) < (int16_t)vm.ds_read(si + OBJ_BBOX_X0)) continue;
-        if ((int16_t)vm.ds_read(si + OBJ_BBOX_X1) < (int16_t)vm.ds_read(di + OBJ_BBOX_X0)) continue;
+        if ((int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X0)) continue;
+        if ((int16_t)ObjRef{vm, si}.u16(OBJ_BBOX_X1) < (int16_t)ObjRef{vm, di}.u16(OBJ_BBOX_X0)) continue;
 
         // Match found!
         vm.ds_write(DS_SEARCH_SI, si);
@@ -13910,7 +13910,7 @@ static void v2_vm_op_87(V2VM& vm) {
 // ds:[obj+0x16C5] * 14 + 0x25F6 = target address; write acc there.
 static void v2_vm_op_C7(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
+    uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
     uint16_t offset = idx * 0x0E;
     vm.ds_write(offset + DS_SPAWN_TABLE, v2_vm_accumulator);
@@ -13964,7 +13964,7 @@ static void v2_vm_op_D2(V2VM& vm) {
 //                                     if SET: fall to loc_144bb (different path)
 static void v2_vm_op_25(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    bool flag40 = vm.ds_read(si + OBJ_FLAGS) & 0x40;
+    bool flag40 = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; scans PUSH/POP-clean (task #15)
@@ -13990,7 +13990,7 @@ static void v2_vm_op_25(V2VM& vm) {
 // si=ds:0x42; ds:[si+0x1585] |= 0x2000
 static void v2_vm_op_4B(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    vm.ds_write(si + OBJ_FLAGS, vm.ds_read(si + OBJ_FLAGS) | 0x2000);
+    vm.ds_write(si + OBJ_FLAGS, ObjRef{vm, si}.u16(OBJ_FLAGS) | 0x2000);
 }
 
 // 0x19 (sub_14428): Set anim state. 2 bytes.
@@ -14076,8 +14076,8 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
                        (void*)vm.es, (void*)vm.cs_base,
                        vm.es ? (long)(vm.es - vm.cs_base) : -1);
                 printf("  ds:[di+OBJ_ANIM_PC]=0x%04X ds:[di+OBJ_CODE_SEG]=0x%04X ds:0x78=0x%04X ds:[di+OBJ_ANIM_TIMER]=0x%04X\n",
-                       vm.ds_read(di + OBJ_ANIM_PC), vm.ds_read(di + OBJ_CODE_SEG),
-                       vm.ds_read(DS_ANIM_TIMER), vm.ds_read(di + OBJ_ANIM_TIMER));
+                       ObjRef{vm, di}.u16(OBJ_ANIM_PC), ObjRef{vm, di}.u16(OBJ_CODE_SEG),
+                       vm.ds_read(DS_ANIM_TIMER), ObjRef{vm, di}.u16(OBJ_ANIM_TIMER));
                 printf("  bytes at es:bx-2..bx+4: %02X %02X [%02X] %02X %02X %02X %02X\n",
                        vm.es[bx_before-2], vm.es[bx_before-1],
                        vm.es[bx_before], vm.es[bx_before+1],
@@ -14437,8 +14437,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             subs.w16(OBJ_DIRTY_MODE, 0x202); // dirty
 
             // Source setup
-            uint16_t src_seg_val = vm.ds_read(si_s + OBJ_SUB_SRC_SEG);
-            uint16_t src_base = vm.ds_read(si_s + OBJ_SUB_SRC_BASE);
+            uint16_t src_seg_val = ObjRef{vm, si_s}.u16(OBJ_SUB_SRC_SEG);
+            uint16_t src_base = ObjRef{vm, si_s}.u16(OBJ_SUB_SRC_BASE);
             uint8_t* src_seg_ptr = v2_resolve_segment(src_seg_val);
             uint16_t lookup = *(uint16_t*)(src_seg_ptr + (uint16_t)(spr_idx * 2 + src_base));
             uint8_t* src = src_seg_ptr + src_base + lookup;
@@ -14521,7 +14521,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 uint16_t dx = vm.ds_read(DS_ANIM_SUB_MASK);
                 do {                                          // loc_13297
                     ObjRef sub{vm, si};   // #38: sub-sprite slot view (cursor si)
-                    if (vm.ds_read(di_dispatch + OBJ_SUB_CLASS) & dx) {   // 0x54D: sub-sprite class mask (unnamed, dispatch gate)
+                    if (ObjRef{vm, di_dispatch}.u16(OBJ_SUB_CLASS) & dx) {   // 0x54D: sub-sprite class mask (unnamed, dispatch gate)
                         uint8_t val = vm.es[anim_bx++];
                         uint16_t bits = ((uint16_t)val << 3) & 0x70;
                         sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFF8F) | bits);
@@ -14727,7 +14727,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
 // sub_1303a: setup globals → run anim interpreter → copy results back
 static void v2_vm_anim_interp_1303a(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
-    uint16_t anim_bx = vm.ds_read(di + OBJ_ANIM_PC);
+    uint16_t anim_bx = ObjRef{vm, di}.u16(OBJ_ANIM_PC);
     if (anim_bx == 0xFFFF) return;
 
     // Debug: log anim frame entry for problematic cases
@@ -14737,16 +14737,16 @@ static void v2_vm_anim_interp_1303a(V2VM& vm) {
         if (first_byte > 0x1A) {
             anim_debug = true;
             printf("V2-VM: anim frame entry: obj=%d anim_bx=0x%04X first_byte=0x%02X timer(0x78)=0x%04X timer_saved(OBJ_ANIM_TIMER)=0x%04X\n",
-                   vm.obj, anim_bx, first_byte, vm.ds_read(DS_ANIM_TIMER), vm.ds_read(di + OBJ_ANIM_TIMER));
+                   vm.obj, anim_bx, first_byte, vm.ds_read(DS_ANIM_TIMER), ObjRef{vm, di}.u16(OBJ_ANIM_TIMER));
             printf("  es=%p code_seg=0x%04X\n", (void*)vm.es,
-                   vm.ds_read(di + OBJ_CODE_SEG));
+                   ObjRef{vm, di}.u16(OBJ_CODE_SEG));
         }
     }
 
-    vm.ds_write(DS_ANIM_TIMER, vm.ds_read(di + OBJ_ANIM_TIMER));
-    vm.ds_write(DS_ANIM_CONT, vm.ds_read(di + OBJ_ANIM_CONT));
-    vm.ds_write(DS_ANIM_SLOT, vm.ds_read(di + OBJ_SUB_SLOT));
-    vm.ds_write(DS_ANIM_SLOT_END, vm.ds_read(di + OBJ_SUB_END));
+    vm.ds_write(DS_ANIM_TIMER, ObjRef{vm, di}.u16(OBJ_ANIM_TIMER));
+    vm.ds_write(DS_ANIM_CONT, ObjRef{vm, di}.u16(OBJ_ANIM_CONT));
+    vm.ds_write(DS_ANIM_SLOT, ObjRef{vm, di}.u16(OBJ_SUB_SLOT));
+    vm.ds_write(DS_ANIM_SLOT_END, ObjRef{vm, di}.u16(OBJ_SUB_END));
     vm.ds_write(DS_ANIM_SUB_MASK, 0);
 
     v2_vm_run_anim_frame(vm, anim_bx);
@@ -15010,10 +15010,10 @@ static uint16_t v2_vm_read_indexed_field_1995(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t di = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     uint16_t si = vm.global_r(DS_CUR_OBJ);
-    di += vm.ds_read(si + OBJ_PARTNER);
+    di += ObjRef{vm, si}.u16(OBJ_PARTNER);
     vm.si_track = si;               // orig ch3: MOV si,ds:42h stays in SI
     vm.di_track = di;               // orig leaves the field address in DI
-    return vm.ds_read(di + OBJ_FIELD_BASE);
+    return ObjRef{vm, di}.u16(OBJ_FIELD_BASE);
 }
 
 // sub_12312: pseudo-random number generator, consumes 0 bytes
@@ -15163,7 +15163,7 @@ static bool v2_vm_ch_escape_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) 
     if (ch_intr) { v2_vm_ch67_ub_guard(vm, "125a3/X@0x25A8: RETN onto PUSHed mode word (orig-UB)"); return true; }
     uint16_t si_obj = vm.ds_read(DS_CUR_OBJ);  // word_28522 = ds:0x42 (current obj from sub_1250b context)
     vm.si_track = si_obj;                // orig 0x25AB: MOV si, word_28522
-    int16_t ax = (int16_t)(x_raw + vm.ds_read(si_obj + OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+    int16_t ax = (int16_t)(x_raw + ObjRef{vm, si_obj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
     if (ax < 0) { ax = 2; }
     else {
         ax = (uint16_t)ax >> 3;
@@ -15180,7 +15180,7 @@ static bool v2_vm_ch_escape_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) 
     uint16_t y_raw = v2_vm_dispatch_30C98(vm, mode >> 3, 0x25D1, &ch_intr);
     if (ch_intr) return true;            // live escape — caller stores si/di_track
     vm.si_track = si_obj;                // orig 0x25D4: MOV si, word_28522
-    int16_t ay = (int16_t)(y_raw + vm.ds_read(si_obj + OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+    int16_t ay = (int16_t)(y_raw + ObjRef{vm, si_obj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
     if (ay < 0) { ay = 2; }
     else {
         ay = (uint16_t)ay >> 3;
@@ -15473,7 +15473,7 @@ static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm) {
     uint16_t lookup = (uint16_t)(idx2 - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
-    di += vm.ds_read(obj + OBJ_PARTNER);
+    di += ObjRef{vm, obj}.u16(OBJ_PARTNER);
     vm.di_track = di;               // orig leaves the field address in DI
     uint16_t val = vm.ds_read((uint16_t)(di + OBJ_FIELD_BASE));
     vm.si_track = idx1;             // orig 15445 tail: POP si → first byte
@@ -15532,7 +15532,7 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
             // sub_16243: read collided object from table
             // di_idx = di * 16 + ds:0x38E; ax = ds:[di_idx + 0x1B25]
             uint16_t di_idx = (uint16_t)(di * 16 + vm.global_r(DS_COLL_BIT_IDX));
-            self.set_partner(vm.ds_read(di_idx + OBJ_COLL_TABLE));
+            self.set_partner(ObjRef{vm, di_idx}.u16(OBJ_COLL_TABLE));
             return true;  // STC → collision (caller does call-jump which saves 0x137D)
         }
         return false;  // CLC → no collision
@@ -15920,7 +15920,7 @@ static void v2_vm_setter_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
         uint8_t idx = vm.read_u8();
         uint16_t field_off = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
         uint16_t si_obj = vm.global_r(DS_CUR_OBJ);
-        uint16_t di_addr = field_off + vm.ds_read(si_obj + OBJ_PARTNER);
+        uint16_t di_addr = field_off + ObjRef{vm, si_obj}.u16(OBJ_PARTNER);
         vm.si_track = si_obj;          // orig: MOV si,ds:42h
         vm.di_track = di_addr;         // orig: field address left in DI
         vm.ds_write(di_addr + OBJ_BBOX_Y0, ax_val);
@@ -16050,9 +16050,9 @@ static void v2_vm_op_34(V2VM& vm) {
     for (uint16_t si = 0; si < 6; si += 2) {
         if (vm.ds_read(si + VIK_PORTRAIT) == 0) continue;
         // Manhattan distance: |di.X - si.X| + |di.Y - si.Y|
-        int16_t dx_val = (int16_t)(vm.ds_read(di + OBJ_WORLD_X) - vm.ds_read(si + OBJ_WORLD_X));
+        int16_t dx_val = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_X) - ObjRef{vm, si}.u16(OBJ_WORLD_X));
         if (dx_val < 0) dx_val = -dx_val;
-        int16_t dy_val = (int16_t)(vm.ds_read(di + OBJ_WORLD_Y) - vm.ds_read(si + OBJ_WORLD_Y));
+        int16_t dy_val = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_Y) - ObjRef{vm, si}.u16(OBJ_WORLD_Y));
         if (dy_val < 0) dy_val = -dy_val;
         uint16_t dist = (uint16_t)(dx_val + dy_val);
         if (dist < best_dist) {
@@ -16065,18 +16065,18 @@ static void v2_vm_op_34(V2VM& vm) {
 
     // loc_1510E: same as 0x16
     int16_t x_delta;
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x40) {
-        x_delta = (int16_t)(vm.ds_read(di + OBJ_WORLD_X) - vm.ds_read(si_sub + OBJ_WORLD_X));
+    if (ObjRef{vm, di}.u16(OBJ_FLAGS) & 0x40) {
+        x_delta = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_X) - ObjRef{vm, si_sub}.u16(OBJ_WORLD_X));
     } else {
-        x_delta = (int16_t)(vm.ds_read(si_sub + OBJ_WORLD_X) - vm.ds_read(di + OBJ_WORLD_X));
+        x_delta = (int16_t)(ObjRef{vm, si_sub}.u16(OBJ_WORLD_X) - ObjRef{vm, di}.u16(OBJ_WORLD_X));
     }
     vm.ds_write(DS_TEXT_COL, (uint16_t)x_delta);
 
     int16_t y_delta;
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x80) {
-        y_delta = (int16_t)(vm.ds_read(di + OBJ_WORLD_Y) - vm.ds_read(si_sub + OBJ_WORLD_Y));
+    if (ObjRef{vm, di}.u16(OBJ_FLAGS) & 0x80) {
+        y_delta = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_Y) - ObjRef{vm, si_sub}.u16(OBJ_WORLD_Y));
     } else {
-        y_delta = (int16_t)(vm.ds_read(si_sub + OBJ_WORLD_Y) - vm.ds_read(di + OBJ_WORLD_Y));
+        y_delta = (int16_t)(ObjRef{vm, si_sub}.u16(OBJ_WORLD_Y) - ObjRef{vm, di}.u16(OBJ_WORLD_Y));
     }
     vm.ds_write(DS_TEXT_ROW, (uint16_t)y_delta);
 
@@ -16092,23 +16092,23 @@ static void v2_vm_op_34(V2VM& vm) {
 // Total bytes consumed: 1 (mode) + N (X handler) + M (Y handler).
 static void v2_vm_op_16(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
-    uint16_t si_sub = vm.ds_read(di + OBJ_PARTNER); // sub-object index
+    uint16_t si_sub = ObjRef{vm, di}.u16(OBJ_PARTNER); // sub-object index
 
     // Compute X delta based on hflip flag (bit 6 = 0x40) → write to DS:0x6C
     int16_t x_delta;
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x40) {
-        x_delta = (int16_t)(vm.ds_read(di + OBJ_WORLD_X) - vm.ds_read(si_sub + OBJ_WORLD_X));
+    if (ObjRef{vm, di}.u16(OBJ_FLAGS) & 0x40) {
+        x_delta = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_X) - ObjRef{vm, si_sub}.u16(OBJ_WORLD_X));
     } else {
-        x_delta = (int16_t)(vm.ds_read(si_sub + OBJ_WORLD_X) - vm.ds_read(di + OBJ_WORLD_X));
+        x_delta = (int16_t)(ObjRef{vm, si_sub}.u16(OBJ_WORLD_X) - ObjRef{vm, di}.u16(OBJ_WORLD_X));
     }
     vm.ds_write(DS_TEXT_COL, (uint16_t)x_delta); // MOV ds:6Ch, ax
 
     // Compute Y delta based on vflip flag (bit 7 = 0x80) → write to DS:0x6E
     int16_t y_delta;
-    if (vm.ds_read(di + OBJ_FLAGS) & 0x80) {
-        y_delta = (int16_t)(vm.ds_read(di + OBJ_WORLD_Y) - vm.ds_read(si_sub + OBJ_WORLD_Y));
+    if (ObjRef{vm, di}.u16(OBJ_FLAGS) & 0x80) {
+        y_delta = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_Y) - ObjRef{vm, si_sub}.u16(OBJ_WORLD_Y));
     } else {
-        y_delta = (int16_t)(vm.ds_read(si_sub + OBJ_WORLD_Y) - vm.ds_read(di + OBJ_WORLD_Y));
+        y_delta = (int16_t)(ObjRef{vm, si_sub}.u16(OBJ_WORLD_Y) - ObjRef{vm, di}.u16(OBJ_WORLD_Y));
     }
     vm.ds_write(DS_TEXT_ROW, (uint16_t)y_delta); // MOV ds:6Eh, ax
 
