@@ -12329,6 +12329,21 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Unit 105: sub_163ac — platform/step probe (three-level tile checks).
+static bool v2_vm_platform_check_163ac(V2VM& vm);
+extern "C" int v2_fntest_call_sub_163ac(uint8_t* test_shadow) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.obj = *(uint16_t*)(test_shadow + DS_CUR_OBJ);
+    bool cf = v2_vm_platform_check_163ac(vm);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+    return cf ? 1 : 0;
+}
 // Units 102-103: sub_16235 (partner stash) / sub_16243 (partner fetch).
 extern "C" void v2_fntest_call_sub_16235(uint8_t* test_shadow, uint16_t si, uint16_t di) {
     uint16_t addr = (uint16_t)((uint16_t)(di << 4) + *(uint16_t*)(test_shadow + 0x38E) + 0x1B25);

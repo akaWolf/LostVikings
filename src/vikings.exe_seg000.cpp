@@ -177,6 +177,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 101: return (void*)&sub_16235;  // collision partner stash [(di<<4)+38E+1B25]=si
     case 102: return (void*)&sub_16243;  // collision partner fetch ax=[(di<<4)+38E+1B25]
     case 103: return (void*)&sub_16390;  // slope height diff (LUT 0x897C zone)
+    case 104: return (void*)&sub_163ac;  // platform/step probe (3-level tile checks)
     default: return 0;
     }
 }
