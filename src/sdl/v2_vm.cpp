@@ -3935,11 +3935,11 @@ static void v2_glyph_list_clear_12816(uint8_t* s) {
 // sub_1133a: init HUD from spawn table extension.
 // Reads viking type + item data for each viking from spawn table.
 static uint16_t v2_hud_init_1133a(uint8_t* s, uint16_t di) {
-    uint16_t ax = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
+    uint16_t ax = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE));   // 16-bit wrap
     s[DS_PAL_ANIM_EN] = (uint8_t)ax; // byte_2AA63
     di += 2;
     for (uint16_t si = 0; ; si++) {
-        ax = *(uint16_t*)(s + (uint16_t)(di + 0x25F6)) & 0xFF;
+        ax = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE)) & 0xFF;
         if (ax == 0) { di++; break; }
         s[(uint16_t)(si + 0x2584)] = (uint8_t)ax;
         s[(uint16_t)(si + 0x258C)] = (uint8_t)ax;
@@ -3947,7 +3947,7 @@ static uint16_t v2_hud_init_1133a(uint8_t* s, uint16_t di) {
         s[(uint16_t)(si + 0x259C)] = s[(uint16_t)(di + 0x25F8)];
         di += 3;
         // Skip sub-entries until 0xFFFF
-        while (*(uint16_t*)(s + (uint16_t)(di + 0x25F6)) != 0xFFFF) di += 2;
+        while (*(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE)) != 0xFFFF) di += 2;
         di += 2;
     }
     return di;
@@ -4129,7 +4129,7 @@ static void v2_spawn_table_13ba5(uint8_t* s) {
     // Iterates spawn table, creates objects with flag 0x800 (permanent).
     *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
     for (uint16_t si = 0, di = 0; ; si++, di += 0x0E) {
-        uint16_t spawn_x = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
+        uint16_t spawn_x = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE));   // 16-bit wrap
         if (spawn_x == 0xFFFF) break; // end of table → STC
         if (!(*(uint16_t*)(s + (uint16_t)(di + 0x2600)) & 0x800)) continue; // not permanent
         // sub_13bbd: setup params and call sub_13809
@@ -4205,7 +4205,7 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
     if ((int16_t)*(uint16_t*)(s + DS_SCRATCH_3A) < 0) *(uint16_t*)(s + DS_SCRATCH_3A) = 0;
     *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
     for (uint16_t si_idx = 0, di_off = 0; ; si_idx++, di_off += 0x0E) {
-        uint16_t sx = *(uint16_t*)(s + (uint16_t)(di_off + 0x25F6));   // 16-bit wrap
+        uint16_t sx = *(uint16_t*)(s + (uint16_t)(di_off + DS_SPAWN_TABLE));   // 16-bit wrap
         if (sx == 0xFFFF) break;
         uint16_t hw = *(uint16_t*)(s + (uint16_t)(di_off + 0x25FA));
         // orig: ADD ax,hw (wraps); SUB ax,[34]; JGE — a SIGNED OPERAND compare
@@ -4279,7 +4279,7 @@ static uint16_t v2_load_sprites_1167a(uint8_t* s, uint16_t di) {
     uint16_t si = 0;
     uint16_t bx = 0; // offset within sprite segment
     while (true) {
-        uint16_t chunk_id = *(uint16_t*)(s + di + 0x25F6);
+        uint16_t chunk_id = *(uint16_t*)(s + di + DS_SPAWN_TABLE);
         if (chunk_id == 0xFFFF) { di += 2; break; }
         // Store chunk_id in resource table
         *(uint16_t*)(s + si + DS_SPRITE_RES_ID) = chunk_id;
@@ -4309,7 +4309,7 @@ static uint16_t v2_load_anims_116ae(uint8_t* s, uint16_t di) {
     // Chunk buffer base segment for linear offset calculation
     uint16_t chunk_base_seg = *(uint16_t*)(s + DS_SEG_CHUNK);
     while (true) {
-        uint16_t chunk_id = *(uint16_t*)(s + di + 0x25F6);
+        uint16_t chunk_id = *(uint16_t*)(s + di + DS_SPAWN_TABLE);
         if (chunk_id == 0xFFFF) break;
         *(uint16_t*)(s + si + DS_ANIM_CHUNK_IDS) = chunk_id;
         // les di, dword_2B359: load es:di from animation buffer pointer
@@ -4564,7 +4564,7 @@ loc_1154a:
 // sub_11383: find end of spawn table. Returns di = end index + 2.
 static uint16_t v2_spawn_table_end_11383(uint8_t* s) {
     uint16_t di = 0;
-    while (*(uint16_t*)(s + (uint16_t)(di + 0x25F6)) != 0xFFFF) di += 0x0E;   // 16-bit wrap
+    while (*(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE)) != 0xFFFF) di += 0x0E;   // 16-bit wrap
     return di + 2;
 }
 
@@ -4574,9 +4574,9 @@ static uint16_t v2_spawn_table_end_11383(uint8_t* s) {
 static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
     uint16_t di = di_start;
     while (true) {
-        uint16_t chunk_id = *(uint16_t*)(s + (uint16_t)(di + 0x25F6));   // 16-bit wrap
+        uint16_t chunk_id = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE));   // 16-bit wrap
         if (chunk_id == 0xFFFF) break;
-        uint16_t type_val = *(uint16_t*)(s + (uint16_t)(di + 2) + 0x25F6) & 0xFF;
+        uint16_t type_val = *(uint16_t*)(s + (uint16_t)(di + 2) + DS_SPAWN_TABLE) & 0xFF;
         uint16_t dest_off = type_val * 3 + DS_PAL_SRC;
         v2_read_chunk(chunk_id, s + dest_off, 0x10000 - dest_off, s);  // ds_ctx: header 2BB4/2BBC (class #22)
         di += 3;
@@ -5721,7 +5721,7 @@ static void v2_vm_pass_14207(uint8_t* shadow) {
             v2_vm_di_track = 0;                                   // MOV di,0
             while (true) {
                 uint16_t di = v2_vm_di_track;
-                uint16_t pobj = *(uint16_t*)(shadow + (uint16_t)(di + 0x378)) & 0xFF;
+                uint16_t pobj = *(uint16_t*)(shadow + (uint16_t)(di + DS_PRIO_QUEUE)) & 0xFF;
                 v2_vm_execute_object(shadow, pobj);               // may skew di_track
                 v2_vm_di_track = (uint16_t)(v2_vm_di_track + 1);  // INC di
                 if (!((int16_t)v2_vm_di_track <
@@ -7658,9 +7658,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     //   push ax; sub_12529(bx); pop ax; sub_12549(ax)
                     //   push si,di; sub_12388; pop di; INC di; pop si; INC si; loc_124c5
                     //   byte_31A4B=1; pop bx; ADD bx,0Ah
-                    uint16_t ax_align = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAD));
-                    uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAB));
-                    uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DA9));
+                    uint16_t ax_align = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
+                    uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
+                    uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
                     uint16_t bx_text = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAF));
                     v2_text_dims_12529(shadow, bx_text);                // read dims, bx_text += 2
                     v2_text_align_12549(shadow, ax_align);               // set alignment offsets
@@ -7676,9 +7676,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     // off_2B086[0xA] = loc_12738: HUD text. bx += 8.
                     // Original: push bx; di=[bx+1DAB]; si=[bx+1DA9]; bx=[bx+1DAD]
                     //   word_28514=2; loc_124c5; byte_31A4B=1; pop bx; ADD bx,8
-                    uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAB));
-                    uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DA9));
-                    uint16_t bx_text = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAD));
+                    uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
+                    uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
+                    uint16_t bx_text = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
                     *(uint16_t*)(shadow + DS_SCRATCH_34) = 2;               // word_28514 = 2
                     v2_text_render_124c5(shadow, si_pos, di_pos, bx_text); // render text
                     shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B = 1
@@ -7743,7 +7743,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     //   OUT 0x3C8,3; OUT 0x3C9,(cx&0x3E)→ds:0x7F0B
                     //   SHR cx,5; OUT 0x3C9,(cx&0x3E)→ds:0x7F0C
                     //   SHR cx,5; OUT 0x3C9,(cx&0x3E)→ds:0x7F0D
-                    uint16_t cx = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DA9));
+                    uint16_t cx = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
                     cx <<= 1;                                      // SHL cx, 1
                     // OUT(0x3C8, 3);                               // VGA palette write addr — commented
                     uint8_t r = (uint8_t)(cx & 0x3E);              // OUT(0x3C9, r)
@@ -7762,9 +7762,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     // off_2B086[8] = loc_126ef: single glyph write. bx += 8.
                     // Original: push bx; ax=[bx+1DA9]; si=[bx+1DAB]; di=[bx+1DAD]
                     //   call sub_1241e; byte_31A4B=1; pop bx; ADD bx,8
-                    uint8_t ch = (uint8_t)*(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DA9));
-                    uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAB));
-                    uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + 0x1DAD));
+                    uint8_t ch = (uint8_t)*(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
+                    uint16_t si_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
+                    uint16_t di_pos = *(uint16_t*)(shadow + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
                     v2_glyph_put_1241e(shadow, ch, si_pos, di_pos);      // call sub_1241e
                     shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B = 1
                     bx_read += 0x08;                               // ADD bx, 8
@@ -11003,7 +11003,7 @@ static void v2_vm_op_14(V2VM& vm) {
     if ((int16_t)di_new < (int16_t)vm.global_r(DS_CUR_OBJ)) {
         uint16_t idx376 = vm.ds_read(DS_PRIO_COUNT);
         { static int _p=0; _p++; if(_p<=200) fprintf(stderr,"V2-PRIO-W[#%d]: ds:376=%04X writing di=%04X (parent ds:42=%04X)\n", _p, idx376, di_new, vm.global_r(DS_CUR_OBJ)); }
-        vm.ds_write(idx376 + 0x378, di_new);
+        vm.ds_write(idx376 + DS_PRIO_QUEUE, di_new);
         vm.ds_write(DS_PRIO_COUNT, idx376 + 1);
     } else {
         static int _ps=0; _ps++;
@@ -11343,7 +11343,7 @@ static void v2_vm_op_10(V2VM& vm) {
             uint16_t save_42 = *(uint16_t*)(s + DS_CUR_OBJ);
             *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
             // sub_13ae0 checks bounds + calls sub_13809 for matching spawn entry
-            uint16_t sx = *(uint16_t*)(s + di_off + 0x25F6);
+            uint16_t sx = *(uint16_t*)(s + di_off + DS_SPAWN_TABLE);
             if (sx != 0xFFFF) {
                 uint16_t hw = *(uint16_t*)(s + di_off + 0x25FA);
                 uint16_t sy = *(uint16_t*)(s + di_off + 0x25F8);
@@ -13240,9 +13240,9 @@ static void v2_vm_op_50(V2VM& vm) {
     // Command buffer entry: type=8 + 3 values + advance by 8
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 8);
-    vm.ds_write(bx_cmd + 0x1DA9, val1);
-    vm.ds_write(bx_cmd + 0x1DAB, val2);
-    vm.ds_write(bx_cmd + 0x1DAD, val3);
+    vm.ds_write(bx_cmd + DS_CMD_ENTRY_SI, val1);
+    vm.ds_write(bx_cmd + DS_CMD_ENTRY_DI, val2);
+    vm.ds_write(bx_cmd + DS_CMD_ENTRY_PARAM, val3);
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 8);
 }
 
@@ -13547,7 +13547,7 @@ static void v2_vm_op_C8(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
-    vm.ds_write(idx * 0x0E + 2 + 0x25F6, v2_vm_accumulator);
+    vm.ds_write(idx * 0x0E + 2 + DS_SPAWN_TABLE, v2_vm_accumulator);
 }
 
 // 0xCA (sub_152b3): write acc to state[idx*14+0xC]. 0 bytes.
@@ -13555,7 +13555,7 @@ static void v2_vm_op_CA(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
-    vm.ds_write(idx * 0x0E + 0x0C + 0x25F6, v2_vm_accumulator);
+    vm.ds_write(idx * 0x0E + 0x0C + DS_SPAWN_TABLE, v2_vm_accumulator);
 }
 
 // 0x55 (sub_1466e): acc = sub_12312 (random). 0 bytes consumed.
@@ -13599,7 +13599,7 @@ static void v2_vm_op_C9(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
-    vm.ds_write(idx * 0x0E + 0x0A + 0x25F6, v2_vm_accumulator);
+    vm.ds_write(idx * 0x0E + 0x0A + DS_SPAWN_TABLE, v2_vm_accumulator);
 }
 
 // 0x69 (sub_14879): sub_15485 (indexed field, 1B). Unsigned acc >= val → jump, else skip 2.
@@ -13884,9 +13884,9 @@ static void v2_vm_op_45(V2VM& vm) {
     // Command buffer write: type=0x0A, si, di, ds:0x002A
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);  // word_2A66F
     vm.ds_write(bx_cmd + DS_CMD_BUF, 0x0A);
-    vm.ds_write(bx_cmd + 0x1DA9, si_val);
-    vm.ds_write(bx_cmd + 0x1DAB, di_val);
-    vm.ds_write(bx_cmd + 0x1DAD, vm.ds_read(DS_TEXT_IDX));  // word_2850A
+    vm.ds_write(bx_cmd + DS_CMD_ENTRY_SI, si_val);
+    vm.ds_write(bx_cmd + DS_CMD_ENTRY_DI, di_val);
+    vm.ds_write(bx_cmd + DS_CMD_ENTRY_PARAM, vm.ds_read(DS_TEXT_IDX));  // word_2850A
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 8);
 }
 
@@ -13903,7 +13903,7 @@ static void v2_vm_op_C7(V2VM& vm) {
     uint16_t idx = vm.ds_read(si + OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
     uint16_t offset = idx * 0x0E;
-    vm.ds_write(offset + 0x25F6, v2_vm_accumulator);
+    vm.ds_write(offset + DS_SPAWN_TABLE, v2_vm_accumulator);
 }
 
 // 0x82 (sub_149ab): Signed >= comparison with indexed field (1 byte).
@@ -14802,7 +14802,7 @@ static void v2_vm_op_46(V2VM& vm) {
     uint16_t param = vm.read_u16();
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 6);
-    vm.ds_write(bx_cmd + 0x1DA9, param);
+    vm.ds_write(bx_cmd + DS_CMD_ENTRY_SI, param);
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 4);
 }
 
@@ -15265,9 +15265,9 @@ static void v2_vm_op_41(V2VM& vm) {
     {
         uint16_t bx = vm.ds_read(DS_CMD_WRITE); // word_2A66F
         vm.ds_write((uint16_t)(bx + DS_CMD_BUF), 0);       // command type = 0
-        vm.ds_write((uint16_t)(bx + 0x1DA9), si_pos);   // X
-        vm.ds_write((uint16_t)(bx + 0x1DAB), di_pos);   // Y
-        vm.ds_write((uint16_t)(bx + 0x1DAD), val2);     // text param (ax from sub_12549)
+        vm.ds_write((uint16_t)(bx + DS_CMD_ENTRY_SI), si_pos);   // X
+        vm.ds_write((uint16_t)(bx + DS_CMD_ENTRY_DI), di_pos);   // Y
+        vm.ds_write((uint16_t)(bx + DS_CMD_ENTRY_PARAM), val2);     // text param (ax from sub_12549)
         vm.ds_write((uint16_t)(bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX)); // word_2850A
         vm.ds_write(DS_CMD_WRITE, bx + 0xA);                  // word_2A66F += 0xA
     }
@@ -15338,9 +15338,9 @@ static void v2_vm_op_44(V2VM& vm) {
     {
         uint16_t bx = vm.ds_read(DS_CMD_WRITE);
         vm.ds_write((uint16_t)(bx + DS_CMD_BUF), 0);
-        vm.ds_write((uint16_t)(bx + 0x1DA9), si_pos);
-        vm.ds_write((uint16_t)(bx + 0x1DAB), di_pos);
-        vm.ds_write((uint16_t)(bx + 0x1DAD), val2);
+        vm.ds_write((uint16_t)(bx + DS_CMD_ENTRY_SI), si_pos);
+        vm.ds_write((uint16_t)(bx + DS_CMD_ENTRY_DI), di_pos);
+        vm.ds_write((uint16_t)(bx + DS_CMD_ENTRY_PARAM), val2);
         vm.ds_write((uint16_t)(bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
         vm.ds_write(DS_CMD_WRITE, bx + 0xA);
     }
@@ -17313,7 +17313,7 @@ static void v2_vm_verify_spawn_coverage(uint8_t* shadow) {
     uint16_t vp_y = *(uint16_t*)(shadow + DS_VIEWPORT_Y);
     uint16_t table_end = *(uint16_t*)(shadow + DS_OBJ_COUNT);
     for (uint16_t di_off = 0; ; di_off += 0x0E) {
-        uint16_t sx = *(uint16_t*)(shadow + di_off + 0x25F6);
+        uint16_t sx = *(uint16_t*)(shadow + di_off + DS_SPAWN_TABLE);
         if (sx == 0xFFFF) break;
         uint16_t sy = *(uint16_t*)(shadow + di_off + 0x25F8);
         uint16_t hw = *(uint16_t*)(shadow + di_off + 0x25FA);
@@ -18586,7 +18586,7 @@ void v2_phase_vm(uint16_t ds_val) {
         uint16_t prio_count = *(uint16_t*)(v2_vm_shadow_ds + DS_PRIO_COUNT);
         if (prio_count != 0) {
             for (uint16_t di = 0; (int16_t)di < (int16_t)prio_count; di++) {
-                uint16_t prio_obj = *(uint16_t*)(v2_vm_shadow_ds + di + 0x378) & 0xFF;
+                uint16_t prio_obj = *(uint16_t*)(v2_vm_shadow_ds + di + DS_PRIO_QUEUE) & 0xFF;
                 v2_vm_execute_object(v2_vm_shadow_ds, prio_obj);
             }
             *(uint16_t*)(v2_vm_shadow_ds + DS_PRIO_COUNT) = 0;
@@ -19816,9 +19816,9 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 
     // Dispatch one cmd (handlers verified line-by-line vs orig off_2b086 table)
     if (cmd_type == 0) {
-        uint16_t ax_align = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
-        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
-        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
+        uint16_t ax_align = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
+        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
+        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
         uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAF));
         v2_text_dims_12529(s, bx_text);
         v2_text_align_12549(s, ax_align);
@@ -19828,9 +19828,9 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         s[DS_GLYPH_DIRTY] = 1;
         bx_read += 0x0A;
     } else if (cmd_type == 0x0A) {
-        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
-        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
-        uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
+        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
+        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
+        uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
         *(uint16_t*)(s + DS_SCRATCH_34) = 2;
         v2_text_render_124c5(s, si_pos, di_pos, bx_text);
         s[DS_GLYPH_DIRTY] = 1;
@@ -19841,7 +19841,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         // transition path) — #39 root cause: this copy updated ds:0x7F0B/C/D but
         // NOT the shadow DAC, so the intro's color-3 pulse froze in v2's DAC
         // model while orig's setPalette mirror kept pulsing.
-        uint16_t cx = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
+        uint16_t cx = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
         cx <<= 1;
         uint8_t r = (uint8_t)(cx & 0x3E); s[DS_DAC_R] = r;
         cx >>= 5;
@@ -19851,9 +19851,9 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_dac_shadow[9] = r; v2_dac_shadow[10] = g; v2_dac_shadow[11] = b; // shadow DAC (task #22)
         bx_read += 4;
     } else if (cmd_type == 8) {
-        uint8_t ch = (uint8_t)*(uint16_t*)(s + (uint16_t)(bx_read + 0x1DA9));
-        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAB));
-        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAD));
+        uint8_t ch = (uint8_t)*(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
+        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
+        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
         v2_glyph_put_1241e(s, ch, si_pos, di_pos);
         s[DS_GLYPH_DIRTY] = 1;
         bx_read += 0x08;

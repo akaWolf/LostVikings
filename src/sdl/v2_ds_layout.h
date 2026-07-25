@@ -39,7 +39,7 @@ constexpr uint16_t DS_TRANSITION     = 0x032F; // word_2880F: level-transition c
 constexpr uint16_t DS_FRAME_FLAGS    = 0x0334; // word_28814: frame/transition bit flags
 constexpr uint16_t DS_OBJ_COUNT      = 0x0372; // word_28852: active object table end (slot*2 bound)
 constexpr uint16_t DS_PRIO_COUNT     = 0x0376; // word_28856: priority drain queue count
-constexpr uint16_t DS_PRIO_QUEUE     = 0x0378; // byte queue of slots (drained on DI register, #28)
+constexpr uint16_t DS_PRIO_QUEUE     = 0x0378; // byte queue of slots (drained on DI register, #28); append at [DS_PRIO_COUNT], word each
 constexpr uint16_t DS_COLL_PHASE     = 0x0390; // word_28870: collision state machine (-1/0/+1 paths)
 constexpr uint16_t DS_COLL_BIT_IDX   = 0x038E; // collision bit index (per-pass, +=2 per op)
 constexpr uint16_t DS_INPUT_KEYS     = 0x03B6; // word_28896: held action bits
@@ -51,9 +51,13 @@ constexpr uint16_t DS_BLINK_COUNTER  = 0x03C6; // word_288A6: viking-switch blin
 constexpr uint16_t DS_GAME_MODE_AC   = 0x03CC; // word_288AC: mode (0x8000 intro, 0x8001/2 transitions)
 constexpr uint16_t DS_LEVEL          = 0x25AD; // word_2AA8D: current level id
 constexpr uint16_t DS_LEVEL_FLAGS    = 0x25CF; // byte_2AAAF: level flags (bit0 HUD, 0x42 chunk scenes)
+constexpr uint16_t DS_SPAWN_TABLE    = 0x25F6; // level object spawn/descriptor table: 14-byte (0x0E) entries, 0xFFFF-terminated (chunk_id/type/x/...); VM ops C7-CA index by OBJ_ANIM_SUB
 constexpr uint16_t DS_CMD_WRITE      = 0x218F; // word_2A66F: command-buffer write offset
 constexpr uint16_t DS_CMD_READ       = 0x2B64; // word_2B044: command-buffer read offset
 constexpr uint16_t DS_CMD_BUF        = 0x1DA7; // command entry base (type/si/di/param/text fields)
+constexpr uint16_t DS_CMD_ENTRY_SI   = 0x1DA9; // command entry +2: si/value1 field (base DS_CMD_BUF+2)
+constexpr uint16_t DS_CMD_ENTRY_DI   = 0x1DAB; // command entry +4: di/value2 field
+constexpr uint16_t DS_CMD_ENTRY_PARAM= 0x1DAD; // command entry +6: param/value3 field
 
 // Segment registry (DosMemAlloc results; wraps documented in unit 31)
 constexpr uint16_t DS_SEG_TILEGFX    = 0x2E5F; // tile graphics segment
