@@ -213,6 +213,17 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 137: return (void*)&sub_16f5f;  // scroll band: right column ([92EF]+0x29)
     case 138: return (void*)&sub_17049;  // scroll band: top row
     case 139: return (void*)&sub_170b9;  // scroll band: bottom row ([92F1]+0x17)
+    case 140: return (void*)&sub_13ae0;  // spawn one visible spawn-table entry
+    case 141: return (void*)&sub_141f7;  // VM pc bump: ADD bx,2
+    case 142: return (void*)&sub_141fb;  // VM pc bump: ADD bx,3
+    case 143: return (void*)&sub_141ff;  // VM pc bump: ADD bx,8
+    case 144: return (void*)&sub_14203;  // VM pc bump: ADD bx,0Ah
+    case 145: return (void*)&sub_165aa;  // page-role rotate + 1664f change hook
+    case 146: return (void*)&sub_166e8;  // sprite dirty marks: X < viewport left
+    case 147: return (void*)&sub_16710;  // sprite dirty marks: X > viewport+0x121
+    case 148: return (void*)&sub_16661;  // scroll tracker (bands + dirty marks)
+    case 149: return (void*)&sub_1673c;  // spawn tracker (>>1 axes + 13a14/34/54/74)
+    case 150: return (void*)&sub_1406d;  // anim queue quadrant redraw (JCXZ + JNS loop)
     default: return 0;
     }
 }

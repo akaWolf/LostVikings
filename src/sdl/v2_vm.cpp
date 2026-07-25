@@ -4676,6 +4676,36 @@ static void v2_vga_scroll_row_bottom_170b9(uint8_t* s) {
     v2_page_copy_col_171dc(s);                                       // 0x7127 JMP sub_171DC
 }
 
+// sub_1673c (seg000 eips 0x673c..0x6774): tile-scroll spawn tracker.
+// Axis 1: [257F]>>1 vs [92F3] — JL: track+CALL 13a14, JG: track+CALL 13a34.
+// Axis 2: [2581]>>1 vs [92F5] — JZ: RETN, JL: track+JMP 13a74, JG: track+JMP 13a54.
+static void v2_scroll_spawn_up_13a14(uint8_t* s);
+static void v2_scroll_spawn_down_13a34(uint8_t* s);
+static void v2_scroll_spawn_left_13a74(uint8_t* s);
+static void v2_scroll_spawn_right_13a54(uint8_t* s);
+static void v2_scroll_spawn_tracker_1673c(uint8_t* s) {
+    uint16_t scroll_y = *(uint16_t*)(s + DS_SCROLL_COL) >> 1;         // 0x673c/0x673f
+    uint16_t track_y = *(uint16_t*)(s + DS_SCROLL_DISP_X2);           // 0x6741 bx=[92F3]
+    if (scroll_y != track_y) {                                        // 0x6747 JZ
+        *(uint16_t*)(s + DS_SCROLL_DISP_X2) = scroll_y;               // 0x674b / 0x6753
+        if ((int16_t)scroll_y < (int16_t)track_y) {                   // 0x6749 JG
+            v2_scroll_spawn_up_13a14(s);       // 0x674e CALL sub_13A14
+        } else {
+            v2_scroll_spawn_down_13a34(s);     // 0x6756 CALL sub_13A34
+        }
+    }
+    uint16_t scroll_x = *(uint16_t*)(s + DS_SCROLL_ROW) >> 1;         // 0x6759/0x675c
+    uint16_t track_x = *(uint16_t*)(s + DS_SCROLL_DISP_Y2);           // 0x675e bx=[92F5]
+    if (scroll_x != track_x) {                                        // 0x6764 JZ -> RETN
+        *(uint16_t*)(s + DS_SCROLL_DISP_Y2) = scroll_x;               // 0x6768 / 0x676e
+        if ((int16_t)scroll_x < (int16_t)track_x) {                   // 0x6766 JG
+            v2_scroll_spawn_left_13a74(s);     // 0x676b JMP loc_13A74
+        } else {
+            v2_scroll_spawn_right_13a54(s);    // 0x6771 JMP loc_13A54
+        }
+    }
+}
+
 // sub_11439: init word_3287C rendering flag
 // sub_11439: init render flag + first page flip.
 // if !(byte_2AAAF & 0x42): call sub_16ded (VGA tile row rendering)
@@ -4766,7 +4796,58 @@ static void v2_despawn_bounds_13c0c(uint8_t* s) {
     }
 }
 
-// loc_13a94: clamp bounds + spawn loop. Exact replica of original loc_13a94 → sub_13ae0.
+// sub_13ae0 (seg000 eips 0x3ae0..0x3ba4): spawn one visible spawn-table entry.
+// si_idx = spawn index, di_off = byte offset of the entry. STC (true) on the
+// 0xFFFF terminator; CLC otherwise (out-of-band / duplicate = no-op).
+static bool v2_spawn_visible_entry_13ae0(uint8_t* s, uint16_t si_idx, uint16_t di_off) {
+    uint16_t sx = *(uint16_t*)(s + (uint16_t)(di_off + DS_SPAWN_TABLE));   // 0x3ae0 ax=[di+25F6]
+    if (sx == 0xFFFF) return true;                                         // 0x3ae7 -> loc_13ba3 STC
+    uint16_t hw = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 4)));
+    // orig: ADD ax,hw (wraps); SUB ax,[34]; JGE — a SIGNED OPERAND compare
+    // of the wrapped sum vs the bound (class #16: not the sign of the
+    // truncated full difference).
+    if ((int16_t)(uint16_t)(sx + hw) <  (int16_t)*(uint16_t*)(s + DS_SCRATCH_34)) return false; // 0x3af4
+    if ((int16_t)(uint16_t)(sx - hw) >= (int16_t)*(uint16_t*)(s + DS_SCRATCH_36)) return false; // 0x3b05
+    uint16_t sy = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 2)));
+    uint16_t hh = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 6)));
+    if ((int16_t)(uint16_t)(sy + hh) <  (int16_t)*(uint16_t*)(s + DS_SCRATCH_38)) return false; // 0x3b16
+    if ((int16_t)(uint16_t)(sy - hh) >= (int16_t)*(uint16_t*)(s + DS_SCRATCH_3A)) return false; // 0x3b27
+    // 0x3b2a: ds:32 = spawn index — written BEFORE the dedup scan.
+    *(uint16_t*)(s + DS_MODE_WORD) = si_idx;
+    // Dedup scan from ds:33C: POST-test loop (orig loc_13b32 body first,
+    // ADD si,2 / CMP si,[372] / JL at the bottom) — the START slot is tested
+    // even when [33C] >= [372] (divergence #36: the old pre-test form skipped
+    // the whole scan there).
+    uint16_t si2 = *(uint16_t*)(s + DS_OBJ_SCAN_START);
+    do {
+        ObjMem o{s, si2};                            // scanned object slot (cursor)
+        if (o.code_seg() != 0 &&
+            o.u16(OBJ_ANIM_SUB) == *(uint16_t*)(s + DS_MODE_WORD))
+            return false;                            // 0x3b41 -> loc_13ba0 CLC (already spawned)
+        si2 += 2;                                    // loc_13b43
+    } while ((int16_t)si2 < (int16_t)*(uint16_t*)(s + DS_OBJ_COUNT));
+    // 0x3b4c: PUSH di + bounds; stage the entry fields; call sub_13809.
+    uint16_t save_34 = *(uint16_t*)(s + DS_SCRATCH_34);
+    uint16_t save_36 = *(uint16_t*)(s + DS_SCRATCH_36);
+    uint16_t save_38 = *(uint16_t*)(s + DS_SCRATCH_38);
+    uint16_t save_3A = *(uint16_t*)(s + DS_SCRATCH_3A);
+    *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + (uint16_t)(di_off + DS_SPAWN_TABLE));        // 0x3b5d
+    *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 2)));  // 0x3b64
+    *(uint16_t*)(s + DS_SPAWN_TBL_LO) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 4))); // 0x3b6b
+    *(uint16_t*)(s + DS_SPAWN_TBL_HI) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 6))); // 0x3b72
+    *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 12))); // 0x3b79
+    uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 8)));  // 0x3b80
+    uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 10)));     // 0x3b84
+    // 0x3b88: di = ds:32 -> call sub_13809
+    v2_spawn_object_13809(s, code_seg_idx, *(uint16_t*)(s + DS_MODE_WORD), anim_idx);
+    *(uint16_t*)(s + DS_SCRATCH_3A) = save_3A;       // 0x3b8f POP-restore
+    *(uint16_t*)(s + DS_SCRATCH_38) = save_38;
+    *(uint16_t*)(s + DS_SCRATCH_36) = save_36;
+    *(uint16_t*)(s + DS_SCRATCH_34) = save_34;
+    return false;                                    // loc_13ba1 CLC
+}
+
+// loc_13a94: clamp bounds + spawn loop (per-entry body = sub_13ae0).
 // Called from sub_13a14/sub_13a34/loc_13a54/loc_13a74 (scroll spawn) and sub_13a0e (init spawn).
 // Bounds (ds:0x34/0x36/0x38/0x3A) must be set by caller before calling.
 static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
@@ -4776,46 +4857,7 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
     if ((int16_t)*(uint16_t*)(s + DS_SCRATCH_3A) < 0) *(uint16_t*)(s + DS_SCRATCH_3A) = 0;
     *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
     for (uint16_t si_idx = 0, di_off = 0; ; si_idx++, di_off += 0x0E) {
-        uint16_t sx = *(uint16_t*)(s + (uint16_t)(di_off + DS_SPAWN_TABLE));   // 16-bit wrap
-        if (sx == 0xFFFF) break;
-        uint16_t hw = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 4)));
-        // orig: ADD ax,hw (wraps); SUB ax,[34]; JGE — a SIGNED OPERAND compare
-        // of the wrapped sum vs the bound (class #16: not the sign of the
-        // truncated full difference).
-        if ((int16_t)(uint16_t)(sx + hw) <  (int16_t)*(uint16_t*)(s + DS_SCRATCH_34)) continue;
-        if ((int16_t)(uint16_t)(sx - hw) >= (int16_t)*(uint16_t*)(s + DS_SCRATCH_36)) continue;
-        uint16_t sy = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 2)));
-        uint16_t hh = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 6)));
-        if ((int16_t)(uint16_t)(sy + hh) <  (int16_t)*(uint16_t*)(s + DS_SCRATCH_38)) continue;
-        if ((int16_t)(uint16_t)(sy - hh) >= (int16_t)*(uint16_t*)(s + DS_SCRATCH_3A)) continue;
-        // In viewport — check if already spawned
-        *(uint16_t*)(s + DS_MODE_WORD) = si_idx;
-        bool already = false;
-        uint16_t table_end = *(uint16_t*)(s + DS_OBJ_COUNT);
-        for (uint16_t si2 = *(uint16_t*)(s + DS_OBJ_SCAN_START); (int16_t)si2 < (int16_t)table_end; si2 += 2) {
-            ObjMem o{s, si2};                                        // scanned object slot (cursor)
-            if (o.code_seg() == 0) continue;   // 16-bit wrap
-            if (o.u16(OBJ_ANIM_SUB) == si_idx) { already = true; break; }
-        }
-        if (already) continue;
-        // sub_13ae0: save viewport bounds, setup params, call sub_13809, restore bounds
-        uint16_t save_34 = *(uint16_t*)(s + DS_SCRATCH_34);
-        uint16_t save_36 = *(uint16_t*)(s + DS_SCRATCH_36);
-        uint16_t save_38 = *(uint16_t*)(s + DS_SCRATCH_38);
-        uint16_t save_3A = *(uint16_t*)(s + DS_SCRATCH_3A);
-        *(uint16_t*)(s + DS_MODE_WORD) = si_idx;
-        *(uint16_t*)(s + DS_TEXT_COL) = sx;
-        *(uint16_t*)(s + DS_TEXT_ROW) = sy;
-        *(uint16_t*)(s + DS_SPAWN_TBL_LO) = hw;
-        *(uint16_t*)(s + DS_SPAWN_TBL_HI) = hh;
-        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 12)));
-        uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 8)));
-        uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 10)));
-        v2_spawn_object_13809(s, code_seg_idx, si_idx, anim_idx);
-        *(uint16_t*)(s + DS_SCRATCH_3A) = save_3A;
-        *(uint16_t*)(s + DS_SCRATCH_38) = save_38;
-        *(uint16_t*)(s + DS_SCRATCH_36) = save_36;
-        *(uint16_t*)(s + DS_SCRATCH_34) = save_34;
+        if (v2_spawn_visible_entry_13ae0(s, si_idx, di_off)) break;   // CALL / JC
     }
 }
 
@@ -7647,29 +7689,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // on the new level. v2's next frame FRAME_BEGIN will do the same.
             // Critical: sub_1673c must run on new level for scroll tracking.
             // Do sub_1673c here, then return to skip remaining pre_vm (sub_10813 etc).
-            {
-                // sub_1673c: compare scroll Y/X with tracking, spawn/despawn on change
-                uint16_t scroll_y = *(uint16_t*)(shadow + DS_SCROLL_COL) >> 1;
-                uint16_t track_y = *(uint16_t*)(shadow + DS_SCROLL_DISP_X2);
-                if (scroll_y != track_y) {
-                    *(uint16_t*)(shadow + DS_SCROLL_DISP_X2) = scroll_y;
-                    if ((int16_t)scroll_y < (int16_t)track_y) {
-                        v2_scroll_spawn_up_13a14(shadow);      // CALL sub_13A14
-                    } else {
-                        v2_scroll_spawn_down_13a34(shadow);    // CALL sub_13A34
-                    }
-                }
-                uint16_t scroll_x = *(uint16_t*)(shadow + DS_SCROLL_ROW) >> 1;
-                uint16_t track_x = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y2);
-                if (scroll_x != track_x) {
-                    *(uint16_t*)(shadow + DS_SCROLL_DISP_Y2) = scroll_x;
-                    if ((int16_t)scroll_x < (int16_t)track_x) {
-                        v2_scroll_spawn_left_13a74(shadow);    // JMP loc_13A74
-                    } else {
-                        v2_scroll_spawn_right_13a54(shadow);   // JMP loc_13A54
-                    }
-                }
-            }
+            v2_scroll_spawn_tracker_1673c(shadow);   // CALL sub_1673C (extracted, unit 150)
         }
     }
 
@@ -8479,31 +8499,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
 #endif // BOGUS sub_1086f mirror in pre_vm — orig only calls at eip 0x00E7
 
-    // sub_1673c: tile scroll management + object spawn/despawn.
-    // sub_13a14/sub_13a34 (CALL) + loc_13a54/loc_13a74 (JMP-tail): scroll-band
-    // spawn scans — extracted functions above.
-    {
-        uint16_t scroll_y = *(uint16_t*)(shadow + DS_SCROLL_COL) >> 1;
-        uint16_t track_y = *(uint16_t*)(shadow + DS_SCROLL_DISP_X2);
-        if (scroll_y != track_y) {
-            *(uint16_t*)(shadow + DS_SCROLL_DISP_X2) = scroll_y;
-            if ((int16_t)scroll_y < (int16_t)track_y) {
-                v2_scroll_spawn_up_13a14(shadow);      // CALL sub_13A14
-            } else {
-                v2_scroll_spawn_down_13a34(shadow);    // CALL sub_13A34
-            }
-        }
-        uint16_t scroll_x = *(uint16_t*)(shadow + DS_SCROLL_ROW) >> 1;
-        uint16_t track_x = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y2);
-        if (scroll_x != track_x) {
-            *(uint16_t*)(shadow + DS_SCROLL_DISP_Y2) = scroll_x;
-            if ((int16_t)scroll_x < (int16_t)track_x) {
-                v2_scroll_spawn_left_13a74(shadow);    // JMP loc_13A74
-            } else {
-                v2_scroll_spawn_right_13a54(shadow);   // JMP loc_13A54
-            }
-        }
-    }
+    // sub_1673c: tile scroll management + object spawn/despawn (extracted).
+    v2_scroll_spawn_tracker_1673c(shadow);   // CALL sub_1673C (extracted, unit 150)
 }
 
 // Viewport movers — called from v2_game_loop_post_vm (sub_1064b camera follow)
@@ -9490,32 +9487,8 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 // directly without the extra sub_16661 (object create/destroy on scroll) that
 // v2_game_loop_post_render also runs. Bit-exact match to orig.
 static void v2_page_rotate_165aa(uint8_t* shadow) {
-        static int rot_dbg = 0; rot_dbg++;
-        uint16_t ax = *(uint16_t*)(shadow + DS_PAGE_SHOWN);
-        if (rot_dbg <= 6) {
-            uint16_t si_lk = (*(uint16_t*)(shadow + DS_VIEWPORT_Y) & 0xFFF8) >> 2;
-            printf("V2-ROT[%d]: 92F9=%04X 92FB=%04X si=%04X tab_a=%04X tab_b=%04X\n",
-                rot_dbg, ax, *(uint16_t*)(shadow+DS_PAGE_BG), si_lk,
-                *(uint16_t*)(shadow + (uint16_t)(si_lk - 0x75D6)),
-                *(uint16_t*)(shadow + (uint16_t)(si_lk - 0x75A4)));
-        }
-        { static int _rot=0; _rot++;
-          if(_rot<=80)
-          fprintf(stderr,"V2-165aa[%d]: IN 92F9=%04X 92FB=%04X vp_y=%04X level=%04X\n",
-            _rot, ax, *(uint16_t*)(shadow+DS_PAGE_BG), *(uint16_t*)(shadow+DS_VIEWPORT_Y), *(uint16_t*)(shadow+DS_LEVEL));
-          // Log rotation count at each level change + output state
-          static uint16_t _prev_level = 0xFFFF;
-          uint16_t _cur_level = *(uint16_t*)(shadow + DS_LEVEL);
-          if (_cur_level != _prev_level) {
-            fprintf(stderr, "V2-165aa-COUNT: level %04X→%04X at rotation #%d\n", _prev_level, _cur_level, _rot);
-            _prev_level = _cur_level;
-          }
-          // Log output for rotations around level 0x28 init (expect #63-#66)
-          if (_rot >= 80 && _rot <= 95)
-            fprintf(stderr, "V2-165aa-OUT[%d]: 92F7=%04X 92F9=%04X 92FB=%04X\n", _rot,
-              *(uint16_t*)(shadow+DS_PAGE_DRAW), *(uint16_t*)(shadow+DS_PAGE_SHOWN), *(uint16_t*)(shadow+DS_PAGE_BG));
-        }
-        *(uint16_t*)(shadow + DS_PAGE_DRAW) = ax;
+        uint16_t ax = *(uint16_t*)(shadow + DS_PAGE_SHOWN);   // 0x65aa
+        *(uint16_t*)(shadow + DS_PAGE_DRAW) = ax;             // 0x65ad
         uint16_t dx = *(uint16_t*)(shadow + DS_PAGE_BG);
         uint16_t si = (*(uint16_t*)(shadow + DS_VIEWPORT_Y) & 0xFFF8) >> 2;
 
@@ -9561,6 +9534,149 @@ static void v2_page_rotate_165aa(uint8_t* shadow) {
         // Do NOT clear it here — it must persist until sub_1DD9C reads it.
 }
 
+// sub_1406d (seg000 eips 0x406d..0x4198): animation queue processing — dirty
+// tile quadrant redraw. Queue at ds:0x8734 (count, entries of 3 words indexed
+// via bx=cx*2 into the [bx-0x78CA/C8/C6] staging arrays written by 13fc2).
+// Per entry: stage ds:6C/6E, viewport clip mask (dx quadrant bits), mutate
+// 6C/6E, then a 2x2 tile quad render per page pass (92F9 then 92FB).
+// LOOP SHAPE (divergence #37, #29 class): after the JCXZ zero-gate the body
+// is entered by FALL-THROUGH (loc_14078 SUB cx,3 straight into loc_1407b) —
+// the first entry runs even when count-3 wrapped negative; the bottom test
+// is SUB cx,3 / JNS.
+static void v2_anim_queue_1406d(uint8_t* shadow) {
+    uint16_t count = *(uint16_t*)(shadow + DS_COUNTER_8734);   // 0x406d cx=[8734]
+    if (count == 0) return;                                    // 0x4071 JCXZ
+    int16_t cx = (int16_t)(count - 3);                         // loc_14078 SUB cx,3
+    do {
+        uint16_t bx = (uint16_t)cx * 2;                        // loc_1407b MOV/SHL
+        do {   // single-pass block: break == orig JMP loc_14191
+            uint16_t pos_x = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78C8));  // 0x4083
+            uint16_t pos_y = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78C6));  // 0x408a
+            *(uint16_t*)(shadow + DS_TEXT_COL) = pos_x;                       // 0x4087
+            *(uint16_t*)(shadow + DS_TEXT_ROW) = pos_y;                       // 0x408e
+            // Viewport X bounds (0x4097-0x40A1): (pos_x - vp_x + 0x10) JA 0x160 → skip.
+            uint16_t ax_x = (uint16_t)(pos_x - *(uint16_t*)(shadow + DS_VIEWPORT_X) + 0x10);
+            if (ax_x > 0x160) break;
+            // Quadrant clip mask (orig dx, 0x40A2-0x40D3): 8=UL 4=UR 2=LL 1=LR.
+            uint16_t clip = 0;
+            if (ax_x < 8)      clip |= 0x0A;                   // 0x40a5 JNC / OR dx,0Ah
+            if (ax_x > 0x158)  clip |= 0x05;                   // 0x40ad JBE / OR dx,5
+            // Viewport Y bounds (0x40B8-0x40C2): JA 0xD0 → skip.
+            uint16_t ax_y = (uint16_t)(pos_y - *(uint16_t*)(shadow + DS_VIEWPORT_Y) + 0x10);
+            if (ax_y > 0xD0) break;
+            if (ax_y < 8)      clip |= 0x0C;                   // 0x40c6 JNC / OR dx,0Ch
+            if (ax_y > 0xC8)   clip |= 0x03;                   // 0x40ce JBE / OR dx,3
+            // Mutate ds:0x6C/0x6E (0x40D6-0x40E0, after the bound checks).
+            *(uint16_t*)(shadow + DS_TEXT_COL) = (pos_x >> 2) + 8;
+            *(uint16_t*)(shadow + DS_TEXT_ROW) = pos_y >> 2;
+            // shadow-VGA: exact orig 2×2 quadrant renders, TWO passes
+            // (page 92F9 then 92FB) — seg000 eips 0x40E5..0x418E.
+            {
+                uint16_t bp_fs = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78CA)); // 0x407f
+                uint16_t stride = *(uint16_t*)(shadow + DS_FS_PAGE_STRIDE);
+                uint16_t col6C = *(uint16_t*)(shadow + DS_TEXT_COL);
+                uint16_t row6E = *(uint16_t*)(shadow + DS_TEXT_ROW);
+                static const uint16_t pg_roles[2] = { DS_PAGE_SHOWN, DS_PAGE_BG };
+                for (int pass = 0; pass < 2; pass++) {
+                    uint16_t dip = (uint16_t)(row6E + *(uint16_t*)(shadow + pg_roles[pass]));
+                    dip = *(uint16_t*)(shadow + (uint16_t)(dip - 0x7608));
+                    dip = (uint16_t)(dip + col6C);
+                    uint16_t bp2 = (uint16_t)(bp_fs - stride);
+                    auto rd_fs = [&](uint16_t off) -> uint16_t {
+                        uint16_t mo = (uint16_t)(bp2 + off);
+                        return (mo < V2_FS_SHADOW_SIZE - 1)
+                             ? *(uint16_t*)(v2_vm_shadow_fs + mo) : 0;
+                    };
+                    if (!(clip & 8)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
+                    dip = (uint16_t)(dip + 2);
+                    if (!(clip & 4)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
+                    dip = (uint16_t)(dip + 0x2AE);
+                    bp2 = (uint16_t)(bp2 + stride);
+                    if (!(clip & 2)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
+                    dip = (uint16_t)(dip + 2);
+                    if (!(clip & 1)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
+                }
+            }
+        } while (0);
+        cx -= 3;                                               // loc_14191 SUB cx,3
+    } while (!((uint16_t)cx & 0x8000));                        // 0x4194 JNS loc_1407b
+}
+
+// sub_166e8 (seg000 eips 0x66e8..0x670f): mark active non-prio sprites dirty
+// when their X is right of the viewport left edge (fresh column scrolled in).
+// Descending slot walk di=0xFE..0 (SUB di,2 / JNS).
+static void v2_mark_dirty_left_166e8(uint8_t* s) {
+    uint16_t dx_vp = *(uint16_t*)(s + DS_VIEWPORT_X);                 // 0x66eb dx=[44]
+    for (int16_t di = 0xFE; di >= 0; di -= 2) {                       // 0x66e8 / 0x670a
+        if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;   // 0x66ef
+        if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;      // 0x66f7
+        if ((int16_t)dx_vp >= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X)) continue; // 0x66ff JGE
+        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x6705 byte
+    }
+}
+// sub_16710 (eips 0x6710..0x673b): same, X right of viewport+0x121 (JLE skip).
+static void v2_mark_dirty_right_16710(uint8_t* s) {
+    uint16_t dx_vp = *(uint16_t*)(s + DS_VIEWPORT_X) + 0x121;         // 0x6713/0x6717
+    for (int16_t di = 0xFE; di >= 0; di -= 2) {
+        if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
+        if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
+        if ((int16_t)dx_vp <= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y - 0x100)) continue; // 0x672b JLE, [di+64D]
+        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x6731
+    }
+}
+// loc_16694 / loc_166bc (Y twins inside sub_16661): viewport_Y and
+// viewport_Y+0x91 against [di+74D].
+static void v2_mark_dirty_top_16694(uint8_t* s) {
+    uint16_t dx_vp = *(uint16_t*)(s + DS_VIEWPORT_Y);                 // 0x6697 dx=[46]
+    for (int16_t di = 0xFE; di >= 0; di -= 2) {
+        if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
+        if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
+        if ((int16_t)dx_vp >= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y)) continue; // 0x66ab JGE
+        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x66b1
+    }
+}
+static void v2_mark_dirty_bottom_166bc(uint8_t* s) {
+    uint16_t dx_vp = *(uint16_t*)(s + DS_VIEWPORT_Y) + 0x91;          // 0x66bf/0x66c3
+    for (int16_t di = 0xFE; di >= 0; di -= 2) {
+        if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
+        if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
+        if ((int16_t)dx_vp <= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y)) continue; // 0x66db JLE
+        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x66dd
+    }
+}
+
+// sub_16661 (eips 0x6661..0x66e7): scroll-change tile bands + sprite dirty
+// marks. Axis 1: [257F] vs [92EF] — JL: 16e75+166e8, JG: 16f5f+16710.
+// Axis 2: [2581] vs [92F1] — JZ: RETN, JL: 17049+loc_16694, JG: 170b9+loc_166bc.
+static void v2_scroll_tracker_16661(uint8_t* shadow) {
+    uint16_t ax_y = *(uint16_t*)(shadow + DS_SCROLL_COL);             // 0x6661
+    uint16_t cx_y = *(uint16_t*)(shadow + DS_SCROLL_DISP_X);          // 0x6664
+    if (ax_y != cx_y) {                                               // 0x666a JZ
+        if ((int16_t)ax_y < (int16_t)cx_y) {                          // 0x666c JG
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16E75 f%d\n", v2_dbg_pre_vm_iter);} }
+            v2_vga_scroll_col_left_16e75(shadow);      // 0x666e CALL sub_16E75
+            v2_mark_dirty_left_166e8(shadow);          // 0x6671 CALL sub_166E8
+        } else {
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16F5F f%d\n", v2_dbg_pre_vm_iter);} }
+            v2_vga_scroll_col_right_16f5f(shadow);     // 0x6676 CALL sub_16F5F
+            v2_mark_dirty_right_16710(shadow);         // 0x6679 CALL sub_16710
+        }
+    }
+    uint16_t ax_x = *(uint16_t*)(shadow + DS_SCROLL_ROW);             // loc_1667c
+    uint16_t cx_x = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y);          // 0x667f
+    if (ax_x != cx_x) {                                               // 0x6685 JZ -> RETN
+        if ((int16_t)ax_x < (int16_t)cx_x) {                          // 0x6687 JG
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V17049 f%d\n", v2_dbg_pre_vm_iter);} }
+            v2_vga_scroll_row_top_17049(shadow);       // 0x6689 CALL sub_17049
+            v2_mark_dirty_top_16694(shadow);           // loc_16694 tail
+        } else {
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V170B9 f%d\n", v2_dbg_pre_vm_iter);} }
+            v2_vga_scroll_row_bottom_170b9(shadow);    // 0x668e CALL sub_170B9
+            v2_mark_dirty_bottom_166bc(shadow);        // loc_166bc tail
+        }
+    }
+}
+
 // Post-RENDER game loop — runs AFTER render (eip 0x0056..0x005C).
 // sub_165aa, sub_16661, sub_1406d.
 static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
@@ -9568,137 +9684,12 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
     // orig block 8 (render3, eips 0xBB-0xD8) calls only sub_165aa+sub_16661 (no
     // sub_1406d). Pass false from v2_phase_render3 to match orig block 8 exactly.
     v2_page_rotate_165aa(shadow);
+    v2_scroll_tracker_16661(shadow);                   // CALL sub_16661 (extracted, unit 149)
 
-    // sub_16661: object create/destroy based on scroll position.
-    // Compares scroll tracking (ds:0x92EF/0x92F1) with current scroll (ds:0x257F/0x2581).
-    // When scroll changes: create new objects entering viewport, destroy those leaving.
-    {
-        uint16_t ax_y = *(uint16_t*)(shadow + DS_SCROLL_COL);
-        uint16_t cx_y = *(uint16_t*)(shadow + DS_SCROLL_DISP_X);
-        if (ax_y != cx_y) {
-            if ((int16_t)ax_y < (int16_t)cx_y) {
-                // Scrolled up: sub_16e75 (VGA tile row render) + sub_166e8 (dirty mark)
-                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16E75 f%d\n", v2_dbg_pre_vm_iter);} }
-                v2_vga_scroll_col_left_16e75(shadow);   // CALL sub_16E75 (extracted, unit 137)
-                // sub_166e8: mark sprites dirty if X < viewport_X
-                uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_X);
-                for (int16_t di = 0xFE; di >= 0; di -= 2) {
-                    if (!(*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
-                    if (*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
-                    if ((int16_t)dx_vp >= (int16_t)*(uint16_t*)(shadow + di + OBJ_SPRITE_X)) continue;
-                    shadow[di + OBJ_DIRTY_MODE] = 2;
-                }
-            } else {
-                // Scrolled down: sub_16f5f (VGA scroll tile render) + sub_16710 (dirty mark)
-                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16F5F f%d\n", v2_dbg_pre_vm_iter);} }
-                v2_vga_scroll_col_right_16f5f(shadow);  // CALL sub_16F5F (extracted, unit 138)
-                // sub_16710: mark sprites dirty if X > viewport_X + 0x121
-                uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_X) + 0x121;
-                for (int16_t di = 0xFE; di >= 0; di -= 2) {
-                    if (!(*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
-                    if (*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
-                    if ((int16_t)dx_vp <= (int16_t)*(uint16_t*)(shadow + di + OBJ_SPRITE_X)) continue;
-                    shadow[di + OBJ_DIRTY_MODE] = 2;
-                }
-            }
-        }
-
-        uint16_t ax_x = *(uint16_t*)(shadow + DS_SCROLL_ROW);
-        uint16_t cx_x = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y);
-        if (ax_x != cx_x) {
-            if ((int16_t)ax_x < (int16_t)cx_x) {
-                // Scrolled left: sub_17049 (VGA scroll tile render) + loc_16694 (dirty mark)
-                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V17049 f%d\n", v2_dbg_pre_vm_iter);} }
-                v2_vga_scroll_row_top_17049(shadow);    // CALL sub_17049 (extracted, unit 139)
-                // loc_16694: mark sprites dirty if Y < viewport_Y
-                uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_Y);
-                for (int16_t di = 0xFE; di >= 0; di -= 2) {
-                    if (!(*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
-                    if (*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
-                    if ((int16_t)dx_vp >= (int16_t)*(uint16_t*)(shadow + di + OBJ_SPRITE_Y)) continue;
-                    shadow[di + OBJ_DIRTY_MODE] = 2;
-                }
-            } else {
-                // Scrolled right: sub_170b9 (VGA scroll tile render) + loc_166bc (dirty mark)
-                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V170B9 f%d\n", v2_dbg_pre_vm_iter);} }
-                v2_vga_scroll_row_bottom_170b9(shadow); // CALL sub_170B9 (extracted, unit 140)
-                // loc_166bc: mark sprites dirty if Y > viewport_Y + 0x91
-                uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_Y) + 0x91;
-                for (int16_t di = 0xFE; di >= 0; di -= 2) {
-                    if (!(*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
-                    if (*(uint16_t*)(shadow + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
-                    if ((int16_t)dx_vp <= (int16_t)*(uint16_t*)(shadow + di + OBJ_SPRITE_Y)) continue;
-                    shadow[di + OBJ_DIRTY_MODE] = 2;
-                }
-            }
-        }
-    }
-
-    // sub_1406d: animation queue processing — VGA tile rendering for queued updates.
-    // Iterates queue at ds:0x8734 (count, step 3). For each entry:
-    //   Reads position from ds:[bx-0x78CA/C8/C6] lookup table.
-    //   Writes ds:0x6C = pos_x, ds:0x6E = pos_y, then mutates if in viewport:
-    //     ds:0x6C >>= 2, ds:0x6C += 8, ds:0x6E >>= 2 (eips 0x40D6/40DB/40E0).
-    //   Calls sub_1689e for visible tile quadrants — rendering is no-op in v2.
+    // sub_1406d: animation queue processing (extracted, unit 151).
     // SKIP if include_anim_queue=false (orig block 8 doesn't call sub_1406d).
     if (!include_anim_queue) return;
-    // VGA rendering omitted (v2 renders tiles separately). DS scratch writes preserved.
-    {
-        uint16_t count = *(uint16_t*)(shadow + DS_COUNTER_8734);
-        if (count != 0) {
-            // Process queue entries (cx from count-3 down to 0, step -3)
-            for (int16_t cx = (int16_t)count - 3; cx >= 0; cx -= 3) {
-                uint16_t bx = (uint16_t)cx * 2;
-                uint16_t pos_x = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78C8));
-                uint16_t pos_y = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78C6));
-                *(uint16_t*)(shadow + DS_TEXT_COL) = pos_x;
-                *(uint16_t*)(shadow + DS_TEXT_ROW) = pos_y;
-                // Viewport X bounds (eip 0x4097-0x40A1): if (pos_x - vp_x + 0x10) > 0x160 → skip.
-                uint16_t ax_x = (uint16_t)(pos_x - *(uint16_t*)(shadow + DS_VIEWPORT_X) + 0x10);
-                if (ax_x > 0x160) continue;
-                // Quadrant clip mask (orig dx, eips 0x40A2-0x40D3): 8=UL 4=UR 2=LL 1=LR.
-                uint16_t clip = 0;
-                if (ax_x < 8)      clip |= 0x0A;
-                if (ax_x > 0x158)  clip |= 0x05;
-                // Viewport Y bounds (eip 0x40B8-0x40C2): if (pos_y - vp_y + 0x10) > 0xD0 → skip.
-                uint16_t ax_y = (uint16_t)(pos_y - *(uint16_t*)(shadow + DS_VIEWPORT_Y) + 0x10);
-                if (ax_y > 0xD0) continue;
-                if (ax_y < 8)      clip |= 0x0C;
-                if (ax_y > 0xC8)   clip |= 0x03;
-                // Mutate ds:0x6C/0x6E per orig eip 0x40D6-0x40E0 (after bound check).
-                *(uint16_t*)(shadow + DS_TEXT_COL) = (pos_x >> 2) + 8;
-                *(uint16_t*)(shadow + DS_TEXT_ROW) = pos_y >> 2;
-                // shadow-VGA: exact orig 2×2 quadrant renders into the shadow VGA,
-                // TWO passes (page 92F9 then 92FB) — seg000 eips 0x40E5..0x418E.
-                {
-                    uint16_t bp_fs = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78CA));
-                    uint16_t stride = *(uint16_t*)(shadow + DS_FS_PAGE_STRIDE);
-                    uint16_t col6C = *(uint16_t*)(shadow + DS_TEXT_COL);
-                    uint16_t row6E = *(uint16_t*)(shadow + DS_TEXT_ROW);
-                    static const uint16_t pg_roles[2] = { DS_PAGE_SHOWN, DS_PAGE_BG };
-                    for (int pass = 0; pass < 2; pass++) {
-                        uint16_t dip = (uint16_t)(row6E + *(uint16_t*)(shadow + pg_roles[pass]));
-                        dip = *(uint16_t*)(shadow + (uint16_t)(dip - 0x7608));
-                        dip = (uint16_t)(dip + col6C);
-                        uint16_t bp2 = (uint16_t)(bp_fs - stride);
-                        auto rd_fs = [&](uint16_t off) -> uint16_t {
-                            uint16_t mo = (uint16_t)(bp2 + off);
-                            return (mo < V2_FS_SHADOW_SIZE - 1)
-                                 ? *(uint16_t*)(v2_vm_shadow_fs + mo) : 0;
-                        };
-                        if (!(clip & 8)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
-                        dip = (uint16_t)(dip + 2);
-                        if (!(clip & 4)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
-                        dip = (uint16_t)(dip + 0x2AE);
-                        bp2 = (uint16_t)(bp2 + stride);
-                        if (!(clip & 2)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
-                        dip = (uint16_t)(dip + 2);
-                        if (!(clip & 1)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
-                    }
-                }
-            }
-        }
-    }
+    v2_anim_queue_1406d(shadow);                       // CALL sub_1406D
 }
 
 // Per-frame update: PERSISTENT shadow — NO memcpy from real DS.
@@ -12380,6 +12371,68 @@ extern "C" void v2_fntest_call_sub_13a14(uint8_t* test_shadow) {
 }
 extern "C" void v2_fntest_call_sub_13a34(uint8_t* test_shadow) {
     v2_scroll_spawn_down_13a34(test_shadow);
+}
+// Units 142-145: sub_141f7/sub_141fb/sub_141ff/sub_14203 — VM PC bumps
+// (ADD bx,N; RETN). The v2 mirrors are the `vm.pc += N` lines inside the
+// op handlers; the unit checks the constant against the oracle's BX delta.
+// Unit 146: sub_165aa — page-role rotate + loc_1664f change hook.
+static void v2_page_rotate_165aa(uint8_t* shadow);
+extern "C" void v2_fntest_call_sub_165aa(uint8_t* test_shadow) {
+    v2_page_rotate_165aa(test_shadow);
+}
+// Units 147-150: sub_166e8 / sub_16710 (sprite dirty marks), sub_16661
+// (scroll tracker aggregate), sub_1673c (spawn tracker aggregate).
+static void v2_mark_dirty_left_166e8(uint8_t* s);
+static void v2_mark_dirty_right_16710(uint8_t* s);
+static void v2_scroll_tracker_16661(uint8_t* shadow);
+static void v2_scroll_spawn_tracker_1673c(uint8_t* s);
+extern "C" void v2_fntest_call_sub_166e8(uint8_t* test_shadow) {
+    v2_mark_dirty_left_166e8(test_shadow);
+}
+extern "C" void v2_fntest_call_sub_16710(uint8_t* test_shadow) {
+    v2_mark_dirty_right_16710(test_shadow);
+}
+extern "C" void v2_fntest_call_sub_16661(uint8_t* test_shadow) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;   // band tilegfx resolve
+    v2_scroll_tracker_16661(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+}
+// Unit 151: sub_1406d — animation queue quadrant redraw.
+static void v2_anim_queue_1406d(uint8_t* shadow);
+extern "C" void v2_fntest_call_sub_1406d(uint8_t* test_shadow) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;   // 1689e tilegfx resolve
+    v2_anim_queue_1406d(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+}
+extern "C" void v2_fntest_call_sub_1673c(uint8_t* test_shadow) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;   // 13809 template resolve
+    v2_scroll_spawn_tracker_1673c(test_shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+}
+// Unit 141: sub_13ae0 (visible spawn entry) — direct unit for the former
+// transitive (13d68/13dd6/13e15 already have direct units 4-6).
+static bool v2_spawn_visible_entry_13ae0(uint8_t* s, uint16_t si_idx, uint16_t di_off);
+extern "C" int v2_fntest_call_sub_13ae0(uint8_t* test_shadow, uint16_t si, uint16_t di) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;   // 13809 -> 13e52 template resolve
+    int cf = v2_spawn_visible_entry_13ae0(test_shadow, si, di) ? 1 : 0;
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+    return cf;
 }
 // Unit 126: sub_13bbd — spawn one permanent spawn-table entry.
 static bool v2_spawn_permanent_entry_13bbd(uint8_t* s, uint16_t si, uint16_t di);
