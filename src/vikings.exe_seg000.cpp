@@ -147,6 +147,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 71: return (void*)&sub_116ae;   // file: anim chunk loads via dword_2B359 + sub_10e85 (di)
     case 72: return (void*)&sub_11b0b;   // portrait/sound sync + render (needs drawinfo)
     case 73: return (void*)&sub_10813;   // viking blink (JMP loc_107A2 tail)
+    case 74: return (void*)&sub_15cef;   // X bbox probe (X_start entry)
+    case 75: return (void*)&sub_15cf5;   // X bbox probe (X_end entry)
     default: return 0;
     }
 }

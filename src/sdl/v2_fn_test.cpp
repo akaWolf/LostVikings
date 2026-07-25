@@ -106,6 +106,8 @@ extern "C" void     v2_fntest_call_sub_10e99(uint8_t* test_shadow);
 extern "C" void     v2_fntest_call_sub_11c52(uint8_t* test_shadow);
 extern "C" int      v2_fntest_call_sub_15d3c(uint8_t* test_shadow, uint16_t si, uint16_t di);
 extern "C" int      v2_fntest_call_sub_15d42(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" int      v2_fntest_call_sub_15cef(uint8_t* test_shadow, uint16_t si, uint16_t di);
+extern "C" int      v2_fntest_call_sub_15cf5(uint8_t* test_shadow, uint16_t si, uint16_t di);
 extern "C" int      v2_fntest_call_search(uint8_t* test_shadow, int which,
                                           uint16_t filter, uint16_t obj);
 extern "C" int32_t  v2_fntest_call_scan(uint8_t* test_shadow, int which,
@@ -180,6 +182,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_112AE = 68, FT_SUB_12D2C = 69,
             FT_SUB_1167A = 70, FT_SUB_116AE = 71, FT_SUB_11B0B = 72,
             FT_SUB_10813 = 73,
+            FT_SUB_15CEF = 74, FT_SUB_15CF5 = 75,
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -219,7 +222,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_173c7", "sub_14207",
                                  "sub_112ae", "sub_12d2c",
                                  "sub_1167a", "sub_116ae", "sub_11b0b",
-                                 "sub_10813" };
+                                 "sub_10813",
+                                 "sub_15cef", "sub_15cf5" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -3857,6 +3861,125 @@ int ft_selftest_bbox2(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---- Units 75-76: sub_15cef / sub_15cf5 (X bbox probe, Y-vel adjust) ------
+// The bbox check of the sub_15c37 X-vel search. Entry ax = self.X_start
+// (sub_15cef) / self.X_end (sub_15cf5), shared tail loc_15cf9. CF via
+// regs[7]; ds:0x32 = Y-adj scratch written ONLY after both X gates pass
+// (0xBBBB canary — the full-DS diff checks both value and written-at-all).
+int ft_selftest_bbox_vel(FtId id, uint32_t seed) {
+    FtSynthStats grid, exh, fuzz;
+    long diff_budget = 24;
+    uint16_t di = 2, si = 4;
+    // X spans {self.X0, self.X1, cand.X0, cand.X1}: JL edge, entry==cand.X1
+    // (the DEC edge), JGE edge, ax=0 (DEC wraps to 0xFFFF), sign borders.
+    static const uint16_t PX[][4] = {
+        { 0x0100, 0x0110, 0x0100, 0x0110 },   // identical spans
+        { 0x0100, 0x0110, 0x0110, 0x0120 },   // entry below cand.X0 (JL edge)
+        { 0x0110, 0x0120, 0x0100, 0x0110 },   // entry == cand.X1 (DEC edge hits)
+        { 0x0111, 0x0121, 0x0100, 0x0110 },   // entry-1 == cand.X1 (JGE edge)
+        { 0x0000, 0x0000, 0x0000, 0x0001 },   // ax=0 → DEC wraps to 0xFFFF
+        { 0x7FFF, 0x8001, 0x7FF0, 0x8010 },   // sign borders
+        { 0xFFF0, 0x0010, 0xFFF8, 0x0008 },   // wrap-looking values
+    };
+    // Y/vel sets {self.Y0, self.Y1, self.vel, cand.Y0, cand.Y1, cand.vel}:
+    // vel=0 overlap/touch/miss, ± velocity shifts, SUB-wrap (0x8000-0x7FFF
+    // class), adjusted values crossing the sign border.
+    static const uint16_t PY[][6] = {
+        { 0x0100, 0x0110, 0x0000, 0x0100, 0x0110, 0x0000 },
+        { 0x0100, 0x0110, 0x0000, 0x0110, 0x0120, 0x0000 },
+        { 0x0100, 0x0110, 0x0000, 0x0111, 0x0120, 0x0000 },
+        { 0x0100, 0x0110, 0x0010, 0x0100, 0x0110, 0xFFF0 },
+        { 0x8000, 0x8010, 0x7FFF, 0x0100, 0x0110, 0x0000 },
+        { 0x0100, 0x0110, 0x0000, 0x8000, 0x8010, 0x7FFF },
+        { 0x7FFF, 0x7FFF, 0xFFFF, 0x8000, 0x8000, 0x0001 },
+    };
+    for (auto& px : PX) for (auto& py : PY) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x0032, 0xBBBB);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), px[0]);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), px[1]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X0), px[2]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X1), px[3]);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), py[0]);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), py[1]);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y),   py[2]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y0), py[3]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y1), py[4]);
+        ft_wr16(g_synth_in, (uint16_t)(si + OBJ_VEL_Y),   py[5]);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = (id == FT_SUB_15CEF)
+                 ? v2_fntest_call_sub_15cef(g_scratch, si, di)
+                 : v2_fntest_call_sub_15cf5(g_scratch, si, di);
+        FtRegs in{}; in.si = si; in.di = di;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, "grid", grid, diff_budget);
+    }
+    // Exhaustive 1: the entry-X axis over all 65536 values (both X fields set
+    // to the axis value — only one is read per twin), cand span mid-range,
+    // passing Y context. Covers every JL/DEC/JGE decision point bit-exactly.
+    // Exhaustive 2: the self Y-velocity axis over all 65536 values with the
+    // X gates passing — sweeps both SUB-wrap adjust points through JL edges.
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t x = 0; x <= 0xFFFF; x++) {
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+            ft_wr16(g_synth_in, 0x0032, 0xBBBB);
+            if (pass == 0) {
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), (uint16_t)x);
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), (uint16_t)x);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X0), 0x0100);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X1), 0x0110);
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), 0x0100);
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), 0x0110);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y0), 0x0100);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y1), 0x0110);
+            } else {
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), 0x0105);
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), 0x0105);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X0), 0x0100);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_X1), 0x0110);
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), 0x0100);
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), 0x0110);
+                ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y), (uint16_t)x);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y0), 0x0100);
+                ft_wr16(g_synth_in, (uint16_t)(si + OBJ_BBOX_Y1), 0x0110);
+            }
+            ft_fill_tail(g_synth_in);
+            memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+            int cf = (id == FT_SUB_15CEF)
+                     ? v2_fntest_call_sub_15cef(g_scratch, si, di)
+                     : v2_fntest_call_sub_15cf5(g_scratch, si, di);
+            FtRegs in{}; in.si = si; in.di = di;
+            ft_synth_case_regs(id, in, (uint16_t)cf, 7, "exh", exh, diff_budget);
+        }
+    }
+    FtRng rng(seed);
+    for (int i = 0; i < 20000; i++) {
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x0032, 0xBBBB);
+        uint16_t d2 = (uint16_t)((rng.next() % 20) * 2);
+        uint16_t s2 = (uint16_t)((rng.next() % 20) * 2);
+        static const uint16_t BASES[5] = { OBJ_BBOX_X0, OBJ_BBOX_X1,
+                                           OBJ_BBOX_Y0, OBJ_BBOX_Y1, OBJ_VEL_Y };
+        for (int b = 0; b < 5; b++) {
+            ft_wr16(g_synth_in, (uint16_t)(d2 + BASES[b]), rng.w());
+            ft_wr16(g_synth_in, (uint16_t)(s2 + BASES[b]), rng.w());
+        }
+        ft_fill_tail(g_synth_in);
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        int cf = (id == FT_SUB_15CEF)
+                 ? v2_fntest_call_sub_15cef(g_scratch, s2, d2)
+                 : v2_fntest_call_sub_15cf5(g_scratch, s2, d2);
+        FtRegs in{}; in.si = s2; in.di = d2;
+        ft_synth_case_regs(id, in, (uint16_t)cf, 7, "fuzz", fuzz, diff_budget);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, exh %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, exh.pass, exh.cases, fuzz.pass, fuzz.cases,
+        grid.cases + exh.cases + fuzz.cases, grid.fail + exh.fail + fuzz.fail,
+        (grid.fail + exh.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + exh.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -4957,6 +5080,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_116ae")) { matched = true; rc |= ft_selftest_seg_loader(1); }
     if (all || strstr(env, "sub_11b0b")) { matched = true; rc |= ft_selftest_sub_11b0b(0); }
     if (all || strstr(env, "sub_10813")) { matched = true; rc |= ft_selftest_sub_10813(0); }
+    if (all || strstr(env, "sub_15cef")) { matched = true; rc |= ft_selftest_bbox_vel(FT_SUB_15CEF, 0x15CEF001u); }
+    if (all || strstr(env, "sub_15cf5")) { matched = true; rc |= ft_selftest_bbox_vel(FT_SUB_15CF5, 0x15CF5001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

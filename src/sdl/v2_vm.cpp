@@ -12080,6 +12080,23 @@ extern "C" int v2_fntest_call_sub_15d42(uint8_t* test_shadow, uint16_t si, uint1
     vm.obj = di;
     return v2_y_overlap_end_15d42(vm, si, di) ? 1 : 0;
 }
+// Units 75-76: sub_15cef / sub_15cf5 — X bbox probe with Y-velocity
+// adjustment (bbox check of the sub_15c37 X-vel search). CF + ds:0x32.
+static bool v2_x_bbox_vel_15cef(V2VM& vm, uint16_t si, uint16_t di, bool use_x1);
+extern "C" int v2_fntest_call_sub_15cef(uint8_t* test_shadow, uint16_t si, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    return v2_x_bbox_vel_15cef(vm, si, di, /*use_x1=*/false) ? 1 : 0;
+}
+extern "C" int v2_fntest_call_sub_15cf5(uint8_t* test_shadow, uint16_t si, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow;
+    vm.shadow = test_shadow;
+    vm.obj = di;
+    return v2_x_bbox_vel_15cef(vm, si, di, /*use_x1=*/true) ? 1 : 0;
+}
 // K2b units (48-53): spawn-table parsers, glyph writer, seg001 text config.
 extern "C" uint16_t v2_fntest_call_sub_11383(uint8_t* test_shadow) { return v2_spawn_table_end_11383(test_shadow); }
 extern "C" uint16_t v2_fntest_call_sub_1133a(uint8_t* test_shadow, uint16_t di) { return v2_hud_init_1133a(test_shadow, di); }
@@ -16110,6 +16127,37 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     return false;  // CLC
 }
 
+// sub_15cef / sub_15cf5 (seg000 eips 0x5CEF..0x5D3B): X bbox probe with
+// Y-velocity adjustment — the bbox check of the sub_15c37 X-vel search.
+// Entry ax = self.X_start (sub_15cef) or self.X_end (sub_15cf5); shared tail
+// loc_15cf9. DS write: ds:0x32 = Y-adj scratch, written ONLY after both X
+// gates pass (orig eips 0x5D0E / 0x5D27). Returns CF (STC = overlap).
+static bool v2_x_bbox_vel_15cef(V2VM& vm, uint16_t si, uint16_t di, bool use_x1) {
+    ObjRef self{vm, di};
+    ObjMem cand{vm.shadow, si};
+    // 0x5CEF: MOV ax,[di+1535] / 0x5CF5: MOV ax,[di+155D]
+    uint16_t ax_x = use_x1 ? self.u16(OBJ_BBOX_X1) : self.u16(OBJ_BBOX_X0);
+    // loc_15cf9: CMP ax,[si+1535]; JL → CLC (signed compare of operands)
+    if ((int16_t)ax_x < cand.bbox_x0()) return false;
+    // 0x5CFF: DEC ax (16-bit wrap); CMP ax,[si+155D]; JGE → CLC
+    if ((int16_t)(uint16_t)(ax_x - 1) >= cand.bbox_x1()) return false;
+    // 0x5D06..0x5D0E: ax = [si+14E5]-[si+196D]; ds:32 = ax
+    int16_t partner_ys_adj = (int16_t)(cand.bbox_y0() - cand.vel_y());
+    vm.ds_write(DS_MODE_WORD, (uint16_t)partner_ys_adj);
+    // 0x5D11..0x5D1D: ax = [di+150D]-[di+196D]; CMP ax,ds:32; JL → CLC
+    // (both operands are wrapped int16 results — signed compare is exact)
+    int16_t self_ye_adj = (int16_t)(self.bbox_y1() - self.vel_y());
+    if (self_ye_adj < partner_ys_adj) return false;
+    // 0x5D1F..0x5D27: ax = [di+14E5]-[di+196D]; ds:32 = ax
+    int16_t self_ys_adj = (int16_t)(self.bbox_y0() - self.vel_y());
+    vm.ds_write(DS_MODE_WORD, (uint16_t)self_ys_adj);
+    // 0x5D2A..0x5D36: ax = [si+150D]-[si+196D]; CMP ax,ds:32; JL → CLC
+    int16_t partner_ye_adj = (int16_t)(cand.bbox_y1() - cand.vel_y());
+    if (partner_ye_adj < self_ys_adj) return false;
+    // 0x5D38: STC
+    return true;
+}
+
 // sub_15c37 (seg000 0x5c37-0x5c92): X-velocity object search. si=filter, di=self.
 // Scans the object table for a type match, then branches on the X velocity
 // difference; sub_15cef/sub_15cf5 + loc_15cf9 do the bbox check. Returns CF;
@@ -16143,37 +16191,13 @@ static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t d
         int32_t vel_diff = (int32_t)self.vel_x() - (int32_t)cand.vel_x();
         if (vel_diff == 0) continue;
 
-        // sub_15cef (vel_diff < 0): ax = self.X_start
-        // sub_15cf5 (vel_diff > 0): ax = self.X_end
-        uint16_t ax_x;
-        int16_t snap_dir;
-        if (vel_diff < 0) {
-            ax_x = self.u16(OBJ_BBOX_X0); // sub_15cef
-            snap_dir = 1; // moved left
-        } else {
-            ax_x = self.u16(OBJ_BBOX_X1); // sub_15cf5
-            snap_dir = 0; // moved right
-        }
-
-        // loc_15cf9: X point in partner range?
-        if ((int16_t)ax_x < cand.bbox_x0()) continue;
-        if ((int16_t)(ax_x - 1) >= cand.bbox_x1()) continue;
-
-        // Y overlap with velocity adjustment:
-        // self.Y_end_adj >= partner.Y_start_adj?
-        int16_t partner_ys_adj = (int16_t)(cand.bbox_y0() - cand.vel_y());
-        vm.ds_write(DS_MODE_WORD, (uint16_t)partner_ys_adj); // orig eip 0x5D0E
-        int16_t self_ye_adj = (int16_t)(self.bbox_y1() - self.vel_y());
-        if (self_ye_adj < partner_ys_adj) continue;
-
-        // partner.Y_end_adj >= self.Y_start_adj?
-        int16_t self_ys_adj = (int16_t)(self.bbox_y0() - self.vel_y());
-        vm.ds_write(DS_MODE_WORD, (uint16_t)self_ys_adj);    // orig eip 0x5D27
-        int16_t partner_ye_adj = (int16_t)(cand.bbox_y1() - cand.vel_y());
-        if (partner_ye_adj < self_ys_adj) continue;
+        // sub_15cef (vel_diff < 0, snap dir 1 = moved left): ax = self.X_start
+        // sub_15cf5 (vel_diff > 0, snap dir 0 = moved right): ax = self.X_end
+        bool use_x1 = (vel_diff > 0);
+        if (!v2_x_bbox_vel_15cef(vm, si2, di, use_x1)) continue;
 
         // Collision found (orig MOV ax,dir; RETN with STC from loc_15cf9's carry path).
-        out_dir = snap_dir;
+        out_dir = use_x1 ? 0 : 1;
         out_partner = si2;
         return true;
     }
