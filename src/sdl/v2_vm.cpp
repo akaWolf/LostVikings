@@ -12317,6 +12317,52 @@ static int v2_fntest_coll_check_common(uint8_t* test_shadow, uint16_t pc, bool d
     v2_vm_acc_base = saved_acc;
     return out;
 }
+static bool v2_vm_collision_check_1584e(V2VM& vm);
+static bool v2_vm_collision_check_157eb(V2VM& vm);
+extern "C" int v2_fntest_call_sub_1584e(uint8_t* test_shadow, uint16_t pc) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_resolve_segment(0x4000 /*FT_VM_TESTSEG*/, test_shadow);
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = *(uint16_t*)(test_shadow + DS_CUR_OBJ);
+    vm.pc = pc; vm.running = true; vm.carry = false;
+    bool cf = v2_vm_collision_check_1584e(vm);
+    int out = ((int)vm.pc << 1) | (cf ? 1 : 0);
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+    return out;
+}
+extern "C" int v2_fntest_call_sub_157eb(uint8_t* test_shadow, uint16_t pc) {
+    v2_vm_init_table();
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int saved_soft = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_resolve_segment(0x4000 /*FT_VM_TESTSEG*/, test_shadow);
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = *(uint16_t*)(test_shadow + DS_CUR_OBJ);
+    vm.pc = pc; vm.running = true; vm.carry = false;
+    bool cf = v2_vm_collision_check_157eb(vm);
+    int out = ((int)vm.pc << 1) | (cf ? 1 : 0);
+    v2_replay_verify_active = saved_rv;
+    v2_fntest_vm_soft = saved_soft;
+    v2_vm_acc_base = saved_acc;
+    return out;
+}
 extern "C" int v2_fntest_call_sub_155d6(uint8_t* test_shadow, uint16_t pc) {
     return v2_fntest_coll_check_common(test_shadow, pc, true);
 }
