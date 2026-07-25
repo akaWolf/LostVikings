@@ -2690,10 +2690,6 @@ loc_1ddd2:
 cs=0xe25;eip=0x0015a2; 	T(MOV(bp, 7));	// 38021 mov     bp, 7 ;~ 0E25:15A2
 cs=0xe25;eip=0x0015a5; 	T(AND(bp, *(dw*)(raddr(ds,di+0x44D))));	// 38022 and     bp, [di+44Dh] ;~ 0E25:15A5
 cs=0xe25;eip=0x0015a9; 	T(SHL(bp, 1));	// 38023 shl     bp, 1 ;~ 0E25:15A9
-{ static bool _dumped=false; if(!_dumped) { _dumped=true;
-  fprintf(stderr,"ORIG-DISPATCH-TABLE:");
-  for(int t=0;t<8;t++) fprintf(stderr," [%d]=%04X",t,*(uint16_t*)raddr(cs,t*2+0x15CB));
-  fprintf(stderr,"\n"); } }
 cs=0xe25;eip=0x0015ab; 	J(CALL(__dispatch_call,*(dw*)(raddr(cs,bp+0x15CB))));	// 38024 call    word ptr cs:[bp+15CBh] ;~ 0E25:15AB
 cs=0xe25;eip=0x0015b0; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x64D))));	// 38025 mov     ax, [di+64Dh] ;~ 0E25:15B0
 cs=0xe25;eip=0x0015b4; 	X(MOV(*(dw*)(raddr(ds,di+0x0D4D)), ax));	// 38026 mov     [di+0D4Dh], ax ;~ 0E25:15B4

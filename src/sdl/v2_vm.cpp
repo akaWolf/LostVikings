@@ -594,18 +594,8 @@ struct myDrawInfoS_a2_fwd {  // forward layout for myDrawInfo access
 extern struct myDrawInfoS_a2_fwd* myDrawInfo;
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 extern "C" int v2_fetch_orig_page(uint8_t* out, uint32_t count);
-extern "C" void v2_emu_ring_dump(void);
-extern "C" void v2_emu_df6a(uint16_t ds_val);
-extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_y, uint16_t clip);
-extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val);
-extern "C" void v2_emu_op13_text_menu(uint16_t ds_val, const uint8_t* hud64);
-extern "C" void v2_glyphs_to_shown_page(uint16_t ds_val);
-// #39: set by v2_glyph_flush_1E0C7 when a full glyph pass ran this sub-frame;
-// consumed by v2_emu_late_end (the orig 1E0C7 moment: after 1DD9C, before flip).
-bool v2_glyph_flush_painted = false;
-extern "C" void v2_emu_init_pages(uint16_t ds_val);
-extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage);
-extern "C" uint16_t v2_dd9c_pixel_ds;   // armed page-cascade DS (0xFFFF = off)
+extern "C" int v2_vga_parity_check(const uint8_t* real_drawbuffer, int log_limit);
+extern "C" int v2_vga_fetch_page(uint8_t* out, uint32_t count);
 #ifdef V2_ONLY
 // fn-test infrastructure lives in v2_fn_test.cpp + the m2c seg files, which
 // are not part of the V2_ONLY build. The referencing paths are all gated by
@@ -671,57 +661,33 @@ void v2_verify_render_buf(int frame) {
     static uint8_t orig_unfold[320 * 176];
     if (!v2_fetch_orig_page(orig_unfold, sizeof(orig_unfold))) return;
     const uint8_t* orig_pixels = orig_unfold;
-    // Page emulator (task #21): compare the orig work page against the emu
-    // work page of the same rotation slot — the byte-exact model of the DOS
-    // page channel. v2_render_buf stays the clean display frame.
-    // 3-page model: compare against the SHOWN page role [92F9] — the page the
-    // orig sub-frame-3 CRTC start points at (sub_16775 adds ds:92F9 into the
-    // y_high lookup); v2_emu_shown assembles the anchored window.
-    const uint8_t* v2_frame = v2_emu_valid ? v2_emu_shown(v2_current_ds_val) : v2_render_buf;
-
-    // Letter-band parity probe (task #21): per-frame checksums of the traced
-    // object's 32-row band on the orig shown snapshot vs the emu pages.
-    if (v2_objtrace_di != 0xFFFF && v2_vm_get_shadow_ds()) {
-        static int _bp = 0;
-        uint8_t* _shd = v2_vm_get_shadow_ds();
-        int16_t oy_w = *(int16_t*)(_shd + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_Y));
-        // Screen-space band top: world − effective viewport (vp+shake clamp).
-        int oy;
-        {
-            int16_t vy = *(int16_t*)(_shd + 0x46), ysh = *(int16_t*)(_shd + DS_SHAKE_Y);
-            int16_t ylv = *(int16_t*)(_shd + 0x25A6);
-            int ye = (int)vy + ysh; if (ye > (int)ylv) ye = (int)vy - ysh;
-            oy = (int)oy_w - ye;
-        }
-        if (oy > 0 && oy < 144 && _bp < 200) {
-            _bp++;
-            int so = 0, sv = 0, sd = 0, se[3] = {0, 0, 0};
-            for (int y = oy; y < oy + 32; y++)
-                for (int x = 0; x < 320; x += 4) {
-                    so += orig_pixels[y * 320 + x];
-                    sv += v2_frame[y * 320 + x];
-                    sd += v2_render_buf[y * 320 + x];
-                }
-            {
-                int16_t wy0 = *(int16_t*)(v2_vm_get_shadow_ds() + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_Y));
-                int16_t wx0 = *(int16_t*)(v2_vm_get_shadow_ds() + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_X));
-                int py0 = (int)wy0 - v2_emu_base_y, px0 = (int)wx0 - v2_emu_base_x;
-                for (int p = 0; p < 3; p++)
-                    for (int yy = 0; yy < 32; yy++)
-                        for (int xx = 0; xx < 32; xx++) {
-                            int X = px0 + xx, Y = py0 + yy;
-                            if (X >= 0 && X < V2_EMU_W && Y >= 0 && Y < V2_EMU_H)
-                                se[p] += v2_emu_page[p][Y * V2_EMU_W + X];
-                        }
-            }
-            extern uint16_t v2_a2_snap_pg;
-            fprintf(stderr, "BAND[f%d]: orig=%d v2=%d dsp=%d | emu=%d/%d/%d snap_pg=%04X roles=%04X/%04X/%04X\n",
-                frame, so, sv, sd, se[0], se[1], se[2], v2_a2_snap_pg,
-                *(uint16_t*)(_shd + DS_PAGE_DRAW),
-                *(uint16_t*)(_shd + DS_PAGE_SHOWN),
-                *(uint16_t*)(_shd + DS_PAGE_BG));
+    // #39: is the myOffset(CRTC) vs ds:92F9(SHOWN-role) lag constant? Log per
+    // frame: roles + myOffset + scroll_x. Env V2_PAGELOG.
+    if (getenv("V2_PAGELOG") && v2_vm_get_shadow_ds() && v2_m2c_base) {
+        uint8_t* rds4 = v2_m2c_base + v2_fntest_game_ds_linear();
+        uint16_t scx = *(uint16_t*)(rds4 + 0x2581);
+        static int _pn = 0;
+        if (scx != 0 && _pn < 50) { _pn++;
+            uint16_t shown = *(uint16_t*)(rds4 + 0x92F9);
+            // base for the SHOWN role via the page-VGA LUT (row 0): [shown - 0x7608]
+            uint16_t base_shown = *(uint16_t*)(rds4 + (uint16_t)(shown - 0x7608));
+            uint8_t gdirty = rds4[0x956B];       // glyph dirty flag (1e0c7 entry gate)
+            uint16_t thr98dc = *(uint16_t*)(rds4 + 0x98DC);  // 1e0c7 throttle counter (caps flush at 4)
+            uint8_t c25cf = rds4[0x25CF];
+            uint8_t g_first = 0; uint16_t g_at = 0;
+            for (uint16_t p = 0; p < 0x370; p++) if (rds4[0x956C + p]) { g_first = rds4[0x956C + p]; g_at = p; break; }
+            fprintf(stderr, "PAGELOG f%d: scroll_x=%d 956B=%d 98DC(throttle)=%d 25CF&E0=%02X | glyph@%d=%02X\n",
+                    frame, scx, gdirty, thr98dc, c25cf & 0xE0, g_at, g_first);
         }
     }
+    // shadow-VGA: the A2 sensor compares the shadow-VGA CRTC window — the same
+    // byte-parity channel V2_VGAPARITY verifies (intro 0 hard, scenarios
+    // PASS). Before the first page flip (no CRTC yet) fall back to the clean
+    // display frame.
+    static uint8_t v2_vga_win[320 * 176];
+    const uint8_t* v2_frame =
+        v2_vga_fetch_page(v2_vga_win, sizeof(v2_vga_win)) ? v2_vga_win
+                                                          : v2_render_buf;
     // Tile-anim phase parity (task #21 f459 class): checksum tile 0xC0's 64
     // bytes in the REAL vs SHADOW tile-graphics segments at verify time.
     if (v2_objtrace_di != 0xFFFF && v2_m2c_base) {
@@ -775,6 +741,31 @@ void v2_verify_render_buf(int frame) {
             }
         }
     }
+    // shadow-VGA: byte parity of the shadow VGA (covered bytes) vs the real
+    // drawBuffer. Env V2_VGAPARITY. Zero diffs = every migrated writer is
+    // byte-exact at its orig addresses.
+    if (getenv("V2_VGAPARITY")) {
+        static uint64_t vp_sum = 0; static int vp_frames = 0, vp_bad = 0;
+        int d = v2_vga_parity_check(myDrawInfo->drawBuffer, 6);
+        extern int v2_vga_parity_hud;
+        vp_sum += (uint64_t)d; vp_frames++; if (d) vp_bad++;
+        static int _vp = 0;
+        if (d || ++_vp % 100 == 0)
+            fprintf(stderr, "VGAPARITY[f%d]: vp=%d hud=%d (frames=%d bad=%d cum=%llu)\n",
+                    frame, d, v2_vga_parity_hud, vp_frames, vp_bad, (unsigned long long)vp_sum);
+    }
+    // #39: compare render_buf (clean tiles, NO glyph/emu overlay) vs orig, to
+    // measure whether the emu glyph/page layer helps or hurts. Env V2_RBUF_CMP.
+    if (getenv("V2_RBUF_CMP")) {
+        static uint64_t rbuf_sum = 0, emu_sum = 0; static int rbuf_frames = 0;
+        int rd = 0;
+        for (int i = 0; i < 320*176; i++) if (orig_pixels[i] != v2_render_buf[i]) rd++;
+        rbuf_sum += rd; emu_sum += viewport_diff; rbuf_frames++;
+        static int _rc = 0;
+        if (++_rc % 50 == 0 || rd != viewport_diff)
+            fprintf(stderr, "RBUF-CMP[f%d]: render_buf-diff=%d emu-diff=%d | cum rbuf=%llu emu=%llu\n",
+                    frame, rd, viewport_diff, (unsigned long long)rbuf_sum, (unsigned long long)emu_sum);
+    }
     if (h_orig == h_v2) return;
     // Split the diff into hard vs dirty-lag using the alternate pages.
     int hard_diff = 0, lag_diff = 0;
@@ -818,20 +809,44 @@ void v2_verify_render_buf(int frame) {
     {
         static int _dump_on = -1;
         static int _dump_hard = -2;   // env V2_A2_DUMP_HARD=N: dump the first frame whose hard==N (any layer, event-based)
+        static int _dump_hard_min = -2; // env V2_A2_DUMP_HARD_MIN=N: dump the first frame whose hard>=N
         if (_dump_on == -1) {
             _dump_on = getenv("V2_A2_DUMP") ? 1 : 0;
             const char* h = getenv("V2_A2_DUMP_HARD");
             _dump_hard = h ? atoi(h) : -1;
+            const char* hm = getenv("V2_A2_DUMP_HARD_MIN");
+            _dump_hard_min = hm ? atoi(hm) : -1;
         }
         static bool dumped = false;
         bool want = _dump_on && !dumped &&
-                    (_dump_hard < 0 ? true : hard_diff == _dump_hard);
+                    (_dump_hard_min >= 0 ? hard_diff >= _dump_hard_min :
+                     (_dump_hard < 0 ? true : hard_diff == _dump_hard));
         if (want) {
             dumped = true;
+            // #39: compute orig glyph screen_y for buffer rows 2-7 using THIS
+            // frame's myOffset + shown page, definitively (no page-pair ambiguity).
+            if (v2_vm_get_shadow_ds() && v2_m2c_base) {
+                uint8_t* rds3 = v2_m2c_base + v2_fntest_game_ds_linear();
+                uint16_t scrx = *(uint16_t*)(rds3 + 0x2581);
+                uint16_t pg9  = *(uint16_t*)(rds3 + 0x92F9);
+                uint32_t moff = myDrawInfo->myOffset;
+                fprintf(stderr, "A2-GLYPHY: scr_x=%d 92F9=%04X myOffset=%04X\n", scrx, pg9, moff);
+                for (int r = 2; r <= 7; r++) {
+                    uint16_t rs = (uint16_t)(r + scrx);
+                    uint16_t d2 = (uint16_t)(rs*2 + pg9);
+                    uint16_t vr = *(uint16_t*)(rds3 + (uint16_t)(d2 - 0x7608));
+                    fprintf(stderr, "  row%d rs=%d vga_row=%04X orig_screen_y=%d (v2 draws at %d)\n",
+                            r, rs, vr, ((int)vr - (int)moff)/86, r*8);
+                }
+            }
             FILE* fo = fopen("/tmp/v2_a2_orig.pgm", "wb");
             if (fo) { fprintf(fo, "P5\n320 176\n255\n"); fwrite(orig_pixels, 1, 320*176, fo); fclose(fo); }
             FILE* fv = fopen("/tmp/v2_a2_v2.pgm", "wb");
             if (fv) { fprintf(fv, "P5\n320 176\n255\n"); fwrite(v2_frame, 1, 320*176, fv); fclose(fv); }
+            // #39: v2 render_buf (clean tiles, NO glyph/sprite overlay) — tests
+            // whether the dialog box FRAME comes from tiles (matches orig y39) or glyph.
+            { FILE* fr = fopen("/tmp/v2_a2_renderbuf.pgm", "wb");
+              if (fr) { fprintf(fr, "P5\n320 176\n255\n"); fwrite(v2_render_buf, 1, 320*176, fr); fclose(fr); } }
             FILE* fb = fopen("/tmp/v2_a2_drawbuffer.bin", "wb");
             if (fb) { fwrite(myDrawInfo->drawBuffer, 1, 65536*4, fb); fclose(fb); }
             // FS tilemap first rows: real vs shadow (title-scene tile-channel probe)
@@ -906,13 +921,15 @@ void v2_verify_render_buf(int frame) {
                 fprintf(stderr, "V2-A2-YSHIFT[f%d]: best dy=%+d (match=%u of %u) — v2[y]==orig[y+dy]\n",
                         frame, best_dy, best_m, 176u*160u);
             }
-            // Dump all 3 emu pages + all 3 orig pages (offsets 0/0x34/0x68) for offline diff.
+            // Dump the v2 CRTC window + all 3 orig pages (offsets 0/0x34/0x68)
+            // for offline diff.
+            {
+                FILE* fv = fopen("/tmp/v2_a2_vga_win.pgm", "wb");
+                if (fv) { fprintf(fv, "P5\n320 176\n255\n");
+                          fwrite(v2_frame, 1, 320*176, fv); fclose(fv); }
+            }
             for (int p = 0; p < 3; p++) {
                 char fn[64];
-                snprintf(fn, sizeof(fn), "/tmp/v2_a2_emu_p%d.pgm", p);
-                FILE* fe = fopen(fn, "wb");
-                if (fe) { fprintf(fe, "P5\n%d %d\n255\n", V2_EMU_W, V2_EMU_H);
-                          fwrite(v2_emu_page[p], 1, (size_t)V2_EMU_W*V2_EMU_H, fe); fclose(fe); }
                 static const uint32_t offs[3] = {0x0000, 0x0034, 0x0068};
                 static uint8_t pg[320*176];
                 bool ok = true;
@@ -984,14 +1001,11 @@ void v2_verify_render_buf(int frame) {
         extern uint8_t* v2_vm_get_shadow_ds();
         uint8_t* shd = v2_vm_get_shadow_ds();
         if (!shd) shd = (uint8_t*)&frame; // never: keeps printf safe
-        extern uint16_t v2_a2_snap_pg;
         fprintf(stderr, "V2-RENDER-DIVERGE[f%d]: hard=%d lag=%d (first hard @ x=%d y=%d) "
-                "orig_hash=%08X v2_hash=%08X page_off=0x%X emu=%d roles=%04X/%04X/%04X snap_pg=%04X "
+                "orig_hash=%08X v2_hash=%08X page_off=0x%X roles=%04X/%04X/%04X "
                 "vp=(%d,%d) shake=(%d,%d) sc=(%04X,%04X)\n",
                 frame, hard_diff, lag_diff, first_hard_x, first_hard_y, h_orig, h_v2, page_offset,
-                (int)v2_emu_valid,
                 *(uint16_t*)(shd + DS_PAGE_DRAW), *(uint16_t*)(shd + DS_PAGE_SHOWN), *(uint16_t*)(shd + DS_PAGE_BG),
-                v2_a2_snap_pg,
                 *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
                 *(int16_t*)(shd + DS_SHAKE_X), *(int16_t*)(shd + DS_SHAKE_Y),
                 *(uint16_t*)(shd + DS_SCROLL_COL), *(uint16_t*)(shd + DS_SCROLL_ROW));
@@ -1019,12 +1033,6 @@ void v2_verify_render_buf(int frame) {
                     }
                 }
             }
-        }
-        // Emu branch-decision history for the divergent frames (task #21).
-        static int _ring_dumps = 0;
-        if (_ring_dumps < 24) {
-            _ring_dumps++;
-            v2_emu_ring_dump();
         }
     }
     _logged++;
@@ -2218,6 +2226,15 @@ static void v2_load_chunk_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
     } else {
         v2_draw_viewport_chunk(chunk_seg, plane_size);
     }
+    // shadow-VGA: replay the orig 4-plane VGA copy (read_and_display_raw_chunk,
+    // seg000 eips 0xD50..0xD8A: OUT plane select + MOV A000:[di+i] ← chunk[p*ps+i]).
+    {
+        extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+        for (uint32_t p = 0; p < 4; p++)
+            for (uint32_t i = 0; i < plane_size; i++)
+                v2_vga_glyph_px((uint16_t)(di + i), p,
+                                v2_vm_shadow_chunk[(uint32_t)plane_size * p + i]);
+    }
 }
 
 // ============================================================================
@@ -2685,17 +2702,81 @@ static void v2_vga_mode_restore_1686f(uint8_t* s) {
 // sub_117d0 (seg000): VGA healthbar draw. VGA-ONLY, no DS writes.
 // Verified with seg000 lines 4228+. Draws 32x24 healthbar to VGA planes. Called from sub_120FF.
 // All instructions are VGA OUT + MOVSW + REP STOSW to es:0xA000.
-static void v2_vga_healthbar_117d0(uint8_t* /*s*/) {
-    // VGA-only: 4 planes × 24 rows × 4 bytes = healthbar pixels to VGA
-    // OUT(0x3C4, plane_mask) — commented
-    // REP MOVSW from ds:[si] to es:[di] — VGA write, commented
+static void v2_vga_healthbar_117d0(uint8_t* s, uint16_t ax, uint16_t bx, uint16_t di_idx) {
+    // shadow-VGA exact replica (seg000 eips 0x17D0..0x183C):
+    //   si = ds:[(bx + ax*3)*2 − 0x7AB6]   (healthbar pixel data in DS)
+    //   di = ds:[di*2 − 0x7AA4]            (HUD VGA byte address)
+    //   4 passes: planes 1,2,3 at di; plane 0 at di+1 (INC di before last pass).
+    //   Each pass: 0x18 rows × 4×MOVSW (8 bytes), row stride 0x4E+8 = 0x56;
+    //   SI runs CONTIGUOUSLY through all passes (24×8 bytes per pass).
+    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+    uint16_t bx2 = (uint16_t)((uint16_t)(bx + ax * 3) << 1);
+    uint16_t si = *(uint16_t*)(s + (uint16_t)(bx2 - 0x7AB6));
+    uint16_t dv = *(uint16_t*)(s + (uint16_t)((uint16_t)(di_idx << 1) - 0x7AA4));
+    static const int pass_plane[4] = {1, 2, 3, 0};
+    for (int pass = 0; pass < 4; pass++) {
+        uint16_t dp = (uint16_t)(pass_plane[pass] == 0 ? dv + 1 : dv);
+        for (int r = 0; r < 0x18; r++) {
+            for (int i = 0; i < 8; i++)
+                v2_vga_glyph_px((uint16_t)(dp + r * 0x56 + i),
+                                (uint32_t)pass_plane[pass],
+                                s[(uint16_t)(si + r * 8 + i)]);
+        }
+        si = (uint16_t)(si + 0x18 * 8);
+    }
 }
 
-// sub_11aa4 (seg000): VGA portrait draw. VGA-ONLY, no DS writes.
-// Verified with seg000 lines 4327+. Draws 32x7 portrait to VGA. Called from sub_11B0B.
-static void v2_vga_portrait_11aa4(uint8_t* /*s*/) {
-    // VGA-only: 4 planes × 7 rows portrait render
-    // OUT(0x3C4, plane_mask) + MOVSW — commented
+// sub_11aa4 (seg000): VGA portrait draw (32×7). shadow-VGA exact replica
+// (seg000 eips 0x1AA4..): si = ds:[si_in − 0x7A7E] + 0x497D; di = ds:[di_in −
+// 0x7A84]; passes (plane 3 @di), (0 @di+1), (1 @di+1), (2 @di+1); 7 rows ×
+// 4×MOVSW (8 bytes), stride 0x4E+8 = 0x56; SI contiguous (7×8 per pass).
+static void v2_vga_portrait_11aa4(uint8_t* s, uint16_t si_in, uint16_t di_in) {
+    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+    uint16_t si = (uint16_t)(*(uint16_t*)(s + (uint16_t)(si_in - 0x7A7E)) + 0x497D);
+    uint16_t dv = *(uint16_t*)(s + (uint16_t)(di_in - 0x7A84));
+    static const int pp[4] = {3, 0, 1, 2};
+    for (int pass = 0; pass < 4; pass++) {
+        uint16_t dp = (uint16_t)(pass == 0 ? dv : dv + 1);
+        for (int r = 0; r < 7; r++)
+            for (int i = 0; i < 8; i++)
+                v2_vga_glyph_px((uint16_t)(dp + r * 0x56 + i), (uint32_t)pp[pass],
+                                s[(uint16_t)(si + r * 8 + i)]);
+        si = (uint16_t)(si + 7 * 8);
+    }
+}
+// sub_1183d (seg000): VGA inventory item draw (16×16). shadow-VGA exact replica:
+// item ax (di_in==0x18 && ax==0 → 0x17); si = 0x507D + ax*256; di = ds:[di_in −
+// 0x7A9E]; passes (3 @di), (0 @di+1), (1 @di+1), (2 @di+1); 16 rows × 2×MOVSW
+// (4 bytes), stride 0x52+4 = 0x56; SI contiguous (16×4 per pass).
+static void v2_vga_hud_item_1183d(uint8_t* s, uint16_t di_in, uint16_t ax_item) {
+    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+    if (di_in == 0x18 && ax_item == 0) ax_item = 0x17;
+    uint16_t si = (uint16_t)(0x507D + (ax_item << 8));
+    uint16_t dv = *(uint16_t*)(s + (uint16_t)(di_in - 0x7A9E));
+    static const int pp[4] = {3, 0, 1, 2};
+    for (int pass = 0; pass < 4; pass++) {
+        uint16_t dp = (uint16_t)(pass == 0 ? dv : dv + 1);
+        for (int r = 0; r < 16; r++)
+            for (int i = 0; i < 4; i++)
+                v2_vga_glyph_px((uint16_t)(dp + r * 0x56 + i), (uint32_t)pp[pass],
+                                s[(uint16_t)(si + r * 4 + i)]);
+        si = (uint16_t)(si + 16 * 4);
+    }
+}
+// sub_118ad (seg000): VGA selector frame draw. shadow-VGA: the exact 56 hardcoded
+// (plane, si_off, di_off, width) writes extracted VERBATIM from the m2c inline
+// hooks of display_selector. si = 0x637D fixed; di = ds:[di_in − 0x7A9E].
+static void v2_vga_selector_118ad(uint8_t* s, uint16_t di_in) {
+    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+    static const struct { uint8_t pl; uint16_t so, dofs; uint8_t w; } T[] = {
+        // generated from src inlines (56 entries, planes 3/0/1/2 groups of 14)
+        #include "v2_selector_table.inc"
+    };
+    uint16_t dv = *(uint16_t*)(s + (uint16_t)(di_in - 0x7A9E));
+    for (const auto& e : T)
+        for (int i = 0; i < e.w; i++)
+            v2_vga_glyph_px((uint16_t)(dv + e.dofs + i), e.pl,
+                            s[(uint16_t)(0x637D + e.so + i)]);
 }
 
 // sub_1237f (seg000): Busy-wait delay loop. No DS writes.
@@ -2806,18 +2887,62 @@ static void v2_tile_blit_1689e(uint8_t* /*s*/, uint16_t /*si_tile*/, uint16_t /*
 // Loop cx=0x2B (43 tiles). Each: si=fs:[bx], call sub_1689e(si, di), bx+=2, di+=2.
 // Renders one horizontal row of 43 tiles to VGA page.
 // No DS writes. Pure VGA rendering.
-static void v2_tile_row_16dc1(uint8_t* /*s*/, uint16_t /*bx_fs*/, uint16_t /*di_vga*/) {
+// sub_1689e: render ONE tile (tile_word: bits 15:6 = gfx offset, bit4 hflip,
+// bit5 vflip) into the shadow VGA at byte address di. Address layout is the
+// verified v2_draw_tiles pixel mapping in VGA-address form: 8 rows × 2 bytes,
+// row pitch 0x56; byte0 plane p = pixel x=p (b0 of plane p), byte1 plane p =
+// pixel x=4+p (b1); hflip swaps bytes and mirrors planes (3−p); vflip mirrors
+// the source row.
+static void v2_vga_tile_1689E(uint8_t* s, uint16_t tile_word, uint16_t di_vga) {
+    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+    uint16_t tg_seg = *(uint16_t*)(s + DS_SEG_TILEGFX);
+    if (!tg_seg) return;
+    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+    uint8_t* tg = v2_resolve_segment(tg_seg, s);
+    if (!tg) return;
+    const uint8_t* tile = tg + (tile_word & 0xFFC0);
+    bool hflip = (tile_word & 0x10) != 0;
+    bool vflip = (tile_word & 0x20) != 0;
+    for (int row = 0; row < 8; row++) {
+        int src_row = vflip ? (7 - row) : row;
+        uint16_t a0 = (uint16_t)(di_vga + row * 0x56);
+        for (int plane = 0; plane < 4; plane++) {
+            uint8_t b0 = tile[plane * 16 + src_row * 2];
+            uint8_t b1 = tile[plane * 16 + src_row * 2 + 1];
+            if (!hflip) {
+                v2_vga_glyph_px(a0,               (uint32_t)plane, b0);
+                v2_vga_glyph_px((uint16_t)(a0+1), (uint32_t)plane, b1);
+            } else {
+                v2_vga_glyph_px((uint16_t)(a0+1), (uint32_t)(3 - plane), b0);
+                v2_vga_glyph_px(a0,               (uint32_t)(3 - plane), b1);
+            }
+        }
+    }
+}
+static void v2_tile_row_16dc1(uint8_t* s, uint16_t bx_fs, uint16_t /*unused*/) {
     // Verified with seg000 lines 14410-14428 (eip 0x6DC1..0x6DD8).
-    // Renders one horizontal row of 43 tiles from FS page table to VGA.
-    // PUSH bx, cx, di;
-    // MOV cx, 0x2B;                  // 43 tiles per viewport row
-    // loc_16DC7:
-    //   MOV si, fs:[bx];             // read tile word from FS page table
-    //   CALL sub_1689e;              // render tile to VGA (si=tile, di=VGA offset)
-    //   ADD bx, 2;                   // next FS entry (2 bytes per tile in FS)
-    //   ADD di, 2;                   // next VGA column (2 bytes = 8 pixels / 4 planes)
-    //   LOOP loc_16DC7;
-    // POP di, cx, bx; RETN
+    // PUSH bx, cx, di; MOV cx, 0x2B;
+    // loc_16DC7: MOV si, fs:[bx]; CALL sub_1689e; ADD bx,2; ADD di,2; LOOP.
+    // di on entry = the freshly computed ds:930B (DRAW page row base + column) —
+    // the caller (16DED mirror) stores it right before this call.
+    uint16_t di_vga = *(uint16_t*)(s + 0x930B);
+    if (getenv("V2_VGAPARITY")) {
+        static int _t1 = 0;
+        static int _tcall = 0; _tcall++;
+        if ((_tcall % 25) == 1 && _t1 < 12) { _t1++;   // 1 line per 11439-mirror invocation (25 rows)
+            fprintf(stderr, "16DC1-MIR bx=%04X di(930B)=%04X fs[bx]=%04X fs[bx+2]=%04X fsseg=%04X 2581=%u\n",
+                bx_fs, di_vga,
+                bx_fs < V2_FS_SHADOW_SIZE-1 ? *(uint16_t*)(v2_vm_shadow_fs + bx_fs) : 0xEEEE,
+                bx_fs < V2_FS_SHADOW_SIZE-3 ? *(uint16_t*)(v2_vm_shadow_fs + bx_fs + 2) : 0xEEEE,
+                *(uint16_t*)(s + DS_SEG_FS), (unsigned)*(uint16_t*)(s + DS_SCROLL_ROW));
+        }
+    }
+    for (int c = 0; c < 0x2B; c++) {
+        uint16_t moff = (uint16_t)(bx_fs + c * 2);
+        uint16_t tw = (moff < V2_FS_SHADOW_SIZE - 1)
+                    ? *(uint16_t*)(v2_vm_shadow_fs + moff) : 0;
+        v2_vga_tile_1689E(s, tw, (uint16_t)(di_vga + c * 2));
+    }
 }
 
 // sub_171dc (seg000): VGA page copy for COLUMN tiles. Verified with seg000 lines 14709+.
@@ -2825,22 +2950,24 @@ static void v2_tile_row_16dc1(uint8_t* /*s*/, uint16_t /*bx_fs*/, uint16_t /*di_
 // OUT(0x3C4, 0x0F02); OUT(0x3CE, 0x0008);
 // Copies tile column between VGA pages using ds:930D/930F/930B offsets.
 // No DS writes.
-static void v2_page_copy_col_171dc(uint8_t* /*s*/) {
-    // Verified with seg000 lines 14768-14808 (eip 0x71DC..0x7230).
-    // Copies rendered tile column from page 3 to pages 1+2 between VGA pages.
+static void v2_page_copy_col_171dc(uint8_t* s) {
+    // Verified with seg000 lines 16580-16178 (eip 0x71DC..0x721A).
     // PUSH es, cx, dx;
-    // OUT(0x3C4, 0x0F02);            // EGA sequencer: enable all 4 planes
-    // OUT(0x3CE, 0x0008);            // EGA graphics: bit mask = 0 (read latch mode)
-    // MOV si, ds:930B;               // source VGA offset (page 3)
-    // MOV di, ds:930D;               // dest VGA offset (page 1)
-    // MOV dx, ds:930F;               // dest VGA offset (page 2)
-    // MOV cx, 0x2B0;                 // column height in bytes (8 scanlines x 0x56)
-    // es = 0xA000;
-    // REP MOVSB;                     // copy page 3 -> page 1
-    // (swap di/dx, repeat for page 2)
-    // Same for ds:931B/931D with ds:9313/9314 counts
-    // OUT(0x3CE, 0xFF08);            // reset bit mask
-    // POP dx, cx, es; RETN
+    // OUT(0x3C4, 0x0F02);            // EGA sequencer: enable all 4 planes — no-op here
+    // OUT(0x3CE, 0x0008);            // EGA graphics: bit mask (latch copy) — no-op here
+    // MOV si, ds:930B;               // source VGA row (DRAW page, drawn by 16DC1)
+    // MOV di, ds:930D;               // dest VGA row (SHOWN page)
+    // MOV dx, ds:930F;               // dest VGA row (BG page)
+    // MOV cx, 0x2B0;  REP MOVSB;     // 0x2B0 bytes = 8 scanlines × 0x56
+    // MOV di, dx; MOV cx, 0x2B0; REP MOVSB;
+    // OUT(0x3CE, 0xFF08);            // reset bit mask — no-op
+    // shadow-VGA: replay both copies into the shadow VGA (4 planes, latch semantics).
+    {
+        extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
+        uint16_t src = *(uint16_t*)(s + 0x930B);
+        v2_vga_copy_span(*(uint16_t*)(s + 0x930D), src, 0x2B0);
+        v2_vga_copy_span(*(uint16_t*)(s + 0x930F), src, 0x2B0);
+    }
 }
 
 // sub_16dd9 (seg000): VGA tile COLUMN render. Verified with seg000 lines 14367-14377.
@@ -2848,17 +2975,22 @@ static void v2_page_copy_col_171dc(uint8_t* /*s*/) {
 //   bx += ds:0x8F6C (FS page stride), di += 0x2B0 (VGA pitch * 8 rows).
 // Renders one vertical column of 25 tiles to VGA page.
 // No DS writes.
-static void v2_tile_col_16dd9(uint8_t* /*s*/) {
-    // Verified with seg000 lines 14430-14438 (eip 0x6DD9..0x6DEC).
-    // Renders one vertical column of 25 tiles from FS page table to VGA.
-    // MOV cx, 0x19;                  // 25 tiles per viewport column
-    // loc_16DDC:
-    //   MOV si, fs:[bx];             // read tile word from FS
-    //   CALL sub_1689e;              // render tile to VGA
-    //   ADD bx, ds:0x8F6C;           // next FS row (stride = map_width * 4 * 2)
-    //   ADD di, 0x2B0;               // next VGA tile row (8 scanlines x 0x56 bytes/line = 0x2B0)
-    //   LOOP loc_16DDC;
-    // RETN
+static void v2_vga_tile_1689E(uint8_t* s, uint16_t tile_word, uint16_t di_vga); // fwd
+static void v2_tile_col_16dd9(uint8_t* s, uint16_t bx_fs) {
+    // Verified with seg000 lines 16118-16126 (eip 0x6DD9..0x6DEC).
+    // MOV cx, 0x19; loc_16DDC: MOV si, fs:[bx]; CALL sub_1689e;
+    // ADD bx, ds:8F6C (map row stride); ADD di, 0x2B0; LOOP.
+    // di on entry = ds:9315 (the freshly computed DRAW-page column base — the
+    // band mirror stores it in DS_PAGE_COPY_SRC1 right before this call).
+    uint16_t di_vga = *(uint16_t*)(s + 0x9315);
+    uint16_t stride = *(uint16_t*)(s + DS_FS_PAGE_STRIDE);
+    for (int r = 0; r < 0x19; r++) {
+        uint16_t tw = (bx_fs < V2_FS_SHADOW_SIZE - 1)
+                    ? *(uint16_t*)(v2_vm_shadow_fs + bx_fs) : 0;
+        v2_vga_tile_1689E(s, tw, di_vga);
+        bx_fs = (uint16_t)(bx_fs + stride);
+        di_vga = (uint16_t)(di_vga + 0x2B0);
+    }
 }
 
 // sub_1712b (seg000): VGA page copy for ROW tiles. Verified with seg000 lines 119-182.
@@ -2871,24 +3003,59 @@ static void v2_tile_col_16dd9(uint8_t* /*s*/) {
 //            then ds:931D for ds:9314 remainder
 // OUT(0x3CE, 0xFF08); // reset bit mask
 // No DS writes.
-static void v2_page_copy_row_1712b(uint8_t* /*s*/) {
-    // Verified with seg000 lines 113-182 (eip 0x70FB..0x71DB).
-    // Copies rendered tile row from source VGA page to other two pages.
-    // PUSH es;
-    // OUT(0x3C4, 0x0F02);            // enable all 4 planes
-    // OUT(0x3CE, 0x0008);            // bit mask = 0 (read latch mode)
-    // MOV bx, 2;                     // 2 bytes per tile width
-    // es = 0xA000;
-    // Phase 1: MOV si, ds:9315; MOV di, ds:9317; MOV cx, ds:9311;
-    //   loc_17148: MOV al, es:[si]; MOV es:[di], al; ADD si, 0x56; ADD di, 0x56; LOOP;
-    // Phase 2: ADD si, bx; MOV di, ds:9319; MOV cx, ds:9312;
-    //   (same copy loop for remaining rows to page 2)
-    // Phase 3: MOV si, ds:9315; MOV di, ds:931B; MOV cx, ds:9313;
-    //   (copy to page 3)
-    // Phase 4: ADD si, bx; MOV di, ds:931D; MOV cx, ds:9314;
-    //   (remaining rows to page 3)
-    // OUT(0x3CE, 0xFF08);            // reset bit mask
-    // POP es; RETN
+static void v2_page_copy_row_1712b(uint8_t* s) {
+    // Exact replica of seg000 eips 0x712B..0x71DB (redraw_tilemap): copies the
+    // freshly drawn tile COLUMN (2 bytes wide × N rows, row pitch 0x56) from the
+    // DRAW page onto the other two pages, split at the page-block seam:
+    //   Phase 1: si=[9315], di=[9317], cl=[9311] rows: copy 2 bytes, bx += 0x56
+    //   Phase 2: cl=[9312]; if non-zero: si += bx (continue source), di=[9319]
+    //   Phase 3: si=[9315] afresh, di=[931B], cl=[9313]
+    //   Phase 4: cl=[9314]; if non-zero: si += bx, di=[931D]
+    // M2C PORT QUIRK (parity target!): the port's inline drawBuffer hooks for
+    // these column-copy loops iterate `for (i = 0; i <= cx; i++)` — ONE MORE
+    // row than the DOS `LOOP cx`. The visible-window extraction never reads
+    // the extra row (it lands past the page blocks, e.g. 0xE828), but byte
+    // parity with THIS binary requires replicating cl+1. (Measured: real
+    // writes at 931B_base + 8·0x56 with cl=8 — exactly the i==cx row.)
+    // The real per-row copy order also matters for overlapping phases: the
+    // hook copies row i fully before row i+1 — our span copy per row matches.
+    extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
+    uint16_t si = *(uint16_t*)(s + 0x9315);
+    uint16_t di = *(uint16_t*)(s + 0x9317);
+    uint16_t bx = 0;
+    uint16_t cl = s[0x9311];
+    for (uint16_t r = 0; r <= cl; r++) {          // port-quirk: <=
+        v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
+        if (r < cl) bx += 0x56;                    // bx after loop = cl*0x56 (orig LOOP semantics)
+    }
+    cl = s[0x9312];
+    if (cl) {
+        si = (uint16_t)(si + bx);
+        di = *(uint16_t*)(s + 0x9319);
+        bx = 0;
+        for (uint16_t r = 0; r <= cl; r++) {      // port-quirk: <=
+            v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
+            if (r < cl) bx += 0x56;
+        }
+    }
+    si = *(uint16_t*)(s + 0x9315);
+    di = *(uint16_t*)(s + 0x931B);
+    bx = 0;
+    cl = s[0x9313];
+    for (uint16_t r = 0; r <= cl; r++) {          // port-quirk: <=
+        v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
+        if (r < cl) bx += 0x56;
+    }
+    cl = s[0x9314];
+    if (cl) {
+        si = (uint16_t)(si + bx);
+        di = *(uint16_t*)(s + 0x931D);
+        bx = 0;
+        for (uint16_t r = 0; r <= cl; r++) {      // port-quirk: <=
+            v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
+            if (r < cl) bx += 0x56;
+        }
+    }
 }
 
 // sub_1E16D (seg003): VGA glyph pixel render. Verified with seg003 lines 3116-3142.
@@ -2898,7 +3065,39 @@ static void v2_page_copy_row_1712b(uint8_t* /*s*/) {
 // Then JMP loc_1CF39 → complex glyph rendering dispatch (switch on glyph pixel pattern).
 // Each dispatch path: OUT(0x3C4, plane); writes to es:0xA000 via indexed addressing.
 // All writes go to VGA (es) and cs temporaries — NO DS writes.
-static void v2_glyph_draw_1E16D(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t /*di_vga*/) {
+static void v2_glyph_draw_1E16D(uint8_t* s, uint16_t si_glyph, uint16_t di_vga) {
+    // shadow-VGA: replay the orig glyph render into the shadow VGA at the EXACT
+    // orig address stream. Glyph data: ds:0x687E + idx*72 (mask at [si-1] =
+    // 0x687D+…); 8 strips of (1 mask + 8 data); strips pair into 4 plane
+    // passes × 2 halves; each mask bit b lights pixel (x=bit_dx+plane,
+    // y=bit_dy) of the 8x8 cell; VGA bytes: addr = di + y*0x56 + (bit_dx>>2),
+    // plane pass order 0..3, strip halves at di and di+0x158 (4 rows down).
+    {
+        extern uint8_t v2_vga[65536 * 4];  (void)v2_vga;
+        static const int bit_dx[8] = {0,4,0,4,0,4,0,4};
+        static const int bit_dy[8] = {0,0,1,1,2,2,3,3};
+        const uint8_t* glyph = s + (uint16_t)(0x687Du + si_glyph * 72u);
+        extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+        for (int plane = 0; plane < 4; plane++) {
+            for (int strip = 0; strip < 2; strip++) {
+                uint8_t mask = glyph[0];
+                const uint8_t* data = glyph + 1;
+                if (mask) {
+                    for (int b = 0; b < 8; b++) {
+                        if (!(mask & (0x80 >> b))) continue;
+                        uint32_t addr = (uint16_t)(di_vga
+                                       + (strip * 4 + bit_dy[b]) * 0x56
+                                       + (bit_dx[b] >> 2));
+                        v2_vga_glyph_px(addr, (uint32_t)plane, data[b]);
+                    }
+                }
+                glyph += 9;
+            }
+        }
+    }
+    // (original doc kept below — VGA out/write map of the orig routine)
+}
+static void v2_glyph_draw_1E16D_doc(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t /*di_vga*/) {
     // Verified with seg003 lines 3116-3142 (eip 0x193D..0x1966).
     // Renders one glyph (72 bytes: 8 strips x 9 bytes) to VGA.
     //
@@ -2938,7 +3137,60 @@ static void v2_glyph_draw_1E16D(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint16_t 
 // Flip dispatch: si & 0x30 → 4 paths (normal/hflip/vflip/both).
 // Each path: OUT(0x3C4, plane_mask); read tile+mask, write to es:0xA000 with masking.
 // No DS writes.
-static void v2_masked_tile_1C939(uint8_t* /*s*/, uint16_t /*fs_val*/, uint16_t /*di_fs*/) {
+// shadow-VGA masked-tile core, all four flip variants (seg003 eips 0x109..0x540).
+// masks: 8 bytes at maskseg[2E61]:[(tile&FFC0)>>3]; data: 64 bytes at
+// gfxseg[2E5F]:[tile&FFC0]. Portion k (0..7) = (plane k>>1, strip k&1); the
+// jpt_1C9B1 bit layout is the SAME verified glyph core (bit b → row bit_dy,
+// byte bit_dx>>2, val data[b]). Flip variants (read from the 1CA91/1CB87
+// cascades): hflip → OUT planes 3..0 (write plane = 3−(k>>1)) + byte swap;
+// vflip → strips bottom-first (+0x158 first) + rows mirrored (3−bit_dy).
+static void v2_vga_masked_tile(uint8_t* s, uint16_t tile_word, uint16_t di_vga) {
+    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+    uint16_t mseg = *(uint16_t*)(s + 0x2E61);
+    uint16_t tseg = *(uint16_t*)(s + 0x2E5F);
+    if (!mseg || !tseg) return;
+    uint8_t* mb = v2_resolve_segment(mseg, s);
+    uint8_t* tb = v2_resolve_segment(tseg, s);
+    if (!mb || !tb) return;
+    uint16_t toff = (uint16_t)(tile_word & 0xFFC0);
+    uint32_t moff = (uint32_t)(toff >> 3);
+    bool hflip = (tile_word & 0x10) != 0;
+    bool vflip = (tile_word & 0x20) != 0;
+    static const int bit_dx[8] = {0,4,0,4,0,4,0,4};
+    static const int bit_dy[8] = {0,0,1,1,2,2,3,3};
+    for (int k = 0; k < 8; k++) {
+        uint8_t mask = mb[moff + k];
+        if (!mask) continue;
+        const uint8_t* data = tb + toff + k * 8;
+        int p  = k >> 1;             // data plane
+        int st = k & 1;              // strip (0=rows 0-3, 1=rows 4-7)
+        for (int b = 0; b < 8; b++) {
+            if (!(mask & (0x80 >> b))) continue;
+            int dy = bit_dy[b];
+            int row = st * 4 + dy;
+            int xpx = bit_dx[b] + p;            // source pixel column
+            if (vflip) row = 7 - row;
+            int wr_plane, wr_byte;
+            if (!hflip) { wr_plane = p;     wr_byte = bit_dx[b] >> 2; }
+            else        { wr_plane = 3 - p; wr_byte = 1 - (bit_dx[b] >> 2); }
+            (void)xpx;
+            v2_vga_glyph_px((uint16_t)(di_vga + row * 0x56 + wr_byte),
+                            (uint32_t)wr_plane, data[b]);
+        }
+    }
+}
+static void v2_masked_tile_1C939(uint8_t* s, uint16_t fs_val, uint16_t row_vis, uint16_t col_vis) {
+    // shadow-VGA: VGA address per orig loc_1C939 (eips 0x110..0x137):
+    //   di = LUT[(row_vis+2581)*2 + 92F9 − 0x7608] + (((col_vis+257F)*2)+8)&~1
+    uint16_t rw = (uint16_t)(row_vis + *(uint16_t*)(s + DS_SCROLL_ROW));
+    uint16_t cw = (uint16_t)(col_vis + *(uint16_t*)(s + DS_SCROLL_COL));
+    uint16_t idx = (uint16_t)(rw * 2 + *(uint16_t*)(s + DS_PAGE_SHOWN));
+    uint16_t base = *(uint16_t*)(s + (uint16_t)(idx - 0x7608));
+    uint16_t di_vga = (uint16_t)(base + (uint16_t)(((uint16_t)(cw * 2 + 8)) & 0xFFFE));
+    v2_vga_masked_tile(s, fs_val, di_vga);
+}
+static void v2_masked_tile_1C939_doc(uint8_t* /*s*/, uint16_t /*fs_val*/, uint16_t /*di_fs*/) {
     // Verified with seg003 lines 65-310 (eip 0x0109..0x0540).
     // Renders flagged/animated tile with transparency mask to VGA.
     // Called from sub_1C8F1 when fs:[di] has bit 3 set.
@@ -3063,7 +3315,7 @@ static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
                     *(uint16_t*)(v2_vm_shadow_fs + di) &= ax_mask;   // AND fs:[di], ax
                     // line 51-52: TEST fs:[di], 8; JNZ loc_1C939
                     if (fs_val & 8) {
-                        v2_masked_tile_1C939(s, fs_val, di);  // VGA flagged tile render
+                        v2_masked_tile_1C939(s, fs_val, row, col);  // VGA flagged tile render
                     }
                 }
             }
@@ -3216,6 +3468,20 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
         dx += 4;                                                     // ADD dx, 4
         dx <<= 1;                                                    // SHL dx, 1
         di += dx;                                                    // ADD di, dx
+        // #39 GROUND TRUTH: for the box top-left cell (buffer row 2, i.e. pos 82..),
+        // log the EXACT orig di and back-convert to screen y via myOffset.
+        if (getenv("V2_DILOG")) {
+            uint16_t bpos = bx - DS_GLYPH_BUF;
+            if (bpos >= 82 && bpos <= 125) {   // rows 2-3
+                uint32_t moff = myDrawInfo ? myDrawInfo->myOffset : 0;
+                static int _dn = 0;
+                if (_dn < 30) { _dn++;
+                    fprintf(stderr, "DILOG pos=%d(row%d,col%d) di=%04X page(92F9)=%04X myOffset=%04X screen_y=%d scroll_x=%d\n",
+                            bpos, bpos/40, bpos%40, di, *(uint16_t*)(s + DS_PAGE_SHOWN), moff,
+                            ((int)di - (int)moff)/86, *(uint16_t*)(s + DS_SCROLL_ROW));
+                }
+            }
+        }
         // line 3081-3082: es = 0xA000                               ; VGA segment
         // es = 0xA000; — commented, VGA not used in v2
 
@@ -3238,7 +3504,6 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
             // line 3094-3095: TEST word ds:9569h; JNZ loc_1E158
             if (*(uint16_t*)(s + DS_TEXT_FULLSCREEN) == 0) {
                 v2_glyph_draw_1E16D(s, si_glyph, di);  // VGA glyph pixel render
-                v2_glyph_flush_painted = true;         // #39: orig painted the page this pass
             }
 
             // loc_1E158:
@@ -3254,15 +3519,13 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
             cx--;                                                     // LOOP (implicit DEC cx)
         }
         // If cx reached 0 → return (LOOP fell through to locret_1E16C)
-        if (cx == 0) { v2_glyph_flush_painted = true; return; }  // #39: full pass done — page render follows in late_end
+        if (cx == 0) return;
         // Otherwise: ds:[bx]==0 → go back to outer scan (loc_1E0EA).
         // Orig DOES NOT advance bx past the zero — it does `mov di, bx; repe scasb`
         // which scans past zero bytes (di++ and cx-- per zero) until non-zero.
         // Previous v2 had a spurious `bx++` here that mis-aligned cx by one each
         // restart, causing ds:0x98DC throttle differential downstream.
     }
-    // #39: full pass also ends here when the outer scan exhausts — mark it.
-    v2_glyph_flush_painted = true;
 }
 
 // sub_1DE05: dirty rect processing — DEC byte [di+0x114E] + save position.
@@ -3364,6 +3627,22 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
             // + multi-pass swap causes flicker. Tile-based levels use full-frame redraw
             // in v2_draw_tiles instead; intro/menu uses chunk_bg restore. dirty bit
             // marking still happens above (v2_sprite_draw_1CD7D) which other DS-aware code uses.
+            //
+            // shadow-VGA: replay the orig loc_1DEE4 span copy into the shadow VGA at
+            // the exact orig addresses (seg003 eips 16B4-171F, verified above):
+            //   si = LUT[(si_row)*2 + ds:92FB]  (BG page row base)
+            //   di = LUT[(si_row)*2 + ds:92F7]  (DRAW page row base)
+            //   ax = (ax_col*2 + 8) & ~1        (byte column)
+            //   8 × REP MOVSB of dx_tl bytes, row pitch 0x56, all 4 planes.
+            {
+                uint16_t srcrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + *(uint16_t*)(s + DS_PAGE_BG))   - 0x7608));
+                uint16_t dstrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + *(uint16_t*)(s + DS_PAGE_DRAW)) - 0x7608));
+                uint16_t offb = (uint16_t)((uint16_t)(ax_col * 2 + 8) & 0xFFFE);
+                extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
+                for (int r8 = 0; r8 < 8; r8++)
+                    v2_vga_copy_span((uint16_t)(dstrow + offb + r8 * 0x56),
+                                     (uint16_t)(srcrow + offb + r8 * 0x56), dx_tl);
+            }
             (void)si_row; (void)ax_col; (void)dx_tl;
         }
     }
@@ -3498,15 +3777,6 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         if ((int8_t)s[di + OBJ_DIRTY_MODE] < 0)
             s[di + OBJ_DIRTY_MODE] = 0;
 
-        // Page-emu pixel cascade (task #23): draw this object onto the armed
-        // [92F9] page NOW — same point as the orig CALL cs:[bp+15CBh]. The
-        // orig is ONE loop per object: gate → draw → DEC → sub_1cd7d OR3, so
-        // an earlier object's OR3 cells are seen by the sub_1cdef scan of a
-        // later object in the SAME sub-frame. v2_dd9c_pixel_ds is armed by
-        // v2_emu_late_begin around the render1/2/3 call sites.
-        if (v2_dd9c_pixel_ds != 0xFFFF)
-            v2_draw_one_sprite_late(v2_dd9c_pixel_ds, di);
-
         // Rendering dispatch: VGA render by sprite type (cs:[bp+15CBh]).
         // Read handler address from dispatch table at CS:0x15CB dynamically.
         // Verified table: [0]=0000 [1]=0648 [2]=1078 [3]=0000 [4]=0B82 [5-7]=0000.
@@ -3522,54 +3792,91 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
 
             if (handler == 0x1078) {
                 // Type 2 (loc_1d8a8): dynamic sprite. Verified seg003 lines 37487-37781.
-                // Exact replica of bounds check + DS side effects.
+                // Exact replica of bounds check + DS side effects + shadow-VGA VGA render.
                 int16_t cx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X);  // 37490
                 int16_t dx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y);  // 37491
-                // cs:word_1C830=0xFFFF, cs:word_1C834=0, cs:word_1C832=0 — VGA clipping state, no DS effect
+                uint16_t c1c830 = 0xFFFF, c1c832 = 0, c1c834 = 0;     // 37492-37494 clip state
                 int16_t ax;
+                uint32_t cs3 = (uint32_t)0x0E25 * 16;                  // seg003 linear base
                 // X right bound: ax = viewport_X + 0x140
                 ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140;        // 37495-37496
                 if (cx >= ax) goto type2_exit;                         // 37498: JGE loc_1DB98
-                // X left margin: ax -= 0x1F
+                // X right-edge clip margin: ax -= 0x1F
                 ax -= 0x1F;                                            // 37499
                 if (cx >= ax) {                                        // 37501: JL → skip means cx >= ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37502: left clipping mode
-                    // cs:word_1C830 = cs:[bx+0x1379] lookup — VGA only
+                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37502
+                    uint16_t bx2 = (uint16_t)((uint16_t)(cx - ax) >> 2) << 1; // 37503-37506
+                    if (v2_m2c_base)
+                        c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x1379 + bx2); // 37507-37508
                 }
                 // X left bound: ax -= 0x140
                 ax -= 0x140;                                           // 37511
                 if (cx <= ax) goto type2_exit;                         // 37513: JLE loc_1DB98
-                // X right margin: ax += 0x1F
+                // X left-edge clip margin: ax += 0x1F
                 ax += 0x1F;                                            // 37514
                 if (cx < ax) {                                         // 37516: JGE → skip means cx < ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37517: right clipping mode
-                    // cs:word_1C830 = cs:[bx+0x138B] lookup — VGA only
+                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37517
+                    uint16_t bx2 = (uint16_t)((uint16_t)(ax - cx) >> 2) << 1; // 37518-37521
+                    if (v2_m2c_base)
+                        c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x138B + bx2); // 37522-37523
                 }
                 // Y bottom bound: ax = viewport_Y + 0xB0
                 ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;          // 37526-37527
                 if (dx >= ax) goto type2_exit;                         // 37529: JGE loc_1DB98
-                // Y top margin: ax -= 0x1F
+                // Y bottom-edge clip: ax -= 0x1F
                 ax -= 0x1F;                                            // 37530
                 if (dx >= ax) {                                        // 37532: JL → skip means dx >= ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37533: top clipping mode
-                    // cs:word_1C832 = dx - ax — VGA only
+                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37533
+                    c1c832 = (uint16_t)(dx - ax);                      // 37534-37535: bottom rows clipped
                 }
                 // Y top bound: ax -= 0xB0
                 ax -= 0xB0;                                            // 37538
                 if (dx < ax) goto type2_exit;                          // 37540: JL loc_1DB98
-                // Y bottom margin: ax += 0x1F
+                // Y top-edge clip: ax += 0x1F
                 ax += 0x1F;                                            // 37541
                 if (dx <= ax) {                                        // 37543: JG → skip means dx <= ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37544: bottom clipping mode
-                    // cs:word_1C834 = ax - dx — VGA only
+                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37544
+                    c1c834 = (uint16_t)(ax - dx);                      // 37545-37546: top rows clipped
                 }
                 // loc_1D95B: all bounds passed → sub_1CD7D + VGA render
                 {
                     int16_t si_h = (int16_t)((*(uint16_t*)(s + di + OBJ_STRIP_COUNT) >> 3) + 1); // 37550-37552
                     v2_sprite_draw_1CD7D(s, cx, dx, si_h, 5);                 // 37549: bp=5, 37553: call sub_1CD7D
                 }
-                // 37554-37776: VGA pixel rendering — all VGA OUT + REP MOVSB. No DS writes.
-                // POP di, es, ds. RETN.
+                // shadow-VGA: exact type-2 VGA render (seg003 eips 0x1139..0x11B8 + row
+                // engine jpt_1DA02 / hflip loc_1DBCD). Table ground truth: jpt
+                // image locations jpt_1da02=0e25:2570, jpt_1d514=0e25:2170,
+                // jpt_1d703=0e25:2370, jpt_1dbfe=0e25:2770 (src/_data.h; the
+                // m2c case COMMENTS belong to overlapping tables — do not trust).
+                if (v2_m2c_base) {
+                    uint16_t y = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_Y) + c1c834); // 37554-37555
+                    uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));  // 37556-37562
+                    uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
+                                       + *(uint16_t*)(s + DS_PAGE_SHOWN));                 // 37558-37560
+                    uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));       // 37563
+                    uint16_t xw = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_X) + 0x20);  // 37564-37565
+                    uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));                 // 37569-37570
+                    int pan = xw & 3;                                                       // 37566-37568
+                    uint16_t spr_off = *(uint16_t*)(s + di + OBJ_SPRITE_OFF);              // 37571
+                    uint16_t skip_top = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D + c1c834*2); // 37572-37574
+                    uint16_t rows = (uint16_t)(*(uint16_t*)(s + di + OBJ_STRIP_COUNT)
+                                    - c1c834 - c1c832);                                     // 37578-37580
+                    uint16_t skip_tail = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D
+                                    + (uint16_t)((c1c832 + c1c834) * 2));                   // 37617-37620
+                    uint16_t spr_seg = *(uint16_t*)(s + di + OBJ_SPRITE_SEG);
+                    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+                    uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
+                    if (sp && (int16_t)rows > 0) {
+                        extern void v2_vga_sprite32_type2(const uint8_t*, uint16_t, int, int, uint8_t, int, uint16_t);
+                        int hflip = (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0; // 37582
+                        // normal engine: AND word_1C830, 0xFF (low byte);
+                        // hflip variant: SHR word_1C830, 8 (high byte holds the
+                        // mirrored clip mask — the 1379/138B LUT words carry both).
+                        uint8_t mand = hflip ? (uint8_t)(c1c830 >> 8) : (uint8_t)(c1c830 & 0xFF);
+                        v2_vga_sprite32_type2(sp + (uint16_t)(spr_off + skip_top - 1),
+                                              di_vga, pan, hflip, mand, rows, skip_tail);
+                    }
+                }
                 goto type2_end;
             type2_exit:
                 // loc_1DB98: sprite outside viewport → set mode=2, return.
@@ -3592,7 +3899,34 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 if (dx < ax) goto type1_exit;                          // 36449
                 // In viewport → sub_1CD7B(si=2)
                 v2_sprite_draw_1CD7D(s, cx, dx, 2, 2);                        // 36450-36451
-                // VGA 8x8 render — commented for v2
+                // shadow-VGA: exact type-1 VGA render (seg003 eips 0x698..0x704 +
+                // hflip 0x945..0x95B). No partial clip exists for type 1 (the
+                // early gates guarantee full visibility; loc_1D154 is a pure
+                // exit): word_1C830 stays FFFF → mask_and = 0xFF both paths.
+                {
+                    uint16_t y = *(uint16_t*)(s + di + OBJ_SPRITE_Y);   // + word_1C834(=0)
+                    uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));
+                    uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
+                                       + *(uint16_t*)(s + DS_PAGE_SHOWN));
+                    uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));
+                    uint16_t xw = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_X) + 0x20);
+                    uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));
+                    int pan = xw & 3;
+                    // src: seg [94D] offset [84D] + cs:[word_1C834*2 + 0x3D] (=cs:[0x3D])
+                    uint16_t spr_seg = *(uint16_t*)(s + di + OBJ_SPRITE_SEG);
+                    uint16_t spr_off = *(uint16_t*)(s + di + OBJ_SPRITE_OFF);
+                    uint16_t cs3d = v2_m2c_base
+                        ? *(uint16_t*)(v2_m2c_base + (uint32_t)0x0E25 * 16 + 0x3D) : 0;
+                    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+                    uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
+                    if (sp) {
+                        extern void v2_vga_sprite8(const uint8_t*, uint16_t, int, int, uint8_t);
+                        int hflip = (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0;
+                        // engine mask sits at [si-1]; [84D] is the 1-based data
+                        // offset (si), so the strip stream starts at si-1.
+                        v2_vga_sprite8(sp + (uint16_t)(spr_off + cs3d - 1), di_vga, pan, hflip, 0xFF);
+                    }
+                }
                 goto type1_end;
             type1_exit:
                 // loc_1D154: sprite outside → set mode=2, return.
@@ -3601,10 +3935,12 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
             type1_end:;
 
             } else if (handler == 0x0B82) {
-                // Type 4 (16x16 sprite). Exact replica of seg003 lines 36965-37271.
+                // Type 4 (16x16 sprite). Exact replica of seg003 lines 36965-37271
+                // incl. shadow-VGA VGA render (proven jpt_1D514/1D703 case bodies).
                 int16_t cx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X);   // 36968
                 int16_t dx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y);   // 36969
-                // cs:word_1C830=0xFFFF, cs:word_1C834=0, cs:word_1C832=0 — VGA clipping init
+                uint16_t c1c830 = 0xFFFF, c1c832 = 0, c1c834 = 0;
+                uint32_t cs3 = (uint32_t)0x0E25 * 16;
                 int16_t ax;
                 // X right bound: ax = viewport_X + 0x140
                 ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140;          // 36973-36974
@@ -3614,7 +3950,8 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 if (cx < ax) goto type4_loc_1d3fd;                       // 36979: JL loc_1D3FD
                 // Right clip path
                 s[di + OBJ_DIRTY_MODE] = 2;                                      // 36980: MOV byte [di+114Dh], 2
-                // bx = cx-ax, shr 2, shl 1 → cs:[bx+0x0E92] → cs:word_1C830 — VGA clip only
+                { uint16_t bx2 = (uint16_t)((uint16_t)(cx - ax) >> 2) << 1;      // 36981-36984
+                  if (v2_m2c_base) c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E92 + bx2); } // 36985-36986
             type4_loc_1d3fd:
                 // X left bound
                 ax -= 0x140;                                             // 36989: SUB ax, 140h
@@ -3624,7 +3961,8 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 if (cx >= ax) goto type4_loc_1d425;                      // 36994: JGE loc_1D425
                 // Left clip path
                 s[di + OBJ_DIRTY_MODE] = 2;                                      // 36995: MOV byte [di+114Dh], 2
-                // bx = ax-cx, shr 2, shl 1 → cs:[bx+0x0E9A] → cs:word_1C830 — VGA clip only
+                { uint16_t bx2 = (uint16_t)((uint16_t)(ax - cx) >> 2) << 1;      // 36996-36999
+                  if (v2_m2c_base) c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E9A + bx2); } // 37000-37001
             type4_loc_1d425:
                 // Y bottom bound: ax = viewport_Y + 0x0B0
                 ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;            // 37004-37005
@@ -3634,7 +3972,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 if (dx < ax) goto type4_loc_1d44c;                       // 37010: JL loc_1D44C
                 // Bottom clip path
                 s[di + OBJ_DIRTY_MODE] = 2;                                      // 37011: MOV byte [di+114Dh], 2
-                // cs:word_1C832 = dx-ax, shr 1 — VGA clip only
+                c1c832 = (uint16_t)((uint16_t)(dx - ax) >> 1);           // 37012-37014: rows→units
             type4_loc_1d44c:
                 // Y top bound
                 ax -= 0xB0;                                              // 37017: SUB ax, 0B0h
@@ -3644,11 +3982,37 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                 if (dx > ax) goto type4_loc_1d471;                       // 37022: JG loc_1D471
                 // Top clip path
                 s[di + OBJ_DIRTY_MODE] = 2;                                      // 37023: MOV byte [di+114Dh], 2
-                // cs:word_1C834 = ax-dx, AND 0xFFFE — VGA clip only
+                c1c834 = (uint16_t)((uint16_t)(ax - dx) & 0xFFFE);       // 37024-37026: even ROWS here
             type4_loc_1d471:
                 // All bounds passed → sub_1CD7B(si=3, bp=3)
                 v2_sprite_draw_1CD7D(s, cx, dx, 3, 3);                          // 37029-37030
-                // VGA 16x16 render — commented for v2
+                // shadow-VGA: exact type-4 VGA render (seg003 eips 0xC47..0xCCA).
+                if (v2_m2c_base) {
+                    uint16_t y = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_Y) + c1c834); // 37031-37032 (rows)
+                    c1c834 >>= 1;                                                           // 37033: rows → units
+                    uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));   // 37034-37040
+                    uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
+                                       + *(uint16_t*)(s + DS_PAGE_SHOWN));                  // 37036-37038
+                    uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));        // 37041
+                    uint16_t xw = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_X) + 0x20);   // 37042-37043
+                    uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));                  // 37047-37048
+                    int pan = xw & 3;                                                        // 37044-37046
+                    uint16_t spr_off = *(uint16_t*)(s + di + OBJ_SPRITE_OFF);               // 37049
+                    uint16_t skip_top = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D + c1c834*2);  // 37050-37052
+                    uint16_t units = (uint16_t)(8 - c1c834 - c1c832);                       // 37056-37058
+                    uint16_t skip_tail = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D
+                                    + (uint16_t)((c1c832 + c1c834) * 2));                    // 37095-37098
+                    uint16_t spr_seg = *(uint16_t*)(s + di + OBJ_SPRITE_SEG);
+                    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+                    uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
+                    if (sp && (int16_t)units > 0) {
+                        extern void v2_vga_sprite16_type4(const uint8_t*, uint16_t, int, int, uint8_t, int, uint16_t);
+                        int hflip = (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0; // 37060
+                        uint8_t mand = hflip ? (uint8_t)(c1c830 >> 8) : (uint8_t)(c1c830 & 0xFF);
+                        v2_vga_sprite16_type4(sp + (uint16_t)(spr_off + skip_top - 1),
+                                              di_vga, pan, hflip, mand, units, skip_tail);
+                    }
+                }
                 goto type4_end;
             type4_exit:
                 // loc_1D6B1: sprite outside → set mode=2, return.
@@ -3694,10 +4058,64 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
         *(uint16_t*)(s + di + OBJ_SPRITE_OLD_X) = *(uint16_t*)(s + di + OBJ_SPRITE_CUR_X);  // MOV [0F4Dh], cx
         *(uint16_t*)(s + di + OBJ_SPRITE_OLD_Y) = *(uint16_t*)(s + di + OBJ_SPRITE_CUR_Y);  // MOV [104Dh], dx
     }
-    // Part 2: tile redraw from dirty page flags — VGA rendering only
-    // OUT(0x3C4, 0x0F02);  // EGA sequencer: enable all planes — commented for v2
-    // OUT(0x3CE, 0x0008);  // EGA graphics: bit mask — commented for v2
-    // ... scan fs dirty flags, render tiles via sub_1CD7D — no DS side effects
+    // Part 2: tile redraw from dirty page flags — VGA rendering only.
+    // shadow-VGA: exact replica of seg003 eips 0x17A0..0x1875 (loc_1DFF0..): scan the
+    // visible 25x43 window for BIT1 cells, span-copy 8 rows × span bytes from the
+    // SHOWN page (92F9) onto the BACKGROUND page (92FB) — fills the freshly
+    // rotated-in BG page. (AND fs:[di],0xFFFF in orig is a value no-op.)
+    {
+        extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
+        uint16_t cx = 0x2B, bx = 0x19;
+        uint16_t di_fs = *(uint16_t*)(s + DS_SCROLL_ROW);
+        di_fs <<= 1;
+        di_fs = *(uint16_t*)(s + (uint16_t)(di_fs - LUT_ROW_BASE));
+        di_fs += *(uint16_t*)(s + DS_SCROLL_COL);
+        di_fs <<= 1;
+        int16_t bp_fs = (int16_t)*(uint16_t*)(s + DS_MAP_BP);
+        bp_fs <<= 2; bp_fs -= 0x56;
+        while (bx != 0) {
+            bool found = false;
+            while (cx != 0) {
+                if (di_fs < V2_FS_SHADOW_SIZE - 1 &&
+                    (*(uint16_t*)(v2_vm_shadow_fs + di_fs) & 2)) { found = true; break; }
+                di_fs += 2; cx--;
+            }
+            if (!found) {
+                di_fs = (uint16_t)((int16_t)di_fs + bp_fs);
+                cx = 0x2B; bx--;
+                continue;
+            }
+            di_fs += 2;
+            uint16_t dx_tl = 2;
+            uint16_t si_row = 0x19 - bx + *(uint16_t*)(s + DS_SCROLL_ROW);
+            uint16_t ax_col = 0x2B - cx + *(uint16_t*)(s + DS_SCROLL_COL);
+            cx--;
+            bool row_ended = false;
+            if (cx == 0) row_ended = true;
+            else {
+                uint16_t rem = cx;
+                while (rem != 0) {
+                    if (di_fs < V2_FS_SHADOW_SIZE - 1 &&
+                        (*(uint16_t*)(v2_vm_shadow_fs + di_fs) & 2)) {
+                        di_fs += 2; dx_tl += 2; rem--;
+                    } else break;
+                }
+                cx = rem;
+                if (rem == 0) row_ended = true;
+            }
+            if (row_ended) {
+                di_fs = (uint16_t)((int16_t)di_fs + bp_fs);
+                cx = 0x2B; bx--;
+            }
+            // loc_1E041: span copy SHOWN → BG
+            uint16_t srcrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + *(uint16_t*)(s + DS_PAGE_SHOWN)) - 0x7608));
+            uint16_t dstrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + *(uint16_t*)(s + DS_PAGE_BG))    - 0x7608));
+            uint16_t offb = (uint16_t)((uint16_t)(ax_col * 2 + 8) & 0xFFFE);
+            for (int r8 = 0; r8 < 8; r8++)
+                v2_vga_copy_span((uint16_t)(dstrow + offb + r8 * 0x56),
+                                 (uint16_t)(srcrow + offb + r8 * 0x56), dx_tl);
+        }
+    }
 }
 
 // sub_1241e: write single glyph to glyph buffer.
@@ -4112,11 +4530,6 @@ static void v2_render_flag_init_11439(uint8_t* s) {
             *(uint16_t*)(s + DS_PAGE_ROWCUR_3) += 2;
             *(uint16_t*)(s + DS_PAGE_ROWCUR_1) += 2;
         }
-        // Page emu (task #21): the pixel side of sub_16ded — all THREE pages
-        // get the visible tile render at level entry, BEFORE the spawn passes
-        // (sub_13ba5/sub_13a0e below) whose [114D] tickets then paint sprites
-        // through the live sub_1dd9c channel.
-        v2_emu_init_pages(v2_current_ds_val);
     }
     // jmp sub_16775: page flip (tail call)
     v2_page_flip_16775(s);
@@ -4463,6 +4876,7 @@ static void v2_portrait_sync_11b0b(uint8_t* s) {
         if (snd != 0) portrait_si += 4;                     // CMP word,0; ADD si,4
         // orig v2 hook + CALL sub_11AA4 (VGA portrait render → v2_hud_buf)
         v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
+        v2_vga_portrait_11aa4(v2_vm_shadow_ds, portrait_si, vk * 2);
         *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2) = snd;            // sync sound tracking
         *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2) = por;            // sync portrait tracking
     }
@@ -4675,15 +5089,17 @@ static void v2_clear_pages_16880(uint8_t* s) {
     // REP STOSW ax=0, cx=0x8000 words (64KB) to es:0 (VGA 0xA000)
     memset(v2_render_buf, 0, 320 * 200);
     memset(v2_hud_buf, 0, 320 * 64);
-    // Page emu (task #21): the orig clear wipes ALL VGA pages — invalidate the
-    // emu pages so they reinitialize from the new scene's background (reseed
-    // on next v2_emu_early). NOTE a black-pages+valid variant was tried to
-    // close the scene-entry blind window honestly, but the very first scenes
-    // (pre-flag chunk screens) fill the pages outside the emu channels — the
-    // display fallback (emu invalid → compare v2_render_buf) covers those.
+    // shadow-VGA: mirror the m2c-port drawBuffer hook, NOT the DOS STOSW. The orig
+    // REP STOSW (cx=0x8000 words) wipes the full 64K VGA segment, but the port
+    // hook is `for (i=0; i<0x8000; i++) drawPixel(j, i, 0)` — 0x8000 BYTE
+    // addresses only. The parity target is THIS binary (same class as the
+    // 1712b `i <= cx` quirk), so the shadow wipes 0..0x7FFF like the port:
+    // bytes 0x8000..0xFFFF keep their previous content across level init
+    // (band-scroll leftovers of the previous scene survive there — verified
+    // vs real at the 0x2B→0x2C transition, rows above the window).
     {
-        memset(v2_emu_page, 0, sizeof(v2_emu_page));
-        v2_emu_valid = false;
+        extern void v2_vga_fill_span(uint16_t dst, uint32_t nbytes, uint8_t val);
+        v2_vga_fill_span(0, 0x8000u, 0);
     }
     // Invalidate chunk_bg backup — old level's static pixels (with old palette)
     // must NOT be restored against new level's palette → would cause wrong colors
@@ -5413,6 +5829,12 @@ static void v2_vga_modex_init_167ff(uint8_t* s) {
     // REP STOSW: clear 64KB VGA memory (es=0xA000, di=0, cx=0x8000, ax=0)
     memset(v2_render_buf, 0, 320 * 200);
     memset(v2_hud_buf, 0, 320 * 64);
+    // shadow-VGA: mirror the m2c-port drawBuffer hook (0x8000 BYTE addresses, not
+    // the DOS STOSW's 0x8000 words) — same port quirk as v2_clear_pages_16880.
+    {
+        extern void v2_vga_fill_span(uint16_t dst, uint32_t nbytes, uint8_t val);
+        v2_vga_fill_span(0, 0x8000u, 0);
+    }
 
     // ds:0x92FF = 1 (VGA mode initialized flag)
     s[DS_VGA_PAGE_FLAG] = 1;
@@ -5870,6 +6292,14 @@ static void v2_load_level_11080(uint8_t* s) {
                 *(uint16_t*)(s + DS_DECOMP_SIZE) = plane_size; // ds:0x2BBC = plane_size
                 // di=0 → HUD area. v2_draw_hud_background draws to v2_hud_buf.
                 v2_draw_hud_background(v2_current_ds_val, chunk_base_seg, plane_size);
+                // shadow-VGA: replay the orig 4-plane VGA copy (HUD area, di=0).
+                {
+                    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+                    for (uint32_t p4 = 0; p4 < 4; p4++)
+                        for (uint32_t i4 = 0; i4 < plane_size; i4++)
+                            v2_vga_glyph_px((uint16_t)i4, p4,
+                                            v2_vm_shadow_chunk[(uint32_t)plane_size * p4 + i4]);
+                }
             }
         }
         // sub_1200a: clear previous health tracking
@@ -5882,6 +6312,7 @@ static void v2_load_level_11080(uint8_t* s) {
             *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)) = item;
             // sub_1183d: draw HUD item to v2_hud_buf
             v2_draw_hud_item(v2_current_ds_val, di2, item);
+            v2_vga_hud_item_1183d(v2_vm_shadow_ds, di2, item);
         }
         // sub_12034: clear portrait/sound tracking, then JMP sub_11B0B (tail call).
         // Original sub_12034 at eip 0x2034: sets 6 words to 0xFFFF, then JMP sub_11B0B.
@@ -5900,12 +6331,15 @@ static void v2_load_level_11080(uint8_t* s) {
         uint16_t sel1 = *(uint16_t*)(s + (DS_HUD_SEL));
         *(uint16_t*)(s + DS_HUD_SEL_PREV) = sel1;
         v2_draw_hud_selector(v2_current_ds_val, sel1 * 2);
+        v2_vga_selector_118ad(v2_vm_shadow_ds, sel1 * 2);
         uint16_t sel2 = *(uint16_t*)(s + DS_HUD_SEL_2);
         *(uint16_t*)(s + DS_HUD_SEL_PREV_2) = sel2;
         v2_draw_hud_selector(v2_current_ds_val, (sel2 + 4) * 2);
+        v2_vga_selector_118ad(v2_vm_shadow_ds, (sel2 + 4) * 2);
         uint16_t sel3 = *(uint16_t*)(s + DS_HUD_SEL_3);
         *(uint16_t*)(s + DS_HUD_SEL_PREV_3) = sel3;
         v2_draw_hud_selector(v2_current_ds_val, (sel3 + 8) * 2);
+        v2_vga_selector_118ad(v2_vm_shadow_ds, (sel3 + 8) * 2);
     }
 
     // sub_11204: load level data chunks (tile graphics, tilemap, etc.)
@@ -6139,15 +6573,12 @@ static void v2_load_level_11080(uint8_t* s) {
         }
         // sub_1de05_dirty_update_position(NULL); // seg003 recreated
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
-        v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu: tiles + early (task #21)
         // sub_165aa + sub_16661: despawn + scroll tracking
         v2_game_loop_post_render(s);
-        v2_emu_init_pass(v2_current_ds_val, 1);   // page-emu: late layer on [92F7]
         // CALLF sub_1DD9C (1st DD9C in sub_115d2)
         { static int _pre1=0; _pre1++; if(_pre1<=8) fprintf(stderr,"V2-115d2-PRE-DD9C1[%d]: 117D=%02X 117E=%02X flags=%04X active=%d level=%04X\n",_pre1,s[DS_RENDER_117D],s[DS_RENDER_117E],*(uint16_t*)(s+0x30+OBJ_SPRITE_FLAGS),!!(*(uint16_t*)(s+0x30+OBJ_SPRITE_FLAGS)&0x8000),*(uint16_t*)(s+DS_LEVEL)); }
         v2_late_sprites_1DD9C(s);
         slot2e_trace("SF1-post-DD9C");
-        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
         { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf1-%d]: mode=%02X force=%02X\n",_dd4,s[DS_RENDER_117D],s[DS_SPRITE_FORCE]); }
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6176,14 +6607,11 @@ static void v2_load_level_11080(uint8_t* s) {
             v2_vsync_wait_10130(s);
             v2_bg_latch_1DE05(s);
             fs_cmp_115d2("SF2-post-DE05");
-            v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu (task #21)
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
-            v2_emu_init_pass(v2_current_ds_val, 1);
             // CALLF sub_1DD9C (line 2911 in original)
             v2_late_sprites_1DD9C(s);
             slot2e_trace("SF2-post-DD9C");
-        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
             { static int _dd2=0; _dd2++; if(_dd2<=8) fprintf(stderr,"V2-115d2-DD9C[sf2-%d]: mode=%02X force=%02X\n",_dd2,s[DS_RENDER_117D],s[DS_SPRITE_FORCE]); }
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
             v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6215,8 +6643,10 @@ static void v2_load_level_11080(uint8_t* s) {
                     else if (*(uint16_t*)(s + DS_ACTIVE_VIKING) != (uint16_t)(vk * 2)) ax = 1;
                     else ax = 0;
                     *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2) = ax;
-                    if (ax != prev)
+                    if (ax != prev) {
                         v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
+                        v2_vga_healthbar_117d0(s, ax, vk, vk);
+                    }
                 }
                 // sub_12199: HUD items refresh — rendering only, no DS side effects beyond what sub_1201d did
                 // loc_1205b: HUD item selector state sync. Verified with seg000 lines 4893-4922.
@@ -6230,6 +6660,7 @@ static void v2_load_level_11080(uint8_t* s) {
                         // These are VGA HUD rendering — v2 uses v2_draw_hud_selector instead.
                         *(uint16_t*)(s + DS_HUD_SEL_PREV + vk_s * 2) = cur;
                         v2_draw_hud_selector(v2_current_ds_val, (cur + vk_s * 4) * 2);
+                        v2_vga_selector_118ad(v2_vm_shadow_ds, (cur + vk_s * 4) * 2);
                     }
                 }
                 // sub_11B0B: portrait/sound state sync + render (3 vikings)
@@ -6239,15 +6670,12 @@ static void v2_load_level_11080(uint8_t* s) {
             // CALLF sub_1DE05 (PASS 3)
             v2_bg_latch_1DE05(s);
             fs_cmp_115d2("SF3-post-DE05");
-            v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu (task #21)
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
-            v2_emu_init_pass(v2_current_ds_val, 1);
             fs_cmp_115d2("SF3-pre-DD9C"); mode_cmp_115d2("SF3-pre-DD9C");
             // CALLF sub_1DD9C
             v2_late_sprites_1DD9C(s);
             slot2e_trace("SF3-post-DD9C");
-        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
             { static int _dd3=0; _dd3++; if(_dd3<=8) fprintf(stderr,"V2-115d2-DD9C[sf3-%d]: mode=%02X force=%02X\n",_dd3,s[DS_RENDER_117D],s[DS_SPRITE_FORCE]); }
             // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
@@ -6263,15 +6691,12 @@ static void v2_load_level_11080(uint8_t* s) {
         fs_cmp_115d2("SF4-post-DE05");
         // sub_1de05_dirty_update_position(NULL); // seg003 recreated
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
-        v2_emu_init_pass(v2_current_ds_val, 0);   // page-emu (task #21)
         // sub_165aa + sub_16661:
         v2_game_loop_post_render(s);
-        v2_emu_init_pass(v2_current_ds_val, 1);
         fs_cmp_115d2("SF4-pre-DD9C"); mode_cmp_115d2("SF4-pre-DD9C");
         // CALLF sub_1DD9C
         v2_late_sprites_1DD9C(s);
         slot2e_trace("SF4-post-DD9C");
-        v2_emu_init_pass(v2_current_ds_val, 2);   // page-emu: flagged+unblit (cascade end)
         // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -8946,9 +9371,6 @@ static void v2_page_rotate_165aa(uint8_t* shadow) {
         if (dx != *(uint16_t*)(shadow + DS_PAGE_BG)) {
             // Original: CALLF sub_1DF6A (position copy + VGA redraw)
             v2_dirty_obj_pos_1DF6A(shadow);
-            // Page-emu pixel side of sub_1df6a: bit1 cells shown→background
-            // page (task #21) — same call order as the orig CALLF.
-            v2_emu_df6a(v2_current_ds_val);
             // Original: MOV byte ptr ds:9568h, 1
             shadow[DS_SPRITE_FORCE] = 1;
         }
@@ -8973,6 +9395,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
         if (ax_y != cx_y) {
             if ((int16_t)ax_y < (int16_t)cx_y) {
                 // Scrolled up: sub_16e75 (VGA tile row render) + sub_166e8 (dirty mark)
+                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16E75 f%d\n", v2_dbg_pre_vm_iter);} }
                 // sub_16e75: full DS side effects (verified with seg000 lines 14433-14521)
                 // Identical structure to sub_16f5f but for upward scroll (DEC row instead of +0x29)
                 {
@@ -9011,7 +9434,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + DS_PAGE_COPY_DST2) += ax_col + 8;
                     *(uint16_t*)(shadow + DS_PAGE_COPY_SRC3) += ax_col + 8;
                     *(uint16_t*)(shadow + DS_PAGE_COPY_SRC1) = di_vga3;
-                    v2_tile_col_16dd9(shadow); v2_page_copy_row_1712b(shadow); // VGA tile row + column render
+                    v2_tile_col_16dd9(shadow, bx_r); v2_page_copy_row_1712b(shadow); // VGA tile column + page copy
                     skip_16e75:;
                 }
                 // sub_166e8: mark sprites dirty if X < viewport_X
@@ -9024,6 +9447,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                 }
             } else {
                 // Scrolled down: sub_16f5f (VGA scroll tile render) + sub_16710 (dirty mark)
+                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16F5F f%d\n", v2_dbg_pre_vm_iter);} }
                 // sub_16f5f: full DS side effects (ds:0x9311-0x931D page tracking)
                 {
                     uint16_t di_r = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y);
@@ -9068,8 +9492,8 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + DS_PAGE_COPY_DST2) += ax_col + 8;
                     *(uint16_t*)(shadow + DS_PAGE_COPY_SRC3) += ax_col + 8;
                     *(uint16_t*)(shadow + DS_PAGE_COPY_SRC1) = di_vga3;
-                    v2_tile_col_16dd9(shadow); // VGA tile row render
-                    v2_page_copy_row_1712b(shadow); // VGA column render
+                    v2_tile_col_16dd9(shadow, bx_r); // VGA tile column render
+                    v2_page_copy_row_1712b(shadow); // VGA page copy
                 }
                 // sub_16710: mark sprites dirty if X > viewport_X + 0x121
                 uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_X) + 0x121;
@@ -9087,6 +9511,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
         if (ax_x != cx_x) {
             if ((int16_t)ax_x < (int16_t)cx_x) {
                 // Scrolled left: sub_17049 (VGA scroll tile render) + loc_16694 (dirty mark)
+                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V17049 f%d\n", v2_dbg_pre_vm_iter);} }
                 // sub_17049: full DS side effects (verified with seg000 lines 14607-14652)
                 {
                     uint16_t di_r = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y);            // ds:92F1h
@@ -9106,7 +9531,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + DS_PAGE_VGA_1) = *(uint16_t*)(shadow + (uint16_t)(pg2 - 0x7608)) + dx_col;
                     uint16_t pg3 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_1);
                     *(uint16_t*)(shadow + DS_PAGE_VGA_2) = *(uint16_t*)(shadow + (uint16_t)(pg3 - 0x7608)) + dx_col;
-                    v2_tile_row_16dc1(shadow, 0, 0); // VGA column render
+                    v2_tile_row_16dc1(shadow, bx_r, 0); // VGA tile row render
                     v2_page_copy_col_171dc(shadow);       // VGA page copy
                 }
                 // loc_16694: mark sprites dirty if Y < viewport_Y
@@ -9119,6 +9544,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                 }
             } else {
                 // Scrolled right: sub_170b9 (VGA scroll tile render) + loc_166bc (dirty mark)
+                if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V170B9 f%d\n", v2_dbg_pre_vm_iter);} }
                 // sub_170b9: full DS side effects (verified with seg000 lines 14656-14702)
                 {
                     uint16_t di_r = *(uint16_t*)(shadow + DS_SCROLL_DISP_Y) + 0x17;   // ADD di, 17h
@@ -9138,7 +9564,7 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                     *(uint16_t*)(shadow + DS_PAGE_VGA_1) = *(uint16_t*)(shadow + (uint16_t)(pg2 - 0x7608)) + dx_col;
                     uint16_t pg3 = *(uint16_t*)(shadow + DS_PAGE_ROWCUR_1);
                     *(uint16_t*)(shadow + DS_PAGE_VGA_2) = *(uint16_t*)(shadow + (uint16_t)(pg3 - 0x7608)) + dx_col;
-                    v2_tile_row_16dc1(shadow, 0, 0); v2_page_copy_col_171dc(shadow); // VGA column/tile render
+                    v2_tile_row_16dc1(shadow, bx_r, 0); v2_page_copy_col_171dc(shadow); // VGA tile row + page copy
                 }
                 // loc_166bc: mark sprites dirty if Y > viewport_Y + 0x91
                 uint16_t dx_vp = *(uint16_t*)(shadow + DS_VIEWPORT_Y) + 0x91;
@@ -9186,10 +9612,34 @@ static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue) {
                 // Mutate ds:0x6C/0x6E per orig eip 0x40D6-0x40E0 (after bound check).
                 *(uint16_t*)(shadow + DS_TEXT_COL) = (pos_x >> 2) + 8;
                 *(uint16_t*)(shadow + DS_TEXT_ROW) = pos_y >> 2;
-                // Pixel side (task #21): repaint the 2x2 anim tile block onto
-                // the shown+background emu pages (orig sub_1689e calls onto
-                // the [92F9]- and [92FB]-page addresses).
-                v2_emu_anim_tiles(v2_current_ds_val, pos_x, pos_y, clip);
+                // shadow-VGA: exact orig 2×2 quadrant renders into the shadow VGA,
+                // TWO passes (page 92F9 then 92FB) — seg000 eips 0x40E5..0x418E.
+                {
+                    uint16_t bp_fs = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78CA));
+                    uint16_t stride = *(uint16_t*)(shadow + DS_FS_PAGE_STRIDE);
+                    uint16_t col6C = *(uint16_t*)(shadow + DS_TEXT_COL);
+                    uint16_t row6E = *(uint16_t*)(shadow + DS_TEXT_ROW);
+                    static const uint16_t pg_roles[2] = { DS_PAGE_SHOWN, DS_PAGE_BG };
+                    for (int pass = 0; pass < 2; pass++) {
+                        uint16_t dip = (uint16_t)(row6E + *(uint16_t*)(shadow + pg_roles[pass]));
+                        dip = *(uint16_t*)(shadow + (uint16_t)(dip - 0x7608));
+                        dip = (uint16_t)(dip + col6C);
+                        uint16_t bp2 = (uint16_t)(bp_fs - stride);
+                        auto rd_fs = [&](uint16_t off) -> uint16_t {
+                            uint16_t mo = (uint16_t)(bp2 + off);
+                            return (mo < V2_FS_SHADOW_SIZE - 1)
+                                 ? *(uint16_t*)(v2_vm_shadow_fs + mo) : 0;
+                        };
+                        if (!(clip & 8)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
+                        dip = (uint16_t)(dip + 2);
+                        if (!(clip & 4)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
+                        dip = (uint16_t)(dip + 0x2AE);
+                        bp2 = (uint16_t)(bp2 + stride);
+                        if (!(clip & 2)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
+                        dip = (uint16_t)(dip + 2);
+                        if (!(clip & 1)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
+                    }
+                }
             }
         }
     }
@@ -13154,15 +13604,20 @@ static void v2_vm_op_13(V2VM& vm) {
         //   - Clear v2_render_buf rows 64..176 (rest of viewport cleared)
         extern uint8_t v2_render_buf[320*200];
         extern uint8_t v2_hud_buf[320*64];
-        // #39 v3 (PAGE-accurate): orig loc_14396 writes to ABSOLUTE page bytes -
-        // inverse LUT_PAGE_ROW: 0x2ADC/0x70BC == world row 62 of the role-value
-        // 0x00 / 0x34 pages; the STOSBs zero the head + everything else incl.
-        // the whole 0x68 page. The previous screen-space fix read vp at opcode
-        // time and diverged between grooves (#39). Now the pages get the
-        // picture at the fixed world row and the shown window does the rest.
-        v2_emu_op13_text_menu(v2_current_ds_val, v2_hud_buf);
         // Clear HUD area (= orig STOSB di=0..0x2ADC head part)
         memset(v2_hud_buf, 0, 320 * 64);
+        // shadow-VGA: replay the orig 5-op VGA sequence into the shadow VGA verbatim.
+        {
+            extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
+            extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+            extern void v2_vga_fill_span(uint16_t dst, uint32_t nbytes, uint8_t val);
+            (void)v2_vga_glyph_px;
+            v2_vga_copy_span(0x2ADC, 0x0000, 0x1600);
+            v2_vga_copy_span(0x70BC, 0x0000, 0x1600);
+            v2_vga_fill_span(0x0000, 0x2ADC, 0);
+            v2_vga_fill_span(0x40DC, 0x2FE0, 0);
+            v2_vga_fill_span(0x86BC, 0x7000, 0);
+        }
     } else if (al == 0x01) {
         // Orig sub_1434c loc_143eb → JMP loc_10E35: GAME EXIT.
         // loc_10E35 (eip 0x0E35) frees all DOS memory blocks (5× INT 21h 0x4900),
@@ -17619,6 +18074,24 @@ static void v2_page_flip_16775(uint8_t* s) {
                          __builtin_return_address(0));
     }
     v2_pageflip_count++;
+    // shadow-VGA: v2 CRTC — the exact sub_16775 computation on SHADOW DS at this
+    // phase point (seg000 eips 0x6775..: y/x eff clamp, flat page LUT, +8).
+    {
+        extern uint32_t v2_vga_crtc; extern uint8_t v2_vga_pan;
+        uint16_t y_disp = *(uint16_t*)(s + 0x46), y_some = *(uint16_t*)(s + 0x3A0);
+        uint16_t y_lvl  = *(uint16_t*)(s + 0x25A6);
+        uint16_t x_disp = *(uint16_t*)(s + 0x44), x_some = *(uint16_t*)(s + 0x39E);
+        uint16_t x_lvl  = *(uint16_t*)(s + 0x25A4);
+        uint16_t page   = *(uint16_t*)(s + 0x92F9);
+        uint16_t y_off = (uint16_t)(y_disp + y_some);
+        if (y_off > y_lvl) y_off = (uint16_t)(y_disp - y_some);
+        uint16_t x_off = (uint16_t)(x_disp + x_some);
+        if (x_off > x_lvl) x_off = (uint16_t)(x_disp - x_some);
+        uint16_t y_hi = *(uint16_t*)(s + (uint16_t)(0x89F8 + page + ((y_off >> 3) * 2)));
+        uint16_t y_lo = *(uint16_t*)(s + (uint16_t)(0x8E58 + (y_off & 7) * 2));
+        v2_vga_crtc = (uint16_t)(y_lo + y_hi + (x_off >> 2) + 8);
+        v2_vga_pan  = (uint8_t)(x_off & 3);
+    }
     // VGA page flip registers:
     // PUSHF; CLI;
     // OUT(0x3D4, 0x0D | (bl << 8));  // CRTC start address low
@@ -17889,6 +18362,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 *(uint16_t*)(s + (DS_HUD_HEALTH)) = ax;
                 if (ax != prev)
                     v2_draw_hud_healthbar(v2_current_ds_val, ax, 0, 0);
+                { v2_vga_healthbar_117d0(s, ax, 0, 0); }
             }
             // Viking 2 (ds:0x0437/0x043D)
             {
@@ -17902,6 +18376,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 *(uint16_t*)(s + DS_VK_STATE_3) = ax;
                 if (ax != prev)
                     v2_draw_hud_healthbar(v2_current_ds_val, ax, 1, 1);
+                { v2_vga_healthbar_117d0(s, ax, 1, 1); }
             }
             // Viking 3 (ds:0x0439/0x043F)
             {
@@ -17915,6 +18390,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 *(uint16_t*)(s + DS_VK_STATE_4) = ax;
                 if (ax != prev)
                     v2_draw_hud_healthbar(v2_current_ds_val, ax, 2, 2);
+                { v2_vga_healthbar_117d0(s, ax, 2, 2); }
             }
             // sub_12199: item/HUD redraw — reads current items and re-renders
             // DS writes: [di+0x3FC] = [di+0x3E4] (copy current→previous for 12 entries)
@@ -17923,6 +18399,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 if (item != *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV))) {
                     *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)) = item;
                     v2_draw_hud_item(v2_current_ds_val, di2, item);
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di2, item);
                 }
             }
             // loc_1205b: HUD selector sync (same logic as sub_120d1 but with change detection)
@@ -17931,22 +18408,28 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 // Draw OLD selector (clear), then update + draw new
                 uint16_t old_di = *(uint16_t*)(s + DS_HUD_SEL_PREV) * 2;
                 v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
+                v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
                 *(uint16_t*)(s + DS_HUD_SEL_PREV) = *(uint16_t*)(s + (DS_HUD_SEL));
                 v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + (DS_HUD_SEL)) * 2);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, *(uint16_t*)(s + (DS_HUD_SEL)) * 2);
             }
             // Viking 2
             if (*(uint16_t*)(s + DS_HUD_SEL_2) != *(uint16_t*)(s + DS_HUD_SEL_PREV_2)) {
                 uint16_t old_di = (*(uint16_t*)(s + DS_HUD_SEL_PREV_2) + 4) * 2;
                 v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
+                v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
                 *(uint16_t*)(s + DS_HUD_SEL_PREV_2) = *(uint16_t*)(s + DS_HUD_SEL_2);
                 v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + DS_HUD_SEL_2) + 4) * 2);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(s + DS_HUD_SEL_2) + 4) * 2);
             }
             // Viking 3
             if (*(uint16_t*)(s + DS_HUD_SEL_3) != *(uint16_t*)(s + DS_HUD_SEL_PREV_3)) {
                 uint16_t old_di = (*(uint16_t*)(s + DS_HUD_SEL_PREV_3) + 8) * 2;
                 v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
+                v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
                 *(uint16_t*)(s + DS_HUD_SEL_PREV_3) = *(uint16_t*)(s + DS_HUD_SEL_3);
                 v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + DS_HUD_SEL_3) + 8) * 2);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(s + DS_HUD_SEL_3) + 8) * 2);
             }
             // sub_11b0b: portrait/sound state sync (3 vikings). Exact replica.
             // Viking 1: compare ds:0x429 vs ds:0x42F AND ds:0x15AD vs ds:0x423
@@ -17955,6 +18438,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 uint16_t ps = *(uint16_t*)(s + VIK_PORTRAIT);
                 if (*(uint16_t*)(s + (DS_PORTRAIT_SND)) != 0) ps += 4;
                 v2_draw_hud_portrait(v2_current_ds_val, 0, ps);
+                v2_vga_portrait_11aa4(v2_vm_shadow_ds, ps, 0);
                 *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) = *(uint16_t*)(s + (DS_PORTRAIT_SND));
                 *(uint16_t*)(s + (DS_PORTRAIT_PREV)) = *(uint16_t*)(s + VIK_PORTRAIT);
             }
@@ -17964,6 +18448,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 uint16_t ps = *(uint16_t*)(s + DS_VK_PORTRAIT_SND_2);
                 if (*(uint16_t*)(s + DS_HUD_SCRATCH_42B) != 0) ps += 4;
                 v2_draw_hud_portrait(v2_current_ds_val, 2, ps);
+                v2_vga_portrait_11aa4(v2_vm_shadow_ds, ps, 2);
                 *(uint16_t*)(s + DS_VK_STATE_1) = *(uint16_t*)(s + DS_HUD_SCRATCH_42B);
                 *(uint16_t*)(s + DS_PORTRAIT_SND_2) = *(uint16_t*)(s + DS_VK_PORTRAIT_SND_2);
             }
@@ -17973,6 +18458,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 uint16_t ps = *(uint16_t*)(s + DS_VK_PORTRAIT_SND_3);
                 if (*(uint16_t*)(s + DS_HUD_SCRATCH_42D) != 0) ps += 4;
                 v2_draw_hud_portrait(v2_current_ds_val, 4, ps);
+                v2_vga_portrait_11aa4(v2_vm_shadow_ds, ps, 4);
                 *(uint16_t*)(s + DS_VK_STATE_2) = *(uint16_t*)(s + DS_HUD_SCRATCH_42D);
                 *(uint16_t*)(s + DS_PORTRAIT_SND_3) = *(uint16_t*)(s + DS_VK_PORTRAIT_SND_3);
             }
@@ -18898,10 +19384,6 @@ void v2_phase_render1(uint16_t ds_val) {
     // 1 ahead of orig per game tick (orig calls sub_1e0c7 ONCE per pass at eip 0x006C).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2a-tiles");
-    // Page emu (task #21): sub-frame early half — page flip, sub_1de05 dirty
-    // latch-copies from the background (= the clean tile render above), early
-    // sprite layer on the work page.
-    v2_emu_early(v2_current_ds_val);
     // Early sprite layer — orig sub_1de05 point: moving objects are erased and
     // repainted here, BEFORE the sub_165aa/16661 anim-state updates. (Static
     // objects' page pixels also correspond to this state.)
@@ -18910,16 +19392,9 @@ void v2_phase_render1(uint16_t ds_val) {
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // Late sprite layer — orig sub_1dd9c point (AFTER the anim updates):
-    // repaint only what orig's 1dd9c would (force 0x9568 / [obj+0x114D] byte /
-    // sub_1cdef render-map-bit0 gate), evaluated BEFORE v2_late_sprites_1DD9C DECs the
-    // counters — same order as orig (gate, draw, DEC). Task #20/#21: flames
-    // take the post-update phase, the mid-screen lift keeps the early one.
-    // Task #23 cascade order: arm page → single dd9c loop (gate → pixels →
-    // DEC → cd7d OR3 per object, orig call order) → flagged+unblit → the
-    // display-lane late repaint (render_buf) stays as before.
-    v2_emu_late_begin(v2_current_ds_val);
+    // v2_late_sprites_1DD9C is the full orig loop (gate → VGA pixels via the
+    // shadow-VGA type engines → DEC → sub_1cd7d OR3 per object, orig call order).
     v2_late_sprites_1DD9C(v2_vm_shadow_ds);
-    v2_emu_late_end(v2_current_ds_val);
     v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("p2a-sprites-late");
 
@@ -19081,19 +19556,13 @@ void v2_phase_render2(uint16_t ds_val) {
     // (effective 20fps animation).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p2b-tiles");
-    v2_emu_early(v2_current_ds_val);
     // Early sprite layer (orig sub_1de05 point) — see render1 note.
     v2_draw_sprites(v2_current_ds_val);
     v2_pixwatch_stage("p2b-sprites");
     // sub_165aa + sub_16661 + sub_1406d
     v2_game_loop_post_render(v2_vm_shadow_ds);
     // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
-    // Task #23 cascade order: arm page → single dd9c loop (gate → pixels →
-    // DEC → cd7d OR3 per object, orig call order) → flagged+unblit → the
-    // display-lane late repaint (render_buf) stays as before.
-    v2_emu_late_begin(v2_current_ds_val);
     v2_late_sprites_1DD9C(v2_vm_shadow_ds);
-    v2_emu_late_end(v2_current_ds_val);
     v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("p2b-sprites-late");
     // sub_1C8F1
@@ -19147,7 +19616,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             int16_t hv = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX + vk * 2);
             uint16_t ax = (hv < 0) ? 2 : (*(uint16_t*)(s + DS_ACTIVE_VIKING) != (uint16_t)(vk * 2)) ? 1 : 0;
             *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2) = ax;
-            if (ax != prev) v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
+            if (ax != prev) { v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk); v2_vga_healthbar_117d0(s, ax, vk, vk); }
         }
         // sub_12199 (eip 0x2199): item display sync. Loop slot 0..0x18 step 2:
         //   if ds:[di+3E4] != ds:[di+3FC]: copy + redraw + sub_120d1.
@@ -19225,6 +19694,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                 }
                 *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)) = item;
                 v2_draw_hud_item(v2_current_ds_val, di2, item);
+                v2_vga_hud_item_1183d(v2_vm_shadow_ds, di2, item);
                 // sub_120d1 (eip 0x20D1): redraw 3 viking selectors AND unconditionally
                 // sync 0x41A=0x414, 0x41C=0x416, 0x41E=0x418. Called on every item change.
                 {
@@ -19232,14 +19702,17 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                     uint16_t v1 = *(uint16_t*)(s + (DS_HUD_SEL));
                     *(uint16_t*)(s + DS_HUD_SEL_PREV) = v1;
                     v2_draw_hud_selector(v2_current_ds_val, v1 * 2);
+                    v2_vga_selector_118ad(v2_vm_shadow_ds, v1 * 2);
                     // viking 2: word_288fc (0x41C) = word_288f6 (0x416)
                     uint16_t v2v = *(uint16_t*)(s + DS_HUD_SEL_2);
                     *(uint16_t*)(s + DS_HUD_SEL_PREV_2) = v2v;
                     v2_draw_hud_selector(v2_current_ds_val, (v2v + 4) * 2);
+                    v2_vga_selector_118ad(v2_vm_shadow_ds, (v2v + 4) * 2);
                     // viking 3: word_288fe (0x41E) = word_288f8 (0x418)
                     uint16_t v3 = *(uint16_t*)(s + DS_HUD_SEL_3);
                     *(uint16_t*)(s + DS_HUD_SEL_PREV_3) = v3;
                     v2_draw_hud_selector(v2_current_ds_val, (v3 + 8) * 2);
+                    v2_vga_selector_118ad(v2_vm_shadow_ds, (v3 + 8) * 2);
                     // ORIG BUG (see top of loop): sub_120d1 leaves di clobbered
                     // = (word_288F8 + 8) * 2. sub_12199 loop's "ADD di,2" then
                     // continues from this wrong value, skipping slots. Replicate
@@ -19256,8 +19729,10 @@ void v2_phase_post_flip2(uint16_t ds_val) {
             if (*(uint16_t*)(s + cur_off) != *(uint16_t*)(s + prev_off)) {
                 uint16_t old_di = *(uint16_t*)(s + prev_off) * 2;
                 v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
+                v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
                 *(uint16_t*)(s + prev_off) = *(uint16_t*)(s + cur_off);
                 v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + cur_off) * 2);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, *(uint16_t*)(s + cur_off) * 2);
             }
         }
         // sub_11B0B: portrait/sound state sync (3 vikings) — same logic as init at sub_11080.
@@ -19270,6 +19745,7 @@ void v2_phase_post_flip2(uint16_t ds_val) {
                 uint16_t portrait_si = port_prev;
                 if (sound_prev != 0) portrait_si += 4;
                 v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
+                v2_vga_portrait_11aa4(v2_vm_shadow_ds, portrait_si, vk * 2);
                 *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2) = sound_prev;
                 *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2) = port_prev;
             }
@@ -19345,7 +19821,6 @@ void v2_phase_render3(uint16_t ds_val) {
     // updated by post_flip2's sub_12fd0 (delta_type2 = 1/3 of remaining delta).
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("r3-tiles");
-    v2_emu_early(v2_current_ds_val);
     // Early sprite layer (orig sub_1de05 point) — see render1 note.
     v2_draw_sprites(v2_current_ds_val);
     v2_pixwatch_stage("r3-sprites");
@@ -19354,12 +19829,7 @@ void v2_phase_render3(uint16_t ds_val) {
     v2_game_loop_post_render(v2_vm_shadow_ds, /*include_anim_queue=*/false);
     v2_pixwatch_stage("r3-post_render");
     // Late sprite layer (orig sub_1dd9c point, gate before DEC) — render1 note.
-    // Task #23 cascade order: arm page → single dd9c loop (gate → pixels →
-    // DEC → cd7d OR3 per object, orig call order) → flagged+unblit → the
-    // display-lane late repaint (render_buf) stays as before.
-    v2_emu_late_begin(v2_current_ds_val);
     v2_late_sprites_1DD9C(v2_vm_shadow_ds);
-    v2_emu_late_end(v2_current_ds_val);
     v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("r3-1DD9C");
     // sub_1C8F1 (flagged tiles)
@@ -20038,6 +20508,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             // Left: find prev category via sub_12250 (seg000 3732-3761)
             // Orig: MOV di, word_28923; SHL di, 1; MOV ax, 0; CALL sub_1183d (clear current)
             v2_draw_hud_item(v2_current_ds_val, *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1, 0);
+            v2_vga_hud_item_1183d(v2_vm_shadow_ds, *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1, 0);
             *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
             uint16_t di_cat = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) >> 2;
             for (int safe = 0; safe < 8; safe++) {
@@ -20063,6 +20534,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             // Right: find next category via sub_12250 (seg000 3765-3795)
             // Orig: MOV di, word_28923; SHL di, 1; MOV ax, 0; CALL sub_1183d (clear current)
             v2_draw_hud_item(v2_current_ds_val, *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1, 0);
+            v2_vga_hud_item_1183d(v2_vm_shadow_ds, *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1, 0);
             *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
             uint16_t di_cat = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) >> 2;
             for (int safe = 0; safe < 8; safe++) {
@@ -20098,6 +20570,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 4);
                     // orig sub_11f93 eip 0x1FBD: sub_1183d(di=0x18, ax=0x17) — render special slot
                     v2_draw_hud_item(v2_current_ds_val, 0x18, 0x17);
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, 0x18, 0x17);
                 }
             } else {
                 if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 2);
@@ -20111,6 +20584,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                 if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
                     // orig sub_11f93 eip 0x1FEE: sub_1183d(di=di2, ax=0) — clear slot render
                     v2_draw_hud_item(v2_current_ds_val, di2, 0);
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di2, 0);
                     uint16_t ax2 = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) & 3;
                     *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
                 }
@@ -20138,6 +20612,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                     di3 = ((di3 << 1) + ax3) << 1;
                     // orig sub_121f6 eip 0x2236: sub_1183d(di=di3, ax=0) — render new slot
                     v2_draw_hud_item(v2_current_ds_val, di3, 0);
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di3, 0);
                     uint16_t si_v = saved >> 1;
                     di3 = (di3 >> 2) & 0xFFFE;
                     *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
@@ -20165,6 +20640,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                 if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
                     // orig sub_11f93 eip 0x1FEE: sub_1183d(di=di2, ax=0) — clear slot render
                     v2_draw_hud_item(v2_current_ds_val, di2, 0);
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di2, 0);
                     uint16_t ax2 = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) & 3;
                     *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
                 }
@@ -20192,6 +20668,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                     di3 = ((di3 << 1) + ax3) << 1;
                     // orig sub_121f6 eip 0x2236: sub_1183d(di=di3, ax=0) — render new slot
                     v2_draw_hud_item(v2_current_ds_val, di3, 0);
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di3, 0);
                     uint16_t si_v = saved >> 1;
                     di3 = (di3 >> 2) & 0xFFFE;
                     *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
@@ -20236,6 +20713,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                     }
                     // sub_1183d: render new viking's slot — orig calls inside switch
                     v2_draw_hud_item(v2_current_ds_val, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
                     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
                     break;
                 }
@@ -20271,6 +20749,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                         if ((int16_t)dist < 0x40) shadow[(si_f47 >> 1) + 0x449] = 0;
                     }
                     v2_draw_hud_item(v2_current_ds_val, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
+                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
                     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
                     break;
                 }
@@ -20284,6 +20763,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             uint16_t old_di = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1;
             uint16_t old_ax = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
             v2_draw_hud_item(v2_current_ds_val, old_di, old_ax);
+            v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_ax);
         };
         if (new_input & 0x200) {
             uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
@@ -20355,10 +20835,13 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             // disappear from selected item after F-pickup.
             *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
             v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1);
+            v2_vga_selector_118ad(v2_vm_shadow_ds, *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1);
             *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
             v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1);
+            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1);
             *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
             v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1);
+            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1);
         }
         if (new_input & 0x3000) {
             *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
@@ -20395,6 +20878,7 @@ static void v2_hud_update_11792(uint8_t* shadow) {
         if (new_state != prev_state) {
             // Mirror orig sub_117d0 args: ax=new_state, bx=vk, di=vk
             v2_draw_hud_healthbar(v2_current_ds_val, new_state, (uint16_t)vk, (uint16_t)vk);
+            v2_vga_healthbar_117d0(shadow, new_state, (uint16_t)vk, (uint16_t)vk);
         }
     }
     // sub_12199: item display sync (loop [3E4] vs [3FC]) + render via sub_1183d.
@@ -20411,16 +20895,20 @@ static void v2_hud_update_11792(uint8_t* shadow) {
                 *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV)) = ax_r;
                 // sub_12199 calls sub_1183d(di_c, ax_r) — mirror via v2_draw_hud_item
                 v2_draw_hud_item(v2_current_ds_val, di_c, ax_r);
+                v2_vga_hud_item_1183d(v2_vm_shadow_ds, di_c, ax_r);
                 // sub_120d1 (eip 0x20D1): redraw 3 viking selectors + sync 0x41A/0x41C/0x41E.
                 uint16_t v1 = *(uint16_t*)(shadow + (DS_HUD_SEL));
                 *(uint16_t*)(shadow + DS_HUD_SEL_PREV) = v1;
                 v2_draw_hud_selector(v2_current_ds_val, v1 << 1);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, v1 << 1);
                 uint16_t v2v = *(uint16_t*)(shadow + DS_HUD_SEL_2);
                 *(uint16_t*)(shadow + DS_HUD_SEL_PREV_2) = v2v;
                 v2_draw_hud_selector(v2_current_ds_val, (v2v + 4) << 1);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, (v2v + 4) << 1);
                 uint16_t v3 = *(uint16_t*)(shadow + DS_HUD_SEL_3);
                 *(uint16_t*)(shadow + DS_HUD_SEL_PREV_3) = v3;
                 v2_draw_hud_selector(v2_current_ds_val, (v3 + 8) << 1);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, (v3 + 8) << 1);
                 // ORIG BUG: sub_120d1 leaves di = (word_288F8+8)*2 (last call).
                 // sub_12199's ADD di,2 continues from this value. Replicate for byte-identical mirror.
                 di_c = (uint16_t)((v3 + 8) << 1);
@@ -20437,27 +20925,33 @@ static void v2_hud_update_11792(uint8_t* shadow) {
         uint16_t old_di = *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) << 1;
         uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
         v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
+        v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_item);
         *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
         uint16_t new_di = *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1;
         v2_draw_hud_selector(v2_current_ds_val, new_di);
+        v2_vga_selector_118ad(v2_vm_shadow_ds, new_di);
     }
     // Viking 1: ds:0x416 (cur) vs ds:0x41C (prev), slot di range +4 → 8-15.
     if (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2))) {
         uint16_t old_di = (*(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) + 4) << 1;
         uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
         v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
+        v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_item);
         *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
         uint16_t new_di = (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1;
         v2_draw_hud_selector(v2_current_ds_val, new_di);
+        v2_vga_selector_118ad(v2_vm_shadow_ds, new_di);
     }
     // Viking 2: ds:0x418 (cur) vs ds:0x41E (prev), slot di range +8 → 16-23.
     if (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4))) {
         uint16_t old_di = (*(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) + 8) << 1;
         uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
         v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
+        v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_item);
         *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
         uint16_t new_di = (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1;
         v2_draw_hud_selector(v2_current_ds_val, new_di);
+        v2_vga_selector_118ad(v2_vm_shadow_ds, new_di);
     }
     // sub_11B0B: portrait/sound tracking sync + portrait render
     for (int vk = 0; vk < 3; vk++) {
@@ -20470,6 +20964,7 @@ static void v2_hud_update_11792(uint8_t* shadow) {
             *(uint16_t*)(shadow + (DS_PORTRAIT_PREV) + vk * 2) = port;
             // sub_11b0b internally renders portrait via v2_draw_hud_portrait
             v2_draw_hud_portrait(v2_current_ds_val, (uint16_t)(vk * 2), port);
+            v2_vga_portrait_11aa4(v2_vm_shadow_ds, port, (uint16_t)(vk * 2));
         }
     }
 }
@@ -20493,6 +20988,7 @@ static void v2_selector_blink_11c52(uint8_t* s) {
             uint16_t di = *(uint16_t*)(s + DS_QUIT_ACTIVE) << 1;
             uint16_t ax = (cnt & 0x10) ? *(uint16_t*)(s + DS_HUD_BLINK_FIELD) : 0;
             v2_draw_hud_item(v2_current_ds_val, di, ax);  // sub_1183d mirror
+            v2_vga_hud_item_1183d(v2_vm_shadow_ds, di, ax);
             // Mirror orig sub_11c52 eip 0x1C7A/0x1C8B: CALL sub_120d1 AFTER
             // sub_1183d in BOTH branches (SET/CLEAR). sub_120d1 redraws all 3
             // viking selectors (orig line 5471-5491) — needed because v2_draw_hud_item
@@ -20500,10 +20996,13 @@ static void v2_selector_blink_11c52(uint8_t* s) {
             // disappears after first blink phase.
             *(uint16_t*)(s + (DS_HUD_SEL_PREV)) = *(uint16_t*)(s + (DS_HUD_SEL));
             v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + (DS_HUD_SEL)) << 1);
+            v2_vga_selector_118ad(v2_vm_shadow_ds, *(uint16_t*)(s + (DS_HUD_SEL)) << 1);
             *(uint16_t*)(s + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(s + (DS_HUD_SEL+2));
             v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + (DS_HUD_SEL+2)) + 4) << 1);
+            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(s + (DS_HUD_SEL+2)) + 4) << 1);
             *(uint16_t*)(s + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(s + (DS_HUD_SEL+4));
             v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + (DS_HUD_SEL+4)) + 8) << 1);
+            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(s + (DS_HUD_SEL+4)) + 8) << 1);
         }
     } else {
         // Mode 1: alternate blink path (loc_11c8f) — selector mode
@@ -20514,9 +21013,11 @@ static void v2_selector_blink_11c52(uint8_t* s) {
             if (cnt & 0x10) {
                 // loc_11cb1: HUD selector render via sub_118ad
                 v2_draw_hud_selector(v2_current_ds_val, di);
+                v2_vga_selector_118ad(v2_vm_shadow_ds, di);
             } else {
                 // loc_11ca3: HUD item render via sub_1183d (ax=word_28921)
                 v2_draw_hud_item(v2_current_ds_val, di, *(uint16_t*)(s + DS_HUD_BLINK_FIELD));
+                v2_vga_hud_item_1183d(v2_vm_shadow_ds, di, *(uint16_t*)(s + DS_HUD_BLINK_FIELD));
             }
         }
     }

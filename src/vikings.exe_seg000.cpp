@@ -424,23 +424,25 @@ unsigned int plane4_to_linear(uint8_t plane, uint32_t plane_offset)
 }
 void drawPixel(uint32_t offset, uint8_t color)
 {
-  // #39 chrono-probe: full write history of two page dwords (blit head 0x20C8
-  // and blit+30rows 0x2ADC), plane 0 only.
-  {
-    uint32_t dw = offset >> 2;
-    if ((dw == 0x20C8 || dw == 0x2ADC) && (offset & 3) == 0) {
-      extern int v2_dbg_pre_vm_iter;
-      static int n = 0;
-      if (n < 40) { n++;
-        fprintf(stderr, "CHRONO[%02d] f=%d dw=%04X val=%02X ra=%p\n",
-                n, v2_dbg_pre_vm_iter, dw, color, __builtin_return_address(0));
-      }
-    }
-  }
-
-
   if (offset > 65536*4 - 1)
 	return;
+  // Shadow-VGA raw binary trace (env V2_RAWTRACE=lo,hi): every drawBuffer write of
+  // frames [lo..hi] → /tmp/rawtrace.bin records (u32 offset, u8 val, u8 f-lo).
+  {
+    static int _rt_lo = -2, _rt_hi = -2; static FILE* _rtf = nullptr;
+    if (_rt_lo == -2) {
+      const char* e = getenv("V2_RAWTRACE");
+      if (e) { _rt_lo = atoi(e); const char* c = strchr(e, ','); _rt_hi = c ? atoi(c+1) : _rt_lo; _rtf = fopen("/tmp/rawtrace.bin","wb"); }
+      else _rt_lo = -1;
+    }
+    if (_rtf) {
+      extern int v2_dbg_pre_vm_iter;
+      if (v2_dbg_pre_vm_iter >= _rt_lo && v2_dbg_pre_vm_iter <= _rt_hi) {
+        uint8_t rec[6]; *(uint32_t*)rec = offset; rec[4] = color; rec[5] = (uint8_t)(v2_dbg_pre_vm_iter - _rt_lo);
+        fwrite(rec, 1, 6, _rtf);
+      } else if (v2_dbg_pre_vm_iter > _rt_hi) { fclose(_rtf); _rtf = nullptr; }
+    }
+  }
   // Task #19 aid: env V2_DP_TRAP=<off1>[,<off2>...] — print every writer of
   // those drawBuffer offsets with a short backtrace (resolve via nm).
   {

@@ -64,10 +64,8 @@ void v2_hw_wp_arm(uint8_t* ptr, const char* label);   // C++ linkage (v2_vm.cpp)
 uint8_t* v2_a2_softwp_ptr = nullptr;   // soft watch byte (task #21 writer hunt)
 uint8_t* v2_a2_softwp_fs_ptr = nullptr; // soft watch on the REAL FS cell word
 uint16_t v2_a2_softwp_fs_moff = 0;      // its map offset (shadow drift compare)
-uint16_t v2_a2_snap_pg = 0xFFFF;   // ds:0x92F9 at the snapshot moment (sub-3 body)
 extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, uint32_t pixel_pan) {
     if (!myDrawInfo) return;
-    if (dsb) v2_a2_snap_pg = *(const uint16_t*)(dsb + 0x92F9);
     // Traced-object band probe (task #21): checksum the object's 32-row band
     // on ALL THREE REAL pages via their y_high subtables — tells whether the
     // orig background-role page carries the sprite pixels (the letter classes).

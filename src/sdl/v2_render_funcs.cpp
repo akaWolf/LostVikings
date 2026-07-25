@@ -41,6 +41,7 @@ uint8_t  v2_render_buf[320*200];
 uint8_t  v2_display_buf[320*200];
 std::mutex v2_display_mutex;
 uint8_t  v2_hud_buf[320*64];
+extern "C" uint32_t v2_fntest_game_ds_linear(void);
 
 // Static intro/menu chunk pixels backup. Orig keeps static chunk pixels in VGA
 // across frames, dirty-rect (sub_1de05) erases sprite trails by redrawing tiles
@@ -51,24 +52,246 @@ uint8_t  v2_hud_buf[320*64];
 // On op_13/0x11 (menu activation) backup is updated to match cleared+moved state.
 uint8_t v2_chunk_bg_backup[320*176];
 bool v2_chunk_bg_valid = false;
-// #39: glyph layer snapshot as of the last orig 1E0C7 painted tick - the
-// orig pages keep this layer between passes; v2 repaints it after bg blits.
-uint8_t v2_glyph_page_snapshot[0x370];
-bool v2_glyph_snap_valid = false;
-// #39 f193: previous painted snapshot - cells that leave the buffer (a shorter
-// reply) must be erased from the pages with the clean tile background, exactly
-// like the orig dirty channel repaints the tiles under the removed text.
-uint8_t v2_glyph_prev_snapshot[0x370];
-
-// #39 dirty-tile erosion: orig keeps painted glyphs on the page until a CHANGED
-// (dirty) tile redraws over them (sub_1C8F1 dirty channel). v2 re-blits every
-// foreground tile each sub-frame, so it needs the glyph snapshot — but the
-// snapshot must be eroded wherever the scene content actually changed
-// (illustration swap / scroll), else it keeps painting stale dialog text over
-// the new picture (the whole intro divergence class: 278/2977/9357/28595 are
-// all this one root). Enabled only around the v2_emu_late_end shown-page pass
-// (draw_flagged_tiles has many other callers/targets that must not touch it).
-bool v2_flagged_erode = false;
+// ============================================================================
+// Shadow VGA (address-anchored page channel, byte parity with the real
+// myDrawInfo->drawBuffer). The emu 3-page + anchor model approximates the VGA
+// with world-anchored pages (branch-3 memmoves content on scroll); the real
+// hardware is address-anchored — pixels stay at their byte address, the CRTC
+// window and the band renderers move AROUND them. Path 1 replays every orig
+// VGA writer into this flat buffer using the orig's own address streams (the
+// LUT rows / di values the v2 mirrors already compute), then extracts via the
+// sub_16775 formula. Writers are migrated ONE AT A TIME; v2_vga_cov marks the
+// bytes v2 already produces so the parity checker compares only those.
+// Layout identical to drawBuffer: linear = vga_byte_addr*4 + plane.
+// ============================================================================
+uint8_t v2_vga[65536 * 4];
+uint8_t v2_vga_cov[65536 * 4];   // 1 = written by a migrated v2 writer
+static inline void v2_vga_w(uint32_t addr, uint32_t plane, uint8_t val) {
+    uint32_t lin = (addr & 0xFFFFu) * 4u + (plane & 3u);
+    // diag (env V2_VGAW_TRAP=vgaaddr): backtrace writers of one VGA byte addr.
+    {
+        static long _t = -2;
+        if (_t == -2) { const char* e = getenv("V2_VGAW_TRAP"); _t = e ? strtol(e, 0, 0) : -1; }
+        if (_t >= 0 && (addr & 0xFFFFu) == (uint32_t)_t) {
+            static int _n = 0;
+            if (_n < 12) { _n++;
+                fprintf(stderr, "VGAW-TRAP addr=%04X pl=%u val=%02X ra=%p %p\n",
+                        addr & 0xFFFF, plane & 3, val,
+                        __builtin_return_address(0), __builtin_return_address(1));
+            }
+        }
+    }
+    v2_vga[lin] = val;
+    v2_vga_cov[lin] = 1;
+}
+// non-static entry for writers living in other TUs (v2_vm.cpp glyph mirror)
+void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val) {
+    v2_vga_w(addr, plane, val);
+}
+// ============================================================================
+// jpt_1c9b1 engine core, address form (glyph 1E16D + sprite type-1 0648 share
+// it). Source: 8 strips × (1 mask + 8 data). Strip pass p covers SOURCE columns
+// {p, 4+p} (bit_dx 0/4) and rows {strip*4 + bit_dy}. Screen pixel for source
+// column c: t = pan + c (normal) / t = pan + (7 − c) (hflip, jpt_1D18B);
+// VGA byte = di + row*0x56 + (t>>2), plane = t&3. pan = low 2 bits of the
+// pixel anchor (jpt_1CF34 case), verified against the case-0/case-3 bodies.
+// mask_and = low byte of cs:word_1C830 (row-clip mask, 0xFF = full).
+// type-2 engine (jpt_1D9E8 pan cases → per-row jpt_1DA02, hflip loc_1DBCD):
+// 32-wide row sprite. Per plane pass p: rows × (1 mask + 8 data); mask bit b
+// (0x80>>b) selects source byte-column (7−b): pixel col c = (7−b)*4 + p,
+// hflip mirrors within 32: c = 31 − ((7−b)*4 + p) = 4b + 3 − p. t = pan + c;
+// VGA byte = di + (t>>2), plane = t&3; di += 0x56 per row, src += 9 per row;
+// after each plane pass src += skip_tail (= cs:[(top+bot)*2+0x3D], the 9·m
+// source-skip of the clipped rows).
+// type-4 engine (jpt_1D4FA pan → per-unit jpt_1D514, hflip jpt_1D6E8/1D703):
+// 16-wide sprite; unit = 2 rows × 4 byte-cols, 8 units/plane pass, 288 bytes.
+// PROVEN case bodies: normal (1D514): 0x80: [si+0]→[di+0]; 0x08: [si+4]→[di+0x56];
+// 0x01: [si+7]→[di+0x59]  ⇒ bit b: row=(b≥4)?0:1, col=3−(b&3), val=data[7−b],
+// t = pan + (col*4 + q). hflip (1D703): 0x80: [si+0]→[di+3]; 0x01: [si+7]→
+// [di+0x56+0] ⇒ t = pan + 15 − (col*4 + q). Unit step: di += 0xAC, src += 9;
+// per-pass tail: src += cs:[(top_u+bot_u)*2+0x3D] (9·m).
+void v2_vga_sprite16_type4(const uint8_t* g0, uint16_t di0, int pan, int hflip,
+                           uint8_t mask_and, int units, uint16_t skip_tail) {
+    const uint8_t* g = g0;
+    for (int q = 0; q < 4; q++) {
+        uint16_t di = di0;
+        for (int u = 0; u < units; u++) {
+            uint8_t mask = (uint8_t)(g[0] & mask_and);
+            const uint8_t* data = g + 1;
+            if (mask) {
+                for (int b = 0; b < 8; b++) {
+                    if (!(mask & (0x80 >> b))) continue;
+                    // SOLVED against a full real write-trace (137/137 unique):
+                    // bit b → row=(b≥4)?1:0, col=b&3, value=data[b]; t=pan+col*4+q.
+                    // (The m2c jumptable case comments belong to an overlapping
+                    // table — the exhaustive trace solve is the ground truth.)
+                    int row = (b >= 4) ? 1 : 0;
+                    int col = b & 3;
+                    int c = col * 4 + q;
+                    int t = hflip ? (pan + 15 - c) : (pan + c);
+                    uint16_t a = (uint16_t)(di + row * 0x56 + (t >> 2));
+                    v2_vga_w(a, (uint32_t)(t & 3), data[b]);
+                }
+            }
+            g += 9;
+            di = (uint16_t)(di + 0xAC);
+        }
+        g += skip_tail;
+    }
+}
+void v2_vga_sprite32_type2(const uint8_t* g0, uint16_t di0, int pan, int hflip,
+                           uint8_t mask_and, int rows, uint16_t skip_tail) {
+    const uint8_t* g = g0;   // points at the first row's mask ([si-1])
+    for (int p = 0; p < 4; p++) {
+        uint16_t di = di0;
+        for (int r = 0; r < rows; r++) {
+            uint8_t mask = (uint8_t)(g[0] & mask_and);
+            const uint8_t* data = g + 1;
+            if (mask) {
+                for (int b = 0; b < 8; b++) {
+                    if (!(mask & (0x80 >> b))) continue;
+                    // PROVEN by jpt case bodies + hflip pass cascade:
+                    //   normal jpt_1DA02: mask bit b → data[b] → byte di+b
+                    //     (case 0x80: [si+0]→[di+0]; case 0x01: [si+7]→[di+7])
+                    //     with pan/pass: t = pan + (4b + q), byte=di+(t>>2), pl=t&3
+                    //   hflip  jpt_1DBFE: data[b] → byte di+(7−b)
+                    //     (case 0x80: [si+0]→[di+7]; case 0x01: [si+7]→[di+0])
+                    //     cascade (case3: planes 2,1,0,3 with INC di ×3) matches
+                    //     t = pan + 31 − (4b + q).
+                    int c = 4 * b + p;             // source pixel column (q = p)
+                    int t = hflip ? (pan + 31 - c) : (pan + c);
+                    uint16_t a = (uint16_t)(di + (t >> 2));
+                    v2_vga_w(a, (uint32_t)(t & 3), data[b]);
+                }
+            }
+            g += 9;
+            di = (uint16_t)(di + 0x56);
+        }
+        g += skip_tail;
+    }
+}
+void v2_vga_sprite8(const uint8_t* src72, uint16_t di, int pan, int hflip,
+                    uint8_t mask_and) {
+    static const int bit_dx[8] = {0,4,0,4,0,4,0,4};
+    static const int bit_dy[8] = {0,0,1,1,2,2,3,3};
+    const uint8_t* g = src72;
+    for (int p = 0; p < 4; p++) {
+        for (int strip = 0; strip < 2; strip++) {
+            uint8_t mask = (uint8_t)(g[0] & mask_and);
+            const uint8_t* data = g + 1;
+            if (mask) {
+                for (int b = 0; b < 8; b++) {
+                    if (!(mask & (0x80 >> b))) continue;
+                    int c = bit_dx[b] + p;
+                    int t = hflip ? (pan + 7 - c) : (pan + c);
+                    int row = strip * 4 + bit_dy[b];
+                    uint16_t addr = (uint16_t)(di + row * 0x56 + (t >> 2));
+                    v2_vga_w(addr, (uint32_t)(t & 3), data[b]);
+                }
+            }
+            g += 9;
+        }
+    }
+}
+// VGA→VGA span copy (orig REP MOVSB class: 1DE05 latch, 171DC row copy).
+// Coverage travels WITH the data: a copy from a not-yet-migrated source leaves
+// the destination unverifiable instead of falsely failing parity.
+// Linear layout addr*4+plane keeps the 4 planes of one VGA byte adjacent, so a
+// VGA span of n bytes is one contiguous 4n linear range — memcpy/memmove-able
+// unless it wraps the 64K address space (then fall back to the per-byte loop).
+void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes) {
+    {
+        static long _t = -2;
+        if (_t == -2) { const char* e = getenv("V2_VGAW_TRAP"); _t = e ? strtol(e, 0, 0) : -1; }
+        if (_t >= 0 && (uint32_t)_t >= dst && (uint32_t)_t < (uint32_t)dst + nbytes) {
+            static int _n = 0;
+            if (_n < 40) { _n++;
+                extern int v2_dbg_pre_vm_iter;
+                fprintf(stderr, "SPAN-TRAP f%d dst=%04X src=%04X n=%u srcval@t=%02X cov=%d ra=%p\n",
+                        v2_dbg_pre_vm_iter, dst, src, nbytes,
+                        v2_vga[(uint32_t)(uint16_t)(src + ((uint32_t)_t - dst)) * 4u],
+                        v2_vga_cov[(uint32_t)(uint16_t)(src + ((uint32_t)_t - dst)) * 4u],
+                        __builtin_return_address(0));
+            }
+        }
+    }
+    uint32_t ds_end = (uint32_t)dst + nbytes, ss_end = (uint32_t)src + nbytes;
+    if (ds_end <= 0x10000u && ss_end <= 0x10000u) {
+        memmove(v2_vga     + (uint32_t)dst * 4u, v2_vga     + (uint32_t)src * 4u, (size_t)nbytes * 4u);
+        memmove(v2_vga_cov + (uint32_t)dst * 4u, v2_vga_cov + (uint32_t)src * 4u, (size_t)nbytes * 4u);
+        return;
+    }
+    for (uint16_t i = 0; i < nbytes; i++) {
+        for (uint32_t p = 0; p < 4; p++) {
+            uint32_t dl = (uint32_t)(uint16_t)(dst + i) * 4u + p;
+            uint32_t sl = (uint32_t)(uint16_t)(src + i) * 4u + p;
+            v2_vga[dl] = v2_vga[sl];
+            v2_vga_cov[dl] = v2_vga_cov[sl];
+        }
+    }
+}
+// Zero-fill span (orig REP STOSB class: op13 wipe) — covered.
+void v2_vga_fill_span(uint16_t dst, uint32_t nbytes, uint8_t val) {
+    uint32_t end = (uint32_t)dst + nbytes;
+    if (end > 0x10000u) { uint32_t n1 = 0x10000u - dst;
+        memset(v2_vga + (uint32_t)dst * 4u, val, (size_t)n1 * 4u);
+        memset(v2_vga_cov + (uint32_t)dst * 4u, 1, (size_t)n1 * 4u);
+        memset(v2_vga, val, (size_t)(nbytes - n1) * 4u);
+        memset(v2_vga_cov, 1, (size_t)(nbytes - n1) * 4u);
+        return; }
+    memset(v2_vga + (uint32_t)dst * 4u, val, (size_t)nbytes * 4u);
+    memset(v2_vga_cov + (uint32_t)dst * 4u, 1, (size_t)nbytes * 4u);
+}
+// v2 CRTC state — published by v2_page_flip_16775 (shadow-side 16775 formula).
+uint32_t v2_vga_crtc = 0;
+uint8_t  v2_vga_pan  = 0;
+// Extract the visible 320×176 window from the shadow VGA exactly like the
+// real CRTC unfold (v2_fetch_orig_page): rows from v2_vga_crtc, pitch 0x56,
+// linear = (crtc + y*0x56)*4 + pan.
+extern "C" int v2_vga_fetch_page(uint8_t* out, uint32_t count) {
+    uint32_t rows = count / 320;
+    if (rows * 320 != count) return 0;
+    for (uint32_t y = 0; y < rows; y++) {
+        uint32_t base = (v2_vga_crtc + y * 0x56u) * 4u + v2_vga_pan;
+        if (base + 320 > sizeof(v2_vga)) return 0;
+        memcpy(out + y * 320, v2_vga + base, 320);
+    }
+    return 1;
+}
+// Parity check against the real drawBuffer — covered bytes only. Returns diff
+// count; logs the first few mismatches (env V2_VGAPARITY, called from verify).
+extern "C" int v2_vga_parity_hud = 0;   // diffs in the HUD region (addr < 0x1600)
+extern "C" int v2_vga_parity_check(const uint8_t* real_drawbuffer, int log_limit) {
+    int diffs = 0;
+    v2_vga_parity_hud = 0;
+    for (uint32_t i = 0; i < sizeof(v2_vga); i++) {
+        if (!v2_vga_cov[i]) continue;
+        if (v2_vga[i] != real_drawbuffer[i]) {
+            if ((i >> 2) < 0x1600u) { v2_vga_parity_hud++; continue; }  // HUD channel — migrated later
+            if (diffs < log_limit)
+                fprintf(stderr, "VGAPARITY addr=%04X plane=%u v2=%02X real=%02X\n",
+                        i >> 2, i & 3, v2_vga[i], real_drawbuffer[i]);
+            diffs++;
+        }
+    }
+    // env V2_VGAPARITY_DUMP: once, when diffs exceed the threshold, dump the
+    // full diff address list for offline classification.
+    static int _dumped = 0;
+    const char* dth = getenv("V2_VGAPARITY_DUMP");
+    int dump_always = dth && atoi(dth) == 0;   // =0: rewrite every call (final state survives)
+    if (dth && (dump_always || (!_dumped && diffs >= atoi(dth)))) {
+        _dumped = 1;
+        FILE* f = fopen("/tmp/v2_vga_diffs.txt", "w");
+        if (f) {
+            for (uint32_t i = 0; i < sizeof(v2_vga); i++) {
+                if (!v2_vga_cov[i] || v2_vga[i] == real_drawbuffer[i]) continue;
+                fprintf(f, "%04X %u %02X %02X\n", i >> 2, i & 3, v2_vga[i], real_drawbuffer[i]);
+            }
+            fclose(f);
+        }
+    }
+    return diffs;
+}
 
 void v2_chunk_bg_update_from_render() {
     memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
@@ -97,9 +320,20 @@ void v2_swap_render_buf() {
     // thread reads the others → mismatched colors (main artifact: viewport,
     // HUD icons flicker: HUD pixels rendered with palette from different frame).
     std::lock_guard<std::mutex> lock(v2_display_mutex);
-    memcpy(v2_display_buf, v2_render_buf, 320*200);
-    extern uint8_t v2_display_hud_buf[];
-    memcpy(v2_display_hud_buf, v2_hud_buf, 320*64);
+    // The display shows the shadow-VGA — the exact byte-parity
+    // channel the verifier checks (viewport window via the shadow CRTC, HUD
+    // from VGA rows 0..63). The old render_buf/hud_buf lanes remain as the
+    // internal composition sources for some mirrors, but what the USER sees
+    // is the verified VGA state.
+    {
+        extern int v2_vga_fetch_page(uint8_t* out, uint32_t count);
+        extern uint8_t v2_vga[65536 * 4];
+        if (!v2_vga_fetch_page(v2_display_buf, 320 * 176))
+            memcpy(v2_display_buf, v2_render_buf, 320 * 200);
+        extern uint8_t v2_display_hud_buf[];
+        for (int y = 0; y < 64; y++)
+            memcpy(v2_display_hud_buf + y * 320, v2_vga + (uint32_t)(y * 0x56) * 4u, 320);
+    }
     extern uint8_t* v2_vm_get_shadow_ds();
     uint8_t* shad = v2_vm_get_shadow_ds();
     if (shad) {
@@ -407,750 +641,14 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 // Helper: write one pixel to v2 buffer with bounds checking.
 // Writes ALL colors including 0 (matching original VGA behavior where mask
 // controls which bytes are written, not the color value).
-// Blit translation state: screen-space (sx,sy) + (dx,dy) into a buffer of
-// the given pitch/bounds. Display: dx=dy=0, 320x176. Emu page target: the
-// window offset (eff − base) with the page pitch — set via v2_blit_to_page().
-static int v2_pp_dx = 0, v2_pp_dy = 0, v2_pp_pitch = 320, v2_pp_w = 320, v2_pp_h = 176;
 static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
-    int x = sx + v2_pp_dx, y = sy + v2_pp_dy;
-    if (x >= 0 && x < v2_pp_w && y >= 0 && y < v2_pp_h)
-        buf[y * v2_pp_pitch + x] = color;
-}
-
-// ============================================================================
-// Page emulator (task #21, stage 1): byte-exact model of the orig VGA page
-// channel for the A2 sensor. DOS uses one BACKGROUND page (clean tiles, the
-// latch-copy source ds:0x92FB in sub_1de05's dirty spans) plus TWO work pages
-// flipped per sub-frame (ds:0x92F7). Each sub-frame: dirty cells are latch-
-// copied from the background page, then sprites are re-blitted (jpt_1d514) and
-// the sub_1dd9c layer runs. v2's display buffer is a clean full-frame render;
-// the emu pages reproduce what the orig work page actually contains, so the
-// A2 sensor can demand a byte-exact match.
-// ============================================================================
-uint8_t v2_emu_bg[320 * 176];          // background of THIS sub-frame = clean tile render
-// THREE persistent pages, indexed by the orig page slot value/0x34 (the
-// ds:0x92F7/92F9/92FB role variables hold 0x00/0x34/0x68 — sub_165aa rotates
-// the ROLES over the fixed pages):
-//   [92F7] = draw page (the previous sub-frame's shown page; ONLY the 1de05
-//            latches land here),
-//   [92F9] = shown page (this sub-frame draws sub_1dd9c/1c8f1 layers on it
-//            AND the CRTC flips to it — BAND-parity proven),
-//   [92FB] = background page (latch source for the 1de05 bit0 spans; on a
-//            background-role change sub_1df6a copies bit1 cells 92F9→92FB).
-//
-// ANCHOR MODEL (f459 shake class): the orig pages hold WORLD content and the
-// CRTC window (vp+shake) moves over them WITHOUT touching the pixels. The emu
-// pages are anchored at B = eff & ~7 (8-aligned world coordinate of page
-// pixel (0,0)) with an 8px right/bottom margin; sub-tile window offsets
-// (eff − B ∈ [0,8)) apply only when reading the shown window — a ±1..7 shake
-// never moves page content, matching the orig.
-uint8_t v2_emu_page[3][V2_EMU_W * V2_EMU_H];
-int     v2_emu_cur = 0;                // legacy extern (unused in 3-page model)
-bool    v2_emu_valid = false;          // pages initialized
-int     v2_emu_base_x = 0;             // world coord of page pixel (0,0), 8-aligned
-int     v2_emu_base_y = 0;
-static inline int v2_emu_slot(uint8_t* ds_base, uint16_t role_addr) {
-    uint16_t v = *(uint16_t*)(ds_base + role_addr);
-    int s = v / 0x34;
-    return s > 2 ? 2 : s;
-}
-// Effective viewport (vp + shake with the sub_16775 clamp).
-static void v2_emu_eff(uint8_t* ds_base, int* xe, int* ye) {
-    int16_t vx = *(int16_t*)(ds_base + DS_VIEWPORT_X), vy = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
-    int16_t xs = *(int16_t*)(ds_base + 0x39E), ys = *(int16_t*)(ds_base + 0x3A0);
-    int16_t xl = *(int16_t*)(ds_base + 0x25A4), yl = *(int16_t*)(ds_base + 0x25A6);
-    *xe = (int)vx + xs; if (*xe > (int)xl) *xe = (int)vx - xs;
-    *ye = (int)vy + ys; if (*ye > (int)yl) *ye = (int)vy - ys;
-}
-// Copy the current screen-space background render into a page at the given
-// window offset (off = eff − B). Margin bands outside the 320x176 screen keep
-// their previous content (orig pages hold real world there; we lack the data).
-static void v2_emu_page_fill_bg(uint8_t* pg, int offx, int offy) {
-    for (int y = 0; y < 176; y++)
-        memcpy(pg + (y + offy) * V2_EMU_W + offx, v2_emu_bg + y * 320, 320);
-}
-
-// Render one map tile directly into a page at page coords (px0,py0) — the
-// page-space equivalent of the orig edge channels (sub_170b9/17049 paint map
-// rows BEYOND the visible window onto every page; the bg render can't supply
-// those). Tile decode identical to v2_draw_tiles.
-static void v2_emu_render_tile(uint8_t* pg, uint8_t* ds_base,
-                               uint8_t* fs_base, uint8_t* tgfx_base,
-                               int map_row, int map_col, int px0, int py0) {
-    uint16_t lut = (uint16_t)((uint16_t)map_row * 2u - LUT_ROW_BASE);
-    uint16_t row_base = *(uint16_t*)(ds_base + lut);
-    uint16_t moff = (uint16_t)(((uint16_t)(row_base + map_col)) * 2u);
-    uint16_t entry = *(uint16_t*)(fs_base + moff);
-    uint16_t gfx = entry & 0xFFC0;
-    bool hflip = (entry & 0x10) != 0, vflip = (entry & 0x20) != 0;
-    uint8_t* tile = tgfx_base + gfx;
-    for (int row = 0; row < 8; row++) {
-        int src_row = vflip ? (7 - row) : row;
-        int py = py0 + row;
-        if (py < 0 || py >= V2_EMU_H) continue;
-        uint8_t pixels[8];
-        for (int plane = 0; plane < 4; plane++) {
-            uint8_t b0 = tile[plane * 16 + src_row * 2];
-            uint8_t b1 = tile[plane * 16 + src_row * 2 + 1];
-            if (!hflip) { pixels[plane] = b0; pixels[plane + 4] = b1; }
-            else        { pixels[(3 - plane) + 4] = b0; pixels[(3 - plane)] = b1; }
-        }
-        for (int px = 0; px < 8; px++) {
-            int X = px0 + px;
-            if (X >= 0 && X < V2_EMU_W)
-                pg[py * V2_EMU_W + X] = pixels[px];
-        }
-    }
-}
-
-// Full-page tile render (41x23 tiles from the anchor) — level entry / fresh
-// pages, matching orig sub_16ded which paints whole map rows on every page.
-static void v2_emu_page_render_full(uint8_t* pg, uint8_t* ds_base) {
-    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
-    uint16_t tg_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
-    if (!fs_seg || !tg_seg) return;
-#ifdef V2_RENDER_FROM_SHADOW
-    uint8_t* fsb = v2_resolve_segment(fs_seg);
-    if (!fsb) fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgb = v2_resolve_segment(tg_seg);
-    if (!tgb) tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
-#else
-    uint8_t* fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
-#endif
-    int col0 = v2_emu_base_x >> 3, row0 = v2_emu_base_y >> 3;
-    for (int tr = 0; tr < V2_EMU_H >> 3; tr++)
-        for (int tc = 0; tc < V2_EMU_W >> 3; tc++)
-            v2_emu_render_tile(pg, ds_base, fsb, tgb,
-                               row0 + tr, col0 + tc, tc * 8, tr * 8);
-}
-
-// Blit target override for the sprite renderer: null = v2_render_buf.
-// When a page is the target, blit coordinates are screen-space and get
-// translated by (v2_blit_dx, v2_blit_dy) with the page pitch/bounds.
-static uint8_t* v2_blit_target = nullptr;
-static void v2_blit_to_page(uint8_t* pg, int offx, int offy) {
-    v2_blit_target = pg;
-    v2_pp_dx = offx; v2_pp_dy = offy;
-    v2_pp_pitch = V2_EMU_W; v2_pp_w = V2_EMU_W; v2_pp_h = V2_EMU_H;
-}
-static void v2_blit_to_display(void) {
-    v2_blit_target = nullptr;
-    v2_pp_dx = 0; v2_pp_dy = 0;
-    v2_pp_pitch = 320; v2_pp_w = 320; v2_pp_h = 176;
-}
-static void v2_draw_one_sprite(uint16_t ds_val, int obj); // fwd (kept: debug single-blit)
-
-// Ring trace of emu_early calls (branch decisions) — dumped on A2 divergence.
-struct V2EmuTrace { int16_t vpx, vpy; int sdx, sdy; uint8_t branch; uint8_t cur; };
-static V2EmuTrace v2_emu_ring[16];
-static int v2_emu_ring_n = 0;
-static uint8_t v2_emu_branch_pending = 0;   // set by branches below
-static void v2_emu_trace(int16_t vpx, int16_t vpy, int sdx, int sdy) {
-    V2EmuTrace& t = v2_emu_ring[v2_emu_ring_n++ % 16];
-    t.vpx = vpx; t.vpy = vpy; t.sdx = sdx; t.sdy = sdy;
-    t.branch = 0; t.cur = (uint8_t)v2_emu_cur;
-}
-static void v2_emu_trace_branch(uint8_t b) {
-    if (v2_emu_ring_n) v2_emu_ring[(v2_emu_ring_n - 1) % 16].branch = b;
-}
-extern "C" void v2_emu_ring_dump(void) {
-    static const char* bn[] = {"?", "chunk", "reinit", "scroll", "dirty"};
-    int n = v2_emu_ring_n < 16 ? v2_emu_ring_n : 16;
-    for (int i = 0; i < n; i++) {
-        const V2EmuTrace& t = v2_emu_ring[(v2_emu_ring_n - n + i) % 16];
-        fprintf(stderr, "  EMU-RING[-%d]: eff=(%d,%d) sd=(%d,%d) cur=%d br=%s\n",
-            n - i, t.vpx, t.vpy, t.sdx, t.sdy, t.cur, bn[t.branch <= 4 ? t.branch : 0]);
-    }
-}
-
-// Stage-1 emu sub-frame, early half — mirrors the orig sub-frame structure:
-// work-page flip, the sub_1de05 dirty channel (latch spans from the background
-// page + sprite re-blit), called right after v2_draw_tiles fills
-// v2_render_buf with the clean tile render (= the background page).
-void v2_emu_early(uint16_t ds_val) {
-#ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
-#endif
-    if (!v2_m2c_base || !myDrawInfo_v2) return;
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-
-    // 1. Background page snapshot (clean tiles just rendered).
-    memcpy(v2_emu_bg, v2_render_buf, sizeof(v2_emu_bg));
-
-    // 2. Effective viewport (vp + shake, sub_16775 clamp) and the 8-aligned
-    //    page anchor. Content NEVER moves for sub-tile window motion (shake,
-    //    pixel pan) — only the read window offset changes, like the orig CRTC.
-    int xe, ye;
-    v2_emu_eff(ds_base, &xe, &ye);
-    int nbx = xe & ~7, nby = ye & ~7;
-    int offx = xe - nbx, offy = ye - nby;   // 0..7
-
-    // Chunk scenes (intro/menu/password, lvl flags & 0x42): the orig channel
-    // paints the raw-chunk picture onto ALL pages at load (sub_10cd8 with the
-    // three display offsets) and there is no tile dirty machinery — the work
-    // page content is the background picture plus the sprite layers. Model:
-    // full background copy + sprite canvas on all three pages.
-    if (ds_base[DS_LEVEL_FLAGS] & 0x42) {
-        v2_emu_trace((int16_t)xe, (int16_t)ye, 0, 0);
-        v2_emu_trace_branch(1);
-        v2_emu_base_x = nbx; v2_emu_base_y = nby;
-        for (int p = 0; p < 3; p++) {
-            memset(v2_emu_page[p], 0, sizeof(v2_emu_page[p]));
-            v2_emu_page_fill_bg(v2_emu_page[p], offx, offy);
-            v2_blit_to_page(v2_emu_page[p], offx, offy);
-            v2_draw_sprites(ds_val);
-        }
-        v2_blit_to_display();
-        v2_emu_valid = true;
-        return;
-    }
-
-    int d8x = nbx - v2_emu_base_x, d8y = nby - v2_emu_base_y;
-    if (!v2_emu_valid || d8x >= 320 || d8x <= -320 || d8y >= 176 || d8y <= -176) {
-        // Fresh pages at the new anchor: clean tile background; WORK-role
-        // pages additionally get the current sprite canvas (scene-entry spawn
-        // tickets painted the work pages before the emu became valid). The
-        // BACKGROUND role page stays sprite-free (f342 ghost class).
-        v2_emu_base_x = nbx; v2_emu_base_y = nby;
-        for (int p = 0; p < 3; p++) {
-            v2_emu_page_render_full(v2_emu_page[p], ds_base);
-            if (p != v2_emu_slot(ds_base, DS_PAGE_BG)) {
-                v2_blit_to_page(v2_emu_page[p], offx, offy);
-                v2_draw_sprites(ds_val);
-            }
-        }
-        v2_blit_to_display();
-        v2_emu_trace((int16_t)xe, (int16_t)ye, 9999, 9999);
-        v2_emu_trace_branch(2);
-    } else if (d8x != 0 || d8y != 0) {
-        // Anchor moved by whole tiles: shift ALL pages by (−d8x,−d8y) and
-        // fill the exposed bands from the current background render (the
-        // screen-space equivalent of the orig edge channels painting the new
-        // rows/columns on every page cursor at once).
-        for (int p = 0; p < 3; p++) {
-            uint8_t* pg = v2_emu_page[p];
-            if (d8y > 0) {
-                memmove(pg, pg + d8y * V2_EMU_W, (size_t)(V2_EMU_H - d8y) * V2_EMU_W);
-            } else if (d8y < 0) {
-                memmove(pg - d8y * V2_EMU_W, pg, (size_t)(V2_EMU_H + d8y) * V2_EMU_W);
-            }
-            if (d8x != 0) {
-                for (int y = 0; y < V2_EMU_H; y++) {
-                    uint8_t* row = pg + y * V2_EMU_W;
-                    if (d8x > 0) memmove(row, row + d8x, (size_t)(V2_EMU_W - d8x));
-                    else         memmove(row - d8x, row, (size_t)(V2_EMU_W + d8x));
-                }
-            }
-            // Exposed bands: render map tiles directly in page space — the
-            // orig edge channels paint whole map rows/columns (including the
-            // beyond-window margin the bg render can't supply).
-            {
-                uint16_t fs_seg2 = *(uint16_t*)(ds_base + DS_SEG_FS);
-                uint16_t tg_seg2 = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
-#ifdef V2_RENDER_FROM_SHADOW
-                uint8_t* fsb2 = v2_resolve_segment(fs_seg2);
-                if (!fsb2) fsb2 = v2_m2c_base + ((uint32_t)fs_seg2 << 4);
-                uint8_t* tgb2 = v2_resolve_segment(tg_seg2);
-                if (!tgb2) tgb2 = v2_m2c_base + ((uint32_t)tg_seg2 << 4);
-#else
-                uint8_t* fsb2 = v2_m2c_base + ((uint32_t)fs_seg2 << 4);
-                uint8_t* tgb2 = v2_m2c_base + ((uint32_t)tg_seg2 << 4);
-#endif
-                int col0 = nbx >> 3, row0 = nby >> 3;
-                if (d8y != 0) {
-                    int ry0 = d8y > 0 ? (V2_EMU_H - d8y) >> 3 : 0;
-                    int ry1 = d8y > 0 ? V2_EMU_H >> 3 : (-d8y) >> 3;
-                    for (int tr = ry0; tr < ry1; tr++)
-                        for (int tc = 0; tc < V2_EMU_W >> 3; tc++)
-                            v2_emu_render_tile(pg, ds_base, fsb2, tgb2,
-                                               row0 + tr, col0 + tc, tc * 8, tr * 8);
-                }
-                if (d8x != 0) {
-                    int cx0 = d8x > 0 ? (V2_EMU_W - d8x) >> 3 : 0;
-                    int cx1 = d8x > 0 ? V2_EMU_W >> 3 : (-d8x) >> 3;
-                    for (int tr = 0; tr < V2_EMU_H >> 3; tr++)
-                        for (int tc = cx0; tc < cx1; tc++)
-                            v2_emu_render_tile(pg, ds_base, fsb2, tgb2,
-                                               row0 + tr, col0 + tc, tc * 8, tr * 8);
-                }
-            }
-        }
-        v2_emu_base_x = nbx; v2_emu_base_y = nby;
-        v2_emu_trace((int16_t)xe, (int16_t)ye, d8x, d8y);
-        v2_emu_trace_branch(3);
-    } else {
-        v2_emu_trace((int16_t)xe, (int16_t)ye, 0, 0);
-        v2_emu_trace_branch(4);
-    }
-    v2_emu_valid = true;
-    {
-        // 4. sub_1de05 dirty channel: scan the visible 43x25 map window for
-        //    render-map bit0 cells and latch-copy each 8x8 cell from the
-        //    background page onto the CURRENT work page. Cell->screen mapping
-        //    identical to v2_draw_tiles (scroll LUT + sub-tile pixel offset).
-        uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
-#ifdef V2_RENDER_FROM_SHADOW
-        uint8_t* fs_base = v2_resolve_segment(fs_seg);
-        if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
-#else
-        uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
-#endif
-        uint16_t scroll_row = *(uint16_t*)(ds_base + 0x2581);
-        uint16_t scroll_col = *(uint16_t*)(ds_base + 0x257F);
-        // sub_1de05 latch pass: every bit0 cell of the visible 43x25 window is
-        // span-copied from the BACKGROUND page role [92FB] onto the DRAW page
-        // role [92F7] (erases stale sprite pixels). NO sprite drawing happens
-        // in the orig sub_1de05 (verified line-by-line: it only marks cells
-        // via sub_1cd7b/7d and REP-MOVSB latches the spans) — redraw of
-        // objects over refreshed cells is the sub_1dd9c layer's job (its
-        // sub_1cdef scan tests the same fs bit0), mirrored by v2_emu_late.
-        // Roles read BEFORE this sub-frame's v2_page_rotate_165aa rotation — same as
-        // orig where sub_1de05 (0xBB) runs before sub_165aa (0xC0).
-        uint8_t* drw = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_DRAW)];
-        uint8_t* bgr = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_BG)];
-        int trace_cells = 0;   // latch cells inside the traced object's area
-        int16_t t_ox = 0, t_oy = 0;
-        if (v2_objtrace_di != 0xFFFF) {
-            t_ox = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_X));
-            t_oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_Y));
-            // Shadow FS letter-cell word dynamics (pairs with orig A2WP-FS).
-            uint16_t row = (uint16_t)((t_oy + 8) >> 3);
-            uint16_t rb = *(uint16_t*)(ds_base + (uint16_t)(row * 2 - LUT_ROW_BASE));
-            uint16_t moff = (uint16_t)((rb + (uint16_t)((t_ox + 8) >> 3)) * 2u);
-            uint16_t w = *(uint16_t*)(fs_base + moff);
-            static uint16_t prev_w = 0xFFFF;
-            if (w != prev_w) { v2_objtrace("e:bit", (int16_t)w, (int16_t)prev_w, moff, 0); prev_w = w; }
-        }
-        for (int rv = 0; rv < 25; rv++) {
-            uint16_t rs = (uint16_t)(rv + scroll_row);
-            uint16_t lut = (uint16_t)(rs * 2u - LUT_ROW_BASE);
-            uint16_t row_base = *(uint16_t*)(ds_base + lut);
-            for (int cv = 0; cv < 43; cv++) {
-                uint16_t cs2 = (uint16_t)(cv + scroll_col);
-                uint16_t moff = (uint16_t)((row_base + cs2) * 2u);
-                if (!(*(uint16_t*)(fs_base + moff) & 1)) continue;
-                if (v2_objtrace_di != 0xFFFF) {
-                    int wx = (int)(cs2 * 8), wy = (int)(rs * 8);
-                    if (wx >= t_ox - 8 && wx < t_ox + 40 && wy >= t_oy - 8 && wy < t_oy + 40)
-                        trace_cells++;
-                }
-                // Page coordinates of the cell: world − anchor.
-                int px0 = (int)cs2 * 8 - v2_emu_base_x;
-                int py0 = (int)rs * 8 - v2_emu_base_y;
-                for (int yy = 0; yy < 8; yy++) {
-                    int py = py0 + yy;
-                    if (py < 0 || py >= V2_EMU_H) continue;
-                    int xa = px0 < 0 ? 0 : px0;
-                    int xb = px0 + 8 > V2_EMU_W ? V2_EMU_W : px0 + 8;
-                    if (xa < xb)
-                        memcpy(drw + py * V2_EMU_W + xa, bgr + py * V2_EMU_W + xa, (size_t)(xb - xa));
-                }
-            }
-        }
-        if (trace_cells)
-            v2_objtrace("e:latch", v2_emu_slot(ds_base, DS_PAGE_DRAW),
-                        v2_emu_slot(ds_base, DS_PAGE_BG), trace_cells, 0);
-    }
-}
-
-// sub_1df6a pixel channel: on a background-role change (sub_165aa tail) every
-// bit1 cell of the visible window is span-copied from the NEW shown page
-// [92F9] onto the NEW background page [92FB] — keeps the incoming background
-// page's world content current before it serves latches. Called from
-// v2_page_rotate_165aa right after the role update (same order as orig CALLF).
-extern "C" void v2_emu_df6a(uint16_t ds_val) {
-#ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
-#endif
-    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (ds_base[DS_LEVEL_FLAGS] & 0x42) return;   // chunk scenes: no tile machinery
-    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
-#ifdef V2_RENDER_FROM_SHADOW
-    uint8_t* fs_base = v2_resolve_segment(fs_seg);
-    if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
-#else
-    uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
-#endif
-    uint16_t scroll_row = *(uint16_t*)(ds_base + 0x2581);
-    uint16_t scroll_col = *(uint16_t*)(ds_base + 0x257F);
-    uint8_t* shown = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
-    uint8_t* bgr   = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_BG)];
-    for (int rv = 0; rv < 25; rv++) {
-        uint16_t rs = (uint16_t)(rv + scroll_row);
-        uint16_t lut = (uint16_t)(rs * 2u - LUT_ROW_BASE);
-        uint16_t row_base = *(uint16_t*)(ds_base + lut);
-        for (int cv = 0; cv < 43; cv++) {
-            uint16_t cs2 = (uint16_t)(cv + scroll_col);
-            uint16_t moff = (uint16_t)((row_base + cs2) * 2u);
-            if (!(*(uint16_t*)(fs_base + moff) & 2)) continue;   // bit1 (TEST 2)
-            int px0 = (int)cs2 * 8 - v2_emu_base_x;
-            int py0 = (int)rs * 8 - v2_emu_base_y;
-            for (int yy = 0; yy < 8; yy++) {
-                int py = py0 + yy;
-                if (py < 0 || py >= V2_EMU_H) continue;
-                int xa = px0 < 0 ? 0 : px0;
-                int xb = px0 + 8 > V2_EMU_W ? V2_EMU_W : px0 + 8;
-                if (xa < xb)
-                    memcpy(bgr + py * V2_EMU_W + xa, shown + py * V2_EMU_W + xa, (size_t)(xb - xa));
-            }
-        }
-    }
-}
-
-// Init-3-pass pixel steps (task #21): the orig level-init tail (sub_115d2 +
-// the 4th block) runs FOUR full render sub-frames — spawn-ticket sprites get
-// painted onto ALL rotation pages there (including the future background
-// role). The v2 init mirrors carry only the DS side; call this from each
-// pass: stage 0 = tiles+early (before the 165aa rotation), stage 1 = late
-// (after it, before v2_late_sprites_1DD9C DECs). Forces the render gate open — the
-// init mirror runs outside the frame-phase context.
-// stage 0 = tiles+early; stage 1 = late_begin (arm page + cascade);
-// stage 2 = late_end — call it AFTER the init site's v2_late_sprites_1DD9C so the
-// cascade pixels land between them (same split as the render1/2/3 sites).
-extern "C" void v2_emu_init_pass(uint16_t ds_val, int stage) {
-#ifdef V2_RENDER_FROM_SHADOW
-    bool save_in_frame = v2_vm_in_frame;
-    v2_vm_in_frame = true;
-#endif
-    if (stage == 0) {
-        v2_draw_tiles(ds_val);
-        v2_emu_early(ds_val);
-    } else if (stage == 1) {
-        v2_emu_late_begin(ds_val);
-    } else {
-        v2_emu_late_end(ds_val);
-    }
-#ifdef V2_RENDER_FROM_SHADOW
-    v2_vm_in_frame = save_in_frame;
-#endif
-}
-
-// sub_1406d pixel channel (task #21 flame class): each anim-queue entry
-// repaints the 2x2 tile block around (pos−8) onto BOTH the shown [92F9] and
-// background [92FB] pages (orig draws two passes, eips 0x40E5.. and 0x413B..),
-// bypassing the render-map bits entirely. clip bits (orig dx): 8=UL,4=UR,
-// 2=LL,1=LR quadrant suppressed at viewport edges.
-extern "C" void v2_emu_anim_tiles(uint16_t ds_val, uint16_t pos_x, uint16_t pos_y, uint16_t clip) {
-#ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
-#endif
-    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (ds_base[DS_LEVEL_FLAGS] & 0x42) return;
-    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
-    uint16_t tg_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
-    if (!fs_seg || !tg_seg) return;
-#ifdef V2_RENDER_FROM_SHADOW
-    uint8_t* fsb = v2_resolve_segment(fs_seg);
-    if (!fsb) fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgb = v2_resolve_segment(tg_seg);
-    if (!tgb) tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
-#else
-    uint8_t* fsb = v2_m2c_base + ((uint32_t)fs_seg << 4);
-    uint8_t* tgb = v2_m2c_base + ((uint32_t)tg_seg << 4);
-#endif
-    // Block geometry per orig: page rows start at [6E]=pos_y>>2 (slot of row
-    // pos_y>>3) and the stored bp map offset covers rows (pos_y>>3)..+1,
-    // columns (pos_x>>3)..+1 — the 2x2 block starts AT pos, not around it.
-    int row0 = (int)pos_y >> 3, col0 = (int)pos_x >> 3;
-    uint8_t* pages[2] = { v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)],
-                          v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_BG)] };
-    static const uint16_t qbit[4] = { 8, 4, 2, 1 };   // UL UR LL LR
-    for (int pi = 0; pi < 2; pi++)
-        for (int q = 0; q < 4; q++) {
-            if (clip & qbit[q]) continue;
-            int r = row0 + (q >> 1), c = col0 + (q & 1);
-            v2_emu_render_tile(pages[pi], ds_base, fsb, tgb, r, c,
-                               c * 8 - v2_emu_base_x, r * 8 - v2_emu_base_y);
-        }
-}
-
-// #39 op_13/0x11 (orig loc_14396 "text menu redraw") - PAGE-accurate mirror.
-// Orig semantics decoded via inverse LUT_PAGE_ROW (ds_static):
-//   MOVSB VGA[0..0x1600) -> 0x2ADC == (role-value 0x00 page, world row 62)
-//   MOVSB VGA[0..0x1600) -> 0x70BC == (role-value 0x34 page, world row 62)
-//   STOSB #3/#4/#5 jointly zero the VGA head + ALL THREE pages outside the
-//   two picture bands (role-value 0x68 page is zeroed entirely).
-// Slots are fixed by role VALUE (slot = value/0x34), independent of the
-// current rotation - so this is groove-independent, unlike the previous
-// screen-space scr_row0 fix which read vp at opcode time (#39 instability).
-extern "C" void v2_emu_op13_text_menu(uint16_t ds_val, const uint8_t* hud64) {
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (!ds_base) return;
-    const int WORLD_ROW = 62;   // inverse LUT: 0x2ADC/0x70BC = row 7*8+6
-    for (int p = 0; p < 3; p++) {
-        memset(v2_emu_page[p], 0, (size_t)V2_EMU_W * V2_EMU_H);
-        if (p == 2) continue;   // role-value 0x68 page: zero only
-        int pr0 = WORLD_ROW - v2_emu_base_y;
-        for (int r = 0; r < 64; r++) {
-            int pr = pr0 + r;
-            if (pr < 0 || pr >= V2_EMU_H) continue;
-            memcpy(v2_emu_page[p] + (size_t)pr * V2_EMU_W, hud64 + (size_t)r * 320, 320);
-        }
-    }
-    // Screen representation = the shown window over the updated pages
-    // (same math as v2_emu_shown), so FRAMESUM/display stay coherent.
-    {
-        int xe, ye;
-        v2_emu_eff(ds_base, &xe, &ye);
-        int offx = xe - v2_emu_base_x, offy = ye - v2_emu_base_y;
-        if (offx < 0) offx = 0; if (offx > V2_EMU_W - 320) offx = V2_EMU_W - 320;
-        if (offy < 0) offy = 0; if (offy > V2_EMU_H - 176) offy = V2_EMU_H - 176;
-        uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
-        for (int y = 0; y < 176; y++)
-            memcpy(v2_render_buf + y * 320, pg + (size_t)(y + offy) * V2_EMU_W + offx, 320);
-    }
-    memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
-    v2_chunk_bg_valid = true;
-    v2_emu_valid = true;
-    v2_glyph_snap_valid = false;   // orig STOSB wiped the pages incl. the glyph layer
-}
-
-// Shown page of the current sub-frame — the A2 sensor compares against this.
-// Assembles the 320x176 window (anchor + current effective offset) into a
-// static frame buffer, like the orig CRTC unfold reads myOffset's window.
-extern "C" const uint8_t* v2_emu_shown(uint16_t ds_val) {
-    static uint8_t win[320 * 176];
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
-    int xe, ye;
-    v2_emu_eff(ds_base, &xe, &ye);
-    int offx = xe - v2_emu_base_x, offy = ye - v2_emu_base_y;
-    if (offx < 0) offx = 0; if (offx > V2_EMU_W - 320) offx = V2_EMU_W - 320;
-    if (offy < 0) offy = 0; if (offy > V2_EMU_H - 176) offy = V2_EMU_H - 176;
-    for (int y = 0; y < 176; y++)
-        memcpy(win + y * 320, pg + (y + offy) * V2_EMU_W + offx, 320);
-    return win;
-}
-
-// sub_11439/sub_16ded mirror hook (task #21): the orig level-entry init
-// renders the visible 25 tile rows onto ALL THREE pages at once (sub_16ded:
-// page cursors 9305/9307/9309 from 92F9/92FB/92F7, sub_16dc1 + sub_171dc per
-// row) BEFORE the object spawn passes (sub_13ba5/13a0e) — so the pages start
-// tile-clean and every sprite arrives later via live [114D] spawn tickets.
-// This closes the "blind init window" honestly: no sprite seeding needed.
-extern "C" void v2_emu_init_pages(uint16_t ds_val) {
-    if (!v2_m2c_base || !myDrawInfo_v2) return;
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (ds_base[DS_LEVEL_FLAGS] & 0x42) return;   // intro flags: orig skips sub_16ded
-#ifdef V2_RENDER_FROM_SHADOW
-    // v2_draw_tiles is gated on v2_vm_in_frame (skips seg000-hook contexts);
-    // this runs on the v2 thread inside the level-init mirror — force the
-    // gate open for the one init render.
-    bool save_in_frame = v2_vm_in_frame;
-    v2_vm_in_frame = true;
-#endif
-    v2_draw_tiles(ds_val);
-#ifdef V2_RENDER_FROM_SHADOW
-    v2_vm_in_frame = save_in_frame;
-#endif
-    memcpy(v2_emu_bg, v2_render_buf, sizeof(v2_emu_bg));
-    int xe, ye;
-    v2_emu_eff(ds_base, &xe, &ye);
-    v2_emu_base_x = xe & ~7; v2_emu_base_y = ye & ~7;
-    for (int p = 0; p < 3; p++)
-        v2_emu_page_render_full(v2_emu_page[p], ds_base);
-    v2_emu_valid = true;
-}
-
-// Stage-1 emu sub-frame, late half — the sub_1dd9c layer + the flagged-tile
-// pass (sub_1c8f1 draws AFTER 1dd9c and clears bit0; call this BEFORE the
-// phase runs v2_dirty_tile_scan_1C8F1 so the bits are still live).
-static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj);
-// Cascade hook: when != 0xFFFF, v2_late_sprites_1DD9C (the DS/FS mirror loop) calls
-// v2_draw_one_sprite_late(this, di) at the orig CALL cs:[bp+15CB] point for
-// every object it decides to draw. This reproduces the orig SINGLE loop:
-// gate → draw pixels → DEC [114D] → sub_1cd7d OR3 cells — so the sub_1cdef
-// scan of the NEXT object in the same sub-frame sees the fresh OR3 bits
-// (in-sub-frame cascade). A separate pixel pass before the mirror missed
-// those bits (scan MISS where orig HIT — flame obj30 class, task #23).
-extern "C" uint16_t v2_dd9c_pixel_ds = 0xFFFF;
-extern "C" void v2_draw_one_sprite_late(uint16_t ds_val, int obj) {
-    // The cascade fires inside v2_late_sprites_1DD9C, which the init mirrors run
-    // OUTSIDE the frame-phase context — force the render gate like
-    // v2_emu_init_pass does (armed v2_dd9c_pixel_ds IS the render context).
-#ifdef V2_RENDER_FROM_SHADOW
-    bool save_in_frame = v2_vm_in_frame;
-    v2_vm_in_frame = true;
-#endif
-    v2_draw_sprites_impl(ds_val, 0, obj);
-#ifdef V2_RENDER_FROM_SHADOW
-    v2_vm_in_frame = save_in_frame;
-#endif
-}
-
-void v2_emu_late_begin(uint16_t ds_val) {
-#ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
-#endif
-    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
-    // Sprite/flagged layers land on the SHOWN page role [92F9] — the page
-    // this sub-frame's 16775 flips to (draw, then show). Measured (BAND
-    // parity probe): the orig sub-3 snapshot content always matches the page
-    // painted by the SAME sub-frame's late layer, i.e. dd9c renders into
-    // [92F9]; [92F7] (previous shown) only receives the 1de05 latches.
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    {
-        int xe, ye;
-        v2_emu_eff(ds_base, &xe, &ye);
-        v2_blit_to_page(v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)],
-                        xe - v2_emu_base_x, ye - v2_emu_base_y);
-    }
-    v2_dd9c_pixel_ds = ds_val;   // enable the per-object cascade in v2_late_sprites_1DD9C
-}
-
-static void v2_emu_late_end_tail_marker(uint16_t ds_val);
-extern "C" void v2_glyphs_to_shown_page(uint16_t ds_val);
-extern uint8_t v2_glyph_page_snapshot[0x370];
-extern bool v2_glyph_snap_valid;
-void v2_emu_late_end(uint16_t ds_val) {
-#ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
-#endif
-    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
-    v2_dd9c_pixel_ds = 0xFFFF;
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    (void)ds_base;
-    // #39: enable dirty-tile erosion of the glyph snapshot for THIS pass only
-    // (the shown-page late_end render). Tiles that changed since last sub-frame
-    // erode the stale glyph cell before the snapshot is repainted below.
-    v2_flagged_erode = true;
-    v2_draw_flagged_tiles(ds_val);
-    v2_flagged_erode = false;
-    // #39: orig 1E0C7 paints the glyph cells onto the CURRENT page at this
-    // exact point (after 1DD9C, before the flip) - but only on sub-frames
-    // where the flush actually ran a full pass (dirty/throttle gates).
-    {
-        // #39 snapshot model: orig pages physically KEEP the glyph layer after
-        // each 1E0C7 pass (no full bg blits in orig), while the v2 emu re-blits
-        // page backgrounds every sub-frame. So: capture the buffer state at
-        // each painted tick, and repaint THE SNAPSHOT (not the live buffer -
-        // that would run ahead of the orig type-in) after every bg pass.
-        extern bool v2_glyph_flush_painted;
-        if (v2_glyph_flush_painted) {
-            v2_glyph_flush_painted = false;
-            uint8_t* ds_base2 = v2_get_ds_base(ds_val);
-            // Erase cells the new reply no longer occupies: restore the clean
-            // background (v2_emu_bg = this sub-frame tile render) into the shown
-            // page at those 8x8 cells - matches orig repainting tiles under the
-            // removed line. Applied to SHOWN each sub-frame so both rotation
-            // pages get cleaned over two frames.
-            {
-                const uint8_t* nb = ds_base2 + DS_GLYPH_BUF; (void)nb;
-                int xe, ye;
-                v2_emu_eff(ds_base2, &xe, &ye);
-                int ox = xe - v2_emu_base_x, oy = ye - v2_emu_base_y;
-                uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base2, DS_PAGE_SHOWN)];
-                for (int pos = 0; pos < 0x370; pos++) {
-                    if (!v2_glyph_prev_snapshot[pos] || nb[pos]) continue;  // erase only cells the shorter reply vacated
-                    int cx = (pos % 40) * 8, cy = (pos / 40) * 8;
-                    for (int k = 0; k < 8; k++) {
-                        int py = cy + k + oy, sx = cx + ox;
-                        if (py < 0 || py >= V2_EMU_H || sx < 0 || sx + 8 > V2_EMU_W) continue;
-                        int sy = cy + k;
-                        if (sy >= 176) continue;
-                        memcpy(pg + (size_t)py * V2_EMU_W + sx, v2_emu_bg + (size_t)sy * 320 + cx, 8);
-                    }
-                }
-            }
-            memcpy(v2_glyph_page_snapshot, ds_base2 + DS_GLYPH_BUF, 0x370);
-            memcpy(v2_glyph_prev_snapshot, v2_glyph_page_snapshot, 0x370);
-            v2_glyph_snap_valid = false;
-            for (int i = 0; i < 0x370; i++)
-                if (v2_glyph_page_snapshot[i]) { v2_glyph_snap_valid = true; break; }
-        }
-        if (v2_glyph_snap_valid)
-            v2_glyphs_to_shown_page(ds_val);
-    }
-    v2_blit_to_display();
-    v2_emu_late_end_tail_marker(ds_val);
-}
-
-// #39: gated page-side glyph render. Orig sub_1E0C7 paints non-zero glyph
-// cells (same 72-byte glyph format as v2_draw_ui) onto the CURRENT page;
-// unconditional per-subframe painting made v2 run AHEAD of the intro
-// type-in dialog, so this runs only when the flush pass really painted.
-extern "C" void v2_glyphs_to_shown_page(uint16_t ds_val) {
-    if (!v2_m2c_base || !myDrawInfo_v2 || !v2_emu_valid) return;
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    if (!ds_base) return;
-    const uint8_t* gl = v2_glyph_page_snapshot;
-    int xe, ye;
-    v2_emu_eff(ds_base, &xe, &ye);
-    int ox = xe - v2_emu_base_x, oy = ye - v2_emu_base_y;
-    uint8_t* pg = v2_emu_page[v2_emu_slot(ds_base, DS_PAGE_SHOWN)];
-    for (int pos = 0; pos < 0x370; pos++) {
-        uint8_t ch = gl[pos];
-        if (ch == 0) continue;
-        uint16_t glyph_index = (uint16_t)(ch - 0x10);
-        int sx = (pos % 40) * 8 + ox;
-        int sy = (pos / 40) * 8 + oy;
-        const uint8_t* glyph = ds_base + (uint16_t)(0x687Du + glyph_index * 72u);
-        for (int plane = 0; plane < 4; plane++) {
-            for (int strip = 0; strip < 2; strip++) {
-                uint8_t mask = glyph[0];
-                const uint8_t* data = glyph + 1;
-                int by = sy + strip * 4;
-                if (mask) {
-                    static const int bit_dx[8] = {0,4,0,4,0,4,0,4};
-                    static const int bit_dy[8] = {0,0,1,1,2,2,3,3};
-                    for (int b = 0; b < 8; b++) {
-                        if (!(mask & (0x80 >> b))) continue;
-                        int px = sx + bit_dx[b] + plane, py = by + bit_dy[b];
-                        if (px >= 0 && px < V2_EMU_W && py >= 0 && py < V2_EMU_H)
-                            pg[(size_t)py * V2_EMU_W + px] = data[b];
-                    }
-                }
-                glyph += 9;
-            }
-        }
-    }
-}
-
-static void v2_emu_late_end_tail_marker(uint16_t ds_val) {
-    uint8_t* ds_base = v2_get_ds_base(ds_val);
-    // Traced object: checksum its 32x32 page area (world − anchor) on all
-    // three pages after the late layer.
-    if (v2_objtrace_di != 0xFFFF) {
-        int16_t ox = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_X));
-        int16_t oy = *(int16_t*)(ds_base + (uint16_t)(v2_objtrace_di + OBJ_SPRITE_Y));
-        int px = (int)ox - v2_emu_base_x, py = (int)oy - v2_emu_base_y;
-        int sums[3] = {0, 0, 0};
-        for (int p = 0; p < 3; p++)
-            for (int yy = 0; yy < 32; yy++)
-                for (int xx = 0; xx < 32; xx++) {
-                    int X = px + xx, Y = py + yy;
-                    if (X >= 0 && X < V2_EMU_W && Y >= 0 && Y < V2_EMU_H)
-                        sums[p] += v2_emu_page[p][Y * V2_EMU_W + X];
-                }
-        v2_objtrace("e:pg", (int16_t)sums[0], (int16_t)sums[1], (int16_t)sums[2],
-                    v2_emu_slot(ds_base, DS_PAGE_DRAW) * 16 + v2_emu_slot(ds_base, DS_PAGE_SHOWN));
-        // Display-side checksum of the same area (v2_render_buf holds the
-        // full clean frame after the early full sprite pass) — tells whether
-        // the display layer carries a DIFFERENT phase than the page layer.
-        {
-            int xe2, ye2;
-            v2_emu_eff(ds_base, &xe2, &ye2);
-            int sx = (int)ox - xe2, sy = (int)oy - ye2;
-            int ds_sum = 0;
-            for (int yy = 0; yy < 32; yy++)
-                for (int xx = 0; xx < 32; xx++) {
-                    int X = sx + xx, Y = sy + yy;
-                    if (X >= 0 && X < 320 && Y >= 0 && Y < 176)
-                        ds_sum += v2_render_buf[Y * 320 + X];
-                }
-            v2_objtrace("e:dsp", (int16_t)ds_sum, (int16_t)sx, (int16_t)sy, 0);
-        }
-    }
+    if (sx >= 0 && sx < 320 && sy >= 0 && sy < 176)
+        buf[sy * 320 + sx] = color;
 }
 
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj = -1);
 void v2_draw_sprites(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 0); }
 void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
-// Single-object blit for the page-emu selective re-blit (sub_1de05 second half).
-static void v2_draw_one_sprite(uint16_t ds_val, int obj) { v2_draw_sprites_impl(ds_val, 0, obj); }
 
 // late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —
 // gates evaluated BEFORE v2_late_sprites_1DD9C's DS effects (DEC of [obj+0x114D]) and
@@ -1167,7 +665,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
 
-    uint8_t* buf = v2_blit_target ? v2_blit_target : v2_render_buf;
+    uint8_t* buf = v2_render_buf;
 
     // Viewport origin — pixel scroll values.
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
@@ -1205,8 +703,6 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             int t_h = 0;
             for (int t_i = 0; t_i < t_sz; t_i++) t_h += t_base[(uint16_t)(t_off - 1 + t_i)];
             int t_slot = 9;   // 9 = display buffer
-            for (int t_p = 0; t_p < 3; t_p++)
-                if (buf == v2_emu_page[t_p]) t_slot = t_p;
             v2_objtrace(late_gate ? "v:late" : "v:early",
                         *(int16_t*)(ds_base + obj + OBJ_SPRITE_X),
                         *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y),
@@ -1287,8 +783,6 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             // d = the FS cell word of the object's first cell at scan time.
             if (obj == v2_objtrace_di) {
                 int t_slot = 9;
-                for (int t_p = 0; t_p < 3; t_p++)
-                    if (buf == v2_emu_page[t_p]) t_slot = t_p;
                 int fs_word = -1;
                 {
                     uint16_t fs_seg2 = *(uint16_t*)(ds_base + DS_SEG_FS);
@@ -1375,22 +869,11 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         // check this flag and branch to mirrored rendering paths.
         bool hflip = (flags & 0x200) != 0;
 
-        // Page-lane detection: writing into an emu page (world-anchored 328x184)
-        // vs the 320x176 screen buffer. The page lane must reproduce the orig
-        // write band exactly (incl. off-window pixels); the screen lane keeps
-        // per-pixel window clipping (equivalent inside the window).
-        bool to_page = false;
-        for (int t_p = 0; t_p < 3; t_p++)
-            if (buf == v2_emu_page[t_p]) to_page = true;
-
-        // Coarse bounds check — sprite pixel size.
-        // Skipped for the page lane: page writes use the exact orig clips
-        // below (raw ds:44/46, no shake); the shaken-window coarse check
-        // would drop sprites orig draws (shake delta / off-window band).
+        // Coarse bounds check — sprite pixel size. (Display lane only; the
+        // byte-exact page channel is the shadow VGA in v2_vm.cpp.)
         int sprite_h = num_strips * rows_per_strip;
         int sprite_w = bytes_per_row * 4;  // 4 planes
-        if (!to_page)
-            if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 176 || sy0 < -sprite_h) continue;
+        if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 176 || sy0 < -sprite_h) continue;
 
         // Sprite data: resolve segment to shadow buffer, add offset.
         // sprite_off = 1-based offset to first data byte; mask at offset-1.
@@ -1430,108 +913,6 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             return hflip ? sx0 + sprite_w - 1 - col : sx0 + col;
         };
 
-        // Page-lane exact bands for types 1/4 (orig seg003_648_proc /
-        // sub_1d3b2): raw ds:44/46 clips (no shake), 4-px column masks and
-        // strip-granular top/bot clip for type 4, full 8x8 write for type 1
-        // (orig has NO masks / no [114D] cut-in there — only object bounds;
-        // up to 7 off-window pixels are written).
-        int t14_top_strips = 0, t14_bot_strips = 0;
-        uint8_t t14_mask = 0xFF;
-        if (to_page && (type == 1 || type == 4)) {
-            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_X);
-            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_Y);
-            if (type == 1) {
-                // seg003_648_proc eips 0x668..0x68E: pure bounds.
-                if (world_x >= vp_raw + 0x140) continue;   // JGE 1d154
-                if (world_x <= vp_raw - 0x07) continue;    // JLE (ax -= 0x147)
-                if (world_y >= vpy_raw + 0x0B0) continue;  // JGE 1d154
-                if (world_y <  vpy_raw - 0x07) continue;   // JL (ax -= 0xB7)
-            } else {
-                // sub_1d3b2 eips 0xBA2..0xC3A.
-                static const uint16_t v2_t4_mask_r[4] = {   // cs:[0E92]
-                    0xFFFF,0x77EE,0x33CC,0x1188};
-                static const uint16_t v2_t4_mask_l[4] = {   // cs:[0E9A]
-                    0xFFFF,0xEE77,0xCC33,0x8811};
-                uint16_t mask16 = 0xFFFF;
-                if (world_x >= vp_raw + 0x140) continue;             // JGE 1d6b1
-                if (world_x >= vp_raw + 0x131)                       // JL 1d3fd
-                    mask16 = v2_t4_mask_r[(world_x - (vp_raw + 0x131)) >> 2];
-                if (world_x <= vp_raw - 0x0F) continue;              // JLE 1d6b1
-                if (world_x < vp_raw)                                // JGE 1d425
-                    mask16 = v2_t4_mask_l[(vp_raw - world_x) >> 2];
-                if (world_y >= vpy_raw + 0x0B0) continue;            // JGE 1d6b1
-                if (world_y >= vpy_raw + 0x0A1)                      // JL 1d44c
-                    t14_bot_strips = (world_y - (vpy_raw + 0x0A1)) >> 1; // SHR 1
-                if (world_y < vpy_raw - 0x0F) continue;              // JL 1d6b1
-                if (world_y <= vpy_raw)                              // JG 1d471
-                    t14_top_strips = ((vpy_raw - world_y) & 0xFFFE) >> 1; // AND FFFE
-                t14_mask = hflip ? (uint8_t)(mask16 >> 8)            // loc_1d6d2 SHR ...,8
-                                 : (uint8_t)(mask16 & 0xFF);         // AND ...,0FFh
-            }
-        }
-
-        if (type == 2 && to_page) {
-            // Exact orig write band — loc_1d8a8 (seg003 eip 0x1078..0x1367).
-            // Clips are against RAW ds:44/46 (no shake; CRTC pan shifts the
-            // window, not the buffer writes). Horizontal clip is a column
-            // mask at 4-px granularity (cs:[1379] right / cs:[138B] left,
-            // indexed by (edge_delta)>>2; hflip uses the high mask byte via
-            // SHR word_1C830,8) — so up to 3 off-window pixels ARE written.
-            // Vertical clip is per-row: top = vpy−y (y<=vpy), bot =
-            // y−(vpy+0x91) (y>=vpy+0x91); with bot>0 the last drawn row is
-            // always vpy+0xB0 — one row below the window, also written.
-            // Data: 4 plane blocks of 9*[C4D] bytes, row = [ctrl][d0..d7];
-            // ctrl bit b → column k=7−b, color d[k] (jpt_1DA02 writers).
-            // Plane rotation by (x+0x20)&3 (jpt_1D9E8 cases + INC DI at the
-            // 3→0 wrap) is transparent in world coords: block j lands on
-            // world X = x + 4k + j; hflip (jpt_1DBE3/1DBFE: reversed plane
-            // order, mirrored write offsets [di+b] ← data [si+7−b]) lands on
-            // world X = x + 31 − (4k+j). [114D]=2 side effects and the
-            // sub_1cd7d bitmap call live in the v2_late_sprites_1DD9C DS mirror.
-            static const uint16_t v2_t2_mask_r[8] = {  // cs:[1379]
-                0xFFFF,0x7FFE,0x3FFC,0x1FF8,0x0FF0,0x07E0,0x03C0,0x0180};
-            static const uint16_t v2_t2_mask_l[8] = {  // cs:[138B]
-                0xFFFF,0xFE7F,0xFC3F,0xF81F,0xF00F,0xE007,0xC003,0x8001};
-            int16_t vp_raw  = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_X);
-            int16_t vpy_raw = (int16_t)*(uint16_t*)(ds_base + DS_VIEWPORT_Y);
-            int rows_total = num_strips;              // ds:[obj+0xC4D]
-            uint16_t mask16 = 0xFFFF;
-            if (world_x >= vp_raw + 0x140) continue;              // JGE 1db98
-            if (world_x >= vp_raw + 0x121)                        // JL 1d8f3
-                mask16 = v2_t2_mask_r[(world_x - (vp_raw + 0x121)) >> 2];
-            if (world_x <= vp_raw - 0x1F) continue;               // JLE 1db98
-            if (world_x < vp_raw)                                 // JGE 1d91b
-                mask16 = v2_t2_mask_l[(vp_raw - world_x) >> 2];
-            int top = 0, bot = 0;
-            if (world_y >= vpy_raw + 0x0B0) continue;             // JGE 1db98
-            if (world_y >= vpy_raw + 0x091)                       // JL 1d93d
-                bot = world_y - (vpy_raw + 0x091);
-            if (world_y < vpy_raw - 0x1F) continue;               // JL 1db98
-            if (world_y <= vpy_raw)                               // JG 1d95b
-                top = vpy_raw - world_y;
-            int cx_rows = rows_total - top - bot;
-            if (cx_rows <= 0) continue;  // orig LOOP would wrap; unreachable geometry
-            uint8_t mask8 = hflip ? (uint8_t)(mask16 >> 8)        // SHR ...,8
-                                  : (uint8_t)(mask16 & 0xFF);     // AND ...,0FFh
-            for (int j = 0; j < 4; j++) {
-                const uint8_t* blk = sprite + 9 * top + j * 9 * rows_total;
-                for (int r = 0; r < cx_rows; r++) {
-                    uint8_t ctrl = (uint8_t)(blk[r * 9] & mask8);
-                    if (!ctrl) continue;
-                    int wy = world_y + top + r;
-                    for (int b = 7; b >= 0; b--) {
-                        if (!(ctrl & (1 << b))) continue;
-                        int k = 7 - b;
-                        int s = 4 * k + j;
-                        int wx = hflip ? (world_x + 31 - s) : (world_x + s);
-                        v2_put_pixel(buf, wx - viewport_x, wy - viewport_y,
-                                     blk[r * 9 + 1 + k]);
-                    }
-                }
-            }
-            continue;
-        }
-
         uint8_t* ptr = sprite;
         for (int section = 0; section < 4; section++) {
             int plane = section;
@@ -1539,15 +920,6 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                 uint8_t mask = ptr[0];
                 uint8_t* data = ptr + 1;
                 int base_y = sy0 + strip * rows_per_strip;
-
-                // Page lane, type 4: strip-granular top/bot clip (orig skips
-                // the clipped strips' data via the cs:[3D] 9m LUT — same as
-                // stepping ptr) and the 4-px column mask on the ctrl byte.
-                if (to_page && type == 4) {
-                    if (strip < t14_top_strips ||
-                        strip >= num_strips - t14_bot_strips) { ptr += 9; continue; }
-                    mask &= t14_mask;
-                }
 
                 if (mask) {
                     if (type == 1) {
@@ -1652,7 +1024,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    uint8_t* buf = v2_blit_target ? v2_blit_target : v2_render_buf;
+    uint8_t* buf = v2_render_buf;
 
     uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
     uint16_t tgfx_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
@@ -1705,26 +1077,6 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
             uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
-
-            // #39 dirty-tile erosion (only on the late_end shown pass): if the
-            // visible tile at this cell changed since the previous sub-frame,
-            // the scene content there was redrawn — orig's dirty channel would
-            // have overwritten any glyph on the page, so erode the matching
-            // glyph-snapshot cell (glyph grid 40x22 aligns with tile cells).
-            if (v2_flagged_erode && col_vis < 40 && row_vis < 22) {
-                static uint16_t prev_ftile[25 * 43];
-                static bool prev_ftile_valid = false;
-                int tcell = row_vis * 43 + col_vis;
-                if (prev_ftile_valid && tile_entry != prev_ftile[tcell]) {
-                    int gpos = row_vis * 40 + col_vis;
-                    v2_glyph_page_snapshot[gpos] = 0;
-                    v2_glyph_prev_snapshot[gpos] = 0;
-                }
-                prev_ftile[tcell] = tile_entry;
-                // mark valid once the last gated cell (21,39) has been stored,
-                // so the next sub-frame's comparisons all have prev data.
-                if (row_vis == 21 && col_vis == 39) prev_ftile_valid = true;
-            }
 
             // Original sub_1c8f1 ANDs entry with ax=0xFFFE (clears dirty bit 0)
             // then draws if bit 3 (foreground) is set. v2 draws all foreground
