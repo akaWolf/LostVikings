@@ -4796,7 +4796,7 @@ static bool v2_slot_alloc_13d68(uint8_t* s, uint16_t si) {
         }
         // loc_13daa: record candidate start/end unconditionally.
         *(uint16_t*)(s + DS_SCRATCH_3A) = di;
-        uint16_t end = (uint16_t)(*(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_COUNT)) * 2 + di);
+        uint16_t end = (uint16_t)(ObjMem{s, si}.sub_count() * 2 + di);
         *(uint16_t*)(s + DS_SCRATCH_38) = end;
         // loc_13db9: verify the run is contiguous. Both exits compare for
         // EQUALITY (JZ), exactly like orig — not >=.
@@ -4817,15 +4817,17 @@ static bool v2_slot_alloc_13d68(uint8_t* s, uint16_t si) {
 // iteration exactly like orig — the loop's own writes can alias them at
 // out-of-pool di values, so hoisting would diverge.
 static void v2_slot_init_13dd6(uint8_t* s, uint16_t si) {
-    uint16_t ax = (uint16_t)(((*(uint16_t*)(s + (uint16_t)(si + OBJ_FLAGS)) & 0xCE) << 3) | 0x8000);
-    uint16_t cx = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_END));
-    uint16_t di = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_SLOT));
+    ObjMem self{s, si};
+    uint16_t ax = (uint16_t)(((self.flags() & 0xCE) << 3) | 0x8000);
+    uint16_t cx = self.sub_end();
+    uint16_t di = self.sub_slot();
     do {
-        *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_FLAGS))  = ax;
-        *(uint16_t*)(s + (uint16_t)(di + OBJ_SUB_CLASS))  = 0;
-        *(uint16_t*)(s + (uint16_t)(di + OBJ_DIRTY_MODE)) = 0x204;
-        *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_SEG))  = *(uint16_t*)(s + DS_SEG_SPRITE);
-        *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_OFF))  = *(uint16_t*)(s + (uint16_t)(si + OBJ_SPRITE_BASE));
+        ObjMem sub{s, di};                       // sub-sprite slot (cursor, re-created per iter)
+        sub.w16(OBJ_SPRITE_FLAGS, ax);
+        sub.w16(OBJ_SUB_CLASS, 0);
+        sub.w16(OBJ_DIRTY_MODE, 0x204);
+        sub.w16(OBJ_SPRITE_SEG, *(uint16_t*)(s + DS_SEG_SPRITE));
+        sub.w16(OBJ_SPRITE_OFF, self.u16(OBJ_SPRITE_BASE));
         di += 2;
     } while ((int16_t)di < (int16_t)cx);
 }
@@ -4834,16 +4836,18 @@ static void v2_slot_init_13dd6(uint8_t* s, uint16_t si) {
 // bit0), constant across the loop. do-while like orig (first slot always
 // written, signed JL bottom test).
 static void v2_slot_size_init_13e15(uint8_t* s, uint16_t si) {
-    uint16_t bp = (uint16_t)((*(uint16_t*)(s + (uint16_t)(si + OBJ_FLAGS)) & 1) << 1);
-    uint16_t cx = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_END));
-    uint16_t di = *(uint16_t*)(s + (uint16_t)(si + OBJ_SUB_SLOT));
+    ObjMem self{s, si};
+    uint16_t bp = (uint16_t)((self.flags() & 1) << 1);
+    uint16_t cx = self.sub_end();
+    uint16_t di = self.sub_slot();
     do {
+        ObjMem sub{s, di};       // sub-sprite slot (cursor)
         if (bp != 0) {           // loc_13e26 taken path: 16x16
-            *(uint16_t*)(s + (uint16_t)(di + OBJ_STRIP_COUNT)) = 0x20;
-            *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_FLAGS)) |= 2;
+            sub.w16(OBJ_STRIP_COUNT, 0x20);
+            sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 2);
         } else {                 // loc_13e3f: 8x8
-            *(uint16_t*)(s + (uint16_t)(di + OBJ_STRIP_COUNT)) = 8;
-            *(uint16_t*)(s + (uint16_t)(di + OBJ_SPRITE_FLAGS)) |= 1;
+            sub.w16(OBJ_STRIP_COUNT, 8);
+            sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 1);
         }
         di += 2;
     } while ((int16_t)di < (int16_t)cx);
@@ -5618,12 +5622,11 @@ static int16_t v2_delta_122f3(int16_t d) {
 // (v2_subsprite_delta_apply). Orig computes the Y delta FIRST (through
 // off_30BC0[bx] → dx), then the X delta (→ ax kept in ax).
 static void v2_subsprite_catchup_12fe5(uint8_t* s, uint16_t di, int type) {
-    if (*(uint16_t*)(s + (uint16_t)(di + OBJ_CODE_SEG)) == 0) return;
-    if (*(uint16_t*)(s + (uint16_t)(di + OBJ_SUB_COUNT)) == 0) return;
-    int16_t dy = (int16_t)(*(uint16_t*)(s + (uint16_t)(di + OBJ_WORLD_Y))
-                         - *(uint16_t*)(s + (uint16_t)(di + OBJ_Y_PREV)));
-    int16_t dx = (int16_t)(*(uint16_t*)(s + (uint16_t)(di + OBJ_WORLD_X))
-                         - *(uint16_t*)(s + (uint16_t)(di + OBJ_X_PREV)));
+    ObjMem o{s, di};
+    if (o.code_seg() == 0) return;
+    if (o.sub_count() == 0) return;
+    int16_t dy = (int16_t)(o.u16(OBJ_WORLD_Y) - o.u16(OBJ_Y_PREV));
+    int16_t dx = (int16_t)(o.u16(OBJ_WORLD_X) - o.u16(OBJ_X_PREV));
     int16_t ty, tx;
     switch (type) {
     case 0:  ty = v2_delta_1227e(dy); tx = v2_delta_1227e(dx); break;
