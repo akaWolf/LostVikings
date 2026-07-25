@@ -11799,13 +11799,11 @@ static void v2_vm_op_81(V2VM& vm) {
 // 0x10 (sub_14327): Destroy object via sub_13c93 + exit VM. 0 bytes consumed.
 // sub_14327: di = ds:0x42; call sub_13c93; si = ds:0x42; POP ax; RETN
 // POP ax + RETN = exit opcode loop (skip caller's return address)
-static void v2_vm_op_10(V2VM& vm) {
-    uint16_t di = vm.global_r(DS_CUR_OBJ);
-    // orig exit regs: di=[0x42] (sub_13c93 is PUSH/POP di-balanced),
-    // si=[0x42] re-read after the call (0x432F) — task #15 tracking.
-    vm.di_track = di;
-    vm.si_track = di;
-
+// sub_13c93 (seg000 eips 0x3C93..0x3D2F): despawn object — clear sub-sprite
+// slots (DO-WHILE), unlink 0x1805/0x182D pair, kill code_seg/anim PC, shrink
+// ds:0x372 by the JS-terminated backward scan, then the 0x16C5+flag-0x100
+// re-spawn tail (sub_139ef viewport bounds + sub_13ae0 table probe).
+static void v2_despawn_13c93(V2VM& vm, uint16_t di) {
     // === sub_13c93 logic ===
     // 1. Clear all sub-sprites if 0x1AD5 != 0. Orig loop loc_13CA2 is a
     // DO-WHILE (body first, CMP si,ax / JL at end) — at least one iteration.
@@ -11854,7 +11852,7 @@ static void v2_vm_op_10(V2VM& vm) {
         uint16_t flags_1585 = ObjRef{vm, di}.u16(OBJ_FLAGS);
         if (flags_1585 & 0x100) {
             // loc_13cfc: sub_139ef (viewport bounds) + sub_13ae0 (re-spawn from table)
-            uint8_t* s = v2_vm_shadow_ds;
+            uint8_t* s = vm.shadow;   // == v2_vm_shadow_ds in combat; isolatable
             // sub_139ef: set viewport bounds
             uint16_t vx = *(uint16_t*)(s + DS_VIEWPORT_X) - 0x10;
             *(uint16_t*)(s + DS_SCRATCH_34) = vx;
@@ -11893,6 +11891,16 @@ static void v2_vm_op_10(V2VM& vm) {
         }
     }
 
+}
+
+static void v2_vm_op_10(V2VM& vm) {
+    uint16_t di = vm.global_r(DS_CUR_OBJ);
+    // orig exit regs: di=[0x42] (sub_13c93 is PUSH/POP di-balanced),
+    // si=[0x42] re-read after the call (0x432F) — task #15 tracking.
+    vm.di_track = di;
+    vm.si_track = di;
+
+    v2_despawn_13c93(vm, di);
     // Exit VM: POP ax + RETN in original skips the opcode loop return
     vm.running = false;
 }
@@ -12304,6 +12312,14 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 extern "C" int16_t v2_fntest_call_sub_16390(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     return v2_slope_diff_16390(test_shadow, ax, si, di);
 }
+// Unit 120: sub_13c93 — despawn (subs clear, unlink, 372 shrink, respawn tail).
+static void v2_despawn_13c93(V2VM& vm, uint16_t di);
+extern "C" void v2_fntest_call_sub_13c93(uint8_t* test_shadow, uint16_t di) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow; vm.obj = di;
+    v2_despawn_13c93(vm, di);
+}
+
 // Unit 119: sub_12fe5 — per-object sub-sprite catch-up (delta-fn via bx).
 static void v2_subsprite_catchup_12fe5(uint8_t* s, uint16_t di, int type);
 extern "C" void v2_fntest_call_sub_12fe5(uint8_t* test_shadow, uint16_t di, uint16_t bx_type) {

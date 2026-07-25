@@ -356,6 +356,8 @@ sub_1625d (ground snap). Все шесть → do-while форма. Урок а�
 
 | 56 | `sub_12fe5` | per-объектный sub-sprite catch-up (delta-fn через off_30BC0[bx], bx=0/2/4) | гейты [1355]/[1AD5]; dy/dx через delta-тип; (tx\|ty)==0 → skip; слот-do-while [64D]+=tx/[74D]+=ty/[114D]=0x202 | 29 381 = grid 18 (3 типа × dead/no-subs/zero/both/IDIV-край −0x8000/инверт-слоты) + exhaustive **dy-ось /7** + fuzz 20 000 | **PASS, 0 диффов** | v2_subsprite_catchup_12fe5 (общая экстракция班а №17-19) | (этот) |
 
+| 57 | `sub_13c93` | despawn: суб-клир (do-while), unlink 1805/182D, kill+[1A0D]=FFFF, ds:0x372 backward-shrink (JS), respawn-хвост (16C5+флаг 0x100 → 139ef/13ae0-проба) | 6 007 = grid 7 (subs/unlink/16C5-гейты/shrink-через-дыру/shrink-в-ноль JS) + fuzz 6 000; spawn-ветка хвоста транзитивна юнитом 54 + vmops op-10 | **PASS, 0 диффов** | v2_despawn_13c93 экстрагирован из op_10 (сайт → вызов); respawn-хвост переведён на vm.shadow (изолируемость) | (этот) |
+
 ## Как добавить функцию (конвейер)
 
 1. Прочитать orig asm построчно → контракт: читаемые/писаемые DS-поля,
