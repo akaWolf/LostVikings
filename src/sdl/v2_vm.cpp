@@ -13233,6 +13233,7 @@ extern "C" void v2_fntest_call_pal(uint8_t* test_shadow, int which, uint8_t* dac
     memcpy(dac_out768, v2_dac_shadow, 768);
 }
 extern "C" void v2_fntest_reset_v2_dac(void) { memset(v2_dac_shadow, 0, 768); }
+extern "C" uint8_t* v2_fntest_dac_shadow_ptr(void) { return v2_dac_shadow; }
 // Class-B: per-object VM exec (v2_vm_execute_object, fwd-declared at top).
 // v2_vm_accumulator is a file-scope global carried across opcodes — reset it
 // so each synthetic case starts from the canonical zero accumulator.

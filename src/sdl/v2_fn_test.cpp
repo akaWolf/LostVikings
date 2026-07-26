@@ -509,6 +509,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_121F6 = 409,   // take-next from category row
             FT_SUB_121B9 = 410,   // pop selected item
             FT_SUB_10555 = 411,   // prompt blink tick
+            FT_SUB_1106F = 412,   // DAC blank
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -675,7 +676,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_12034", "sub_16880", "sub_11792",
                                  "sub_11f47", "sub_103ca", "sub_1047c",
                                  "sub_12250", "sub_11f93", "sub_121f6",
-                                 "sub_121b9", "sub_10555" };
+                                 "sub_121b9", "sub_10555", "sub_1106f" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9916,6 +9917,54 @@ int ft_selftest_12250(uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// sub_1106f: DAC blank — the oracle's OUT 3C8/3C9 port hooks feed the
+// drawPalette array; v2's model is a zeroed v2_dac_shadow. Compare all 768.
+extern "C" void v2_fntest_reset_v2_dac(void);
+extern "C" void v2_fetch_orig_dac(uint8_t* rgb768);
+extern "C" uint8_t* v2_fntest_dac_shadow_ptr(void);
+
+int ft_selftest_1106f(uint32_t seed) {
+    (void)seed;
+    FtSynthStats grid, fuzz;
+    long diff_budget = 12;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    grid.cases++;
+    memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+    memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+    uint16_t regs[8] = {0};
+    long esc0 = ft_ub_marks();
+    v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1106F), g_synth_orig, regs);
+    if (ft_ub_marks() != esc0) { grid.cases--; }
+    else {
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_reset_v2_dac();
+        uint8_t orig_dac[768];
+        v2_fetch_orig_dac(orig_dac);
+        uint8_t* v2dac = v2_fntest_dac_shadow_ptr();
+        long diffs = 0;
+        for (int i = 0; i < 768; i++) {
+            if (orig_dac[i] == v2dac[i]) continue;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_1106f]: dac[%d] orig=%02X v2=%02X\n",
+                        i, orig_dac[i], v2dac[i]);
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            diffs++;
+        }
+        if (diffs) grid.fail++; else grid.pass++;
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_1106f]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -11458,6 +11507,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_121f6")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_121F6, 0xB4AF001u); }
     if (all || strstr(env, "sub_121b9")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_121B9, 0xB4B0001u); }
     if (all || strstr(env, "sub_10555")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_10555, 0xB4B1001u); }
+    if (all || strstr(env, "sub_1106f")) { matched = true; rc |= ft_selftest_1106f(0xB4B2001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
