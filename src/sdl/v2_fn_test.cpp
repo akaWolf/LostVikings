@@ -9037,6 +9037,19 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             static const FtWr winact[] = { {0x16CB, 0x8000} };
             A(c, 5, O, "grid", winact, 1);
         }
+        // Frame fix (#47, "пятёрка"): these handlers read a MODE WORD whose
+        // low 3 bits drive the first channel call and bits 3-5 the second
+        // (dist-X into [6C] then dist-Y into [6E], each via a setter/getter
+        // pair). The universal frame's word 0x4001 makes the SECOND channel
+        // ch0 — the no-op setter RETNs onto the pushed value ([6E] garbage)
+        // and the case UB-skips. Word 0x4009 (args 09 40 42) keeps both
+        // channels ch1: setter-1 idx=0x40, setter-2 idx=0x42, then a clean
+        // yield opcode.
+        if (id == FT_SUB_150FC || id == FT_SUB_15106 || id == FT_SUB_14EDD ||
+            id == FT_SUB_14F27 || id == FT_SUB_150B5) {
+            uint8_t c9[] = {op, 0x09, 0x40, 0x42, 0x00};
+            A(c9, 5, O, "grid");
+        }
         // Coverage-directed (#47): op34 scans viking slots ([si+15AD]!=0) for
         // the nearest one (|dx|+|dy| of [173D]/[1765]). Slot 0 alive covers
         // the scan; nonzero slot coords force both NEG branches.
@@ -11769,6 +11782,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     }
     fprintf(stderr, "FNSELFTEST: game DS at linear 0x%X (seg 0x%X), oracle = isolated m2c orig\n",
             ds_lin, ds_lin >> 4);
+    { extern int v2_fntest_ss_trace; v2_fntest_ss_trace = getenv("FT_SS_TRACE") ? 1 : 0; }
     v2_fntest_watchdog_enable = 1;   // single-threaded here: hang watchdog is safe
     v2_fntest_ensure_drawinfo();     // oracle HUD/VGA inlines need a draw target
     v2_set_m2c_base(v2_fntest_m2c_base());   // v2 const-data reads (seg001 text

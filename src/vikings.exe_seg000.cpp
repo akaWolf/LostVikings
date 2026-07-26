@@ -410,6 +410,8 @@ extern "C" void v2_fntest_arm_signals(void) {
 // DATA.DAT for both the oracle and v2 (the oracle's file layer is the port's
 // SDL-inlined fread/fseek on the static `data_handle`).
 extern "C" uint16_t v2_fntest_es_override = 0;
+// FT_SS_TRACE=1: RETN/escape routing diagnostics (cached in fn-test main).
+extern "C" int v2_fntest_ss_trace = 0;
 // ES value after the isolated call (unit sub_10e85 compares the para-advance).
 extern "C" uint16_t v2_fntest_last_es = 0;
 // fs for orig functions that rely on a caller-loaded fs (e.g. sub_13fc2:
@@ -528,7 +530,11 @@ static bool v2_fntest_orig_isolated_body(void* fn, uint8_t* ds_image, uint16_t* 
     } else {
         ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
     }
-    if (sp != sp_ref) { v2_fntest_start_escapes++; ok = false; }
+    if (sp != sp_ref) {
+        v2_fntest_start_escapes++;
+        if (v2_fntest_ss_trace) fprintf(stderr, "ESC-SPDIFF: sp=%04X ref=%04X\n", (unsigned)sp, (unsigned)sp_ref);
+        ok = false;
+    }
     v2_fntest_isolated_active = 0;
 
     io_regs[0] = ax; io_regs[1] = bx; io_regs[2] = cx; io_regs[3] = dx;
@@ -2574,7 +2580,11 @@ start:
     // into PUSH(si)'s value 0 → __disp=0x01A20000 → here). In isolated mode
     // count the escape and bail out of the group instead of re-running
     // start:. Game startup (v2_fntest_isolated_active==0) is unaffected.
-    if (v2_fntest_isolated_active) { v2_fntest_start_escapes++; return true; }
+    if (v2_fntest_isolated_active) {
+        v2_fntest_start_escapes++;
+        if (v2_fntest_ss_trace) fprintf(stderr, "ESC-START: eip=%04X\n", (unsigned)eip);
+        return true;
+    }
 	{
 	  printf("__start__\n");
 	  //setPalette(0, 0, 0, 0);
@@ -19590,7 +19600,11 @@ fntest_ret_trap:
             // In isolated mode count it as an escape and bail out of the
             // group; the runner marks the case orig-UB. Game mode aborts as
             // before.
-            if (v2_fntest_isolated_active) { v2_fntest_start_escapes++; eip = 0xFFF0; return true; }
+            if (v2_fntest_isolated_active) {
+                v2_fntest_start_escapes++;
+                if (v2_fntest_ss_trace) fprintf(stderr, "ESC-DEFAULT: disp=%08X\n", (unsigned)__disp);
+                eip = 0xFFF0; return true;
+            }
             m2c::log_error("Don't know how to jump to 0x%x. See " __FILE__ " line %d\n", __disp, __LINE__);m2c::stackDump(); abort();
     };
 }

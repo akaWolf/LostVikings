@@ -200,6 +200,7 @@ uint16_t& Z = *(uint16_t *)& e##Z ;
 // fn-test isolation hooks (defined in vikings.exe_seg000.cpp) — used by the
 // RETN_/RETF_ mismatch paths to escape a runaway instead of killing the runner.
 extern "C" int  v2_fntest_isolated_active;
+extern "C" int  v2_fntest_ss_trace;   // FT_SS_TRACE diagnostics (cached flag)
 extern "C" void v2_fntest_escape_jump(void);
 
     class ShadowStack {
@@ -1662,8 +1663,9 @@ struct StackPop
         bool ret(true);
 #ifndef NO_SHADOW_STACK
         ret = shadow_stack.itwascall();
-        if (getenv("FT_SS_TRACE"))
-            fprintf(stderr, "SS-RETN: ip=%04X wascall=%d\n", (unsigned)(ip & 0xFFFF), (int)ret);
+        if (v2_fntest_ss_trace)   // fn-test RETN routing trace (FT_SS_TRACE=1)
+            fprintf(stderr, "SS-RETN: ip=%04X wascall=%d\n",
+                    (unsigned)(ip & 0xFFFF), (int)ret);
         int skip = shadow_stack.getneedtoskipcallndclean();
         if (!ret) {
             log_error("Warning. Return address wasn't created by native CALL (found %x)\n", ip);
