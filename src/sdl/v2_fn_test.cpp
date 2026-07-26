@@ -9049,6 +9049,28 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             uint8_t c9[] = {op, 0x09, 0x40, 0x42, 0x00};
             A(c9, 5, O, "grid");
         }
+        // Coverage-directed (#47): op35/op2C link scans need a LIVE partner
+        // slot ([0+1355]!=0, slot != [42]), a type passing the [3AA]-LUT
+        // check ([17DD]=0xFF beats any LUT byte) and overlapping ranges
+        // ([di+155D]>=[si+1535] both ways).
+        if (id == FT_SUB_15E91 || id == FT_SUB_15F2C) {
+            // Full-link pass: partner counters [14E5]/[150D] must satisfy
+            // [3AE]>= slot's [14E5] and [3AE]-1 < slot's [150D].
+            static const FtWr wl6[] = { {0x1355, 1}, {0x17DD, 0x00FF},
+                                        {0x1563, 10}, {0x1535, 5},
+                                        {0x155D, 10}, {0x153B, 5} };
+            A(c, 5, O, "grid", wl6, 6);      // op35's counter polarity
+            static const FtWr wlink[] = { {0x1355, 1}, {0x17DD, 0x00FF},
+                                          {0x1563, 10}, {0x1535, 5},
+                                          {0x155D, 10}, {0x153B, 5},
+                                          {0x14EB, 10}, {0x14E5, 5},
+                                          {0x150D, 9} };
+            A(c, 5, O, "grid", wlink, 9);    // op2C's counter gates
+            // LUT walk (INC di loop): a type byte whose LUT entry != 0xFF
+            // forces the scan to the 0xFF terminator.
+            uint8_t cw[] = {op, 0x00, 0x40, 0x42, 0x00};
+            A(cw, 5, O, "grid", wlink, 9);
+        }
         // op26/28 read TWO mode words: getter pair (X->[6C], Y->[6E], SHR 4)
         // then a setter pair via 154bf + the 154bc tail - both words 0x??09
         // keep every channel ch1; stream: w1, g-idx, g-idx, w2, s-idx,
