@@ -8946,6 +8946,18 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         // remainder as further opcodes (both channels identically).
         uint8_t c[] = {op, 0x01, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
         A(c, 5, O, "grid");
+        // Coverage-directed (#47): the acc-conditional kill-LUT stores
+        // ([8A]!=0 branch) never fire with the base image's [8A]=0.
+        if (id == FT_SUB_14CBB || id == FT_SUB_14CDD || id == FT_SUB_14D0F) {
+            static const FtWr wacc[] = { {0x008A, 1} };
+            A(c, 5, O, "grid", wacc, 1);
+        }
+        // Coverage-directed (#47): op B1's taken-jump needs RNG&1 != [8A] —
+        // [8A]=5 makes the inequality unconditional.
+        if (id == FT_SUB_14E24) {
+            static const FtWr wneq[] = { {0x008A, 5} };
+            A(c, 5, O, "grid", wneq, 1);
+        }
         fuzz_op = op; fuzz_alen = 3; break;
     }
     // ---- waves 10-11: remaining table handlers (universal frame) ----
@@ -9019,6 +9031,12 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         uint16_t t = FT_VM_PC + 0x40;
         uint8_t c[] = {op, 0x01, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
         A(c, 5, O, "grid");
+        // Coverage-directed (#47): the early-RETN of the C7/C9/CA family
+        // fires on [obj+16C5] bit15 (frame slot 6 → ds:0x16CB).
+        if (id == FT_SUB_15268 || id == FT_SUB_1529A || id == FT_SUB_152B3) {
+            static const FtWr winact[] = { {0x16CB, 0x8000} };
+            A(c, 5, O, "grid", winact, 1);
+        }
         fuzz_op = op; fuzz_alen = 3; break;
     }
     default: return 1;
@@ -11151,6 +11169,49 @@ int ft_selftest_sub_14207() {
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
         v2_fntest_call_sub_14207(g_scratch);
         ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-ch3-#28", grid, diff_budget);
+    }
+    // Coverage-directed (#47): the drain loop (eip 4223..4241) only runs when
+    // the pass's OWN bytecode enqueues a slot — sub_14207 zeroes ds:0x376 on
+    // entry, so runner presets never reach it. Slot 0 executes op 0x14 (the
+    // only [376] writer, INC at eip 4FBF) with the same universal frame the
+    // sub_14f59 unit fully covers; slot 2 carries the op5B marker.
+    {
+        uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        // op14 enqueues only when the child slot < parent slot (JGE at eip
+        // 4FB5), and sub_13809 takes the LOWEST free slot — so the op14
+        // parent sits in slot 6 (the vmop-frame convention that gives the
+        // sub_14f59 unit its full coverage) and slots 0/4 stay free. The
+        // drained child then runs with a template-derived PC; whether that
+        // survives or UB-escapes, the drain loop itself is executed and the
+        // verdict stays sound (escape = legal case skip).
+        ft_wr16(g_synth_in, 0x372, 8);
+        for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+        ft_wr16(g_synth_in, 0x32F, 0);
+        ft_wr16(g_synth_in, 0x42, 0xFFFF);
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_CODE_SEG), FT_VM_TESTSEG);   // marker slot 2
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_PC), (uint16_t)(FT_VM_PC + 8));
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_FLAGS), 0x8000);
+        ft_wr16(g_synth_in, (uint16_t)(6 + OBJ_CODE_SEG), FT_VM_TESTSEG);   // op14 parent slot 6
+        ft_wr16(g_synth_in, (uint16_t)(6 + OBJ_PC), FT_VM_PC);
+        ft_wr16(g_synth_in, (uint16_t)(6 + OBJ_FLAGS), 0x8000);
+        ft_fill_tail(g_synth_in);
+        memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
+        uint16_t t = FT_VM_PC + 0x40;
+        g_vm_es_in[FT_VM_PC]     = 0x14;            // spawn+enqueue opcode
+        g_vm_es_in[FT_VM_PC + 1] = 0x01;
+        g_vm_es_in[FT_VM_PC + 2] = (uint8_t)t;
+        g_vm_es_in[FT_VM_PC + 3] = (uint8_t)(t >> 8);
+        g_vm_es_in[FT_VM_PC + 4] = 0x00;            // yield
+        g_vm_es_in[FT_VM_PC + 8] = 0x5B;            // marker on slot 2
+        g_vm_es_in[FT_VM_PC + 9] = 0x12;
+        g_vm_es_in[FT_VM_PC + 10] = 0x00;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        FtRegs in{};
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_14207(g_scratch);
+        ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-op14", grid, diff_budget);
     }
     fprintf(stderr,
         "FNSELFTEST-SUMMARY[sub_14207]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
