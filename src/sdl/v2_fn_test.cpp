@@ -480,6 +480,16 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_125A3 = 383,   // X/Y position pair (viewport math)
             FT_SUB_125FA = 384,   // X/Y dispatch pair → si/di
             FT_SUB_12613 = 385,   // glyph coord clamps
+            // wave B3c-I: HUD state trackers
+            FT_SUB_120FF = 386,   // healthbar state per viking
+            FT_SUB_12199 = 387,   // item slot sync (DI-clobber bug)
+            FT_SUB_120D1 = 388,   // selector redraw + prev sync
+            // wave B3c-II: viking switch family
+            FT_SUB_12E16 = 389,
+            FT_SUB_12E2D = 390,
+            FT_SUB_12E79 = 391,
+            FT_SUB_12E84 = 392,
+            FT_SUB_1201D = 393,   // full HUD item redraw
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -637,7 +647,10 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_1434c", "sub_1227e", "sub_122c0",
                                  "sub_122f3", "sub_12345", "sub_12312",
                                  "sub_1237f", "sub_1250b", "sub_12543",
-                                 "sub_125a3", "sub_125fa", "sub_12613" };
+                                 "sub_125a3", "sub_125fa", "sub_12613",
+                                 "sub_120ff", "sub_12199", "sub_120d1",
+                                 "sub_12e16", "sub_12e2d", "sub_12e79",
+                                 "sub_12e84", "sub_1201d" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9357,6 +9370,202 @@ int ft_selftest_b3b(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// Wave B3c-I: HUD state trackers (120ff/12199/120d1, the 11792 subtree).
+// DS compare + K3 pixel compare (oracle drawPixel→drawBuffer vs v2 shadow
+// VGA — the HUD writers are proven shadow-VGA mirrors). The 12199 unit
+// exercises the genuine orig DI-clobber bug: sub_120d1 exits with
+// di=(word_288F8+8)*2 and the slot loop continues from there.
+extern "C" void v2_fntest_call_hud(int which, uint8_t* shadow, uint16_t si_in, uint16_t* out_si);
+
+int ft_selftest_b3c1(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    int which = (id == FT_SUB_120FF) ? 0 : (id == FT_SUB_12199) ? 1 :
+                (id == FT_SUB_120D1) ? 2 : (id == FT_SUB_12E16) ? 3 :
+                (id == FT_SUB_12E2D) ? 4 : (id == FT_SUB_12E79) ? 5 :
+                (id == FT_SUB_12E84) ? 6 : 7;
+    FtRng rng(seed);
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+
+    auto CASE = [&](const FtWr* w, int nw, uint16_t si_in, const char* tag,
+                    FtSynthStats& st) {
+        st.cases++;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        for (int i = 0; i < nw; i++) ft_wr16(g_synth_in, w[i].addr, w[i].val);
+        memset(db, 0xCC, 0x40000);
+        memset(vga, 0xCC, 0x40000);
+
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, si_in, 0, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+        if (ft_ub_marks() != esc0) { st.cases--; return; }
+
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t v2_si = 0;
+        v2_fntest_call_hud(which, g_scratch, si_in, &v2_si);
+
+        long diffs = 0;
+        if (id == FT_SUB_12E2D && regs[4] != v2_si) {
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: SI orig=%04X v2=%04X (in=%04X)\n",
+                        g_name[id], tag, regs[4], v2_si, si_in);
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X)\n",
+                        g_name[id], tag, a, g_synth_orig[a], g_scratch[a], g_synth_in[a]);
+            diffs++;
+        }
+        long pdiffs = 0;
+        for (uint32_t a = 0; a < 0x40000; a++) {
+            if (db[a] == vga[a]) continue;
+            if (pdiffs < 4 && diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s k3]: lin=%05X orig=%02X v2=%02X\n",
+                        g_name[id], tag, a, db[a], vga[a]);
+            pdiffs++;
+        }
+        if (diffs + pdiffs) st.fail++; else st.pass++;
+    };
+
+    // shared field helpers
+    const uint16_t HP0 = 0x16ED;         // [vk*2+16ED] anim/health source
+    if (id == FT_SUB_120FF) {
+        static const uint16_t AV[] = {0, 2, 4};
+        for (uint16_t act : AV) for (int dead = 0; dead < 2; dead++) {
+            FtWr w[8]; int n = 0;
+            w[n++] = FtWr{0x3C0, act};
+            w[n++] = FtWr{HP0, (uint16_t)(dead ? 0x8001 : 0x0005)};
+            w[n++] = FtWr{(uint16_t)(HP0 + 2), 0x0003};
+            w[n++] = FtWr{(uint16_t)(HP0 + 4), (uint16_t)(dead ? 0xFFFF : 0x0001)};
+            w[n++] = FtWr{0x435, 0x0001};  // prev states force change on some
+            w[n++] = FtWr{0x437, 0x0000};
+            w[n++] = FtWr{0x439, 0x0002};
+            CASE(w, n, 0, "grid", grid);
+        }
+        for (int i = 0; i < 200; i++) {
+            FtWr w[8]; int n = 0;
+            w[n++] = FtWr{0x3C0, (uint16_t)((rng.next() % 3) * 2)};
+            for (int vk = 0; vk < 3; vk++) {
+                w[n++] = FtWr{(uint16_t)(HP0 + vk * 2), rng.w()};
+                w[n++] = FtWr{(uint16_t)(0x435 + vk * 2), (uint16_t)(rng.next() % 3)};
+            }
+            CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_12199) {
+        // directed: mismatched slots at various positions × selector v3 values
+        // (v3 controls the DI clobber: resume point = (v3+8)*2)
+        static const uint16_t V3[] = {0, 1, 2, 3};
+        for (uint16_t v3 : V3) for (int slot = 0; slot < 4; slot++) {
+            FtWr w[12]; int n = 0;
+            w[n++] = FtWr{(uint16_t)(0x3E4 + slot * 2), 0x0007};
+            w[n++] = FtWr{(uint16_t)(0x3FC + slot * 2), 0x0001};   // mismatch
+            w[n++] = FtWr{(uint16_t)(0x3E4 + 0x14), 0x0009};       // late slot mismatch
+            w[n++] = FtWr{(uint16_t)(0x3FC + 0x14), 0x0002};
+            w[n++] = FtWr{0x414, 0x0001};
+            w[n++] = FtWr{0x416, 0x0002};
+            w[n++] = FtWr{0x418, v3};
+            CASE(w, n, 0, "grid", grid);
+        }
+        for (int i = 0; i < 200; i++) {
+            FtWr w[16]; int n = 0;
+            for (int sl = 0; sl < 3; sl++) {
+                uint16_t off = (uint16_t)((rng.next() % 12) * 2);
+                w[n++] = FtWr{(uint16_t)(0x3E4 + off), (uint16_t)(rng.next() % 12)};
+                w[n++] = FtWr{(uint16_t)(0x3FC + off), (uint16_t)(rng.next() % 12)};
+            }
+            w[n++] = FtWr{0x414, (uint16_t)(rng.next() % 4)};
+            w[n++] = FtWr{0x416, (uint16_t)(rng.next() % 4)};
+            w[n++] = FtWr{0x418, (uint16_t)(rng.next() % 4)};
+            CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_120D1) {
+        static const uint16_t SEL[] = {0, 1, 2, 3};
+        for (uint16_t a : SEL) for (uint16_t b : SEL) {
+            FtWr w[6]; int n = 0;
+            w[n++] = FtWr{0x414, a};
+            w[n++] = FtWr{0x416, b};
+            w[n++] = FtWr{0x418, (uint16_t)((a + b) & 3)};
+            w[n++] = FtWr{0x41A, 0xFFFF};   // prevs differ
+            CASE(w, n, 0, "grid", grid);
+        }
+        for (int i = 0; i < 150; i++) {
+            FtWr w[6]; int n = 0;
+            w[n++] = FtWr{0x414, (uint16_t)(rng.next() % 4)};
+            w[n++] = FtWr{0x416, (uint16_t)(rng.next() % 4)};
+            w[n++] = FtWr{0x418, (uint16_t)(rng.next() % 4)};
+            CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_12E16 || id == FT_SUB_12E2D) {
+        // alive/dead lattices over the 3 viking slots × current [3C2]
+        static const uint16_t CUR[] = {0, 2, 4, 6, 0xFFFF};
+        for (uint16_t cur : CUR) for (int m = 0; m < 8; m++) {
+            FtWr w[8]; int n = 0;
+            w[n++] = FtWr{0x3C2, cur};
+            for (int vk = 0; vk < 3; vk++)
+                w[n++] = FtWr{(uint16_t)(0x16ED + vk * 2),
+                              (uint16_t)((m >> vk) & 1 ? 0x8001 : 0x0004)};
+            CASE(w, n, cur, "grid", grid);   // si_in = cur for the 12e2d unit
+        }
+        for (int i = 0; i < 200; i++) {
+            FtWr w[8]; int n = 0;
+            uint16_t cur = (uint16_t)((rng.next() % 5) * 2);
+            w[n++] = FtWr{0x3C2, cur};
+            for (int vk = 0; vk < 3; vk++)
+                w[n++] = FtWr{(uint16_t)(0x16ED + vk * 2), rng.w()};
+            CASE(w, n, cur, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_1201D) {
+        for (int m = 0; m < 4; m++) {
+            FtWr w[14]; int n = 0;
+            for (int sl = 0; sl < 6; sl++)
+                w[n++] = FtWr{(uint16_t)(0x3E4 + sl * 4), (uint16_t)((m + sl) % 12)};
+            CASE(w, n, 0, "grid", grid);
+        }
+        for (int i = 0; i < 150; i++) {
+            FtWr w[14]; int n = 0;
+            for (int sl = 0; sl < 6; sl++)
+                w[n++] = FtWr{(uint16_t)(0x3E4 + (rng.next() % 12) * 2), (uint16_t)(rng.next() % 12)};
+            CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else {   // FT_SUB_12E79 / FT_SUB_12E84: cycling by input bits
+        static const uint16_t BITS[] = {0, 0x10, 0x20, 0x30};
+        for (uint16_t b : BITS) for (uint16_t cur = 0; cur < 6; cur += 2)
+        for (int m = 0; m < 8; m++) {
+            FtWr w[10]; int n = 0;
+            w[n++] = FtWr{0x3B8, b};
+            w[n++] = FtWr{0x3C2, cur};
+            w[n++] = FtWr{0x25BA, (uint16_t)((id == FT_SUB_12E79 && (m & 4)) ? 0x0000 : 0x0001)};
+            for (int vk = 0; vk < 3; vk++)
+                w[n++] = FtWr{(uint16_t)(VIK_PORTRAIT + vk * 2),
+                              (uint16_t)((m >> vk) & 1 ? 0x0001 : 0x0000)};
+            CASE(w, n, 0, "grid", grid);
+        }
+        for (int i = 0; i < 200; i++) {
+            FtWr w[10]; int n = 0;
+            w[n++] = FtWr{0x3B8, rng.w()};
+            w[n++] = FtWr{0x3C2, (uint16_t)((rng.next() % 3) * 2)};
+            w[n++] = FtWr{0x25BA, (uint16_t)(rng.next() & 1)};
+            for (int vk = 0; vk < 3; vk++)
+                w[n++] = FtWr{(uint16_t)(VIK_PORTRAIT + vk * 2), (uint16_t)(rng.next() & 1)};
+            CASE(w, n, 0, "fuzz", fuzz);
+        }
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -10875,6 +11084,14 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_125a3")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_125A3, 0xB3B3001u); }
     if (all || strstr(env, "sub_125fa")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_125FA, 0xB3B4001u); }
     if (all || strstr(env, "sub_12613")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_12613, 0xB3B5001u); }
+    if (all || strstr(env, "sub_120ff")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_120FF, 0xB3C1001u); }
+    if (all || strstr(env, "sub_12199")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_12199, 0xB3C2001u); }
+    if (all || strstr(env, "sub_120d1")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_120D1, 0xB3C3001u); }
+    if (all || strstr(env, "sub_12e16")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_12E16, 0xB3C4001u); }
+    if (all || strstr(env, "sub_12e2d")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_12E2D, 0xB3C5001u); }
+    if (all || strstr(env, "sub_12e79")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_12E79, 0xB3C6001u); }
+    if (all || strstr(env, "sub_12e84")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_12E84, 0xB3C7001u); }
+    if (all || strstr(env, "sub_1201d")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_1201D, 0xB3C8001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

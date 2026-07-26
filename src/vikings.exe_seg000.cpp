@@ -249,6 +249,15 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 383: return (void*)&sub_125a3;  // X/Y position pair (writes [6C], returns si/di)
     case 384: return (void*)&sub_125fa;  // X/Y dispatch pair → si/di
     case 385: return (void*)&sub_12613;  // glyph coord clamp (si/di vs [34]/[36])
+    // wave B3c-I: HUD state trackers (11792 subtree)
+    case 386: return (void*)&sub_120ff;  // healthbar state per viking
+    case 387: return (void*)&sub_12199;  // item slot sync (DI-clobber orig bug)
+    case 388: return (void*)&sub_120d1;  // selector redraw + prev sync (clobbers DI)
+    case 389: return (void*)&sub_12e16;  // viking death check (wraps 12e2d)
+    case 390: return (void*)&sub_12e2d;  // next-alive-viking scan
+    case 391: return (void*)&sub_12e79;  // viking cycle gate ([25BA])
+    case 392: return (void*)&sub_12e84;  // viking cycle by input bits
+    case 393: return (void*)&sub_1201d;  // full HUD item redraw
     default: return 0;
     }
 }
