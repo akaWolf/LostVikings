@@ -9,7 +9,7 @@ rm -f vikings.exe_seg000.gcov.json.gz
 gcov -b --json-format -o .obj-headless/src src/vikings.exe_seg000.cpp >/dev/null 2>&1
 cp vikings.exe_seg000.gcov.json.gz /tmp/fncov_unit.json.gz
 bash tests/scenarios.sh > /tmp/fncov_scen.log 2>&1
-echo "scenarios: $(grep -cE '^PASS' /tmp/fncov_scen.log)/4 PASS"
+echo "scenarios: $(grep -cE '^PASS' /tmp/fncov_scen.log)/$(ls tests/replays/*.inp | wc -l) PASS"
 rm -f vikings.exe_seg000.gcov.json.gz
 gcov -b --json-format -o .obj-headless/src src/vikings.exe_seg000.cpp >/dev/null 2>&1
 cp vikings.exe_seg000.gcov.json.gz /tmp/fncov_merged.json.gz
