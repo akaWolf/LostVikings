@@ -259,6 +259,15 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 392: return (void*)&sub_12e84;  // viking cycle by input bits
     case 393: return (void*)&sub_1201d;  // full HUD item redraw
     case 394: return (void*)&sub_12388;  // draw text box frame (glyph grid)
+    // wave B4a: HUD VGA writers
+    case 395: return (void*)&sub_117ad;  // full healthbar redraw gate ([340]=2, [25CF]&1)
+    case 396: return (void*)&sub_117d0;  // healthbar draw (ax=state, bx=glyph base, di=vk)
+    case 397: return (void*)&sub_1183d;  // inventory item draw (port C fn draw_inventory_item)
+    case 398: return (void*)&sub_118ad;  // selector draw (port C fn display_selector)
+    case 399: return (void*)&sub_11aa4;  // portrait draw (si=idx, di=vk*2)
+    case 400: return (void*)&sub_1200a;  // healthbar prev-state reset
+    case 401: return (void*)&sub_12034;  // portrait prev-state reset + 11b0b tail
+    case 402: return (void*)&sub_16880;  // VGA full wipe (port drawPixel loop)
     default: return 0;
     }
 }

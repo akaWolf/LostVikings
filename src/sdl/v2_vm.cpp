@@ -5293,7 +5293,7 @@ static void v2_portrait_sync_11b0b(uint8_t* s) {
         if (snd != 0) portrait_si += 4;                     // CMP word,0; ADD si,4
         // orig v2 hook + CALL sub_11AA4 (VGA portrait render → v2_hud_buf)
         v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
-        v2_vga_portrait_11aa4(v2_vm_shadow_ds, portrait_si, vk * 2);
+        v2_vga_portrait_11aa4(s, portrait_si, vk * 2);
         *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2) = snd;            // sync sound tracking
         *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2) = por;            // sync portrait tracking
     }
@@ -5501,15 +5501,16 @@ static void v2_clear_pages_16880(uint8_t* s) {
     memset(v2_hud_buf, 0, 320 * 64);
     // shadow-VGA: mirror the m2c-port drawBuffer hook, NOT the DOS STOSW. The orig
     // REP STOSW (cx=0x8000 words) wipes the full 64K VGA segment, but the port
-    // hook is `for (i=0; i<0x8000; i++) drawPixel(j, i, 0)` — 0x8000 BYTE
-    // addresses only. The parity target is THIS binary (same class as the
-    // 1712b `i <= cx` quirk), so the shadow wipes 0..0x7FFF like the port:
-    // bytes 0x8000..0xFFFF keep their previous content across level init
-    // (band-scroll leftovers of the previous scene survive there — verified
-    // vs real at the 0x2B→0x2C transition, rows above the window).
+    // hook is `for (i=0; i<0x8000; i++) drawPixel(j, i, (dw)0)` — and the dw
+    // OVERLOAD writes TWO bytes (i and i+1), so the covered range is
+    // 0..0x8000 INCLUSIVE (0x8001 bytes per plane; №43, caught by the K3
+    // unit: diffs exactly at addr 0x8000 × 4 planes). Parity target is THIS
+    // binary (1712b `i <= cx` quirk class); bytes 0x8001..0xFFFF keep their
+    // previous content across level init (band-scroll leftovers of the
+    // previous scene survive there — verified vs real at 0x2B→0x2C).
     {
         extern void v2_vga_fill_span(uint16_t dst, uint32_t nbytes, uint8_t val);
-        v2_vga_fill_span(0, 0x8000u, 0);
+        v2_vga_fill_span(0, 0x8001u, 0);
     }
     // Invalidate chunk_bg backup — old level's static pixels (with old palette)
     // must NOT be restored against new level's palette → would cause wrong colors
@@ -13071,6 +13072,72 @@ extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_
     }
     if (out_si) *out_si = r;
     v2_vm_acc_base = saved_acc;
+}
+
+static void v2_hud_reset_1200a(uint8_t* s);
+static void v2_hud_reset_12034(uint8_t* s);
+static void v2_hud_full_reinit_117ad(uint8_t* s);
+
+extern "C" void v2_fntest_call_hudvga(int which, uint8_t* shadow, uint16_t ax,
+                                      uint16_t bx, uint16_t si, uint16_t di) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = shadow;
+    switch (which) {
+    case 0:   // sub_117ad: HUD full reinit chain
+        v2_hud_full_reinit_117ad(shadow);
+        break;
+    case 1:
+        v2_draw_hud_healthbar(v2_current_ds_val, ax, bx, di);
+        v2_vga_healthbar_117d0(shadow, ax, bx, di);
+        break;
+    case 2:
+        v2_draw_hud_item(v2_current_ds_val, di, ax);
+        v2_vga_hud_item_1183d(shadow, di, ax);
+        break;
+    case 3:
+        v2_draw_hud_selector(v2_current_ds_val, di);
+        v2_vga_selector_118ad(shadow, di);
+        break;
+    case 4:
+        v2_draw_hud_portrait(v2_current_ds_val, di, si);
+        v2_vga_portrait_11aa4(shadow, si, di);
+        break;
+    case 5: v2_hud_reset_1200a(shadow); break;
+    case 6: v2_hud_reset_12034(shadow); break;
+    case 7: v2_clear_pages_16880(shadow); break;
+    }
+    v2_vm_acc_base = saved_acc;
+}
+
+// sub_1200a: reset the healthbar prev-state trio [435]/[437]/[439] = 0xFFFF.
+static void v2_hud_reset_1200a(uint8_t* s) {
+    *(uint16_t*)(s + 0x435) = 0xFFFF;
+    *(uint16_t*)(s + 0x437) = 0xFFFF;
+    *(uint16_t*)(s + 0x439) = 0xFFFF;
+}
+
+// sub_12034: reset the portrait/sound prev-state six [423..427]/[42F..433]
+// = 0xFFFF, then JMP sub_11B0B (portrait sync tail).
+static void v2_hud_reset_12034(uint8_t* s) {
+    *(uint16_t*)(s + 0x423) = 0xFFFF;
+    *(uint16_t*)(s + 0x425) = 0xFFFF;
+    *(uint16_t*)(s + 0x427) = 0xFFFF;
+    *(uint16_t*)(s + 0x42F) = 0xFFFF;
+    *(uint16_t*)(s + 0x431) = 0xFFFF;
+    *(uint16_t*)(s + 0x433) = 0xFFFF;
+    v2_portrait_sync_11b0b(s);
+}
+
+// sub_117ad: HUD full reinit — [340]=2; gated on [25CF]&1: 10cd8(ax=1,di=0)
+// HUD chunk load, then the reset/redraw chain 1200a → 1201d → 12034 → 120d1.
+static void v2_hud_full_reinit_117ad(uint8_t* s) {
+    *(uint16_t*)(s + 0x340) = 2;   // word_28820 — HUD redraw request (NOT 0x334)
+    if (!(s[DS_LEVEL_FLAGS] & 1)) return;
+    v2_load_chunk_10cd8(s, 1, 0);
+    v2_hud_reset_1200a(s);
+    v2_hud_items_full_1201d(s);
+    v2_hud_reset_12034(s);
+    (void)v2_hud_selectors_120d1(s);
 }
 
 extern "C" void v2_fntest_call_12388(uint8_t* shadow, uint16_t si, uint16_t di, uint16_t ax) {
