@@ -12848,6 +12848,97 @@ extern "C" void v2_fntest_call_ch_getter(int ch, uint8_t* test_shadow,
     v2_vm_acc_base = saved_acc;
 }
 
+// sub_125fa: mode byte + X/Y dispatch pair → si=[6C], di=Y (plain RETN).
+// A ch6/7 X-site escape is orig-UB (soft guard); a Y-site escape returns
+// true with the stale 8086 registers in si/di_track (task #15).
+// Returns 0 = clean, 1 = X-site ch6/7 escape (orig-UB; guard printed, caller
+// must exit like the orig RETN-through), 2 = Y-site escape (stale si/di_track
+// delivered — the orig continues through the caller's writes, task #15).
+static int v2_vm_text_xy_125fa(V2VM& vm, uint16_t& si_out, uint16_t& di_out) {
+    uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
+    uint8_t mode2 = (uint8_t)(word2 & 0xFF);
+    bool ch_intr = false;
+    uint16_t si_val = v2_vm_dispatch_30C98(vm, mode2, 0x25FF, &ch_intr);
+    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "125fa/X@0x25FF: RETN onto PUSHed mode word (orig-UB)"); return 1; }
+    vm.ds_write(DS_TEXT_COL, si_val);   // word_2854C at DS:0x006C
+    uint16_t di_val = v2_vm_dispatch_30C98(vm, mode2 >> 3, 0x2609, &ch_intr);
+    if (ch_intr) { si_out = vm.si_track; di_out = vm.di_track; return 2; }
+    vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C: MOV si,[0x6C]
+    vm.di_track = di_val;                    // orig 0x2610: MOV di,ax
+    si_out = vm.si_track; di_out = di_val;
+    return 0;
+}
+
+// sub_12613: glyph coordinate clamps around the [34]/[36] scroll bias.
+static void v2_vm_glyph_clamp_12613(V2VM& vm, uint16_t& si_pos, uint16_t& di_pos) {
+    uint16_t w14 = vm.ds_read(DS_SCRATCH_34);
+    uint16_t w16 = vm.ds_read(DS_SCRATCH_36);
+    si_pos = (uint16_t)(si_pos + w14);
+    if ((int16_t)si_pos >= 0x27) si_pos = 0x26;
+    si_pos = (uint16_t)(si_pos - w14);
+    di_pos = (uint16_t)(di_pos + w16);
+    if ((int16_t)di_pos >= 0x16) di_pos = 0x15;
+    di_pos = (uint16_t)(di_pos - w16);
+}
+
+// Wave B3b: text-engine channel wrappers. Each builds a minimal V2VM over
+// the scratch DS with vm.es at the FT_VM_TESTSEG zone (same bytes the oracle
+// reads via es_override) and returns the register outcomes for comparison.
+extern "C" void v2_fntest_call_b3b(int which, uint8_t* test_shadow, uint16_t pc,
+                                   uint16_t testseg, uint16_t si_in, uint16_t di_in,
+                                   uint16_t* out_ax, uint16_t* out_pc,
+                                   uint16_t* out_si, uint16_t* out_di) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_m2c_base ? v2_m2c_base + (uint32_t)testseg * 16 : test_shadow;
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = 6; vm.pc = pc; vm.running = true; vm.slot = 3;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    extern int v2_fntest_vm_soft;
+    int soft_save = v2_fntest_vm_soft;
+    v2_fntest_vm_soft = 1;
+    uint16_t ax = 0, si = si_in, di = di_in;
+    switch (which) {
+    case 0: {                                   // sub_1250b (+12515 tail)
+        uint8_t mode = 0;
+        v2_vm_ch_dispatch_1250b(vm, mode);
+        ax = vm.ds_read(DS_TEXT_IDX);           // tail leaves [2A] in bx path; ax≈dispatch result unused
+        break;
+    }
+    case 1: {                                   // sub_12543: Y-dispatch from [32]
+        bool intr = false;
+        ax = v2_vm_dispatch_30C98(vm, (uint8_t)(vm.ds_read(DS_MODE_WORD) >> 3), 0x2546, &intr);
+        break;
+    }
+    case 2: {                                   // sub_125a3: X/Y position pair
+        uint16_t so = 0, dio = 0;
+        if (v2_vm_ch_escape_125a3(vm, so, dio)) {
+            // Y-site live escape (task #15): the orig RETNs through with the
+            // setter's registers — mirrored in si/di_track. (X-site escapes
+            // raise the soft guard; the unit case is skipped.)
+            si = vm.si_track; di = vm.di_track;
+        } else { si = so; di = dio; }
+        break;
+    }
+    case 3: {                                   // sub_125fa mirror
+        (void)v2_vm_text_xy_125fa(vm, si, di);
+        break;
+    }
+    case 4: {                                   // sub_12613 mirror
+        si = si_in; di = di_in;
+        v2_vm_glyph_clamp_12613(vm, si, di);
+        break;
+    }
+    }
+    v2_fntest_vm_soft = soft_save;
+    if (out_ax) *out_ax = ax;
+    if (out_pc) *out_pc = vm.pc;
+    if (out_si) *out_si = si;
+    if (out_di) *out_di = di;
+    v2_vm_acc_base = saved_acc;
+}
+
 // Wave B3a: pure helpers. Delta scalers are plain int16 functions; RNG runs
 // over the scratch DS; sub_12345 is the input-pair clear ([3B6]/[3B8]).
 extern "C" int16_t v2_fntest_call_delta(int which, int16_t d) {
@@ -15051,24 +15142,13 @@ static void v2_vm_op_45(V2VM& vm) {
     uint8_t mode1;
     v2_vm_ch_dispatch_1250b(vm, mode1);
 
-    // sub_125fa: mode byte + 2 dispatches → si (word_2854C = ds:0x6C), di
-    uint16_t word2 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
-    uint8_t mode2 = (uint8_t)(word2 & 0xFF);
-    bool ch_intr = false;
-    uint16_t si_val = v2_vm_dispatch_30C98(vm, mode2, 0x25FF, &ch_intr);
-    if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op45/125fa-X@0x25FF: RETN onto PUSHed mode word (orig-UB)"); return; }
-    vm.ds_write(DS_TEXT_COL, si_val);  // word_2854C at DS:0x006C
-    uint16_t di_val = v2_vm_dispatch_30C98(vm, mode2 >> 3, 0x2609, &ch_intr);
-    if (ch_intr) {
-        // Live Y escape (task #15): sub_12634 continues straight into the
-        // buffer writes (no sub_12613 here) with the stale registers.
-        si_val = vm.si_track;
-        di_val = vm.di_track;
-    } else {
-        vm.si_track = vm.ds_read(DS_TEXT_COL);    // orig 0x260C: MOV si,[0x6C]
-        vm.di_track = di_val;              // orig 0x2610: MOV di,ax
-        si_val = vm.si_track;
-    }
+    // sub_125fa: mode byte + 2 dispatches → si (word_2854C = ds:0x6C), di.
+    // A live Y escape (task #15) falls through into the buffer writes with
+    // the stale registers (no sub_12613 in this opcode); an X escape is
+    // orig-UB and exits via the soft guard inside the helper.
+    uint16_t si_val = 0, di_val = 0;
+    int esc45 = v2_vm_text_xy_125fa(vm, si_val, di_val);
+    if (esc45 == 1) return;   // X-site escape: orig RETNs out of the opcode
 
     // Command buffer write: type=0x0A, si, di, ds:0x002A
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);  // word_2A66F
@@ -16537,16 +16617,7 @@ static void v2_vm_op_41(V2VM& vm) {
     }
 
     // 6. sub_12613: text bounds clamping
-    {
-        uint16_t w14 = vm.ds_read(DS_SCRATCH_34);
-        uint16_t w16 = vm.ds_read(DS_SCRATCH_36);
-        si_pos += w14;
-        if ((int16_t)si_pos >= 0x27) si_pos = 0x26;
-        si_pos -= w14;
-        di_pos += w16;
-        if ((int16_t)di_pos >= 0x16) di_pos = 0x15;
-        di_pos -= w16;
-    }
+    v2_vm_glyph_clamp_12613(vm, si_pos, di_pos);
     vm.si_track = si_pos;   // sub_12613 exits with the clamped values in si/di
     vm.di_track = di_pos;
 

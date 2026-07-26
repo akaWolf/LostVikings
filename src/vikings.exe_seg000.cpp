@@ -243,6 +243,12 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 378: return (void*)&sub_12345;  // input pair clear [3B6]/[3B8]
     case 379: return (void*)&sub_12312;  // RNG ch4 (LCG / LFSR paths)
     case 380: return (void*)&sub_1237f;  // delay burn loop (256*di)
+    // wave B3b: text-engine channel wrappers
+    case 381: return (void*)&sub_1250b;  // mode word → [32], dispatch, [2A]=seg001 text ptr
+    case 382: return (void*)&sub_12543;  // Y-dispatch tail from [32]
+    case 383: return (void*)&sub_125a3;  // X/Y position pair (writes [6C], returns si/di)
+    case 384: return (void*)&sub_125fa;  // X/Y dispatch pair → si/di
+    case 385: return (void*)&sub_12613;  // glyph coord clamp (si/di vs [34]/[36])
     default: return 0;
     }
 }

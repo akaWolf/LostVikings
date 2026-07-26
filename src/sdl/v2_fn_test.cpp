@@ -474,6 +474,12 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_12345 = 378,   // input pair clear
             FT_SUB_12312 = 379,   // RNG (ch4 body)
             FT_SUB_1237F = 380,   // delay burn loop
+            // wave B3b: text-engine channel wrappers
+            FT_SUB_1250B = 381,   // mode word → [32] + dispatch + [2A]
+            FT_SUB_12543 = 382,   // Y-dispatch tail from [32]
+            FT_SUB_125A3 = 383,   // X/Y position pair (viewport math)
+            FT_SUB_125FA = 384,   // X/Y dispatch pair → si/di
+            FT_SUB_12613 = 385,   // glyph coord clamps
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -630,7 +636,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_126a9", "sub_1287a", "sub_12829",
                                  "sub_1434c", "sub_1227e", "sub_122c0",
                                  "sub_122f3", "sub_12345", "sub_12312",
-                                 "sub_1237f" };
+                                 "sub_1237f", "sub_1250b", "sub_12543",
+                                 "sub_125a3", "sub_125fa", "sub_12613" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9214,6 +9221,142 @@ int ft_selftest_b3a(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// Wave B3b: text-engine channel wrappers (1250b/12543/125a3/125fa/12613).
+// Byte stream in the FT_VM_TESTSEG zone (oracle es_override, v2 vm.es on the
+// same m2c bytes); compared: DS image, SI/DI/AX outcomes, stream consumption.
+extern "C" void v2_fntest_call_b3b(int which, uint8_t* shadow, uint16_t pc,
+                                   uint16_t testseg, uint16_t si_in, uint16_t di_in,
+                                   uint16_t* out_ax, uint16_t* out_pc,
+                                   uint16_t* out_si, uint16_t* out_di);
+
+int ft_selftest_b3b(FtId id, uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    int which = (id == FT_SUB_1250B) ? 0 : (id == FT_SUB_12543) ? 1 :
+                (id == FT_SUB_125A3) ? 2 : (id == FT_SUB_125FA) ? 3 : 4;
+    FtRng rng(seed);
+
+    auto CASE = [&](const uint8_t* stream, int slen, uint16_t mode32,
+                    uint16_t si_in, uint16_t di_in, uint16_t w34, uint16_t w36,
+                    const char* tag, FtSynthStats& st) {
+        st.cases++;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x42, 6);
+        ft_wr16(g_synth_in, 0x32, mode32);
+        ft_wr16(g_synth_in, 0x34, w34);
+        ft_wr16(g_synth_in, 0x36, w36);
+        uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
+        uint8_t zone_save[64];
+        memcpy(zone_save, zone + 0x100, 64);
+        for (int i = 0; i < slen; i++) zone[0x100 + i] = stream[i];
+        for (int i = slen; i < 64; i++) zone[0x100 + i] = 0xEE;
+
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0x100, 0, 0, si_in, di_in, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_es_override = FT_VM_TESTSEG;
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+        v2_fntest_es_override = 0;
+        if (ft_ub_marks() != esc0) {
+            st.cases--;
+            memcpy(zone + 0x100, zone_save, 64);
+            return;
+        }
+
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t v2_ax = 0, v2_pc = 0, v2_si = 0, v2_di = 0;
+        v2_fntest_vm_soft = 1;
+        v2_fntest_call_b3b(which, g_scratch, 0x100, FT_VM_TESTSEG, si_in, di_in,
+                           &v2_ax, &v2_pc, &v2_si, &v2_di);
+        int soft = v2_fntest_vm_soft; v2_fntest_vm_soft = 0;
+        if (soft == 3) {   // ch6/7 X-site guard — model boundary skip
+            st.cases--;
+            memcpy(zone + 0x100, zone_save, 64);
+            return;
+        }
+
+        long diffs = 0;
+        if ((id == FT_SUB_12543) && regs[0] != v2_ax) {
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: AX orig=%04X v2=%04X (m32=%04X)\n",
+                        g_name[id], tag, regs[0], v2_ax, mode32);
+            diffs++;
+        }
+        if ((id == FT_SUB_125A3 || id == FT_SUB_125FA || id == FT_SUB_12613)) {
+            if (regs[4] != v2_si) {
+                if (diff_budget-- > 0)
+                    fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: SI orig=%04X v2=%04X\n",
+                            g_name[id], tag, regs[4], v2_si);
+                diffs++;
+            }
+            if (regs[5] != v2_di) {
+                if (diff_budget-- > 0)
+                    fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: DI orig=%04X v2=%04X\n",
+                            g_name[id], tag, regs[5], v2_di);
+                diffs++;
+            }
+        }
+        if (id != FT_SUB_12613 && regs[1] != v2_pc) {
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: BX orig=%04X v2-pc=%04X (s0=%02X)\n",
+                        g_name[id], tag, regs[1], v2_pc, slen ? stream[0] : 0);
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X v2=%02X (in=%02X)\n",
+                        g_name[id], tag, a, g_synth_orig[a], g_scratch[a], g_synth_in[a]);
+            diffs++;
+        }
+        memcpy(zone + 0x100, zone_save, 64);
+        if (diffs) st.fail++; else st.pass++;
+    };
+
+    if (id == FT_SUB_12613) {
+        static const uint16_t SIV[] = {0, 1, 0x24, 0x25, 0x26, 0x27, 0x30, 0xFFF0};
+        static const uint16_t DIV2[] = {0, 1, 0x14, 0x15, 0x16, 0x20, 0xFFF8};
+        static const uint16_t BIAS[] = {0, 2, 0x10};
+        for (uint16_t b : BIAS) for (uint16_t s : SIV) for (uint16_t d : DIV2)
+            CASE(nullptr, 0, 0, s, d, b, (uint16_t)(b >> 1), "grid", grid);
+        for (int i = 0; i < 300; i++)
+            CASE(nullptr, 0, 0, rng.w(), rng.w(), (uint16_t)(rng.next() & 0x3F),
+                 (uint16_t)(rng.next() & 0x3F), "fuzz", fuzz);
+    } else if (id == FT_SUB_12543) {
+        static const uint16_t M32[] = {0x0000, 0x0008, 0x0010, 0x0018, 0x0020, 0x00FF, 0x0100};
+        static const uint8_t st0[] = {0x34, 0x12, 0xBB, 0xFC};
+        for (uint16_t m : M32) CASE(st0, 4, m, 0, 0, 0, 0, "grid", grid);
+        for (int i = 0; i < 300; i++) {
+            uint8_t sf[4] = {(uint8_t)rng.next(), (uint8_t)rng.next(),
+                             (uint8_t)rng.next(), (uint8_t)rng.next()};
+            CASE(sf, 4, rng.w(), 0, 0, 0, 0, "fuzz", fuzz);
+        }
+    } else {
+        // 1250b / 125a3 / 125fa: stream = mode byte + channel payload
+        static const uint8_t MODES[] = {0x00, 0x08, 0x09, 0x11, 0x1B, 0x20, 0x24};
+        for (uint8_t m : MODES) {
+            uint8_t sg[5] = {m, 0x34, 0x12, 0xFC, 0x00};
+            CASE(sg, 5, 0, 0, 0, 2, 1, "grid", grid);
+        }
+        for (int i = 0; i < 400; i++) {
+            uint8_t sf[5] = {(uint8_t)rng.next(), (uint8_t)rng.next(),
+                             (uint8_t)rng.next(), (uint8_t)rng.next(), (uint8_t)rng.next()};
+            CASE(sf, 5, rng.w(), 0, 0, (uint16_t)(rng.next() & 15),
+                 (uint16_t)(rng.next() & 15), "fuzz", fuzz);
+        }
+    }
+
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -10727,6 +10870,11 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_12345")) { matched = true; rc |= ft_selftest_b3a(FT_SUB_12345, 0xB3A4001u); }
     if (all || strstr(env, "sub_12312")) { matched = true; rc |= ft_selftest_b3a(FT_SUB_12312, 0xB3A5001u); }
     if (all || strstr(env, "sub_1237f")) { matched = true; rc |= ft_selftest_b3a(FT_SUB_1237F, 0xB3A6001u); }
+    if (all || strstr(env, "sub_1250b")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_1250B, 0xB3B1001u); }
+    if (all || strstr(env, "sub_12543")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_12543, 0xB3B2001u); }
+    if (all || strstr(env, "sub_125a3")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_125A3, 0xB3B3001u); }
+    if (all || strstr(env, "sub_125fa")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_125FA, 0xB3B4001u); }
+    if (all || strstr(env, "sub_12613")) { matched = true; rc |= ft_selftest_b3b(FT_SUB_12613, 0xB3B5001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
