@@ -6040,6 +6040,15 @@ int ft_selftest_coll_dir(FtId id, uint32_t seed) {
     // state>0 with moving self (dir gates engaged)
     ctx(0x0001, 0x0000, 4, 0x0108, 0x0100, 0, 1); run1("grid", grid);
     ctx(0x0001, 0x0000, 4, 0x0100, 0x0108, 0, 1); run1("grid", grid);
+    // Coverage-directed (#47): search-HIT paths — the 15972/15da8 snap
+    // calls and the [38E]-bit OR only run when the walk actually finds a
+    // stripe/partner. Tile stripe (type 0x30, world y 0x40..0x4F) with the
+    // self moving into it from both sides, and a partner-object hit around
+    // the shared 0x100 box.
+    ctx(0x0001, 0x0000, 4, 0x0048, 0x0040, 1, 0); run1("grid", grid);
+    ctx(0x0001, 0x0000, 4, 0x0040, 0x0048, 1, 0); run1("grid", grid);
+    ctx(0x0001, 0x0000, 4, 0x0108, 0x0100, 1, 1); run1("grid", grid);
+    ctx(0x0001, 0x0000, 4, 0x0100, 0x0108, 1, 1); run1("grid", grid);
     FtRng rng(seed);
     for (int i = 0; i < 300; i++) {
         uint16_t stv = (uint16_t)((rng.next() % 3 == 0) ? 0
