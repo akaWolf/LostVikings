@@ -508,6 +508,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_11F93 = 408,   // place carried item (CF=refused)
             FT_SUB_121F6 = 409,   // take-next from category row
             FT_SUB_121B9 = 410,   // pop selected item
+            FT_SUB_10555 = 411,   // prompt blink tick
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -674,7 +675,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_12034", "sub_16880", "sub_11792",
                                  "sub_11f47", "sub_103ca", "sub_1047c",
                                  "sub_12250", "sub_11f93", "sub_121f6",
-                                 "sub_121b9" };
+                                 "sub_121b9", "sub_10555" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9408,7 +9409,7 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
     v2_set_m2c_base(v2_fntest_m2c_base());
     int which = (id == FT_SUB_120FF) ? 0 : (id == FT_SUB_12199) ? 1 :
                 (id == FT_SUB_11F93) ? 8 : (id == FT_SUB_121F6) ? 9 :
-                (id == FT_SUB_121B9) ? 10 :
+                (id == FT_SUB_121B9) ? 10 : (id == FT_SUB_10555) ? 11 :
                 (id == FT_SUB_120D1) ? 2 : (id == FT_SUB_12E16) ? 3 :
                 (id == FT_SUB_12E2D) ? 4 : (id == FT_SUB_12E79) ? 5 :
                 (id == FT_SUB_12E84) ? 6 : 7;
@@ -9533,6 +9534,19 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
             w[n++] = FtWr{0x416, (uint16_t)(rng.next() % 4)};
             w[n++] = FtWr{0x418, (uint16_t)(rng.next() % 4)};
             CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_10555) {
+        // blink phases: [445] values crossing the &0xF==0 / &0x10 branches ×
+        // option [443] 0/1; AIL off; K3 catches the glyph/flip pixels.
+        static const uint16_t B445[] = {0x11, 0x10, 0x21, 0x20, 0x01, 0x02};
+        for (uint16_t b : B445) for (uint16_t opt = 0; opt < 2; opt++) {
+            FtWr w[8]; int n = 0;
+            w[n++] = FtWr{0x304, 1};
+            w[n++] = FtWr{0x86AC, 0};
+            w[n++] = FtWr{0x86AE, 0};
+            w[n++] = FtWr{0x445, b};
+            w[n++] = FtWr{0x443, opt};
+            CASE(w, n, 0, "grid", grid);
         }
     } else if (id == FT_SUB_11F93 || id == FT_SUB_121F6 || id == FT_SUB_121B9) {
         // item flows: carried item × active slot × category fills; AIL off,
@@ -11443,6 +11457,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_11f93")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_11F93, 0xB4AE001u); }
     if (all || strstr(env, "sub_121f6")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_121F6, 0xB4AF001u); }
     if (all || strstr(env, "sub_121b9")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_121B9, 0xB4B0001u); }
+    if (all || strstr(env, "sub_10555")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_10555, 0xB4B1001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

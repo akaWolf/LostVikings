@@ -12997,6 +12997,7 @@ extern "C" void v2_fntest_call_b3b(int which, uint8_t* test_shadow, uint16_t pc,
 
 // Wave B3c-I: HUD state trackers (extracted 11792-subtree mirrors).
 static bool v2_item_place_11f93(uint8_t* s);
+static void v2_pw_blink_10555(uint8_t* shadow);
 static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in);
 static void v2_item_pop_121b9(uint8_t* s);
 
@@ -13017,6 +13018,7 @@ extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_
     case 8: r = v2_item_place_11f93(test_shadow) ? 1 : 0; break;   // CF via out_si
     case 9: v2_item_take_next_121f6(test_shadow, si_in); break;
     case 10: v2_item_pop_121b9(test_shadow); break;
+    case 11: v2_pw_blink_10555(test_shadow); break;
     }
     if (out_si) *out_si = r;
     v2_vm_acc_base = saved_acc;
@@ -21995,6 +21997,32 @@ static bool v2_pw_did_save_1450b = false;
 // PW_ENTRY signal fires INSIDE sub_104a1 (eip 0x04A1) — AFTER the path was
 // already chosen and setup ran in real DS. We detect the path via shadow
 // byte_31690/31684/31679/3165C state (mirrored by PART A in v2_phase_post_flip3).
+// sub_10555: quit/password prompt blink tick. DEC [445]; every 16th tick
+// ([445]&0xF==0) redraw the highlighted/normal option text (phase from
+// [445]&0x10, option from [443]): texts 6/5/4 at si 0x10/0x15/0x16, di 0x0F;
+// then 165AA + 1DD9C + 1C8F1(ax=0xFFFF — the ONLY 0xFFFF site) + 1E0C7 +
+// the 16775 flip tail (no vsync wait inside).
+static void v2_pw_blink_10555(uint8_t* shadow) {
+    *(uint16_t*)(shadow + DS_QUIT_BLINK) -= 1;            // DEC word_28925
+    if ((*(uint16_t*)(shadow + DS_QUIT_BLINK) & 0xF) != 0) return;
+    uint16_t si_b, ax_b;
+    if (*(uint16_t*)(shadow + DS_QUIT_BLINK) & 0x10) {
+        si_b = (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) != 0) ? 0x15 : 0x10;
+        ax_b = 6;
+    } else {
+        if (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) == 0) { si_b = 0x10; ax_b = 5; }
+        else { si_b = 0x16; ax_b = 4; }
+    }
+    v2_text_lookup_12515(shadow, ax_b);
+    uint16_t bx_b = *(uint16_t*)(shadow + DS_TEXT_IDX);
+    v2_text_render_124c5(shadow, si_b, 0x0F, bx_b);
+    v2_game_loop_post_render(shadow);          // sub_165AA
+    v2_late_sprites_1DD9C(shadow);
+    v2_dirty_tile_scan_1C8F1(shadow, 0xFFFF);
+    v2_glyph_flush_1E0C7(shadow);
+    v2_page_flip_16775(shadow);
+}
+
 static void v2_pw_pre_loop(uint8_t* shadow) {
     // Detect F10/ALT+X/ALT+Q (quit-prompt path) vs ESC (pause path) via shadow
     // spec-state bytes. Match orig sub_10350 logic (seg000.cpp lines 2564-2570):
@@ -22097,26 +22125,8 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
 #endif
-    // sub_10555: password blink
-    *(uint16_t*)(shadow + DS_QUIT_BLINK) -= 1;            // DEC word_28925
-    if ((*(uint16_t*)(shadow + DS_QUIT_BLINK) & 0xF) == 0) {
-        uint16_t si_b, ax_b;
-        if (*(uint16_t*)(shadow + DS_QUIT_BLINK) & 0x10) {
-            si_b = (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) != 0) ? 0x15 : 0x10;
-            ax_b = 6;
-        } else {
-            if (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) == 0) { si_b = 0x10; ax_b = 5; }
-            else { si_b = 0x16; ax_b = 4; }
-        }
-        v2_text_lookup_12515(shadow, ax_b);
-        uint16_t bx_b = *(uint16_t*)(shadow + DS_TEXT_IDX);
-        v2_text_render_124c5(shadow, si_b, 0x0F, bx_b);
-        v2_game_loop_post_render(shadow);          // sub_165AA
-        v2_late_sprites_1DD9C(shadow);
-        v2_dirty_tile_scan_1C8F1(shadow, 0xFFFF);
-        v2_glyph_flush_1E0C7(shadow);
-        v2_page_flip_16775(shadow);
-    }
+    // sub_10555: password blink (extracted).
+    v2_pw_blink_10555(shadow);
     // sub_105CB: password exit check
     uint16_t ni = *(uint16_t*)(shadow + DS_INPUT_EDGES);
     if (ni & 0x200) {

@@ -276,6 +276,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 408: return (void*)&sub_11f93;  // place carried item (CF=refused)
     case 409: return (void*)&sub_121f6;  // take-next from category (di=row)
     case 410: return (void*)&sub_121b9;  // pop selected item (active viking)
+    case 411: return (void*)&sub_10555;  // prompt blink tick (flip tail, no wait)
     default: return 0;
     }
 }
