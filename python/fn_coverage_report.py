@@ -57,15 +57,23 @@ def load_gcov(path: str):
     with op(path, 'rt') as f:
         data = json.load(f)
     counts = {}          # line number -> execution count
+    branches = {}        # line number -> list of edge counts (merged by max)
     for fentry in data['files']:
         if not fentry['file'].endswith('vikings.exe_seg000.cpp'):
             continue
         for ln in fentry['lines']:
             n = ln['line_number']
             counts[n] = max(counts.get(n, 0), ln['count'])
+            br = [b.get('count', 0) for b in ln.get('branches', [])]
+            if br:
+                prev = branches.get(n)
+                if prev is None or len(prev) != len(br):
+                    branches[n] = br
+                else:
+                    branches[n] = [max(a, b) for a, b in zip(prev, br)]
     if not counts:
         sys.exit('no coverage rows for vikings.exe_seg000.cpp in ' + path)
-    return counts
+    return counts, branches
 
 
 def main():
@@ -75,9 +83,13 @@ def main():
     ap.add_argument('--min', type=float, default=100.0,
                     help='print subs with coverage%% < MIN (default: all below 100)')
     ap.add_argument('--csv', help='write full per-sub table as CSV')
+    ap.add_argument('--live', help='second gcov json (units+replays merged) — adds a unit+live column')
     args = ap.parse_args()
 
-    counts = load_gcov(args.gcov_json)
+    counts, branches = load_gcov(args.gcov_json)
+    live_counts = None
+    if args.live:
+        live_counts, _ = load_gcov(args.live)
     src = open(args.src, encoding='utf-8', errors='replace').read().splitlines()
 
     # Zone boundaries: sub_ labels + m2c proc markers + called-into loc_
@@ -135,27 +147,70 @@ def main():
         missed = [(n, e) for (n, e) in eips if counts.get(n, 0) == 0]
         execd = total - len(missed)
         pct = 100.0 * execd / total
-        rows.append((name, total, execd, pct, missed))
+        lexecd = execd
+        if live_counts is not None:
+            lexecd = total - sum(1 for (n, e) in eips if live_counts.get(n, 0) == 0)
+        rows.append((name, total, execd, pct, missed, lexecd, eips))
 
     # ---- report ----
     by_class = {}
-    for name, total, execd, pct, missed in rows:
+    for name, total, execd, pct, missed, lexecd, eips in rows:
         c = klass(name)
-        agg = by_class.setdefault(c, [0, 0, 0])   # procs, insns, exec
-        agg[0] += 1; agg[1] += total; agg[2] += execd
-    print('== class summary (procedures / oracle instructions / executed / %) ==')
+        agg = by_class.setdefault(c, [0, 0, 0, 0])   # procs, insns, exec, live-exec
+        agg[0] += 1; agg[1] += total; agg[2] += execd; agg[3] += lexecd
+    hdr = '== class summary (procs / insns / unit-exec / %'
+    hdr += ' / +live %) ==' if live_counts is not None else ') =='
+    print(hdr)
     for c in ('unit', 'L', 'E', 'D', 'SDL'):
         if c not in by_class: continue
-        p, t, x = by_class[c]
+        p, t, x, lx = by_class[c]
         pc = (100.0 * x / t) if t else 100.0
-        print(f'  {c:4} {p:4d} procs  {t:6d} insns  {x:6d} exec  {pc:6.2f}%')
+        line = f'  {c:4} {p:4d} procs  {t:6d} insns  {x:6d} exec  {pc:6.2f}%'
+        if live_counts is not None:
+            line += f'  | +live {100.0 * lx / t if t else 100.0:6.2f}%'
+        print(line)
     tt = sum(v[1] for v in by_class.values()); tx = sum(v[2] for v in by_class.values())
-    print(f'  ALL  {sum(v[0] for v in by_class.values()):4d} procs  {tt:6d} insns  '
-          f'{tx:6d} exec  {100.0 * tx / tt:6.2f}%')
+    tlx = sum(v[3] for v in by_class.values())
+    line = (f'  ALL  {sum(v[0] for v in by_class.values()):4d} procs  {tt:6d} insns  '
+            f'{tx:6d} exec  {100.0 * tx / tt:6.2f}%')
+    if live_counts is not None:
+        line += f'  | +live {100.0 * tlx / tt:6.2f}%'
+    print(line)
+
+    # ---- branch coverage: only asm-branch lines (J(Jcc)/LOOP macros) ----
+    BR_RE = re.compile(r'\bJ\(J[A-Z]+|\bR\(LOOP|\bJ\(LOOP')
+    br_total = br_full = br_half = br_zero = 0
+    half_list = []
+    for name, total, execd, pct, missed, lexecd, eips in rows:
+        for (n, e) in eips:
+            if not BR_RE.search(src[n - 1]):
+                continue
+            br = branches.get(n)
+            if not br or len(br) < 2:
+                continue
+            br_total += 1
+            taken = sum(1 for b in br if b > 0)
+            if taken == len(br):
+                br_full += 1
+            elif taken == 0:
+                br_zero += 1
+            else:
+                br_half += 1
+                half_list.append((name, e))
+    if br_total:
+        print(f'\n== branch coverage (Jcc/LOOP lines with edge data) ==')
+        print(f'  total {br_total}  both-edges {br_full} ({100.0*br_full/br_total:.2f}%)  '
+              f'one-edge {br_half}  none {br_zero}')
+        by_sub = {}
+        for name, e in half_list:
+            by_sub.setdefault(name, []).append(e)
+        print(f'  one-edge branches by sub (top 20):')
+        for name, es in sorted(by_sub.items(), key=lambda kv: -len(kv[1]))[:20]:
+            print(f'    {name:11} {len(es):3d}: {" ".join(es[:8])}{" +" + str(len(es)-8) if len(es) > 8 else ""}')
 
     print(f'\n== unit-class subs below {args.min:.0f}% (uncovered eips listed) ==')
     shown = 0
-    for name, total, execd, pct, missed in sorted(rows, key=lambda r: r[3]):
+    for name, total, execd, pct, missed, lexecd, eips in sorted(rows, key=lambda r: r[3]):
         if klass(name) != 'unit' or pct >= args.min or total == 0:
             continue
         shown += 1
@@ -175,7 +230,7 @@ def main():
     if args.csv:
         with open(args.csv, 'w') as f:
             f.write('sub,class,total_insns,executed,pct,missed_eips\n')
-            for name, total, execd, pct, missed in rows:
+            for name, total, execd, pct, missed, lexecd, eips in rows:
                 f.write(f'{name},{klass(name)},{total},{execd},{pct:.2f},'
                         f'"{" ".join(e for _, e in missed)}"\n')
         print(f'\nCSV: {args.csv}')
