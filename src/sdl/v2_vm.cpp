@@ -2856,6 +2856,39 @@ static void v2_viking_cycle_12e79(uint8_t* s) {
     if (s[DS_ACTIVE_VK_SEL] != 0) v2_viking_cycle_12e84(s);
 }
 
+static void v2_hud_health_120ff(uint8_t* s);
+static void v2_hud_item_sync_12199(uint8_t* s);
+static void v2_portrait_sync_11b0b(uint8_t* s);
+
+// loc_1205B: HUD selector sync tail of sub_11792. Per viking: if the live
+// selector [414+vk*2] differs from the tracked [41A+vk*2]: redraw the OLD
+// slot's item, sync tracking, draw the new selector.
+static void v2_hud_sel_sync_1205b(uint8_t* s) {
+    for (int vk = 0; vk < 3; vk++) {
+        uint16_t cur_off = 0x0414 + vk * 2;
+        uint16_t prev_off = DS_HUD_SEL_PREV + vk * 2;
+        if (*(uint16_t*)(s + cur_off) != *(uint16_t*)(s + prev_off)) {
+            uint16_t old_di = *(uint16_t*)(s + prev_off) * 2;
+            v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
+            v2_vga_hud_item_1183d(s, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
+            *(uint16_t*)(s + prev_off) = *(uint16_t*)(s + cur_off);
+            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + cur_off) * 2);
+            v2_vga_selector_118ad(s, *(uint16_t*)(s + cur_off) * 2);
+        }
+    }
+}
+
+// sub_11792: per-frame HUD update — gated on [25CF]&1 and level != 0x2C:
+// 120ff (healthbars) → 12199 (item sync) → loc_1205B (selector sync) →
+// 11b0b (portraits).
+static void v2_hud_update_11792(uint8_t* s) {
+    if (!(s[DS_LEVEL_FLAGS] & 1) || *(uint16_t*)(s + DS_LEVEL) == 0x2C) return;
+    v2_hud_health_120ff(s);
+    v2_hud_item_sync_12199(s);
+    v2_hud_sel_sync_1205b(s);
+    v2_portrait_sync_11b0b(s);
+}
+
 // sub_120d1: redraw the 3 viking selectors AND unconditionally sync the
 // prev-selectors 0x41A=0x414, 0x41C=0x416, 0x41E=0x418. The orig does NOT
 // save DI — it exits with di = (word_288F8 + 8) * 2, and sub_12199's loop
@@ -13105,6 +13138,7 @@ extern "C" void v2_fntest_call_hudvga(int which, uint8_t* shadow, uint16_t ax,
     case 5: v2_hud_reset_1200a(shadow); break;
     case 6: v2_hud_reset_12034(shadow); break;
     case 7: v2_clear_pages_16880(shadow); break;
+    case 8: v2_hud_update_11792(shadow); break;
     }
     v2_vm_acc_base = saved_acc;
 }
@@ -20614,107 +20648,10 @@ void v2_phase_post_flip2(uint16_t ds_val) {
     v2_despawn_bounds_13c0c(s);
     // sub_12fd0: sub-sprite update, delta type 2 — consolidated.
     v2_subsprite_walk_12fd0(s);
-    // sub_11792: HUD update — orig calls sub_120FF + sub_12199 + loc_1205B + sub_11B0B.
-    // Previously v2 only had sub_120FF (healthbar). Missing sub_12199 caused ds:0x3FC
-    // to never sync with ds:0x3E4 after item pickup → ITEM-TRAP divergence at frame ~393.
-    {
-        // V2-11792-ENTRY: trap v2 sub_11792 entry condition
-        static int _v211792 = 0; _v211792++;
-        if (_v211792 <= 30 || _v211792 % 200 == 0)
-            fprintf(stderr,
-              "V2-11792-ENTRY[%d]: lvl=%04X 25CF=%02X enter=%d 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
-              _v211792, *(uint16_t*)(s + DS_LEVEL), s[DS_LEVEL_FLAGS],
-              ((s[DS_LEVEL_FLAGS] & 1) && *(uint16_t*)(s + DS_LEVEL) != 0x2C) ? 1 : 0,
-              *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 8),
-              *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 16),
-              *(uint16_t*)(s + (DS_HUD_ITEMS) + 8),
-              *(uint16_t*)(s + (DS_HUD_ITEMS) + 16));
-    }
-    if ((s[DS_LEVEL_FLAGS] & 1) && *(uint16_t*)(s + DS_LEVEL) != 0x2C) {
-        // sub_120FF: healthbar state tracking + rendering (3 vikings)
-        v2_hud_health_120ff(s);
-        // sub_12199 (eip 0x2199): item display sync. Loop slot 0..0x18 step 2:
-        //   if ds:[di+3E4] != ds:[di+3FC]: copy + redraw + sub_120d1.
-        {
-            // V2-12199-ENTRY: log entry to v2 sub_12199 (per-frame mirror sync)
-            static int _v212199 = 0; _v212199++;
-            if (_v212199 <= 30 || _v212199 % 200 == 0)
-                fprintf(stderr,
-                  "V2-12199-ENTRY[%d]: lvl=%04X 25CF=%02X 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
-                  _v212199, *(uint16_t*)(s + DS_LEVEL), s[DS_LEVEL_FLAGS],
-                  *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 8),
-                  *(uint16_t*)(s + (DS_HUD_ITEMS_PREV) + 16),
-                  *(uint16_t*)(s + (DS_HUD_ITEMS) + 8),
-                  *(uint16_t*)(s + (DS_HUD_ITEMS) + 16));
-        }
-        // ====================================================================
-        // ORIG BUG REPLICATION: sub_12199 loop has a register-clobber bug.
-        // ====================================================================
-        // Orig sub_12199 (vikings.exe_seg000.cpp:5326) runs an iteration loop:
-        //     MOV di, 0
-        //   loc_1219c:
-        //     MOV ax, [di+3E4h]; CMP ax, [di+3FCh]
-        //     JZ loc_121b0
-        //     MOV [di+3FCh], ax
-        //     CALL sub_1183d                 ; render slot
-        //     CALL sub_120d1                 ; ⚠️ TRASHES DI
-        //   loc_121b0:
-        //     ADD di, 2; CMP di, 18h; JL loc_1219c
-        //     RETN
-        //
-        // sub_120d1 (vikings.exe_seg000.cpp:5220) does NOT save/restore di:
-        //   ... last instruction touching di:
-        //     MOV  di, word_288F8        ; viking 3 selector
-        //     ADD  di, 8
-        //     SHL  di, 1                 ; di = (word_288F8 + 8) * 2
-        //     CALL sub_118AD             ; PUSHes/POPs di — preserves it
-        //     RETN                       ; di = (word_288F8+8)*2 on return
-        //
-        // Result: sub_12199's next "ADD di, 2" continues from wrong di value,
-        // skipping intermediate slots. This is a genuine bug in the original
-        // DOS game — but it's deterministic, so observable behavior of orig
-        // depends on it. We must replicate it bit-exact to keep ds:0x3FC
-        // mirror identical between v2 shadow and orig real DS (DS-verify).
-        //
-        // Hard cap: max legit iterations = 12 (0x18 / 2). With the clobber
-        // bug, depending on word_288F8 the loop visits a SUBSET of those 12
-        // slots, never more. If iteration exceeds 13 the shadow s[0x418]
-        // (= word_288F8) is corrupted to a value where (v3+8)*2 wraps
-        // uint16_t back into [0..0x16] → infinite loop. Default mode catches
-        // such corruption upstream via DS-verify; V2_ONLY has no verify, so
-        // we abort here with diagnostic to surface root cause early.
-        // ====================================================================
-        v2_hud_item_sync_12199(s);
-        // loc_1205B: HUD selector sync (orig sub_120D1 inline). Per viking:
-        //   if ds:[414+vk*2] != ds:[41A+vk*2]: redraw old selector slot, update tracking.
-        for (int vk = 0; vk < 3; vk++) {
-            uint16_t cur_off = 0x0414 + vk * 2;
-            uint16_t prev_off = DS_HUD_SEL_PREV + vk * 2;
-            if (*(uint16_t*)(s + cur_off) != *(uint16_t*)(s + prev_off)) {
-                uint16_t old_di = *(uint16_t*)(s + prev_off) * 2;
-                v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
-                v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
-                *(uint16_t*)(s + prev_off) = *(uint16_t*)(s + cur_off);
-                v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + cur_off) * 2);
-                v2_vga_selector_118ad(v2_vm_shadow_ds, *(uint16_t*)(s + cur_off) * 2);
-            }
-        }
-        // sub_11B0B: portrait/sound state sync (3 vikings) — same logic as init at sub_11080.
-        for (int vk = 0; vk < 3; vk++) {
-            uint16_t sound_prev = *(uint16_t*)(s + (DS_PORTRAIT_SND) + vk * 2);
-            uint16_t sound_cur  = *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2);
-            uint16_t port_prev  = *(uint16_t*)(s + VIK_PORTRAIT + vk * 2);
-            uint16_t port_cur   = *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2);
-            if (sound_prev != sound_cur || port_prev != port_cur) {
-                uint16_t portrait_si = port_prev;
-                if (sound_prev != 0) portrait_si += 4;
-                v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
-                v2_vga_portrait_11aa4(v2_vm_shadow_ds, portrait_si, vk * 2);
-                *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2) = sound_prev;
-                *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2) = port_prev;
-            }
-        }
-    }
+    // sub_11792: per-frame HUD update — extracted chain incl. its gate
+    // (healthbars 120ff → item sync 12199 with the orig DI-clobber bug →
+    // selector sync 1205B → portraits 11b0b). See v2_hud_update_11792.
+    v2_hud_update_11792(s);
     // sub_101be: palette cycling (eip 0xB5). DECs ds:[si+0x258C] for 8 channels;
     // when timer→0, rotates palette buffer at 0x8202+ and 0x7F02+, signals
     // word_303DE=2 (handled by v2_render_callback dispatch to sub_10ffc).
@@ -21816,122 +21753,6 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
     return cbb_exit;
 }
 
-// sub_11792 mirror: HUD update. Verified with seg000 lines 3096-3109.
-//   TEST byte_2AAAF, 1; JZ ret. CMP word_2AA8D, 2C; JZ ret.
-//   Then: sub_120FF (healthbar) + sub_12199 (item display) + loc_1205B (selector)
-//   + sub_11B0B (portrait/sound sync). Each sub_xxxx has internal render via
-//   sub_1183d/sub_11ad9 — mirrored as v2_draw_hud_healthbar/portrait/item.
-static void v2_hud_update_11792(uint8_t* shadow) {
-    extern uint16_t v2_current_ds_val;
-    if (!(shadow[DS_LEVEL_FLAGS] & 1) || *(uint16_t*)(shadow + DS_LEVEL) == 0x2C) return;
-    // sub_120FF: healthbar tracking. DS writes: [435-439] state, [43B-43F] previous.
-    // Save old state, compute new, render ONLY if changed (mirrors orig sub_120ff
-    // eip 0x2127 CMP ax, word_2891B; JZ skip-render).
-    *(uint16_t*)(shadow + (DS_HUD_HEALTH_PREV)) = *(uint16_t*)(shadow + (DS_HUD_HEALTH));
-    *(uint16_t*)(shadow + DS_HUD_TRACK_1) = *(uint16_t*)(shadow + DS_VK_STATE_3);
-    *(uint16_t*)(shadow + DS_HUD_TRACK_2) = *(uint16_t*)(shadow + DS_VK_STATE_4);
-    for (int vk = 0; vk < 3; vk++) {
-        uint16_t health_addr = OBJ_ANIM_IDX + vk * 2;
-        uint16_t prev_state = *(uint16_t*)(shadow + (DS_HUD_HEALTH_PREV) + vk * 2);
-        uint16_t new_state;
-        if ((int16_t)*(uint16_t*)(shadow + health_addr) < 0) new_state = 2;
-        else if (*(uint16_t*)(shadow + DS_ACTIVE_VIKING) == (uint16_t)(vk * 2)) new_state = 0;
-        else new_state = 1;
-        *(uint16_t*)(shadow + (DS_HUD_HEALTH) + vk * 2) = new_state;
-        // Conditional render — orig only draws when state transitions.
-        if (new_state != prev_state) {
-            // Mirror orig sub_117d0 args: ax=new_state, bx=vk, di=vk
-            v2_draw_hud_healthbar(v2_current_ds_val, new_state, (uint16_t)vk, (uint16_t)vk);
-            v2_vga_healthbar_117d0(shadow, new_state, (uint16_t)vk, (uint16_t)vk);
-        }
-    }
-    // sub_12199: item display sync (loop [3E4] vs [3FC]) + render via sub_1183d.
-    // Orig (eip 0x2199..0x21B8): per slot if [3E4]!=[3FC], copy + sub_1183d + sub_120d1.
-    // sub_120d1 не сохраняет di → "ADD di, 2" продолжает с (word_288F8+8)*2.
-    // Replicate bit-exact: после sub_120d1 di clobbered → set di_c в loop.
-    {
-        int _iter = 0;
-        uint16_t di_c = 0;
-        while (di_c < 0x18) {
-            if (++_iter > 13) break;  // safety
-            uint16_t ax_r = *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS));
-            if (ax_r != *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV))) {
-                *(uint16_t*)(shadow + di_c + (DS_HUD_ITEMS_PREV)) = ax_r;
-                // sub_12199 calls sub_1183d(di_c, ax_r) — mirror via v2_draw_hud_item
-                v2_draw_hud_item(v2_current_ds_val, di_c, ax_r);
-                v2_vga_hud_item_1183d(v2_vm_shadow_ds, di_c, ax_r);
-                // sub_120d1 (eip 0x20D1): redraw 3 viking selectors + sync 0x41A/0x41C/0x41E.
-                uint16_t v1 = *(uint16_t*)(shadow + (DS_HUD_SEL));
-                *(uint16_t*)(shadow + DS_HUD_SEL_PREV) = v1;
-                v2_draw_hud_selector(v2_current_ds_val, v1 << 1);
-                v2_vga_selector_118ad(v2_vm_shadow_ds, v1 << 1);
-                uint16_t v2v = *(uint16_t*)(shadow + DS_HUD_SEL_2);
-                *(uint16_t*)(shadow + DS_HUD_SEL_PREV_2) = v2v;
-                v2_draw_hud_selector(v2_current_ds_val, (v2v + 4) << 1);
-                v2_vga_selector_118ad(v2_vm_shadow_ds, (v2v + 4) << 1);
-                uint16_t v3 = *(uint16_t*)(shadow + DS_HUD_SEL_3);
-                *(uint16_t*)(shadow + DS_HUD_SEL_PREV_3) = v3;
-                v2_draw_hud_selector(v2_current_ds_val, (v3 + 8) << 1);
-                v2_vga_selector_118ad(v2_vm_shadow_ds, (v3 + 8) << 1);
-                // ORIG BUG: sub_120d1 leaves di = (word_288F8+8)*2 (last call).
-                // sub_12199's ADD di,2 continues from this value. Replicate for byte-identical mirror.
-                di_c = (uint16_t)((v3 + 8) << 1);
-            }
-            di_c += 2;
-        }
-    }
-    // loc_1205B: selector tracking (seg000 4139-4182) — orig erases OLD slot
-    // (sub_1183d at prev pos with item at slot), updates prev=current, then
-    // draws NEW selector frame (sub_118ad at new pos). v2: mirror via
-    // v2_draw_hud_item (erase) + v2_draw_hud_selector (new frame).
-    // Viking 0: ds:0x414 (cur) vs ds:0x41A (prev), slot di range 0-7.
-    if (*(uint16_t*)(shadow + (DS_HUD_SEL)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV))) {
-        uint16_t old_di = *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) << 1;
-        uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
-        v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
-        v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_item);
-        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
-        uint16_t new_di = *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1;
-        v2_draw_hud_selector(v2_current_ds_val, new_di);
-        v2_vga_selector_118ad(v2_vm_shadow_ds, new_di);
-    }
-    // Viking 1: ds:0x416 (cur) vs ds:0x41C (prev), slot di range +4 → 8-15.
-    if (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2))) {
-        uint16_t old_di = (*(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) + 4) << 1;
-        uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
-        v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
-        v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_item);
-        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
-        uint16_t new_di = (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1;
-        v2_draw_hud_selector(v2_current_ds_val, new_di);
-        v2_vga_selector_118ad(v2_vm_shadow_ds, new_di);
-    }
-    // Viking 2: ds:0x418 (cur) vs ds:0x41E (prev), slot di range +8 → 16-23.
-    if (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) != *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4))) {
-        uint16_t old_di = (*(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) + 8) << 1;
-        uint16_t old_item = *(uint16_t*)(shadow + old_di + (DS_HUD_ITEMS));
-        v2_draw_hud_item(v2_current_ds_val, old_di, old_item);
-        v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_item);
-        *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
-        uint16_t new_di = (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1;
-        v2_draw_hud_selector(v2_current_ds_val, new_di);
-        v2_vga_selector_118ad(v2_vm_shadow_ds, new_di);
-    }
-    // sub_11B0B: portrait/sound tracking sync + portrait render
-    for (int vk = 0; vk < 3; vk++) {
-        uint16_t port = *(uint16_t*)(shadow + VIK_PORTRAIT + vk * 2);
-        uint16_t prev_port = *(uint16_t*)(shadow + (DS_PORTRAIT_PREV) + vk * 2);
-        uint16_t snd = *(uint16_t*)(shadow + (DS_PORTRAIT_SND) + vk * 2);
-        uint16_t prev_snd = *(uint16_t*)(shadow + (DS_PORTRAIT_SND_PREV) + vk * 2);
-        if (port != prev_port || snd != prev_snd) {
-            *(uint16_t*)(shadow + (DS_PORTRAIT_SND_PREV) + vk * 2) = snd;
-            *(uint16_t*)(shadow + (DS_PORTRAIT_PREV) + vk * 2) = port;
-            // sub_11b0b internally renders portrait via v2_draw_hud_portrait
-            v2_draw_hud_portrait(v2_current_ds_val, (uint16_t)(vk * 2), port);
-            v2_vga_portrait_11aa4(v2_vm_shadow_ds, port, (uint16_t)(vk * 2));
-        }
-    }
-}
 
 // sub_11c52 mirror: pause selector blink animation. Orig (eip 0x1c52..0x1c8e):
 //   if word_28927 == 1 → JZ loc_11c8f (alternate path)
