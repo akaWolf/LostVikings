@@ -212,9 +212,20 @@ void hexDump (void *addr, int len) {
 static uint16_t v2_pit_counter = 0xFFFF;
 static uint16_t v2_pit_latch = 0;
 static int v2_pit_lohi = 0;
+// (#60 branch) PIT jitter: when enabled, latch steps alternate a small
+// (0x0BF0 < 0x1BF8) and the normal (0x1C00) delta — the real 1.19MHz chip
+// gives variable elapsed counts per loop, so BOTH sub_179a8 retry edges
+// (79F5 JL) are live on hardware. Off by default: the calibrated unit
+// expectations (12ef8 idle thresholds) ride on the constant step.
+extern "C" int v2_fntest_pit_jitter;
+extern "C" int v2_fntest_pit_jitter = 0;
+static int v2_pit_jitter_phase = 0;
 void asm2C_OUT(int16_t address, int data,_STATE* _state) {
 	if ((uint16_t)address == 0x43) {           // PIT latch command
-		v2_pit_counter = (uint16_t)(v2_pit_counter - 0x1C00);
+		uint16_t step = 0x1C00;
+		if (v2_fntest_pit_jitter && (v2_pit_jitter_phase ^= 1))
+			step = 0x0BF0;
+		v2_pit_counter = (uint16_t)(v2_pit_counter - step);
 		v2_pit_latch = v2_pit_counter;
 		v2_pit_lohi = 0;
 		return;
@@ -233,6 +244,10 @@ void asm2C_OUT(int16_t address, int data,_STATE* _state) {
 // joystick detect (12989 tail) runs.
 static int v2_fntest_in201 = 0xFF;
 extern "C" void v2_fntest_set_in201(int v) { v2_fntest_in201 = v & 0xFF; }
+// (#60 branch) port 0x60 (8042 keyboard data): scancode read by the INT9
+// ISR body (seg000_6440_proc). Unit cases seed the byte the ISR sees.
+static int v2_fntest_in60 = 0;
+extern "C" void v2_fntest_set_in60(int v) { v2_fntest_in60 = v & 0xFF; }
 // 8253 PIT model: OUT 0x43 latches the down-counter (mode-2 semantics),
 // the two following IN 0x40 reads return the LATCHED lo then hi byte —
 // reading the live counter without the latch protocol is what the real
@@ -246,6 +261,15 @@ int8_t asm2C_IN(int16_t address,_STATE* _state) {
 		return b;
 	}
 	if ((uint16_t)address == 0x201) return (int8_t)v2_fntest_in201;
+	if ((uint16_t)address == 0x60) return (int8_t)v2_fntest_in60;
+	// (#60 branch) port 0x3DA (CRT status): bit 3 = vertical retrace. The
+	// real bit alternates with the beam; a constant would leave one edge of
+	// every "wait for retrace" poll loop (sub_12eed) structurally dead.
+	// Toggle per read: the loop spins at least once, then exits.
+	if ((uint16_t)address == 0x3DA) {
+		static int v2_crt_toggle = 0;
+		return (int8_t)((v2_crt_toggle ^= 1) ? 0x08 : 0x00);
+	}
 	return 0;  // FIX: Return value required on ARM
 }
 

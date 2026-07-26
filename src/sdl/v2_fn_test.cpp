@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
+#include <thread>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "v2_ds_layout.h"
@@ -556,6 +557,14 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_10138 = 444,   // viking-switch mode dispatcher
             FT_SUB_1775D = 445,   // music track dispatch
             FT_SUB_12352 = 446,   // input read (joystick edge)
+            // (447 is an orphan duplicate of sub_1673c in the fnptr table)
+            FT_SUB_177BB = 448,   // music slot scan (SDL class)
+            FT_SUB_100BB = 449,   // main level loop (L class)
+            FT_SUB_128D1 = 450,   // INT24 critical-error ISR
+            FT_SUB_16440 = 451,   // INT9 keyboard ISR body
+            FT_SUB_11080 = 452,   // level (re)load
+            FT_SUB_16563 = 453,   // spec-key table sweep
+            FT_SUB_17A44 = 454,   // joystick delay loop
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -729,7 +738,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_179a8", "sub_108c8",
                                  "sub_17337", "sub_172d3", "sub_11ba5", "sub_10350",
                                  "sub_1754c", "sub_17561", "sub_10138",
-                                 "sub_1775d", "sub_12352" };
+                                 "sub_1775d", "sub_12352", "sub_1673c", "sub_177bb", "sub_100bb",
+                                 "sub_128d1", "sub_16440", "sub_11080", "sub_16563", "sub_17a44" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9292,33 +9302,63 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         // bbox misses the self box on exactly one axis per case.
         if (id == FT_SUB_1559C || id == FT_SUB_155C0 ||
             id == FT_SUB_15686 || id == FT_SUB_156AA) {
-            static const FtWr wbase[] = { {0x0390, 1}, {0x1355, 1},
-                                          {0x15FD, 1},
-                                          {0x1535+6, 0x40}, {0x155D+6, 0x50},
-                                          {0x14E5+6, 0x40}, {0x150D+6, 0x50} };
-            // partner fully overlapping (hit side)
-            static const FtWr whit[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+            // (#60) the 55DB/55E0 gates take the scan only when ds:390h
+            // is NONZERO and SIGN-negative — 0x8000, not 1. The self box
+            // ([34]/[36]/[38]/[3A]) is copied from the frame object (slot
+            // 6) at 55F1-560A, so the axis cases must seed slot 6 too.
+            static const FtWr whit[] = { {0x0390,0x8000},{0x1355,1},{0x15FD,1},
                                          {0x153B,0x40},{0x1563,0x50},
                                          {0x14EB,0x40},{0x1513,0x50},
                                          {0x1543,0x40},{0x156B,0x50},
                                          {0x14F3,0x40},{0x151B,0x50} };
-            (void)wbase;
             A(c, 5, O, "grid", whit, 11);
             // each axis split: X0 far right / X1 far left / Y0 below / Y1 above
-            static const FtWr wx0[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+            static const FtWr wx0[] = { {0x0390,0x8000},{0x1355,1},{0x15FD,1},
+                                        {0x153B,0x40},{0x1563,0x50},
+                                        {0x14EB,0x40},{0x1513,0x50},
                                         {0x1535,0x7000} };
-            A(c, 5, O, "grid", wx0, 4);
-            static const FtWr wx1[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+            A(c, 5, O, "grid", wx0, 8);
+            static const FtWr wx1[] = { {0x0390,0x8000},{0x1355,1},{0x15FD,1},
+                                        {0x153B,0x40},{0x1563,0x50},
+                                        {0x14EB,0x40},{0x1513,0x50},
                                         {0x1535,1},{0x155D,2} };
-            A(c, 5, O, "grid", wx1, 5);
-            static const FtWr wy0[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+            A(c, 5, O, "grid", wx1, 9);
+            static const FtWr wy0[] = { {0x0390,0x8000},{0x1355,1},{0x15FD,1},
+                                        {0x153B,0x40},{0x1563,0x50},
+                                        {0x14EB,0x40},{0x1513,0x50},
                                         {0x1535,0x40},{0x155D,0x50},
                                         {0x14E5,0x7000} };
-            A(c, 5, O, "grid", wy0, 6);
-            static const FtWr wy1[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+            A(c, 5, O, "grid", wy0, 10);
+            static const FtWr wy1[] = { {0x0390,0x8000},{0x1355,1},{0x15FD,1},
+                                        {0x153B,0x40},{0x1563,0x50},
+                                        {0x14EB,0x40},{0x1513,0x50},
                                         {0x1535,0x40},{0x155D,0x50},
                                         {0x14E5,1},{0x150D,2} };
-            A(c, 5, O, "grid", wy1, 7);
+            A(c, 5, O, "grid", wy1, 11);
+            // positive [390]: the 55E0 JS falls to the 15667 exit arm
+            static const FtWr wpos[] = { {0x0390,1} };
+            A(c, 5, O, "grid", wpos, 1);
+        }
+        // (#60 branch) 15f2c self-skip: scan limit [372] raised past the
+        // frame object (slot 6, == ds:42h) with its slot word alive.
+        if (id == FT_SUB_15F2C) {
+            static const FtWr wself[] = { {0x0372,8},{0x135B,1} };
+            A(c, 5, O, "grid", wself, 2);
+        }
+        // (#60 branch) music-slot walkers: the [304]/[302] mute gates.
+        if (id == FT_SUB_1787F || id == FT_SUB_1782A) {
+            static const FtWr wmute[] = { {0x0304,1} };
+            A(c, 5, O, "grid", wmute, 1);
+        }
+        if (id == FT_SUB_178D6 || id == FT_SUB_178F1) {
+            static const FtWr wbusy[] = { {0x0302,1} };
+            A(c, 5, O, "grid", wbusy, 1);
+        }
+        // (#60 branch) op44 with a NUL first text byte: the 24FD end-of-
+        // string exit instead of the glyph walk.
+        if (id == FT_SUB_1246D) {
+            uint8_t cn[] = {0x44, 0x00, 0x00, 0x00, 0x00};
+            A(cn, 5, O, "nul-first");
         }
         // Coverage-directed (#47): opCC's second dispatch (530E, off_30c92)
         // needs the object inside BOTH camera windows: [44]+0x1F < X <=
@@ -10627,6 +10667,30 @@ int ft_selftest_1041c(void) {
         int v2_open = v2_fntest_call_pw_gate(g_synth_in);
         if ((v2_open != 0) != orig_open) grid.fail++; else grid.pass++;
     }
+    // (#47) open gate with ZERO shading ([342]=[344]=0) drives the 469
+    // block instead: 1450b save + the RESTORED sub_1047c fade loop (the
+    // {92FF}=1/{A39C}=0 unwind canon walks it) + the 478 JMP into the
+    // blocking pw screen sub_14590 — which waits for input and escapes.
+    {
+        grid.cases++;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        g_synth_in[0x25BA] = 2;
+        ft_wr16(g_synth_in, 0x0334, 0);
+        ft_wr16(g_synth_in, 0x03B8, 0x1000);
+        ft_wr16(g_synth_in, 0x218F, 0);
+        g_synth_in[0x0342] = 0;
+        g_synth_in[0x0344] = 0;
+        ft_wr16(g_synth_in, 0xA39C, 0);
+        g_synth_in[0x92FF] = 1;
+        ft_fill_tail(g_synth_in);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1041C), g_synth_orig, regs);
+        bool orig_open = (ft_ub_marks() != esc0);
+        int v2_open = v2_fntest_call_pw_gate(g_synth_in);
+        if ((v2_open != 0) != orig_open) grid.fail++; else grid.pass++;
+    }
     // all 16 gate combinations (open = sel!=0 && !(fl&3) && (ed&0x1000) && cw==0)
     for (int sel = 0; sel <= 1; sel++)
         for (int fl = 0; fl <= 1; fl++)
@@ -11500,6 +11564,36 @@ int ft_selftest_sub_11cbb() {
             FtRegs in{};
             ft_synth_case_regs(FT_SUB_11CBB, in, 0, -1, "exit", grid, diff_budget);
         }
+        // (#60 branch) HUD 0x2000 exchange with the hand-slot counter FULL:
+        // [443]=0x0C makes 11F93's 1F99 slot test hit 0x18, and a held item
+        // whose type byte [item-0x7A6E] is zero takes the 1FAF STC exit ->
+        // 11CBB's 1D69 JC. The sibling case (type byte nonzero) walks the
+        // 11FB1 ax=4 restock arm instead.
+        for (int typebit = 0; typebit <= 1; typebit++) {
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+            ft_wr16(g_synth_in, 0x447, 0);
+            ft_wr16(g_synth_in, 0x3B8, 0x2000);
+            ft_wr16(g_synth_in, 0x304, 1);
+            ft_wr16(g_synth_in, 0x3C2, 0);
+            ft_wr16(g_synth_in, 0x15AD, 1);
+            ft_wr16(g_synth_in, 0x15AF, 1);
+            ft_wr16(g_synth_in, 0x15B1, 1);
+            ft_wr16(g_synth_in, 0x443, 0x0C);
+            ft_wr16(g_synth_in, 0x441, 0x7B00);
+            g_synth_in[0x92] = (uint8_t)typebit;   // byte [0x7B00-0x7A6E]
+            for (uint32_t a = 0x3E4; a < 0x404; a += 2) ft_wr16(g_synth_in, a, 0);
+            ft_wr16(g_synth_in, 0x3E4, 5);
+            ft_wr16(g_synth_in, 0x449, 1);
+            ft_wr16(g_synth_in, 0x44B, 0);
+            ft_norm_11c52(g_synth_in);
+            ft_fill_tail(g_synth_in);
+            memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+            v2_fntest_call_sub_11cbb(g_scratch);
+            FtRegs in{};
+            ft_synth_case_regs(FT_SUB_11CBB, in, 0, -1,
+                               typebit ? "carry-swap" : "carry-full",
+                               grid, diff_budget);
+        }
     }
     fprintf(stderr,
         "FNSELFTEST-SUMMARY[sub_11cbb]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
@@ -12269,6 +12363,8 @@ int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
 // state outside the DS window. Documented in FN_COVERAGE_REPORT.md.
 extern "C" void v2_fntest_meminit(void);
 extern "C" void v2_fntest_set_in201(int v);
+extern "C" void v2_fntest_set_in60(int v);
+extern "C" int v2_fntest_pit_jitter;
 extern "C" int v2_fntest_sim_int21_irq;
 
 int ft_selftest_dosio(FtId id, uint32_t seed) {
@@ -12384,6 +12480,14 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
                                       {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
             CASE(w,7,r0,nullptr,0,"axis-y");
         }
+        // (#60 branch) both axis bits low -> ah==0 after the first probe
+        // loop -> the 7A24 JZ "both done" arm (17A32 exit).
+        v2_fntest_set_in201(0xFC);
+        {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
+                                      {0x86D2,0x30},{0x86D4,0x10},
+                                      {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
+            CASE(w,7,r0,nullptr,0,"axis-both");
+        }
         v2_fntest_set_in201(0xFF);
         break;
     }
@@ -12446,8 +12550,16 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             CASE(w,4,r0,nullptr,0,"joy-present");
             v2_fntest_set_in201(0xFF);
         }
-        // (the no-VGA / no-386 reject arms 12AA6/12AAF are unreachable the
-        //  same way: their JNZ gates are inside the DOSBOX_CUSTOM ifdef.)
+        {   // (#60 branch) audio-busy fallthrough: registration copies
+            // [86B2]/[86B4] into [302]/[304]; the 12AB8 tail then takes
+            // the 2AF8 JNZ (skip music re-init) with bit15 set.
+            static const FtWr w[] = { {0x86D0,0},{0x86C2,0x3000},
+                                      {0x86B2,0x8000},{0x86B4,0x8000} };
+            CASE(w,4,r0,nullptr,0,"busy-audio");
+        }
+        // (the no-VGA / no-386 JNZ gates 2A2C/2A31 are compiled out the
+        //  same way — but 12A9D/12AA6/12AAF still RUN as a straight
+        //  fall-through chain when the bad-magic case takes 29D0.)
         // File-shape arms: sub_12989 fopen()s "DATA.DAT" from the CWD (the
         // SDL inline replaces the DOS open), so a temporary chdir into a
         // fixture directory drives each error path honestly.
@@ -12609,6 +12721,18 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // latched lo/hi reads, coarse down-step) makes the elapsed check
         // (>= 0x1BF8 PIT ticks) converge — the routine returns cleanly.
         CASE(nullptr,0,r0,nullptr,0,"calibrate");
+        {   // (#60 branch) PIT jitter: a small latch step (< 0x1BF8) takes
+            // the 79F5 JL retry arm once, then the normal step converges —
+            // both edges of the real chip's variable timing.
+            v2_fntest_pit_jitter = 1;
+            CASE(nullptr,0,r0,nullptr,0,"retry");
+            v2_fntest_pit_jitter = 0;
+        }
+        {   // (#60 branch) nonzero ah mask: the 79D6 LOOPE exits on ZF=0
+            // immediately instead of spinning cx dry.
+            FtRegs r{}; r.ax = 0x0300;
+            CASE(nullptr,0,r,nullptr,0,"mask-exit");
+        }
         break;
     }
     case FT_SUB_108C8: {
@@ -12616,6 +12740,11 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // arm the press latches and take a snapshot (environment prep).
         extern std::atomic<uint8_t> sdl_spec_press_latch[256];
         extern void sdl_spec_snapshot_take();
+        {   // (#60 branch) [302]&0x8000 busy -> the 95F early RETN
+            static const FtWr w[] = { {0x302,0x8000} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,1,r0,e,0,"busy");
+        }
         {   // both keys down; [304] low byte 0 -> XOR makes it 1 (mute ON)
             // -> the SFX stop sweep over the [990C/990E] handles.
             sdl_spec_press_latch[0xA4] = 1;   // F10 (0x91A4)
@@ -12786,6 +12915,22 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             CASE(w,2,r0,nullptr,0,"altx-spin",1);
             input_keys = 0x8000;
         }
+        {   // (#60 branch) no spec keys at all: the 35D/364 reject pair
+            // falls through to the plain RETN (locret_103C9).
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1} };
+            CASE(w,2,r0,nullptr,0,"no-spec");
+        }
+        {   // (#60 branch) ALT+X prompt answered with ESC: sub_105cb's
+            // ESC exit path returns ax=0 -> the 4FA OR [334],2 arm and
+            // 103CA's 418 JMP into the 10E35 restart chain (escapes).
+            sdl_spec_press_latch[0xA4] = 1;
+            sdl_spec_press_latch[0x99] = 1;
+            sdl_spec_press_latch[0xB0] = 1;   // ESC (0x91B0)
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1} };
+            CASE(w,2,r0,nullptr,0,"altx-esc");   // clean unwind is the honest outcome
+        }
         {   // (#47 branch) [2A66F]!=0 -> the 356 early return BEFORE the
             // spec-snap inline: DS stays untouched.
             sdl_spec_snapshot_take();
@@ -12831,6 +12976,27 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
                                       {0x9910,0x5678},{0xA39A,1} };
             CASE(w,6,r0,nullptr,0,"shutdown-handles");
         }
+        {   // (#47 branch) the 8-bit-DMA warning tail 763D-7650: [86B6]==8
+            // AND [86B8]==3 -> [A378] flips 1 then 0, INT21/9 prints the
+            // 2DCE warning string (model: no-op). Nothing in seg000 writes
+            // [86B6]/[86B8] — the seeds hold through the init chain.
+            static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x86B6,8},{0x86B8,3} };
+            CASE(w,4,r0,nullptr,0,"dma-warning");
+        }
+        {   // (#60 branch) [86B6]==8 but [86B8]!=3: the 7648 JNZ reject
+            // right after the 763D [A378]=1 write.
+            static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x86B6,8},{0x86B8,0} };
+            CASE(w,4,r0,nullptr,0,"dma-half");
+        }
+        {   // install-fail probe: a null driver-image far ptr [992C]:[992A]
+            // feeds sub_1C537 garbage — IF it returns 0xFFFF the 7599 exit
+            // arm runs; any clean return still exercises the chain.
+            static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x992A,0},{0x992C,0} };
+            CASE(w,4,r0,nullptr,0,"install-null");
+        }
         break;
     }
     case FT_SUB_10138: {
@@ -12854,6 +13020,11 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             input_keys = 0x2000;
             static const FtWr w[] = { {0x0334,4},{0x92FF,1},{0xA39C,0} };
             CASE(w,3,r0,nullptr,0,"mode-4-switch",1);
+            // (#60 branch) direction bits (0xC0C0) instead: the 172 JNZ
+            // takes the 10191 JMP-to-12352 tail.
+            input_keys = 0x4040;
+            static const FtWr w2[] = { {0x0334,4},{0x92FF,1},{0xA39C,0} };
+            CASE(w2,3,r0,nullptr,0,"mode-4-dir");  // 191 tail-jump returns cleanly
             input_keys = keep;
         }
         break;
@@ -12895,6 +13066,309 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         {   static const FtWr w[] = { {0x86DA,0},{0x3CC,0} };
             CASE(w,2,r0,nullptr,0,"no-joy");
         }
+        break;
+    }
+    case FT_SUB_128D1: {
+        // INT24 critical-error ISR: text mode + "Retry/Abort" prompt. The
+        // 2901 release-wait and 290B press-wait loops poll the spec snap;
+        // a helper thread flips sdl_spec_state mid-loop and refreshes the
+        // snapshot — the only honest way to walk a wait-for-keypress ISR.
+        // Every exit is an escape: IRET (R), the 10DBA abort chain (A), or
+        // the isolator watchdog (idle). R=0x917F -> state[0x7F], A=0x918A
+        // -> state[0x8A].
+        extern std::atomic<uint8_t> sdl_spec_state[256];
+        extern void sdl_spec_snapshot_take();
+        auto key_thread = [](int idx, int val) {
+            return std::thread([idx, val]() {
+                usleep(300000);
+                sdl_spec_state[idx & 0xFF] = (uint8_t)val;
+                sdl_spec_snapshot_take();
+            });
+        };
+        sdl_spec_state[0x7F] = 0; sdl_spec_state[0x8A] = 0;
+        sdl_spec_snapshot_take();
+        {   // idle: both wait loops spin dry -> watchdog escape
+            CASE(nullptr,0,r0,nullptr,0,"ra-idle",1);
+        }
+        {   // R pressed mid-wait: 2910 JNZ -> the 12923 IRET exit
+            std::thread t = key_thread(0x7F, 1);
+            CASE(nullptr,0,r0,nullptr,0,"ra-press-r",1);
+            t.join();
+            sdl_spec_state[0x7F] = 0; sdl_spec_snapshot_take();
+        }
+        {   // A pressed mid-wait: 2917 falls into the 10DBA abort chain
+            std::thread t = key_thread(0x8A, 1);
+            CASE(nullptr,0,r0,nullptr,0,"ra-press-a",1);
+            t.join();
+            sdl_spec_state[0x8A] = 0; sdl_spec_snapshot_take();
+        }
+        {   // R held at entry: the 2909 release-wait spins until the
+            // helper thread lets go, then the press-wait runs dry.
+            sdl_spec_state[0x7F] = 1; sdl_spec_snapshot_take();
+            std::thread t = key_thread(0x7F, 0);
+            CASE(nullptr,0,r0,nullptr,0,"ra-held",1);
+            t.join();
+            sdl_spec_state[0x7F] = 0; sdl_spec_snapshot_take();
+        }
+        break;
+    }
+    case FT_SUB_16440: {
+        // INT9 keyboard ISR body: scancode from the port-0x60 model, the
+        // [91xx] latch table + [86DE] direction-mask writes, IRET exit
+        // (an expected isolator escape on every path).
+        {   // plain make code (A = 0x1E): latch write + mask OR
+            v2_fntest_set_in60(0x1E);
+            CASE(nullptr,0,r0,nullptr,0,"make-a",1);
+        }
+        {   // break code (A|0x80): the 6464 JC release arm (mask AND)
+            v2_fntest_set_in60(0x9E);
+            CASE(nullptr,0,r0,nullptr,0,"break-a",1);
+        }
+        {   // F10 make (0x44): the spec-key row of the 64CD ladder
+            v2_fntest_set_in60(0x44);
+            CASE(nullptr,0,r0,nullptr,0,"f10-spec",1);
+        }
+        {   // scancode&0x7F==0 -> the 645E JZ spurious-byte reject
+            v2_fntest_set_in60(0x80);
+            CASE(nullptr,0,r0,nullptr,0,"spurious",1);
+        }
+        {   // the three-key debug chord ([91A4]&[9189]&[91BF] all held):
+            // 649C/64A3/64AA fall through to the PUSH FFFF/0 + RETF stack
+            // switch (an expected escape of a different shape).
+            v2_fntest_set_in60(0x1E);
+            static const FtWr w[] = { {0x91A4,1},{0x9189,1},{0x91BF,1} };
+            CASE(w,3,r0,nullptr,0,"debug-chord",1);
+        }
+        v2_fntest_set_in60(0);
+        break;
+    }
+    case FT_SUB_11080: {
+        // level (re)load: chunk loads run against the real DATA.DAT. The
+        // [25AD]==0x25 endgame gate (114E) skips the 12CE4 call.
+        v2_fntest_set_data_file("DATA.DAT");
+        v2_fntest_set_data_file_v2("DATA.DAT");
+        {   static const FtWr w[] = { {0x25AD,0x25},{0xA39C,0},{0x92FF,1} };
+            CASE(w,3,r0,nullptr,0,"lvl37",1);
+        }
+        {   static const FtWr w[] = { {0x25AD,2},{0xA39C,0},{0x92FF,1} };
+            CASE(w,3,r0,nullptr,0,"lvl2",1);
+        }
+        break;
+    }
+    case FT_SUB_16563: {
+        // spec-key table sweep: REPE SCASB over the 128-byte [916C] table,
+        // consuming nonzero latches into the [3B6] mask via the [-0x6E14]
+        // LUT. One seeded key: the JCXZ takes both shapes in one walk
+        // (found -> consume -> resume -> exhaust).
+        {   static const FtWr w[] = { {0x9170,0x0001} };
+            CASE(w,1,r0,nullptr,0,"sweep");
+        }
+        break;
+    }
+    case FT_SUB_17A44: {
+        // (#60 branch) joystick delay loop (no in-seg callers — a far
+        // entry via seg000_7a44_proc): cx = (ax/3)*[A39E], ten NOPs per
+        // LOOP pass; both 7A59 edges in one run.
+        {   FtRegs r{}; r.ax = 6;
+            static const FtWr w[] = { {0xA39E,4} };
+            CASE(w,1,r,nullptr,0,"delay");
+        }
+        break;
+    }
+    case FT_SUB_14207: {
+        // (#60 branch) all-objects VM sweep: [376] raised so the 4239 JL
+        // loop-back edge runs (base image holds a single-slot count).
+        static const FtWr w[] = { {0x376,4},{0xA39C,0},{0x92FF,1} };
+        CASE(w,3,r0,nullptr,0,"multi-slot");
+        break;
+    }
+    case FT_SUB_15C37: {
+        // (#47 branch) directed collision-scan edges on top of the grid
+        // unit: the self-slot skip (5C49) and both dY signs (5C70).
+        {   // scanning slot == [42] -> the 5C49 JZ skip
+            FtRegs r{}; r.si = 0x100; r.di = 4;
+            static const FtWr w[] = { {0x1355,1},{0x1357,0},{0x1359,0},
+                                      {0x42,0},{0x372,6} };
+            CASE(w,5,r,nullptr,0,"self-slot");
+        }
+        {   // type match via the 5C57 walk: al=[17DD]-lo must equal
+            // [rin.si-0x6B34] ([0x95CC] for si=0x100); dY = [di+1945] -
+            // [slot+1945] > 0 -> the 5C70 JG arm
+            FtRegs r{}; r.si = 0x100; r.di = 4;
+            static const FtWr w[] = { {0x1355,1},{0x1357,0},{0x1359,0},
+                                      {0x42,0x40},{0x17DD,0x33},{0x95CC,0x33},
+                                      {0x1949,100},{0x1945,50},{0x372,6} };
+            CASE(w,9,r,nullptr,0,"dy-pos");
+        }
+        {   // dY < 0 -> the 5C72 sub_15CEF call arm
+            FtRegs r{}; r.si = 0x100; r.di = 4;
+            static const FtWr w[] = { {0x1355,1},{0x1357,0},{0x1359,0},
+                                      {0x42,0x40},{0x17DD,0x33},{0x95CC,0x33},
+                                      {0x1949,50},{0x1945,100},{0x372,6} };
+            CASE(w,9,r,nullptr,0,"dy-neg");
+        }
+        break;
+    }
+    case FT_SUB_12E2D: {
+        // (#47 branch) next-viking scan: both [3C2] self-skip JZ arms
+        // (2E54/2E6C), the FFFF exhaust tail 2E75, and both wrap edges
+        // (2E4B/2E63). Slots: si 0/2/4 -> [16ED]/[16EF]/[16F1]; negative
+        // word = skip, >=0 = found (early RETN).
+        {   // step1 hits [3C2] (2E54 taken), step2 slot negative -> FFFF
+            FtRegs r{}; r.si = 0;
+            static const FtWr w[] = { {0x3C2,2},{0x16ED,0x8000},
+                                      {0x16EF,0x8000},{0x16F1,0x8000} };
+            static const Exp e[] = { {0x34E,5},{0x350,5} };
+            CASE(w,4,r,e,2,"skip-self");
+        }
+        {   // step2 hits [3C2] (2E6C taken) after a negative step1
+            FtRegs r{}; r.si = 0;
+            static const FtWr w[] = { {0x3C2,4},{0x16ED,0x8000},
+                                      {0x16EF,0x8000},{0x16F1,0x8000} };
+            static const Exp e[] = { {0x34E,5},{0x350,5} };
+            CASE(w,4,r,e,2,"wrap-2nd");
+        }
+        {   // first-step wrap 4->6->0 (2E4B not-taken), then 2E50 JZ
+            FtRegs r{}; r.si = 4;
+            static const FtWr w[] = { {0x3C2,0},{0x16ED,0x8000},
+                                      {0x16EF,0x8000},{0x16F1,0x8000} };
+            static const Exp e[] = { {0x34E,5},{0x350,5} };
+            CASE(w,4,r,e,2,"wrap-1st");
+        }
+        {   // second-step wrap 6->0 (2E63 not-taken), then 2E68 JZ
+            FtRegs r{}; r.si = 2;
+            static const FtWr w[] = { {0x3C2,0},{0x16ED,0x8000},
+                                      {0x16EF,0x8000},{0x16F1,0x8000} };
+            static const Exp e[] = { {0x34E,5},{0x350,5} };
+            CASE(w,4,r,e,2,"wrap-2step");
+        }
+        break;
+    }
+    case FT_SUB_1673C: {
+        // (#47 branch) camera chase: X target [257F]>>1 vs [92F3], Y
+        // target [2581]>>1 vs [92F5] — both JG arms each way (6749/6766).
+        {   // both equal -> clean RETN, zero DS writes (strict compare)
+            static const FtWr w[] = { {0x257F,100},{0x92F3,50},
+                                      {0x2581,80},{0x92F5,40} };
+            static const Exp e[] = { {0x34E,0} };
+            CASE(w,4,r0,e,0,"eq-eq");
+        }
+        {   // X target above current: 6749 JG -> 6753 + sub_13A34
+            static const FtWr w[] = { {0x257F,200},{0x92F3,50},
+                                      {0x2581,80},{0x92F5,40} };
+            CASE(w,4,r0,nullptr,0,"x-more");
+        }
+        {   // X target below: 674B write + sub_13A14
+            static const FtWr w[] = { {0x257F,20},{0x92F3,50},
+                                      {0x2581,80},{0x92F5,40} };
+            CASE(w,4,r0,nullptr,0,"x-less");
+        }
+        {   // Y target above: 6766 JG -> 676E arm
+            static const FtWr w[] = { {0x257F,100},{0x92F3,50},
+                                      {0x2581,300},{0x92F5,50} };
+            CASE(w,4,r0,nullptr,0,"y-more");
+        }
+        {   // Y target below: 6768 write + the loc_13A74 tail-jump
+            static const FtWr w[] = { {0x257F,100},{0x92F3,50},
+                                      {0x2581,20},{0x92F5,50} };
+            CASE(w,4,r0,nullptr,0,"y-less");
+        }
+        break;
+    }
+    case FT_SUB_177BB: {
+        // music slot scan (SDL class): slots [9914]/[9912]/[9910]/[990E]
+        // (si=8/6/4/2), seq store at slot+0xA, sub_176BD start is the
+        // port's early-RETN stub. [304]!=0 mutes the whole scan.
+        {   // muted -> the 77C3 early-out, zero DS writes
+            FtRegs r{}; r.ax = 5;
+            static const FtWr w[] = { {0x304,1} };
+            static const Exp e[] = { {0x34E,0} };
+            CASE(w,1,r,e,0,"muted");
+        }
+        {   // first slot free (0xFFFF) -> the 77D1 claim arm
+            FtRegs r{}; r.ax = 5;
+            static const FtWr w[] = { {0x304,0},{0x302,0},{0x9914,0xFFFF} };
+            CASE(w,3,r,nullptr,0,"free-first");
+        }
+        {   // all four busy -> per-slot 1C7AB status walk, 7823 loop edges
+            FtRegs r{}; r.ax = 5;
+            static const FtWr w[] = { {0x304,0},{0x302,0},
+                                      {0x9914,1},{0x9912,2},
+                                      {0x9910,3},{0x990E,4} };
+            CASE(w,6,r,nullptr,0,"all-busy");
+        }
+        {   // busy head, free second -> both 77CF edges in one walk
+            FtRegs r{}; r.ax = 5;
+            static const FtWr w[] = { {0x304,0},{0x302,0},
+                                      {0x9914,7},{0x9912,0xFFFF} };
+            CASE(w,4,r,nullptr,0,"busy-then-free");
+        }
+        break;
+    }
+    case FT_SUB_100BB: {
+        // main level loop (L class): with the unwind canon ({92FF}=1 arms
+        // the vsync ISR model, {A39C}=0 lets sub_10130 pass) the loop body
+        // runs full frames on the base DS snapshot until the isolator
+        // watchdog fires — an expected escape, covering the whole body.
+        extern uint16_t input_keys;
+        extern std::atomic<uint8_t> sdl_spec_state[256];
+        extern void sdl_spec_snapshot_take();
+        uint16_t keep_keys = input_keys;
+        input_keys = 0;
+        {   static const FtWr w[] = { {0xA39C,0},{0x92FF,1} };
+            CASE(w,2,r0,nullptr,0,"loop",1);
+        }
+        {   // (#60 branch) F5 cheat, level 5: [202]!=0 gate open, F5 held
+            // (state channel — 12352's snapshot inline refreshes the snap
+            // every loop pass): [25C9]=level-1, the 116 JGE-taken arm.
+            sdl_spec_state[0xAB] = 1;         // F5 (0x91AB)
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1},
+                                      {0x202,1},{0x25AD,5} };
+            CASE(w,4,r0,nullptr,0,"f5-lvl5",1);
+            sdl_spec_state[0xAB] = 0;
+            sdl_spec_snapshot_take();
+        }
+        {   // (#60 branch) F5 at level 0: DEC makes -1 -> the 116 JGE
+            // falls through to the ax=0 clamp.
+            sdl_spec_state[0xAB] = 1;
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1},
+                                      {0x202,1},{0x25AD,0} };
+            CASE(w,4,r0,nullptr,0,"f5-lvl0",1);
+            sdl_spec_state[0xAB] = 0;
+            sdl_spec_snapshot_take();
+        }
+        {   // (#60 branch) F6 cheat: the 121/126 arm ([334]|=1, no level
+            // write).
+            sdl_spec_state[0xAC] = 1;         // F6 (0x91AC)
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1},{0x202,1},
+                                      {0x25AD,5} };
+            CASE(w,4,r0,nullptr,0,"f6-cheat",1);
+            sdl_spec_state[0xAC] = 0;
+            sdl_spec_snapshot_take();
+        }
+        {   // (#60 branch) level 37 (0x25): the F7 JGE gate skips the
+            // whole cheat block even with F5 held.
+            sdl_spec_state[0xAB] = 1;
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1},{0x202,1},
+                                      {0x25AD,0x25} };
+            CASE(w,4,r0,nullptr,0,"cheat-lvl37",1);
+            sdl_spec_state[0xAB] = 0;
+            sdl_spec_snapshot_take();
+        }
+        {   // (#60 branch) byte_3168A ([91AA]) armed -> the EF fall-through
+            // into the debugger INT3 trap (expected escape).
+            sdl_spec_state[0xAA] = 1;
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1},{0x91AA,1} };
+            CASE(w,3,r0,nullptr,0,"int3-trap",1);
+            sdl_spec_state[0xAA] = 0;
+            sdl_spec_snapshot_take();
+        }
+        input_keys = keep_keys;
         break;
     }
     default: break;
@@ -13408,6 +13882,17 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10138")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10138, ft_seed(0xD0500016u)); }
     if (all || strstr(env, "sub_1775d")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1775D, ft_seed(0xD0500017u)); }
     if (all || strstr(env, "sub_12352")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12352, ft_seed(0xD0500018u)); }
+    if (all || strstr(env, "sub_15c37")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_15C37, ft_seed(0xD0500019u)); }
+    if (all || strstr(env, "sub_12e2d")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12E2D, ft_seed(0xD050001Au)); }
+    if (all || strstr(env, "sub_1673c")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1673C, ft_seed(0xD050001Bu)); }
+    if (all || strstr(env, "sub_177bb")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_177BB, ft_seed(0xD050001Cu)); }
+    if (all || strstr(env, "sub_100bb")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_100BB, ft_seed(0xD050001Du)); }
+    if (all || strstr(env, "sub_128d1")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_128D1, ft_seed(0xD050001Eu)); }
+    if (all || strstr(env, "sub_16440")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16440, ft_seed(0xD050001Fu)); }
+    if (all || strstr(env, "sub_11080")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_11080, ft_seed(0xD0500020u)); }
+    if (all || strstr(env, "sub_16563")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16563, ft_seed(0xD0500021u)); }
+    if (all || strstr(env, "sub_17a44")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17A44, ft_seed(0xD0500023u)); }
+    if (all || strstr(env, "sub_14207x")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_14207, ft_seed(0xD0500022u)); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, ft_seed(0x15D3C001u)); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, ft_seed(0x15D42001u)); }
     if (!matched) {

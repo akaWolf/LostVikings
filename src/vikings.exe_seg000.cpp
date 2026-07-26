@@ -316,6 +316,12 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 445: return (void*)&sub_1775d;  // music track dispatch
     case 446: return (void*)&sub_12352;  // input read
     case 447: return (void*)&sub_1673c;  // scroll target seek
+    case 448: return (void*)&sub_177bb;  // music slot scan (SDL class)
+    case 449: return (void*)&sub_100bb;  // main level loop (L class)
+    case 450: return (void*)&seg000_28d1_proc;  // INT24 critical-error ISR
+    case 451: return (void*)&seg000_6440_proc;  // INT9 keyboard ISR body
+    case 452: return (void*)&sub_11080;         // level (re)load
+    case 453: return (void*)&seg000_6563_proc;  // spec-key table sweep
     default: return 0;
     }
 }
