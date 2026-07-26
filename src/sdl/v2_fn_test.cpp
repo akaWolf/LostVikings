@@ -6659,9 +6659,10 @@ int ft_selftest_sub_1625d(uint32_t seed) {
     long diff_budget = 24;
     auto run1 = [&](uint16_t flags, uint16_t dy, uint16_t wx, uint16_t y1,
                     int t_at, int t_below, uint8_t slope,
-                    const char* group, FtSynthStats& st) {
+                    const char* group, FtSynthStats& st,
+                    int t_above = -1, uint16_t nslots = 2, int slot1 = 0) {
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-        ft_wr16(g_synth_in, 0x372, 2);
+        ft_wr16(g_synth_in, 0x372, nslots);
         ft_wr16(g_synth_in, (uint16_t)(0 + OBJ_CODE_SEG), 1);
         ft_wr16(g_synth_in, (uint16_t)(0 + OBJ_FLAGS), flags);
         ft_wr16(g_synth_in, (uint16_t)(0 + OBJ_ANIM_DY), dy);
@@ -6678,9 +6679,11 @@ int ft_selftest_sub_1625d(uint32_t seed) {
         ft_wr16(g_synth_in, 0x25DE, 16);
         for (int y = 0; y < 16; y++)
             ft_wr16(g_synth_in, (uint16_t)(y * 2 - LUT_ROW_BASE), (uint16_t)(y * 32));
-        // slope LUT row for tile type t_at
+        // slope LUT row for tile type t_at (and the second probe row's type)
         if (t_at >= 0x30)
             g_synth_in[(uint16_t)((((t_at & 0xF) << 4) + (wx & 0xF)) - 0x7684)] = slope;
+        if (t_above >= 0x30)
+            g_synth_in[(uint16_t)((((t_above & 0xF) << 4) + (wx & 0xF)) - 0x7684)] = slope;
         memset(g_vm_es_in, 0, 0x400);
         auto put=[&](uint16_t px, uint16_t py, int tt){
             if (tt < 0) return;
@@ -6690,6 +6693,21 @@ int ft_selftest_sub_1625d(uint32_t seed) {
             g_vm_es_in[(cy*16+cx2)*2+1]=(uint8_t)(tw>>8);
         };
         put(wx, y1, t_at); put(wx, (uint16_t)(y1+0x10), t_below);
+        put(wx, (uint16_t)(y1 - 0x10), t_above);   // second probe row (#47)
+        if (slot1) {
+            // live platform partner for the 15fbe scan: type matches the
+            // 0x89-arg chain, Y window spans bottom+1, X ranges overlap.
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_CODE_SEG), 1);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_TYPE_ID), 0x0077);
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_Y0), (uint16_t)(y1 - 0x10));
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_Y1), (uint16_t)(y1 + 0x10));
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X0), (uint16_t)(wx - 8));
+            ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X1), (uint16_t)(wx + 8));
+            ft_wr16(g_synth_in, (uint16_t)(0 + OBJ_BBOX_X0), (uint16_t)(wx - 8));
+            ft_wr16(g_synth_in, (uint16_t)(0 + OBJ_BBOX_X1), (uint16_t)(wx + 8));
+            g_synth_in[(uint16_t)(0x89 - LUT_SCAN_FILTER)] = 0x77;
+            g_synth_in[(uint16_t)(0x89 - LUT_SCAN_FILTER + 1)] = 0xFF;
+        }
         ft_fill_tail(g_synth_in);
         uint8_t* zone = (uint8_t*)v2_fntest_m2c_base() + (uint32_t)FT_VM_TESTSEG * 16;
         memcpy(zone, g_vm_es_in, FT_VM_ZONE);
@@ -6707,6 +6725,14 @@ int ft_selftest_sub_1625d(uint32_t seed) {
     run1(0x2000, 0, 0x85, 0x80, 0x00, 0x02, 0, "grid", grid);       // solid below
     run1(0x2000, 0, 0x85, 0x80, 0x31, 0x00, 0x07, "grid", grid);    // slope tile
     run1(0x2000, 0, 0x85, 0x8F, 0x31, 0x00, 0x07, "grid", grid);    // slope, y&F edge
+    // Coverage-directed (#47): feet type 1 + second probe row variants
+    // (0x0C hits the 162c4 snap, 5 falls through to 162e0), a dead slot 1
+    // (626b skip + 638c loop tail), and the 15fbe platform hit (62f1).
+    run1(0x2000, 0, 0x85, 0x80, 0x01, 0x00, 0, "grid", grid, 0x0C);
+    run1(0x2000, 0, 0x85, 0x80, 0x01, 0x00, 0, "grid", grid, 0x05);
+    run1(0x2000, 0, 0x85, 0x80, 0x00, 0x00, 0, "grid", grid, -1, 4, 0);
+    run1(0x2000, 0, 0x85, 0x80, 0x02, 0x00, 0, "grid", grid, -1, 4, 1);
+    run1(0x2000, 0, 0x85, 0x80, 0x01, 0x00, 0x07, "grid", grid, 0x31);  // slope on probe 2 (162d3)
     FtRng rng(seed);
     for (int i = 0; i < 4000; i++)
         run1((uint16_t)(rng.next() & 1 ? 0x2000 : 0), (uint16_t)(rng.next() & 1 ? 0 : 0x8000),
@@ -9055,6 +9081,23 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         uint16_t t = FT_VM_PC + 0x40;
         uint8_t c[] = {op, 0x01, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
         A(c, 5, O, "grid");
+        // Coverage-directed (#47): op85 is this wave's RNG-flavored member
+        // (12312 + SUB dx,ax + JO/JS). [3CC]!=0 makes 12312 read ds:[352]:
+        // 0x0100 -> small positive output (acc 0x8000 overflows down, SF=0);
+        // 0x0010 -> byteswap 0x1000, RCL3 = 0x8000.. negative (acc 0x7FFF
+        // overflows up, SF=1) — both sides of the JS landing.
+        if (id == FT_SUB_149F3) {
+            static const FtWr wj1[] = { {0x008A, 0x8000}, {0x0352, 0x0100},
+                                        {0x03CC, 0x0001} };
+            A(c, 5, O, "grid", wj1, 3);
+            static const FtWr wj2[] = { {0x008A, 0x7FFF}, {0x0352, 0x0010},
+                                        {0x03CC, 0x0001} };
+            A(c, 5, O, "grid", wj2, 3);
+            // acc 0 - small positive: SF=1 without OF -> the 4a00 fall-through
+            static const FtWr wj3[] = { {0x008A, 0x0000}, {0x0352, 0x0100},
+                                        {0x03CC, 0x0001} };
+            A(c, 5, O, "grid", wj3, 3);
+        }
         fuzz_op = op; fuzz_alen = 3; break;
     }
     // ---- wave 9: bittest cores + conditional kill forms + compare jumps ----
@@ -9191,6 +9234,18 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         if (id == FT_SUB_15268 || id == FT_SUB_1529A || id == FT_SUB_152B3) {
             static const FtWr winact[] = { {0x16CB, 0x8000} };
             A(c, 5, O, "grid", winact, 1);
+        }
+        // Coverage-directed (#47): the state-0 collision-bit escape of the
+        // vel-scan family (155d6/156c0 and the 15788/157eb/1584e wrappers):
+        // [390]==0 + LUT[38E] bit set in [obj+13F5] -> (16243 probe) -> STC
+        // -> the ADD [38E],2 + JMP 142c1 escape tails. The frame's jump
+        // word t is a valid yield target for the 142c1 stream jump.
+        if (id == FT_SUB_1559C || id == FT_SUB_155C0 || id == FT_SUB_15686 ||
+            id == FT_SUB_156AA || id == FT_SUB_15772 || id == FT_SUB_157D5 ||
+            id == FT_SUB_15838) {
+            static const FtWr wesc[] = { {0x0390, 0x0000}, {0x038E, 0x0004},
+                                         {0x93D0, 0x0004}, {0x13FB, 0xFFFF} };
+            A(c, 5, O, "grid", wesc, 4);
         }
         // Coverage-directed (#47): opCC's second dispatch (530E, off_30c92)
         // needs the object inside BOTH camera windows: [44]+0x1F < X <=
