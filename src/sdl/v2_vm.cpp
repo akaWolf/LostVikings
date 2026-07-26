@@ -19720,6 +19720,21 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // intermediate phases). Both sides read same value at SFX fire moment →
     // deterministic handle hash with frame entropy works correctly.
     v2_dbg_pre_vm_iter++;
+    // Phase map for scenario authoring (#47): V2_PHASE_LOG=1 prints the
+    // frame counter + the phase-defining DS words every 50 frames, so a
+    // synthetic .inp can target exact game phases instead of guessing.
+    {
+        static int phase_log = -1;
+        if (phase_log < 0) { const char* e = getenv("V2_PHASE_LOG"); phase_log = (e && e[0] == '1') ? 1 : 0; }
+        if (phase_log && (v2_dbg_pre_vm_iter % 50) == 0 && v2_vm_shadow_ds) {
+            uint8_t* s_ = v2_vm_shadow_ds;
+            fprintf(stderr,
+                "V2-PHASE: frame=%d 25CF=%02X 25BA=%02X 3CC=%04X 25C9=%04X 3B8=%04X 447=%04X\n",
+                v2_dbg_pre_vm_iter, s_[0x25CF], s_[0x25BA],
+                *(uint16_t*)(s_ + 0x3CC), *(uint16_t*)(s_ + 0x25C9),
+                *(uint16_t*)(s_ + 0x3B8), *(uint16_t*)(s_ + 0x447));
+        }
+    }
     v2_audit_reset_fire_counters();
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
     // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.

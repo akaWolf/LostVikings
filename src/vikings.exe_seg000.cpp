@@ -291,6 +291,19 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 420: return (void*)&sub_105cb;  // pw exit check (arrows/Enter/ESC/Y/N, CF)
     case 421: return (void*)&sub_111b1;  // template+level descriptor loader (di=level)
     case 422: return (void*)&sub_11439;  // render gate + 16DED + page-flip tail
+    case 423: return (void*)&sub_12ef8;  // joystick poll (IN 0x201 model)
+    case 424: return (void*)&sub_1292f;  // INT24 vector restore (INT21/25)
+    case 425: return (void*)&sub_12948;  // DOS startup: SETBLOCK + vectors + time
+    case 426: return (void*)&sub_12989;  // environment registration / detect
+    case 427: return (void*)&sub_128a9;  // INT21 wrapper (audio-tick defer)
+    case 428: return (void*)&sub_10d96;  // DosMemAlloc bytes->paras head
+    case 429: return (void*)&sub_10d9f;  // DosMemAlloc (INT21/48) + fatal arm
+    case 430: return (void*)&sub_17512;  // AIL driver-table scan
+    case 431: return (void*)&sub_16528;  // INT9 vector save/set
+    case 432: return (void*)&sub_16546;  // INT9 vector restore
+    case 433: return (void*)&sub_1686f;  // video-mode restore
+    case 434: return (void*)&sub_167ff;  // video-mode save
+    case 435: return (void*)&sub_17912;  // AIL sequencer stop pair
     default: return 0;
     }
 }

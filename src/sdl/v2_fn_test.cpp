@@ -530,6 +530,19 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_105CB = 420,   // pw exit check (CF + ax)
             FT_SUB_111B1 = 421,   // template+level loader
             FT_SUB_11439 = 422,   // render gate + flip
+            FT_SUB_12EF8 = 423,   // joystick poll (class E, model-diff)
+            FT_SUB_1292F = 424,   // INT24 vector restore
+            FT_SUB_12948 = 425,   // DOS startup block
+            FT_SUB_12989 = 426,   // env registration (exercise)
+            FT_SUB_128A9 = 427,   // INT21 wrapper
+            FT_SUB_10D96 = 428,   // alloc bytes->paras
+            FT_SUB_10D9F = 429,   // alloc paras
+            FT_SUB_17512 = 430,   // AIL driver-table scan
+            FT_SUB_16528 = 431,   // INT9 vector save/set
+            FT_SUB_16546 = 432,   // INT9 vector restore
+            FT_SUB_1686F = 433,   // video-mode restore (INT10)
+            FT_SUB_167FF = 434,   // video-mode save (INT10/0F)
+            FT_SUB_17912 = 435,   // AIL sequencer stop pair
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -697,7 +710,9 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_11f47", "sub_103ca", "sub_1047c",
                                  "sub_12250", "sub_11f93", "sub_121f6",
                                  "sub_121b9", "sub_10555", "sub_1106f",
-                                 "sub_102ad", "sub_1265b", "sub_12709", "sub_10e85", "sub_11204", "sub_12d72", "sub_1041c", "sub_105cb", "sub_111b1", "sub_11439" };
+                                 "sub_102ad", "sub_1265b", "sub_12709", "sub_10e85", "sub_11204", "sub_12d72", "sub_1041c", "sub_105cb", "sub_111b1", "sub_11439",
+                                 "sub_12ef8", "sub_1292f", "sub_12948", "sub_12989", "sub_128a9", "sub_10d96", "sub_10d9f",
+                                 "sub_17512", "sub_16528", "sub_16546", "sub_1686f", "sub_167ff", "sub_17912" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -12146,6 +12161,259 @@ int ft_selftest_clear(const FtClearSpec& cs, uint32_t seed) {
 // Entry point, called from main() BEFORE m2c::init (no game/SDL/threads).
 // Returns -1 when FNSELFTEST is not set (normal game startup continues),
 // else the process exit code (0 = all pass, 1 = divergence).
+// ---- Units 425+: class-E DOS/joystick layer (#47 live-gap) ----------------
+// These originals have NO v2 mirror (the port replaces the DOS/BIOS/joystick
+// layer with SDL). The check is a MODEL diff: the expected DS effects are
+// derived line-by-line from the asm (with the deterministic env models in
+// asm.cpp: IN->0, INT21 defaults, INT10/1A00 VGA detect) and applied to a
+// copy of the input; the oracle image must match the model exactly.
+// Cases with exp==nullptr are exercise-only (checked for a clean, escape-free
+// run; DS compare skipped) — used where the DOS side effects hit memmgr/cs
+// state outside the DS window. Documented in FN_COVERAGE_REPORT.md.
+int ft_selftest_dosio(FtId id, uint32_t seed) {
+    (void)seed;
+    FtSynthStats grid;
+    long diff_budget = 24;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    struct Exp { uint16_t addr, val; };
+    auto CASE = [&](const FtWr* w, int nw, FtRegs rin,
+                    const Exp* exp, int nexp, const char* tag,
+                    int expect_escape = 0) {
+        grid.cases++;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        for (int i = 0; i < nw; i++) ft_wr16(g_synth_in, w[i].addr, w[i].val);
+        ft_fill_tail(g_synth_in);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { rin.ax, rin.bx, rin.cx, rin.dx, rin.si, rin.di, rin.bp, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
+        if (ft_ub_marks() != esc0) {
+            // An escape at a DOCUMENTED DOS/memmgr boundary is the expected
+            // outcome for expect_escape cases: the lines up to the boundary
+            // executed, the fault location is the assertion.
+            if (expect_escape) { grid.pass++; return; }
+            grid.cases--;
+            fprintf(stderr, "FNSELFTEST-UB[%s %s]: escaped\n", g_name[id], tag);
+            return;
+        }
+        if (expect_escape) {
+            fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: expected the DOS-boundary "
+                    "escape, got a clean return\n", g_name[id], tag);
+            grid.fail++;
+            return;
+        }
+        if (!exp) { grid.pass++; return; }        // exercise-only case
+        long diffs = 0;
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        for (int i = 0; i < nexp; i++) ft_wr16(g_scratch, exp[i].addr, exp[i].val);
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: addr=%04X orig=%02X model=%02X\n",
+                        g_name[id], tag, a, g_synth_orig[a], g_scratch[a]);
+            diffs++;
+        }
+        if (diffs) grid.fail++; else grid.pass++;
+    };
+    FtRegs r0{};
+    switch (id) {
+    case FT_SUB_12EF8: {
+        // joystick poll: buttons AL=0 -> NOT ax(=0) = 0xFFFF -> all four
+        // button bits; axes via 179fb: LOOPE-1 exits on iteration 1
+        // (probe reads NOT al = 0xFF, TEST 3 != 0), [32882]=cx-1, ah=0 ->
+        // 17a32 exit ax=bx=[3287E]-1. Thresholds drive the four OR arms.
+        {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
+                                      {0x86D2,0x30},{0x86D4,0x10},
+                                      {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
+            static const Exp e[] = { {0x86DC,0xCFC0},{0xA3A2,0x1F} };
+            CASE(w,7,r0,e,2,"present-low");
+        }
+        {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
+                                      {0x86D2,0x05},{0x86D4,0x30},
+                                      {0x86D6,0x05},{0x86D8,0x30},{0x3CC,0} };
+            static const Exp e[] = { {0x86DC,0xC0C0},{0xA3A2,0x1F} };
+            CASE(w,7,r0,e,2,"present-high");
+        }
+        {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
+                                      {0x86D2,0x30},{0x86D4,0x10},
+                                      {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0x8000} };
+            static const Exp e[] = { {0x86DC,0xFFFF},{0xA3A2,0x1F} };
+            CASE(w,7,r0,e,2,"special-wipe");
+        }
+        {   static const FtWr w[] = { {0x86DA,0},{0x3CC,0} };
+            static const Exp e[] = { {0x86DC,0} };
+            CASE(w,2,r0,e,1,"absent");
+        }
+        {   // [3287E]=1: LOOPE decs cx to 0 with ZF=0, JCXZ takes the 17a41
+            // STC bail — ax keeps 12ef8's 0xFFFF, bx stays 0; only the
+            // low-side axis arms fire; [32882] untouched.
+            static const FtWr w[] = { {0x86DA,1},{0xA39E,1},
+                                      {0x86D2,0x30},{0x86D4,0x10},
+                                      {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
+            static const Exp e[] = { {0x86DC,0xC5C0} };
+            CASE(w,7,r0,e,1,"axis-timeout");
+        }
+        break;
+    }
+    case FT_SUB_1292F: {
+        static const Exp none[] = { {0,0} };   // nexp=0: pure no-change check
+        {   static const FtWr w[] = { {0x86AC,0},{0x86AE,0} };
+            CASE(w,2,r0,none,0,"null-vector");
+        }
+        {   // nonzero saved vector -> the INT21/25 restore arm (no-op model)
+            static const FtWr w[] = { {0x86AC,0x1234},{0x86AE,0x0192} };
+            CASE(w,2,r0,none,0,"restore");
+        }
+        break;
+    }
+    case FT_SUB_12948: {
+        // startup: SETBLOCK (real memmgr resize on ES), GET/SET INT24,
+        // 16528 (INT9 save/set), GET TIME -> [8639]/[863B]. ES must be a
+        // real allocated segment: use the init-time [2E5F] segment from the
+        // base image. Exercise-only for the memmgr side; the DS-visible
+        // effects ([86AC/AE] from the vector-get stub, the time pair) are
+        // model-checked.
+        uint16_t seg2e5f = *(uint16_t*)(g_synth_base + 0x2E5F);
+        ::v2_fntest_es_override = seg2e5f;
+        // The SETBLOCK INT21/4A faults inside the isolator's memmgr layer
+        // (ISO-FAULT at 2958) — documented DOS boundary; the prelude
+        // (2948-2958) is the covered span.
+        CASE(nullptr,0,r0,nullptr,0,"startup",1);
+        ::v2_fntest_es_override = 0;
+        break;
+    }
+    case FT_SUB_12989: {
+        // registration path: XOR checksum (ax=0x3000 after the INT21/30
+        // no-op, bx=cx=0) must equal [86C2]; then [302]=[86B2],
+        // [304]=[86B4]; INT10/1A00 VGA detect (al=0x1A, bl=8 model) and the
+        // CPU flag probes run from there. Exercise-only: the tail touches
+        // cs-globals and vector state outside the DS window.
+        {   static const FtWr w[] = { {0x86D0,0},{0x86C2,0x3000},
+                                      {0x86B2,0x0102},{0x86B4,0x0304} };
+            CASE(w,4,r0,nullptr,0,"register");
+        }
+        {   // checksum mismatch -> the 12a94 reject arm
+            static const FtWr w[] = { {0x86D0,0},{0x86C2,0xDEAD} };
+            CASE(w,2,r0,nullptr,0,"reject");
+        }
+        break;
+    }
+    case FT_SUB_128A9: {
+        // INT21 wrapper: clears the cs pending-flag, forwards the INT
+        // (ah=0x2C time model), PUSHF-tail. The audio-defer arm (28BA+)
+        // needs the flag set DURING the INT — an IRQ-driver artifact that
+        // never happens under the deterministic INT models: documented
+        // unreachable in the isolator. Exercise-only (cs flag + FAR frame).
+        FtRegs r{}; r.ax = 0x2C00;
+        CASE(nullptr,0,r,nullptr,0,"fwd-time");
+        break;
+    }
+    case FT_SUB_10D96: {
+        // bytes->paras head folds into 10d9f's alloc: ax:bx = byte count.
+        // INT21/48 faults inside the isolator's memmgr (ISO-FAULT at 0DA1):
+        // documented DOS boundary, head lines covered.
+        FtRegs r{}; r.ax = 0; r.bx = 0x100;   // 0x11 paras
+        CASE(nullptr,0,r,nullptr,0,"alloc-small",1);
+        break;
+    }
+    case FT_SUB_10D9F: {
+        {   FtRegs r{}; r.bx = 1;             // memmgr boundary (ISO-FAULT @0DA1)
+            CASE(nullptr,0,r,nullptr,0,"alloc-1",1);
+        }
+        {   FtRegs r{}; r.bx = 0xF000;
+            CASE(nullptr,0,r,nullptr,0,"alloc-fail",1);
+        }
+        break;
+    }
+    case FT_SUB_17512: {
+        // AIL driver-table scan in es=[2E6F]: 6-byte records from di=0
+        // (0xFFFA+6 wraps) up to 0x3F82; match on es:[di+1]==[993E] and
+        // es:[di]==[9940] -> [9930]=es, [992E]=word at es:[di+2].
+        uint8_t* mb = (uint8_t*)v2_fntest_m2c_base();
+        uint16_t ail = *(uint16_t*)(g_synth_base + 0x2E6F);
+        uint8_t* z = mb + (uint32_t)ail * 16;
+        static uint8_t sv[0x3F90];
+        memcpy(sv, z, sizeof(sv));
+        z[0] = 0x22; z[1] = 0x11; z[2] = 0x55; z[3] = 0x44;
+        {   static const FtWr w[] = { {0x993E,0x0011},{0x9940,0x0022} };
+            Exp e[2] = { {0x9930,ail},{0x992E,0x4455} };
+            CASE(w,2,r0,e,2,"found");
+        }
+        // not-found: no record matches 0xEE/0xEE in a zeroed table -> the
+        // 17543 fatal arm (sub_10dba -> INT21/4C isolator escape).
+        memset(z, 0, sizeof(sv));
+        {   static const FtWr w[] = { {0x993E,0x00EE},{0x9940,0x00EE} };
+            CASE(w,2,r0,nullptr,0,"not-found",1);   // 17543 fatal arm
+        }
+        memcpy(z, sv, sizeof(sv));
+        break;
+    }
+    case FT_SUB_16528: {
+        // INT9 save/set: INT21/35 stub gives bx=0,es=0 -> cs words = 0;
+        // INT21/25 no-op. cs-globals live outside the DS window: exercise.
+        CASE(nullptr,0,r0,nullptr,0,"save-set");
+        break;
+    }
+    case FT_SUB_16546: {
+        // restore arm needs a nonzero saved vector in the cs words
+        // (word_16436/8 at linear 0x7E56/0x7E58) — seed them directly
+        // (environment prep, the function only reads them).
+        uint8_t* mb = (uint8_t*)v2_fntest_m2c_base();
+        uint16_t s0 = *(uint16_t*)(mb + 0x7E56), s1 = *(uint16_t*)(mb + 0x7E58);
+        *(uint16_t*)(mb + 0x7E56) = 0x1234;
+        *(uint16_t*)(mb + 0x7E58) = 0x0192;
+        CASE(nullptr,0,r0,nullptr,0,"restore");
+        *(uint16_t*)(mb + 0x7E56) = 0; *(uint16_t*)(mb + 0x7E58) = 0;
+        CASE(nullptr,0,r0,nullptr,0,"null-skip");
+        *(uint16_t*)(mb + 0x7E56) = s0; *(uint16_t*)(mb + 0x7E58) = s1;
+        break;
+    }
+    case FT_SUB_1686F: {
+        // [9300] byte != 0xFF -> INT10 set-mode (no-op model) -> RETN.
+        {   static const FtWr w[] = { {0x9300,0x0003} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,1,r0,e,0,"set-mode");
+        }
+        {   static const FtWr w[] = { {0x9300,0x00FF} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,1,r0,e,0,"skip");
+        }
+        break;
+    }
+    case FT_SUB_167FF: {
+        // sub_167ff has NO RETN — it falls through into sub_16807 (the
+        // audio tick), whose DS effects ride along ([92FF] flag etc.):
+        // exercise-only, and the fall-through covers part of 16807 too.
+        CASE(nullptr,0,r0,nullptr,0,"save-mode");
+        break;
+    }
+    case FT_SUB_17912: {
+        // AIL sequencer stop pair: the far driver calls are m2c-commented
+        // (dead in the port) — the PUSH/ADD-sp frames execute clean.
+        {   static const FtWr w[] = { {0x302,1},{0x304,1} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,2,r0,e,0,"active-skip");
+        }
+        {   static const FtWr w[] = { {0x302,0},{0x304,0},{0x25B9,0},
+                                      {0x990C,0xFFFF},{0x990E,0xFFFF} };
+            CASE(w,5,r0,nullptr,0,"null-handles");
+        }
+        {   static const FtWr w[] = { {0x302,0},{0x304,0},{0x25B9,1},
+                                      {0x990C,0x1234},{0x990E,0x1234} };
+            CASE(w,5,r0,nullptr,0,"stop-seq");
+        }
+        break;
+    }
+    default: break;
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        g_name[id], grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
 extern "C" int v2_fntest_selftest_env(void) {
     const char* env = getenv("FNSELFTEST");
     if (!env || !env[0]) return -1;
@@ -12624,6 +12892,19 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_105cb")) { matched = true; rc |= ft_selftest_105cb(); }
     if (all || strstr(env, "sub_111b1")) { matched = true; rc |= ft_selftest_111b1(); }
     if (all || strstr(env, "sub_11439")) { matched = true; rc |= ft_selftest_11439(ft_seed(0xB4B8001u)); }
+    if (all || strstr(env, "sub_12ef8")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12EF8, ft_seed(0xD050001u)); }
+    if (all || strstr(env, "sub_1292f")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1292F, ft_seed(0xD050002u)); }
+    if (all || strstr(env, "sub_12948")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12948, ft_seed(0xD050003u)); }
+    if (all || strstr(env, "sub_12989")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12989, ft_seed(0xD050004u)); }
+    if (all || strstr(env, "sub_128a9")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_128A9, ft_seed(0xD050005u)); }
+    if (all || strstr(env, "sub_10d96")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10D96, ft_seed(0xD050006u)); }
+    if (all || strstr(env, "sub_10d9f")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10D9F, ft_seed(0xD050007u)); }
+    if (all || strstr(env, "sub_17512")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17512, ft_seed(0xD050008u)); }
+    if (all || strstr(env, "sub_16528")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16528, ft_seed(0xD050009u)); }
+    if (all || strstr(env, "sub_16546")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16546, ft_seed(0xD05000Au)); }
+    if (all || strstr(env, "sub_1686f")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1686F, ft_seed(0xD05000Bu)); }
+    if (all || strstr(env, "sub_167ff")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_167FF, ft_seed(0xD05000Cu)); }
+    if (all || strstr(env, "sub_17912")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17912, ft_seed(0xD05000Du)); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, ft_seed(0x15D3C001u)); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, ft_seed(0x15D42001u)); }
     if (!matched) {

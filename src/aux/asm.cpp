@@ -301,6 +301,14 @@ X86_REGREF
 
 
 	switch(a) {
+	case 0x10:
+		// BIOS VIDEO. ah=0x1A al=0: GET DISPLAY COMBINATION — the game's VGA
+		// detect (sub_12989 registration path). Real VGA BIOS echoes al=0x1A
+		// and returns bl=8 (VGA color). Deterministic environment model in
+		// the same spirit as the fixed INT21/2C time; other INT10 functions
+		// stay no-ops (previous behavior via the default arm).
+		if (ah == 0x1A && al == 0x00) { al = 0x1A; bl = 0x08; }
+		return;
 	case 0x21:
 	{
 		switch(ah) {
