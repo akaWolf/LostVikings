@@ -9745,6 +9745,17 @@ struct V2VM {
     // the command buffer word [bx+0x1DAB] (the orig continues through the
     // wrapper writes with whatever di held at escape time).
     uint16_t di_track = 0;
+    // DX clobber model for the ch4 getter (sub_12312 Path1, divergence №40):
+    // MOV edx,15A4E35h (0x231E) + MUL edx (0x2324) leave EDX = high32 of
+    // seed*0x15A4E35 — the real 386 destroys DX inside the RNG fetch. Opcode
+    // bodies that keep a value in DX across a later dispatch (op27 X @0x4F11,
+    // op29 Y @0x5025) must replace it with ch4_mul_dx when the LAST dispatch
+    // took the ch4 Path1 route. Path2 (LFSR, [0x42C]!=0) clobbers only AX.
+    // (EAX's high half also survives as low16(new_seed) after ROR — no 16-bit
+    // VM path ever reads it, so it is not modelled.)
+    // The dispatcher clears the flag before every dispatch.
+    bool     ch4_mul_clobber = false;
+    uint16_t ch4_mul_dx = 0;
 
     // Bytecode read helpers
     uint8_t  read_u8()  {
@@ -13473,6 +13484,10 @@ static void v2_vm_op_29(V2VM& vm) {
     uint8_t mode2 = (uint8_t)(word2 & 0xFF);
     uint16_t tile_val = v2_vm_dispatch_30C98(vm, mode2, 0x502B, &ch_intr);
     if (ch_intr) return;   // clean (no live pushes at the 3rd site)
+    // №40: Y lives in DX (MOV dx,ax @0x5025) across the tile fetch; a ch4
+    // Path1 fetch destroys DX via MUL edx, and MOV di,dx @0x5030 then loads
+    // the multiply's high half as the Y coordinate — replicate that.
+    if (vm.ch4_mul_clobber) di = vm.ch4_mul_dx;
 
     v2_vm_tile_write_141e0(vm, si, di, tile_val);
     v2_vm_tile_dirty_13fc2(vm, si, di, tile_val);   // sets si/di_track (di*4, w3)
@@ -14817,6 +14832,10 @@ static void v2_vm_op_27(V2VM& vm) {
     if (ch_intr) { v2_vm_ch67_ub_guard(vm, "op27/X@0x4F0E: RETN onto PUSHed mode word"); return; }
     uint16_t di_y = v2_vm_dispatch_30C98(vm, mode1 >> 3, 0x4F14, &ch_intr);  // di = ax (Y coord)
     if (ch_intr) return;   // clean
+    // №40: X lives in DX (MOV dx,ax @0x4F11) across the Y fetch; a ch4 Path1
+    // fetch destroys DX via MUL edx, and MOV si,dx @0x4F19 then feeds the
+    // multiply's high half to the tile lookup — replicate that.
+    if (vm.ch4_mul_clobber) si_x = vm.ch4_mul_dx;
     // sub_141a7: tile type lookup
     uint16_t tile_word = v2_vm_tile_read_141ba(vm, si_x, di_y);
     // AND 0xFC00; XCHG ah,al; SHR 2
@@ -15761,7 +15780,12 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             if (v2_fntest_vm_soft) {
                 fprintf(stderr, "V2-ANIM-SOFT: cmd=%02X handler=%04X bx=%04X\n",
                         cmd, handler, anim_bx);
-                v2_fntest_vm_soft = 2; return false;   // fn-test: soft abort
+                // fn-test: a cmd past the 27-entry anim table means the oracle
+                // dispatched through garbage beyond off_30BC6 — a register-
+                // history/model boundary like the ch6/7 escapes, not a v2
+                // divergence. Mark 3 (GUARD skip); real replays still FATAL.
+                v2_fntest_vm_soft = (cmd > 0x1A) ? 3 : 2;
+                return false;
             }
             fprintf(stderr, "FATAL: unimplemented anim cmd 0x%02X (handler=0x%04X) obj=%d pc=%04X\n",
                 cmd, handler, vm.obj, vm.pc);
@@ -16118,6 +16142,10 @@ static uint16_t v2_vm_read_random(V2VM& vm) {
     }
     // Path 1: LCG — eax = eax * 0x15A4E35 + 1; return ROR(eax, 16)
     uint32_t seed = *(uint32_t*)(vm.shadow + DS_RNG_SEED); // dword_30B19
+    // MUL edx (0x2324) clobbers EDX = high32(seed*0x15A4E35) — №40 model,
+    // consumed by opcode bodies that carry a value in DX across this fetch.
+    vm.ch4_mul_dx = (uint16_t)(((uint64_t)seed * 0x15A4E35ull) >> 32);
+    vm.ch4_mul_clobber = true;
     seed = seed * 0x15A4E35 + 1;
     *(uint32_t*)(vm.shadow + DS_RNG_SEED) = seed;
     uint32_t rot = (seed >> 16) | (seed << 16); // ROR eax, 16
@@ -16148,6 +16176,7 @@ uint64_t v2_ch30c98_count[8] = {0};   // B5-style reachability: getter channels
 static uint16_t v2_vm_dispatch_30C98(V2VM& vm, uint8_t mode,
                                      uint16_t site_ret_ip, bool* out_interrupt) {
     v2_ch30c98_count[mode & 7]++;
+    vm.ch4_mul_clobber = false;   // №40: flag describes THIS dispatch only
     switch (mode & 7) {
     case 0: return v2_vm_read_literal(vm);           // sub_1547e: 2 bytes
     case 1: return v2_vm_read_indexed_field(vm);     // sub_15485: 1 byte
@@ -16210,9 +16239,10 @@ static bool v2_vm_ch_dispatch_1250b(V2VM& vm, uint8_t& out_mode) {
     uint16_t seg001_off = result * 2;
     uint16_t text_ptr = *(uint16_t*)(v2_m2c_base + 0x9480 + seg001_off);
     vm.ds_write(DS_TEXT_IDX, text_ptr);
-    { extern int v2_dbg_pre_vm_iter;
+    { static int _t = -1; if (_t < 0) _t = getenv("V2_CH_TRACE") ? 1 : 0;
+      if (_t) { extern int v2_dbg_pre_vm_iter;
       fprintf(stderr, "V2-2850A-VMOP[f%d]: mode=%02X dispatch_result=%04X seg001_off=%04X text_ptr=%04X\n",
-              v2_dbg_pre_vm_iter, (uint8_t)out_mode, result, seg001_off, text_ptr); }
+              v2_dbg_pre_vm_iter, (uint8_t)out_mode, result, seg001_off, text_ptr); } }
     return false;
 }
 

@@ -8101,17 +8101,6 @@ cs=0x1a2;eip=0x003059; 	X(MOV(*(dw*)(raddr(ds,0x7C)), si));	// 6409 mov     ds:7
 cs=0x1a2;eip=0x00305d; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x1AAD))));	// 6410 mov     ax, [di+1AADh] ;~ 01A2:305D
 cs=0x1a2;eip=0x003061; 	X(MOV(*(dw*)(raddr(ds,0x80)), ax));	// 6411 mov     ds:80h, ax ;~ 01A2:3061
 cs=0x1a2;eip=0x003064; 	X(MOV(*(dw*)(raddr(ds,0x38C)), 0));	// 6412 mov     word ptr ds:38Ch, 0 ;~ 01A2:3064
-	// Debug: log when original runs anim frame with suspicious bx for obj 0
-	{ static bool orig_anim_dbg = false;
-	  if (!orig_anim_dbg && *(dw*)(raddr(ds,0x42)) == 0) {
-	    uint8_t first = *(uint8_t*)(raddr(es, bx));
-	    if (first > 0x1A) {
-	      orig_anim_dbg = true;
-	      printf("ORIG-ANIM: obj=0 bx=0x%04X first_byte=0x%02X es_seg=0x%04X timer(0x78)=0x%04X\n",
-	             (uint16_t)bx, first, (uint16_t)es, *(dw*)(raddr(ds,0x78)));
-	    }
-	  }
-	}
 cs=0x1a2;eip=0x00306a; 	J(CALL(sub_13084,0));	// 6413 call    sub_13084 ;~ 01A2:306A
 cs=0x1a2;eip=0x00306d; 	T(MOV(di, *(dw*)(raddr(ds,0x42))));	// 6414 mov     di, ds:42h ;~ 01A2:306D
 cs=0x1a2;eip=0x003071; 	X(MOV(*(dw*)(raddr(ds,di+0x1A0D)), bx));	// 6415 mov     [di+1A0Dh], bx ;~ 01A2:3071
@@ -8763,22 +8752,6 @@ cs=0x1a2;eip=0x0035c8; 	X(MOV(*(dw*)(raddr(ds,di+0x191D)), 0x0FFFF));	// 7142 mo
 cs=0x1a2;eip=0x0035ce; 	J(RETN(0));	// 7143 retn ;~ 01A2:35CE
 sub_135cf:
 	// 7148
-{
-  // CUR-135CF-ENTRY: log Erik's 0x141D + flags at ENTRY (before early-return).
-  // Detects when 0x141D becomes != 0xFFFF (causes early-return → no vel update).
-  if (di == 0 && *(dw*)(raddr(ds, 0x25AD)) == 0x002B) {
-    static int _curen = 0; _curen++;
-    static uint16_t prev_141D = 0xFFFF, prev_flags = 0;
-    uint16_t cur_141D = *(dw*)(raddr(ds, 0x141D));
-    uint16_t cur_flags = *(dw*)(raddr(ds, 0x1585));
-    if (_curen <= 3000 && (cur_141D != prev_141D || cur_flags != prev_flags)) {
-      fprintf(stderr,
-        "CUR-135CF-ENTRY[%d]: 141D %04X→%04X flags %04X→%04X\n",
-        _curen, prev_141D, cur_141D, prev_flags, cur_flags);
-      prev_141D = cur_141D; prev_flags = cur_flags;
-    }
-  }
-}
 cs=0x1a2;eip=0x0035cf; 	T(CMP(*(dw*)(raddr(ds,di+0x141D)), 0x0FFFF));	// 7149 cmp     word ptr [di+141Dh], 0FFFFh ;~ 01A2:35CF
 ret_1a2_35d4:
 	// 4970
@@ -9951,14 +9924,6 @@ cs=0x1a2;eip=0x004028; 	X(OR(*(dw*)(raddr(fs,bp+2)), 1));	// 8455 or      word p
 cs=0x1a2;eip=0x00402d; 	T(MOV(cx, *(dw*)(raddr(ds,0x8734))));	// 8456 mov     cx, ds:8734h ;~ 01A2:402D
 cs=0x1a2;eip=0x004031; 	T(MOV(bx, cx));	// 8457 mov     bx, cx ;~ 01A2:4031
 cs=0x1a2;eip=0x004033; 	T(SHL(bx, 1));	// 8458 shl     bx, 1 ;~ 01A2:4033
-	{ extern int v2_orig_post_vm_frame; static int _oc = 0;
-	  if (myDrawInfo_v2 && _oc < 30) { _oc++;
-	    fprintf(stderr, "ORIG-13FC2[f%d obj=%04X]: si_pix=%04X di_pix=%04X | bp=%04X cx=%04X | write[%04X]=%04X\n",
-	      v2_orig_post_vm_frame, *(dw*)(raddr(ds,0x42)),
-	      *(dw*)(raddr(ds,0x6C)), *(dw*)(raddr(ds,0x6E)),
-	      (uint16_t)bp, (uint16_t)cx, (uint16_t)(bx - 0x78CA), (uint16_t)bp);
-	  }
-	}
 cs=0x1a2;eip=0x004035; 	X(MOV(*(dw*)(raddr(ds,bx-0x78CA)), bp));	// 8459 mov     [bx-78CAh], bp ;~ 01A2:4035
 cs=0x1a2;eip=0x004039; 	T(MOV(ax, *(dw*)(raddr(ds,0x6C))));	// 8460 mov     ax, ds:6Ch ;~ 01A2:4039
 cs=0x1a2;eip=0x00403c; 	X(MOV(*(dw*)(raddr(ds,bx-0x78C8)), ax));	// 8461 mov     [bx-78C8h], ax ;~ 01A2:403C
@@ -12420,7 +12385,6 @@ cs=0x1a2;eip=0x004f53; 	X(POP(ax));	// 11583 pop     ax ;~ 01A2:4F53
 cs=0x1a2;eip=0x004f54; 	T(MOV(si, dx));	// 11584 mov     si, dx ;~ 01A2:4F54
 cs=0x1a2;eip=0x004f56; 	J(JMP(loc_154bc));	// 11585 jmp     loc_154BC ;~ 01A2:4F56
 sub_14f59:
-{ static int _c=0; _c++; if(_c<=30) fprintf(stderr,"ORIG-14f59[#%d]: parent=ds:42=%04X bx=%04X 374=%04X 32F=%04X\n", _c, *(dw*)raddr(ds,0x42), bx, *(dw*)raddr(ds,0x374), *(dw*)raddr(ds,0x32F)); }
 	// 11592
 cs=0x1a2;eip=0x004f59; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 11594 mov     ax, es:[bx] ;~ 01A2:4F59
 ret_1a2_4f5c:
@@ -12526,6 +12490,9 @@ cs=0x1a2;eip=0x005025; 	T(MOV(dx, ax));	// 11714 mov     dx, ax ;~ 01A2:5025
 cs=0x1a2;eip=0x005027; 	T(MOV(ax, *(dw*)(raddr(es,bx))));	// 11715 mov     ax, es:[bx] ;~ 01A2:5027
 cs=0x1a2;eip=0x00502a; 	T(INC(bx));	// 11716 inc     bx ;~ 01A2:502A
 cs=0x1a2;eip=0x00502b; 	J(CALL(sub_15473,0));	// 11717 call    sub_15473 ;~ 01A2:502B
+	// №40: the tile fetch above may be ch4 Path1 (sub_12312) whose MUL edx
+	// destroys DX — MOV di,dx below then carries the multiply's high half
+	// as Y. v2 replicates via V2VM::ch4_mul_clobber (v2_vm_op_29).
 cs=0x1a2;eip=0x00502e; 	T(MOV(si, cx));	// 11718 mov     si, cx ;~ 01A2:502E
 cs=0x1a2;eip=0x005030; 	T(MOV(di, dx));	// 11719 mov     di, dx ;~ 01A2:5030
 cs=0x1a2;eip=0x005032; 	J(CALL(sub_141e0,0));	// 11720 call    sub_141E0 ;~ 01A2:5032
@@ -16924,8 +16891,6 @@ sub_177bb:
                        raddr(*(dw*)(raddr(ds,0x2E6D)),0),
                        chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4],
                        ax, handle, false /* not muted - orig plays */);
-   bool _stored = false;
-   int _stored_si = -1;
    if (sdl_handle > 0) {
      // Try slots si=8,6,4,2 for free slot (matches orig sub_177bb scan order).
      // Store deterministic handle so v2 mirrors exactly.
@@ -16945,20 +16910,10 @@ sub_177bb:
        if (_cur == 0xFFFF) {
          *(dw*)(raddr(ds, _si - 0x66F4)) = (dw)sdl_handle;
          *(dw*)(raddr(ds, _si - 0x66EA)) = ax & 0xFF;
-         _stored = true;
-         _stored_si = _si;
          break;
        }
      }
    }
-   fprintf(stderr, "ORIG-SUB-177BB[f%d obj=%04X]: seq=%u handle=%04X stored=%d si=%d "
-           "slots: 8=(h=%04X,s=%04X) 6=(h=%04X,s=%04X) 4=(h=%04X,s=%04X) 2=(h=%04X,s=%04X)\n",
-           v2_dbg_pre_vm_iter, obj, (uint16_t)(ax & 0xFF), (uint16_t)sdl_handle,
-           _stored ? 1 : 0, _stored_si,
-           *(dw*)(raddr(ds, 8 - 0x66F4)), *(dw*)(raddr(ds, 8 - 0x66EA)),
-           *(dw*)(raddr(ds, 6 - 0x66F4)), *(dw*)(raddr(ds, 6 - 0x66EA)),
-           *(dw*)(raddr(ds, 4 - 0x66F4)), *(dw*)(raddr(ds, 4 - 0x66EA)),
-           *(dw*)(raddr(ds, 2 - 0x66F4)), *(dw*)(raddr(ds, 2 - 0x66EA)));
  }
 cs=0x1a2;eip=0x0077b1; 	J(RETN(0));	// 17313 retn ;~ 01A2:77B1
 cs=0x1a2;eip=0x0077bb; 	X(PUSH(es));	// 17331 push    es ;~ 01A2:77BB
