@@ -2258,6 +2258,7 @@ static bool v2_load_exe_ds(); // forward decl
 static void v2_read_input_12352_iter(uint8_t*); // forward decl (definition ~line 18010)
 static void v2_pw_pre_loop(uint8_t*);    // forward decl (definition ~line 18937)
 static void v2_transition_kick_102ad(uint8_t* s);  // fwd (used by the phase at ~7697)
+static void v2_text_print_1265b(uint8_t* s, uint16_t ax, uint16_t si, uint16_t di);
 static bool v2_pw_iter_body(uint8_t*);   // forward decl (definition ~line 19011)
 static void v2_pw_post_loop(uint8_t*);   // forward decl (definition ~line 19100)
 static void v2_page_flip_16775(uint8_t* s);
@@ -12963,6 +12964,7 @@ extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_
     case 10: v2_item_pop_121b9(test_shadow); break;
     case 11: v2_pw_blink_10555(test_shadow); break;
     case 12: v2_transition_kick_102ad(test_shadow); break;
+    case 13: v2_text_print_1265b(test_shadow, si_in & 0xFF, (uint16_t)(si_in >> 8), 0x0F); break;
     }
     if (out_si) *out_si = r;
     v2_vm_acc_base = saved_acc;
@@ -19552,11 +19554,10 @@ void v2_run_animation_vm(uint16_t ds_val) {
                       uint16_t si_t = 0x0D, di_t = 0x0C;
                       v2_text_frame_12388(s, si_t, di_t, (uint8_t)ax_h);
                       v2_text_render_124c5(s, si_t + 1, di_t + 1, bx_t); }
-                    // sub_1265b: display password. ax=5 → sub_12515(5) + loc_124c5
-                    v2_text_lookup_12515(s, 5);
-                    { uint16_t bx_p = *(uint16_t*)(s + DS_TEXT_IDX);
-                      v2_text_dims_12529(s, bx_p);
-                      v2_text_render_124c5(s, 0x10 + 1, 0x0F + 1, bx_p); }
+                    // sub_1265b: display password label. №45: the orig JMP
+                    // loc_124c5 renders at the RAW (0x10, 0x0F) — the +1 pair
+                    // this copy carried belonged to the frame-text pattern.
+                    v2_text_print_1265b(s, 5, 0x10, 0x0F);
                     // sub_1241e × 4: draw password characters from ds:0x310-0x316
                     { uint16_t si_pw = 0x12, di_pw = 0x11;
                       v2_glyph_put_1241e(s, (uint8_t)*(uint16_t*)(s + DS_PW_CHAR0), si_pw, di_pw);
@@ -21276,6 +21277,15 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 //   Mode 0 (word_28927 == 0): item selection / category navigation.
 //   Mode 1 (word_28927 == 1): item carry — viking switch + slot placement.
 // Returns true if loop should exit (orig STC = exit pause loop).
+// sub_1265b: print text ax at (si, di) — sub_12515(ax) + bx=[2850A] +
+// JMP loc_124c5 with the RAW si/di (the +1 offsets belong to the 124a9/
+// 12709 frame-then-text callers, NOT to this helper — №45).
+static void v2_text_print_1265b(uint8_t* s, uint16_t ax, uint16_t si, uint16_t di) {
+    v2_text_lookup_12515(s, ax);
+    uint16_t bx = *(uint16_t*)(s + DS_TEXT_IDX);
+    v2_text_render_124c5(s, si, di, bx);
+}
+
 // sub_102ad: level-transition trigger — [3CC]<0 && [3B6]&0x1000: mode 0x8000
 // → per-level dispatch (0x2B: [3B6]==0xFFFF-gate, 0x2C, 0x2D, 0x2E, else
 // table walk at [288B4]/[si+DS_TRANSITION_LEVEL_TBL]); 0x8002 → reload
@@ -22066,9 +22076,7 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
 
     // Second text call: sub_1047c eip 0x495-0x49E / sub_103ca eip 0x03E3-0x03EC.
     // Both use ax=5, si=0x10, di=0xF via sub_1265b.
-    v2_text_lookup_12515(shadow, 5);
-    { uint16_t bx_p = *(uint16_t*)(shadow + DS_TEXT_IDX);
-      v2_text_render_124c5(shadow, 0x10, 0x0F, bx_p); }
+    v2_text_print_1265b(shadow, 5, 0x10, 0x0F);
 
     // F10/quit path only: 4× sub_1241e for saved password chars (sub_103ca
     // eip 0x03EF-0x040A). ESC path doesn't render password chars.

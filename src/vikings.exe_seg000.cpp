@@ -279,6 +279,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 411: return (void*)&sub_10555;  // prompt blink tick (flip tail, no wait)
     case 412: return (void*)&sub_1106f;  // DAC blank (768 zero writes)
     case 413: return (void*)&sub_102ad;  // level transition trigger
+    case 414: return (void*)&sub_1265b;  // text print at raw si/di (12515 + JMP 124c5)
     default: return 0;
     }
 }

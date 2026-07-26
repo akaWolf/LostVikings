@@ -511,6 +511,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_10555 = 411,   // prompt blink tick
             FT_SUB_1106F = 412,   // DAC blank
             FT_SUB_102AD = 413,   // level transition trigger
+            FT_SUB_1265B = 414,   // text print (12515 + JMP 124c5)
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -678,7 +679,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_11f47", "sub_103ca", "sub_1047c",
                                  "sub_12250", "sub_11f93", "sub_121f6",
                                  "sub_121b9", "sub_10555", "sub_1106f",
-                                 "sub_102ad" };
+                                 "sub_102ad", "sub_1265b" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9413,7 +9414,7 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
     int which = (id == FT_SUB_120FF) ? 0 : (id == FT_SUB_12199) ? 1 :
                 (id == FT_SUB_11F93) ? 8 : (id == FT_SUB_121F6) ? 9 :
                 (id == FT_SUB_121B9) ? 10 : (id == FT_SUB_10555) ? 11 :
-                (id == FT_SUB_102AD) ? 12 :
+                (id == FT_SUB_102AD) ? 12 : (id == FT_SUB_1265B) ? 13 :
                 (id == FT_SUB_120D1) ? 2 : (id == FT_SUB_12E16) ? 3 :
                 (id == FT_SUB_12E2D) ? 4 : (id == FT_SUB_12E79) ? 5 :
                 (id == FT_SUB_12E84) ? 6 : 7;
@@ -9431,6 +9432,11 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
 
         memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
         uint16_t regs[8] = { 0, 0, 0, 0, si_in, si_in, 0, 0 };   // 12e2d uses SI, 121f6 uses DI
+        if (id == FT_SUB_1265B) {                                 // ax=text, si=row, di=0x0F
+            regs[0] = (uint16_t)(si_in & 0xFF);
+            regs[4] = (uint16_t)(si_in >> 8);
+            regs[5] = 0x0F;
+        }
         long esc0 = ft_ub_marks();
         v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
         if (ft_ub_marks() != esc0) { st.cases--; return; }
@@ -9538,6 +9544,16 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
             w[n++] = FtWr{0x416, (uint16_t)(rng.next() % 4)};
             w[n++] = FtWr{0x418, (uint16_t)(rng.next() % 4)};
             CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_1265B) {
+        // ax texts 2..6 × si rows: si_in packs (si<<8)|ax; oracle regs get
+        // ax/si/di natively via CASE (di fixed 0x0F).
+        static const uint16_t AXV[] = {2, 3, 4, 5, 6};
+        static const uint16_t SIV[] = {0x0D, 0x10, 0x15, 0x16};
+        for (uint16_t axv : AXV) for (uint16_t siv : SIV) {
+            FtWr w[4]; int n = 0;
+            w[n++] = FtWr{0x304, 1};
+            CASE(w, n, (uint16_t)((siv << 8) | axv), "grid", grid);
         }
     } else if (id == FT_SUB_102AD) {
         static const uint16_t AC[] = {0x0000, 0x0001, 0x7FFF, 0x8000, 0x8001, 0x8002, 0xFFFF};
@@ -11525,6 +11541,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10555")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_10555, 0xB4B1001u); }
     if (all || strstr(env, "sub_1106f")) { matched = true; rc |= ft_selftest_1106f(0xB4B2001u); }
     if (all || strstr(env, "sub_102ad")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_102AD, 0xB4B3001u); }
+    if (all || strstr(env, "sub_1265b")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_1265B, 0xB4B4001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
