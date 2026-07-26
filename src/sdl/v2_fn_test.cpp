@@ -9045,10 +9045,17 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         // and the case UB-skips. Word 0x4009 (args 09 40 42) keeps both
         // channels ch1: setter-1 idx=0x40, setter-2 idx=0x42, then a clean
         // yield opcode.
-        if (id == FT_SUB_150FC || id == FT_SUB_15106 || id == FT_SUB_14EDD ||
-            id == FT_SUB_14F27 || id == FT_SUB_150B5) {
+        if (id == FT_SUB_150FC || id == FT_SUB_15106 || id == FT_SUB_150B5) {
             uint8_t c9[] = {op, 0x09, 0x40, 0x42, 0x00};
             A(c9, 5, O, "grid");
+        }
+        // op26/28 read TWO mode words: getter pair (X->[6C], Y->[6E], SHR 4)
+        // then a setter pair via 154bf + the 154bc tail - both words 0x??09
+        // keep every channel ch1; stream: w1, g-idx, g-idx, w2, s-idx,
+        // s-idx, yield.
+        if (id == FT_SUB_14EDD || id == FT_SUB_14F27) {
+            uint8_t c26[] = {op, 0x09, 0x40, 0x42, 0x09, 0x44, 0x46, 0x00};
+            A(c26, 8, O, "grid");
         }
         // Coverage-directed (#47): op34 scans viking slots ([si+15AD]!=0) for
         // the nearest one (|dx|+|dy| of [173D]/[1765]). Slot 0 alive covers
