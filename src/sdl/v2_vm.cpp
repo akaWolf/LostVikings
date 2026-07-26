@@ -13073,6 +13073,13 @@ extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_
     v2_vm_acc_base = saved_acc;
 }
 
+extern "C" void v2_fntest_call_12388(uint8_t* shadow, uint16_t si, uint16_t di, uint16_t ax) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = shadow;
+    v2_text_frame_12388(shadow, si, di, (uint8_t)ax);
+    v2_vm_acc_base = saved_acc;
+}
+
 // Wave B3a: pure helpers. Delta scalers are plain int16 functions; RNG runs
 // over the scratch DS; sub_12345 is the input-pair clear ([3B6]/[3B8]).
 extern "C" int16_t v2_fntest_call_delta(int which, int16_t d) {

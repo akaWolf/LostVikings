@@ -258,6 +258,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 391: return (void*)&sub_12e79;  // viking cycle gate ([25BA])
     case 392: return (void*)&sub_12e84;  // viking cycle by input bits
     case 393: return (void*)&sub_1201d;  // full HUD item redraw
+    case 394: return (void*)&sub_12388;  // draw text box frame (glyph grid)
     default: return 0;
     }
 }
