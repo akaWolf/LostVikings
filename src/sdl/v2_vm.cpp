@@ -2257,6 +2257,7 @@ static bool v2_load_exe_ds(); // forward decl
 // before their definitions):
 static void v2_read_input_12352_iter(uint8_t*); // forward decl (definition ~line 18010)
 static void v2_pw_pre_loop(uint8_t*);    // forward decl (definition ~line 18937)
+static void v2_transition_kick_102ad(uint8_t* s);  // fwd (used by the phase at ~7697)
 static bool v2_pw_iter_body(uint8_t*);   // forward decl (definition ~line 19011)
 static void v2_pw_post_loop(uint8_t*);   // forward decl (definition ~line 19100)
 static void v2_page_flip_16775(uint8_t* s);
@@ -7693,67 +7694,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         }
     }
 
-    // sub_102ad: level transition trigger (eip 0x02AD..0x034F).
-    // Checks word_288AC (0x3CC) for negative, and word_28896 (0x3B6) for 0x1000 button.
-    {
-        int16_t ac = (int16_t)*(uint16_t*)(shadow + DS_GAME_MODE_AC); // word_288AC
-        if (ac < 0) {
-            if (*(uint16_t*)(shadow + DS_INPUT_KEYS) & 0x1000) { // word_28896
-                uint16_t ac_u = (uint16_t)ac;
-                if (ac_u == 0x8000) {
-                    // loc_102f0: level-specific dispatch
-                    uint16_t level = *(uint16_t*)(shadow + DS_LEVEL); // word_2AA8D
-                    if (level == 0x2B) {
-                        // loc_10309: check word_28896 == 0xFFFF
-                        if (*(uint16_t*)(shadow + DS_INPUT_KEYS) != 0xFFFF) {
-                            // loc_10344: word_288AC = 1
-                            *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 1;
-                        } else {
-                            *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0; // word_2AAA9 = 0
-                            // fall through to loc_10317
-                            *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = 0;  // word_288A2 = 0
-                            *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0;  // word_288AC = 0 (loc_1033c)
-                        }
-                    } else if (level == 0x2C) {
-                        // loc_10317: word_288A2 = 0; jmp loc_1033c
-                        *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = 0;  // word_288A2
-                        *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0;  // word_288AC (loc_1033c)
-                    } else if (level == 0x2D) {
-                        // loc_10344: word_288AC = 1
-                        *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 1;
-                    } else if (level == 0x2E) {
-                        // loc_10336: word_2AAA9 = 0x27; → loc_1033c
-                        *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0x27;
-                        *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0; // loc_1033c
-                    } else {
-                        // loc_1031f: table lookup
-                        uint16_t si = *(uint16_t*)(shadow + DS_HUD_SEL_SI); // word_288B4
-                        si += 2;
-                        uint16_t ax = *(uint16_t*)(shadow + si + DS_TRANSITION_LEVEL_TBL);
-                        if (ax == 0xFFFF) si = 0;
-                        *(uint16_t*)(shadow + DS_HUD_SEL_SI) = si; // word_288B4
-                        // loc_10336: word_2AAA9 = 0x27; → loc_1033c
-                        *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0x27;
-                        *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0; // loc_1033c
-                    }
-                } else if (ac_u == 0x8002) {
-                    // loc_102e8: reload current level
-                    *(uint16_t*)(shadow + DS_LEVEL_LOAD) = *(uint16_t*)(shadow + DS_LEVEL);
-                } else {
-                    // First time: write command buffer, set 0x8002, fall through to loc_102e8
-                    uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD); // word_2A671
-                    *(uint16_t*)(shadow + (uint16_t)(bx + DS_TRANSITION_CHUNK_BUF)) = 0x1000;
-                    *(uint16_t*)(shadow + (uint16_t)(bx + 0x2195)) = 0xFFFF;
-                    *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
-                    *(uint16_t*)(shadow + DS_GAME_MODE_AC) = 0x8002; // word_288AC
-                    // loc_102e8: reload current level
-                    *(uint16_t*)(shadow + DS_LEVEL_LOAD) = *(uint16_t*)(shadow + DS_LEVEL);
-                }
-                // loc_1034a: OR(word_28814, 1)
-                *(uint16_t*)(shadow + DS_FRAME_FLAGS) |= 1;
-            }
-        }
-    }
+    // sub_102ad: level transition trigger (extracted, see the helper zone).
+    v2_transition_kick_102ad(shadow);
 
 
     // sub_1041c: password / quit-prompt screen (Start button trigger).
@@ -12998,6 +12940,7 @@ extern "C" void v2_fntest_call_b3b(int which, uint8_t* test_shadow, uint16_t pc,
 // Wave B3c-I: HUD state trackers (extracted 11792-subtree mirrors).
 static bool v2_item_place_11f93(uint8_t* s);
 static void v2_pw_blink_10555(uint8_t* shadow);
+static void v2_transition_kick_102ad(uint8_t* s);
 static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in);
 static void v2_item_pop_121b9(uint8_t* s);
 
@@ -13019,6 +12962,7 @@ extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_
     case 9: v2_item_take_next_121f6(test_shadow, si_in); break;
     case 10: v2_item_pop_121b9(test_shadow); break;
     case 11: v2_pw_blink_10555(test_shadow); break;
+    case 12: v2_transition_kick_102ad(test_shadow); break;
     }
     if (out_si) *out_si = r;
     v2_vm_acc_base = saved_acc;
@@ -21332,6 +21276,57 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 //   Mode 0 (word_28927 == 0): item selection / category navigation.
 //   Mode 1 (word_28927 == 1): item carry — viking switch + slot placement.
 // Returns true if loop should exit (orig STC = exit pause loop).
+// sub_102ad: level-transition trigger — [3CC]<0 && [3B6]&0x1000: mode 0x8000
+// → per-level dispatch (0x2B: [3B6]==0xFFFF-gate, 0x2C, 0x2D, 0x2E, else
+// table walk at [288B4]/[si+DS_TRANSITION_LEVEL_TBL]); 0x8002 → reload
+// current level; anything else negative → queue the 0x1000/0xFFFF command
+// pair, bump the head, set 0x8002 and reload. All taken paths end with
+// [340] |= 1.
+static void v2_transition_kick_102ad(uint8_t* s) {
+    int16_t ac = (int16_t)*(uint16_t*)(s + DS_GAME_MODE_AC);
+    if (ac >= 0) return;
+    if (!(*(uint16_t*)(s + DS_INPUT_KEYS) & 0x1000)) return;
+    uint16_t ac_u = (uint16_t)ac;
+    if (ac_u == 0x8000) {
+        uint16_t level = *(uint16_t*)(s + DS_LEVEL);
+        if (level == 0x2B) {
+            if (*(uint16_t*)(s + DS_INPUT_KEYS) != 0xFFFF) {
+                *(uint16_t*)(s + DS_GAME_MODE_AC) = 1;
+            } else {
+                *(uint16_t*)(s + DS_LEVEL_LOAD) = 0;
+                *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0;
+                *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+            }
+        } else if (level == 0x2C) {
+            *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0;
+            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+        } else if (level == 0x2D) {
+            *(uint16_t*)(s + DS_GAME_MODE_AC) = 1;
+        } else if (level == 0x2E) {
+            *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x27;
+            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+        } else {
+            uint16_t si = *(uint16_t*)(s + DS_HUD_SEL_SI);
+            si += 2;
+            uint16_t ax = *(uint16_t*)(s + si + DS_TRANSITION_LEVEL_TBL);
+            if (ax == 0xFFFF) si = 0;
+            *(uint16_t*)(s + DS_HUD_SEL_SI) = si;
+            *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x27;
+            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+        }
+    } else if (ac_u == 0x8002) {
+        *(uint16_t*)(s + DS_LEVEL_LOAD) = *(uint16_t*)(s + DS_LEVEL);
+    } else {
+        uint16_t bx = *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD);
+        *(uint16_t*)(s + (uint16_t)(bx + DS_TRANSITION_CHUNK_BUF)) = 0x1000;
+        *(uint16_t*)(s + (uint16_t)(bx + 0x2195)) = 0xFFFF;
+        *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) += 2;
+        *(uint16_t*)(s + DS_GAME_MODE_AC) = 0x8002;
+        *(uint16_t*)(s + DS_LEVEL_LOAD) = *(uint16_t*)(s + DS_LEVEL);
+    }
+    *(uint16_t*)(s + DS_FRAME_FLAGS) |= 1;
+}
+
 // sub_12250: probe ONE inventory category di (0..3). Returns true with
 // ax_out = free slot offset when usable: di==3 → the special slot 0x18;
 // a category whose gate byte [di+0x449] is nonzero is rejected; otherwise

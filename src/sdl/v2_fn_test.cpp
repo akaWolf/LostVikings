@@ -510,6 +510,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_121B9 = 410,   // pop selected item
             FT_SUB_10555 = 411,   // prompt blink tick
             FT_SUB_1106F = 412,   // DAC blank
+            FT_SUB_102AD = 413,   // level transition trigger
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -676,7 +677,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_12034", "sub_16880", "sub_11792",
                                  "sub_11f47", "sub_103ca", "sub_1047c",
                                  "sub_12250", "sub_11f93", "sub_121f6",
-                                 "sub_121b9", "sub_10555", "sub_1106f" };
+                                 "sub_121b9", "sub_10555", "sub_1106f",
+                                 "sub_102ad" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9411,6 +9413,7 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
     int which = (id == FT_SUB_120FF) ? 0 : (id == FT_SUB_12199) ? 1 :
                 (id == FT_SUB_11F93) ? 8 : (id == FT_SUB_121F6) ? 9 :
                 (id == FT_SUB_121B9) ? 10 : (id == FT_SUB_10555) ? 11 :
+                (id == FT_SUB_102AD) ? 12 :
                 (id == FT_SUB_120D1) ? 2 : (id == FT_SUB_12E16) ? 3 :
                 (id == FT_SUB_12E2D) ? 4 : (id == FT_SUB_12E79) ? 5 :
                 (id == FT_SUB_12E84) ? 6 : 7;
@@ -9535,6 +9538,19 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
             w[n++] = FtWr{0x416, (uint16_t)(rng.next() % 4)};
             w[n++] = FtWr{0x418, (uint16_t)(rng.next() % 4)};
             CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_102AD) {
+        static const uint16_t AC[] = {0x0000, 0x0001, 0x7FFF, 0x8000, 0x8001, 0x8002, 0xFFFF};
+        static const uint16_t LV[] = {0x2B, 0x2C, 0x2D, 0x2E, 0x05};
+        static const uint16_t KEYS[] = {0x0000, 0x1000, 0xFFFF};
+        for (uint16_t ac : AC) for (uint16_t lv : LV) for (uint16_t k : KEYS) {
+            FtWr w[8]; int n = 0;
+            w[n++] = FtWr{0x3CC, ac};
+            w[n++] = FtWr{0x25AD, lv};
+            w[n++] = FtWr{0x3B6, k};
+            w[n++] = FtWr{0x2191, 0x2200};   // queue head into a safe zone
+            w[n++] = FtWr{0x3D4, 4};         // table walk cursor [288B4]
+            CASE(w, n, 0, "grid", grid);
         }
     } else if (id == FT_SUB_10555) {
         // blink phases: [445] values crossing the &0xF==0 / &0x10 branches ×
@@ -11508,6 +11524,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_121b9")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_121B9, 0xB4B0001u); }
     if (all || strstr(env, "sub_10555")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_10555, 0xB4B1001u); }
     if (all || strstr(env, "sub_1106f")) { matched = true; rc |= ft_selftest_1106f(0xB4B2001u); }
+    if (all || strstr(env, "sub_102ad")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_102AD, 0xB4B3001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {
