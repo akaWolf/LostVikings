@@ -26,6 +26,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "v2_ds_layout.h"
 
 // Thin exports from v2_vm.cpp (wrappers over file-static v2 functions/tables).
@@ -551,6 +553,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_10350 = 441,   // quit-prompt gate
             FT_SUB_1754C = 442,   // AIL timer stop
             FT_SUB_17561 = 443,   // AIL shutdown chain
+            FT_SUB_10138 = 444,   // viking-switch mode dispatcher
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -723,7 +726,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_17512", "sub_16528", "sub_16546", "sub_1686f", "sub_167ff", "sub_17912",
                                  "sub_179a8", "sub_108c8",
                                  "sub_17337", "sub_172d3", "sub_11ba5", "sub_10350",
-                                 "sub_1754c", "sub_17561" };
+                                 "sub_1754c", "sub_17561", "sub_10138" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -6759,6 +6762,11 @@ int ft_selftest_sub_1625d(uint32_t seed) {
     run1(0x2000, 0, 0x85, 0x80, 0x00, 0x00, 0, "grid", grid, -1, 4, 0);
     run1(0x2000, 0, 0x85, 0x80, 0x02, 0x00, 0, "grid", grid, -1, 4, 1);
     run1(0x2000, 0, 0x85, 0x80, 0x01, 0x00, 0x07, "grid", grid, 0x31);  // slope on probe 2 (162d3)
+    // (#47 branch) the 1633D type switch second edges: feet types 3/5/0x20
+    // route through the 162E0 arm into the 16338+ dispatch.
+    run1(0x2000, 0, 0x85, 0x80, 0x03, 0x00, 0, "grid", grid);
+    run1(0x2000, 0, 0x85, 0x80, 0x05, 0x00, 0, "grid", grid);
+    run1(0x2000, 0, 0x85, 0x80, 0x20, 0x00, 0, "grid", grid);
     FtRng rng(seed);
     for (int i = 0; i < 4000; i++)
         run1((uint16_t)(rng.next() & 1 ? 0x2000 : 0), (uint16_t)(rng.next() & 1 ? 0 : 0x8000),
@@ -9314,6 +9322,23 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             // forces the scan to the 0xFF terminator.
             uint8_t cw[] = {op, 0x00, 0x40, 0x42, 0x00};
             A(cw, 5, O, "grid", wlink, 9);
+            // (#47 branch) refusal edges of the link gates:
+            // partner type BELOW the chain byte -> the 5F67/5ECC JC side;
+            static const FtWr wtypelo[] = { {0x1355, 1}, {0x17DD, 0x0005} };
+            A(c, 5, O, "grid", wtypelo, 2);
+            // counter gate fails ([3AE] < partner [14E5]) -> 5F75 JC;
+            static const FtWr wcnt[] = { {0x1355, 1}, {0x17DD, 0x00FF},
+                                         {0x14E5, 0x7FFF} };
+            A(c, 5, O, "grid", wcnt, 3);
+            // X ranges split apart -> the 5F8A / 5F94 JC sides.
+            static const FtWr wxsplit[] = { {0x1355, 1}, {0x17DD, 0x00FF},
+                                            {0x1563, 10}, {0x1535, 0x200},
+                                            {0x155D, 0x210}, {0x153B, 5} };
+            A(c, 5, O, "grid", wxsplit, 6);
+            static const FtWr wxsplit2[] = { {0x1355, 1}, {0x17DD, 0x00FF},
+                                             {0x1563, 10}, {0x1535, 5},
+                                             {0x155D, 0x0002}, {0x153B, 5} };
+            A(c, 5, O, "grid", wxsplit2, 6);
         }
         // op26/28 read TWO mode words: getter pair (X->[6C], Y->[6E], SHR 4)
         // then a setter pair via 154bf + the 154bc tail - both words 0x??09
@@ -9349,6 +9374,14 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             const FtWr wpart[] = { {0x0310, p0}, {0x0312, (uint16_t)(p1 ^ 0x7F)},
                                    {0x0314, 0}, {0x0316, 0} };
             A(c, 5, O, "grid", wpart, 4);
+            // (#47 branch) mismatches on letters 3 and 4: the 2850 taken /
+            // 285C fallthrough edges of the cascade.
+            const FtWr wp3[] = { {0x0310, p0}, {0x0312, p1},
+                                 {0x0314, (uint16_t)(p2 ^ 0x7F)}, {0x0316, p3} };
+            A(c, 5, O, "grid", wp3, 4);
+            const FtWr wp4[] = { {0x0310, p0}, {0x0312, p1},
+                                 {0x0314, p2}, {0x0316, (uint16_t)(p3 ^ 0x7F)} };
+            A(c, 5, O, "grid", wp4, 4);
         }
         // Coverage-directed (#47): the SFX stop path of op04/opD7 scans the
         // slot table at [si-66EA] (si=8 → ds:0x991E) for seq==arg (frame arg
@@ -11386,6 +11419,20 @@ int ft_selftest_sub_11cbb() {
             // (#47) HUD 0x100 arm with category 0x0C: di=[443]>>2=3, the
             // INC hits 4 -> the 1d3f/1d42 di=0 wrap of the viking poll loop.
             { 0, 0x0100, 0, 1, 1, 1, 0x0C, 1 },
+            // (#47 branch) DEC-poll (0x200 arm) second edges: cat=4 -> di=1,
+            // DEC to 0 hits the busy viking (12250 STC -> 1CFA fallthrough),
+            // DEC to -1 flips 1CFD; cat=0 wraps straight to di=3.
+            { 0, 0x0200, 0, 1, 1, 1, 4, 1 },
+            { 0, 0x0200, 0, 1, 1, 1, 0, 1 },
+            // (#47 branch) switch-scan second edges: only self alive ->
+            // the 11DD7 walk passes dead slots (1DE8 both ways) and comes
+            // back to self (1DEE taken) through the di=0 wrap (1DDD).
+            { 1, 0x0020, 4, 0, 0, 1, 0, 1 },
+            { 1, 0x0010, 0, 1, 0, 0, 0, 1 },
+            // (#47 branch) carried-bit arms crossed: 0x800 with bit1 CLEAR
+            // (1EBF fallthrough) and 0x400 with bit1 SET (1F02 taken).
+            { 1, 0x0800, 4, 1, 1, 1, 0, 0 },
+            { 1, 0x0400, 4, 1, 1, 1, 0, 2 },
         };
         for (const EC& c : EC_CASES) {
             memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
@@ -12328,16 +12375,68 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
     case FT_SUB_12989: {
         // registration path: XOR checksum (ax=0x3000 after the INT21/30
         // no-op, bx=cx=0) must equal [86C2]; then [302]=[86B2],
-        // [304]=[86B4]; INT10/1A00 VGA detect (al=0x1A, bl=8 model) and the
-        // CPU flag probes run from there. Exercise-only: the tail touches
-        // cs-globals and vector state outside the DS window.
+        // [304]=[86B4]; INT10/1A00 VGA detect (al=0x1A, bl=8 model), the
+        // CPU flag probes and the RESTORED joystick detect run from there.
+        // Exercise-only: cs-globals and PIT-latch scratches ride along.
+        // NB the checksum lives in the DATA.DAT header freads — presets on
+        // [86C2] only matter because the isolated fread re-reads the same
+        // file bytes; the reject case flips the stored value instead.
         {   static const FtWr w[] = { {0x86D0,0},{0x86C2,0x3000},
                                       {0x86B2,0x0102},{0x86B4,0x0304} };
             CASE(w,4,r0,nullptr,0,"register");
         }
-        {   // checksum mismatch -> the 12a94 reject arm
+        {   // checksum mismatch: the reject JNZ (2A17) is compiled out by
+            // the port (#ifdef DOSBOX_CUSTOM — the copy-protection check
+            // would kill the game on any non-original machine), so 12A94
+            // is unreachable by design; this case keeps the XOR chain
+            // exercised with a non-matching sum.
             static const FtWr w[] = { {0x86D0,0},{0x86C2,0xDEAD} };
-            CASE(w,2,r0,nullptr,0,"reject");
+            CASE(w,2,r0,nullptr,0,"reject-xor");
+        }
+        {   // joystick FOUND: a non-idle port byte lets 179fb return CF=0
+            // -> the 2A63-2A7D threshold writes + [86DA]=1.
+            v2_fntest_set_in201(0xFE);
+            static const FtWr w[] = { {0x86D0,0},{0x86C2,0x3000},
+                                      {0x86B2,0x0102},{0x86B4,0x0304} };
+            CASE(w,4,r0,nullptr,0,"joy-present");
+            v2_fntest_set_in201(0xFF);
+        }
+        // (the no-VGA / no-386 reject arms 12AA6/12AAF are unreachable the
+        //  same way: their JNZ gates are inside the DOSBOX_CUSTOM ifdef.)
+        // File-shape arms: sub_12989 fopen()s "DATA.DAT" from the CWD (the
+        // SDL inline replaces the DOS open), so a temporary chdir into a
+        // fixture directory drives each error path honestly.
+        {
+            auto run_in_dir = [&](const char* dir, const char* tag) {
+                char keep[512];
+                if (!getcwd(keep, sizeof(keep))) return;
+                if (chdir(dir) != 0) return;
+                CASE(nullptr,0,r0,nullptr,0,tag,1);
+                if (chdir(keep) != 0) _exit(97);
+            };
+            // bad magic: full 8-byte header + 0x20 header block, magic word
+            // at +0x14 ([86C4] = 0x86B0+0x14) != 0x6969 -> 29D0 -> 12A9D.
+            (void)mkdir("/tmp/ft12989_badmagic", 0777);
+            {   FILE* f = fopen("/tmp/ft12989_badmagic/DATA.DAT", "wb");
+                if (f) {
+                    uint8_t hdr[8] = {8,0,0,0, 0,0,0,0};   // table at offset 8
+                    uint8_t blk[0x20] = {0};
+                    blk[0x14] = 0x77; blk[0x15] = 0x77;    // magic != 0x6969
+                    fwrite(hdr, 1, 8, f); fwrite(blk, 1, 0x20, f); fclose(f);
+                }
+            }
+            run_in_dir("/tmp/ft12989_badmagic", "bad-magic");
+            // short file: 4 bytes only -> the first 8-byte fread fails ->
+            // the inline goto loc_12a84 read-error arm.
+            (void)mkdir("/tmp/ft12989_short", 0777);
+            {   FILE* f = fopen("/tmp/ft12989_short/DATA.DAT", "wb");
+                if (f) { uint8_t b[4] = {1,2,3,4}; fwrite(b, 1, 4, f); fclose(f); }
+            }
+            run_in_dir("/tmp/ft12989_short", "short-file");
+            // no file at all -> fopen NULL -> the 12A8C open-error arm.
+            (void)mkdir("/tmp/ft12989_empty", 0777);
+            (void)remove("/tmp/ft12989_empty/DATA.DAT");
+            run_in_dir("/tmp/ft12989_empty", "no-file");
         }
         break;
     }
@@ -12386,6 +12485,14 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         {   static const FtWr w[] = { {0x993E,0x0011},{0x9940,0x0022} };
             Exp e[2] = { {0x9930,ail},{0x992E,0x4455} };
             CASE(w,2,r0,e,2,"found");
+        }
+        // (#47 branch) half-match record at di=0 (low byte hits, high byte
+        // differs -> the 7533 continue edge), full match at di=6.
+        z[0] = 0x99; z[1] = 0x11; z[2] = 0; z[3] = 0;
+        z[6] = 0x22; z[7] = 0x11; z[8] = 0x66; z[9] = 0x33;
+        {   static const FtWr w[] = { {0x993E,0x0011},{0x9940,0x0022} };
+            Exp e[2] = { {0x9930,ail},{0x992E,0x3366} };
+            CASE(w,2,r0,e,2,"half-match");
         }
         // not-found: no record matches 0xEE/0xEE in a zeroed table -> the
         // 17543 fatal arm (sub_10dba -> INT21/4C isolator escape).
@@ -12657,6 +12764,22 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         {   // busy gate [302]&[304]&0x8000 -> the 757e early-out
             static const FtWr w[] = { {0x302,0x8000},{0x304,0x8000} };
             CASE(w,2,r0,nullptr,0,"busy");
+        }
+        break;
+    }
+    case FT_SUB_10138: {
+        // viking-switch mode dispatcher: [28814] bits 2/0/1 route to the
+        // 10164 / 10151 / 1014B ([2AAA9]=0x25) arms; 0 -> plain RETN.
+        // The open arms dive into switch machinery — vsync armed, escapes
+        // expected where the wait loops spin dry.
+        static const uint16_t MODES[] = { 0, 4, 1, 2 };
+        for (uint16_t m : MODES) {
+            FtWr w[4]; int nw = 0;
+            w[nw++] = {0x0334, m};
+            w[nw++] = {0x92FF, 1};
+            w[nw++] = {0xA39C, 0};
+            char tag[16]; snprintf(tag, sizeof(tag), "mode-%u", m);
+            CASE(w, nw, r0, nullptr, 0, tag, m != 0);
         }
         break;
     }
@@ -13168,6 +13291,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10350")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10350, ft_seed(0xD0500013u)); }
     if (all || strstr(env, "sub_1754c")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1754C, ft_seed(0xD0500014u)); }
     if (all || strstr(env, "sub_17561")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17561, ft_seed(0xD0500015u)); }
+    if (all || strstr(env, "sub_10138")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10138, ft_seed(0xD0500016u)); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, ft_seed(0x15D3C001u)); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, ft_seed(0x15D42001u)); }
     if (!matched) {

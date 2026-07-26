@@ -312,6 +312,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 441: return (void*)&sub_10350;  // F10/ALT+X quit-prompt gate
     case 442: return (void*)&sub_1754c;  // AIL timer stop (far call)
     case 443: return (void*)&sub_17561;  // AIL shutdown chain
+    case 444: return (void*)&sub_10138;  // viking-switch mode dispatcher
     default: return 0;
     }
 }
