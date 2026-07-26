@@ -1,0 +1,30 @@
+# Synthetic scenario (#47): phase-targeted via the V2_PHASE_LOG map:
+# title (25C9=2C, 25BA=4) lives at frames ~100-2750; the demo level
+# starts itself around frame 2760. Long holds cover %4 frame gates.
+17 KD SPACE
+19 KU SPACE
+23 KD SPACE
+24 KU SPACE
+34 KD SPACE
+35 KU SPACE
+53 KD SPACE
+54 KU SPACE
+300 KD SPACE
+320 KU SPACE
+600 KD TAB
+660 KU TAB
+800 KD ESC
+860 KU ESC
+1000 KD F10
+1004 KU F10
+1100 KD N
+1140 KU N
+1300 KD F10
+1304 KU F10
+1400 KD Y
+1440 KU Y
+1600 KD SPACE
+1640 KU SPACE
+1800 KD RETURN
+1840 KU RETURN
+# end-frame 2200

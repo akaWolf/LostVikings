@@ -1,0 +1,57 @@
+# Synthetic scenario (#47 coverage): built on the level1.inp prefix
+# (frames <3580 — title skip; world state identical to level1 replay).
+# Long holds: the [3B8] input-word gates sample once per frame and some
+# consumers add a %4 frame gate — short taps can miss the window.
+17 KD SPACE
+19 KU SPACE
+23 KD SPACE
+24 KU SPACE
+34 KD SPACE
+35 KU SPACE
+53 KD SPACE
+54 KU SPACE
+111 KU Y
+113 KU S
+113 KU S
+113 KU Q
+113 KU N
+114 KU F
+114 KU E
+114 KU D
+114 KU A
+2839 KU R
+2839 KU R
+2839 KU M
+2839 KU D
+3511 KU DEL
+3511 KU Y
+3511 KU Y
+3511 KU X
+3511 KU X
+3511 KU X
+3512 KU S
+3512 KU S
+3512 KU R
+3512 KU R
+3512 KU Q
+3512 KU N
+3512 KU M
+3512 KU F
+3512 KU E
+3560 KU E
+3560 KU N
+3560 KU Q
+3561 KU Y
+3600 KD F10
+3604 KU F10
+3700 KD N
+3740 KU N
+3800 KD F10
+3804 KU F10
+3900 KD Y
+3940 KU Y
+4000 KD SPACE
+4020 KU SPACE
+4100 KD RETURN
+4120 KU RETURN
+# end-frame 4500

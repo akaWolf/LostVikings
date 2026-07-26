@@ -1,0 +1,24 @@
+# Synthetic scenario (#47): single-mechanic title-phase probe.
+# Title = frames ~100-2750 (25C9=2C, 25BA=4). One mechanic per file:
+# a prompt loop swallows every later event (synth_title lesson).
+17 KD SPACE
+19 KU SPACE
+23 KD SPACE
+24 KU SPACE
+34 KD SPACE
+35 KU SPACE
+53 KD SPACE
+54 KU SPACE
+400 KD TAB
+480 KU TAB
+600 KD TAB
+680 KU TAB
+900 KD 1
+980 KU 1
+1100 KD 2
+1180 KU 2
+1300 KD 3
+1380 KU 3
+1600 KD TAB
+1680 KU TAB
+# end-frame 2200
