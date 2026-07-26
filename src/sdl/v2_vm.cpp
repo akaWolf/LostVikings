@@ -1919,7 +1919,17 @@ static void v2_vm_init_table();
 // In standalone mode, segment values are fake (assigned by v2_alloc_segments_12ab8).
 // This function maps them to the correct shadow buffer + offset.
 // ============================================================================
+// fn-test hook (wave A, cmd14 unit): the anim decompressor writes through
+// [slot+0x94D]/[0x B4D] segment fields; when a unit points them at the game
+// DS segment, the oracle writes into its own DS image (compared byte-for-
+// byte), and v2 must write into ITS scratch DS — not the m2c fallback zone
+// (which is the oracle's restored image). Zero = off.
+extern "C" uint16_t v2_fntest_ds_seg_override = 0;
+extern "C" uint8_t* v2_fntest_ds_seg_ptr = nullptr;
+
 uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds) {
+    if (v2_fntest_ds_seg_override && seg == v2_fntest_ds_seg_override && v2_fntest_ds_seg_ptr)
+        return v2_fntest_ds_seg_ptr;
     if (v2_replay_verify_active && v2_m2c_base) {
         return v2_m2c_base + (uint32_t)seg * 16;
     }
@@ -15491,9 +15501,12 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint8_t spr_idx = vm.es[anim_bx] & 0xFF;
             anim_bx += 1;
 
-            // Skip if same sprite already loaded
+            // Skip if same sprite already loaded.
+            // №41: orig 0x34F0 is a WORD compare — CMP bx,[di+191Dh] with
+            // bx = byte (0..255). After cmd17 sets [191D]=0xFFFF, frame 0xFF
+            // must NOT match (0x00FF != 0xFFFF) — a byte-vs-byte compare did.
             ObjRef self{vm, obj_d}, subs{vm, si_s};
-            if (spr_idx == (uint8_t)self.u16(OBJ_CUR_SPRITE_IDX)) {
+            if ((uint16_t)spr_idx == self.u16(OBJ_CUR_SPRITE_IDX)) {
                 static int _skip = 0;
                 if (_skip++ < 5) fprintf(stderr, "V2-134DC-SKIP[%d]: si=%04X spr=%02X same as 191D\n",
                                           _skip, si_s, spr_idx);
@@ -15632,26 +15645,30 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t mask_v = vm.ds_read(DS_ANIM_SUB_MASK);
             uint16_t end_di = vm.ds_read(DS_ANIM_SLOT_END);
 
+            // №42: orig loops loc_13316 (masked) / loc_1335F (unmasked) are
+            // DO-WHILE — body runs once even on an empty [7C,80) window.
             if (mask_v != 0) {
                 // Masked: only matching sub-sprites
-                for (; (int16_t)di_s < (int16_t)end_di; di_s += 2) {
-                    ObjRef sub{vm, di_s};   // #38: sub-sprite slot view (cursor di_s)
-                    if (!(sub.u16(OBJ_SUB_CLASS) & mask_v)) continue;   // 0x54D: class mask (unnamed)
-                    sub.w16(OBJ_STRIP_COUNT, ax_height);
-                    sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
-                    sub.w16(OBJ_DIRTY_MODE, 0x202);
-                    if (reset_data) {
-                        uint16_t d = sub.u16(OBJ_SUB_SRC_BASE) + 1;   // 0x0A4D: sprite source base (unnamed)
-                        sub.w16(OBJ_SPRITE_OFF, d);
-                        vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);  // cur_obj (global), not the sub
-                        sub.w16(OBJ_SPRITE_SEG, sub.u16(OBJ_SUB_SRC_SEG));   // 0x0B4D: sprite source seg (unnamed)
+                do {                                          // loc_13316
+                    ObjRef sub{vm, di_s};
+                    if (sub.u16(OBJ_SUB_CLASS) & mask_v) {   // 0x54D: class mask (unnamed)
+                        sub.w16(OBJ_STRIP_COUNT, ax_height);
+                        sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
+                        sub.w16(OBJ_DIRTY_MODE, 0x202);
+                        if (reset_data) {
+                            uint16_t d = sub.u16(OBJ_SUB_SRC_BASE) + 1;   // 0x0A4D: sprite source base (unnamed)
+                            sub.w16(OBJ_SPRITE_OFF, d);
+                            vm.ds_write(vm.global_r(DS_CUR_OBJ) + OBJ_SPRITE_BASE, d);  // cur_obj (global), not the sub
+                            sub.w16(OBJ_SPRITE_SEG, sub.u16(OBJ_SUB_SRC_SEG));   // 0x0B4D: sprite source seg (unnamed)
+                        }
                     }
-                }
+                    di_s += 2;
+                } while ((int16_t)di_s < (int16_t)end_di);
             } else {
                 // Unmasked: all sub-sprites. Original loops loc_1335f→loc_13381→loop.
                 // reset_data check is INSIDE the loop (per sub-sprite, not just first).
-                for (; (int16_t)di_s < (int16_t)end_di; di_s += 2) {
-                    ObjRef sub{vm, di_s};   // #38: sub-sprite slot view (cursor di_s)
+                do {                                          // loc_1335F
+                    ObjRef sub{vm, di_s};
                     if (reset_data) {
                         uint16_t d = sub.u16(OBJ_SUB_SRC_BASE) + 1;   // 0x0A4D: sprite source base (unnamed)
                         sub.w16(OBJ_SPRITE_OFF, d);
@@ -15661,7 +15678,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                     sub.w16(OBJ_STRIP_COUNT, ax_height);
                     sub.w16(OBJ_SPRITE_FLAGS, (sub.u16(OBJ_SPRITE_FLAGS) & 0xFFF8) | type_val);
                     sub.w16(OBJ_DIRTY_MODE, 0x202);
-                }
+                    di_s += 2;
+                } while ((int16_t)di_s < (int16_t)end_di);
             }
             return true;
         }
@@ -15674,11 +15692,25 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t si_f = vm.ds_read(DS_ANIM_SLOT);
             uint16_t mask_f = vm.ds_read(DS_ANIM_SUB_MASK);
             uint16_t end_f = vm.ds_read(DS_ANIM_SLOT_END);
-            for (; (int16_t)si_f < (int16_t)end_f; si_f += 2) {
-                ObjRef sub{vm, si_f};   // #38: sub-sprite slot view (cursor si_f)
-                if (mask_f != 0 && !(sub.u16(OBJ_SUB_CLASS) & mask_f)) continue;   // 0x54D: class mask (unnamed)
-                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) ^ xor_val);
-                sub.w16(OBJ_DIRTY_MODE, 0x202);
+            // №42: orig loops loc_1349C (masked) / loc_134B6 (unmasked) are
+            // DO-WHILE (body first, ADD si,2 / CMP si,[80h] / JL) — at least
+            // one iteration even when [7Ch] >= [80h].
+            if (mask_f != 0) {
+                do {                                          // loc_1349C
+                    ObjRef sub{vm, si_f};
+                    if (sub.u16(OBJ_SUB_CLASS) & mask_f) {   // 0x54D: class mask (unnamed)
+                        sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) ^ xor_val);
+                        sub.w16(OBJ_DIRTY_MODE, 0x202);
+                    }
+                    si_f += 2;
+                } while ((int16_t)si_f < (int16_t)end_f);
+            } else {
+                do {                                          // loc_134B6
+                    ObjRef sub{vm, si_f};
+                    sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) ^ xor_val);
+                    sub.w16(OBJ_DIRTY_MODE, 0x202);
+                    si_f += 2;
+                } while ((int16_t)si_f < (int16_t)end_f);
             }
             return true;
         }
@@ -15688,20 +15720,24 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t si_m = vm.ds_read(DS_ANIM_SLOT);
             uint16_t mask_m = vm.ds_read(DS_ANIM_SUB_MASK);
             uint16_t end_m = vm.ds_read(DS_ANIM_SLOT_END);
+            // №42: orig loops loc_1342E (masked) / loc_13449 (unmasked) are
+            // DO-WHILE — body runs once even on an empty [7C,80) window.
             if (mask_m != 0) {
-                for (; (int16_t)si_m < (int16_t)end_m; si_m += 2) {
-                    ObjRef sub{vm, si_m};   // #38: sub-sprite slot view (cursor si_m)
+                do {                                          // loc_1342E
+                    ObjRef sub{vm, si_m};
                     if (sub.u16(OBJ_SUB_CLASS) & mask_m) {
                         uint8_t val = vm.es[anim_bx++] & 0xFF;
                         sub.w16(OBJ_SUB_CLASS, val);
                     }
-                }
+                    si_m += 2;
+                } while ((int16_t)si_m < (int16_t)end_m);
             } else {
-                for (; (int16_t)si_m < (int16_t)end_m; si_m += 2) {
-                    ObjRef sub{vm, si_m};   // #38: sub-sprite slot view (cursor si_m)
+                do {                                          // loc_13449
+                    ObjRef sub{vm, si_m};
                     uint8_t val = vm.es[anim_bx++] & 0xFF;
                     sub.w16(OBJ_SUB_CLASS, val);
-                }
+                    si_m += 2;
+                } while ((int16_t)si_m < (int16_t)end_m);
             }
             return true;
         }
@@ -15725,10 +15761,12 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t base_off = vm.ds_read(di_r + DS_ANIM_CHUNK_OFF);
             uint16_t base_seg = vm.ds_read(di_r + DS_ANIM_CHUNK_SEG);
             uint16_t sprite_seg = vm.ds_read(DS_SEG_TILEDATA);
-            // Loop sub-sprites
+            // Loop sub-sprites.
+            // №42: orig loop loc_1358C is a DO-WHILE (entered by fallthrough
+            // from the search) — body runs once even on an empty [7C,80) window.
             uint16_t end_r = vm.ds_read(DS_ANIM_SLOT_END);
-            for (; (int16_t)si_r < (int16_t)end_r; si_r += 2) {
-                ObjRef sub{vm, si_r};   // #38: sub-sprite slot view (cursor si_r)
+            do {                                              // loc_1358C
+                ObjRef sub{vm, si_r};
                 sub.w16(OBJ_SUB_SRC_BASE, base_off);   // 0x0A4D: sprite source base (unnamed)
                 sub.w16(OBJ_SUB_SRC_SEG, base_seg);   // 0x0B4D: sprite source seg (unnamed)
                 sub.w16(OBJ_SPRITE_SEG, sprite_seg);
@@ -15741,7 +15779,8 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
                 sub.w16(OBJ_SPRITE_OFF, data_ptr);
                 sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x0A);
                 vm.ds_write_b(si_r + OBJ_DIRTY_MODE, 2);
-            }
+                si_r += 2;
+            } while ((int16_t)si_r < (int16_t)end_r);
             // After loop: reset sprite dedup index
             uint16_t di_obj = vm.global_r(DS_CUR_OBJ);
             ObjRef self{vm, di_obj};
@@ -15753,11 +15792,24 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t si_o = vm.ds_read(DS_ANIM_SLOT);
             uint16_t mask_o = vm.ds_read(DS_ANIM_SUB_MASK);
             uint16_t end_o = vm.ds_read(DS_ANIM_SLOT_END);
-            for (; (int16_t)si_o < (int16_t)end_o; si_o += 2) {
-                ObjRef sub{vm, si_o};   // #38: sub-sprite slot view (cursor si_o)
-                if (mask_o != 0 && !(sub.u16(OBJ_SUB_CLASS) & mask_o)) continue;   // 0x54D: class mask (unnamed)
-                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x4000);
-                vm.ds_write_b(si_o + OBJ_DIRTY_CNT, 2);
+            // №42: orig loops loc_133AE (masked) / loc_133C9 (unmasked) are
+            // DO-WHILE — body runs once even on an empty [7C,80) window.
+            if (mask_o != 0) {
+                do {                                          // loc_133AE
+                    ObjRef sub{vm, si_o};
+                    if (sub.u16(OBJ_SUB_CLASS) & mask_o) {   // 0x54D: class mask (unnamed)
+                        sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x4000);
+                        vm.ds_write_b(si_o + OBJ_DIRTY_CNT, 2);
+                    }
+                    si_o += 2;
+                } while ((int16_t)si_o < (int16_t)end_o);
+            } else {
+                do {                                          // loc_133C9
+                    ObjRef sub{vm, si_o};
+                    sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x4000);
+                    vm.ds_write_b(si_o + OBJ_DIRTY_CNT, 2);
+                    si_o += 2;
+                } while ((int16_t)si_o < (int16_t)end_o);
             }
             return true;
         }
@@ -15766,11 +15818,24 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             uint16_t si_a = vm.ds_read(DS_ANIM_SLOT);
             uint16_t mask_a = vm.ds_read(DS_ANIM_SUB_MASK);
             uint16_t end_a = vm.ds_read(DS_ANIM_SLOT_END);
-            for (; (int16_t)si_a < (int16_t)end_a; si_a += 2) {
-                ObjRef sub{vm, si_a};   // #38: sub-sprite slot view (cursor si_a)
-                if (mask_a != 0 && !(sub.u16(OBJ_SUB_CLASS) & mask_a)) continue;   // 0x54D: class mask (unnamed)
-                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF);
-                sub.w16(OBJ_DIRTY_MODE, 2);
+            // №42: orig loops loc_133ED (masked) / loc_13409 (unmasked) are
+            // DO-WHILE — body runs once even on an empty [7C,80) window.
+            if (mask_a != 0) {
+                do {                                          // loc_133ED
+                    ObjRef sub{vm, si_a};
+                    if (sub.u16(OBJ_SUB_CLASS) & mask_a) {   // 0x54D: class mask (unnamed)
+                        sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF);
+                        sub.w16(OBJ_DIRTY_MODE, 2);
+                    }
+                    si_a += 2;
+                } while ((int16_t)si_a < (int16_t)end_a);
+            } else {
+                do {                                          // loc_13409
+                    ObjRef sub{vm, si_a};
+                    sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF);
+                    sub.w16(OBJ_DIRTY_MODE, 2);
+                    si_a += 2;
+                } while ((int16_t)si_a < (int16_t)end_a);
             }
             return true;
         }
