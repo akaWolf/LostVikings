@@ -226,6 +226,16 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 150: return (void*)&sub_1406d;  // anim queue quadrant redraw (JCXZ + JNS loop)
     case 151: return (void*)&sub_13084;  // anim command interpreter core (ds:78 gate)
     case 152: return (void*)&sub_135cf;  // anim velocity tail (gravity + clamps + flip)
+    // wave B1b: tile helpers + channel getters (direct units)
+    case 356: return (void*)&sub_14199;  // tile type at pixel coords (si/di >> 4)
+    case 357: return (void*)&sub_141a7;  // tile type at tile coords (FC00→>>10)
+    case 358: return (void*)&sub_141b3;  // tile index (low 10 bits)
+    case 359: return (void*)&sub_141ba;  // tile word read + map bounds
+    case 360: return (void*)&sub_141e0;  // tile word write via [2E63]
+    case 361: return (void*)&sub_1547e;  // ch0 getter: literal word
+    case 362: return (void*)&sub_15485;  // ch1 getter: indexed field
+    case 363: return (void*)&sub_1549a;  // ch2 getter: indirect word
+    case 364: return (void*)&sub_154a3;  // ch3 getter: indexed + partner
     default: return 0;
     }
 }

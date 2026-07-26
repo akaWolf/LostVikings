@@ -10203,6 +10203,14 @@ static uint16_t v2_vm_tile_read_141ba(V2VM& vm, uint16_t si, uint16_t di) {
     si2 += vm.ds_read((uint16_t)(di2 - LUT_ROW_BASE));
     vm.di_track = di2;   // orig SHL di,1 on the success path (task #15)
     vm.si_track = si2;   // orig si*2 + row base
+    // fn-test: a unit may point [2E63] at the game DS segment (see
+    // v2_fntest_ds_seg_override) — read the scratch DS then, like the
+    // oracle reads its own DS image through raddr.
+    extern uint16_t v2_fntest_ds_seg_override; extern uint8_t* v2_fntest_ds_seg_ptr;
+    if (v2_fntest_ds_seg_override && v2_fntest_ds_seg_ptr &&
+        vm.ds_read(DS_SEG_TILEMAP) == v2_fntest_ds_seg_override) {
+        return *(uint16_t*)(v2_fntest_ds_seg_ptr + si2);
+    }
     // fn-test parity: like v2_resolve_segment, read the tilemap segment
     // [ds:0x2E63] linearly from m2c::m (the oracle's raddr does exactly
     // that; the shadow tilemap is not populated in the selftest process).
@@ -10222,6 +10230,20 @@ static uint16_t v2_vm_tile_low_141b3(V2VM& vm, uint16_t si, uint16_t di) {
     return v2_vm_tile_read_141ba(vm, si, di) & 0x3FF;
 }
 
+// sub_141a7: Read tile TYPE at (si, di) — 141ba word, then
+// AND 0xFC00; XCHG ah,al; SHR ax,2 (== high 6 bits >> 10, in place).
+static uint16_t v2_vm_tile_type_141a7(V2VM& vm, uint16_t si, uint16_t di) {
+    uint16_t t = (uint16_t)(v2_vm_tile_read_141ba(vm, si, di) & 0xFC00);
+    t = (uint16_t)((t >> 8) | (t << 8));   // XCHG ah, al
+    return (uint16_t)(t >> 2);
+}
+
+// sub_14199: Read tile TYPE at PIXEL coords — PUSH si/di; si>>=4; di>>=4;
+// CALL 141a7; POP di/si (caller's registers preserved — by-value here).
+static uint16_t v2_vm_tile_type_px_14199(V2VM& vm, uint16_t si, uint16_t di) {
+    return v2_vm_tile_type_141a7(vm, (uint16_t)(si >> 4), (uint16_t)(di >> 4));
+}
+
 // sub_141e0: Write tile word ax to tile map at (si, di).
 // push si, di; di*=2; si*=2; si+=ds:[di-0x7098]; es=ds:0x2E63; es:[si]=ax; pop di, si.
 static void v2_vm_tile_write_141e0(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
@@ -10229,6 +10251,14 @@ static void v2_vm_tile_write_141e0(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
     uint16_t di2 = di << 1;
     uint16_t si2 = si << 1;
     si2 += vm.ds_read((uint16_t)(di2 - LUT_ROW_BASE));
+    // fn-test: [2E63]→game-DS override (see 141ba) — mirror the write into
+    // the scratch DS so it is compared byte-for-byte against the oracle's.
+    extern uint16_t v2_fntest_ds_seg_override; extern uint8_t* v2_fntest_ds_seg_ptr;
+    if (v2_fntest_ds_seg_override && v2_fntest_ds_seg_ptr &&
+        vm.ds_read(DS_SEG_TILEMAP) == v2_fntest_ds_seg_override) {
+        *(uint16_t*)(v2_fntest_ds_seg_ptr + si2) = ax;
+        return;
+    }
     if (v2_tilemap_shadow_valid && si2 < V2_TILEMAP_SHADOW_SIZE - 1) {
         *(uint16_t*)(v2_vm_shadow_tilemap + si2) = ax;
     }
@@ -12767,6 +12797,57 @@ extern "C" void v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int whic
     v2_vm_acc_base = saved_acc;
 }
 
+// Wave B1b: tile helpers (sub_14199/141a7/141b3/141ba/141e0 mirrors).
+// which: 0=141ba word, 1=141b3 low10, 2=141a7 type, 3=14199 type@pixel,
+// 4=141e0 write (ax_in). Units point [2E63] at the game DS segment via
+// v2_fntest_ds_seg_override, so reads/writes hit the scratch image.
+extern "C" void v2_fntest_call_tile(int which, uint8_t* test_shadow,
+                                    uint16_t si, uint16_t di, uint16_t ax_in,
+                                    uint16_t* out_ax) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = test_shadow;
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = 6; vm.pc = 0; vm.running = true; vm.carry = false; vm.slot = 3;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    uint16_t r = ax_in;
+    switch (which) {
+    case 0: r = v2_vm_tile_read_141ba(vm, si, di); break;
+    case 1: r = v2_vm_tile_low_141b3(vm, si, di); break;
+    case 2: r = v2_vm_tile_type_141a7(vm, si, di); break;
+    case 3: r = v2_vm_tile_type_px_14199(vm, si, di); break;
+    case 4: v2_vm_tile_write_141e0(vm, si, di, ax_in); break;
+    }
+    if (out_ax) *out_ax = r;
+    v2_vm_acc_base = saved_acc;
+}
+
+// Wave B1b: channel getters (sub_1547e/15485/1549a/154a3 mirrors). The unit
+// plants the byte stream in the FT_VM_TESTSEG zone of m2c::m; the oracle
+// reads it via v2_fntest_es_override, v2 via vm.es pointed at the same zone.
+extern "C" void v2_fntest_call_ch_getter(int ch, uint8_t* test_shadow,
+                                         uint16_t pc, uint16_t testseg,
+                                         uint16_t* out_val, uint16_t* out_pc) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow;
+    vm.es = v2_m2c_base ? v2_m2c_base + (uint32_t)testseg * 16 : test_shadow;
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = 6; vm.pc = pc; vm.running = true; vm.carry = false; vm.slot = 3;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    uint16_t v = 0;
+    switch (ch) {
+    case 0: v = v2_vm_read_literal(vm); break;
+    case 1: v = v2_vm_read_indexed_field(vm); break;
+    case 2: v = v2_vm_read_indirect(vm); break;
+    case 3: v = v2_vm_read_indexed_field_1995(vm); break;
+    }
+    if (out_val) *out_val = v;
+    if (out_pc) *out_pc = vm.pc;
+    v2_vm_acc_base = saved_acc;
+}
+
 // Anim-search family (sub_158aa..sub_158e6 mirrors). A minimal V2VM over the
 // case image; segment parity via v2_replay_verify_active (tile reads resolve
 // [ds:0x2E63] linearly into m2c::m, same as the oracle's raddr).
@@ -14847,11 +14928,7 @@ static void v2_vm_op_27(V2VM& vm) {
     // multiply's high half to the tile lookup — replicate that.
     if (vm.ch4_mul_clobber) si_x = vm.ch4_mul_dx;
     // sub_141a7: tile type lookup
-    uint16_t tile_word = v2_vm_tile_read_141ba(vm, si_x, di_y);
-    // AND 0xFC00; XCHG ah,al; SHR 2
-    uint16_t tile_type = tile_word & 0xFC00;
-    tile_type = (uint16_t)((tile_type >> 8) | (tile_type << 8)); // XCHG ah,al
-    tile_type >>= 2;
+    uint16_t tile_type = v2_vm_tile_type_141a7(vm, si_x, di_y);
     // si = tile_type; read mode2; JMP sub_154bf
     uint8_t mode2 = vm.read_u8();
     v2_vm_setter_154bf(vm, tile_type, mode2);
