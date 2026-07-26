@@ -9819,6 +9819,16 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
     FtSynthStats grid, fuzz;
     long diff_budget = 24;
     v2_set_m2c_base(v2_fntest_m2c_base());
+    // sub_117ad's open-gate case dives into sub_10cd8 (raw chunk fread):
+    // both sides need DATA.DAT. Historically this unit only passed 2/2 when
+    // it happened to run in the same process AFTER a needs-file unit had
+    // opened the handle — solo/per-unit-process runs silently UB-skipped
+    // the case on fread(NULL) (found via the coverage report, task #47).
+    if (!v2_fntest_set_data_file("DATA.DAT") || !v2_fntest_set_data_file_v2("DATA.DAT")) {
+        fprintf(stderr, "FNSELFTEST-SUMMARY[%s]: DATA.DAT missing — total cases=0 fail=1\n",
+                g_name[id]);
+        return 1;
+    }
     int which = (id == FT_SUB_117AD) ? 0 : (id == FT_SUB_117D0) ? 1 :
                 (id == FT_SUB_1183D) ? 2 : (id == FT_SUB_118AD) ? 3 :
                 (id == FT_SUB_11AA4) ? 4 : (id == FT_SUB_1200A) ? 5 :
@@ -9839,8 +9849,15 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
         memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
         uint16_t regs[8] = { ax, bx, 0, 0, si, di, 0, 0 };
         long esc0 = ft_ub_marks();
+        long mm0 = v2_fntest_ret_mismatches();
         v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
-        if (ft_ub_marks() != esc0) { st.cases--; return; }
+        if (ft_ub_marks() != esc0) {
+            st.cases--;
+            fprintf(stderr, "FNSELFTEST-UB[%s]: d_marks=%ld d_mismatch=%ld\n",
+                    g_name[id], ft_ub_marks() - esc0,
+                    v2_fntest_ret_mismatches() - mm0);
+            return;
+        }
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
         v2_fntest_call_hudvga(which, g_scratch, ax, bx, si, di);
         long diffs = 0;

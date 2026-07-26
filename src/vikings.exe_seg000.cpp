@@ -458,14 +458,12 @@ static bool v2_fntest_orig_isolated_body(void* fn, uint8_t* ds_image, uint16_t* 
     ax = io_regs[0]; bx = io_regs[1]; cx = io_regs[2]; dx = io_regs[3];
     si = io_regs[4]; di = io_regs[5]; bp = io_regs[6];
 
-    // Shadow-stack hygiene: legal POP-through paths (e.g. the off_30CA2
-    // setters popping the caller's PUSH) leave "uncontrolled pop" residue in
-    // m_ss between cases. The residue is cumulative across units and
-    // eventually makes clean RETNs look like frame escapes (sp!=sp_ref), so
-    // whole units silently degrade to 0-case UB-skips in integration runs
-    // (caught via the sub_12709 gcov paradox). Every isolated call starts
-    // from a fresh shadow stack — each call owns its virtual stack anyway.
-    m2c::shadow_stack.reset_for_fntest();
+    // NB: no unconditional shadow-stack reset here. Under fork-per-case every
+    // child inherits the parent's pristine stack (the parent never runs
+    // oracle code), so cross-case residue is impossible by construction; the
+    // FT_NO_FORK coverage mode accepts in-unit residue (units are isolated
+    // per process by tests/fn_coverage.sh). Reset stays on the fault path
+    // below only.
 
     // Escape cushion: double-POP exit opcodes (VM op 0x15 class) pop through
     // the CALL_ frame; these trap words route the runaway RETN into

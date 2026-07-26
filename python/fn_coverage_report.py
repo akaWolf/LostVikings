@@ -36,6 +36,12 @@ CLASS_SDL = {'sub_12352', 'sub_176bd', 'sub_177bb'}        # SDL-replaced bodies
 
 EIP_RE = re.compile(r'^cs=0x1a2;eip=0x([0-9a-f]+);')
 SUB_RE = re.compile(r'^(sub_[0-9a-f]+):')
+# Additional exact zone boundaries (no heuristics): m2c's own independent-
+# procedure markers and loc_ labels that are real inter-procedure CALL
+# targets (CALL(_groupN, m2c::kloc_XXXX) sites). Without them a sub_'s zone
+# swallows the neighbouring loc_-entry bodies and tail-JMP dead space.
+PROC_RE = re.compile(r'^seg000_[0-9a-f]+_proc:')
+CALL_KLOC_RE = re.compile(r'CALL\(_group[0-9]+,m2c::kloc_([0-9a-f]+)')
 
 
 def klass(name: str) -> str:
@@ -74,15 +80,48 @@ def main():
     counts = load_gcov(args.gcov_json)
     src = open(args.src, encoding='utf-8', errors='replace').read().splitlines()
 
-    # sub_ label -> [start_line, end_line) over the source; eip lines inside.
+    # Zone boundaries: sub_ labels + m2c proc markers + called-into loc_
+    # labels. A sub_'s zone ends at the NEXT boundary of any kind, so the
+    # neighbouring loc_-entry bodies stop inflating its instruction count.
+    kloc_targets = set()
+    for line in src:
+        for m in CALL_KLOC_RE.finditer(line):
+            kloc_targets.add('loc_' + m.group(1))
+    boundaries = []      # (line, name or None) — None = cut-only marker
     subs = []            # (name, start_line)
     for i, line in enumerate(src, 1):
         m = SUB_RE.match(line)
         if m:
             subs.append((m.group(1), i))
+            boundaries.append((i, m.group(1)))
+            continue
+        if PROC_RE.match(line):
+            boundaries.append((i, None))
+            continue
+        lm = re.match(r'^(loc_[0-9a-f]+):', line)
+        if lm and lm.group(1) in kloc_targets:
+            boundaries.append((i, lm.group(1)))
+    boundary_lines = sorted(b[0] for b in boundaries)
+    import bisect
+    def zone_end(start):
+        j = bisect.bisect_right(boundary_lines, start)
+        return boundary_lines[j] if j < len(boundary_lines) else len(src) + 1
     rows = []
+    loc_rows = []        # called-into loc_ entries, reported separately
+    for (bl, bname) in boundaries:
+        if bname is None or not bname.startswith('loc_'):
+            continue
+        end_l = zone_end(bl)
+        eips_l = []
+        for n in range(bl, end_l):
+            m = EIP_RE.match(src[n - 1])
+            if m:
+                eips_l.append((n, m.group(1)))
+        if eips_l:
+            missed_l = [(n, e) for (n, e) in eips_l if counts.get(n, 0) == 0]
+            loc_rows.append((bname, len(eips_l), len(eips_l) - len(missed_l), missed_l))
     for idx, (name, start) in enumerate(subs):
-        end = subs[idx + 1][1] if idx + 1 < len(subs) else len(src) + 1
+        end = zone_end(start)
         eips = []        # (line_number, eip_hex)
         for n in range(start, end):
             m = EIP_RE.match(src[n - 1])
@@ -125,6 +164,13 @@ def main():
         print(f'  {name:11} {execd:4d}/{total:<4d} {pct:6.2f}%  missed: {gaps}{more}')
     if not shown:
         print('  (none — every unit-class procedure fully covered)')
+
+    if loc_rows:
+        print('\n== called-into loc_ entries (separate zones) ==')
+        for name, total, execd, missed in loc_rows:
+            pct = 100.0 * execd / total
+            gaps = ' '.join(e for _, e in missed[:10])
+            print(f'  {name:11} {execd:4d}/{total:<4d} {pct:6.2f}%  missed: {gaps}')
 
     if args.csv:
         with open(args.csv, 'w') as f:
