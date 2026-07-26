@@ -502,6 +502,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_16880 = 402,   // VGA full wipe
             FT_SUB_11792 = 403,   // per-frame HUD update chain
             FT_SUB_11F47 = 404,   // viking proximity
+            FT_SUB_103CA = 405,   // quit-prompt screen build
+            FT_SUB_1047C = 406,   // pause-prompt screen build
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -666,7 +668,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_117ad", "sub_117d0", "sub_1183d",
                                  "sub_118ad", "sub_11aa4", "sub_1200a",
                                  "sub_12034", "sub_16880", "sub_11792",
-                                 "sub_11f47" };
+                                 "sub_11f47", "sub_103ca", "sub_1047c" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9650,7 +9652,8 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
                 (id == FT_SUB_1183D) ? 2 : (id == FT_SUB_118AD) ? 3 :
                 (id == FT_SUB_11AA4) ? 4 : (id == FT_SUB_1200A) ? 5 :
                 (id == FT_SUB_12034) ? 6 : (id == FT_SUB_16880) ? 7 :
-                (id == FT_SUB_11792) ? 8 : 9;
+                (id == FT_SUB_11792) ? 8 : (id == FT_SUB_11F47) ? 9 :
+                (id == FT_SUB_103CA) ? 10 : 11;
     FtRng rng(seed);
     uint8_t* db = v2_fntest_drawbuffer_ptr();
     uint8_t* vga = v2_fntest_vga_ptr();
@@ -9726,6 +9729,12 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
     case 7:     // 16880: full VGA wipe (single K3 case over a random baseline)
         CASE(0, 0, 0, 0, nullptr, 0, "grid", grid);
         break;
+    // NOTE: sub_103ca / sub_1047c are CLASS-L TAIL-BLOCKING: after the prompt
+    // screen build they run page-flip (writes the vsync counter =1) + the
+    // sub_10130 wait loop — nothing DECs it inside the isolator, the oracle
+    // hangs (watchdog fault at eip 0x0130 on every case, presets can't help
+    // because the flip re-arms the counter). Their bodies are mirrored by
+    // v2_pw_pre_loop, verified by the LIVE password-phase PSNAP/DS-verify.
     case 9: {   // 11f47: proximity — active viking × positions lattice
         for (uint16_t cur = 0; cur < 6; cur += 2) for (int m = 0; m < 8; m++) {
             FtWr w[12]; int n = 0;

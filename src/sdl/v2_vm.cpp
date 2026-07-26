@@ -13160,6 +13160,15 @@ extern "C" void v2_fntest_call_hudvga(int which, uint8_t* shadow, uint16_t ax,
     case 7: v2_clear_pages_16880(shadow); break;
     case 8: v2_hud_update_11792(shadow); break;
     case 9: v2_viking_proximity_11f47(shadow); break;
+    case 10:   // sub_103ca: quit-prompt path — force the F10 spec key
+        shadow[DS_KEY_F10] = 1; shadow[DS_KEY_ALT] = 0;
+        v2_pw_pre_loop(shadow);
+        break;
+    case 11:   // sub_1047c: pause-prompt path — no quit keys
+        shadow[DS_KEY_F10] = 0; shadow[DS_KEY_ALT] = 0;
+        shadow[DS_KEY_X] = 0; shadow[DS_KEY_Q] = 0;
+        v2_pw_pre_loop(shadow);
+        break;
     }
     v2_vm_acc_base = saved_acc;
 }

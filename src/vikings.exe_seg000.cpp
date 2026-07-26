@@ -270,6 +270,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 402: return (void*)&sub_16880;  // VGA full wipe (port drawPixel loop)
     case 403: return (void*)&sub_11792;  // per-frame HUD update chain
     case 404: return (void*)&sub_11f47;  // viking proximity check
+    case 405: return (void*)&sub_103ca;  // quit-prompt screen build (F10/ALT+X path)
+    case 406: return (void*)&sub_1047c;  // pause-prompt screen build (ESC path)
     default: return 0;
     }
 }
