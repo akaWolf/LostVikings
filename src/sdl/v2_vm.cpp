@@ -2892,18 +2892,24 @@ static void v2_viking_proximity_11f47(uint8_t* s) {
 
 // loc_1205B: HUD selector sync tail of sub_11792. Per viking: if the live
 // selector [414+vk*2] differs from the tracked [41A+vk*2]: redraw the OLD
-// slot's item, sync tracking, draw the new selector.
+// slot's item, sync tracking, draw the new selector. The slot index carries
+// the per-viking base BEFORE the *2: viking 0 di=[41A]*2 (2064), viking 1
+// di=([41C]+4)*2 (2087: add di,4), viking 2 di=([41E]+8)*2 (20B0: add di,8)
+// — same base on the 118ad side (2071/2097/20B4). Divergence #48: the
+// mirror used the bare value for all three vikings.
 static void v2_hud_sel_sync_1205b(uint8_t* s) {
     for (int vk = 0; vk < 3; vk++) {
         uint16_t cur_off = 0x0414 + vk * 2;
         uint16_t prev_off = DS_HUD_SEL_PREV + vk * 2;
+        uint16_t base = (uint16_t)(vk * 4);          // slot base +0/+4/+8
         if (*(uint16_t*)(s + cur_off) != *(uint16_t*)(s + prev_off)) {
-            uint16_t old_di = *(uint16_t*)(s + prev_off) * 2;
+            uint16_t old_di = (uint16_t)((*(uint16_t*)(s + prev_off) + base) * 2);
             v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
             v2_vga_hud_item_1183d(s, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
             *(uint16_t*)(s + prev_off) = *(uint16_t*)(s + cur_off);
-            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + cur_off) * 2);
-            v2_vga_selector_118ad(s, *(uint16_t*)(s + cur_off) * 2);
+            uint16_t new_di = (uint16_t)((*(uint16_t*)(s + cur_off) + base) * 2);
+            v2_draw_hud_selector(v2_current_ds_val, new_di);
+            v2_vga_selector_118ad(s, new_di);
         }
     }
 }

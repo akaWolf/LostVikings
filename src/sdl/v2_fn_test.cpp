@@ -2205,10 +2205,6 @@ int ft_selftest_search(FtId id, uint32_t seed) {
     static const SCase SC[] = {
         // in-map bbox, tile type 5 under Y_end+1 probe (row1), filter matches 5 → tile hit
         { 0x8000, 0x0010, 0x0020, 0x0008, 0x000E, 0x0005, 0x00FF, 0, 0, 0, 0, 0, 0 },
-        // (#47) slope/cliff branch of 15afd: filter 0x30 — the >=0x30 tile
-        // word comes from the same crafted map (types (i&0x3F)<<10 reach
-        // 0x30+ on rows 12+: probe geometry below row 12).
-        { 0x8000, 0x0010, 0x0020, 0x00C8, 0x00CE, 0x0030, 0x00FF, 0, 0, 0, 0, 0, 0 },
         // filter stops before (first entry > type) → no tile; no obj → none
         { 0x8000, 0x0010, 0x0020, 0x0008, 0x000E, 0x0006, 0x00FF, 0, 0, 0, 0, 0, 0 },
         // filter chain: first entry smaller, second matches (INC walk)
@@ -2508,16 +2504,29 @@ int ft_selftest_scan(FtId id, uint32_t seed) {
     if (shard0 && is_afd) {
         struct ACase { uint16_t y, yp, ye, x, xs, xe; uint16_t f0f1; uint16_t slope; };
         static const ACase AC[] = {
-            // moved down (y>yp), slope filter 0x30, probe over slope row 2 (y=0x20-0x2F)
-            { 0x0030, 0x0020, 0x002E, 0x0015, 0x0010, 0x0020, 0x0030 | (0xFF<<8), 0x0004 },
+            // moved down (y>yp), slope filter 0x30, probe over slope row 2:
+            // probe = yp - y + ye = 0x20-0x30+0x3E = 0x2E (row2!) — the old
+            // ye=0x2E landed the probe on row1 (type<0x30) and the whole
+            // slope arm stayed dead (#47).
+            { 0x0030, 0x0020, 0x003E, 0x0015, 0x0010, 0x0020, 0x0030 | (0xFF<<8), 0x0004 },
             // same but slope value larger than (temp&0xF) → sr<0 → probe B/walk
-            { 0x0030, 0x0020, 0x002E, 0x0015, 0x0010, 0x0020, 0x0030 | (0xFF<<8), 0x000F },
+            { 0x0030, 0x0020, 0x003E, 0x0015, 0x0010, 0x0020, 0x0030 | (0xFF<<8), 0x000F },
+            // chain walk: first byte <0x30 (INC si loop), then the slope 0x30
+            { 0x0030, 0x0020, 0x003E, 0x0015, 0x0010, 0x0020, 0x0005 | (0x30<<8), 0x0004 },
+            // chain terminator 0xFF first → the 15bb8 tail arm
+            { 0x0030, 0x0020, 0x003E, 0x0015, 0x0010, 0x0020, 0x00FF | (0xFF<<8), 0x0000 },
+            // both probes on slope row2 (probe2 = ye = 0x2E) → the JGE arm
+            { 0x0030, 0x0028, 0x002E, 0x0015, 0x0010, 0x0020, 0x0030 | (0xFF<<8), 0x0004 },
             // plain filter (no slope in chain) → straight to walk over match row 3
             { 0x0040, 0x0030, 0x003E, 0x0015, 0x0010, 0x0020, 0x0005 | (0xFF<<8), 0x0000 },
             // walk with same 16px row (old_ye & F0 == ye & F0) → early CLC
             { 0x0032, 0x0030, 0x0031, 0x0015, 0x0010, 0x0020, 0x0005 | (0xFF<<8), 0x0000 },
             // walk clamp: X range not multiple of 16
             { 0x0040, 0x0030, 0x003E, 0x0015, 0x0012, 0x002D, 0x0005 | (0xFF<<8), 0x0000 },
+            // 5ba8 arm: probe1 (yp-y+ye=0x1E, row1 type 4 <0x30) -> 15b88;
+            // probe2 at ye=0x2E row2 col0 = type 0x30 (slope); 16390 gives
+            // (ye&0xF)=0xE minus slope 0xF -> negative -> JNS not taken.
+            { 0x0030, 0x0020, 0x002E, 0x0005, 0x0000, 0x0010, 0x0030 | (0xFF<<8), 0x000F },
         };
         int ai = 0;
         for (const ACase& c : AC) {
@@ -4457,7 +4466,10 @@ void ft_norm_13a0e(uint8_t* img) {
 // oracle's renderer (aborting it mid-way) — outside the function's domain;
 // pin them into range after each noise fill.
 void ft_norm_11c52(uint8_t* img) {
-    ft_wr16(img, 0x0443, (uint16_t)(*(uint16_t*)(img + 0x0443) % 12));
+    // [443] domain is 0..12, NOT 0..11: sub_12250's di==3 arm returns the
+    // trash slot ax=0x18 and the caller stores [443]=0x18>>1=0x0C (12).
+    // Category 12 is what drives the 1d3f/1d42 poll-loop wrap (#47).
+    ft_wr16(img, 0x0443, (uint16_t)(*(uint16_t*)(img + 0x0443) % 13));
     ft_wr16(img, 0x0441, (uint16_t)(*(uint16_t*)(img + 0x0441) % 0x18));
     ft_wr16(img, 0x0414, (uint16_t)(*(uint16_t*)(img + 0x0414) % 6));
     ft_wr16(img, 0x0416, (uint16_t)(*(uint16_t*)(img + 0x0416) % 6));
@@ -6067,10 +6079,42 @@ int ft_selftest_coll_dir(FtId id, uint32_t seed) {
     // stripe/partner. Tile stripe (type 0x30, world y 0x40..0x4F) with the
     // self moving into it from both sides, and a partner-object hit around
     // the shared 0x100 box.
-    ctx(0x0001, 0x0000, 4, 0x0048, 0x0040, 1, 0); run1("grid", grid);
-    ctx(0x0001, 0x0000, 4, 0x0040, 0x0048, 1, 0); run1("grid", grid);
-    ctx(0x0001, 0x0000, 4, 0x0108, 0x0100, 1, 1); run1("grid", grid);
-    ctx(0x0001, 0x0000, 4, 0x0100, 0x0108, 1, 1); run1("grid", grid);
+    // NB the crafted map is 16 columns (X pixels 0..0xFF) — the ctx default
+    // bbox X 0x100.. puts every probe OUT of the map (type 0x400 path), so
+    // the hit cases override X into columns 4..5 right after ctx (#47).
+    auto inmap_x = [&]() {
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), 0x0040);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), 0x0050);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_X), 0x0048);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_X_PREV),  0x0048);
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X0), 0x0040);
+        ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_BBOX_X1), 0x0050);
+        // 15911's Y-walk probes start at Y_start ([di+14E5]) / bottom
+        // ([di+150D]) — anchor them around the row-4 stripe (#47).
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x14E5), 0x0048);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x150D), 0x0050);
+        ft_wr16(g_synth_in, (uint16_t)(2 + 0x14E5), 0x0048);
+        ft_wr16(g_synth_in, (uint16_t)(2 + 0x150D), 0x0050);
+    };
+    ctx(0x0001, 0x0000, 4, 0x0048, 0x0040, 1, 0); inmap_x(); run1("grid", grid);
+    ctx(0x0001, 0x0000, 4, 0x0040, 0x0048, 1, 0); inmap_x(); run1("grid", grid);
+    ctx(0x0001, 0x0000, 4, 0x0048, 0x0048, 1, 1); inmap_x(); run1("grid", grid);
+    ctx(0x0001, 0x0000, 4, 0x0040, 0x0048, 1, 1); inmap_x(); run1("grid", grid);
+    // Coverage-directed (#47): the 15c93/1614e OBJECT scans skip equal
+    // velocities (JZ on [di+196D]-[si+196D]); a falling self (VY=8) over
+    // the static partner passes the delta gate AND the VY-adjusted bbox
+    // overlap -> CF=1 -> the 15da8 snap calls (580f / 5872).
+    ctx(0x0001, 0x0000, 4, 0x0048, 0x0048, 1, 1); inmap_x();
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y), 0x0008);
+    run1("grid", grid);
+    // 1584e twin (#47): 1614e->161a1 needs the partner's VY-adjusted top
+    // ([si+14E5]-[si+1765]+[si+13CD]) to reach the self interval bottom
+    // ([34]=0x50): partner bbox top 0x50 with zero movement passes every
+    // JGE gate -> STC -> the 5872 CALL sub_15da8 arm.
+    ctx(0x0001, 0x0000, 4, 0x0048, 0x0048, 1, 1); inmap_x();
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y), 0x0008);
+    ft_wr16(g_synth_in, (uint16_t)(2 + 0x14E5), 0x0050);
+    run1("grid", grid);
     FtRng rng(seed);
     for (int i = 0; i < 300; i++) {
         uint16_t stv = (uint16_t)((rng.next() % 3 == 0) ? 0
@@ -6474,6 +6518,26 @@ int ft_selftest_sub_15788(uint32_t seed) {
     ctx(0x0001, 0x0000, 4, 0x0108, 0x0100, 1); run1("grid", grid);   // moved right + obj
     ctx(0x0001, 0x0000, 4, 0x0100, 0x0108, 1); run1("grid", grid);   // moved left + obj
     ctx(0x0001, 0x0000, 4, 0x0100, 0x0100, 1); run1("grid", grid);   // vel-scan path
+    // Coverage-directed (#47): wx!=px enters the 158f5 X-walks (159d3 probes
+    // the X0 edge, 159ec probes X1). The walk STCs only when the probed tile
+    // type EQUALS a chain byte (JZ in the filter scan), and the [173D]-column
+    // pre-probe must stay <0x30 — so: a single type-0x30 cell on the probe
+    // column, empty world elsewhere -> CF=1 -> the 57A2 CALL sub_1592d arm.
+    auto walk_hit_map = [&](unsigned colx) {
+        g_vm_es_in[4 * 32 + colx * 2]     = 0x00;   // (row 4, col colx)
+        g_vm_es_in[4 * 32 + colx * 2 + 1] = 0xC0;   // word 0xC000 = type 0x30
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y0), 0x0040);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_Y1), 0x0048);
+        ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y), 0);
+    };
+    ctx(0x0001, 0x0000, 4, 0x0048, 0x0040, 0);      // right walk: X1 0x50 -> col 5
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), 0x0040);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), 0x0050);
+    walk_hit_map(5); run1("grid", grid);
+    ctx(0x0001, 0x0000, 4, 0x0040, 0x0048, 0);      // left walk: X0 0x30 -> col 3
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X0), 0x0030);
+    ft_wr16(g_synth_in, (uint16_t)(di + OBJ_BBOX_X1), 0x0048);
+    walk_hit_map(3); run1("grid", grid);
     FtRng rng(seed);
     for (int i = 0; i < 300; i++) {
         uint16_t stv = (uint16_t)((rng.next() % 3 == 0) ? 0
@@ -6709,6 +6773,14 @@ int ft_selftest_sub_13916(uint32_t seed) {
     ctx(0x0002, 0x0000, 0x0080, 0); run1("grid", grid);   // vflip differs
     ctx(0x0002, 0x0040, 0x0080, 1); run1("grid", grid);   // both + subs
     ctx(0x0002, 0x0040, 0x0000, 1); run1("grid", grid);   // hflip + empty sub range corner
+    // Coverage-directed (#47): dead slot 0 ([1355]=0 -> the 3920 skip arm)
+    // with a live slot 1 on the vel-apply path.
+    ctx(0x0100, 0x0000, 0x0000, 0);
+    ft_wr16(g_synth_in, (uint16_t)(0 + OBJ_CODE_SEG), 0);
+    ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_ANIM_TABLE), 0x0100);
+    ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_VEL_X), 0x0008);
+    ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_VEL_Y), 0xFFF8);
+    run1("grid", grid);
     FtRng rng(seed);
     for (int i = 0; i < 8000; i++) {
         uint16_t at = (uint16_t)((rng.next() % 3 == 0) ? 0xFFFF
@@ -7910,6 +7982,11 @@ int ft_selftest_scroll_band(FtId id, uint32_t seed) {
     run1(0x0001, 0x0001, 0x00AC, "grid", grid);   // DEC edges
     run1(0x0010, 0x0008, 0x00AC, "grid", grid);
     run1(0x0027, 0x0018, 0x00AC, "grid", grid);
+    // Coverage-directed (#47): a negative display row makes [92F1]+0x17
+    // signed-negative -> the 70C2 di=0 clamp (170b9's entry); the clamped
+    // row 0 stays inside the row-LUT domain.
+    if (id == FT_SUB_170B9)
+        run1(0xFFE0, 0x0000, 0x00AC, "grid", grid);
     for (int i = 0; i < 120; i++)
         run1((uint16_t)(rng.next() % 0x28), (uint16_t)(rng.next() % 0x20),
              0x00AC, "fuzz", fuzz);
@@ -8903,19 +8980,52 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         uint16_t t = FT_VM_PC + 0x40;
         uint8_t c[] = {op, 0x01, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
         A(c, 5, O, "grid");
-        // Coverage-directed (#47): the JO landing of the signed compare
-        // (SUB dx,ax) needs signed overflow. Two symmetric cases cover every
-        // channel: acc 0x8000 with a POSITIVE operand, and acc 0x7FFF with a
-        // NEGATIVE one. The ch1 operand field for idx 0x40 resolves to
-        // ds:0x19EB (LUT[0x9386]=0x0500 + [42]=6 + 0x14E5); ch2 reads the
-        // word at ds:0x6000 (frame convention).
+        // Coverage-directed (#47): the JO/JS landings need signed overflow
+        // in SUB dx,ax; the CF-form ops (JC/JNC) need acc < operand unsigned.
+        // The frame's channel arg byte is 0x01, so per-getter operands are:
+        //   1547e: literal word from the stream = 0x01|(t_lo<<8)
+        //   15485 (ch1): [LUT@0x9347 + [42]=6 + 0x14E5] -> LUT seeded 0
+        //                => operand at ds:0x14EB
+        //   1549a (ch2): operand at the stream literal address 0x01|(t_lo<<8)
+        //   154a3 (ch3): [LUT@0x9347 + [0x199B] + 0x14E5] -> both seeded 0
+        //                => operand at ds:0x14E5
+        //   12312 (RNG): [3CC]=1 -> nonzero deterministic output
         {
-            static const FtWr wovp[] = { {0x008A, 0x8000},
-                                         {0x19EB, 0x0001}, {0x6000, 0x0001} };
-            A(c, 5, O, "grid", wovp, 3);
-            static const FtWr wovn[] = { {0x008A, 0x7FFF},
-                                         {0x19EB, 0xFFFF}, {0x6000, 0xFFFF} };
-            A(c, 5, O, "grid", wovn, 3);
+            uint16_t ch2a = (uint16_t)(0x0001 | ((t & 0xFF) << 8));
+            FtWr wop[8]; int nwo;
+            // positive operand vs acc 0x8000 -> overflow down (JO, SF=0)
+            nwo = 0;
+            wop[nwo++] = {0x008A, 0x8000};
+            wop[nwo++] = {0x0352, 0x0100};
+            wop[nwo++] = {0x9347, 0x0000};
+            wop[nwo++] = {0x14EB, 0x0001};
+            wop[nwo++] = {ch2a,   0x0001};
+            wop[nwo++] = {0x199B, 0x0000};
+            wop[nwo++] = {0x14E5, 0x0001};
+            wop[nwo++] = {0x03CC, 0x0001};
+            A(c, 5, O, "grid", wop, nwo);
+            // negative operand vs acc 0x7FFF -> overflow up (JO, SF=1)
+            nwo = 0;
+            wop[nwo++] = {0x008A, 0x7FFF};
+            wop[nwo++] = {0x0352, 0x0100};
+            wop[nwo++] = {0x9347, 0x0000};
+            wop[nwo++] = {0x14EB, 0xFFFF};
+            wop[nwo++] = {ch2a,   0xFFFF};
+            wop[nwo++] = {0x199B, 0x0000};
+            wop[nwo++] = {0x14E5, 0xFFFF};
+            wop[nwo++] = {0x03CC, 0x0001};
+            A(c, 5, O, "grid", wop, nwo);
+            // CF landing (op71 family): acc 0 below any nonzero operand
+            nwo = 0;
+            wop[nwo++] = {0x008A, 0x0000};
+            wop[nwo++] = {0x0352, 0x0100};
+            wop[nwo++] = {0x9347, 0x0000};
+            wop[nwo++] = {0x14EB, 0x0001};
+            wop[nwo++] = {ch2a,   0x0001};
+            wop[nwo++] = {0x199B, 0x0000};
+            wop[nwo++] = {0x14E5, 0x0001};
+            wop[nwo++] = {0x03CC, 0x0001};
+            A(c, 5, O, "grid", wop, nwo);
         }
         fuzz_op = op; fuzz_alen = 3; break;
     }
@@ -9081,6 +9191,14 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         if (id == FT_SUB_15268 || id == FT_SUB_1529A || id == FT_SUB_152B3) {
             static const FtWr winact[] = { {0x16CB, 0x8000} };
             A(c, 5, O, "grid", winact, 1);
+        }
+        // Coverage-directed (#47): opCC's second dispatch (530E, off_30c92)
+        // needs the object inside BOTH camera windows: [44]+0x1F < X <=
+        // [44]+0x121 and [46]+0x1F < Y <= [46]+0x91 (frame slot 6).
+        if (id == FT_SUB_152DE) {
+            static const FtWr wwin[] = { {0x0044, 0}, {0x0046, 0},
+                                         {0x1743, 0x0030}, {0x176B, 0x0030} };
+            A(c, 5, O, "grid", wwin, 4);
         }
         // Frame fix (#47, "пятёрка"): these handlers read a MODE WORD whose
         // low 3 bits drive the first channel call and bits 3-5 the second
@@ -9807,6 +9925,18 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
             w[n++] = FtWr{0x3D4, 4};         // table walk cursor [288B4]
             CASE(w, n, 0, "grid", grid);
         }
+        // Coverage-directed (#47): default key path (lv not in 2B-2E) with
+        // the list terminator 0xFFFF at [si+2B66] -> the 32F si=0 wrap arm.
+        {
+            FtWr w[8]; int n = 0;
+            w[n++] = FtWr{0x3CC, 0x8000};
+            w[n++] = FtWr{0x25AD, 0x0005};
+            w[n++] = FtWr{0x3B6, 0x1000};
+            w[n++] = FtWr{0x2191, 0x2200};
+            w[n++] = FtWr{0x3D4, 4};
+            w[n++] = FtWr{0x2B6C, 0xFFFF};   // [4+2+0x2B66]
+            CASE(w, n, 0, "grid", grid);
+        }
     } else if (id == FT_SUB_10555) {
         // blink phases: [445] values crossing the &0xF==0 / &0x10 branches ×
         // option [443] 0/1; AIL off; K3 catches the glyph/flip pixels.
@@ -10099,6 +10229,13 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
         CASE(0, 0, 0, 0, g0, 1, "grid", grid);
         static const FtWr g1[] = {{0x25CF, 0x0001}, {0x25AD, 0x002C}};
         CASE(0, 0, 0, 0, g1, 2, "grid", grid);
+        // Coverage-directed (#47): all three loc_1205b HUD pairs desynced
+        // ([414]!=[41A], [416]!=[41C], [418]!=[41E]) -> the 1183d/118ad
+        // redraw arms inside loc_1205b fire.
+        static const FtWr g2[] = {{0x25CF, 0x0001}, {0x25AD, 0x0001},
+                                  {0x414, 1}, {0x41A, 0}, {0x416, 1},
+                                  {0x41C, 0}, {0x418, 1}, {0x41E, 0}};
+        CASE(0, 0, 0, 0, g2, 8, "grid", grid);
         for (int i = 0; i < 60; i++) {
             FtWr w[14]; int n = 0;
             w[n++] = FtWr{0x25CF, 0x0001};
@@ -10188,6 +10325,15 @@ int ft_selftest_12250(uint32_t seed) {
             w[n++] = FtWr{(uint16_t)((di << 3) + sl * 2 + 0x3E4),
                           (uint16_t)((m & 2) && sl < 3 ? 5 : 0)};
         CASE(di, w, n, "grid", grid);
+    }
+    // Coverage-directed (#47): all four inventory slots busy -> the LOOP
+    // exhausts and the 2271 POP-di/STC reject arm fires.
+    {
+        FtWr w[8]; int n = 0;
+        w[n++] = FtWr{0x449, 0};
+        w[n++] = FtWr{0x3E4, 5}; w[n++] = FtWr{0x3E6, 5};
+        w[n++] = FtWr{0x3E8, 5}; w[n++] = FtWr{0x3EA, 5};
+        CASE(0, w, n, "grid", grid);
     }
     for (int i = 0; i < 200; i++) {
         FtWr w[12]; int n = 0;
@@ -10883,6 +11029,19 @@ int ft_selftest_spawn2() {
             g_synth_in[0x25BA] = (uint8_t)m;
             ft_spawn_case_id(FT_SUB_11446, 0, "mode", g2, diff_budget);
         }
+        // Coverage-directed (#47): default path (mode 3) with [2AAA1] bit6
+        // set takes both JNZ arms (ADD 0x20 @14F2 / ADD 0x40 @1526).
+        {
+            FtSpawnRec none[] = { { 0x0500, 0x0500, 8, 8, 0, 0, 0 } };
+            const FtWr wr[] = { {0x0044,0x0100},{0x0046,0x0100},
+                                {0x25BB, 0x0140},{0x25BD, 0x0120},
+                                {0x25BF, 0x0001},{0x25C1, 0x0040},
+                                {0x25C3, 0x0042},
+                                {0x25C5, 0x0180},{0x25C7, 0x0110} };
+            ft_spawn_build(none, 1, T, sizeof(T), wr, 9);
+            g_synth_in[0x25BA] = 3;
+            ft_spawn_case_id(FT_SUB_11446, 0, "mode-dir40", g2, diff_budget);
+        }
         fprintf(stderr, "FNSELFTEST-SUMMARY[sub_11446]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
                 g2.pass, g2.cases, g2.cases, g2.fail, g2.fail ? "  <<< DIVERGENCE" : "");
         rc |= g2.fail ? 1 : 0; grid.cases += g2.cases; grid.fail += g2.fail;
@@ -10962,6 +11121,14 @@ int ft_selftest_spawn_band(FtId id, uint32_t seed) {
         const FtWr wr[] = { {0x0044, 0x0008}, {0x0046, 0x0008} };
         ft_spawn_build(recs, 1, T, (int)tlen, wr, 2);
         run_case("clamp-zero");
+    }
+    // Deep-negative viewport (#47): [36]=[44]+0x150 and [3A]=[46]+0xC0 both
+    // go negative -> the 3AA8/3AC2 zero-clamp arms fire.
+    {
+        FtSpawnRec recs[] = { { 0x0008, 0x0008, 8, 8, 0, 0, 0 } };
+        const FtWr wr[] = { {0x0044, 0x8000}, {0x0046, 0x8000} };
+        ft_spawn_build(recs, 1, T, (int)tlen, wr, 2);
+        run_case("clamp-negative");
     }
     fprintf(stderr,
         "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
@@ -11120,16 +11287,24 @@ int ft_selftest_sub_11cbb() {
     // 120d1/11f47/177bb chain; plus the HUD category-wrap of the 0x100 arm
     // and the 0x2000 exchange (11f93 JC/STC exits).
     {
-        struct EC { uint16_t mode, inp, anchor, s0, s1, s2, cat; };
+        struct EC { uint16_t mode, inp, anchor, s0, s1, s2, cat, item; };
         static const EC EC_CASES[] = {
-            { 1, 0x0020, 4, 1, 1, 1, 0 },   // switch left, all alive
-            { 1, 0x0010, 4, 1, 1, 1, 0 },   // switch right, all alive
-            { 1, 0x0020, 0, 1, 0, 0, 0 },   // left from slot 0 → wrap di=4
-            { 1, 0x0010, 4, 1, 0, 0, 0 },   // right from 4 → wrap di=0
-            { 1, 0x8000, 4, 1, 1, 1, 0 },   // exit-mode Enter arm
-            { 1, 0x2000, 4, 1, 1, 1, 0 },   // exit-mode exchange arm
-            { 0, 0x0100, 0, 1, 1, 1, 2 },   // HUD: cat wrap (only cat-0 busy)
-            { 0, 0x2000, 0, 1, 1, 1, 0 },   // HUD: 0x2000 exchange (11f93)
+            { 1, 0x0020, 4, 1, 1, 1, 0, 1 },   // switch left, all alive
+            { 1, 0x0010, 4, 1, 1, 1, 0, 1 },   // switch right, all alive
+            { 1, 0x0020, 0, 1, 0, 0, 0, 1 },   // left from slot 0 → wrap di=4
+            { 1, 0x0010, 4, 1, 0, 0, 0, 1 },   // right from 4 → wrap di=0
+            { 1, 0x8000, 4, 1, 1, 1, 0, 1 },   // exit Enter arm (121b9+120d1)
+            { 1, 0x2000, 4, 1, 1, 1, 0, 1 },   // exit exchange arm
+            { 0, 0x0100, 0, 1, 1, 1, 2, 1 },   // HUD: cat wrap (only cat-0 busy)
+            { 0, 0x2000, 0, 1, 1, 1, 0, 1 },   // HUD: 0x2000 exchange (11f93)
+            { 1, 0x0100, 4, 1, 1, 1, 0, 1 },   // exit: right-arrow use arm (bit0)
+            { 1, 0x0200, 4, 1, 1, 1, 0, 1 },   // exit: left-arrow arm
+            { 1, 0x0800, 4, 1, 1, 1, 0, 2 },   // exit: 0x800 arm needs bit1 SET
+            { 1, 0x0400, 4, 1, 1, 1, 0, 0 },   // exit: 0x400 arm needs bit1 CLEAR
+            { 1, 0x1000, 4, 1, 1, 1, 0, 1 },   // exit: 0x3000-selection arm
+            // (#47) HUD 0x100 arm with category 0x0C: di=[443]>>2=3, the
+            // INC hits 4 -> the 1d3f/1d42 di=0 wrap of the viking poll loop.
+            { 0, 0x0100, 0, 1, 1, 1, 0x0C, 1 },
         };
         for (const EC& c : EC_CASES) {
             memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
@@ -11144,6 +11319,13 @@ int ft_selftest_sub_11cbb() {
             // categories: only cat-0 busy (slot word at [3E4])
             for (uint32_t a = 0x3E4; a < 0x404; a += 2) ft_wr16(g_synth_in, a, 0);
             ft_wr16(g_synth_in, 0x3E4, 5);
+            // category-presence bytes: only cat-0 (otherwise the 12250
+            // cascade finds cats 1-3 from the base image before wrapping)
+            ft_wr16(g_synth_in, 0x449, 1);
+            ft_wr16(g_synth_in, 0x44B, 0);
+            // (#47) Enter-arm deep path: bit0 of the anchored viking's item
+            // word [slot+0x414] drives the consume/redraw block (1e3b+).
+            ft_wr16(g_synth_in, (uint16_t)(c.anchor + 0x414), c.item);
             ft_norm_11c52(g_synth_in);
             ft_fill_tail(g_synth_in);
             memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
