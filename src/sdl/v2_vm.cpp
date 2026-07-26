@@ -5997,10 +5997,18 @@ static void v2_open_data_dat_12989(uint8_t* s) {
     // INT 10h/1Ah: VGA display combination check — not needed (we know it's VGA)
     // CPU detection (EFLAGS test) — not needed (we're on modern CPU)
 
-    // sub_179a8 / sub_179fb: joystick calibration
-    // DS writes: ds:0x86DA = joystick present flag, ds:0x86D2..0x86D8 = calibration
-    // For v2: no joystick. Mark as absent.
-    *(uint16_t*)(s + DS_JOYSTICK_PRESENT) = 0; // no joystick
+    // sub_179a8 / sub_179fb: joystick calibration — the port's transplanted
+    // RETN was removed (the orig 2A55-2A7D detect runs again), so the mirror
+    // must reproduce its DS writes. Under the deterministic 8253-latch model
+    // (asm.cpp: latch step 0x1C00 per OUT 43h, pit starts 0xFFFF):
+    //   sub_179a8: one lap — latch1=0xE3FF into [32880] (79C4/79CB byte
+    //   writes), [3287E] accumulates one 0x10 step, elapsed 0x1C00 >= 0x1BF8
+    //   exits; sub_179fb probes the idle port (IN 0x201 -> 0xFF, NOT=0,
+    //   TEST 3 == 0) -> full LOOPE -> JCXZ bail: [32882] untouched, CF=1 ->
+    //   the 2A61 JC skips the 86D2..86D8 threshold writes.
+    *(uint16_t*)(s + 0xA39E) = 0x0010;         // word_3287E (calibration accum)
+    *(uint16_t*)(s + 0xA3A0) = 0xE3FF;         // word_32880 (PIT latch snapshot)
+    *(uint16_t*)(s + DS_JOYSTICK_PRESENT) = 0; // ds:86DA = 0 (2A58 + no 2A7D)
 }
 
 // sub_12ab8: segment allocation + initial data load.

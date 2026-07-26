@@ -7690,7 +7690,10 @@ cs=0x1a2;eip=0x002a4c; 	X(POP(ax));	// 5676 pop     ax ;~ 01A2:2A4C
 cs=0x1a2;eip=0x002a4d; 	T(AND(ax, 0x4000));	// 5677 and     ax, 4000h ;~ 01A2:2A4D
 cs=0x1a2;eip=0x002a50; 	T(CMP(ax, 0x4000));	// 5678 cmp     ax, 4000h ;~ 01A2:2A50
 cs=0x1a2;eip=0x002a53; 	J(JNZ(loc_12aaf));	// 5679 jnz     short loc_12AAF ;~ 01A2:2A53
-cs=0x1a2;eip=0x002a83;         J(RETN(0));     // 5695 retn ;~ 01A2:2A83
+ // (a transplanted RETN copy of 2A83 used to sit here, cutting the joystick
+ //  detect below out of the port; removed — the 8253-latch PIT model makes
+ //  sub_179a8 finite and the idle game-port model (IN 0x201 -> 0xFF) makes
+ //  sub_179fb time out honestly, so the detect fails clean with [86DA]=0.)
 cs=0x1a2;eip=0x002a55; 	J(CALL(sub_179a8,0));	// 5680 call    sub_179A8 ;~ 01A2:2A55
 cs=0x1a2;eip=0x002a58; 	X(MOV(*(dw*)(raddr(ds,0x86DA)), 0));	// 5681 mov     word ptr ds:86DAh, 0 ;~ 01A2:2A58
 cs=0x1a2;eip=0x002a5e; 	J(CALL(sub_179fb,0));	// 5682 call    sub_179FB ;~ 01A2:2A5E

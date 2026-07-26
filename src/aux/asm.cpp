@@ -227,7 +227,11 @@ void asm2C_OUT(int16_t address, int data,_STATE* _state) {
 //    timer calibration (sub_179a8) spin forever.
 //  - port 0x201 (game port): idle default is overridable per unit-case via
 //    v2_fntest_set_in201 (axis bits need a non-idle byte).
-static int v2_fntest_in201 = 0;   // keep the historic 0 default (models set it)
+// Idle game port reads 0xFF on real hardware (pull-ups, buttons active-low,
+// no axis capacitors discharging) — 0 would read as "all buttons pressed"
+// and a successful axis detect, flooding live input once the restored
+// joystick detect (12989 tail) runs.
+static int v2_fntest_in201 = 0xFF;
 extern "C" void v2_fntest_set_in201(int v) { v2_fntest_in201 = v & 0xFF; }
 // 8253 PIT model: OUT 0x43 latches the down-counter (mode-2 semantics),
 // the two following IN 0x40 reads return the LATCHED lo then hi byte —

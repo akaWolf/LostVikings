@@ -12238,40 +12238,44 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
     FtRegs r0{};
     switch (id) {
     case FT_SUB_12EF8: {
-        // joystick poll: buttons AL=0 -> NOT ax(=0) = 0xFFFF -> all four
-        // button bits; axes via 179fb: LOOPE-1 exits on iteration 1
-        // (probe reads NOT al = 0xFF, TEST 3 != 0), [32882]=cx-1, ah=0 ->
-        // 17a32 exit ax=bx=[3287E]-1. Thresholds drive the four OR arms.
+        // Idle port model (IN 0x201 -> 0xFF): buttons released (NOT ax =
+        // 0xFF00 has no 0x10..0x80 bits), the 179fb axis wait times out
+        // via JCXZ (probe NOT al = 0, TEST 3 == 0 -> full LOOPE) — ax keeps
+        // 0xFF00 (-256), bx stays 0, [32882] untouched.
         {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
                                       {0x86D2,0x30},{0x86D4,0x10},
                                       {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
-            static const Exp e[] = { {0x86DC,0xCFC0},{0xA3A2,0x1F} };
-            CASE(w,7,r0,e,2,"present-low");
+            static const Exp e[] = { {0x86DC,0x0500} };
+            CASE(w,7,r0,e,1,"idle-low");
         }
-        {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
-                                      {0x86D2,0x05},{0x86D4,0x30},
-                                      {0x86D6,0x05},{0x86D8,0x30},{0x3CC,0} };
-            static const Exp e[] = { {0x86DC,0xC0C0},{0xA3A2,0x1F} };
-            CASE(w,7,r0,e,2,"present-high");
+        {   // negative thresholds flip all four arms: -256 > -512 (no
+            // 0x100), -256 !< -256 (0x200), 0 > -16 (no 0x400), 0 !< 0
+            // (0x800).
+            static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
+                                      {0x86D2,0xFE00},{0x86D4,0xFF00},
+                                      {0x86D6,0xFFF0},{0x86D8,0x0000},{0x3CC,0} };
+            static const Exp e[] = { {0x86DC,0x0A00} };
+            CASE(w,7,r0,e,1,"idle-high");
         }
         {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
                                       {0x86D2,0x30},{0x86D4,0x10},
                                       {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0x8000} };
-            static const Exp e[] = { {0x86DC,0xFFFF},{0xA3A2,0x1F} };
-            CASE(w,7,r0,e,2,"special-wipe");
+            static const Exp e[] = { {0x86DC,0xFFFF} };
+            CASE(w,7,r0,e,1,"special-wipe");
         }
         {   static const FtWr w[] = { {0x86DA,0},{0x3CC,0} };
             static const Exp e[] = { {0x86DC,0} };
             CASE(w,2,r0,e,1,"absent");
         }
-        {   // [3287E]=1: LOOPE decs cx to 0 with ZF=0, JCXZ takes the 17a41
-            // STC bail — ax keeps 12ef8's 0xFFFF, bx stays 0; only the
-            // low-side axis arms fire; [32882] untouched.
-            static const FtWr w[] = { {0x86DA,1},{0xA39E,1},
+        {   // all four buttons pressed (active-low nibble 0x0F): NOT ax =
+            // 0xFFF0 -> the 0xC0C0 button mask; axes still time out (-16).
+            v2_fntest_set_in201(0x0F);
+            static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
                                       {0x86D2,0x30},{0x86D4,0x10},
                                       {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
             static const Exp e[] = { {0x86DC,0xC5C0} };
-            CASE(w,7,r0,e,1,"axis-timeout");
+            CASE(w,7,r0,e,1,"buttons");
+            v2_fntest_set_in201(0xFF);
         }
         // 179fb axis arms (#47): a non-idle port byte drives ah!=0 in the
         // axis wait (al&3 != 3 after the first probe). Exercise-only: the
@@ -12288,7 +12292,7 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
                                       {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
             CASE(w,7,r0,nullptr,0,"axis-y");
         }
-        v2_fntest_set_in201(0);
+        v2_fntest_set_in201(0xFF);
         break;
     }
     case FT_SUB_1292F: {
