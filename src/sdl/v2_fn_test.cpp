@@ -5975,9 +5975,11 @@ int ft_selftest_coll_dir(FtId id, uint32_t seed) {
         memset(g_vm_es_in, 0, 0x400);
         if (with_tile)
             for (int x = 0; x < 16; x++) {
+                // NB row-LUT gives y*32 straight offsets — the stripe must
+                // live там же (the old +0x400 wrote it past every probe).
                 uint16_t tw = (uint16_t)(0x30 << 10);
-                g_vm_es_in[0x400 + (4 * 16 + x) * 2]     = (uint8_t)(tw & 0xFF);
-                g_vm_es_in[0x400 + (4 * 16 + x) * 2 + 1] = (uint8_t)(tw >> 8);
+                g_vm_es_in[(4 * 16 + x) * 2]     = (uint8_t)(tw & 0xFF);
+                g_vm_es_in[(4 * 16 + x) * 2 + 1] = (uint8_t)(tw >> 8);
             }
         if (with_obj) {
             ft_wr16(g_synth_in, (uint16_t)(2 + OBJ_CODE_SEG), 1);
