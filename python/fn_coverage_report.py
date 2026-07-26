@@ -130,6 +130,7 @@ def main():
             if m:
                 eips_l.append((n, m.group(1)))
         if eips_l:
+            eips_l = [(n, e) for (n, e) in eips_l if n in counts]   # drop NI
             missed_l = [(n, e) for (n, e) in eips_l if counts.get(n, 0) == 0]
             loc_rows.append((bname, len(eips_l), len(eips_l) - len(missed_l), missed_l))
     for idx, (name, start) in enumerate(subs):
@@ -139,9 +140,16 @@ def main():
             m = EIP_RE.match(src[n - 1])
             if m:
                 eips.append((n, m.group(1)))
+        # NI = the eip line is absent from gcov's instrumented set: the port
+        # made it unreachable (an early SDL-inline return or a transplanted
+        # RETN cuts the block) — the original instruction survives only as
+        # documentation text, same class as the commented OUT/INT lines.
+        # Excluded from the denominator, listed visibly below.
+        ni = [(n, e) for (n, e) in eips if n not in counts]
+        eips = [(n, e) for (n, e) in eips if n in counts]
         total = len(eips)
         if total == 0:
-            rows.append((name, 0, 0, 100.0, []))
+            rows.append((name, 0, 0, 100.0, [], 0, [], ni))
             continue
         # a line is covered when gcov saw it executed at least once
         missed = [(n, e) for (n, e) in eips if counts.get(n, 0) == 0]
@@ -150,11 +158,11 @@ def main():
         lexecd = execd
         if live_counts is not None:
             lexecd = total - sum(1 for (n, e) in eips if live_counts.get(n, 0) == 0)
-        rows.append((name, total, execd, pct, missed, lexecd, eips))
+        rows.append((name, total, execd, pct, missed, lexecd, eips, ni))
 
     # ---- report ----
     by_class = {}
-    for name, total, execd, pct, missed, lexecd, eips in rows:
+    for name, total, execd, pct, missed, lexecd, eips, ni in rows:
         c = klass(name)
         agg = by_class.setdefault(c, [0, 0, 0, 0])   # procs, insns, exec, live-exec
         agg[0] += 1; agg[1] += total; agg[2] += execd; agg[3] += lexecd
@@ -181,7 +189,7 @@ def main():
     BR_RE = re.compile(r'\bJ\(J[A-Z]+|\bR\(LOOP|\bJ\(LOOP')
     br_total = br_full = br_half = br_zero = 0
     half_list = []
-    for name, total, execd, pct, missed, lexecd, eips in rows:
+    for name, total, execd, pct, missed, lexecd, eips, ni in rows:
         for (n, e) in eips:
             if not BR_RE.search(src[n - 1]):
                 continue
@@ -210,7 +218,7 @@ def main():
 
     print(f'\n== unit-class subs below {args.min:.0f}% (uncovered eips listed) ==')
     shown = 0
-    for name, total, execd, pct, missed, lexecd, eips in sorted(rows, key=lambda r: r[3]):
+    for name, total, execd, pct, missed, lexecd, eips, ni in sorted(rows, key=lambda r: r[3]):
         if klass(name) != 'unit' or pct >= args.min or total == 0:
             continue
         shown += 1
@@ -227,12 +235,23 @@ def main():
             gaps = ' '.join(e for _, e in missed[:10])
             print(f'  {name:11} {execd:4d}/{total:<4d} {pct:6.2f}%  missed: {gaps}')
 
+    ni_rows = [(name, ni) for name, total, execd, pct, missed, lexecd, eips, ni in rows if ni]
+    if ni_rows:
+        tot_ni = sum(len(ni) for _, ni in ni_rows)
+        print(f'\n== port-replaced instructions (NOT instrumented by gcov: an early')
+        print(f'== SDL-inline return / transplanted RETN makes them unreachable —')
+        print(f'== same documentation-only class as commented OUT/INT) — {tot_ni} lines ==')
+        for name, ni in ni_rows:
+            print(f'  {name:11} {len(ni):3d}: {" ".join(e for _, e in ni[:12])}'
+                  f'{" ..." if len(ni) > 12 else ""}')
+
     if args.csv:
         with open(args.csv, 'w') as f:
-            f.write('sub,class,total_insns,executed,pct,missed_eips\n')
-            for name, total, execd, pct, missed, lexecd, eips in rows:
+            f.write('sub,class,total_insns,executed,pct,missed_eips,ni_eips\n')
+            for name, total, execd, pct, missed, lexecd, eips, ni in rows:
                 f.write(f'{name},{klass(name)},{total},{execd},{pct:.2f},'
-                        f'"{" ".join(e for _, e in missed)}"\n')
+                        f'"{" ".join(e for _, e in missed)}",'
+                        f'"{" ".join(e for _, e in ni)}"\n')
         print(f'\nCSV: {args.csv}')
 
 
