@@ -13204,6 +13204,15 @@ static void v2_hud_full_reinit_117ad(uint8_t* s) {
     (void)v2_hud_selectors_120d1(s);
 }
 
+static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out);
+
+extern "C" int v2_fntest_call_12250(uint8_t* shadow, uint16_t di, uint16_t* out_ax) {
+    uint16_t ax = 0;
+    bool cf = v2_hud_cat_probe_12250(shadow, di, ax);
+    if (out_ax) *out_ax = ax;
+    return cf ? 1 : 0;
+}
+
 extern "C" void v2_fntest_call_12388(uint8_t* shadow, uint16_t si, uint16_t di, uint16_t ax) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = shadow;
@@ -21425,6 +21434,21 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 //   Mode 0 (word_28927 == 0): item selection / category navigation.
 //   Mode 1 (word_28927 == 1): item carry — viking switch + slot placement.
 // Returns true if loop should exit (orig STC = exit pause loop).
+// sub_12250: probe ONE inventory category di (0..3). Returns true with
+// ax_out = free slot offset when usable: di==3 → the special slot 0x18;
+// a category whose gate byte [di+0x449] is nonzero is rejected; otherwise
+// the four item slots [di*8 + 0x3E4] are scanned for a zero (free) one.
+static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out) {
+    if (di_cat == 3) { ax_out = 0x18; return true; }
+    if (s[di_cat + 0x449] != 0) return false;
+    uint16_t di_i = (uint16_t)(di_cat << 3);
+    for (int cx = 0; cx < 4; cx++) {
+        if (*(uint16_t*)(s + di_i + (DS_HUD_ITEMS)) == 0) { ax_out = di_i; return true; }
+        di_i += 2;
+    }
+    return false;
+}
+
 static bool v2_pause_items_11cbb(uint8_t* shadow) {
     extern uint16_t v2_current_ds_val;
     bool cbb_exit = false;
@@ -21445,19 +21469,10 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             for (int safe = 0; safe < 8; safe++) {
                 di_cat = (uint16_t)(di_cat - 1);
                 if ((int16_t)di_cat < 0) di_cat = 3;
-                uint16_t ax_r = 0; bool nc;
-                if (di_cat == 3) { ax_r = 0x18; nc = true; }
-                else if (shadow[di_cat + 0x449] != 0) { nc = false; }
-                else {
-                    uint16_t di_i = di_cat << 3; nc = false;
-                    for (int cx = 0; cx < 4; cx++) {
-                        if (*(uint16_t*)(shadow + di_i + (DS_HUD_ITEMS)) == 0) {
-                            ax_r = di_i; nc = true; break;
-                        }
-                        di_i += 2;
-                    }
+                uint16_t ax_r = 0;
+                if (v2_hud_cat_probe_12250(shadow, di_cat, ax_r)) {
+                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = ax_r >> 1; break;
                 }
-                if (nc) { *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = ax_r >> 1; break; }
             }
             // Orig eip 0x1d09: MOV ax, 1; CALL sub_177bb (play SFX 1 — selector move)
             if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
@@ -21471,19 +21486,10 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             for (int safe = 0; safe < 8; safe++) {
                 di_cat++;
                 if ((int16_t)di_cat >= 4) di_cat = 0;
-                uint16_t ax_r = 0; bool nc;
-                if (di_cat == 3) { ax_r = 0x18; nc = true; }
-                else if (shadow[di_cat + 0x449] != 0) { nc = false; }
-                else {
-                    uint16_t di_i = di_cat << 3; nc = false;
-                    for (int cx = 0; cx < 4; cx++) {
-                        if (*(uint16_t*)(shadow + di_i + (DS_HUD_ITEMS)) == 0) {
-                            ax_r = di_i; nc = true; break;
-                        }
-                        di_i += 2;
-                    }
+                uint16_t ax_r = 0;
+                if (v2_hud_cat_probe_12250(shadow, di_cat, ax_r)) {
+                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = ax_r >> 1; break;
                 }
-                if (nc) { *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = ax_r >> 1; break; }
             }
             // Orig eip 0x1d49: MOV ax, 1; CALL sub_177bb (play SFX 1 — selector move)
             if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);

@@ -504,6 +504,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_11F47 = 404,   // viking proximity
             FT_SUB_103CA = 405,   // quit-prompt screen build
             FT_SUB_1047C = 406,   // pause-prompt screen build
+            FT_SUB_12250 = 407,   // inventory category probe
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -668,7 +669,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_117ad", "sub_117d0", "sub_1183d",
                                  "sub_118ad", "sub_11aa4", "sub_1200a",
                                  "sub_12034", "sub_16880", "sub_11792",
-                                 "sub_11f47", "sub_103ca", "sub_1047c" };
+                                 "sub_11f47", "sub_103ca", "sub_1047c",
+                                 "sub_12250" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9798,6 +9800,77 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
     return (grid.fail + fuzz.fail) ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// sub_12250: inventory category probe — CF + AX vs the oracle (io_regs[7] is
+// the isolator's CF slot), plus full DS (read-only body).
+extern "C" int v2_fntest_call_12250(uint8_t* shadow, uint16_t di, uint16_t* out_ax);
+
+int ft_selftest_12250(uint32_t seed) {
+    FtSynthStats grid, fuzz;
+    long diff_budget = 24;
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    FtRng rng(seed);
+    auto CASE = [&](uint16_t di, const FtWr* w, int nw, const char* tag, FtSynthStats& st) {
+        st.cases++;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        for (int i = 0; i < nw; i++) ft_wr16(g_synth_in, w[i].addr, w[i].val);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, di, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_12250), g_synth_orig, regs);
+        if (ft_ub_marks() != esc0) { st.cases--; return; }
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        uint16_t v2_ax = 0;
+        int v2_cf = v2_fntest_call_12250(g_scratch, di, &v2_ax);
+        long diffs = 0;
+        // orig: CLC = found (ax valid), STC = rejected — CF is the INVERSE
+        // of the probe's "found" boolean.
+        if ((regs[7] != 0) != (v2_cf == 0)) {
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_12250]: CF orig=%d v2-found=%d (di=%04X)\n",
+                        regs[7] ? 1 : 0, v2_cf, di);
+            diffs++;
+        }
+        if (v2_cf && regs[7] == 0 && regs[0] != v2_ax) {
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_12250]: AX orig=%04X v2=%04X (di=%04X)\n",
+                        regs[0], v2_ax, di);
+            diffs++;
+        }
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            diffs++;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_12250]: addr=%04X orig=%02X v2=%02X\n",
+                        a, g_synth_orig[a], g_scratch[a]);
+        }
+        if (diffs) st.fail++; else st.pass++;
+    };
+    for (uint16_t di = 0; di <= 3; di++) for (int m = 0; m < 4; m++) {
+        FtWr w[10]; int n = 0;
+        w[n++] = FtWr{(uint16_t)(0x449 + (di & 1)), (uint16_t)((m & 1) ? 0x0101 : 0)};
+        for (int sl = 0; sl < 4; sl++)
+            w[n++] = FtWr{(uint16_t)((di << 3) + sl * 2 + 0x3E4),
+                          (uint16_t)((m & 2) && sl < 3 ? 5 : 0)};
+        CASE(di, w, n, "grid", grid);
+    }
+    for (int i = 0; i < 200; i++) {
+        FtWr w[12]; int n = 0;
+        w[n++] = FtWr{0x449, rng.w()};
+        w[n++] = FtWr{0x44B, rng.w()};
+        for (int sl = 0; sl < 6; sl++)
+            w[n++] = FtWr{(uint16_t)(0x3E4 + (rng.next() % 12) * 2), (uint16_t)(rng.next() % 6)};
+        CASE((uint16_t)(rng.next() % 4), w, n, "fuzz", fuzz);
+    }
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_12250]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, fuzz.pass, fuzz.cases,
+        grid.cases + fuzz.cases, grid.fail + fuzz.fail,
+        (grid.fail + fuzz.fail) ? "  <<< DIVERGENCE" : "");
+    return (grid.fail + fuzz.fail) ? 1 : 0;
+}
+
 // ---- Unit 54 full tree: sub_13a0e = viewport clamps + 13ae0 spawn loop ----
 // Both sides read object templates from ONE synthetic block: the oracle via
 // es=[2E67] -> FT_VM_TESTSEG (templates copied into m2c::m at SEG*16), v2 via
@@ -11335,6 +11408,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_16880")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_16880, 0xB4A8001u); }
     if (all || strstr(env, "sub_11792")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_11792, 0xB4A9001u); }
     if (all || strstr(env, "sub_11f47")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_11F47, 0xB4AA001u); }
+    if (all || strstr(env, "sub_12250")) { matched = true; rc |= ft_selftest_12250(0xB4AD001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

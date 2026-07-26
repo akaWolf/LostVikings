@@ -272,6 +272,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 404: return (void*)&sub_11f47;  // viking proximity check
     case 405: return (void*)&sub_103ca;  // quit-prompt screen build (F10/ALT+X path)
     case 406: return (void*)&sub_1047c;  // pause-prompt screen build (ESC path)
+    case 407: return (void*)&sub_12250;  // inventory category probe (CF+ax)
     default: return 0;
     }
 }
