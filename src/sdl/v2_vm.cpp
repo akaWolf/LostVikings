@@ -14333,6 +14333,10 @@ static void v2_vm_op_13(V2VM& vm) {
         // loc_10E35 (eip 0x0E35) frees all DOS memory blocks (5× INT 21h 0x4900),
         // closes data file, calls sub_1686F + sub_1292F, then INT 21h 0x4C00 (DOS exit).
         // Used when user selects "Quit" from menu.
+        // fn-test: the oracle's INT 21h/4C escapes the isolator (UB-skip), so
+        // a unit case never reaches the comparison — guard instead of _exit.
+        extern int v2_fntest_vm_soft;
+        if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 3; return; }
         // V2: trigger graceful exit similar to orig behavior.
         extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(0);
     }
