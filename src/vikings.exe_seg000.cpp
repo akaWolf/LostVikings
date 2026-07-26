@@ -304,6 +304,14 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 433: return (void*)&sub_1686f;  // video-mode restore
     case 434: return (void*)&sub_167ff;  // video-mode save
     case 435: return (void*)&sub_17912;  // AIL sequencer stop pair
+    case 436: return (void*)&sub_179a8;  // joystick timer calibration
+    case 437: return (void*)&sub_108c8;  // F10+S mute toggle
+    case 438: return (void*)&sub_17337;  // MDA debug print (B000 text)
+    case 439: return (void*)&sub_172d3;  // MDA debug print (far)
+    case 440: return (void*)&sub_11ba5;  // TAB pause/inventory loop
+    case 441: return (void*)&sub_10350;  // F10/ALT+X quit-prompt gate
+    case 442: return (void*)&sub_1754c;  // AIL timer stop (far call)
+    case 443: return (void*)&sub_17561;  // AIL shutdown chain
     default: return 0;
     }
 }

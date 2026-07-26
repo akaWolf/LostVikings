@@ -26,6 +26,8 @@ extern void v2_record_alloc(uint16_t seg, const uint8_t* mcb_ptr);
 
 // (orig-write trap defined inside namespace m2c below — placeholder removed)
 
+extern db& byte_128a8;   // _data.cpp global ref (#47 IRQ-defer model)
+
 namespace m2c {
 
 // orig-write trap: m2c::setdata logs every write to v2_orig_trap_addr (with caller IP).
@@ -207,10 +209,39 @@ void hexDump (void *addr, int len) {
 	log_debug ("  %s\n", buff);
 }
 
+static uint16_t v2_pit_counter = 0xFFFF;
+static uint16_t v2_pit_latch = 0;
+static int v2_pit_lohi = 0;
 void asm2C_OUT(int16_t address, int data,_STATE* _state) {
+	if ((uint16_t)address == 0x43) {           // PIT latch command
+		v2_pit_counter = (uint16_t)(v2_pit_counter - 0x1C00);
+		v2_pit_latch = v2_pit_counter;
+		v2_pit_lohi = 0;
+		return;
+	}
 }
 
+// fn-test environment models (#47):
+//  - port 0x40 (PIT counter, 8253 mode 2): a DOWN-counter — the real chip
+//    decrements between reads; a constant would make the game's joystick
+//    timer calibration (sub_179a8) spin forever.
+//  - port 0x201 (game port): idle default is overridable per unit-case via
+//    v2_fntest_set_in201 (axis bits need a non-idle byte).
+static int v2_fntest_in201 = 0;   // keep the historic 0 default (models set it)
+extern "C" void v2_fntest_set_in201(int v) { v2_fntest_in201 = v & 0xFF; }
+// 8253 PIT model: OUT 0x43 latches the down-counter (mode-2 semantics),
+// the two following IN 0x40 reads return the LATCHED lo then hi byte —
+// reading the live counter without the latch protocol is what the real
+// chip forbids. Coarse step per latch keeps sub_179a8's calibration finite.
+// (The state lives above asm2C_OUT, which handles the 0x43 latch command.)
 int8_t asm2C_IN(int16_t address,_STATE* _state) {
+	if ((uint16_t)address == 0x40) {
+		int8_t b = (int8_t)((v2_pit_lohi == 0) ? (v2_pit_latch & 0xFF)
+		                                       : (v2_pit_latch >> 8));
+		v2_pit_lohi ^= 1;
+		return b;
+	}
+	if ((uint16_t)address == 0x201) return (int8_t)v2_fntest_in201;
 	return 0;  // FIX: Return value required on ARM
 }
 
@@ -290,6 +321,16 @@ static void fntest_trap_or_exit(int code) {
 	exit(code);
 }
 
+// fn-test (#47): reproduce the orig IRQ0 audio-tick race — the real ISR
+// sets cs:byte_128A8=1 when it fires while DOS is busy; sub_128a9's defer
+// arm is unreachable without it under the deterministic INT models.
+extern "C" int v2_fntest_sim_int21_irq = 0;
+// fn-test (#47): FNSELFTEST processes skip m2c::init, so first_mcb stays 0
+// and DosMemAlloc walks garbage MCBs from segment 0 (2s hang -> SIGALRM).
+// Same mcb_init call as m2c::init performs.
+extern "C" void v2_fntest_meminit(void) {
+	mcb_init(seg_offset(heap), (HEAP_SIZE >> 4) - seg_offset(heap) - 1, MCB_LAST);
+}
 void asm2C_INT(struct _STATE* _state, int a) {
 X86_REGREF
 	static FILE * file;
@@ -300,6 +341,7 @@ X86_REGREF
 	log_debug2("INT %x ax=%x bx=%x cx=%x dx=%x\n",a,ax,bx,cx,dx);
 
 
+	if (a == 0x21 && v2_fntest_sim_int21_irq) ::byte_128a8 = 1;
 	switch(a) {
 	case 0x10:
 		// BIOS VIDEO. ah=0x1A al=0: GET DISPLAY COMBINATION — the game's VGA
