@@ -273,6 +273,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 405: return (void*)&sub_103ca;  // quit-prompt screen build (F10/ALT+X path)
     case 406: return (void*)&sub_1047c;  // pause-prompt screen build (ESC path)
     case 407: return (void*)&sub_12250;  // inventory category probe (CF+ax)
+    case 408: return (void*)&sub_11f93;  // place carried item (CF=refused)
+    case 409: return (void*)&sub_121f6;  // take-next from category (di=row)
+    case 410: return (void*)&sub_121b9;  // pop selected item (active viking)
     default: return 0;
     }
 }

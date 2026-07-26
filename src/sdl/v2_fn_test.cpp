@@ -505,6 +505,9 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_103CA = 405,   // quit-prompt screen build
             FT_SUB_1047C = 406,   // pause-prompt screen build
             FT_SUB_12250 = 407,   // inventory category probe
+            FT_SUB_11F93 = 408,   // place carried item (CF=refused)
+            FT_SUB_121F6 = 409,   // take-next from category row
+            FT_SUB_121B9 = 410,   // pop selected item
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -670,7 +673,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_118ad", "sub_11aa4", "sub_1200a",
                                  "sub_12034", "sub_16880", "sub_11792",
                                  "sub_11f47", "sub_103ca", "sub_1047c",
-                                 "sub_12250" };
+                                 "sub_12250", "sub_11f93", "sub_121f6",
+                                 "sub_121b9" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9403,6 +9407,8 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
     long diff_budget = 24;
     v2_set_m2c_base(v2_fntest_m2c_base());
     int which = (id == FT_SUB_120FF) ? 0 : (id == FT_SUB_12199) ? 1 :
+                (id == FT_SUB_11F93) ? 8 : (id == FT_SUB_121F6) ? 9 :
+                (id == FT_SUB_121B9) ? 10 :
                 (id == FT_SUB_120D1) ? 2 : (id == FT_SUB_12E16) ? 3 :
                 (id == FT_SUB_12E2D) ? 4 : (id == FT_SUB_12E79) ? 5 :
                 (id == FT_SUB_12E84) ? 6 : 7;
@@ -9419,7 +9425,7 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
         memset(vga, 0xCC, 0x40000);
 
         memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
-        uint16_t regs[8] = { 0, 0, 0, 0, si_in, 0, 0, 0 };
+        uint16_t regs[8] = { 0, 0, 0, 0, si_in, si_in, 0, 0 };   // 12e2d uses SI, 121f6 uses DI
         long esc0 = ft_ub_marks();
         v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
         if (ft_ub_marks() != esc0) { st.cases--; return; }
@@ -9429,6 +9435,12 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
         v2_fntest_call_hud(which, g_scratch, si_in, &v2_si);
 
         long diffs = 0;
+        if (id == FT_SUB_11F93 && (regs[7] != 0) != (v2_si != 0)) {
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_11f93 %s]: CF orig=%d v2=%d\n",
+                        tag, regs[7] ? 1 : 0, (int)v2_si);
+            diffs++;
+        }
         if (id == FT_SUB_12E2D && regs[4] != v2_si) {
             if (diff_budget-- > 0)
                 fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: SI orig=%04X v2=%04X (in=%04X)\n",
@@ -9521,6 +9533,25 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
             w[n++] = FtWr{0x416, (uint16_t)(rng.next() % 4)};
             w[n++] = FtWr{0x418, (uint16_t)(rng.next() % 4)};
             CASE(w, n, 0, "fuzz", fuzz);
+        }
+    } else if (id == FT_SUB_11F93 || id == FT_SUB_121F6 || id == FT_SUB_121B9) {
+        // item flows: carried item × active slot × category fills; AIL off,
+        // SFX muted; for 121f6 si_in = viking row (0/2/4).
+        for (int i = 0; i < 260; i++) {
+            FtWr w[20]; int n = 0;
+            w[n++] = FtWr{0x304, 1};
+            w[n++] = FtWr{0x86AC, 0};
+            w[n++] = FtWr{0x86AE, 0};
+            w[n++] = FtWr{0x3C2, (uint16_t)((rng.next() % 3) * 2)};
+            w[n++] = FtWr{0x421, (uint16_t)((rng.next() % 3) * 2)};
+            w[n++] = FtWr{0x441, (uint16_t)(1 + rng.next() % 10)};
+            w[n++] = FtWr{0x443, (uint16_t)(rng.next() % 13)};
+            for (int vk = 0; vk < 3; vk++)
+                w[n++] = FtWr{(uint16_t)(0x414 + vk * 2), (uint16_t)(rng.next() % 4)};
+            for (int sl = 0; sl < 6; sl++)
+                w[n++] = FtWr{(uint16_t)(0x3E4 + (rng.next() % 12) * 2), (uint16_t)(rng.next() % 6)};
+            CASE(w, n, (uint16_t)((rng.next() % 3) * 2),
+                 i < 20 ? "grid" : "fuzz", i < 20 ? grid : fuzz);
         }
     } else if (id == FT_SUB_12E16 || id == FT_SUB_12E2D) {
         // alive/dead lattices over the 3 viking slots × current [3C2]
@@ -11409,6 +11440,9 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_11792")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_11792, 0xB4A9001u); }
     if (all || strstr(env, "sub_11f47")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_11F47, 0xB4AA001u); }
     if (all || strstr(env, "sub_12250")) { matched = true; rc |= ft_selftest_12250(0xB4AD001u); }
+    if (all || strstr(env, "sub_11f93")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_11F93, 0xB4AE001u); }
+    if (all || strstr(env, "sub_121f6")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_121F6, 0xB4AF001u); }
+    if (all || strstr(env, "sub_121b9")) { matched = true; rc |= ft_selftest_b3c1(FT_SUB_121B9, 0xB4B0001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

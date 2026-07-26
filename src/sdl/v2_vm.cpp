@@ -8052,128 +8052,16 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                             }
                         } else if (new_input & 0x8000) {
                             // Action: sub_11F93 pick up item (seg000 4042-4091)
-                            bool f93_carry = false;
-                            {
-                                uint16_t di = *(uint16_t*)(shadow + DS_QUIT_ACTIVE); // word_28923
-                                di <<= 1;
-                                if (di == 0x18) {
-                                    // Special use slot: check item usability
-                                    uint16_t item = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                                    if (shadow[(uint16_t)(item + 0x8592)] == 0) {
-                                        // Mirror orig sub_11f93 eip 0x1FA9-0x1FAC: MOV ax, 3; CALL sub_177bb
-                                        if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 3);
-                                        f93_carry = true;
-                                    } else {
-                                        // Mirror orig sub_11f93 loc_11fb1 eip 0x1FB1-0x1FB4: MOV ax, 4; CALL sub_177bb
-                                        if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 4);
-                                        // sub_1183d(di=0x18, ax=0x17) — VGA only
-                                    }
-                                } else {
-                                    // Place item into slot
-                                    // Mirror orig sub_11f93 loc_11fc2 eip 0x1FC2-0x1FC5: MOV ax, 2; CALL sub_177bb
-                                    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 2);
-                                    uint16_t ax = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                                    *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax; // [di+3E4] = item
-                                    uint16_t si = *(uint16_t*)(shadow + DS_QUIT_ACTIVE);
-                                    si &= 0xFFFC; si >>= 1; // viking index * 2
-                                    uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
-                                    uint16_t si2 = si << 1;
-                                    di2 += si2; si2 >>= 1; di2 <<= 1;
-                                    if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
-                                        // sub_1183d(ax=0) — VGA only
-                                        uint16_t ax2 = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) & 3;
-                                        *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
-                                    }
-                                }
-                                if (!f93_carry) {
-                                    // loc_11FFB: sub_121F6(di=word_28901) + mode=1
-                                    uint16_t di_r = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                                    uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
-                                    uint16_t di_s = (di_r << 1) + ax_r;
-                                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = di_s; // word_28923
-                                    uint16_t di_b = (di_s << 1) & 0xFFF8;
-                                    bool found = false; uint16_t found_di = 0;
-                                    for (int cx = 0; cx < 4; cx++) {
-                                        if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
-                                            found = true; found_di = di_b; break;
-                                        }
-                                        di_b += 2;
-                                    }
-                                    if (!found) {
-                                        *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = 0;
-                                    } else {
-                                        *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
-                                        uint16_t saved = found_di;
-                                        uint16_t di3 = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                                        uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
-                                        di3 = ((di3 << 1) + ax3) << 1;
-                                        // sub_1183d(ax=0, di3) — VGA only
-                                        uint16_t si_v = saved >> 1;
-                                        di3 = (di3 >> 2) & 0xFFFE;
-                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
-                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
-                                        *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = si_v;
-                                    }
-                                    *(uint16_t*)(shadow + DS_QUIT_MODE) = 1; // mode = carrying
-                                }
+                            // Action: sub_11F93 — place carried item (full mirror incl. SFX and
+            // the loc_11FFB take-next tail; №44 fixed the Exit twin below).
+            (void)v2_item_place_11f93(shadow);
                             }
                         } else if (new_input & 0x2000) {
-                            // Exit: sub_11F93 + carry check (seg000 3806-3811)
-                            bool f93_carry = false;
-                            {
-                                uint16_t di = *(uint16_t*)(shadow + DS_QUIT_ACTIVE);
-                                di <<= 1;
-                                if (di == 0x18) {
-                                    uint16_t item = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                                    if (shadow[(uint16_t)(item + 0x8592)] == 0) {
-                                        f93_carry = true;
-                                    }
-                                } else {
-                                    uint16_t ax = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                                    *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax;
-                                    uint16_t si = *(uint16_t*)(shadow + DS_QUIT_ACTIVE);
-                                    si &= 0xFFFC; si >>= 1;
-                                    uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
-                                    uint16_t si2 = si << 1;
-                                    di2 += si2; si2 >>= 1; di2 <<= 1;
-                                    if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
-                                        uint16_t ax2 = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) & 3;
-                                        *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
-                                    }
-                                }
-                                if (!f93_carry) {
-                                    uint16_t di_r = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                                    uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
-                                    uint16_t di_s = (di_r << 1) + ax_r;
-                                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = di_s;
-                                    uint16_t di_b = (di_s << 1) & 0xFFF8;
-                                    bool found = false; uint16_t found_di = 0;
-                                    for (int cx = 0; cx < 4; cx++) {
-                                        if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
-                                            found = true; found_di = di_b; break;
-                                        }
-                                        di_b += 2;
-                                    }
-                                    if (!found) {
-                                        *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = 0;
-                                    } else {
-                                        *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
-                                        uint16_t saved = found_di;
-                                        uint16_t di3 = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                                        uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
-                                        di3 = ((di3 << 1) + ax3) << 1;
-                                        uint16_t si_v = saved >> 1;
-                                        di3 = (di3 >> 2) & 0xFFFE;
-                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
-                                        *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
-                                        *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = si_v;
-                                    }
-                                    *(uint16_t*)(shadow + DS_QUIT_MODE) = 1;
-                                }
-                            }
-                            // JC loc_11D6D: if carry → CLC return (don't exit)
-                            // If !carry → STC return (exit)
-                            if (!f93_carry) cbb_exit = true;
+                            // Exit: sub_11F93 + carry check (seg000 3806-3811).
+            // №44: this path used a TRIMMED inline copy (no SFX 3/4, no
+            // special-slot render) — now the full extracted mirror.
+            bool f93_carry = v2_item_place_11f93(shadow);
+            if (!f93_carry) cbb_exit = true;
                         }
                     } else {
                         // Mode 1: carrying item — viking switch + directional placement
@@ -13108,6 +12996,10 @@ extern "C" void v2_fntest_call_b3b(int which, uint8_t* test_shadow, uint16_t pc,
 }
 
 // Wave B3c-I: HUD state trackers (extracted 11792-subtree mirrors).
+static bool v2_item_place_11f93(uint8_t* s);
+static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in);
+static void v2_item_pop_121b9(uint8_t* s);
+
 extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_in,
                                    uint16_t* out_si) {
     uint8_t* saved_acc = v2_vm_acc_base;
@@ -13122,6 +13014,9 @@ extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_
     case 5: v2_viking_cycle_12e79(test_shadow); break;
     case 6: v2_viking_cycle_12e84(test_shadow); break;
     case 7: v2_hud_items_full_1201d(test_shadow); break;
+    case 8: r = v2_item_place_11f93(test_shadow) ? 1 : 0; break;   // CF via out_si
+    case 9: v2_item_take_next_121f6(test_shadow, si_in); break;
+    case 10: v2_item_pop_121b9(test_shadow); break;
     }
     if (out_si) *out_si = r;
     v2_vm_acc_base = saved_acc;
@@ -21438,6 +21333,92 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 // ax_out = free slot offset when usable: di==3 → the special slot 0x18;
 // a category whose gate byte [di+0x449] is nonzero is rejected; otherwise
 // the four item slots [di*8 + 0x3E4] are scanned for a zero (free) one.
+// sub_121f6: take-next — from viking row di: slot = ((di<<1)+[di+414])<<1,
+// [443]=slot>>1... precisely: [443]=(di<<1)+[di+414]; scan the category's 4
+// slots for a NON-empty one; found → [441]=item, clear-render the current
+// slot (1183d di3,0), retarget [di3>>2&~1 +414]=found>>1 &3, [443]=found>>1;
+// none → [441]=0.
+static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in) {
+    uint16_t ax_r = *(uint16_t*)(s + di_in + (DS_HUD_SEL));
+    uint16_t di_s = (uint16_t)((di_in << 1) + ax_r);
+    *(uint16_t*)(s + DS_QUIT_ACTIVE) = di_s;
+    uint16_t di_b = (uint16_t)((di_s << 1) & 0xFFF8);
+    bool found = false; uint16_t found_di = 0;
+    for (int cx = 0; cx < 4; cx++) {
+        if (*(uint16_t*)(s + di_b + (DS_HUD_ITEMS)) != 0) { found = true; found_di = di_b; break; }
+        di_b += 2;
+    }
+    if (!found) { *(uint16_t*)(s + DS_HUD_BLINK_FIELD) = 0; return; }
+    *(uint16_t*)(s + DS_HUD_BLINK_FIELD) = *(uint16_t*)(s + found_di + (DS_HUD_ITEMS));
+    uint16_t saved = found_di;
+    uint16_t di3 = *(uint16_t*)(s + DS_HUD_DRAW_DI);
+    uint16_t ax3 = *(uint16_t*)(s + di3 + (DS_HUD_SEL));
+    di3 = (uint16_t)(((di3 << 1) + ax3) << 1);
+    v2_draw_hud_item(v2_current_ds_val, di3, 0);
+    v2_vga_hud_item_1183d(s, di3, 0);
+    uint16_t si_v = (uint16_t)(saved >> 1);
+    di3 = (uint16_t)((di3 >> 2) & 0xFFFE);
+    *(uint16_t*)(s + di3 + (DS_HUD_SEL)) = si_v;
+    *(uint16_t*)(s + di3 + (DS_HUD_SEL)) &= 3;
+    *(uint16_t*)(s + DS_QUIT_ACTIVE) = si_v;
+}
+
+// sub_11f93: place the carried item. Special slot 0x18: usable-LUT
+// [item+0x8592]==0 → SFX 3 + STC (refuse); else SFX 4 + render (0x18,0x17).
+// Normal slot: SFX 2, drop into [di+3E4]; if the source category emptied,
+// clear-render it and retarget [si+414]. Common tail loc_11FFB:
+// take-next via 121f6(di=[421]), [447]=1, CLC. Returns true = CARRY (refused).
+static bool v2_item_place_11f93(uint8_t* s) {
+    uint16_t di = (uint16_t)(*(uint16_t*)(s + DS_QUIT_ACTIVE) << 1);
+    if (di == 0x18) {
+        uint16_t item = *(uint16_t*)(s + DS_HUD_BLINK_FIELD);
+        if (s[(uint16_t)(item + 0x8592)] == 0) {
+            if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 3);
+            return true;                                   // STC
+        }
+        if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 4);
+        v2_draw_hud_item(v2_current_ds_val, 0x18, 0x17);
+        v2_vga_hud_item_1183d(s, 0x18, 0x17);
+    } else {
+        if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 2);
+        uint16_t ax = *(uint16_t*)(s + DS_HUD_BLINK_FIELD);
+        *(uint16_t*)(s + di + (DS_HUD_ITEMS)) = ax;
+        uint16_t si = *(uint16_t*)(s + DS_QUIT_ACTIVE);
+        si = (uint16_t)((si & 0xFFFC) >> 1);
+        uint16_t di2 = *(uint16_t*)(s + si + (DS_HUD_SEL));
+        uint16_t si2 = (uint16_t)(si << 1);
+        di2 = (uint16_t)(di2 + si2); si2 >>= 1; di2 <<= 1;
+        if (*(uint16_t*)(s + di2 + (DS_HUD_ITEMS)) == 0) {
+            v2_draw_hud_item(v2_current_ds_val, di2, 0);
+            v2_vga_hud_item_1183d(s, di2, 0);
+            uint16_t ax2 = *(uint16_t*)(s + DS_QUIT_ACTIVE) & 3;
+            *(uint16_t*)(s + si2 + (DS_HUD_SEL)) = ax2;
+        }
+    }
+    v2_item_take_next_121f6(s, *(uint16_t*)(s + DS_HUD_DRAW_DI));   // loc_11FFB
+    *(uint16_t*)(s + DS_QUIT_MODE) = 1;
+    return false;                                          // CLC
+}
+
+// sub_121b9: pop the selected item from the ACTIVE viking's category:
+// di=[3C2]; [421]=di; slot=((di<<1)+[di+414])<<1; empty → return; else
+// [441]=item, [slot+3E4]=0, [443]=slot>>1, [447]=0, [445]=9, SFX 2.
+static void v2_item_pop_121b9(uint8_t* s) {
+    uint16_t di = *(uint16_t*)(s + DS_ACTIVE_VIKING);
+    *(uint16_t*)(s + DS_HUD_DRAW_DI) = di;
+    uint16_t ax = *(uint16_t*)(s + di + (DS_HUD_SEL));
+    di = (uint16_t)(((di << 1) + ax) << 1);
+    uint16_t item = *(uint16_t*)(s + di + (DS_HUD_ITEMS));
+    if (item == 0) return;
+    *(uint16_t*)(s + DS_HUD_BLINK_FIELD) = item;
+    *(uint16_t*)(s + di + (DS_HUD_ITEMS)) = 0;
+    di >>= 1;
+    *(uint16_t*)(s + DS_QUIT_ACTIVE) = di;
+    *(uint16_t*)(s + DS_QUIT_MODE) = 0;
+    *(uint16_t*)(s + DS_QUIT_BLINK) = 9;
+    if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 2);
+}
+
 static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out) {
     if (di_cat == 3) { ax_out = 0x18; return true; }
     if (s[di_cat + 0x449] != 0) return false;
