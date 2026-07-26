@@ -554,6 +554,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1754C = 442,   // AIL timer stop
             FT_SUB_17561 = 443,   // AIL shutdown chain
             FT_SUB_10138 = 444,   // viking-switch mode dispatcher
+            FT_SUB_1775D = 445,   // music track dispatch
+            FT_SUB_12352 = 446,   // input read (joystick edge)
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -726,7 +728,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_17512", "sub_16528", "sub_16546", "sub_1686f", "sub_167ff", "sub_17912",
                                  "sub_179a8", "sub_108c8",
                                  "sub_17337", "sub_172d3", "sub_11ba5", "sub_10350",
-                                 "sub_1754c", "sub_17561", "sub_10138" };
+                                 "sub_1754c", "sub_17561", "sub_10138",
+                                 "sub_1775d", "sub_12352" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -8424,6 +8427,7 @@ int ft_selftest_sub_1673c(uint32_t seed) {
         run1((uint16_t)(rng.next() % 0x40), (uint16_t)(rng.next() % 0x20),
              (uint16_t)(rng.next() % 0x40), (uint16_t)(rng.next() % 0x20),
              "fuzz", fuzz);
+
     fprintf(stderr,
         "FNSELFTEST-SUMMARY[sub_1673c]: grid %ld/%ld, fuzz %ld/%ld — total cases=%ld fail=%ld%s\n",
         grid.pass, grid.cases, fuzz.pass, fuzz.cases, grid.cases + fuzz.cases,
@@ -9280,6 +9284,39 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             static const FtWr wesc[] = { {0x0390, 0x0000}, {0x038E, 0x0004},
                                          {0x93D0, 0x0004}, {0x13FB, 0xFFFF} };
             A(c, 5, O, "grid", wesc, 4);
+        }
+        // (#47 branch) refusal edges of the 155d6/156c0 state>0 partner
+        // scan: a live partner whose state matches the frame arg but whose
+        // bbox misses the self box on exactly one axis per case.
+        if (id == FT_SUB_1559C || id == FT_SUB_155C0 ||
+            id == FT_SUB_15686 || id == FT_SUB_156AA) {
+            static const FtWr wbase[] = { {0x0390, 1}, {0x1355, 1},
+                                          {0x15FD, 1},
+                                          {0x1535+6, 0x40}, {0x155D+6, 0x50},
+                                          {0x14E5+6, 0x40}, {0x150D+6, 0x50} };
+            // partner fully overlapping (hit side)
+            static const FtWr whit[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+                                         {0x153B,0x40},{0x1563,0x50},
+                                         {0x14EB,0x40},{0x1513,0x50},
+                                         {0x1543,0x40},{0x156B,0x50},
+                                         {0x14F3,0x40},{0x151B,0x50} };
+            (void)wbase;
+            A(c, 5, O, "grid", whit, 11);
+            // each axis split: X0 far right / X1 far left / Y0 below / Y1 above
+            static const FtWr wx0[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+                                        {0x1535,0x7000} };
+            A(c, 5, O, "grid", wx0, 4);
+            static const FtWr wx1[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+                                        {0x1535,1},{0x155D,2} };
+            A(c, 5, O, "grid", wx1, 5);
+            static const FtWr wy0[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+                                        {0x1535,0x40},{0x155D,0x50},
+                                        {0x14E5,0x7000} };
+            A(c, 5, O, "grid", wy0, 6);
+            static const FtWr wy1[] = { {0x0390,1},{0x1355,1},{0x15FD,1},
+                                        {0x1535,0x40},{0x155D,0x50},
+                                        {0x14E5,1},{0x150D,2} };
+            A(c, 5, O, "grid", wy1, 7);
         }
         // Coverage-directed (#47): opCC's second dispatch (530E, off_30c92)
         // needs the object inside BOTH camera windows: [44]+0x1F < X <=
@@ -12314,6 +12351,12 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             static const Exp e[] = { {0x86DC,0} };
             CASE(w,2,r0,e,1,"absent");
         }
+        {   // absent + special mode: [86DC]==0 -> the 2F79 JZ side of the
+            // special-wipe test (no 0xFFFF write).
+            static const FtWr w[] = { {0x86DA,0},{0x3CC,0x8000} };
+            static const Exp e[] = { {0x86DC,0} };
+            CASE(w,2,r0,e,1,"absent-special");
+        }
         {   // all four buttons pressed (active-low nibble 0x0F): NOT ax =
             // 0xFFF0 -> the 0xC0C0 button mask; axes still time out (-16).
             v2_fntest_set_in201(0x0F);
@@ -12603,6 +12646,13 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             static const FtWr w[] = { {0x302,1},{0x304,0} };
             CASE(w,2,r0,nullptr,0,"music-on-restart");
         }
+        {   // (#47 branch) no keys latched at all: the 8D6 F10 gate takes
+            // its reject edge straight to the 1097E return.
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0x302,1},{0x304,0} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,2,r0,e,0,"no-keys");
+        }
         {   // F10 without S -> the 10935 arm
             sdl_spec_press_latch[0xA4] = 1;
             sdl_spec_snapshot_take();
@@ -12734,6 +12784,13 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             CASE(w,2,r0,nullptr,0,"altx-spin",1);
             input_keys = 0x8000;
         }
+        {   // (#47 branch) [2A66F]!=0 -> the 356 early return BEFORE the
+            // spec-snap inline: DS stays untouched.
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0x218F,1} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,1,r0,e,0,"anim-lock-ret");
+        }
         {   // [25CF] bit3 set -> the 386 JMP 10e35 top-level bail
             sdl_spec_press_latch[0xB0] = 1;
             sdl_spec_snapshot_take();
@@ -12765,6 +12822,13 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             static const FtWr w[] = { {0x302,0x8000},{0x304,0x8000} };
             CASE(w,2,r0,nullptr,0,"busy");
         }
+        {   // (#47 branch) live handles in the shutdown sweep: both slot
+            // states (0xFFFF empty vs live) drive the second edges.
+            static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x990C,0x1234},{0x990E,0xFFFF},
+                                      {0x9910,0x5678},{0xA39A,1} };
+            CASE(w,6,r0,nullptr,0,"shutdown-handles");
+        }
         break;
     }
     case FT_SUB_10138: {
@@ -12780,6 +12844,54 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             w[nw++] = {0xA39C, 0};
             char tag[16]; snprintf(tag, sizeof(tag), "mode-%u", m);
             CASE(w, nw, r0, nullptr, 0, tag, m != 0);
+        }
+        {   // (#47 branch) mode-4 with the switch bit fed through 12352:
+            // the 169 wait loop exits into the 191 tail-jump.
+            extern uint16_t input_keys;
+            uint16_t keep = input_keys;
+            input_keys = 0x2000;
+            static const FtWr w[] = { {0x0334,4},{0x92FF,1},{0xA39C,0} };
+            CASE(w,3,r0,nullptr,0,"mode-4-switch",1);
+            input_keys = keep;
+        }
+        break;
+    }
+    case FT_SUB_1775D: {
+        // music dispatch: [302]-gate both ways, track compare both ways.
+        {   static const FtWr w[] = { {0x302,0x8000},{0x304,0x8000} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,2,r0,e,0,"busy-skip");
+        }
+        {   // track request comes from [25B8] (low byte), NOT a register
+            static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x25B8,5},{0x25AF,5} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,4,r0,e,0,"same-track");
+        }
+        {   static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x25B8,0xFF},{0x25AF,1} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,4,r0,e,0,"ff-track");
+        }
+        {   // new track: chunk load through sub_10982 (needs DATA.DAT)
+            v2_fntest_set_data_file("DATA.DAT");
+            v2_fntest_set_data_file_v2("DATA.DAT");
+            static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x25B8,2},{0x25AF,1} };
+            CASE(w,4,r0,nullptr,0,"new-track");
+        }
+        break;
+    }
+    case FT_SUB_12352: {
+        // input read: the joystick-present edge (235D CALL 12ef8) — dead in
+        // live (the honest detect fails), honest under a seeded [86DA].
+        {   static const FtWr w[] = { {0x86DA,1},{0xA39E,0x20},
+                                      {0x86D2,0x30},{0x86D4,0x10},
+                                      {0x86D6,0x30},{0x86D8,0x10},{0x3CC,0} };
+            CASE(w,7,r0,nullptr,0,"joy-branch");
+        }
+        {   static const FtWr w[] = { {0x86DA,0},{0x3CC,0} };
+            CASE(w,2,r0,nullptr,0,"no-joy");
         }
         break;
     }
@@ -13292,6 +13404,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_1754c")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1754C, ft_seed(0xD0500014u)); }
     if (all || strstr(env, "sub_17561")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17561, ft_seed(0xD0500015u)); }
     if (all || strstr(env, "sub_10138")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10138, ft_seed(0xD0500016u)); }
+    if (all || strstr(env, "sub_1775d")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1775D, ft_seed(0xD0500017u)); }
+    if (all || strstr(env, "sub_12352")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12352, ft_seed(0xD0500018u)); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, ft_seed(0x15D3C001u)); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, ft_seed(0x15D42001u)); }
     if (!matched) {

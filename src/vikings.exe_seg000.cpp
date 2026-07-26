@@ -313,6 +313,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 442: return (void*)&sub_1754c;  // AIL timer stop (far call)
     case 443: return (void*)&sub_17561;  // AIL shutdown chain
     case 444: return (void*)&sub_10138;  // viking-switch mode dispatcher
+    case 445: return (void*)&sub_1775d;  // music track dispatch
+    case 446: return (void*)&sub_12352;  // input read
+    case 447: return (void*)&sub_1673c;  // scroll target seek
     default: return 0;
     }
 }
