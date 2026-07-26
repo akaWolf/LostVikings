@@ -120,6 +120,9 @@ extern "C" uint16_t v2_fntest_call_sub_13084(uint8_t* test_shadow, uint16_t bx, 
 extern "C" void     v2_fntest_call_sub_135cf(uint8_t* test_shadow, uint16_t di);
 extern "C" uint8_t* v2_fntest_vga_ptr(void);
 extern "C" uint8_t* v2_fntest_drawbuffer_ptr(void);
+extern "C" void v2_fntest_fork_export(void* ptr, uint32_t len);
+extern "C" uint8_t* v2_fntest_drawinfo_ptr(void);
+extern "C" uint32_t v2_fntest_drawinfo_size(void);
 extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
 extern "C" uint8_t* v2_fntest_fs_ptr(void);
 extern "C" void     v2_fntest_clear_fs(uint8_t fill);
@@ -7374,6 +7377,9 @@ int ft_selftest_sub_1689e(uint32_t seed) {
         memcpy(saved_tz, tz, 0x10000);
         memcpy(saved_a000, a000, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        // v2 reads its OWN tilegfx copy — never the shared m2c zone after
+        // the oracle ran (task #55: no post-oracle shared reads).
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
         ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);   // ds:2E5F
         ft_fill_tail(g_synth_in);
@@ -7457,6 +7463,9 @@ int ft_selftest_tile_loop(FtId id, uint32_t seed) {
         memcpy(saved_fz, fz, 0x10000);
         memcpy(saved_a000, a000, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        // v2 reads its OWN tilegfx copy — never the shared m2c zone after
+        // the oracle ran (task #55: no post-oracle shared reads).
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
 
@@ -7712,6 +7721,9 @@ int ft_selftest_sub_16ded(uint32_t seed) {
         memcpy(saved_fz, fz, 0x10000);
         memcpy(saved_a000, a000, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        // v2 reads its OWN tilegfx copy — never the shared m2c zone after
+        // the oracle ran (task #55: no post-oracle shared reads).
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
 
@@ -7801,6 +7813,9 @@ int ft_selftest_scroll_band(FtId id, uint32_t seed) {
         memcpy(saved_fz, fz, 0x10000);
         memcpy(saved_a000, a000, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        // v2 reads its OWN tilegfx copy — never the shared m2c zone after
+        // the oracle ran (task #55: no post-oracle shared reads).
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
 
@@ -8116,6 +8131,9 @@ int ft_selftest_sub_16661(uint32_t seed) {
         memcpy(saved_fz, fz, 0x10000);
         memcpy(saved_a000, a000, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        // v2 reads its OWN tilegfx copy — never the shared m2c zone after
+        // the oracle ran (task #55: no post-oracle shared reads).
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
@@ -8269,6 +8287,9 @@ int ft_selftest_sub_1406d(uint32_t seed) {
         memcpy(saved_fz, fz, 0x10000);
         memcpy(saved_a000, a000, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        // v2 reads its OWN tilegfx copy — never the shared m2c zone after
+        // the oracle ran (task #55: no post-oracle shared reads).
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
@@ -9456,8 +9477,15 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
         }
         if (id == FT_SUB_12709) { regs[1] = si_in; }               // buffer entry in BX
         long esc0 = ft_ub_marks();
+        long mm0 = v2_fntest_ret_mismatches();
         v2_fntest_orig_isolated(v2_fntest_orig_fnptr(id), g_synth_orig, regs);
-        if (ft_ub_marks() != esc0) { st.cases--; return; }
+        if (ft_ub_marks() != esc0) {
+            st.cases--;
+            fprintf(stderr, "FNSELFTEST-UB[%s]: si=%04X d_marks=%ld d_mismatch=%ld\n",
+                    g_name[id], si_in, ft_ub_marks() - esc0,
+                    v2_fntest_ret_mismatches() - mm0);
+            return;
+        }
 
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
         uint16_t v2_si = 0;
@@ -9591,10 +9619,17 @@ int ft_selftest_b3c1(FtId id, uint32_t seed) {
         }
     } else if (id == FT_SUB_12709) {
         // buffer entry at 0x2200: align/di/si/text fields; orig takes BX.
+        // NB [0x34]/[0x36] (dialog frame w/h) MUST be preset: the base image
+        // has 0 there and sub_12388's cx=[0x34]-2 wraps to a legit-but-
+        // pathological 65534-column frame; the case then dies on the 2s
+        // watchdog depending on process warm-up (root of the silent
+        // integration 0/0 — see task #55).
         static const uint16_t ALIGNS[] = {0, 5, 6};
         static const uint16_t TEXTS[] = {2, 3, 5};
         for (uint16_t al : ALIGNS) for (uint16_t tx : TEXTS) {
-            FtWr w[8]; int n = 0;
+            FtWr w[10]; int n = 0;
+            w[n++] = FtWr{0x0034, 10};
+            w[n++] = FtWr{0x0036, 8};
             w[n++] = FtWr{(uint16_t)(0x2200 + 0x1DAD), al};
             w[n++] = FtWr{(uint16_t)(0x2200 + 0x1DAB), 0x0C};
             w[n++] = FtWr{(uint16_t)(0x2200 + 0x1DA9), 0x0D};
@@ -10305,6 +10340,9 @@ int ft_selftest_11439(uint32_t seed) {
         memcpy(saved_fz, fz, 0x10000);
         memcpy(saved_a000, a000, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        // v2 reads its OWN tilegfx copy — never the shared m2c zone after
+        // the oracle ran (task #55: no post-oracle shared reads).
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
@@ -11623,6 +11661,16 @@ extern "C" int v2_fntest_selftest_env(void) {
     v2_set_m2c_base(v2_fntest_m2c_base());   // v2 const-data reads (seg001 text
                                              // config, CS jump tables) — same
                                              // bytes the oracle reads
+    // Fork-per-case default export windows: the child copies these to the
+    // parent after every case — they are the oracle's legal out-of-DS
+    // channels. Everything else the child touches dies with it.
+    //  (1) runner work zones in m2c::m: TESTSEG/DEST/FS/porch dest zones
+    //  (2) the A000 VGA byte zone
+    //  (3) the whole myDrawInfo (drawBuffer K3 channel + drawPalette DAC +
+    //      CRTC fields)
+    v2_fntest_fork_export((uint8_t*)v2_fntest_m2c_base() + 0x40000, 0x3C000);
+    v2_fntest_fork_export((uint8_t*)v2_fntest_m2c_base() + 0xA0000, 0x10000);
+    v2_fntest_fork_export(v2_fntest_drawinfo_ptr(), v2_fntest_drawinfo_size());
     v2_fntest_snap_game_ds(g_synth_base);
     ft_fill_tail(g_synth_base);      // out-of-window WORD reads at 0xFFFF (see tail note)
     if (const char* sh = getenv("FNSELFTEST_SHARD")) {   // "i/N" exhaustive split

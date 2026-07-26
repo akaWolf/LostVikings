@@ -12255,37 +12255,37 @@ static void v2_vga_scroll_row_bottom_170b9(uint8_t* s);
 extern "C" void v2_fntest_call_sub_17049(uint8_t* test_shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)
     v2_vga_scroll_row_top_17049(test_shadow);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 extern "C" void v2_fntest_call_sub_170b9(uint8_t* test_shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)
     v2_vga_scroll_row_bottom_170b9(test_shadow);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 extern "C" void v2_fntest_call_sub_16e75(uint8_t* test_shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)
     v2_vga_scroll_col_left_16e75(test_shadow);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 extern "C" void v2_fntest_call_sub_16f5f(uint8_t* test_shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)
     v2_vga_scroll_col_right_16f5f(test_shadow);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 // Unit 136: sub_16ded — full-viewport band render (25 rows x 43 tiles x 3 pages).
@@ -12293,10 +12293,10 @@ static void v2_vga_band_16ded(uint8_t* s);
 extern "C" void v2_fntest_call_sub_16ded(uint8_t* test_shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;   // tilegfx resolve -> shared m2c zone
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)   // tilegfx resolve -> shared m2c zone
     v2_vga_band_16ded(test_shadow);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 // Units 132-133: sub_16dc1 (tile row ×43) / sub_16dd9 (tile column ×25).
@@ -12305,19 +12305,19 @@ static void v2_tile_col_16dd9(uint8_t* s, uint16_t bx_fs);
 extern "C" void v2_fntest_call_sub_16dc1(uint8_t* test_shadow, uint16_t bx) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)
     v2_tile_row_16dc1(test_shadow, bx, 0);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 extern "C" void v2_fntest_call_sub_16dd9(uint8_t* test_shadow, uint16_t bx) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)
     v2_tile_col_16dd9(test_shadow, bx);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 // Unit 131: sub_1689e — VGA tile blit (shadow-VGA channel vs oracle drawBuffer).
@@ -13026,10 +13026,10 @@ static void v2_render_flag_init_11439(uint8_t* s);
 extern "C" void v2_fntest_call_11439(uint8_t* shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = shadow;
-    bool saved_rv = v2_replay_verify_active;
-    v2_replay_verify_active = true;   // tilegfx resolve -> shared m2c zone (unit-136 channel)
+    bool saved_tv = v2_tilegfx_shadow_valid;
+    v2_tilegfx_shadow_valid = true;   // v2 own tilegfx copy (runner-seeded)   // tilegfx resolve -> shared m2c zone (unit-136 channel)
     v2_render_flag_init_11439(shadow);
-    v2_replay_verify_active = saved_rv;
+    v2_tilegfx_shadow_valid = saved_tv;
     v2_vm_acc_base = saved_acc;
 }
 

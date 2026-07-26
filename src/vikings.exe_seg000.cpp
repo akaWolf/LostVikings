@@ -6,6 +6,9 @@
 
                 #include "vikings.exe.h"
  #include <unistd.h>
+ #include <sys/wait.h>
+ #include <sys/mman.h>
+ #include <errno.h>
 #ifdef __linux__
 #include <execinfo.h>
 #endif
@@ -421,7 +424,10 @@ extern "C" int v2_fntest_set_data_file(const char* path) {
 extern "C" uint16_t v2_fntest_get_word_10980(void) { return (uint16_t)word_10980; }
 extern "C" void     v2_fntest_put_word_10980(uint16_t v) { word_10980 = v; }
 
-extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs)
+// In-process body of the isolated oracle call (the pre-fork implementation).
+// Under the default fork-per-case mode it runs INSIDE the child; with
+// FT_NO_FORK=1 (gcov coverage runs, debugging) it runs in-process as before.
+static bool v2_fntest_orig_isolated_body(void* fn, uint8_t* ds_image, uint16_t* io_regs)
 {
     // +0x10 tail: a WORD access at offset 0xFFFF reaches linear ds+0x10000
     // (the port reads/writes linearly, no 8086 wrap) — keep those bytes
@@ -451,6 +457,15 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     esp = 0; sp = (dw)(STACK_SIZE / 2);
     ax = io_regs[0]; bx = io_regs[1]; cx = io_regs[2]; dx = io_regs[3];
     si = io_regs[4]; di = io_regs[5]; bp = io_regs[6];
+
+    // Shadow-stack hygiene: legal POP-through paths (e.g. the off_30CA2
+    // setters popping the caller's PUSH) leave "uncontrolled pop" residue in
+    // m_ss between cases. The residue is cumulative across units and
+    // eventually makes clean RETNs look like frame escapes (sp!=sp_ref), so
+    // whole units silently degrade to 0-case UB-skips in integration runs
+    // (caught via the sub_12709 gcov paradox). Every isolated call starts
+    // from a fresh shadow stack — each call owns its virtual stack anyway.
+    m2c::shadow_stack.reset_for_fntest();
 
     // Escape cushion: double-POP exit opcodes (VM op 0x15 class) pop through
     // the CALL_ frame; these trap words route the runaway RETN into
@@ -523,9 +538,138 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     io_regs[7] = st.CF ? 1 : 0;
     v2_fntest_last_es = es;   // ES-out probe (unit sub_10e85: para advance)
 
+
     memcpy(ds_image, ds_ptr, 0x10000);
     memcpy(ds_ptr, saved_ds, 0x10010);
     return ok;
+}
+
+// ============================================================================
+// Fork-per-case isolation (canonical mode). Every isolated oracle call runs
+// in a fork()ed child: ANY state the orig-UB runaway corrupts — the m2c::m
+// image, port C globals (word_10980, drawPalette, ...), heap, even gcov
+// counters — dies with the child. Each case therefore starts from a
+// bit-identical process state; verdicts cannot depend on case order or on
+// neighbouring units (root cause of the silent sub_12709 integration 0/0:
+// sub_154bf runaways zeroed the seg001 table at linear 0x9480 for the rest
+// of the process). Outputs travel through one MAP_SHARED block. The child
+// keeps the whole in-process machinery (watchdog SIGALRM/SIGSEGV + sigsetjmp,
+// trap words, sp balance check) — a hung child dies by its own 2s alarm; the
+// parent adds a hard 30s belt via SIGKILL for the historical
+// stranded-in-sigsuspend class. FT_NO_FORK=1 restores the old in-process
+// behaviour (needed for gcov: children _exit() without flushing .gcda).
+// Export windows: runners whose oracle writes OUTSIDE the DS image (porch
+// dest zones in m2c::m, the drawPixel drawBuffer for K3 compares, the DAC
+// mirror, FS rings, ...) DECLARE those channels before their cases via
+// v2_fntest_fork_export(). The child copies each declared window into the
+// shared block, the parent copies it back — nothing else of the child's
+// world survives, so runaway corruption still dies with the child. The
+// declaration doubles as documentation of the unit's oracle channels.
+#define FT_FORK_EXPORT_MAX   8
+#define FT_FORK_EXPORT_BYTES 0x200000   // 2 MB pool (drawBuffer 256K + zones)
+struct FtForkExport { uint8_t* ptr; uint32_t len; };
+static FtForkExport ft_fork_exports[FT_FORK_EXPORT_MAX];
+static int ft_fork_export_n = 0;
+extern "C" void v2_fntest_fork_export(void* ptr, uint32_t len) {
+    if (ft_fork_export_n < FT_FORK_EXPORT_MAX && ptr && len)
+        ft_fork_exports[ft_fork_export_n++] = FtForkExport{ (uint8_t*)ptr, len };
+}
+extern "C" void v2_fntest_fork_export_clear(void) { ft_fork_export_n = 0; }
+
+struct FtForkShared {
+    uint8_t  ds_image[0x10000];
+    uint16_t io_regs[8];
+    long     d_escapes;      // child's start_escapes delta
+    long     d_mismatch;     // child's shadow-stack ret-mismatch delta
+    uint16_t last_es;        // ES-out probe (unit sub_10e85)
+    uint16_t w10980;         // cs-global word_10980 after the call (units 31/32)
+    uint8_t  ok;
+    uint8_t  exports[FT_FORK_EXPORT_BYTES];   // declared windows, packed in order
+};
+static void v2_fntest_parent_alarm(int) {}   // just EINTR out of waitpid
+
+extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs)
+{
+    static int no_fork = -1;
+    if (no_fork < 0) no_fork = getenv("FT_NO_FORK") ? 1 : 0;
+    if (no_fork) return v2_fntest_orig_isolated_body(fn, ds_image, io_regs);
+
+    static FtForkShared* sh = nullptr;
+    if (!sh) {
+        sh = (FtForkShared*)mmap(nullptr, sizeof(FtForkShared),
+                                 PROT_READ | PROT_WRITE,
+                                 MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        if (sh == MAP_FAILED) { perror("fn-test mmap"); abort(); }
+    }
+    static long ft_fork_count = 0;
+    if (ft_fork_count++ == 0) fprintf(stderr, "FT-FORK-MODE: active (first fork)\n");
+    fflush(stdout); fflush(stderr);   // don't duplicate buffered output into the child
+    pid_t pid = fork();
+    if (pid < 0) { perror("fn-test fork"); abort(); }
+    if (pid == 0) {
+        // ---- child: the case runs here and dies here ----
+        long esc0 = v2_fntest_start_escapes;
+        long mm0  = m2c::shadow_stack.m_fntest_ret_mismatch;
+        bool ok = v2_fntest_orig_isolated_body(fn, ds_image, io_regs);
+        memcpy(sh->ds_image, ds_image, 0x10000);
+        memcpy(sh->io_regs, io_regs, sizeof(sh->io_regs));
+        sh->d_escapes  = v2_fntest_start_escapes - esc0;
+        sh->d_mismatch = m2c::shadow_stack.m_fntest_ret_mismatch - mm0;
+        sh->last_es    = v2_fntest_last_es;
+        sh->w10980     = (uint16_t)word_10980;
+        sh->ok         = ok ? 1 : 0;
+        {   // export the declared oracle channels
+            uint32_t off = 0;
+            for (int i = 0; i < ft_fork_export_n; i++) {
+                if (off + ft_fork_exports[i].len > FT_FORK_EXPORT_BYTES) break;
+                memcpy(sh->exports + off, ft_fork_exports[i].ptr, ft_fork_exports[i].len);
+                off += ft_fork_exports[i].len;
+            }
+        }
+        fflush(nullptr);              // keep the child's diagnostics
+        _exit(0);                     // no atexit/gcov flush — by design
+    }
+    // ---- parent ----
+    // Own SIGALRM handler just for this waitpid (the v2-side watchdog
+    // re-installs the siglongjmp fault handler between calls; firing THAT
+    // one outside an armed sigsetjmp would be fatal). Save/restore around.
+    struct sigaction sa_alrm, sa_old;
+    memset(&sa_alrm, 0, sizeof(sa_alrm));
+    sa_alrm.sa_handler = v2_fntest_parent_alarm;   // no SA_RESTART: EINTR out
+    sigemptyset(&sa_alrm.sa_mask);
+    sigaction(SIGALRM, &sa_alrm, &sa_old);
+    alarm(30);                        // belt: child has its own 2s watchdog
+    int wst = 0;
+    pid_t r = waitpid(pid, &wst, 0);
+    if (r < 0) {                      // EINTR: 30s passed → hard-hung child
+        kill(pid, SIGKILL);
+        waitpid(pid, &wst, 0);
+        alarm(0);
+        sigaction(SIGALRM, &sa_old, nullptr);
+        v2_fntest_start_escapes++;    // hung child = orig-UB escape
+        return false;
+    }
+    alarm(0);
+    sigaction(SIGALRM, &sa_old, nullptr);
+    if (!WIFEXITED(wst) || WEXITSTATUS(wst) != 0) {
+        v2_fntest_start_escapes++;    // crashed child = orig-UB escape
+        return false;
+    }
+    memcpy(ds_image, sh->ds_image, 0x10000);
+    memcpy(io_regs, sh->io_regs, sizeof(sh->io_regs));
+    v2_fntest_start_escapes += sh->d_escapes;
+    m2c::shadow_stack.m_fntest_ret_mismatch += sh->d_mismatch;
+    v2_fntest_last_es = sh->last_es;
+    word_10980 = sh->w10980;
+    {   // import the declared oracle channels back
+        uint32_t off = 0;
+        for (int i = 0; i < ft_fork_export_n; i++) {
+            if (off + ft_fork_exports[i].len > FT_FORK_EXPORT_BYTES) break;
+            memcpy(ft_fork_exports[i].ptr, sh->exports + off, ft_fork_exports[i].len);
+            off += ft_fork_exports[i].len;
+        }
+    }
+    return sh->ok != 0;
 }
 extern "C" void v2_spec_ors_mirror_10350();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
@@ -560,6 +704,15 @@ extern "C" void v2_fntest_ensure_drawinfo(void) {
 extern "C" uint8_t* v2_fntest_drawbuffer_ptr(void) {
     v2_fntest_ensure_drawinfo();
     return myDrawInfo->drawBuffer;
+}
+// Whole oracle-side draw state (drawBuffer + drawPalette + CRTC fields) —
+// one fork-export window covers every VGA/DAC/K3 channel at once.
+extern "C" uint8_t* v2_fntest_drawinfo_ptr(void) {
+    v2_fntest_ensure_drawinfo();
+    return (uint8_t*)myDrawInfo;
+}
+extern "C" uint32_t v2_fntest_drawinfo_size(void) {
+    return (uint32_t)sizeof(struct myDrawInfoS);
 }
 
 #include "sdl/render_v2.h"

@@ -1662,6 +1662,8 @@ struct StackPop
         bool ret(true);
 #ifndef NO_SHADOW_STACK
         ret = shadow_stack.itwascall();
+        if (getenv("FT_SS_TRACE"))
+            fprintf(stderr, "SS-RETN: ip=%04X wascall=%d\n", (unsigned)(ip & 0xFFFF), (int)ret);
         int skip = shadow_stack.getneedtoskipcallndclean();
         if (!ret) {
             log_error("Warning. Return address wasn't created by native CALL (found %x)\n", ip);
