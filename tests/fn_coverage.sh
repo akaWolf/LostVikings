@@ -31,7 +31,7 @@ for u in $UNITS; do
   esac
 done
 echo "units run: $n"
-gcov --json-format -o .obj-headless/src src/vikings.exe_seg000.cpp \
+gcov -b --json-format -o .obj-headless/src src/vikings.exe_seg000.cpp \
   > /dev/null 2>&1
 python3 python/fn_coverage_report.py vikings.exe_seg000.gcov.json.gz \
   --csv /tmp/fn_coverage.csv

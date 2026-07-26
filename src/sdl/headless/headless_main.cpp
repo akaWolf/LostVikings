@@ -17,6 +17,9 @@
 #include <atomic>
 #ifndef _WIN32
 #include <unistd.h>   // _exit
+#ifdef FT_COV_BUILD
+extern "C" void __gcov_dump(void);   // libgcov: flush counters before _exit
+#endif
 #endif
 #include "headless_dump.h"
 #include "../v2_input_recorder.h"
@@ -98,6 +101,13 @@ int headless_check_exit(void) {
         v2_fntest_report();   // fn-test infra is not part of the V2_ONLY build
 #endif
         fflush(stdout); fflush(stderr);
+        // COV_SEG000 builds: flush gcov counters before the atexit-skipping
+        // _exit — replays feed the merged coverage profile (#47 step 1).
+        // (a block-scope weak declaration silently dropped the attribute and
+        // the call never flushed — hence the honest ifdef)
+#ifdef FT_COV_BUILD
+        __gcov_dump();
+#endif
         _exit(0);
     }
     return 0;

@@ -2205,6 +2205,10 @@ int ft_selftest_search(FtId id, uint32_t seed) {
     static const SCase SC[] = {
         // in-map bbox, tile type 5 under Y_end+1 probe (row1), filter matches 5 → tile hit
         { 0x8000, 0x0010, 0x0020, 0x0008, 0x000E, 0x0005, 0x00FF, 0, 0, 0, 0, 0, 0 },
+        // (#47) slope/cliff branch of 15afd: filter 0x30 — the >=0x30 tile
+        // word comes from the same crafted map (types (i&0x3F)<<10 reach
+        // 0x30+ on rows 12+: probe geometry below row 12).
+        { 0x8000, 0x0010, 0x0020, 0x00C8, 0x00CE, 0x0030, 0x00FF, 0, 0, 0, 0, 0, 0 },
         // filter stops before (first entry > type) → no tile; no obj → none
         { 0x8000, 0x0010, 0x0020, 0x0008, 0x000E, 0x0006, 0x00FF, 0, 0, 0, 0, 0, 0 },
         // filter chain: first entry smaller, second matches (INC walk)
@@ -5963,6 +5967,10 @@ int ft_selftest_coll_dir(FtId id, uint32_t seed) {
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_X), 0x0108);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_WORLD_Y), wy);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_Y_PREV),  py);
+        // sub_15911 compares [di+1765] vs [di+13CD] (NOT world_y/y_prev!) —
+        // seed the actual gate fields so the Y-walk dispatch fires (#47).
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x1765), wy);
+        ft_wr16(g_synth_in, (uint16_t)(di + 0x13CD), py);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_X_PREV),  0x0108);
         ft_wr16(g_synth_in, (uint16_t)(di + OBJ_VEL_Y),   0);
         // tilemap 16x16, stripe type 0x30 on row 4 (world y 0x40..0x4F)
@@ -8895,6 +8903,20 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         uint16_t t = FT_VM_PC + 0x40;
         uint8_t c[] = {op, 0x01, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
         A(c, 5, O, "grid");
+        // Coverage-directed (#47): the JO landing of the signed compare
+        // (SUB dx,ax) needs signed overflow. Two symmetric cases cover every
+        // channel: acc 0x8000 with a POSITIVE operand, and acc 0x7FFF with a
+        // NEGATIVE one. The ch1 operand field for idx 0x40 resolves to
+        // ds:0x19EB (LUT[0x9386]=0x0500 + [42]=6 + 0x14E5); ch2 reads the
+        // word at ds:0x6000 (frame convention).
+        {
+            static const FtWr wovp[] = { {0x008A, 0x8000},
+                                         {0x19EB, 0x0001}, {0x6000, 0x0001} };
+            A(c, 5, O, "grid", wovp, 3);
+            static const FtWr wovn[] = { {0x008A, 0x7FFF},
+                                         {0x19EB, 0xFFFF}, {0x6000, 0xFFFF} };
+            A(c, 5, O, "grid", wovn, 3);
+        }
         fuzz_op = op; fuzz_alen = 3; break;
     }
     // ---- wave 8: equality channel-compare jump/call forms ----
@@ -10287,6 +10309,25 @@ int ft_selftest_1041c(void) {
         }
         if (diffs) grid.fail++; else grid.pass++;
     };
+    // (#47) open gate with nonzero shading ([342]) drives the JMP sub_1047c
+    // arm (eip 467/478) instead of the 1450b save chain.
+    {
+        grid.cases++;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        g_synth_in[0x25BA] = 2;
+        ft_wr16(g_synth_in, 0x0334, 0);
+        ft_wr16(g_synth_in, 0x03B8, 0x1000);
+        ft_wr16(g_synth_in, 0x218F, 0);
+        g_synth_in[0x0342] = 0x11;
+        ft_fill_tail(g_synth_in);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_1041C), g_synth_orig, regs);
+        bool orig_open = (ft_ub_marks() != esc0);
+        int v2_open = v2_fntest_call_pw_gate(g_synth_in);
+        if ((v2_open != 0) != orig_open) grid.fail++; else grid.pass++;
+    }
     // all 16 gate combinations (open = sel!=0 && !(fl&3) && (ed&0x1000) && cw==0)
     for (int sel = 0; sel <= 1; sel++)
         for (int fl = 0; fl <= 1; fl++)
@@ -11074,6 +11115,43 @@ int ft_selftest_sub_11cbb() {
             FtRegs in{};
             ft_synth_case_regs(FT_SUB_11CBB, in, 0, -1, "grid", grid, diff_budget);
         }
+    // (#47) exit-mode branches: viking switch left/right (edges 0x20/0x10),
+    // the [3C2]-anchored [15AD]-alive scan with both wrap arms, the
+    // 120d1/11f47/177bb chain; plus the HUD category-wrap of the 0x100 arm
+    // and the 0x2000 exchange (11f93 JC/STC exits).
+    {
+        struct EC { uint16_t mode, inp, anchor, s0, s1, s2, cat; };
+        static const EC EC_CASES[] = {
+            { 1, 0x0020, 4, 1, 1, 1, 0 },   // switch left, all alive
+            { 1, 0x0010, 4, 1, 1, 1, 0 },   // switch right, all alive
+            { 1, 0x0020, 0, 1, 0, 0, 0 },   // left from slot 0 → wrap di=4
+            { 1, 0x0010, 4, 1, 0, 0, 0 },   // right from 4 → wrap di=0
+            { 1, 0x8000, 4, 1, 1, 1, 0 },   // exit-mode Enter arm
+            { 1, 0x2000, 4, 1, 1, 1, 0 },   // exit-mode exchange arm
+            { 0, 0x0100, 0, 1, 1, 1, 2 },   // HUD: cat wrap (only cat-0 busy)
+            { 0, 0x2000, 0, 1, 1, 1, 0 },   // HUD: 0x2000 exchange (11f93)
+        };
+        for (const EC& c : EC_CASES) {
+            memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+            ft_wr16(g_synth_in, 0x447, c.mode);
+            ft_wr16(g_synth_in, 0x3B8, c.inp);
+            ft_wr16(g_synth_in, 0x304, 1);
+            ft_wr16(g_synth_in, 0x3C2, c.anchor);
+            ft_wr16(g_synth_in, 0x15AD, c.s0);
+            ft_wr16(g_synth_in, 0x15AF, c.s1);
+            ft_wr16(g_synth_in, 0x15B1, c.s2);
+            ft_wr16(g_synth_in, 0x443, c.cat);
+            // categories: only cat-0 busy (slot word at [3E4])
+            for (uint32_t a = 0x3E4; a < 0x404; a += 2) ft_wr16(g_synth_in, a, 0);
+            ft_wr16(g_synth_in, 0x3E4, 5);
+            ft_norm_11c52(g_synth_in);
+            ft_fill_tail(g_synth_in);
+            memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+            v2_fntest_call_sub_11cbb(g_scratch);
+            FtRegs in{};
+            ft_synth_case_regs(FT_SUB_11CBB, in, 0, -1, "exit", grid, diff_budget);
+        }
+    }
     fprintf(stderr,
         "FNSELFTEST-SUMMARY[sub_11cbb]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
         grid.pass, grid.cases, grid.cases, grid.fail,

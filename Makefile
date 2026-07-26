@@ -112,9 +112,6 @@ EXE_NAME := vikings_headless
 OBJDIR := .obj-headless
 endif
 
-CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
-CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
-
 # COV_SEG000=1: instrument ONLY the m2c oracle (vikings.exe_seg000.cpp) with
 # gcov, for the fn-test coverage report (task #47). Everything else compiles
 # as usual; the link adds --coverage for the gcov runtime. Use with HEADLESS:
@@ -124,7 +121,11 @@ CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 #   python3 python/fn_coverage_report.py vikings.exe_seg000.cpp.gcov.json.gz
 ifdef COV_SEG000
 COV_LDFLAGS := --coverage
+V2_DEFINES += -DFT_COV_BUILD
 endif
+
+CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
+CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 
 ifdef V2_ONLY
 # V2_ONLY: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.

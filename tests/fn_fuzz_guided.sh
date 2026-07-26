@@ -14,7 +14,7 @@ GCDA=.obj-headless/src/vikings.exe_seg000.gcda
 mkdir -p tests/fn_seeds
 lines() {
   rm -f vikings.exe_seg000.gcov.json.gz
-  gcov --json-format -o .obj-headless/src src/vikings.exe_seg000.cpp >/dev/null 2>&1
+  gcov -b --json-format -o .obj-headless/src src/vikings.exe_seg000.cpp >/dev/null 2>&1
   python3 - <<'PY'
 import gzip, json
 d = json.load(gzip.open('vikings.exe_seg000.gcov.json.gz','rt'))
