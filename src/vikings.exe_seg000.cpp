@@ -280,6 +280,14 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 412: return (void*)&sub_1106f;  // DAC blank (768 zero writes)
     case 413: return (void*)&sub_102ad;  // level transition trigger
     case 414: return (void*)&sub_1265b;  // text print at raw si/di (12515 + JMP 124c5)
+    case 415: return (void*)&sub_12709;  // dialog-box cmd from buffer entry (bx)
+    case 416: return (void*)&sub_10e85;  // para advance: es += (di>>4)+1, di=0
+    case 417: return (void*)&sub_11204;  // level chunk-load dispatcher ([25CF] bits)
+    case 418: return (void*)&sub_12d72;  // demo input record/replay tick
+    case 419: return (void*)&sub_1041c;  // pw-screen gates (open path = L tail)
+    case 420: return (void*)&sub_105cb;  // pw exit check (arrows/Enter/ESC/Y/N, CF)
+    case 421: return (void*)&sub_111b1;  // template+level descriptor loader (di=level)
+    case 422: return (void*)&sub_11439;  // render gate + 16DED + page-flip tail
     default: return 0;
     }
 }
@@ -399,6 +407,8 @@ extern "C" void v2_fntest_arm_signals(void) {
 // DATA.DAT for both the oracle and v2 (the oracle's file layer is the port's
 // SDL-inlined fread/fseek on the static `data_handle`).
 extern "C" uint16_t v2_fntest_es_override = 0;
+// ES value after the isolated call (unit sub_10e85 compares the para-advance).
+extern "C" uint16_t v2_fntest_last_es = 0;
 // fs for orig functions that rely on a caller-loaded fs (e.g. sub_13fc2:
 // fs = ds:2E69 is loaded by the caller, not the function itself).
 extern "C" uint16_t v2_fntest_fs_override = 0;
@@ -511,6 +521,7 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     io_regs[0] = ax; io_regs[1] = bx; io_regs[2] = cx; io_regs[3] = dx;
     io_regs[4] = si; io_regs[5] = di; io_regs[6] = bp;
     io_regs[7] = st.CF ? 1 : 0;
+    v2_fntest_last_es = es;   // ES-out probe (unit sub_10e85: para advance)
 
     memcpy(ds_image, ds_ptr, 0x10000);
     memcpy(ds_ptr, saved_ds, 0x10010);

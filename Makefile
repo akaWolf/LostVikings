@@ -115,6 +115,17 @@ endif
 CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 
+# COV_SEG000=1: instrument ONLY the m2c oracle (vikings.exe_seg000.cpp) with
+# gcov, for the fn-test coverage report (task #47). Everything else compiles
+# as usual; the link adds --coverage for the gcov runtime. Use with HEADLESS:
+#   COV_SEG000=1 HEADLESS=1 make -j$(nproc)
+#   FNSELFTEST=all ./vikings_headless > /tmp/fnst_cov.log 2>&1
+#   gcov --json-format -o .obj-headless/src .obj-headless/src/vikings.exe_seg000.o
+#   python3 python/fn_coverage_report.py vikings.exe_seg000.cpp.gcov.json.gz
+ifdef COV_SEG000
+COV_LDFLAGS := --coverage
+endif
+
 ifdef V2_ONLY
 # V2_ONLY: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.
 # Excluded: vikings.exe*.cpp, _data.cpp, asm.cpp, shadowstack.cpp, memmgr.cpp (all m2c-only).
@@ -226,7 +237,11 @@ $(KEYMAP_EDITOR_OBJDIR)/%.o: %.cpp
 -include $(KEYMAP_EDITOR_OBJS:.o=.d)
 
 $(EXE_NAME): $(ALL_OBJS)
-	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) -o $@ $^ $(SDL)
+	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) $(COV_LDFLAGS) -o $@ $^ $(SDL)
+
+ifdef COV_SEG000
+$(OBJDIR)/src/vikings.exe_seg000.o: CXXFLAGS += --coverage
+endif
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)

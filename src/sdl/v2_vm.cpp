@@ -2228,9 +2228,14 @@ static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max
 // Args: ax = chunk_id, di = display_offset (VGA dest)
 static void v2_load_chunk_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
     uint16_t chunk_seg = *(uint16_t*)(shadow + DS_SEG_CHUNK);
-    uint16_t plane_size = v2_read_raw_chunk(ax, v2_vm_shadow_chunk, V2_CHUNK_SHADOW_SIZE);
+    if (ax == 0xFFFA) return;   // orig: early RETN before any fread — no DS writes
+    // №46: orig freads the 8-byte chunk-table entry into ds:0x2BB4 before the
+    // plane_size read — mirror it into shadow (unit-32 compared it via hdr10_out,
+    // but this battle glue never wrote it).
+    uint16_t plane_size = v2_read_raw_chunk(ax, v2_vm_shadow_chunk, V2_CHUNK_SHADOW_SIZE,
+                                            shadow + DS_CHUNK_HDR);
+    if (plane_size == 0) return;    // orig error paths → sub_10dba DOS-abort (class E)
     *(uint16_t*)(shadow + DS_DECOMP_SIZE) = plane_size; // ds:0x2BBC = plane_size (mirror orig)
-    if (plane_size == 0) return;
     if (di == 0) {
         v2_draw_hud_background(v2_current_ds_val, chunk_seg, plane_size);
     } else {
@@ -2258,7 +2263,10 @@ static bool v2_load_exe_ds(); // forward decl
 static void v2_read_input_12352_iter(uint8_t*); // forward decl (definition ~line 18010)
 static void v2_pw_pre_loop(uint8_t*);    // forward decl (definition ~line 18937)
 static void v2_transition_kick_102ad(uint8_t* s);  // fwd (used by the phase at ~7697)
+static void v2_demo_input_12d72(uint8_t* s);  // fwd (used by the same phase)
+static bool v2_pw_gate_1041c(const uint8_t* s); // fwd (V2_ONLY phase + fn-test)
 static void v2_text_print_1265b(uint8_t* s, uint16_t ax, uint16_t si, uint16_t di);
+static void v2_cmd_text_12709(uint8_t* s, uint16_t bx_read);
 static bool v2_pw_iter_body(uint8_t*);   // forward decl (definition ~line 19011)
 static void v2_pw_post_loop(uint8_t*);   // forward decl (definition ~line 19100)
 static void v2_page_flip_16775(uint8_t* s);
@@ -7434,23 +7442,30 @@ tile_load:
         uint16_t bg_chunk   = *(uint16_t*)(shadow + DS_CHUNK_BG); // word_2AAC5
 
         // 1. tile_chunk → tilegfx (ds:0x2E5F shadow)
-        v2_read_chunk(tile_chunk, v2_vm_shadow_tilegfx, V2_TILEGFX_SHADOW_SIZE);
+        v2_read_chunk(tile_chunk, v2_vm_shadow_tilegfx, V2_TILEGFX_SHADOW_SIZE, shadow);
         v2_tilegfx_shadow_valid = true;
 
         // 2. tile_chunk+1 → GS masks (ds:0x2E61 shadow)
-        v2_read_chunk((uint16_t)(tile_chunk + 1), v2_vm_shadow_gs, V2_GS_SHADOW_SIZE);
+        v2_read_chunk((uint16_t)(tile_chunk + 1), v2_vm_shadow_gs, V2_GS_SHADOW_SIZE, shadow);
         v2_gs_shadow_valid = true;
 
         // 3. main_chunk → tilemap (ds:0x2E63 shadow); save decompressed size to ds:0x2E65
-        uint32_t sz3 = v2_read_chunk(main_chunk, v2_vm_shadow_tilemap, V2_TILEMAP_SHADOW_SIZE);
+        uint32_t sz3 = v2_read_chunk(main_chunk, v2_vm_shadow_tilemap, V2_TILEMAP_SHADOW_SIZE, shadow);
         v2_tilemap_shadow_valid = true;
         *(uint16_t*)(shadow + DS_DECOMP_DI_END) = (uint16_t)sz3; // word_2B345 = di after decomp
 
         // 4. bg_chunk → gs_tiledata (ds:0x2E5D shadow) — tail call in orig
-        v2_read_chunk(bg_chunk, v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE);
+        v2_read_chunk(bg_chunk, v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE, shadow);
         v2_gs_tiledata_valid = true;
 
     }
+}
+
+// fn-test unit sub_11204: dispatcher mirror — 0xCC-baseline every v2 dest
+// buffer the four branches can touch, then run v2_load_level_data.
+uint8_t* v2_vm_get_shadow_gs_tiledata() { return v2_vm_shadow_gs_tiledata; }
+extern "C" void v2_fntest_call_11204(uint8_t* shadow) {
+    v2_load_level_data(shadow);
 }
 
 // Combined loader for backward compatibility (called from game loop)
@@ -7638,62 +7653,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     v2_read_input_12352_iter(shadow);
 #endif
 
-    // sub_12d72: level transition handler.
-    // ds:0x3CC = transition state. If >= 0 → return. If negative → process.
-    {
-        int16_t ax = (int16_t)*(uint16_t*)(shadow + DS_GAME_MODE_AC);
-        if (ax >= 0) {
-            // Normal: no transition active
-        } else if (ax == (int16_t)0x8000 || ax == (int16_t)0x8002) {
-            // loc_12dd2: countdown transition
-            if (*(uint16_t*)(shadow + DS_INPUT_KEYS) & 0x1000) {
-                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 0xFFFF;
-                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = 0xFFFF;
-            }
-            if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) != 0) {
-                *(uint16_t*)(shadow + DS_SCRATCH_3CE) -= 1;
-                *(uint16_t*)(shadow + DS_INPUT_ACCUM) |= *(uint16_t*)(shadow + DS_SCRATCH_3D0);
-            } else {
-                // Pop from stack at ds:0x2191
-                uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
-                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
-                uint16_t cnt = *(uint16_t*)(shadow + bx + DS_TRANSITION_CHUNK_BUF);
-                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
-                *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
-            }
-        } else {
-            // Other negative: active viking tracking
-            if (*(uint16_t*)(shadow + DS_SCRATCH_3CE) == 0) {
-                // loc_12dc4: init tracking
-                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + DS_INPUT_KEYS);
-                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
-            } else {
-                // Check if active viking changed
-                uint16_t cur = *(uint16_t*)(shadow + DS_INPUT_KEYS);
-                uint16_t prev = *(uint16_t*)(shadow + DS_SCRATCH_3D0);
-                if (cur == prev) {
-                    *(uint16_t*)(shadow + DS_SCRATCH_3CE) += 1;
-                } else {
-                    // Push previous state to stack at ds:0x2191
-                    // bx = ds:0x2191 (stack pointer, loaded ONCE)
-                    // [bx+0x2191] = prev; ds:0x2191 += 2
-                    // [bx+0x2191] = counter; ds:0x2191 += 2
-                    // Note: bx is NOT reloaded after ADD — same bx for both writes!
-                    // So second write goes to same address, overwriting first.
-                    // Actually: bx+0x2191 for first, (bx)+0x2191 for second (bx unchanged)
-                    // The ADD changes ds:0x2191 memory, not bx register.
-                    uint16_t bx = *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD);
-                    *(uint16_t*)(shadow + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = prev;
-                    *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
-                    *(uint16_t*)(shadow + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = *(uint16_t*)(shadow + DS_SCRATCH_3CE);
-                    *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) += 2;
-                    *(uint16_t*)(shadow + DS_SCRATCH_3D0) = cur;
-                    *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 1;
-                }
-            }
-        }
-    }
+    // sub_12d72: demo input record/replay tick (extracted, see the helper zone).
+    v2_demo_input_12d72(shadow);
 
     // sub_102ad: level transition trigger (extracted, see the helper zone).
     v2_transition_kick_102ad(shadow);
@@ -7711,10 +7672,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // helpers, no logic duplication — just structural difference (signal
     // dispatch vs inline spin).
 #ifdef V2_ONLY
-    if (shadow[DS_ACTIVE_VK_SEL] != 0 &&                                  // byte_2AA9A
-        (*(uint16_t*)(shadow + DS_FRAME_FLAGS) & 3) == 0 &&             // word_28814 & 3
-        (*(uint16_t*)(shadow + DS_INPUT_EDGES) & 0x1000) &&             // word_28898 ESC
-        *(uint16_t*)(shadow + DS_CMD_WRITE) == 0)                     // word_2A66F
+    if (v2_pw_gate_1041c(shadow))                     // sub_1041c gates (extracted)
     {
         bool need_save = !(shadow[DS_PAL_SHADE_R] | shadow[DS_PAL_SHADE_G] | shadow[DS_PAL_SHADE_B]);
         v2_pw_pre_loop(shadow);
@@ -12965,6 +12923,8 @@ extern "C" void v2_fntest_call_hud(int which, uint8_t* test_shadow, uint16_t si_
     case 11: v2_pw_blink_10555(test_shadow); break;
     case 12: v2_transition_kick_102ad(test_shadow); break;
     case 13: v2_text_print_1265b(test_shadow, si_in & 0xFF, (uint16_t)(si_in >> 8), 0x0F); break;
+    case 14: v2_cmd_text_12709(test_shadow, si_in); break;
+    case 15: v2_demo_input_12d72(test_shadow); break;
     }
     if (out_si) *out_si = r;
     v2_vm_acc_base = saved_acc;
@@ -13048,6 +13008,38 @@ static void v2_hud_full_reinit_117ad(uint8_t* s) {
 }
 
 static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out);
+
+// sub_10e85: segment para-advance — es += (di >> 4) + 1, di = 0 (register-pure,
+// no DS writes). v2's loaders address linearly (64K-wrap canon), so the only
+// battle mirror is this formula; the unit diffs it against the oracle's ES-out.
+static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax);
+extern "C" int v2_fntest_call_105cb(uint8_t* shadow, uint16_t* out_ax) {
+    return v2_pw_exit_check_105cb(shadow, out_ax) ? 1 : 0;
+}
+
+static void v2_load_template(uint8_t* shadow);
+extern "C" void v2_fntest_call_111b1(uint8_t* shadow) {
+    v2_load_template(shadow);
+}
+extern uint8_t* v2_vm_get_shadow_animdata();
+static void v2_render_flag_init_11439(uint8_t* s);
+extern "C" void v2_fntest_call_11439(uint8_t* shadow) {
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = shadow;
+    bool saved_rv = v2_replay_verify_active;
+    v2_replay_verify_active = true;   // tilegfx resolve -> shared m2c zone (unit-136 channel)
+    v2_render_flag_init_11439(shadow);
+    v2_replay_verify_active = saved_rv;
+    v2_vm_acc_base = saved_acc;
+}
+
+extern "C" int v2_fntest_call_pw_gate(const uint8_t* shadow) {
+    return v2_pw_gate_1041c(shadow) ? 1 : 0;
+}
+
+extern "C" uint16_t v2_para_advance_10e85(uint16_t es_in, uint16_t di_in) {
+    return (uint16_t)(es_in + (di_in >> 4) + 1);
+}
 
 extern "C" int v2_fntest_call_12250(uint8_t* shadow, uint16_t di, uint16_t* out_ax) {
     uint16_t ax = 0;
@@ -21082,16 +21074,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 
     // Dispatch one cmd (handlers verified line-by-line vs orig off_2b086 table)
     if (cmd_type == 0) {
-        uint16_t ax_align = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
-        uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
-        uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
-        uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAF));
-        v2_text_dims_12529(s, bx_text);
-        v2_text_align_12549(s, ax_align);
-        uint16_t save_si = si_pos, save_di = di_pos;
-        v2_text_frame_12388(s, si_pos, di_pos, (uint8_t)ax_align);
-        v2_text_render_124c5(s, save_si + 1, save_di + 1, bx_text);
-        s[DS_GLYPH_DIRTY] = 1;
+        v2_cmd_text_12709(s, bx_read);          // sub_12709 (extracted)
         bx_read += 0x0A;
     } else if (cmd_type == 0x0A) {
         uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
@@ -21277,6 +21260,23 @@ void v2_cmd_loop_1086f(uint8_t* s) {
 //   Mode 0 (word_28927 == 0): item selection / category navigation.
 //   Mode 1 (word_28927 == 1): item carry — viking switch + slot placement.
 // Returns true if loop should exit (orig STC = exit pause loop).
+// sub_12709: dialog-box command — fields from the cmd buffer entry at bx:
+// align=[bx+1DAD], di=[bx+1DAB], si=[bx+1DA9], text=[bx+1DAF]; then 12529
+// (dims) + 12549 (align) + 12388 (frame at si/di) + loc_124c5 (text at
+// si+1/di+1) + [31A4B]=1.
+static void v2_cmd_text_12709(uint8_t* s, uint16_t bx_read) {
+    uint16_t ax_align = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
+    uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
+    uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
+    uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + 0x1DAF));
+    v2_text_dims_12529(s, bx_text);
+    v2_text_align_12549(s, ax_align);
+    uint16_t save_si = si_pos, save_di = di_pos;
+    v2_text_frame_12388(s, si_pos, di_pos, (uint8_t)ax_align);
+    v2_text_render_124c5(s, save_si + 1, save_di + 1, bx_text);
+    s[DS_GLYPH_DIRTY] = 1;
+}
+
 // sub_1265b: print text ax at (si, di) — sub_12515(ax) + bx=[2850A] +
 // JMP loc_124c5 with the RAW si/di (the +1 offsets belong to the 124a9/
 // 12709 frame-then-text callers, NOT to this helper — №45).
@@ -21292,6 +21292,75 @@ static void v2_text_print_1265b(uint8_t* s, uint16_t ax, uint16_t si, uint16_t d
 // current level; anything else negative → queue the 0x1000/0xFFFF command
 // pair, bump the head, set 0x8002 and reload. All taken paths end with
 // [340] |= 1.
+// sub_1041c gate (eips 0x41C..0x439): password/quit screen trigger — active
+// viking selected, no transition bits, ESC edge pressed, cmd buffer empty.
+// The open-gate tail (DAC 3 blank + shading check + sub_1450b/1047c/14590
+// chain into the blocking pw loop) is class L — verified live via the
+// V2_PHASE_PW_* machinery; this predicate is the diffable prefix.
+static bool v2_pw_gate_1041c(const uint8_t* s) {
+    return s[DS_ACTIVE_VK_SEL] != 0 &&                       // byte_2AA9A
+           (*(const uint16_t*)(s + DS_FRAME_FLAGS) & 3) == 0 &&    // word_28814 & 3
+           (*(const uint16_t*)(s + DS_INPUT_EDGES) & 0x1000) != 0 && // word_28898 ESC
+           *(const uint16_t*)(s + DS_CMD_WRITE) == 0;        // word_2A66F
+}
+
+// sub_12d72: demo input record/replay tick. ds:0x3CC = mode. Positive →
+// no-op. 0x8000/0x8002 → replay: ESC bit ([3B6]&0x1000) poisons [3CE]/[3D0]
+// to 0xFFFF; while [3CE]!=0: DEC + OR [86DE]|=[3D0]; else pop a (keys,count)
+// pair from the [2191]-queue ([86DE]=[3D0]=keys, [3CE]=count-1, head+=4).
+// Other negative → record: [3CE]==0 seeds [3D0]=[3B6],[3CE]=1; same keys →
+// [3CE]++; changed → flush: BOTH stores hit [bx+0x2191] (orig does NOT
+// reload bx after the head+=2 — the counter overwrites the keys word; exact
+// original behavior, replicated bit-for-bit), head+=4, reseed.
+static void v2_demo_input_12d72(uint8_t* s) {
+    int16_t ax = (int16_t)*(uint16_t*)(s + DS_GAME_MODE_AC);
+    if (ax >= 0) {
+        // locret_12dc3: no transition active
+    } else if (ax == (int16_t)0x8000 || ax == (int16_t)0x8002) {
+        // loc_12dd2: replay path
+        if (*(uint16_t*)(s + DS_INPUT_KEYS) & 0x1000) {
+            *(uint16_t*)(s + DS_SCRATCH_3CE) = 0xFFFF;
+            *(uint16_t*)(s + DS_SCRATCH_3D0) = 0xFFFF;
+        }
+        if (*(uint16_t*)(s + DS_SCRATCH_3CE) != 0) {
+            *(uint16_t*)(s + DS_SCRATCH_3CE) -= 1;
+            *(uint16_t*)(s + DS_INPUT_ACCUM) |= *(uint16_t*)(s + DS_SCRATCH_3D0);
+        } else {
+            // loc_12dfa: pop (keys,count) pair from the ds:0x2191 queue
+            uint16_t bx = *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD);
+            *(uint16_t*)(s + DS_INPUT_ACCUM) = *(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD));
+            *(uint16_t*)(s + DS_SCRATCH_3D0) = *(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD));
+            uint16_t cnt = *(uint16_t*)(s + (uint16_t)(bx + DS_TRANSITION_CHUNK_BUF));
+            *(uint16_t*)(s + DS_SCRATCH_3CE) = cnt - 1;
+            *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) = bx + 4;
+        }
+    } else {
+        // record path
+        if (*(uint16_t*)(s + DS_SCRATCH_3CE) == 0) {
+            // loc_12dc4: seed tracking
+            *(uint16_t*)(s + DS_SCRATCH_3D0) = *(uint16_t*)(s + DS_INPUT_KEYS);
+            *(uint16_t*)(s + DS_SCRATCH_3CE) = 1;
+        } else {
+            uint16_t cur = *(uint16_t*)(s + DS_INPUT_KEYS);
+            uint16_t prev = *(uint16_t*)(s + DS_SCRATCH_3D0);
+            if (cur == prev) {
+                *(uint16_t*)(s + DS_SCRATCH_3CE) += 1;
+            } else {
+                // loc_12d9b: flush — bx loaded ONCE; the head+=2 changes the
+                // MEMORY word, not bx, so both stores land on bx+0x2191 and
+                // the counter overwrites the keys word (original artifact).
+                uint16_t bx = *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD);
+                *(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = prev;
+                *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) += 2;
+                *(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = *(uint16_t*)(s + DS_SCRATCH_3CE);
+                *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) += 2;
+                *(uint16_t*)(s + DS_SCRATCH_3D0) = cur;
+                *(uint16_t*)(s + DS_SCRATCH_3CE) = 1;
+            }
+        }
+    }
+}
+
 static void v2_transition_kick_102ad(uint8_t* s) {
     int16_t ac = (int16_t)*(uint16_t*)(s + DS_GAME_MODE_AC);
     if (ac >= 0) return;
@@ -22104,6 +22173,52 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
 // input + sub_10555 selector blink + sub_105cb Y/N+arrow handling. Returns
 // true when exit condition met; in that case stores exit_ax in v2_pw_last_exit_ax
 // for v2_pw_post_loop to consume.
+// sub_105cb: password/quit-screen exit check. Arrow edges 0x200/0x100 move
+// the Y/N cursor ([443] DEC/INC bounded 0..1) and reprint the selection via
+// sub_1265b (text 4 at (0x16,0x0F) / text 5 at (0x10,0x0F)), [445]=0x11
+// blink reload. Exit: Enter (0x8000) → CF=1 ax=[443]; ESC (0x1000) → CF=1
+// ax=1; spec-key Y ([9181], live SDL state — the m2c port refreshes the DS
+// byte right before the TEST) → CF=1 ax=0; N ([919D]) → CF=1 ax=1; else
+// CF=0. The port also consumes the taken Enter/ESC edge from
+// sdl_input_press_snap (inline in orig sub_105cb) — kept here.
+static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
+    uint16_t ni = *(uint16_t*)(shadow + DS_INPUT_EDGES);
+    if (ni & 0x200) {
+        if (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) != 0) {
+            *(uint16_t*)(shadow + DS_QUIT_ACTIVE) -= 1;    // DEC word_28923
+            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            v2_text_print_1265b(shadow, 4, 0x16, 0x0F);    // sub_1265b
+        }
+    }
+    if (ni & 0x100) {
+        if (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) == 0) {
+            *(uint16_t*)(shadow + DS_QUIT_ACTIVE) += 1;    // INC word_28923
+            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            v2_text_print_1265b(shadow, 5, 0x10, 0x0F);    // sub_1265b
+        }
+    }
+    uint16_t consumed_bit = 0;
+    uint16_t exit_ax; bool exit;
+    if (ni & 0x8000) { exit_ax = *(uint16_t*)(shadow + DS_QUIT_ACTIVE); exit = true; consumed_bit = 0x8000; }
+    else if (ni & 0x1000) { exit_ax = 1; exit = true; consumed_bit = 0x1000; }
+    else {
+        // Y/N: live state read (no snap) — see seg000 sub_105cb note about why.
+        shadow[DS_SPEC_KEY_Y] = sdl_spec_state_get(0x9181);  // SDL Y — live atomic
+        if (shadow[DS_SPEC_KEY_Y] != 0) { exit_ax = 0; exit = true; }
+        else {
+            shadow[DS_SPEC_KEY_N] = sdl_spec_state_get(0x919D);  // SDL N — live atomic
+            if (shadow[DS_SPEC_KEY_N] != 0) { exit_ax = 1; exit = true; }
+            else { exit_ax = 0; exit = false; }
+        }
+    }
+    if (exit && consumed_bit) {
+        extern uint16_t sdl_input_press_snap;
+        sdl_input_press_snap = (uint16_t)(sdl_input_press_snap & ~consumed_bit);
+    }
+    *out_ax = exit_ax;
+    return exit;
+}
+
 static bool v2_pw_iter_body(uint8_t* shadow) {
     extern uint16_t v2_current_ds_val;
     extern void v2_swap_render_buf();
@@ -22131,44 +22246,12 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
 #endif
     // sub_10555: password blink (extracted).
     v2_pw_blink_10555(shadow);
-    // sub_105CB: password exit check
-    uint16_t ni = *(uint16_t*)(shadow + DS_INPUT_EDGES);
-    if (ni & 0x200) {
-        if (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) != 0) {
-            *(uint16_t*)(shadow + DS_QUIT_ACTIVE) -= 1;    // DEC word_28923
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-            v2_text_lookup_12515(shadow, 4);
-            uint16_t bx_e = *(uint16_t*)(shadow + DS_TEXT_IDX);
-            v2_text_render_124c5(shadow, 0x16, 0x0F, bx_e);
-        }
-    }
-    if (ni & 0x100) {
-        if (*(uint16_t*)(shadow + DS_QUIT_ACTIVE) == 0) {
-            *(uint16_t*)(shadow + DS_QUIT_ACTIVE) += 1;    // INC word_28923
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-            v2_text_lookup_12515(shadow, 5);
-            uint16_t bx_e = *(uint16_t*)(shadow + DS_TEXT_IDX);
-            v2_text_render_124c5(shadow, 0x10, 0x0F, bx_e);
-        }
-    }
-    // Y/N: live state read (no snap) — see seg000 sub_105cb note about why.
-    shadow[DS_SPEC_KEY_Y] = sdl_spec_state_get(0x9181);  // SDL Y — live atomic
-    shadow[DS_SPEC_KEY_N] = sdl_spec_state_get(0x919D);  // SDL N — live atomic
+    // sub_105CB: password exit check (extracted).
     uint16_t exit_ax;
-    bool exit;
-    uint16_t consumed_bit = 0;
-    if (ni & 0x8000) { exit_ax = *(uint16_t*)(shadow + DS_QUIT_ACTIVE); exit = true; consumed_bit = 0x8000; }
-    else if (ni & 0x1000) { exit_ax = 1; exit = true; consumed_bit = 0x1000; }
-    else if (shadow[DS_SPEC_KEY_Y] != 0) { exit_ax = 0; exit = true; }
-    else if (shadow[DS_SPEC_KEY_N] != 0) { exit_ax = 1; exit = true; }
-    else { exit_ax = 0; exit = false; }
+    bool exit = v2_pw_exit_check_105cb(shadow, &exit_ax);
     if (exit) {
         v2_pw_last_exit_ax = exit_ax;
         v2_pw_last_exit_valid = true;
-        if (consumed_bit) {
-            extern uint16_t sdl_input_press_snap;
-            sdl_input_press_snap = (uint16_t)(sdl_input_press_snap & ~consumed_bit);
-        }
     }
     return exit;
 }
