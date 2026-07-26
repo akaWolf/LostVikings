@@ -4322,8 +4322,10 @@ sub_10f5d:
 cs=0x1a2;eip=0x000f5d; 	X(PUSH(si));	// 2111 push    si ;~ 01A2:0F5D
 ret_1a2_f5e:
 	// 4554
-//cs=0x1a2;eip=0x000f5e; 	T(MOV(bx, 0x46));	// 2112 mov     bx, 46h ; 'F' ;~ 01A2:0F5E
- bx = 0; // disable shading for debug purpose
+cs=0x1a2;eip=0x000f5e; 	T(MOV(bx, 0x46));	// 2112 mov     bx, 46h ; 'F' ;~ 01A2:0F5E
+ // (debug override `bx = 0` removed — the full 0x47-step fade-out loop is
+ //  the original behaviour; the shade core sub_10f03 runs as the C mirror
+ //  copy_palitra_with_shaded and 16775/10130 pace each step.)
 loc_10f61:
 	// 4555
 cs=0x1a2;eip=0x000f61; 	X(MOV(byte_28822, bl));	// 2115 mov     byte_28822, bl ;~ 01A2:0F61
@@ -4350,8 +4352,8 @@ sub_10fa0:
 cs=0x1a2;eip=0x000fa0; 	X(PUSH(si));	// 2140 push    si ;~ 01A2:0FA0
 ret_1a2_fa1:
 	// 4556
-//cs=0x1a2;eip=0x000fa1; 	T(MOV(bx, 0));	// 2141 mov     bx, 0 ;~ 01A2:0FA1
- bx = 0x45; // disable shading for debug
+cs=0x1a2;eip=0x000fa1; 	T(MOV(bx, 0));	// 2141 mov     bx, 0 ;~ 01A2:0FA1
+ // (debug override `bx = 0x45` removed — full 0x46-step fade-in restored.)
 loc_10fa4:
 	// 4557
 cs=0x1a2;eip=0x000fa4; 	X(MOV(byte_28822, bl));	// 2144 mov     byte_28822, bl ;~ 01A2:0FA4

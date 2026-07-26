@@ -8316,8 +8316,10 @@ int ft_selftest_sub_16661(uint32_t seed) {
         ft_wr16(g_synth_in, 0x2581, sc_row);
         ft_wr16(g_synth_in, 0x92F1, disp_y);
         for (uint32_t i = 0; i < 128; i++) {
+            // slots 0-39 active, 40-43 active+prio-skip bits (0x6000) —
+            // both sides of the 66A9/66D5 sprite-scan gates (#47 branch).
             ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x044D),
-                    (uint16_t)(i < 40 ? 0x8000 : 0));
+                    (uint16_t)(i < 40 ? 0x8000 : (i < 44 ? 0xE000 : 0)));
             ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x064D), (uint16_t)(rng.next() % 0x400));
             ft_wr16(g_synth_in, (uint16_t)(i * 2 + 0x074D), (uint16_t)(rng.next() % 0x400));
             g_synth_in[(uint16_t)(i * 2 + 0x114D)] = 0;
