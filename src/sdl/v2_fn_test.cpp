@@ -501,6 +501,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_12034 = 401,
             FT_SUB_16880 = 402,   // VGA full wipe
             FT_SUB_11792 = 403,   // per-frame HUD update chain
+            FT_SUB_11F47 = 404,   // viking proximity
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -664,7 +665,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_12e84", "sub_1201d", "sub_12388",
                                  "sub_117ad", "sub_117d0", "sub_1183d",
                                  "sub_118ad", "sub_11aa4", "sub_1200a",
-                                 "sub_12034", "sub_16880", "sub_11792" };
+                                 "sub_12034", "sub_16880", "sub_11792",
+                                 "sub_11f47" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -9647,7 +9649,8 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
     int which = (id == FT_SUB_117AD) ? 0 : (id == FT_SUB_117D0) ? 1 :
                 (id == FT_SUB_1183D) ? 2 : (id == FT_SUB_118AD) ? 3 :
                 (id == FT_SUB_11AA4) ? 4 : (id == FT_SUB_1200A) ? 5 :
-                (id == FT_SUB_12034) ? 6 : (id == FT_SUB_16880) ? 7 : 8;
+                (id == FT_SUB_12034) ? 6 : (id == FT_SUB_16880) ? 7 :
+                (id == FT_SUB_11792) ? 8 : 9;
     FtRng rng(seed);
     uint8_t* db = v2_fntest_drawbuffer_ptr();
     uint8_t* vga = v2_fntest_vga_ptr();
@@ -9723,6 +9726,29 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
     case 7:     // 16880: full VGA wipe (single K3 case over a random baseline)
         CASE(0, 0, 0, 0, nullptr, 0, "grid", grid);
         break;
+    case 9: {   // 11f47: proximity — active viking × positions lattice
+        for (uint16_t cur = 0; cur < 6; cur += 2) for (int m = 0; m < 8; m++) {
+            FtWr w[12]; int n = 0;
+            w[n++] = FtWr{0x3C2, cur};
+            for (int vk = 0; vk < 3; vk++) {
+                w[n++] = FtWr{(uint16_t)(0x15AD + vk * 2), (uint16_t)((m >> vk) & 1)};
+                w[n++] = FtWr{(uint16_t)(0x173D + vk * 2), (uint16_t)(0x100 + vk * 0x30)};
+                w[n++] = FtWr{(uint16_t)(0x1765 + vk * 2), (uint16_t)(0x100 + vk * 0x08)};
+            }
+            CASE(0, 0, 0, 0, w, n, "grid", grid);
+        }
+        for (int i = 0; i < 120; i++) {
+            FtWr w[12]; int n = 0;
+            w[n++] = FtWr{0x3C2, (uint16_t)((rng.next() % 3) * 2)};
+            for (int vk = 0; vk < 3; vk++) {
+                w[n++] = FtWr{(uint16_t)(0x15AD + vk * 2), (uint16_t)(rng.next() & 1)};
+                w[n++] = FtWr{(uint16_t)(0x173D + vk * 2), rng.w()};
+                w[n++] = FtWr{(uint16_t)(0x1765 + vk * 2), rng.w()};
+            }
+            CASE(0, 0, 0, 0, w, n, "fuzz", fuzz);
+        }
+        break;
+    }
     case 8: {   // 11792: HUD chain — gate off / level 0x2C / on with mixed diffs
         static const FtWr g0[] = {{0x25CF, 0x0000}};
         CASE(0, 0, 0, 0, g0, 1, "grid", grid);
@@ -11299,6 +11325,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_12034")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_12034, 0xB4A7001u); }
     if (all || strstr(env, "sub_16880")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_16880, 0xB4A8001u); }
     if (all || strstr(env, "sub_11792")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_11792, 0xB4A9001u); }
+    if (all || strstr(env, "sub_11f47")) { matched = true; rc |= ft_selftest_hudvga(FT_SUB_11F47, 0xB4AA001u); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, 0x15D3C001u); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, 0x15D42001u); }
     if (!matched) {

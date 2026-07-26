@@ -269,6 +269,7 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 401: return (void*)&sub_12034;  // portrait prev-state reset + 11b0b tail
     case 402: return (void*)&sub_16880;  // VGA full wipe (port drawPixel loop)
     case 403: return (void*)&sub_11792;  // per-frame HUD update chain
+    case 404: return (void*)&sub_11f47;  // viking proximity check
     default: return 0;
     }
 }

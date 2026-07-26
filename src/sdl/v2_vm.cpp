@@ -2860,6 +2860,26 @@ static void v2_hud_health_120ff(uint8_t* s);
 static void v2_hud_item_sync_12199(uint8_t* s);
 static void v2_portrait_sync_11b0b(uint8_t* s);
 
+// sub_11f47: viking proximity — [449]=0xFFFF word, [44B]=0xFF byte; for each
+// alive viking (portrait != 0): |dx|+|dy| to the active one < 0x40 →
+// byte [si>>1 + 0x449] = 0. Uses signed JNS/NEG absolute values.
+static void v2_viking_proximity_11f47(uint8_t* s) {
+    *(uint16_t*)(s + DS_HUD_FIELD_449) = 0xFFFF;     // word_28929
+    s[DS_HUD_FORCE] = 0xFF;                          // byte_2892B
+    uint16_t di = *(uint16_t*)(s + DS_ACTIVE_VIKING);
+    for (uint16_t si = 0; si < 6; si += 2) {
+        if (*(uint16_t*)(s + si + OBJ_RES_HANDLE) == 0) continue;
+        int16_t ax_d = (int16_t)*(uint16_t*)(s + si + OBJ_WORLD_X)
+                     - (int16_t)*(uint16_t*)(s + di + OBJ_WORLD_X);
+        if (ax_d < 0) ax_d = -ax_d;
+        int16_t dx_d = (int16_t)*(uint16_t*)(s + si + OBJ_WORLD_Y)
+                     - (int16_t)*(uint16_t*)(s + di + OBJ_WORLD_Y);
+        if (dx_d < 0) dx_d = -dx_d;
+        uint16_t dist = (uint16_t)ax_d + (uint16_t)dx_d;
+        if ((int16_t)dist < 0x40) s[(si >> 1) + 0x449] = 0;
+    }
+}
+
 // loc_1205B: HUD selector sync tail of sub_11792. Per viking: if the live
 // selector [414+vk*2] differs from the tracked [41A+vk*2]: redraw the OLD
 // slot's item, sync tracking, draw the new selector.
@@ -13139,6 +13159,7 @@ extern "C" void v2_fntest_call_hudvga(int which, uint8_t* shadow, uint16_t ax,
     case 6: v2_hud_reset_12034(shadow); break;
     case 7: v2_clear_pages_16880(shadow); break;
     case 8: v2_hud_update_11792(shadow); break;
+    case 9: v2_viking_proximity_11f47(shadow); break;
     }
     v2_vm_acc_base = saved_acc;
 }
@@ -21870,24 +21891,8 @@ void v2_run_pause_entry(uint8_t* shadow) {
         si <<= 1;
         *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + si + (DS_HUD_ITEMS)); // word_28921
     }
-    // sub_11f47: proximity check (word_28929 = 0xFFFF; byte_2892B = 0xFF;
-    //   for each viking 0..2: if alive AND |dx|+|dy| < 0x40 → byte[viking>>1+0x449] = 0)
-    *(uint16_t*)(shadow + DS_HUD_FIELD_449) = 0xFFFF;     // word_28929
-    shadow[DS_HUD_FORCE] = 0xFF;                       // byte_2892B
-    {
-        uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-        for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-            if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
-            int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
-                         - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
-            if (ax_d < 0) ax_d = -ax_d;
-            int16_t dx_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_Y)
-                         - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_Y);
-            if (dx_d < 0) dx_d = -dx_d;
-            uint16_t dist = (uint16_t)ax_d + (uint16_t)dx_d;
-            if ((int16_t)dist < 0x40) shadow[(si_f47 >> 1) + 0x449] = 0;
-        }
-    }
+    // sub_11f47: viking proximity check (extracted).
+    v2_viking_proximity_11f47(shadow);
 }
 
 // V2_PHASE_PAUSE_LOOP handler — Phase 3. One iteration of orig sub_11ba5
