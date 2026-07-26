@@ -14,8 +14,11 @@ BIN=./vikings_headless
 [ -f .obj-headless/src/vikings.exe_seg000.gcno ] || {
   echo "no .gcno — build with COV_SEG000=1 HEADLESS=1 make"; exit 1; }
 rm -f .obj-headless/src/vikings.exe_seg000.gcda
-UNITS=$(grep -o 'strstr(env, "[a-z0-9_]*")' src/sdl/v2_fn_test.cpp \
-        | sed 's/.*"\(.*\)")/\1/' | awk '!seen[$0]++')
+# Полный список юнитов — из канонического шардера (литеральный grep по
+# v2_fn_test.cpp пропускает clear/leaf-семьи, матчащиеся через g_name).
+UNITS=$(awk '/^UNITS=\$\{\*:-"/,/"\}$/' tests/fnselftest_parallel.sh \
+        | sed 's/^UNITS=\${\*:-"//; s/"}$//; s/\\$//' | tr ' ' '\n' \
+        | grep -v '^$' | awk '!seen[$0]++')
 n=0
 for u in $UNITS; do
   n=$((n+1))
@@ -30,5 +33,5 @@ done
 echo "units run: $n"
 gcov --json-format -o .obj-headless/src src/vikings.exe_seg000.cpp \
   > /dev/null 2>&1
-python3 python/fn_coverage_report.py vikings.exe_seg000.cpp.gcov.json.gz \
+python3 python/fn_coverage_report.py vikings.exe_seg000.gcov.json.gz \
   --csv /tmp/fn_coverage.csv
