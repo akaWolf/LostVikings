@@ -9037,6 +9037,41 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             static const FtWr winact[] = { {0x16CB, 0x8000} };
             A(c, 5, O, "grid", winact, 1);
         }
+        // Coverage-directed (#47): op34 scans viking slots ([si+15AD]!=0) for
+        // the nearest one (|dx|+|dy| of [173D]/[1765]). Slot 0 alive covers
+        // the scan; nonzero slot coords force both NEG branches.
+        if (id == FT_SUB_150B5) {
+            static const FtWr walive[] = { {0x15AD, 1} };
+            A(c, 5, O, "grid", walive, 1);
+            static const FtWr wneg[] = { {0x15AD, 1}, {0x173D, 100}, {0x1765, 100},
+                                         {0x1743, 1}, {0x176B, 1} };
+            A(c, 5, O, "grid", wneg, 5);
+        }
+        // Coverage-directed (#47): opD3 compares the four typed letters
+        // ([310]/[312]/[314]/[316]) against the password LUT rows at
+        // ds:0x85A5 (si-0x7A5B), &0x7F per byte. Full match from base row 0
+        // covers the accept path; first-byte-only match covers the cascade
+        // rejects.
+        if (id == FT_SUB_12829) {
+            uint16_t p0 = (uint16_t)(g_synth_base[0x85A5] & 0x7F);
+            uint16_t p1 = (uint16_t)(g_synth_base[0x85A6] & 0x7F);
+            uint16_t p2 = (uint16_t)(g_synth_base[0x85A7] & 0x7F);
+            uint16_t p3 = (uint16_t)(g_synth_base[0x85A8] & 0x7F);
+            const FtWr wfull[] = { {0x0310, p0}, {0x0312, p1},
+                                   {0x0314, p2}, {0x0316, p3} };
+            A(c, 5, O, "grid", wfull, 4);
+            const FtWr wpart[] = { {0x0310, p0}, {0x0312, (uint16_t)(p1 ^ 0x7F)},
+                                   {0x0314, 0}, {0x0316, 0} };
+            A(c, 5, O, "grid", wpart, 4);
+        }
+        // Coverage-directed (#47): the SFX stop path of op04/opD7 scans the
+        // slot table at [si-66EA] (si=8 → ds:0x991E) for seq==arg (frame arg
+        // byte = 0x01); a matching busy slot drives the CALLF 1C79F/1C769
+        // stop/release branch (SDL stubs) + the 0xFFFF slot clears.
+        if (id == FT_SUB_1782A || id == FT_SUB_1787F) {
+            static const FtWr wseq[] = { {0x991E, 1} };
+            A(c, 5, O, "grid", wseq, 1);
+        }
         fuzz_op = op; fuzz_alen = 3; break;
     }
     default: return 1;
