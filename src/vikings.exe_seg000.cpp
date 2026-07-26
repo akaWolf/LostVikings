@@ -236,6 +236,13 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 362: return (void*)&sub_15485;  // ch1 getter: indexed field
     case 363: return (void*)&sub_1549a;  // ch2 getter: indirect word
     case 364: return (void*)&sub_154a3;  // ch3 getter: indexed + partner
+    // wave B3a: pure/small 12xxx helpers
+    case 375: return (void*)&sub_1227e;  // delta scale (2/3 with round toward)
+    case 376: return (void*)&sub_122c0;  // delta scale variant
+    case 377: return (void*)&sub_122f3;  // delta scale variant (1/3)
+    case 378: return (void*)&sub_12345;  // input pair clear [3B6]/[3B8]
+    case 379: return (void*)&sub_12312;  // RNG ch4 (LCG / LFSR paths)
+    case 380: return (void*)&sub_1237f;  // delay burn loop (256*di)
     default: return 0;
     }
 }

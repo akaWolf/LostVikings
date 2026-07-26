@@ -12848,6 +12848,29 @@ extern "C" void v2_fntest_call_ch_getter(int ch, uint8_t* test_shadow,
     v2_vm_acc_base = saved_acc;
 }
 
+// Wave B3a: pure helpers. Delta scalers are plain int16 functions; RNG runs
+// over the scratch DS; sub_12345 is the input-pair clear ([3B6]/[3B8]).
+extern "C" int16_t v2_fntest_call_delta(int which, int16_t d) {
+    return which == 0 ? v2_delta_1227e(d)
+         : which == 1 ? v2_delta_122c0(d) : v2_delta_122f3(d);
+}
+extern "C" uint16_t v2_fntest_call_rng_12312(uint8_t* test_shadow) {
+    V2VM vm{};
+    vm.ds = test_shadow; vm.shadow = test_shadow; vm.es = test_shadow;
+    vm.cs_base = v2_m2c_base ? v2_m2c_base + 0x1A20 : nullptr;
+    vm.obj = 6; vm.pc = 0; vm.running = true; vm.slot = 3;
+    uint8_t* saved_acc = v2_vm_acc_base;
+    v2_vm_acc_base = test_shadow;
+    uint16_t v = v2_vm_read_random(vm);
+    v2_vm_acc_base = saved_acc;
+    return v;
+}
+// sub_12345 mirror: clear the input accumulator pair (ds:0x3B6 / ds:0x3B8).
+extern "C" void v2_fntest_call_clear_12345(uint8_t* test_shadow) {
+    *(uint16_t*)(test_shadow + 0x3B6) = 0;
+    *(uint16_t*)(test_shadow + 0x3B8) = 0;
+}
+
 // Anim-search family (sub_158aa..sub_158e6 mirrors). A minimal V2VM over the
 // case image; segment parity via v2_replay_verify_active (tile reads resolve
 // [ds:0x2E63] linearly into m2c::m, same as the oracle's raddr).
