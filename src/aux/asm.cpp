@@ -27,6 +27,11 @@ extern void v2_record_alloc(uint16_t seg, const uint8_t* mcb_ptr);
 // (orig-write trap defined inside namespace m2c below — placeholder removed)
 
 extern db& byte_128a8;   // _data.cpp global ref (#47 IRQ-defer model)
+// (#60 branch) direct setter for the cs-side INT21-busy flag: the 128D1
+// critical-error ISR tests it BEFORE any INT fires, so the IRQ-defer hook
+// alone cannot reach the 28EB skip arm.
+extern "C" void v2_fntest_set_128a8(int v);
+extern "C" void v2_fntest_set_128a8(int v) { ::byte_128a8 = (db)v; }
 
 namespace m2c {
 

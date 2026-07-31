@@ -7272,6 +7272,9 @@ int ft_selftest_sub_13809(uint32_t seed) {
     { FtTmplCtx c2 = C; c2.occ_mask = 0xFFFFF; run1(0, 0, 0xFFFF, c2, "grid", grid); } // full
     { FtTmplCtx c2 = C; c2.occ_mask = 0x00003; c2.obj_count = 4;
       run1(0, 0, 0xFFFF, c2, "grid", grid); }          // slot 4, no 372 bump... (si=4 >= 4 -> bump to 6)
+    { // (#60 branch) full pool on the 13d68 chain (code 2): the 3837 JC
+      FtTmplCtx c2 = C; c2.occ_mask = 0xFFFFF;
+      run1(2, 0x8001, 0xFFFF, c2, "grid", grid); }
     fill_tables(false);
     run1(1, 0, 0xFFFF, C, "grid", grid);               // 13e52 miss -> slot freed, STC
     fill_tables(true);
@@ -8736,10 +8739,13 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
     case FT_SUB_142DC: {                // op 0D: clear kill bit ([16C5] index)
         static const uint16_t IDX[] = { 0, 5, 7, 8, 15, 0x7FFF, 0x8000, 0xFFFF };
         for (uint16_t ix : IDX) {
-            FtVmObj o2 = O; o2.anim = ix;   // JS gate on bit15
-            FtWr wr[] = { { 0x0356, 0xFFFF }, { 0x0358, 0xFFFF } };
+            // (#60) the JS gate reads the kill-index word [si+16C5], NOT
+            // the anim slot [si+16ED] — seed it directly (bit15 = skip).
+            FtVmObj o2 = O; o2.anim = ix;
+            FtWr wr[] = { { 0x0356, 0xFFFF }, { 0x0358, 0xFFFF },
+                          { (uint16_t)(si + 0x16C5), ix } };
             static const uint8_t c[] = {0x0D, 0x00};
-            A(c, 2, o2, "grid", wr, 2);
+            A(c, 2, o2, "grid", wr, 3);
         }
         fuzz_op = 0x0D; fuzz_alen = 1; break;
     }
@@ -8747,8 +8753,9 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         static const uint16_t IDX[] = { 0, 5, 7, 8, 15, 0x7FFF, 0x8000, 0xFFFF };
         for (uint16_t ix : IDX) {
             FtVmObj o2 = O; o2.anim = ix;
+            FtWr wr[] = { { (uint16_t)(si + 0x16C5), ix } };
             static const uint8_t c[] = {0x0E, 0x00};
-            A(c, 2, o2, "grid");
+            A(c, 2, o2, "grid", wr, 1);
         }
         fuzz_op = 0x0E; fuzz_alen = 1; break;
     }
@@ -9102,6 +9109,20 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             wop[nwo++] = {0x14E5, 0x0001};
             wop[nwo++] = {0x03CC, 0x0001};
             A(c, 5, O, "grid", wop, nwo);
+            // (#60 branch) channel-0 LITERAL operands: arg byte 0x01 is
+            // the RNG channel ([352] seed), so the exact 0xFFFF/0x0001
+            // operands above never reach the compare. The stream-literal
+            // frame pins them: acc 0x7FFF - (-1) -> OF=1,SF=1 (the second
+            // JNS/JS landing), acc 0x8000 - 1 -> OF=1,SF=0.
+            {   uint8_t cl[] = {c[0], 0x00, 0xFF, 0xFF,
+                                (uint8_t)t, (uint8_t)(t >> 8)};
+                FtWr wl[] = { {0x008A, 0x7FFF} };
+                A(cl, 6, O, "of-neg", wl, 1);
+                uint8_t cl2[] = {c[0], 0x00, 0x01, 0x00,
+                                 (uint8_t)t, (uint8_t)(t >> 8)};
+                FtWr wl2[] = { {0x008A, 0x8000} };
+                A(cl2, 6, O, "of-pos", wl2, 1);
+            }
         }
         fuzz_op = op; fuzz_alen = 3; break;
     }
@@ -12365,6 +12386,7 @@ extern "C" void v2_fntest_meminit(void);
 extern "C" void v2_fntest_set_in201(int v);
 extern "C" void v2_fntest_set_in60(int v);
 extern "C" int v2_fntest_pit_jitter;
+extern "C" void v2_fntest_set_128a8(int v);
 extern "C" int v2_fntest_sim_int21_irq;
 
 int ft_selftest_dosio(FtId id, uint32_t seed) {
@@ -12842,6 +12864,15 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             static const Exp e[] = { {0,0} };
             CASE(w3,1,r0,e,0,"gate-off");
         }
+        {   // (#60 branch) demo mode WITHOUT the ESC bit: 12d72 runs, the
+            // 1C46 JZ loops back — watchdog is the expected exit.
+            input_keys = 0;
+            static const FtWr w4[] = { {0x25CF,0x0089},{0x3B8,0x2000},
+                                       {0xA39C,0x0000},{0x3C2,0},
+                                       {0x1A85,0x0008},{0x0304,1},
+                                       {0x3CC,0x8000},{0x92FF,1} };
+            CASE(w4,8,r0,nullptr,0,"demo-noesc",1);
+        }
         input_keys = keep;
         break;
     }
@@ -13110,6 +13141,24 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             t.join();
             sdl_spec_state[0x7F] = 0; sdl_spec_snapshot_take();
         }
+        {   // (#60 branch) vsync armed ([92FF]!=0) and DOS idle: the 28E3
+            // fall-through — INT10 mode 3 + the cs busy-flag write 28F2.
+            std::thread t = key_thread(0x7F, 1);
+            static const FtWr w[] = { {0x92FF,1} };
+            CASE(w,1,r0,nullptr,0,"ra-vsync",1);
+            t.join();
+            sdl_spec_state[0x7F] = 0; sdl_spec_snapshot_take();
+        }
+        {   // (#60 branch) vsync armed but INT21 already in progress
+            // (cs:128A8=1): the 28EB skip of the mode-switch.
+            v2_fntest_set_128a8(1);
+            std::thread t = key_thread(0x7F, 1);
+            static const FtWr w[] = { {0x92FF,1} };
+            CASE(w,1,r0,nullptr,0,"ra-vsync-busy",1);
+            t.join();
+            v2_fntest_set_128a8(0);
+            sdl_spec_state[0x7F] = 0; sdl_spec_snapshot_take();
+        }
         break;
     }
     case FT_SUB_16440: {
@@ -13162,6 +13211,11 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // (found -> consume -> resume -> exhaust).
         {   static const FtWr w[] = { {0x9170,0x0001} };
             CASE(w,1,r0,nullptr,0,"sweep");
+        }
+        {   // (#60 branch) fully-zero table: REPE exhausts cx -> the
+            // immediate JCXZ RETN (locret_16594) without a single consume.
+            static const FtWr w[] = { {0x916C,0},{0x916E,0},{0x9170,0},{0x9172,0},{0x9174,0},{0x9176,0},{0x9178,0},{0x917A,0},{0x917C,0},{0x917E,0},{0x9180,0},{0x9182,0},{0x9184,0},{0x9186,0},{0x9188,0},{0x918A,0},{0x918C,0},{0x918E,0},{0x9190,0},{0x9192,0},{0x9194,0},{0x9196,0},{0x9198,0},{0x919A,0},{0x919C,0},{0x919E,0},{0x91A0,0},{0x91A2,0},{0x91A4,0},{0x91A6,0},{0x91A8,0},{0x91AA,0},{0x91AC,0},{0x91AE,0},{0x91B0,0},{0x91B2,0},{0x91B4,0},{0x91B6,0},{0x91B8,0},{0x91BA,0},{0x91BC,0},{0x91BE,0},{0x91C0,0},{0x91C2,0},{0x91C4,0},{0x91C6,0},{0x91C8,0},{0x91CA,0},{0x91CC,0},{0x91CE,0},{0x91D0,0},{0x91D2,0},{0x91D4,0},{0x91D6,0},{0x91D8,0},{0x91DA,0},{0x91DC,0},{0x91DE,0},{0x91E0,0},{0x91E2,0},{0x91E4,0},{0x91E6,0},{0x91E8,0},{0x91EA,0} };
+            CASE(w,64,r0,nullptr,0,"empty");
         }
         break;
     }
