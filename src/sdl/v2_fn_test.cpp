@@ -565,6 +565,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_11080 = 452,   // level (re)load
             FT_SUB_16563 = 453,   // spec-key table sweep
             FT_SUB_17A44 = 454,   // joystick delay loop
+            FT_SUB_17791 = 455,   // ambient music restart gate
+            FT_SUB_101AC = 456,   // viking-switch vsync spin entry
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -739,7 +741,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_17337", "sub_172d3", "sub_11ba5", "sub_10350",
                                  "sub_1754c", "sub_17561", "sub_10138",
                                  "sub_1775d", "sub_12352", "sub_1673c", "sub_177bb", "sub_100bb",
-                                 "sub_128d1", "sub_16440", "sub_11080", "sub_16563", "sub_17a44" };
+                                 "sub_128d1", "sub_16440", "sub_11080", "sub_16563", "sub_17a44",
+                                 "sub_17791", "sub_101ac" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -11820,6 +11823,36 @@ int ft_selftest_sub_14207() {
         v2_fntest_call_sub_14207(g_scratch);
         ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-ch3-#28", grid, diff_budget);
     }
+    {   // (#60 branch) TWO ch3 objects fill the drain queue to [376]=2:
+        // the 4239 JL loop-back edge of the drain walk.
+        uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+        uint8_t* zone = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, 0x372, 4);
+        for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
+        ft_wr16(g_synth_in, 0x32F, 0);
+        ft_wr16(g_synth_in, 0x42, 0xFFFF);
+        for (int i = 0; i < 2; i++) {
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_CODE_SEG), FT_VM_TESTSEG);
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_PC), (uint16_t)(FT_VM_PC + i * 8));
+            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_FLAGS), 0x8000);
+        }
+        ft_wr16(g_synth_in, 0x376, 0);
+        ft_fill_tail(g_synth_in);
+        memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
+        g_vm_es_in[FT_VM_PC]     = 0x54;
+        g_vm_es_in[FT_VM_PC + 1] = 0x10;
+        g_vm_es_in[FT_VM_PC + 2] = 0x00;
+        g_vm_es_in[FT_VM_PC + 8] = 0x54;
+        g_vm_es_in[FT_VM_PC + 9] = 0x12;
+        g_vm_es_in[FT_VM_PC + 10] = 0x00;
+        memcpy(zone, g_vm_es_in, FT_VM_ZONE);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        FtRegs in{};
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        v2_fntest_call_sub_14207(g_scratch);
+        ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-two-ch3", grid, diff_budget);
+    }
     // Coverage-directed (#47): the drain loop (eip 4223..4241) only runs when
     // the pass's OWN bytecode enqueues a slot — sub_14207 zeroes ds:0x376 on
     // entry, so runner presets never reach it. Slot 0 executes op 0x14 (the
@@ -12545,8 +12578,9 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
     }
     case FT_SUB_12989: {
         // registration path: XOR checksum (ax=0x3000 after the INT21/30
-        // no-op, bx=cx=0) must equal [86C2]; then [302]=[86B2],
-        // [304]=[86B4]; INT10/1A00 VGA detect (al=0x1A, bl=8 model), the
+        // no-op, bx=cx=0) must equal [86C2]; then [302]/[304] are seeded
+        // from the CHECKSUM DERIVATIVE at 2A1C/2A22 (a copy-protection
+        // fingerprint, NOT a config copy); INT10/1A00 VGA detect, the
         // CPU flag probes and the RESTORED joystick detect run from there.
         // Exercise-only: cs-globals and PIT-latch scratches ride along.
         // NB the checksum lives in the DATA.DAT header freads — presets on
@@ -12572,9 +12606,12 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             CASE(w,4,r0,nullptr,0,"joy-present");
             v2_fntest_set_in201(0xFF);
         }
-        {   // (#60 branch) audio-busy fallthrough: registration copies
-            // [86B2]/[86B4] into [302]/[304]; the 12AB8 tail then takes
-            // the 2AF8 JNZ (skip music re-init) with bit15 set.
+        {   // (#60 LEDGER-MODEL) the 12AB8@2AF8 skip arm needs bit15 in
+            // BOTH [302] and [304] — but 2A1C/2A22 overwrite them with the
+            // deterministic checksum derivative of the model (BIOS sum +
+            // INT21/30 + INT21/36 constants), whose bit pattern is fixed.
+            // The arm is live only on real hardware fingerprints; in the
+            // model it is documented one-sided. Exercise the chain anyway.
             static const FtWr w[] = { {0x86D0,0},{0x86C2,0x3000},
                                       {0x86B2,0x8000},{0x86B4,0x8000} };
             CASE(w,4,r0,nullptr,0,"busy-audio");
@@ -12762,10 +12799,19 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // arm the press latches and take a snapshot (environment prep).
         extern std::atomic<uint8_t> sdl_spec_press_latch[256];
         extern void sdl_spec_snapshot_take();
-        {   // (#60 branch) [302]&0x8000 busy -> the 95F early RETN
-            static const FtWr w[] = { {0x302,0x8000} };
+        {   // (#60 branch) [302]&[304]&0x8000 -> the 8D2 entry-gate RETN
+            static const FtWr w[] = { {0x302,0x8000},{0x304,0x8000} };
             static const Exp e[] = { {0,0} };
-            CASE(w,1,r0,e,0,"busy");
+            CASE(w,2,r0,e,0,"busy");
+        }
+        {   // (#60 branch) ALT+M with a busy stream: the 941 XOR makes
+            // [302]=0x8001 (low byte 1 -> 946 taken), then 10959 TEST
+            // bit15 fires the 95F RETN.
+            sdl_spec_press_latch[0xA4] = 1;
+            sdl_spec_press_latch[0x9E] = 1;
+            sdl_spec_snapshot_take();
+            static const FtWr w[] = { {0x302,0x8000},{0x304,0} };
+            CASE(w,2,r0,nullptr,0,"unmute-busy");
         }
         {   // both keys down; [304] low byte 0 -> XOR makes it 1 (mute ON)
             // -> the SFX stop sweep over the [990C/990E] handles.
@@ -12853,11 +12899,15 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         CASE(w,10,r0,nullptr,0,"tab-loop",1);   // exits via watchdog or CF
         {   // demo mode + ESC: the 1c3d/1c40 12d72 arm and the 1c48 STC exit
             input_keys = 0x1000;               // ESC bit
+            // (#60) [3CC]=0x8000 seeded directly is WIPED by 116e3 (the
+            // 1719 arm zeroes any non-automaton value); the honest channel
+            // is [3CC]=1 + a demo level id ([25C9]=0x2B) - 11733 then sets
+            // 0x8000 itself and 1176C loads the real demo pointers.
             static const FtWr w2[] = { {0x25CF,0x0089},{0x3B8,0x2000},
                                        {0xA39C,0x0000},{0x3C2,0},
                                        {0x1A85,0x0008},{0x0304,1},
-                                       {0x3CC,0x8000},{0x92FF,1} };
-            CASE(w2,8,r0,nullptr,0,"demo-esc",1);
+                                       {0x3CC,1},{0x25C9,0x2B},{0x92FF,1} };
+            CASE(w2,9,r0,nullptr,0,"demo-esc");  // clean return IS the 1C48 STC exit
         }
         {   // level-flag gate off -> the 1bb6 early RETN
             static const FtWr w3[] = { {0x25CF,0} };
@@ -12870,8 +12920,8 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             static const FtWr w4[] = { {0x25CF,0x0089},{0x3B8,0x2000},
                                        {0xA39C,0x0000},{0x3C2,0},
                                        {0x1A85,0x0008},{0x0304,1},
-                                       {0x3CC,0x8000},{0x92FF,1} };
-            CASE(w4,8,r0,nullptr,0,"demo-noesc",1);
+                                       {0x3CC,1},{0x25C9,0x2B},{0x92FF,1} };
+            CASE(w4,9,r0,nullptr,0,"demo-noesc",1);
         }
         input_keys = keep;
         break;
@@ -12955,12 +13005,20 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         {   // (#60 branch) ALT+X prompt answered with ESC: sub_105cb's
             // ESC exit path returns ax=0 -> the 4FA OR [334],2 arm and
             // 103CA's 418 JMP into the 10E35 restart chain (escapes).
+            // (#60) the prompt loop's FIRST 12352 refreshes the snap and
+            // the consumed ESC latch vanishes before 105cb reads it - ESC
+            // must be HELD via sdl_spec_state. The 638 exit then returns
+            // ax=0 (+CF): the 4FA OR [334],2 arm and 103CA's 418 JMP into
+            // the 10E35 restart chain.
+            extern std::atomic<uint8_t> sdl_spec_state[256];
             sdl_spec_press_latch[0xA4] = 1;
             sdl_spec_press_latch[0x99] = 1;
-            sdl_spec_press_latch[0xB0] = 1;   // ESC (0x91B0)
+            sdl_spec_state[0xB0] = 1;
             sdl_spec_snapshot_take();
             static const FtWr w[] = { {0xA39C,0},{0x92FF,1} };
-            CASE(w,2,r0,nullptr,0,"altx-esc");   // clean unwind is the honest outcome
+            CASE(w,2,r0,nullptr,0,"altx-esc");   // restart chain unwinds cleanly here
+            sdl_spec_state[0xB0] = 0;
+            sdl_spec_snapshot_take();
         }
         {   // (#47 branch) [2A66F]!=0 -> the 356 early return BEFORE the
             // spec-snap inline: DS stays untouched.
@@ -12988,6 +13046,11 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         {   static const FtWr w[] = { {0xA39A,0} };
             static const Exp e[] = { {0,0} };
             CASE(w,1,r0,e,0,"skip");
+        }
+        {   // (#60 branch) [302]!=0 with [304]==0: the 7920 JZ takes the
+            // 17924 continue arm instead of the 7922 early return.
+            static const FtWr w[] = { {0xA39A,1},{0x302,1},{0x304,0} };
+            CASE(w,3,r0,nullptr,0,"half-busy");
         }
         break;
     }
@@ -13181,6 +13244,23 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             v2_fntest_set_in60(0x80);
             CASE(nullptr,0,r0,nullptr,0,"spurious",1);
         }
+        {   // (#60 branch) S make-code (0x1F -> si=0x3E): the 646E fall
+            // into the F10-held test (6470), F10 latch clear -> 6475 fall.
+            v2_fntest_set_in60(0x1F);
+            CASE(nullptr,0,r0,nullptr,0,"spec-s",1);
+        }
+        {   // (#60 branch) S with F10 held ([91A4]=1): the 6475 JNZ skip
+            // of the mask/ASCII writes (the mute-combo arm).
+            v2_fntest_set_in60(0x1F);
+            static const FtWr w[] = { {0x91A4,1} };
+            CASE(w,1,r0,nullptr,0,"spec-s-f10",1);
+        }
+        {   // (#60 branch) partial debug chord: F10 latch held but R/D
+            // latches clear -> the 64A3 JNZ reject after the 649C fall.
+            v2_fntest_set_in60(0x1E);
+            static const FtWr w[] = { {0x91A4,1},{0x9189,0},{0x91BF,0} };
+            CASE(w,3,r0,nullptr,0,"chord-partial",1);
+        }
         {   // the three-key debug chord ([91A4]&[9189]&[91BF] all held):
             // 649C/64A3/64AA fall through to the PUSH FFFF/0 + RETF stack
             // switch (an expected escape of a different shape).
@@ -13196,10 +13276,12 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // [25AD]==0x25 endgame gate (114E) skips the 12CE4 call.
         v2_fntest_set_data_file("DATA.DAT");
         v2_fntest_set_data_file_v2("DATA.DAT");
-        {   static const FtWr w[] = { {0x25AD,0x25},{0xA39C,0},{0x92FF,1} };
+        // (#60) the 114E gate reads [25AD] AFTER the 113B-113F reload
+        // copies [25C9] into it - seed the TARGET level, not the current.
+        {   static const FtWr w[] = { {0x25C9,0x25},{0xA39C,0},{0x92FF,1} };
             CASE(w,3,r0,nullptr,0,"lvl37",1);
         }
-        {   static const FtWr w[] = { {0x25AD,2},{0xA39C,0},{0x92FF,1} };
+        {   static const FtWr w[] = { {0x25C9,2},{0xA39C,0},{0x92FF,1} };
             CASE(w,3,r0,nullptr,0,"lvl2",1);
         }
         break;
@@ -13216,6 +13298,39 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             // immediate JCXZ RETN (locret_16594) without a single consume.
             static const FtWr w[] = { {0x916C,0},{0x916E,0},{0x9170,0},{0x9172,0},{0x9174,0},{0x9176,0},{0x9178,0},{0x917A,0},{0x917C,0},{0x917E,0},{0x9180,0},{0x9182,0},{0x9184,0},{0x9186,0},{0x9188,0},{0x918A,0},{0x918C,0},{0x918E,0},{0x9190,0},{0x9192,0},{0x9194,0},{0x9196,0},{0x9198,0},{0x919A,0},{0x919C,0},{0x919E,0},{0x91A0,0},{0x91A2,0},{0x91A4,0},{0x91A6,0},{0x91A8,0},{0x91AA,0},{0x91AC,0},{0x91AE,0},{0x91B0,0},{0x91B2,0},{0x91B4,0},{0x91B6,0},{0x91B8,0},{0x91BA,0},{0x91BC,0},{0x91BE,0},{0x91C0,0},{0x91C2,0},{0x91C4,0},{0x91C6,0},{0x91C8,0},{0x91CA,0},{0x91CC,0},{0x91CE,0},{0x91D0,0},{0x91D2,0},{0x91D4,0},{0x91D6,0},{0x91D8,0},{0x91DA,0},{0x91DC,0},{0x91DE,0},{0x91E0,0},{0x91E2,0},{0x91E4,0},{0x91E6,0},{0x91E8,0},{0x91EA,0} };
             CASE(w,64,r0,nullptr,0,"empty");
+        }
+        break;
+    }
+    case FT_SUB_101AC: {
+        // viking-switch vsync spin (16775 + [3287C]=3 + the 1B5 wait):
+        // unlike 10130 this loop has NO ISR inline, so a helper thread
+        // plays the vsync tick - it zeroes the live [A39C] word inside the
+        // oracle image mid-spin. Both 1BB edges in one walk.
+        {   uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
+                          + v2_fntest_game_ds_linear() + 0xA39C;
+            std::thread t([live]() {
+                usleep(300000);
+                *(volatile uint16_t*)live = 0;
+            });
+            static const FtWr w[] = { {0xA39C,3},{0x92FF,1} };
+            CASE(w,2,r0,nullptr,0,"spin");
+            t.join();
+        }
+        break;
+    }
+    case FT_SUB_17791: {
+        // ambient music restart gate: [302]&0x8000 -> the 7797 skip;
+        // [302] nonzero without bit15 -> the 77A2 skip; zero -> restart.
+        {   static const FtWr w[] = { {0x302,0x8000} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,1,r0,e,0,"busy-bit15");
+        }
+        {   static const FtWr w[] = { {0x302,1},{0x304,0} };
+            static const Exp e[] = { {0,0} };
+            CASE(w,2,r0,e,0,"busy-low");
+        }
+        {   static const FtWr w[] = { {0x302,0},{0x304,0},{0x2E6B,0} };
+            CASE(w,3,r0,nullptr,0,"restart");
         }
         break;
     }
@@ -13412,6 +13527,12 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             CASE(w,4,r0,nullptr,0,"cheat-lvl37",1);
             sdl_spec_state[0xAB] = 0;
             sdl_spec_snapshot_take();
+        }
+        {   // (#60 branch) cheats enabled but neither F5 nor F6 held:
+            // the 10B and 126 rejects both fall to the 1012D exit.
+            static const FtWr w[] = { {0xA39C,0},{0x92FF,1},{0x202,1},
+                                      {0x25AD,5} };
+            CASE(w,4,r0,nullptr,0,"cheat-idle",1);
         }
         {   // (#60 branch) byte_3168A ([91AA]) armed -> the EF fall-through
             // into the debugger INT3 trap (expected escape).
@@ -13946,6 +14067,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_11080")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_11080, ft_seed(0xD0500020u)); }
     if (all || strstr(env, "sub_16563")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16563, ft_seed(0xD0500021u)); }
     if (all || strstr(env, "sub_17a44")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17A44, ft_seed(0xD0500023u)); }
+    if (all || strstr(env, "sub_17791")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17791, ft_seed(0xD0500024u)); }
+    if (all || strstr(env, "sub_101ac")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_101AC, ft_seed(0xD0500025u)); }
     if (all || strstr(env, "sub_14207x")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_14207, ft_seed(0xD0500022u)); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, ft_seed(0x15D3C001u)); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, ft_seed(0x15D42001u)); }

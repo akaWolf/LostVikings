@@ -322,6 +322,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 451: return (void*)&seg000_6440_proc;  // INT9 keyboard ISR body
     case 452: return (void*)&sub_11080;         // level (re)load
     case 453: return (void*)&seg000_6563_proc;  // spec-key table sweep
+    case 454: return (void*)&seg000_7a44_proc;  // joystick delay loop (LOOP@7A59)
+    case 455: return (void*)&seg000_7791_proc;  // ambient music restart gate
+    case 456: return (void*)&seg000_1ac_proc;   // viking-switch vsync spin
     default: return 0;
     }
 }
