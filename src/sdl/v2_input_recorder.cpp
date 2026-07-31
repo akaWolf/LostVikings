@@ -16,6 +16,13 @@
 #include <cstring>
 #include <vector>
 #include <mutex>
+#include <atomic>
+
+// (#59) file-scope externs: an extern declaration INSIDE the anonymous
+// namespace binds to (anonymous namespace)::name — the classic trap.
+extern uint16_t input_keys, input_keys_v2;
+extern std::atomic<uint8_t> sdl_spec_state[256];
+extern std::atomic<uint8_t> sdl_spec_press_latch[256];
 
 // v2 game frame counter, defined in v2_vm.cpp; bumped in v2_phase_frame_begin.
 extern int v2_dbg_pre_vm_iter;
@@ -124,7 +131,43 @@ bool dequeue_due_replay(SDL_Event* out) {
     return true;
 }
 
+// (#59) Deterministic replay injection. The render-thread poll loop applied
+// KD/KU replay events to sdl_spec_state/input_keys ASYNCHRONOUSLY to the
+// game thread's frame_begin snapshot — under load an event tagged frame N
+// landed in frame N+-1 (PSNAP flakes on [34]/[3C6] scratch words). In
+// REPLAY mode the game thread now drains due events itself, right before
+// every sdl_spec_snapshot_take(), applying them synchronously; the poll
+// wrapper no longer hands KD/KU to the render loops (see below).
+int v2_replay_drain_impl(void) {
+    if (g_mode != MODE_REPLAY) return 0;
+    int applied = 0;
+    SDL_Event e;
+    while (dequeue_due_replay(&e)) {
+        uint16_t key_val = 0, spec_off = 0;
+        v2_keymap_lookup_sdl(e.key.keysym.sym, &key_val, &spec_off);
+        if (e.type == SDL_KEYDOWN) {
+            input_keys |= key_val; input_keys_v2 |= key_val;
+        } else {
+            input_keys &= (uint16_t)~key_val; input_keys_v2 &= (uint16_t)~key_val;
+        }
+        if (spec_off) {
+            if (e.type == SDL_KEYDOWN) {
+                sdl_spec_state[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+                sdl_spec_press_latch[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+            } else {
+                sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
+            }
+        }
+        applied++;
+    }
+    return applied;
+}
+
 } // namespace
+
+// C-linkage bridge OUTSIDE the anonymous namespace (the anon-ns extern "C"
+// trap: language linkage C but internal storage — the symbol never exports).
+extern "C" int v2_replay_drain_to_state(void) { return v2_replay_drain_impl(); }
 
 extern "C" void v2_input_recorder_init(const char* record_file, const char* replay_file, int strict_replay) {
     g_strict_replay = (strict_replay != 0);
@@ -162,8 +205,10 @@ extern "C" int v2_input_poll_event(SDL_Event* e) {
     if (!e) return 0;
 
     if (g_mode == MODE_REPLAY) {
-        if (dequeue_due_replay(e)) return 1;
-        // Queue not yet exhausted, or strict mode → still ignore real keyboard
+        // (#59) KD/KU replay events are now applied ON THE GAME THREAD via
+        // v2_replay_drain_to_state() (called from sdl_spec_snapshot_take),
+        // synchronously with the frame snapshot — never handed to the
+        // render-thread loops (the async apply was the PSNAP flake source).
         bool keyboard_locked = g_strict_replay ||
                                (g_replay_pos < g_replay_queue.size());
         if (keyboard_locked) {

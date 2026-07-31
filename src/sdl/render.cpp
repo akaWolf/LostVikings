@@ -423,7 +423,11 @@ void sdl_spec_snapshot_refresh_only() {
     // No-op: snap_take at frame_begin only (race-free).
 }
 
+extern "C" int v2_replay_drain_to_state(void);   // v2_input_recorder.cpp (#59)
 void sdl_spec_snapshot_take() {
+    // (#59) replay determinism: apply all due frame-gated replay events on
+    // THIS (game) thread before latching the snapshot.
+    v2_replay_drain_to_state();
     for (int i = 0; i < 256; i++) {
         // snap = state OR press_latch. Latch catches brief KEYDOWN+KEYUP
         // between frame_begins (sub-frame taps that state alone misses).

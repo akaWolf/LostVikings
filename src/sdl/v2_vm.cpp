@@ -22351,7 +22351,15 @@ void v2_run_input_update(uint8_t* shadow) { v2_read_input_12352_iter(shadow); }
 // loc_104c3 quit-prompt loop. Discards iter exit return (orig's sub_105cb
 // CF result) — orig's main thread observes it via its own jump; v2's exit
 // signal is V2_PHASE_PW_EXIT below.
-void v2_run_transition_text_loop(uint8_t* shadow) { (void)v2_pw_iter_body(shadow); }
+void v2_run_transition_text_loop(uint8_t* shadow) {
+    // #58: the quit-prompt loop (loc_104C3) was the ONLY blocking loop whose
+    // handler didn't bump the iteration counter — the frame counter froze,
+    // frame-gated replay events never became due (Y unreachable) and the
+    // HEADLESS max-frames check never ran => deadlock. Same #180 Fix-A tick
+    // as v2_run_viking_switch_loop / the pause loop.
+    v2_blocking_loop_tick();
+    (void)v2_pw_iter_body(shadow);
+}
 
 // V2_PHASE_PASSWORD_PROMPT handler — sub_1041c trigger only (no DS writes
 // of its own). Loop body handled by V2_PHASE_TRANSITION_TEXT.

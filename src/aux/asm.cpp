@@ -33,6 +33,13 @@ extern db& byte_128a8;   // _data.cpp global ref (#47 IRQ-defer model)
 extern "C" void v2_fntest_set_128a8(int v);
 extern "C" void v2_fntest_set_128a8(int v) { ::byte_128a8 = (db)v; }
 
+// (#58) clean-quit shutdown chain for the INT21/4C model (see the 0x4c case)
+extern void v2_game_thread_stop();
+extern bool need_quit;
+#ifdef FT_COV_BUILD
+extern "C" void __gcov_dump(void);
+#endif
+
 namespace m2c {
 
 // orig-write trap: m2c::setdata logs every write to v2_orig_trap_addr (with caller IP).
@@ -228,7 +235,9 @@ static int v2_pit_jitter_phase = 0;
 void asm2C_OUT(int16_t address, int data,_STATE* _state) {
 	if ((uint16_t)address == 0x43) {           // PIT latch command
 		uint16_t step = 0x1C00;
-		if (v2_fntest_pit_jitter && (v2_pit_jitter_phase ^= 1))
+		// (#60 fact) elapsed is measured between latch pairs — the SECOND
+		// latch's step decides it, so the small delta must land on EVEN calls.
+		if (v2_fntest_pit_jitter && !(v2_pit_jitter_phase ^= 1))
 			step = 0x0BF0;
 		v2_pit_counter = (uint16_t)(v2_pit_counter - step);
 		v2_pit_latch = v2_pit_counter;
@@ -441,7 +450,21 @@ X86_REGREF
 			executionFinished = 1;
 			exitCode = al;
 			log_error("Graceful exit al=%d\n",al);
-			exit(al);
+			// #58 root: plain exit() runs static destructors, and
+			// ~condition_variable (v2_cv_start) BLOCKS forever in
+			// pthread_cond_destroy while the v2 game thread still waits
+			// on it — the process "hangs" after the game already quit
+			// (title-screen F10 = direct DOS quit, no prompt). Shut the
+			// worker threads down first, flush gcov (COV builds merge the
+			// live profile), then _exit to skip the destructor chain —
+			// the same shutdown order as the headless max-frames path.
+			need_quit = true;
+			v2_game_thread_stop();
+			fflush(stdout); fflush(stderr);
+#ifdef FT_COV_BUILD
+			__gcov_dump();
+#endif
+			_exit(al);
 			return;
 		}
 		case 0x35: // GET INTERRUPT VECTOR — not implemented, return 0
