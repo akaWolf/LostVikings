@@ -296,6 +296,40 @@ std::atomic<uint16_t> sdl_input_press_edges{0};
 // landing between them leaked into ds:0x34 on the password screen, #37 crash
 // report). With this snap the {0x28C} verify skip is REMOVED (stricter).
 std::atomic<uint16_t> sdl_int9_char_pending{0};
+
+// #62: single writer helper for the INT9 letter channel — used by BOTH
+// window event loops (default render.cpp / V2_ONLY render_v2.cpp) and by
+// the replay drain, so no mode can lose the [28C] character again.
+extern "C" void sdl_int9_note_keydown(int sdl_scancode) {
+    static const struct { SDL_Scancode s; uint8_t dos; } k2dos[] = {
+      {SDL_SCANCODE_ESCAPE,0x01},{SDL_SCANCODE_1,0x02},{SDL_SCANCODE_2,0x03},
+      {SDL_SCANCODE_3,0x04},{SDL_SCANCODE_4,0x05},{SDL_SCANCODE_5,0x06},
+      {SDL_SCANCODE_6,0x07},{SDL_SCANCODE_7,0x08},{SDL_SCANCODE_8,0x09},
+      {SDL_SCANCODE_9,0x0A},{SDL_SCANCODE_0,0x0B},{SDL_SCANCODE_MINUS,0x0C},
+      {SDL_SCANCODE_EQUALS,0x0D},{SDL_SCANCODE_BACKSPACE,0x0E},
+      {SDL_SCANCODE_TAB,0x0F},{SDL_SCANCODE_Q,0x10},{SDL_SCANCODE_W,0x11},
+      {SDL_SCANCODE_E,0x12},{SDL_SCANCODE_R,0x13},{SDL_SCANCODE_T,0x14},
+      {SDL_SCANCODE_Y,0x15},{SDL_SCANCODE_U,0x16},{SDL_SCANCODE_I,0x17},
+      {SDL_SCANCODE_O,0x18},{SDL_SCANCODE_P,0x19},{SDL_SCANCODE_LEFTBRACKET,0x1A},
+      {SDL_SCANCODE_RIGHTBRACKET,0x1B},{SDL_SCANCODE_RETURN,0x1C},
+      {SDL_SCANCODE_A,0x1E},{SDL_SCANCODE_S,0x1F},{SDL_SCANCODE_D,0x20},
+      {SDL_SCANCODE_F,0x21},{SDL_SCANCODE_G,0x22},{SDL_SCANCODE_H,0x23},
+      {SDL_SCANCODE_J,0x24},{SDL_SCANCODE_K,0x25},{SDL_SCANCODE_L,0x26},
+      {SDL_SCANCODE_SEMICOLON,0x27},{SDL_SCANCODE_APOSTROPHE,0x28},
+      {SDL_SCANCODE_GRAVE,0x29},{SDL_SCANCODE_BACKSLASH,0x2B},
+      {SDL_SCANCODE_Z,0x2C},{SDL_SCANCODE_X,0x2D},{SDL_SCANCODE_C,0x2E},
+      {SDL_SCANCODE_V,0x2F},{SDL_SCANCODE_B,0x30},{SDL_SCANCODE_N,0x31},
+      {SDL_SCANCODE_M,0x32},{SDL_SCANCODE_COMMA,0x33},
+      {SDL_SCANCODE_PERIOD,0x34},{SDL_SCANCODE_SLASH,0x35},
+      {SDL_SCANCODE_SPACE,0x39},
+    };
+    for (const auto& m : k2dos)
+      if (m.s == (SDL_Scancode)sdl_scancode) {
+        sdl_int9_char_pending.store((uint16_t)(0x100 | m.dos), std::memory_order_relaxed); // #37b: drained at frame begin
+        break;
+      }
+}
+
 // Non-static so sub_12352 (seg000.cpp) and v2_read_input_12352_iter (v2_vm.cpp) can
 // OR into it directly during per-call drain — see LAYER 1 comments in both.
 uint16_t sdl_input_press_snap = 0;
@@ -717,40 +751,10 @@ void updateDraw()
 					   break;
 				   }
 				   if (event.type == SDL_KEYDOWN) {
-					 // Task #37: mirror orig INT9's word_2876C = LUT[scancode] for EVERY
-					 // press (typematic repeats included — DOS resent make codes). The
-					 // SDL→set-1 map below is the PC keyboard spec (the same codes the
-					 // game's own LUT at ds:[-0x7198] is indexed by); the CHARACTER
-					 // values come from that original LUT, not from here.
-					 {
-					   static const struct { SDL_Scancode s; uint8_t dos; } k2dos[] = {
-					     {SDL_SCANCODE_ESCAPE,0x01},{SDL_SCANCODE_1,0x02},{SDL_SCANCODE_2,0x03},
-					     {SDL_SCANCODE_3,0x04},{SDL_SCANCODE_4,0x05},{SDL_SCANCODE_5,0x06},
-					     {SDL_SCANCODE_6,0x07},{SDL_SCANCODE_7,0x08},{SDL_SCANCODE_8,0x09},
-					     {SDL_SCANCODE_9,0x0A},{SDL_SCANCODE_0,0x0B},{SDL_SCANCODE_MINUS,0x0C},
-					     {SDL_SCANCODE_EQUALS,0x0D},{SDL_SCANCODE_BACKSPACE,0x0E},
-					     {SDL_SCANCODE_TAB,0x0F},{SDL_SCANCODE_Q,0x10},{SDL_SCANCODE_W,0x11},
-					     {SDL_SCANCODE_E,0x12},{SDL_SCANCODE_R,0x13},{SDL_SCANCODE_T,0x14},
-					     {SDL_SCANCODE_Y,0x15},{SDL_SCANCODE_U,0x16},{SDL_SCANCODE_I,0x17},
-					     {SDL_SCANCODE_O,0x18},{SDL_SCANCODE_P,0x19},{SDL_SCANCODE_LEFTBRACKET,0x1A},
-					     {SDL_SCANCODE_RIGHTBRACKET,0x1B},{SDL_SCANCODE_RETURN,0x1C},
-					     {SDL_SCANCODE_A,0x1E},{SDL_SCANCODE_S,0x1F},{SDL_SCANCODE_D,0x20},
-					     {SDL_SCANCODE_F,0x21},{SDL_SCANCODE_G,0x22},{SDL_SCANCODE_H,0x23},
-					     {SDL_SCANCODE_J,0x24},{SDL_SCANCODE_K,0x25},{SDL_SCANCODE_L,0x26},
-					     {SDL_SCANCODE_SEMICOLON,0x27},{SDL_SCANCODE_APOSTROPHE,0x28},
-					     {SDL_SCANCODE_GRAVE,0x29},{SDL_SCANCODE_BACKSLASH,0x2B},
-					     {SDL_SCANCODE_Z,0x2C},{SDL_SCANCODE_X,0x2D},{SDL_SCANCODE_C,0x2E},
-					     {SDL_SCANCODE_V,0x2F},{SDL_SCANCODE_B,0x30},{SDL_SCANCODE_N,0x31},
-					     {SDL_SCANCODE_M,0x32},{SDL_SCANCODE_COMMA,0x33},
-					     {SDL_SCANCODE_PERIOD,0x34},{SDL_SCANCODE_SLASH,0x35},
-					     {SDL_SCANCODE_SPACE,0x39},
-					   };
-					   for (const auto& m : k2dos)
-					     if (m.s == event.key.keysym.scancode) {
-					       sdl_int9_char_pending.store((uint16_t)(0x100 | m.dos), std::memory_order_relaxed); // #37b: drained at frame begin
-					       break;
-					     }
-					 }
+					 // Task #37/#62: INT9 letter channel — shared helper so the
+					 // V2_ONLY event loop (render_v2.cpp) and the replay drain
+					 // (#59) feed the SAME path as this default-window handler.
+					 sdl_int9_note_keydown(event.key.keysym.scancode);
 					 input_keys |= key_val;
 					 input_keys_v2 |= key_val;
 					 // Edge accumulator: catches brief KEYDOWN+KEYUP-same-iter race.

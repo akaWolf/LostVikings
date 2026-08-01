@@ -2507,6 +2507,10 @@ static void v2_vsync_wait_10130(uint8_t* s) {
 // bytecode polls/clears ds:0x028C per character). The LUT itself is the
 // ORIGINAL static table read from DS (letters/digits → ASCII, ENTER/SPACE →
 // 0x81, non-character keys → 0), never hardcoded here.
+// fn-test (#62): the delivery unit runs without the barrier channel that
+// normally publishes the real-DS segment — expose a setter.
+extern "C" void v2_fntest_set_current_ds(uint16_t v) { v2_current_ds_val = v; }
+
 extern "C" void v2_mirror_int9_char(uint8_t dos_scan) {
     uint16_t off = (uint16_t)((uint16_t)(dos_scan * 2) - 0x7198);
     if (v2_vm_shadow_ds) {

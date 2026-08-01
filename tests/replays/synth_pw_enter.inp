@@ -1,0 +1,11 @@
+# Synthetic (#62): password-screen input-delivery path.
+# Title -> ESC opens the pw screen (1041C gate) -> RETURN lands 0x81 in
+# [28C] via the INT9 letter channel (unit `input_delivery` checks the
+# channel itself; this replay guards the full path: open, deliver, parity).
+450 KD ESCAPE
+453 KU ESCAPE
+560 KD RETURN
+563 KU RETURN
+640 KD RETURN
+643 KU RETURN
+# end-frame 780

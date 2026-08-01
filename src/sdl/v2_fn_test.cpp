@@ -12476,6 +12476,9 @@ extern "C" void v2_fntest_set_in201(int v);
 extern "C" void v2_fntest_set_in60(int v);
 extern "C" int v2_fntest_pit_jitter;
 extern "C" void v2_fntest_set_128a8(int v);
+extern "C" void sdl_int9_note_keydown(int sdl_scancode);   // render.cpp (#62)
+extern "C" void v2_mirror_int9_char(uint8_t dos_scan);
+extern "C" void v2_fntest_set_current_ds(uint16_t v);
 extern "C" int v2_fntest_sim_int21_irq;
 
 int ft_selftest_dosio(FtId id, uint32_t seed) {
@@ -14217,6 +14220,31 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_101ac")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_101AC, ft_seed(0xD0500025u)); }
     if (all || strstr(env, "sub_124a9")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_124A9, ft_seed(0xD0500026u)); }
     if (all || strstr(env, "sub_15f2cd")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_15F2C, ft_seed(0xD0500027u)); }
+    if (all || strstr(env, "input_delivery")) {
+        // #62: end-to-end INT9 letter delivery — note_keydown(RETURN) must
+        // land 0x81 (the original LUT value for Enter/Space) in ds:[28C]
+        // of BOTH DS copies after the frame-begin drain.
+        matched = true;
+        extern void sdl_spec_snapshot_take();
+        uint32_t dsl = v2_fntest_game_ds_linear();
+        uint8_t* real = (uint8_t*)v2_fntest_m2c_base() + dsl;
+        v2_set_m2c_base(v2_fntest_m2c_base());
+        v2_fntest_set_current_ds((uint16_t)(dsl >> 4));
+        long fails = 0;
+        sdl_int9_note_keydown(0x28 /*SDL_SCANCODE_RETURN*/);
+        sdl_spec_snapshot_take();          // frame-begin drain
+        uint16_t rc28c = *(uint16_t*)(real + 0x28C);
+        if (rc28c != 0x81) { fails++; fprintf(stderr, "INPUT-DELIVERY: ENTER real[28C]=%04X != 0081\n", rc28c); }
+        // 'B' (a consonant): the ORIGINAL LUT zeroes vowels (passwords
+        // never use them), so a vowel would legitimately read 0 here.
+        sdl_int9_note_keydown(0x05 /*SDL_SCANCODE_B*/);
+        sdl_spec_snapshot_take();
+        rc28c = *(uint16_t*)(real + 0x28C);
+        if (rc28c == 0) { fails++; fprintf(stderr, "INPUT-DELIVERY: 'B' real[28C]=%04X (empty)\n", rc28c); }
+        fprintf(stderr, "FNSELFTEST-SUMMARY[input_delivery]: grid %ld/2 — total cases=2 fail=%ld%s\n",
+                2 - fails, fails, fails ? "  <<< DIVERGENCE" : "");
+        rc |= fails ? 1 : 0;
+    }
     if (all || strstr(env, "sub_14207x")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_14207, ft_seed(0xD0500022u)); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, ft_seed(0x15D3C001u)); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, ft_seed(0x15D42001u)); }

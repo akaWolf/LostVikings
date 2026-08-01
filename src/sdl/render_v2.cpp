@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 #include <thread>
 #include <atomic>
 #include <cassert>
@@ -171,6 +172,11 @@ void render_thread_proc_v2(void* _state)
               uint16_t spec_off = 0;
               v2_keymap_lookup_sdl(event.key.keysym.sym, &key_val, &spec_off);
               if (event.type == SDL_KEYDOWN) {
+                  // #62: the INT9 letter channel ([28C] = LUT[scancode]) was
+                  // fed ONLY by the default-window handler — in V2_ONLY the
+                  // password screen never received letters/Enter. Same shared
+                  // writer as render.cpp (typematic repeats included).
+                  sdl_int9_note_keydown(event.key.keysym.scancode);
                   input_keys |= key_val; input_keys_v2 |= key_val;
               } else {
                   input_keys &= ~key_val; input_keys_v2 &= ~key_val;

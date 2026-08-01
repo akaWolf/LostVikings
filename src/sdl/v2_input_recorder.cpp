@@ -23,6 +23,7 @@
 extern uint16_t input_keys, input_keys_v2;
 extern std::atomic<uint8_t> sdl_spec_state[256];
 extern std::atomic<uint8_t> sdl_spec_press_latch[256];
+extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 
 // v2 game frame counter, defined in v2_vm.cpp; bumped in v2_phase_frame_begin.
 extern int v2_dbg_pre_vm_iter;
@@ -146,6 +147,9 @@ int v2_replay_drain_impl(void) {
         uint16_t key_val = 0, spec_off = 0;
         v2_keymap_lookup_sdl(e.key.keysym.sym, &key_val, &spec_off);
         if (e.type == SDL_KEYDOWN) {
+            // #62: replays must feed the INT9 letter channel too — the
+            // password screen consumes [28C], not only key bits.
+            sdl_int9_note_keydown(SDL_GetScancodeFromKey(e.key.keysym.sym));
             input_keys |= key_val; input_keys_v2 |= key_val;
         } else {
             input_keys &= (uint16_t)~key_val; input_keys_v2 &= (uint16_t)~key_val;
