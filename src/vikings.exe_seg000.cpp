@@ -325,6 +325,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 454: return (void*)&seg000_7a44_proc;  // joystick delay loop (LOOP@7A59)
     case 455: return (void*)&seg000_7791_proc;  // ambient music restart gate
     case 456: return (void*)&seg000_1ac_proc;   // viking-switch vsync spin
+    case 457: return (void*)&seg000_24a9_proc;  // dialog glyph-line printer
+    case 343: return (void*)&sub_15f2c;         // op2C partner-scan (direct, no dispatcher)
     default: return 0;
     }
 }

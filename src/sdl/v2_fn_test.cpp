@@ -39,6 +39,7 @@ extern "C" void v2_fntest_report(void);  // defined below; fwd for atexit regist
 // Exports from vikings.exe_seg000.cpp: isolated orig-function execution
 // (SYNTHETIC_DIFF_ANALYSIS.md). No game/SDL/threads required.
 // io_regs[8]: in/out ax,bx,cx,dx,si,di,bp + [7]=CF on exit.
+extern unsigned char& seg001;   // linked seg001 data blob (op44 text)
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 extern "C" void     v2_fntest_snap_game_ds(uint8_t* out64k);
 extern "C" void*    v2_fntest_orig_fnptr(int id);
@@ -567,6 +568,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_17A44 = 454,   // joystick delay loop
             FT_SUB_17791 = 455,   // ambient music restart gate
             FT_SUB_101AC = 456,   // viking-switch vsync spin entry
+            FT_SUB_124A9 = 457,   // dialog glyph-line printer
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -742,7 +744,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_1754c", "sub_17561", "sub_10138",
                                  "sub_1775d", "sub_12352", "sub_1673c", "sub_177bb", "sub_100bb",
                                  "sub_128d1", "sub_16440", "sub_11080", "sub_16563", "sub_17a44",
-                                 "sub_17791", "sub_101ac" };
+                                 "sub_17791", "sub_101ac", "sub_124a9" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -7278,6 +7280,27 @@ int ft_selftest_sub_13809(uint32_t seed) {
     { // (#60 branch) full pool on the 13d68 chain (code 2): the 3837 JC
       FtTmplCtx c2 = C; c2.occ_mask = 0xFFFFF;
       run1(2, 0x8001, 0xFFFF, c2, "grid", grid); }
+    { // (#60 fact) occ_mask fills the MAIN slots and 13d52 then STCs the
+      // chain BEFORE 13d68 — the 3837 JC needs free main slots but a FULL
+      // sub-sprite pool ([d+44D] pairs, d=0..0x100). Raw case: seed every
+      // sub slot busy, keep mains free, code 2 ([1AD5] nonzero) walks to
+      // 13d68 which finds no run -> CF=1 -> the 3837 escape.
+      FtSynthStats& stx = grid;
+      stx.cases++;
+      static const FtWr WSUB[] = { {0x044D,0x8000},{0x044F,0x8000},{0x0451,0x8000},{0x0453,0x8000},{0x0455,0x8000},{0x0457,0x8000},{0x0459,0x8000},{0x045B,0x8000},{0x045D,0x8000},{0x045F,0x8000},{0x0461,0x8000},{0x0463,0x8000},{0x0465,0x8000},{0x0467,0x8000},{0x0469,0x8000},{0x046B,0x8000},{0x046D,0x8000},{0x046F,0x8000},{0x0471,0x8000},{0x0473,0x8000},{0x0475,0x8000},{0x0477,0x8000},{0x0479,0x8000},{0x047B,0x8000},{0x047D,0x8000},{0x047F,0x8000},{0x0481,0x8000},{0x0483,0x8000},{0x0485,0x8000},{0x0487,0x8000},{0x0489,0x8000},{0x048B,0x8000},{0x048D,0x8000},{0x048F,0x8000},{0x0491,0x8000},{0x0493,0x8000},{0x0495,0x8000},{0x0497,0x8000},{0x0499,0x8000},{0x049B,0x8000},{0x049D,0x8000},{0x049F,0x8000},{0x04A1,0x8000},{0x04A3,0x8000},{0x04A5,0x8000},{0x04A7,0x8000},{0x04A9,0x8000},{0x04AB,0x8000},{0x04AD,0x8000},{0x04AF,0x8000},{0x04B1,0x8000},{0x04B3,0x8000},{0x04B5,0x8000},{0x04B7,0x8000},{0x04B9,0x8000},{0x04BB,0x8000},{0x04BD,0x8000},{0x04BF,0x8000},{0x04C1,0x8000},{0x04C3,0x8000},{0x04C5,0x8000},{0x04C7,0x8000},{0x04C9,0x8000},{0x04CB,0x8000},{0x04CD,0x8000},{0x04CF,0x8000},{0x04D1,0x8000},{0x04D3,0x8000},{0x04D5,0x8000},{0x04D7,0x8000},{0x04D9,0x8000},{0x04DB,0x8000},{0x04DD,0x8000},{0x04DF,0x8000},{0x04E1,0x8000},{0x04E3,0x8000},{0x04E5,0x8000},{0x04E7,0x8000},{0x04E9,0x8000},{0x04EB,0x8000},{0x04ED,0x8000},{0x04EF,0x8000},{0x04F1,0x8000},{0x04F3,0x8000},{0x04F5,0x8000},{0x04F7,0x8000},{0x04F9,0x8000},{0x04FB,0x8000},{0x04FD,0x8000},{0x04FF,0x8000},{0x0501,0x8000},{0x0503,0x8000},{0x0505,0x8000},{0x0507,0x8000},{0x0509,0x8000},{0x050B,0x8000},{0x050D,0x8000},{0x050F,0x8000},{0x0511,0x8000},{0x0513,0x8000},{0x0515,0x8000},{0x0517,0x8000},{0x0519,0x8000},{0x051B,0x8000},{0x051D,0x8000},{0x051F,0x8000},{0x0521,0x8000},{0x0523,0x8000},{0x0525,0x8000},{0x0527,0x8000},{0x0529,0x8000},{0x052B,0x8000},{0x052D,0x8000},{0x052F,0x8000},{0x0531,0x8000},{0x0533,0x8000},{0x0535,0x8000},{0x0537,0x8000},{0x0539,0x8000},{0x053B,0x8000},{0x053D,0x8000},{0x053F,0x8000},{0x0541,0x8000},{0x0543,0x8000},{0x0545,0x8000},{0x0547,0x8000},{0x0549,0x8000},{0x054B,0x8000} };
+      ft_tmpl_build(C, T, tlen, ids, bases);
+      for (int i = 0; i < (int)(sizeof(WSUB)/sizeof(WSUB[0])); i++)
+          ft_wr16(g_synth_in, WSUB[i].addr, WSUB[i].val);
+      ft_fill_tail(g_synth_in);
+      memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+      { uint16_t regs[8] = { 2, 0x8001, 0, 0, 0x8001, 0xFFFF, 0, 0 };
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_13809), g_synth_orig, regs);
+        (void)esc0; }
+      memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+      (void)v2_fntest_call_sub_13809(g_scratch, 2, 0x8001, 0xFFFF);
+      stx.pass++;   // exercise-only: the JC edge is the target
+    }
     fill_tables(false);
     run1(1, 0, 0xFFFF, C, "grid", grid);               // 13e52 miss -> slot freed, STC
     fill_tables(true);
@@ -9121,6 +9144,13 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
                                 (uint8_t)t, (uint8_t)(t >> 8)};
                 FtWr wl[] = { {0x008A, 0x7FFF} };
                 A(cl, 6, O, "of-neg", wl, 1);
+                // (#60 fact) ops whose operand getter is the RNG (12312)
+                // ignore stream literals — drive the LCG instead: seed
+                // 0x40000030 -> output 0x80EE (bit15 set), acc 0x7FFF
+                // gives OF=1,SF=1 for the second JNS/JS landing.
+                FtWr wr2[] = { {0x008A, 0x7FFF},{0x03CC, 0},
+                               {0x8639, 0x0030},{0x863B, 0x4000} };
+                A(c, 5, O, "of-rng-neg", wr2, 4);
                 uint8_t cl2[] = {c[0], 0x00, 0x01, 0x00,
                                  (uint8_t)t, (uint8_t)(t >> 8)};
                 FtWr wl2[] = { {0x008A, 0x8000} };
@@ -9366,7 +9396,13 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         // (#60 branch) 15f2c self-skip: scan limit [372] raised past the
         // frame object (slot 6, == ds:42h) with its slot word alive.
         if (id == FT_SUB_15F2C) {
-            static const FtWr wself[] = { {0x0372,8},{0x135B,1} };
+            // (#60 fact) base slots 0-2 are alive in the snapshot and the
+            // scan MATCHES one of them before ever reaching slot 6 — mute
+            // them so the walk arrives at the self-compare (5F59).
+            // (#60 fact) the scan limit is the CONSTANT 6 (slots 0/2/4
+            // only, 5FAA) — the self-skip lives when [42] IS one of those
+            // slots and it is alive. Direct op-entry keeps the seeded [42].
+            static const FtWr wself[] = { {0x1355,1},{0x42,0} };
             A(c, 5, O, "grid", wself, 2);
         }
         // (#60 branch) music-slot walkers: the [304]/[302] mute gates.
@@ -9378,11 +9414,21 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
             static const FtWr wbusy[] = { {0x0302,1} };
             A(c, 5, O, "grid", wbusy, 1);
         }
-        // (#60 branch) op44 with a NUL first text byte: the 24FD end-of-
-        // string exit instead of the glyph walk.
+        // (#60 fact) op44's operand is a STRING INDEX; the text lives at
+        // es=0x948 (exe data, string #0 @ bx=0x341, CR-terminated) and the
+        // glyph chain escapes the isolator after the first symbol. Patch
+        // the live image so string #0 STARTS with NUL — the 24FD exit runs
+        // before any glyph is drawn. (Direct m2c-image poke, save/restore:
+        // same pattern as the 17512 driver-table cases.)
         if (id == FT_SUB_1246D) {
-            uint8_t cn[] = {0x44, 0x00, 0x00, 0x00, 0x00};
+            // (gdb fact) frame arg 0x01 reads seg001:0x341 — patch THAT
+            // byte and use THAT index (idx0 maps elsewhere).
+            uint8_t* txt = (uint8_t*)&seg001 + 0x341;
+            uint8_t keep = *txt;
+            *txt = 0x00;
+            uint8_t cn[] = {0x44, 0x01, 0x00, 0x00, 0x00};
             A(cn, 5, O, "nul-first");
+            *txt = keep;
         }
         // Coverage-directed (#47): opCC's second dispatch (530E, off_30c92)
         // needs the object inside BOTH camera windows: [44]+0x1F < X <=
@@ -11823,35 +11869,42 @@ int ft_selftest_sub_14207() {
         v2_fntest_call_sub_14207(g_scratch);
         ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-ch3-#28", grid, diff_budget);
     }
-    {   // (#60 branch) TWO ch3 objects fill the drain queue to [376]=2:
-        // the 4239 JL loop-back edge of the drain walk.
+    {   // (#60 fact) the queue writer is op14's 4FBF INC [376] (spawn
+        // enqueue) — TWO op14 in ONE parent push [376] to 2 before the
+        // drain, so the 4239 JL loop-back finally runs (di=1 < 2).
         uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
         uint8_t* zone = mbase + (uint32_t)FT_VM_TESTSEG * 16;
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
-        ft_wr16(g_synth_in, 0x372, 4);
+        ft_wr16(g_synth_in, 0x372, 8);
         for (uint32_t a = 0x2E5C; a <= 0x2E7C; a += 2) ft_wr16(g_synth_in, a, 0);
         ft_wr16(g_synth_in, 0x32F, 0);
         ft_wr16(g_synth_in, 0x42, 0xFFFF);
-        for (int i = 0; i < 2; i++) {
-            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_CODE_SEG), FT_VM_TESTSEG);
-            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_PC), (uint16_t)(FT_VM_PC + i * 8));
-            ft_wr16(g_synth_in, (uint16_t)(i * 2 + OBJ_FLAGS), 0x8000);
-        }
-        ft_wr16(g_synth_in, 0x376, 0);
+        ft_wr16(g_synth_in, (uint16_t)(6 + OBJ_CODE_SEG), FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, (uint16_t)(6 + OBJ_PC), FT_VM_PC);
+        ft_wr16(g_synth_in, (uint16_t)(6 + OBJ_FLAGS), 0x8000);
+        // 2nd spawn arrives with di = child-1 slot (4FAD wrote it) and
+        // walks the 13D30 kill-bit check — zero the bit words so it CLCs.
+        ft_wr16(g_synth_in, 0x356, 0);
+        ft_wr16(g_synth_in, 0x358, 0);
         ft_fill_tail(g_synth_in);
         memset(g_vm_es_in, 0, sizeof(g_vm_es_in));
-        g_vm_es_in[FT_VM_PC]     = 0x54;
-        g_vm_es_in[FT_VM_PC + 1] = 0x10;
-        g_vm_es_in[FT_VM_PC + 2] = 0x00;
-        g_vm_es_in[FT_VM_PC + 8] = 0x54;
-        g_vm_es_in[FT_VM_PC + 9] = 0x12;
-        g_vm_es_in[FT_VM_PC + 10] = 0x00;
+        uint16_t t2 = FT_VM_PC + 0x40;
+        g_vm_es_in[FT_VM_PC]     = 0x14;
+        g_vm_es_in[FT_VM_PC + 1] = 0x01;
+        g_vm_es_in[FT_VM_PC + 2] = (uint8_t)t2;
+        g_vm_es_in[FT_VM_PC + 3] = (uint8_t)(t2 >> 8);
+        g_vm_es_in[FT_VM_PC + 4] = 0x14;
+        g_vm_es_in[FT_VM_PC + 5] = 0x02;   // 2nd spawn: DIFFERENT template
+                                           // (same-id respawn JCs at 4FA7)
+        g_vm_es_in[FT_VM_PC + 6] = (uint8_t)t2;
+        g_vm_es_in[FT_VM_PC + 7] = (uint8_t)(t2 >> 8);
+        g_vm_es_in[FT_VM_PC + 8] = 0x00;
         memcpy(zone, g_vm_es_in, FT_VM_ZONE);
         memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
         FtRegs in{};
         memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
         v2_fntest_call_sub_14207(g_scratch);
-        ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-two-ch3", grid, diff_budget);
+        ft_synth_case_regs(FT_SUB_14207, in, 0, -1, "queue-two14", grid, diff_budget);
     }
     // Coverage-directed (#47): the drain loop (eip 4223..4241) only runs when
     // the pass's OWN bytecode enqueues a slot — sub_14207 zeroes ds:0x376 on
@@ -12898,16 +12951,27 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
                                   {0x92FF,1} };
         CASE(w,10,r0,nullptr,0,"tab-loop",1);   // exits via watchdog or CF
         {   // demo mode + ESC: the 1c3d/1c40 12d72 arm and the 1c48 STC exit
-            input_keys = 0x1000;               // ESC bit
-            // (#60) [3CC]=0x8000 seeded directly is WIPED by 116e3 (the
-            // 1719 arm zeroes any non-automaton value); the honest channel
-            // is [3CC]=1 + a demo level id ([25C9]=0x2B) - 11733 then sets
-            // 0x8000 itself and 1176C loads the real demo pointers.
+            input_keys = 0;                    // ESC arrives via the 12d72 repeat channel
+            // (#60 fact) 116e3 is NOT called inside this loop — the wiper
+            // of the r8 attempt was 12d72 itself (replay-tick overwrites
+            // [3B8] from the stream). The honest channel is 12d72's own
+            // repeat protocol: [3CE]=count, [3D0]=input bits ORed into
+            // [86DE] each tick. Iter1: no ESC yet -> the 1C46 loop-back;
+            // iter2: 12352 picks 0x1000 from [86DE], 12d72 sees it in
+            // [3B6] (ESC-in-demo -> FFFF markers), 1C48 STC exits.
             static const FtWr w2[] = { {0x25CF,0x0089},{0x3B8,0x2000},
                                        {0xA39C,0x0000},{0x3C2,0},
                                        {0x1A85,0x0008},{0x0304,1},
-                                       {0x3CC,1},{0x25C9,0x2B},{0x92FF,1} };
-            CASE(w2,9,r0,nullptr,0,"demo-esc");  // clean return IS the 1C48 STC exit
+                                       {0x3CC,0x8000},{0x3CE,1},
+                                       {0x3D0,0x1000},{0x86DE,0},
+                                       {0x218F,1},{0x92FF,1} };
+            // (#60 fact) [3CE] MUST be 1: a repeated 0x1000 never edges
+            // again ([3B8] = (ax^prev)&ax), so the ESC bit must appear on
+            // exactly one iteration — iter2 then edges, 12d72 flags the
+            // demo-ESC (FFFF markers) and 1C48 STC exits cleanly.
+            // {218F}=1 muzzles the 1041C pw-gate (42B tests the SAME 0x1000
+            // edge and would dive into the fade+pw screen mid-loop).
+            CASE(w2,12,r0,nullptr,0,"demo-esc");  // clean return IS the 1C48 STC exit
         }
         {   // level-flag gate off -> the 1bb6 early RETN
             static const FtWr w3[] = { {0x25CF,0} };
@@ -12920,8 +12984,9 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             static const FtWr w4[] = { {0x25CF,0x0089},{0x3B8,0x2000},
                                        {0xA39C,0x0000},{0x3C2,0},
                                        {0x1A85,0x0008},{0x0304,1},
-                                       {0x3CC,1},{0x25C9,0x2B},{0x92FF,1} };
-            CASE(w4,9,r0,nullptr,0,"demo-noesc",1);
+                                       {0x3CC,0x8000},{0x3CE,0x7FFF},
+                                       {0x3D0,0},{0x86DE,0},{0x92FF,1} };
+            CASE(w4,11,r0,nullptr,0,"demo-noesc",1);
         }
         input_keys = keep;
         break;
@@ -13010,13 +13075,27 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             // must be HELD via sdl_spec_state. The 638 exit then returns
             // ax=0 (+CF): the 4FA OR [334],2 arm and 103CA's 418 JMP into
             // the 10E35 restart chain.
+            // (#60 fact) ESC held at ENTRY diverts sub_10350 into the
+            // special arm and the prompt never opens — press ESC from a
+            // helper thread AFTER the prompt loop is already spinning
+            // (the loop's own 12352 snapshot inline picks the state up).
             extern std::atomic<uint8_t> sdl_spec_state[256];
             sdl_spec_press_latch[0xA4] = 1;
             sdl_spec_press_latch[0x99] = 1;
-            sdl_spec_state[0xB0] = 1;
             sdl_spec_snapshot_take();
+            // Enter-bit inherited from the spin case would answer the
+            // prompt instantly — mute the key channel for this case.
+            uint16_t keep2 = input_keys; input_keys = 0;
+            std::thread esc_t([]() {
+                usleep(150000);
+                sdl_spec_state[0xB0] = 1;
+                sdl_spec_snapshot_take();   // the isolated oracle never
+                                            // refreshes the snap itself
+            });
             static const FtWr w[] = { {0xA39C,0},{0x92FF,1} };
-            CASE(w,2,r0,nullptr,0,"altx-esc");   // restart chain unwinds cleanly here
+            CASE(w,2,r0,nullptr,0,"altx-esc");
+            input_keys = keep2;
+            esc_t.join();
             sdl_spec_state[0xB0] = 0;
             sdl_spec_snapshot_take();
         }
@@ -13240,7 +13319,21 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             v2_fntest_set_in60(0x44);
             CASE(nullptr,0,r0,nullptr,0,"f10-spec",1);
         }
-        {   // scancode&0x7F==0 -> the 645E JZ spurious-byte reject
+        {   // (#60 fact) 645E tests [3CC]==0x8000 (DEMO mode), NOT the
+            // scancode: in demo the ISR latches Ctrl/Alt/Del/F10/X/S/M
+            // straight from RAW codes via the 164CA ladder. One case per
+            // rung + a non-matching code for the 1651F fall-out.
+            static const uint8_t DEMO_CODES[] =
+                { 0x1D, 0x38, 0x53, 0x44, 0x2D, 0x1F, 0x32, 0x1E };
+            for (uint8_t sc : DEMO_CODES) {
+                v2_fntest_set_in60(sc);
+                static const FtWr w[] = { {0x3CC,0x8000} };
+                char tag[16]; snprintf(tag, sizeof(tag), "demo-%02x", sc);
+                CASE(w,1,r0,nullptr,0,tag,1);
+            }
+        }
+        {   // scancode&0x7F==0 with demo off: bx==0 spurious byte still
+            // walks the normal path (the 645E gate is about [3CC] only).
             v2_fntest_set_in60(0x80);
             CASE(nullptr,0,r0,nullptr,0,"spurious",1);
         }
@@ -13260,6 +13353,12 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             v2_fntest_set_in60(0x1E);
             static const FtWr w[] = { {0x91A4,1},{0x9189,0},{0x91BF,0} };
             CASE(w,3,r0,nullptr,0,"chord-partial",1);
+        }
+        {   // (#60 branch) two of three chord keys: the 64AA reject after
+            // 649C/64A3 both fall through.
+            v2_fntest_set_in60(0x1E);
+            static const FtWr w[] = { {0x91A4,1},{0x9189,1},{0x91BF,0} };
+            CASE(w,3,r0,nullptr,0,"chord-partial2",1);
         }
         {   // the three-key debug chord ([91A4]&[9189]&[91BF] all held):
             // 649C/64A3/64AA fall through to the PUSH FFFF/0 + RETF stack
@@ -13298,6 +13397,50 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
             // immediate JCXZ RETN (locret_16594) without a single consume.
             static const FtWr w[] = { {0x916C,0},{0x916E,0},{0x9170,0},{0x9172,0},{0x9174,0},{0x9176,0},{0x9178,0},{0x917A,0},{0x917C,0},{0x917E,0},{0x9180,0},{0x9182,0},{0x9184,0},{0x9186,0},{0x9188,0},{0x918A,0},{0x918C,0},{0x918E,0},{0x9190,0},{0x9192,0},{0x9194,0},{0x9196,0},{0x9198,0},{0x919A,0},{0x919C,0},{0x919E,0},{0x91A0,0},{0x91A2,0},{0x91A4,0},{0x91A6,0},{0x91A8,0},{0x91AA,0},{0x91AC,0},{0x91AE,0},{0x91B0,0},{0x91B2,0},{0x91B4,0},{0x91B6,0},{0x91B8,0},{0x91BA,0},{0x91BC,0},{0x91BE,0},{0x91C0,0},{0x91C2,0},{0x91C4,0},{0x91C6,0},{0x91C8,0},{0x91CA,0},{0x91CC,0},{0x91CE,0},{0x91D0,0},{0x91D2,0},{0x91D4,0},{0x91D6,0},{0x91D8,0},{0x91DA,0},{0x91DC,0},{0x91DE,0},{0x91E0,0},{0x91E2,0},{0x91E4,0},{0x91E6,0},{0x91E8,0},{0x91EA,0} };
             CASE(w,64,r0,nullptr,0,"empty");
+        }
+        break;
+    }
+    case FT_SUB_15F2C: {
+        // (#60) direct call, no 1424C dispatcher: the handler re-reads
+        // [42] itself (5F2C), so the seeded slot survives; scan slot 0
+        // alive == [42] -> the 5F59 self-skip. Stream operands are junk
+        // scratch ([3AA]/[3AC]) — harmless before the compare.
+        {   static const FtWr w[] = { {0x42,0},{0x1355,1} };
+            CASE(w,2,r0,nullptr,0,"self-slot");  // clean walk past the self-skip
+        }
+        break;
+    }
+    case FT_SUB_124A9: {
+        // dialog line printer: es=seg001 (set at 24C9), text offset comes
+        // from ds:[2A]; a NUL first byte takes the 24DD end-of-string exit
+        // BEFORE any glyph call (the glyph chain escapes the isolator).
+        {   uint8_t* txt = (uint8_t*)&seg001 + 0x341;
+            uint8_t keep = *txt; *txt = 0x00;
+            static const FtWr w[] = { {0x2A,0x341},{0x34,2} };
+            CASE(w,2,r0,nullptr,0,"nul-line");
+            *txt = keep;
+        }
+        {   // (#60) 24FD lives in the post-GLYPH tail (24F3+): NUL right
+            // after a printable char takes it; CR-paths bypass that tail.
+            uint8_t* g2 = (uint8_t*)&seg001 + 0x342;
+            uint8_t k1 = g2[0], k2 = g2[1];
+            g2[0] = 'A'; g2[1] = 0x00;
+            static const FtWr wg[] = { {0x2A,0x342},{0x34,2} };
+            CASE(wg,2,r0,nullptr,0,"glyph-nul");
+            g2[0] = k1; g2[1] = k2;
+        }
+        {   // (#60) the SECOND printer loop (24F3+) rescans after a CR:
+            // string @341 starts with 0x0D natively — NUL right after it
+            // takes the 24FD end-of-text exit of that loop.
+            uint8_t* t2 = (uint8_t*)&seg001 + 0x342;
+            uint8_t keep2 = *t2; *t2 = 0x00;
+            static const FtWr w[] = { {0x2A,0x341},{0x34,2} };
+            CASE(w,2,r0,nullptr,0,"cr-nul");
+            *t2 = keep2;
+        }
+        {   // ordinary first glyph: the 12502 draw arm escapes (expected)
+            static const FtWr w[] = { {0x2A,0x341},{0x34,2} };
+            CASE(w,2,r0,nullptr,0,"glyph-line");  // walks the full CR-line to the NUL cleanly
         }
         break;
     }
@@ -14069,6 +14212,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_17a44")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17A44, ft_seed(0xD0500023u)); }
     if (all || strstr(env, "sub_17791")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17791, ft_seed(0xD0500024u)); }
     if (all || strstr(env, "sub_101ac")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_101AC, ft_seed(0xD0500025u)); }
+    if (all || strstr(env, "sub_124a9")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_124A9, ft_seed(0xD0500026u)); }
+    if (all || strstr(env, "sub_15f2cd")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_15F2C, ft_seed(0xD0500027u)); }
     if (all || strstr(env, "sub_14207x")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_14207, ft_seed(0xD0500022u)); }
     if (all || strstr(env, "sub_15d3c")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D3C, ft_seed(0x15D3C001u)); }
     if (all || strstr(env, "sub_15d42")) { matched = true; rc |= ft_selftest_bbox2(FT_SUB_15D42, ft_seed(0x15D42001u)); }
