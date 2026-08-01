@@ -40,6 +40,13 @@ extern "C" void v2_fntest_report(void);  // defined below; fwd for atexit regist
 // (SYNTHETIC_DIFF_ANALYSIS.md). No game/SDL/threads required.
 // io_regs[8]: in/out ax,bx,cx,dx,si,di,bp + [7]=CF on exit.
 extern unsigned char& seg001;   // linked seg001 data blob (op44 text)
+// ARM-fix: extern "C" declarations INSIDE the anonymous namespace get
+// internal linkage there (the classic project trap) — x86 gcc happened to
+// bind them by C name, arm-gcc mangles them as (anonymous namespace)::*
+// and the link fails. Keep every cross-TU variable declared at file scope.
+extern "C" uint16_t v2_fntest_ds_seg_override;
+extern "C" uint8_t* v2_fntest_ds_seg_ptr;
+extern "C" uint16_t v2_fntest_last_es;
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 extern "C" void     v2_fntest_snap_game_ds(uint8_t* out64k);
 extern "C" void*    v2_fntest_orig_fnptr(int id);
@@ -3293,8 +3300,6 @@ int ft_selftest_anim(FtId id, uint32_t seed) {
 // Per-cmd directed grids exercise the branch map read line-by-line from the
 // originals (masked/unmasked, EMPTY range → do-while residuals, flag paths,
 // cache paths); a per-cmd fuzz stream varies args/slots/timers.
-extern "C" uint16_t v2_fntest_ds_seg_override;
-extern "C" uint8_t* v2_fntest_ds_seg_ptr;
 extern "C" uint32_t v2_fntest_game_ds_linear();
 
 int ft_selftest_anim_cmd(const char* uname, uint8_t cmd, uint32_t seed) {
@@ -3608,7 +3613,6 @@ extern "C" void v2_fntest_call_tile(int which, uint8_t* shadow, uint16_t si,
 extern "C" void v2_fntest_call_ch_getter(int ch, uint8_t* shadow, uint16_t pc,
                                          uint16_t testseg, uint16_t* out_val,
                                          uint16_t* out_pc);
-extern "C" uint16_t v2_fntest_es_override;
 
 int ft_selftest_b1b(FtId id, uint32_t seed) {
     FtSynthStats grid, fuzz;
@@ -10618,7 +10622,6 @@ int ft_selftest_12250(uint32_t seed) {
 // sub_10e85: segment para-advance (register-pure): es += (di>>4)+1, di=0.
 // Oracle's ES-out arrives via the v2_fntest_last_es probe; v2 side is the
 // formula mirror v2_para_advance_10e85 (v2 loaders address linearly).
-extern "C" uint16_t v2_fntest_last_es;
 extern "C" uint16_t v2_para_advance_10e85(uint16_t es_in, uint16_t di_in);
 
 int ft_selftest_10e85(uint32_t seed) {
