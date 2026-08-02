@@ -55,3 +55,10 @@ pointing at a single suspect area.
   `./vikings --debug --record-input=...` directly (record.sh keeps it simple
   without --debug).
 - `.inp` files are tiny text (action names + frame numbers) — commit them.
+
+## synth_inventory (6216 frames, user-recorded 2026-08-05)
+M5 закрытие (VERIFICATION_GAPS_ANALYSIS): mode-0-ветки sub_11cbb с РЕАЛЬНЫМ
+предметом — недостижимо синтетикой (стартовый инвентарь пуст). Запись:
+level 1, подбор предмета, TAB-инвентарь: стрелки по слотам (вкл. «в упор»),
+Action на предмете и пустом слоте, Exit, повторный вход. 55 транзишн-кадров.
+Первый прогон: PSNAP 0 диффов по всем фазам, CALLPAR 0, SFX 0 unmatched.
