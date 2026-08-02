@@ -68,6 +68,7 @@
   F1(scroll_delta_x,     DS_SCROLL_DELTA_X)     \
   F1(scroll_delta_y,     DS_SCROLL_DELTA_Y)     \
   F1(rng_timer,          DS_RNG_TIMER)          \
+  F1(rng_seed_lo,        DS_RNG_SEED)           \
   F1(obj_count,          DS_OBJ_COUNT)          \
   F1(spawn_pool_sel,     DS_SPAWN_POOL_SEL)     \
   F1(prio_count,         DS_PRIO_COUNT)         \
@@ -226,6 +227,10 @@
   F1(input_joy,          DS_INPUT_JOY)          \
   F1(input_accum,        DS_INPUT_ACCUM)        \
   F1(counter_8734,       DS_COUNTER_8734)       \
+  FN(cmd_handler_tbl,    DS_CMD_HANDLER_TBL, 27) \
+  FN(vm_subdispatch_tbl, DS_VM_DISPATCH_TBL, 10) \
+  FN(vm_setter_tbl,      DS_VM_SETTER_TBL, 5)   \
+  FN(vm_optable,         DS_VM_OPTABLE, 216)    \
   F1(sound_field_8ea,    DS_SOUND_FIELD_8EA)    \
   F1(music_id,           DS_MUSIC_ID)           \
   F1(sound_init_92a,     DS_SOUND_INIT_92A)     \
@@ -377,7 +382,9 @@
   B1(key_f10,          DS_KEY_F10)             \
   B1(sprite_force,     DS_SPRITE_FORCE)        \
   B1(glyph_dirty,      DS_GLYPH_DIRTY)         \
-  BN(hud_sel_gfx,      DS_HUD_SEL_GFX, 256)
+  BN(hud_sel_gfx,      DS_HUD_SEL_GFX, 256)    \
+  BN(hud_item_gfx,     DS_HUD_ITEM_GFX, 4864)  \
+  BN(chunk_hdr,        DS_CHUNK_HDR, 8)
 
 // ---------------------------------------------------------------------------
 // The typed state. Serializer contract: v2_gs_deserialize fills every field
@@ -406,3 +413,40 @@ void v2_gs_serialize(const V2GameState* gs, uint8_t* ds_out);
 // Returns diff count (0 = byte-identical roundtrip); logs first diffs.
 int  v2_gs_roundtrip_check(const uint8_t* ds, const char* tag);
 }
+
+// ---------------------------------------------------------------------------
+// V2StateView — typed accessors over the LIVE flat DS image. Same field
+// names as V2GameState (generated from the same X-macro lists), but the
+// carrier stays the byte image: view.viewport_x() reads/writes the exact DS
+// bytes every other subsystem sees, so it can be adopted call-site by
+// call-site with zero behavior change. Once all v2 code goes through the
+// view, swapping the carrier to V2GameState (+ serializer at the verify
+// barriers) is a single-point change — that is the phase-D endgame.
+//
+// Word access uses the project-wide unaligned *(uint16_t*) idiom (same as
+// every existing v2 site); array fields return a pointer to the first
+// element's DS bytes (words: unaligned-safe on x86 like the rest of v2).
+// ---------------------------------------------------------------------------
+struct V2StateView {
+    uint8_t* ds;
+    explicit V2StateView(uint8_t* ds_) : ds(ds_) {}
+
+#define V2_GS_A1(name, off) \
+    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
+    void     name(uint16_t v)          { *(uint16_t*)(ds + (off)) = v; }
+#define V2_GS_AN(name, off, n) \
+    uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); } \
+    void     name(uint32_t i, uint16_t v) { *(uint16_t*)(ds + (off) + 2u * i) = v; }
+    V2_GS_FIELDS_W(V2_GS_A1, V2_GS_AN)
+#undef V2_GS_A1
+#undef V2_GS_AN
+#define V2_GS_AB1(name, off) \
+    uint8_t  name##_b() const          { return ds[(off)]; } \
+    void     name##_b(uint8_t v)       { ds[(off)] = v; }
+#define V2_GS_ABN(name, off, n) \
+    uint8_t* name##_bytes()            { return ds + (off); } \
+    const uint8_t* name##_bytes() const { return ds + (off); }
+    V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
+#undef V2_GS_AB1
+#undef V2_GS_ABN
+};
