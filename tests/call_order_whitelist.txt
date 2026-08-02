@@ -1,0 +1,52 @@
+# call_order_audit.py whitelist — разобранные и ЛЕГАЛЬНЫЕ расхождения пар.
+# Формат: <orig_sub> <v2_name> <класс> <причина>
+# Классы:
+#   PORT        — orig-вызовы за SDL/AIL/DOS-заменами (до #61 и порт-модели)
+#   WRAPPER     — orig-обёртка инлайнена в v2, зовётся ядро (пары в причине)
+#   OWN-TAIL    — собственный loc_-хвост orig, экстрагированный в v2-функцию
+#   RESTRUCTURED— v2-архитектурная перестройка с компенсирующим verify-каналом
+#   BP-PARAM    — 1cd7b/1cd7d-класс: вход-стаб заменён параметром
+# Каждая строка обязана иметь причину; NEW-диффы этих пар всё равно печатаются
+# (whitelist прячет только точное текущее расхождение — заморозка снимка).
+sub_108c8 v2_audio_tick_108c8 PORT AIL-стабы 1c79f/1c769/176bd — до #61
+sub_17512 v2_snd_xmi_setup_17512 PORT AIL tail 10dba — до #61
+sub_17561 v2_ail_init_17561 PORT AIL-цепь целиком — до #61 (см. задачу)
+sub_10d9f v2_alloc_recorded_10d9f PORT 10dba-паника за alloc-моделью
+sub_1d3b2 v2_draw_type4_1D3B2 BP-PARAM 1cd7b→1cd7d bp=si параметром (волна 1DD9C)
+sub_11792 v2_hud_update_11792 OWN-TAIL loc_1205b-хвост = v2_hud_sel_sync_1205b
+sub_158aa v2_vm_probe_left_158aa WRAPPER 159c6(X0−1-обёртка)→ядро 159f6; юнит 85
+sub_158b9 v2_vm_probe_right_158b9 WRAPPER 159d3(X1-обёртка)→ядро 159f6; юнит 86
+sub_10350 v2_spec_ors_mirror_10350 RESTRUCTURED spec-Y/N flow: 1450b/14590 через pw_did_save-флаг; M1-волна-2 добавит счётчики
+sub_1041c v2_pw_gate_1041c RESTRUCTURED тот же spec-flow класс
+sub_10555 v2_quit_blink_10555 RESTRUCTURED blink-рендер полнокадровым каналом
+sub_10555 v2_pw_blink_10555 RESTRUCTURED pw-экран текст-каналом 12515/124c5
+sub_1086f v2_cmd_loop_1086f RESTRUCTURED пер-cmd лок-степ по сигналам (архитектура порта, PSNAP-совместимая)
+sub_112ae v2_load_viking_cfg_112ae WRAPPER орig-рекурсия→итерация; 10982 = v2_read_chunk (замаплен)
+sub_11446 v2_game_mode_init_11446 COND-MERGE 3×11569-ветки → один вызов с выбором таблицы (динамика идентична)
+sub_116ae v2_load_anims_116ae PORT 10e85-para-advance не нужен (линейная адресация, класс D)
+sub_116e3 v2_level_desc_init_116e3 COND-MERGE 12ce4: orig общий JMP-сайт, v2 по-веточно (динамика та же)
+sub_11b0b v2_portrait_sync_11b0b LOOP-ROLLED 3×11aa4 развёрнуто → петля
+sub_120ff v2_hud_health_120ff LOOP-ROLLED 3×117d0 → петля
+sub_1250b v2_vm_ch_dispatch_1250b RESTRUCTURED 15473-getter → V2VM-канал-модель (vmops 21975)
+sub_125a3 v2_vm_ch_escape_125a3 RESTRUCTURED тот же канал-класс
+sub_125fa v2_vm_text_xy_125fa RESTRUCTURED тот же канал-класс
+sub_1265b v2_text_print_1265b PAIR-RENDER 124c5 = v2-рендер-двойник текст-канала
+sub_12709 v2_cmd_text_12709 PAIR-RENDER тот же класс
+sub_128a9 v2_dos_file_close_128a9 PORT 16807 за file-op моделью
+sub_12948 v2_dos_init_12948 PORT 16528 INT9-install модель
+sub_12989 v2_open_data_dat_12989 PORT fopen/fread-модель всей цепи
+sub_1303a v2_vm_anim_interp_1303a WRAPPER 13084 = SFX-обёртка → fx::(177bb); СВЕРИТЬ тело 13084 при 1303a-волне
+sub_13a0e v2_spawn_visible_13a0e PARSER orig 13a94 вложен в 139ef (orig-транзитив не разворачивается)
+sub_1406d v2_anim_queue_1406d RESTRUCTURED 8×1689e-блиты через shadow-VGA-каналы (A2-verify компенсирует)
+sub_14207 v2_vm_pass_14207 RESTRUCTURED 1424c-диспатч → v2_vm_execute_object (vmops)
+sub_155d6 v2_vm_collision_check_155d6 INLINE-VERIFIED 16235/16243 инлайн (волна 2a, оракул 21975)
+sub_156c0 v2_vm_collision_check_156c0 INLINE-VERIFIED тот же класс
+sub_159df v2_vm_tile_search_right_159df INLINE-VERIFIED 14199-циклы → ядро 159f6 (юнит 87)
+sub_15a57 v2_vm_tile_search_up_15a57 WRAPPER 14199=(>>4)-обёртка над 141ba
+sub_15afd v2_vm_tile_coll_down_15afd WRAPPER тот же 14199→141ba класс (юнит 75566)
+sub_163ac v2_vm_platform_check_163ac WRAPPER тот же класс + COND-MERGE 4 сайта→1
+sub_15c37 v2_vm_xvel_obj_search_15c37 BP-PARAM 15cef/15cf5-выходы → out_dir параметр (юнит 75563)
+sub_1625d v2_ground_snap_1625d INLINE-VERIFIED лямбды tile_type/slope = 14199/16390; TODO-C: слить с экстракциями
+sub_165aa v2_page_rotate_165aa PARSER 1df6a-вызов лежит ЗА финальным RETN (чужой вход 0x6656)
+sub_16661 v2_scroll_tracker_16661 OWN-TAIL 16694/166bc = собственные loc_-хвосты, экстрагированные в v2
+sub_11cbb v2_pause_items_11cbb LAMBDA стрелки 2-4: erase_old/arrow_commit-лямбды невидимы статически

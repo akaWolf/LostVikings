@@ -8725,11 +8725,27 @@ static const char* v2_cc_names[CC_COUNT] = {
     "10130", "16775", "1183d", "118ad", "120d1", "11f47", "11f93", "121b9",
     "121f6", "1de05", "1dd9c", "1c8f1", "1cd7d", "165aa", "16661", "108c8",
 };
+static FILE* v2_cc_trace_f() {          // V2_CC_TRACE=<id>: per-hit stream
+    static FILE* f = nullptr; static int want = -2;
+    if (want == -2) {
+        const char* e = getenv("V2_CC_TRACE");
+        want = e ? atoi(e) : -1;
+        if (want >= 0) f = fopen("/tmp/v2_cc_trace.log", "w");
+    }
+    return f;
+}
+static int v2_cc_trace_id() { const char* e = getenv("V2_CC_TRACE"); return e ? atoi(e) : -1; }
 extern "C" void v2_cc_orig_hit(int id) {
-    if (id >= 0 && id < CC_COUNT) v2_cc_orig[id]++;
+    if (id < 0 || id >= CC_COUNT) return;
+    v2_cc_orig[id]++;
+    if (v2_cc_trace_f() && id == v2_cc_trace_id())
+        fprintf(v2_cc_trace_f(), "O %u f%d\n", v2_cc_orig[id], v2_dbg_pre_vm_iter);
 }
 extern "C" void v2_cc_v2_hit(int id) {
-    if (id >= 0 && id < CC_COUNT) v2_cc_v2[id]++;
+    if (id < 0 || id >= CC_COUNT) return;
+    v2_cc_v2[id]++;
+    if (v2_cc_trace_f() && id == v2_cc_trace_id())
+        fprintf(v2_cc_trace_f(), "V %u f%d\n", v2_cc_v2[id], v2_dbg_pre_vm_iter);
 }
 
 void v2_record_orig_phase_snap(int phase_idx) {
@@ -8857,6 +8873,29 @@ void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name) {
     }
     if (!v2_psnap_valid[prev_phase_idx]) return;
     if (!v2_vm_shadow_ds) return;
+    // Stale-snap gate (№52 part 3): a blocking loop can run BETWEEN the
+    // snapped orig point and this compare (e.g. FRAME_BEGIN → 10138/11BA5
+    // loops → PRE_VM of the SAME frame). The loop's per-iter mirrors
+    // legally rewrite DS (page flips → 92F7/F9/FB), so comparing against a
+    // snap that is >2 ticks old only measures the loop length, not parity
+    // (observed snap_age=1147 phantom). The loop itself is verified by the
+    // per-iter lockstep + the next FRESH snap pairs. Visible, never silent.
+    {
+        int age = v2_dbg_pre_vm_iter - v2_psnap_frame[prev_phase_idx];
+        if (age > 2) {
+            extern uint64_t v2_psnap_stale_count;
+            v2_psnap_stale_count++;
+            static int stale_prints = 0;
+            if (stale_prints < 4) {
+                stale_prints++;
+                fprintf(stderr, "V2-PSNAP-STALE[%llu]: prev=%s at %s age=%d — "
+                        "blocking loop ran since the snap; compare skipped\n",
+                        (unsigned long long)v2_psnap_stale_count,
+                        v2_psnap_names[prev_phase_idx], my_phase_name, age);
+            }
+            return;
+        }
+    }
     v2_psnap_compare_count[prev_phase_idx]++;
     // M1 call-parity: v2's cumulative call vector must equal the orig vector
     // captured with this snap. A skew names the exact procedure whose call
@@ -8945,8 +8984,9 @@ void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name) {
         if (snap_v != shadow_v) {
             _found[prev_phase_idx][wi] = true;
             if (first) {
-                fprintf(stderr, "V2-PSNAP-DIVERGE[after %s, at %s entry, f=%d]:\n",
-                    v2_psnap_names[prev_phase_idx], my_phase_name, v2_psnap_frame[prev_phase_idx]);
+                fprintf(stderr, "V2-PSNAP-DIVERGE[after %s, at %s entry, f=%d snap_age=%d]:\n",
+                    v2_psnap_names[prev_phase_idx], my_phase_name, v2_psnap_frame[prev_phase_idx],
+                    v2_dbg_pre_vm_iter - v2_psnap_frame[prev_phase_idx]);
                 first = false;
             }
             fprintf(stderr, "  addr=0x%04X orig_snap=%04X shadow=%04X (diff=%+d)\n",
@@ -8964,6 +9004,7 @@ void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name) {
 }
 
 uint64_t v2_psnap_async86_count = 0;
+uint64_t v2_psnap_stale_count = 0;   // №52 part 3: stale-snap compare skips (visible)
 void v2_dump_psnap_summary() {
     fprintf(stderr, "\n========== PSNAP DIVERGENCE SUMMARY ==========\n");
     fprintf(stderr, "%-22s %10s %10s %8s\n", "phase", "compares", "diverges", "rate%");
@@ -20898,8 +20939,18 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
 // reached while blocked). Called by BOTH the default-mode phase handlers and the
 // V2_ONLY inline spins → record and replay step through menus with identical
 // per-iteration counts.
+extern "C" int v2_replay_drain_to_state(void);  // №52: drain in blocking loops
 static inline void v2_blocking_loop_tick() {
     v2_dbg_pre_vm_iter++;
+    // №52: replay events must keep flowing INSIDE blocking loops too. #59
+    // moved the drain onto sdl_spec_snapshot_take (FRAME_BEGIN) — but a
+    // blocking loop never reaches FRAME_BEGIN, so due events piled up
+    // undrained, input_keys stayed frozen and BOTH sides (orig per-iter
+    // 12352 reads the same input_keys global) waited until max-frames.
+    // Every scenario whose replay tail crossed such a loop "passed" in
+    // silence (no compares ran past the freeze). Same game thread as the
+    // snapshot drain — the #59 race-free invariant holds.
+    v2_replay_drain_to_state();
 #ifdef HEADLESS
     extern int headless_check_exit(void);
     headless_check_exit();

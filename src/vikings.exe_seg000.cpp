@@ -5703,6 +5703,12 @@ locret_11ba4:
 	// 4656
 cs=0x1a2;eip=0x001ba4; 	J(RETN(0));	// 3583 retn ;~ 01A2:1BA4
 sub_11ba5:
+ { static int _g11ba5 = 0;
+   if (getenv("V2_11BA5_GATE") && _g11ba5 < 40) {
+     uint16_t _e = *(uint16_t*)(raddr(ds,0x3B8));
+     uint8_t  _f = *(uint8_t*)(raddr(ds,0x25CF));
+     if (_e) { _g11ba5++;
+       fprintf(stderr, "GATE-11BA5: 2AAAF=%02X 3B8=%04X (need flag&1 && 3B8&0x2000)\n", _f, _e); } } }
 	// 3590
 cs=0x1a2;eip=0x001ba5; 	T(TEST(byte_2aaaf, 1));	// 3591 test    byte_2AAAF, 1 ;~ 01A2:1BA5
 ret_1a2_1baa:

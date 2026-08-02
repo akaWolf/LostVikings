@@ -146,6 +146,12 @@ int v2_replay_drain_impl(void) {
     while (dequeue_due_replay(&e)) {
         uint16_t key_val = 0, spec_off = 0;
         v2_keymap_lookup_sdl(e.key.keysym.sym, &key_val, &spec_off);
+        if (getenv("V2_DRAIN_LOG")) {
+            fprintf(stderr, "DRAIN[f%d]: %s sym=%d key=%04X spec=%04X ik=%04X\n",
+                    v2_dbg_pre_vm_iter, e.type == SDL_KEYDOWN ? "KD" : "KU",
+                    (int)e.key.keysym.sym, key_val, spec_off,
+                    (uint16_t)input_keys);
+        }
         if (e.type == SDL_KEYDOWN) {
             // #62: replays must feed the INT9 letter channel too — the
             // password screen consumes [28C], not only key bits.

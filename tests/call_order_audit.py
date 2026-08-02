@@ -39,6 +39,17 @@ def load(p):
 LOC_MIRRORED = {'loc_174e9': 'sub_174e9', 'loc_174bf': 'sub_174bf',
                 'loc_17496': 'sub_17496', 'loc_1746c': 'sub_1746c'}
 
+# v2-зеркала БЕЗ hex-суффикса (исторические имена) → их orig sub_.
+# Дополняет docs2/ref/V2_FUNCTION_NAMES.md; без этого их вызовы невидимы
+# (транзитив раскрывает внутренности вместо парного orig-CALL).
+NONHEX_MIRRORS = {
+    'v2_load_template':   'sub_111b1',
+    'v2_load_level_data': 'sub_11204',
+    'v2_music_dispatch':  'sub_17749',
+    'v2_read_chunk':      'sub_10982',
+    'v2_do_render':       None,   # чисто v2-рендер, не зеркало
+}
+
 # ---- 1. orig: sub_X → последовательность CALL/CALLF-таргетов -------------
 def parse_orig():
     bodies = {}
@@ -91,6 +102,10 @@ def v2_raw_bodies():
             calls = []
             for ln in src[i+1:end]:
                 code = ln.split('//')[0]
+                # строки-декларации (static/extern ... ;) — не вызовы
+                cs = code.strip()
+                if (cs.startswith(('static ', 'extern ')) and cs.endswith(';')):
+                    continue
                 if re.search(r'fx::(play_sfx|play_xmidi)', code):
                     calls.append(('sfx', 'sub_177bb'))
                 if re.search(r'fx::stop_all_sfx', code):
@@ -98,6 +113,10 @@ def v2_raw_bodies():
                 for cm in V2ANY.finditer(code):
                     fn = cm.group(1)
                     if fn == name or fn.startswith('v2_fntest_'):
+                        continue
+                    if fn in NONHEX_MIRRORS:
+                        tgt = NONHEX_MIRRORS[fn]
+                        if tgt: calls.append(('hex', tgt))
                         continue
                     hm = re.match(r'v2_[a-z0-9_]+_([0-9a-fA-F]{4,5})$', fn)
                     if hm:
@@ -143,26 +162,45 @@ def diff_pair(orig_seq, v2_seq):
         out.append((tag, orig_seq[a0:a1], v2_seq[b0:b1]))
     return out
 
+def load_whitelist():
+    wl = {}
+    p = os.path.join(ROOT, 'tests/call_order_whitelist.txt')
+    if not os.path.exists(p): return wl
+    for ln in open(p, encoding='utf-8'):
+        ln = ln.strip()
+        if not ln or ln.startswith('#'): continue
+        parts = ln.split(None, 3)
+        if len(parts) >= 3:
+            wl[(parts[0], parts[1])] = (parts[2], parts[3] if len(parts) > 3 else '')
+    return wl
+
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
     orig = parse_orig()
     v2   = v2_bodies()
+    wl   = load_whitelist()
     pairs = sorted(set(orig) & set(v2))
     if only: pairs = [p for p in pairs if p == only]
-    n_diff = 0
+    n_diff = n_wl = 0
     for p in pairs:
         oseq = [c for c in orig[p]]
         if not oseq: continue
         for (v2name, vseq) in v2[p]:
             d = diff_pair(oseq, vseq)
             if not d: continue
+            if (p, v2name) in wl:
+                n_wl += 1
+                if only:
+                    cls, why = wl[(p, v2name)]
+                    print(f"=== {p} ↔ {v2name}  [WL:{cls}] {why}")
+                continue
             n_diff += 1
             print(f"=== {p} ↔ {v2name}")
             print(f"  orig ({len(oseq)}): {' '.join(s.replace('sub_','') for s in oseq)}")
             print(f"  v2   ({len(vseq)}): {' '.join(s.replace('sub_','') for s in vseq)}")
             for tag, a, b in d:
                 print(f"  {tag:8s} orig={[s.replace('sub_','') for s in a]} v2={[s.replace('sub_','') for s in b]}")
-    print(f"\n[call-order-audit] paired={len(pairs)} with-diffs={n_diff}")
+    print(f"\n[call-order-audit] paired={len(pairs)} with-diffs={n_diff} whitelisted={n_wl}")
 
 if __name__ == '__main__':
     main()
