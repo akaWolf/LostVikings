@@ -381,6 +381,43 @@ void v2_set_m2c_base(void* base) {
 //
 // Mirrors sub_1689e (draw_tile) + sub_16dc1 (draw tile row) logic.
 // ============================================================================
+// ============================================================================
+// Effective camera: viewport pixel origin with the screen-shake offset folded
+// in. Mirrors orig set_display_memory_addr (port of sub_16775, seg000:1880-
+// 1912) EXACTLY — all dw (uint16_t) arithmetic:
+//   x_offset = x_disp + x_some; if (x_offset > x_level_size) x_offset = x_disp - x_some;
+//   y_offset = y_disp + y_some; if (y_offset > y_level_size) y_offset = y_disp - y_some;
+// №60: the four former inline copies used int arithmetic with int16_t sign
+// extension — a shake word with bit 15 set (e.g. 0xFFFE) picked the OPPOSITE
+// branch there (signed sum stays below the limit; the orig unsigned sum wraps
+// above it and takes the minus branch). uint16_t end to end, as the port.
+// x_some/y_some (DS_SHAKE_X/Y) come from sub_12d2c; the tile-shift pair is
+// the v2 linear-buffer derivation (orig splits into CRTC start + pixel pan).
+// ============================================================================
+struct V2Camera {
+    uint16_t x_eff, y_eff;          // effective pixel origin (shake folded in)
+    int pix_off_x, pix_off_y;       // sub-tile pixel offset (eff & 7)
+    int tile_shift_x, tile_shift_y; // shake tile shift: eff>>3 - disp>>3
+};
+static V2Camera v2_effective_camera(const uint8_t* ds_base) {
+    uint16_t x_disp = *(const uint16_t*)(ds_base + DS_VIEWPORT_X);
+    uint16_t y_disp = *(const uint16_t*)(ds_base + DS_VIEWPORT_Y);
+    uint16_t x_some = *(const uint16_t*)(ds_base + DS_SHAKE_X);
+    uint16_t y_some = *(const uint16_t*)(ds_base + DS_SHAKE_Y);
+    uint16_t x_lvl  = *(const uint16_t*)(ds_base + DS_SCROLL_LIMIT_X);
+    uint16_t y_lvl  = *(const uint16_t*)(ds_base + DS_SCROLL_LIMIT_Y);
+    V2Camera c;
+    c.x_eff = (uint16_t)(x_disp + x_some);
+    if (c.x_eff > x_lvl) c.x_eff = (uint16_t)(x_disp - x_some);
+    c.y_eff = (uint16_t)(y_disp + y_some);
+    if (c.y_eff > y_lvl) c.y_eff = (uint16_t)(y_disp - y_some);
+    c.pix_off_x = c.x_eff & 7;
+    c.pix_off_y = c.y_eff & 7;
+    c.tile_shift_x = (int)(c.x_eff >> 3) - (int)(x_disp >> 3);
+    c.tile_shift_y = (int)(c.y_eff >> 3) - (int)(y_disp >> 3);
+    return c;
+}
+
 void v2_draw_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -403,7 +440,7 @@ void v2_draw_tiles(uint16_t ds_val) {
               _dt_dbg, ds_val, fs_seg, tgfx_seg,
               ds_base[DS_LEVEL_FLAGS],
               *(uint16_t*)(ds_base + DS_LEVEL),
-              *(uint16_t*)(ds_base + 0x25C9));
+              *(uint16_t*)(ds_base + DS_LEVEL_LOAD));
         }
     }
 
@@ -436,8 +473,8 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
 #endif
 
-    uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);  // row scroll
-    uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);  // column scroll
+    uint16_t scroll_x = *(uint16_t*)(ds_base + DS_SCROLL_ROW);   // tile-row scroll (vp_y>>3)
+    uint16_t scroll_y = *(uint16_t*)(ds_base + DS_SCROLL_COL);   // tile-column scroll (vp_x>>3)
 
     // Sub-tile pixel offset from viewport pixel position.
     // Mirrors orig set_display_memory_addr (sub_16775, seg000.cpp:1105):
@@ -448,20 +485,10 @@ void v2_draw_tiles(uint16_t ds_val) {
     // x_high_bits = x_offset >> 2 (byte position in VGA row, → CRTC start addr)
     // Combined display position = (x_high_bits<<2) + x_low_bits = x_offset (full pixel precision).
     // In v2 linear buffer: total sub-tile pixel offset = x_offset & 7.
-    int16_t vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
-    int16_t vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
-    int16_t x_some = *(int16_t*)(ds_base + 0x39E);
-    int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
-    int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
-    int16_t y_lvl  = *(int16_t*)(ds_base + 0x25A6);
-    int x_eff = (int)vp_px + (int)x_some; if (x_eff > (int)x_lvl) x_eff = (int)vp_px - (int)x_some;
-    int y_eff = (int)vp_py + (int)y_some; if (y_eff > (int)y_lvl) y_eff = (int)vp_py - (int)y_some;
-    int pix_off_x = x_eff & 7;
-    int pix_off_y = y_eff & 7;
-    // Tile-aligned shift due to shake (when shake crosses tile boundary).
-    // Source tile column index is shifted by (x_eff/8 - vp_px/8); same for rows.
-    int extra_tile_x = (x_eff >> 3) - ((int)vp_px >> 3);
-    int extra_tile_y = (y_eff >> 3) - ((int)vp_py >> 3);
+    // №60: dw-exact shake fold (see v2_effective_camera).
+    V2Camera cam = v2_effective_camera(ds_base);
+    int pix_off_x = cam.pix_off_x, pix_off_y = cam.pix_off_y;
+    int extra_tile_x = cam.tile_shift_x, extra_tile_y = cam.tile_shift_y;
 
     for (int row_vis = 0; row_vis < 25; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
@@ -559,21 +586,13 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
 #endif
-    uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
-    uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
+    uint16_t scroll_x = *(uint16_t*)(ds_base + DS_SCROLL_ROW);
+    uint16_t scroll_y = *(uint16_t*)(ds_base + DS_SCROLL_COL);
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
-    int16_t vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
-    int16_t vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
-    int16_t x_some = *(int16_t*)(ds_base + 0x39E);
-    int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
-    int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
-    int16_t y_lvl  = *(int16_t*)(ds_base + 0x25A6);
-    int x_eff = (int)vp_px + (int)x_some; if (x_eff > (int)x_lvl) x_eff = (int)vp_px - (int)x_some;
-    int y_eff = (int)vp_py + (int)y_some; if (y_eff > (int)y_lvl) y_eff = (int)vp_py - (int)y_some;
-    int pix_off_x = x_eff & 7;
-    int pix_off_y = y_eff & 7;
-    int extra_tile_x = (x_eff >> 3) - ((int)vp_px >> 3);
-    int extra_tile_y = (y_eff >> 3) - ((int)vp_py >> 3);
+    // №60: dw-exact shake fold (see v2_effective_camera).
+    V2Camera cam = v2_effective_camera(ds_base);
+    int pix_off_x = cam.pix_off_x, pix_off_y = cam.pix_off_y;
+    int extra_tile_x = cam.tile_shift_x, extra_tile_y = cam.tile_shift_y;
 
     // Convert absolute tilemap coords → visible viewport position (with shake-aware tile shift)
     int visible_row = abs_row - (int)scroll_x - extra_tile_y;
@@ -679,14 +698,12 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
     // Sprites in orig are drawn at world_pos - vp_px in VGA buffer; CRTC then shifts
     // entire display by x_some via start address + pixel pan. v2 single-buffer:
     // bake the shake into the effective camera so all elements stay aligned.
-    int16_t _vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
-    int16_t _vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
-    int16_t _xs   = *(int16_t*)(ds_base + 0x39E);
-    int16_t _ys   = *(int16_t*)(ds_base + 0x3A0);
-    int16_t _xlvl = *(int16_t*)(ds_base + 0x25A4);
-    int16_t _ylvl = *(int16_t*)(ds_base + 0x25A6);
-    int viewport_x = (int)_vp_px + (int)_xs; if (viewport_x > (int)_xlvl) viewport_x = (int)_vp_px - (int)_xs;
-    int viewport_y = (int)_vp_py + (int)_ys; if (viewport_y > (int)_ylvl) viewport_y = (int)_vp_py - (int)_ys;
+    // №60: dw-exact shake fold (see v2_effective_camera). Sprites subtract
+    // the full effective origin (screen = world - camera); int locals keep
+    // the downstream signed screen math unchanged.
+    V2Camera cam = v2_effective_camera(ds_base);
+    int viewport_x = (int)(int16_t)cam.x_eff;
+    int viewport_y = (int)(int16_t)cam.y_eff;
     static int spr_dbg = 0; spr_dbg++;
     for (int obj = 0xFE; obj >= 0; obj -= 2) {
         if (only_obj >= 0 && obj != only_obj) continue;
@@ -738,7 +755,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                 int16_t ax_h = si_h;
                 int16_t si_off = 0;
                 bool visible = true;
-                int16_t vw = (int16_t)*(uint16_t*)(ds_base + 0x9168);
+                int16_t vw = (int16_t)*(uint16_t*)(ds_base + DS_CLIP_LIMIT_X);
                 if (cx < 0) { bp_w += cx; if (bp_w <= 0) visible = false; }
                 else {
                     si_off += cx;
@@ -746,7 +763,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                     else { int16_t ov = cx + bp_w - vw; if (ov > 0) bp_w -= ov; }
                 }
                 if (visible) {
-                    int16_t vh = (int16_t)*(uint16_t*)(ds_base + 0x916A);
+                    int16_t vh = (int16_t)*(uint16_t*)(ds_base + DS_CLIP_LIMIT_Y);
                     if (dxv < 0) { ax_h += dxv; if (ax_h <= 0) visible = false; }
                     else {
                         if (dxv >= vh) visible = false;
@@ -1053,23 +1070,15 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint8_t* gs_base = v2_m2c_base + ((uint32_t)gs_seg << 4);
 #endif
 
-    uint16_t scroll_x = *(uint16_t*)(ds_base + 0x2581);
-    uint16_t scroll_y = *(uint16_t*)(ds_base + 0x257F);
+    uint16_t scroll_x = *(uint16_t*)(ds_base + DS_SCROLL_ROW);
+    uint16_t scroll_y = *(uint16_t*)(ds_base + DS_SCROLL_COL);
 
     // Sub-tile pixel offset (same as v2_draw_tiles).
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
-    int16_t vp_px = *(int16_t*)(ds_base + DS_VIEWPORT_X);
-    int16_t vp_py = *(int16_t*)(ds_base + DS_VIEWPORT_Y);
-    int16_t x_some = *(int16_t*)(ds_base + 0x39E);
-    int16_t y_some = *(int16_t*)(ds_base + 0x3A0);
-    int16_t x_lvl  = *(int16_t*)(ds_base + 0x25A4);
-    int16_t y_lvl  = *(int16_t*)(ds_base + 0x25A6);
-    int x_eff = (int)vp_px + (int)x_some; if (x_eff > (int)x_lvl) x_eff = (int)vp_px - (int)x_some;
-    int y_eff = (int)vp_py + (int)y_some; if (y_eff > (int)y_lvl) y_eff = (int)vp_py - (int)y_some;
-    int pix_off_x = x_eff & 7;
-    int pix_off_y = y_eff & 7;
-    int extra_tile_x = (x_eff >> 3) - ((int)vp_px >> 3);
-    int extra_tile_y = (y_eff >> 3) - ((int)vp_py >> 3);
+    // №60: dw-exact shake fold (see v2_effective_camera).
+    V2Camera cam = v2_effective_camera(ds_base);
+    int pix_off_x = cam.pix_off_x, pix_off_y = cam.pix_off_y;
+    int extra_tile_x = cam.tile_shift_x, extra_tile_y = cam.tile_shift_y;
 
     for (int row_vis = 0; row_vis < 25; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
@@ -1362,7 +1371,7 @@ void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
         item_id = 0x17;
 
     // Item graphics: 256 bytes at ds:0x507D + item_id * 256
-    uint8_t* item_data = ds_base + 0x507D + (item_id << 8);
+    uint8_t* item_data = ds_base + DS_HUD_ITEM_GFX + (item_id << 8);
 
     // VGA offset from lookup table (uint16_t cast for x86 16-bit wrapping)
     uint16_t vga_off = *(uint16_t*)(ds_base + (uint16_t)(slot_di - 0x7A9E));
@@ -1403,7 +1412,7 @@ void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
     if (!v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    uint8_t* sel_data = ds_base + 0x637D;
+    uint8_t* sel_data = ds_base + DS_HUD_SEL_GFX;
 
     // VGA offset from lookup table (di already shifted by caller, uint16_t for x86 wrapping)
     uint16_t vga_base = *(uint16_t*)(ds_base + (uint16_t)(slot_di - 0x7A9E));

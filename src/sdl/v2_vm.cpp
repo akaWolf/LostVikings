@@ -3140,7 +3140,7 @@ static void v2_tile_row_16dc1(uint8_t* s, uint16_t bx_fs, uint16_t /*unused*/) {
     // loc_16DC7: MOV si, fs:[bx]; CALL sub_1689e; ADD bx,2; ADD di,2; LOOP.
     // di on entry = the freshly computed ds:930B (DRAW page row base + column) —
     // the caller (16DED mirror) stores it right before this call.
-    uint16_t di_vga = *(uint16_t*)(s + 0x930B);
+    uint16_t di_vga = *(uint16_t*)(s + DS_PAGE_VGA_2);
     if (getenv("V2_VGAPARITY")) {
         static int _t1 = 0;
         static int _tcall = 0; _tcall++;
@@ -3179,9 +3179,9 @@ static void v2_page_copy_col_171dc(uint8_t* s) {
     // shadow-VGA: replay both copies into the shadow VGA (4 planes, latch semantics).
     {
         extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
-        uint16_t src = *(uint16_t*)(s + 0x930B);
-        v2_vga_copy_span(*(uint16_t*)(s + 0x930D), src, 0x2B0);
-        v2_vga_copy_span(*(uint16_t*)(s + 0x930F), src, 0x2B0);
+        uint16_t src = *(uint16_t*)(s + DS_PAGE_VGA_2);
+        v2_vga_copy_span(*(uint16_t*)(s + DS_PAGE_VGA_3), src, 0x2B0);
+        v2_vga_copy_span(*(uint16_t*)(s + DS_PAGE_VGA_1), src, 0x2B0);
     }
 }
 
@@ -3197,7 +3197,7 @@ static void v2_tile_col_16dd9(uint8_t* s, uint16_t bx_fs) {
     // ADD bx, ds:8F6C (map row stride); ADD di, 0x2B0; LOOP.
     // di on entry = ds:9315 (the freshly computed DRAW-page column base — the
     // band mirror stores it in DS_PAGE_COPY_SRC1 right before this call).
-    uint16_t di_vga = *(uint16_t*)(s + 0x9315);
+    uint16_t di_vga = *(uint16_t*)(s + DS_PAGE_COPY_SRC1);
     uint16_t stride = *(uint16_t*)(s + DS_FS_PAGE_STRIDE);
     for (int r = 0; r < 0x19; r++) {
         uint16_t tw = (bx_fs < V2_FS_SHADOW_SIZE - 1)
@@ -3235,8 +3235,8 @@ static void v2_page_copy_row_1712b(uint8_t* s) {
     // The real per-row copy order also matters for overlapping phases: the
     // hook copies row i fully before row i+1 — our span copy per row matches.
     extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
-    uint16_t si = *(uint16_t*)(s + 0x9315);
-    uint16_t di = *(uint16_t*)(s + 0x9317);
+    uint16_t si = *(uint16_t*)(s + DS_PAGE_COPY_SRC1);
+    uint16_t di = *(uint16_t*)(s + DS_PAGE_COPY_DST1);
     uint16_t bx = 0;
     uint16_t cl = s[0x9311];
     for (uint16_t r = 0; r <= cl; r++) {          // port-quirk: <=
@@ -3246,15 +3246,15 @@ static void v2_page_copy_row_1712b(uint8_t* s) {
     cl = s[0x9312];
     if (cl) {
         si = (uint16_t)(si + bx);
-        di = *(uint16_t*)(s + 0x9319);
+        di = *(uint16_t*)(s + DS_PAGE_COPY_SRC2);
         bx = 0;
         for (uint16_t r = 0; r <= cl; r++) {      // port-quirk: <=
             v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
             if (r < cl) bx += 0x56;
         }
     }
-    si = *(uint16_t*)(s + 0x9315);
-    di = *(uint16_t*)(s + 0x931B);
+    si = *(uint16_t*)(s + DS_PAGE_COPY_SRC1);
+    di = *(uint16_t*)(s + DS_PAGE_COPY_DST2);
     bx = 0;
     cl = s[0x9313];
     for (uint16_t r = 0; r <= cl; r++) {          // port-quirk: <=
@@ -3264,7 +3264,7 @@ static void v2_page_copy_row_1712b(uint8_t* s) {
     cl = s[0x9314];
     if (cl) {
         si = (uint16_t)(si + bx);
-        di = *(uint16_t*)(s + 0x931D);
+        di = *(uint16_t*)(s + DS_PAGE_COPY_SRC3);
         bx = 0;
         for (uint16_t r = 0; r <= cl; r++) {      // port-quirk: <=
             v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
@@ -3362,8 +3362,8 @@ static void v2_glyph_draw_1E16D_doc(uint8_t* /*s*/, uint16_t /*si_glyph*/, uint1
 static void v2_vga_masked_tile(uint8_t* s, uint16_t tile_word, uint16_t di_vga) {
     extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
     extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
-    uint16_t mseg = *(uint16_t*)(s + 0x2E61);
-    uint16_t tseg = *(uint16_t*)(s + 0x2E5F);
+    uint16_t mseg = *(uint16_t*)(s + DS_SEG_GS);
+    uint16_t tseg = *(uint16_t*)(s + DS_SEG_TILEGFX);
     if (!mseg || !tseg) return;
     uint8_t* mb = v2_resolve_segment(mseg, s);
     uint8_t* tb = v2_resolve_segment(tseg, s);
@@ -18266,17 +18266,17 @@ static void v2_page_flip_16775(uint8_t* s) {
     // phase point (seg000 eips 0x6775..: y/x eff clamp, flat page LUT, +8).
     {
         extern uint32_t v2_vga_crtc; extern uint8_t v2_vga_pan;
-        uint16_t y_disp = *(uint16_t*)(s + 0x46), y_some = *(uint16_t*)(s + 0x3A0);
-        uint16_t y_lvl  = *(uint16_t*)(s + 0x25A6);
-        uint16_t x_disp = *(uint16_t*)(s + 0x44), x_some = *(uint16_t*)(s + 0x39E);
-        uint16_t x_lvl  = *(uint16_t*)(s + 0x25A4);
-        uint16_t page   = *(uint16_t*)(s + 0x92F9);
+        uint16_t y_disp = *(uint16_t*)(s + DS_VIEWPORT_Y), y_some = *(uint16_t*)(s + DS_SHAKE_Y);
+        uint16_t y_lvl  = *(uint16_t*)(s + DS_SCROLL_LIMIT_Y);
+        uint16_t x_disp = *(uint16_t*)(s + DS_VIEWPORT_X), x_some = *(uint16_t*)(s + DS_SHAKE_X);
+        uint16_t x_lvl  = *(uint16_t*)(s + DS_SCROLL_LIMIT_X);
+        uint16_t page   = *(uint16_t*)(s + DS_PAGE_SHOWN);
         uint16_t y_off = (uint16_t)(y_disp + y_some);
         if (y_off > y_lvl) y_off = (uint16_t)(y_disp - y_some);
         uint16_t x_off = (uint16_t)(x_disp + x_some);
         if (x_off > x_lvl) x_off = (uint16_t)(x_disp - x_some);
-        uint16_t y_hi = *(uint16_t*)(s + (uint16_t)(0x89F8 + page + ((y_off >> 3) * 2)));
-        uint16_t y_lo = *(uint16_t*)(s + (uint16_t)(0x8E58 + (y_off & 7) * 2));
+        uint16_t y_hi = *(uint16_t*)(s + (uint16_t)(LUT_PAGE_ROW + page + ((y_off >> 3) * 2)));
+        uint16_t y_lo = *(uint16_t*)(s + (uint16_t)(LUT_SUBROW + (y_off & 7) * 2));
         v2_vga_crtc = (uint16_t)(y_lo + y_hi + (x_off >> 2) + 8);
         v2_vga_pan  = (uint8_t)(x_off & 3);
     }

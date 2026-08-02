@@ -179,6 +179,8 @@ constexpr uint16_t DS_HUD_SEL        = 0x0414; // word_288F4[3]: selector value 
 constexpr uint16_t DS_HUD_SEL_PREV   = 0x041A; // tracked previous selector (0x41A/41C/41E)
 constexpr uint16_t DS_HUD_ITEMS      = 0x03E4; // item table current (12 words, sub_12199 source)
 constexpr uint16_t DS_HUD_ITEMS_PREV = 0x03FC; // item table tracked copy
+constexpr uint16_t DS_HUD_ITEM_GFX   = 0x507D; // HUD item graphics: item_id*256, 4 planes x 16 rows x 4 bytes (sub_1183d source)
+constexpr uint16_t DS_HUD_SEL_GFX    = 0x637D; // HUD selector cursor graphics: 256 bytes (sub_118ad source)
 constexpr uint16_t DS_HUD_HEALTH     = 0x0435; // health state per viking (0x435/437/439)
 constexpr uint16_t DS_HUD_HEALTH_PREV= 0x043B; // tracked previous health (0x43B/43D/43F)
 constexpr uint16_t DS_PORTRAIT_PREV  = 0x0423; // word_28903[3]: tracked portrait idx (11B0B prev)
@@ -222,6 +224,7 @@ constexpr uint16_t DS_PAL_OUT        = 0x8202; // = DS_PAL_SRC + 0x300: shaded/o
 // Per-page tile-row VGA offset LUT
 // ---------------------------------------------------------------------------
 constexpr uint16_t LUT_PAGE_ROW      = 0x89F8; // 3 pages x 0x1A rows x 2B: VGA offset of tile row y on page p (idx: +pgs[p]+(y>>3)*2); [0] = wrap target in page-copy
+constexpr uint16_t LUT_SUBROW        = 0x8E58; // 8 words: VGA byte offset of sub-tile row (y&7)*86 (set_display_memory_addr y_low)
 
 // ---------------------------------------------------------------------------
 // Held-special-key state bytes (INT9 cluster 0x916C+; full map = v2_keymap.cpp)
