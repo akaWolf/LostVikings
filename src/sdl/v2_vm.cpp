@@ -35,6 +35,7 @@
 
 // Access to emulated memory
 extern "C" int  v2_ail_native_on();
+extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_gamestate.cpp (phase D)
 extern uint8_t* v2_m2c_base;
 
 // SDL spec-key state (defined in sdl/render.cpp). Game logic ORs this in
@@ -18546,6 +18547,27 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         }
     }
     v2_audit_reset_fire_counters();
+    // Phase D step 1: GameState serializer roundtrip on the live shadow DS
+    // (V2_GS_ROUNDTRIP=1). Every frame: DS -> typed struct -> DS' must be
+    // byte-identical — proves field encodings + coverage on real data.
+    {
+        static int gs_rt = -1;
+        if (gs_rt < 0) { const char* e = getenv("V2_GS_ROUNDTRIP"); gs_rt = (e && e[0]=='1') ? 1 : 0; }
+        if (gs_rt && v2_vm_shadow_ds) {
+            char tag[32]; snprintf(tag, sizeof(tag), "f%d", v2_dbg_pre_vm_iter);
+            int gs_diffs = v2_gs_roundtrip_check(v2_vm_shadow_ds, tag);
+#ifdef HEADLESS
+            // canon: a serializer identity break is a divergence, not a log line
+            if (gs_diffs > 0) {
+                extern void headless_dump_divergence(const char*, int, const char*);
+                char buf[64]; snprintf(buf, sizeof(buf), "%d roundtrip byte diffs", gs_diffs);
+                headless_dump_divergence("gs-roundtrip", v2_dbg_pre_vm_iter, buf);
+            }
+#else
+            (void)gs_diffs;
+#endif
+        }
+    }
     // #61 native AIL: pump the driver sequencer (fn67 ticks due by the audio
     // clock). Game thread only — the interpreter shares the m2c-adjacent
     // shadow state and is not thread-safe.
