@@ -427,6 +427,35 @@ int  v2_gs_roundtrip_check(const uint8_t* ds, const char* tag);
 // every existing v2 site); array fields return a pointer to the first
 // element's DS bytes (words: unaligned-safe on x86 like the rest of v2).
 // ---------------------------------------------------------------------------
+// Alias accessors — phase-A layout names that overlap covering fields
+// (documented in the phase-D memory). They are VIEW-only channels into the
+// same bytes; the serializer/coverage lists do not include them.
+#define V2_GS_ALIASES(A1) \
+  A1(scroll_disp_x,      DS_SCROLL_DISP_X)      \
+  A1(scroll_disp_y,      DS_SCROLL_DISP_Y)      \
+  A1(scroll_disp_x2,     DS_SCROLL_DISP_X2)     \
+  A1(scroll_disp_y2,     DS_SCROLL_DISP_Y2)     \
+  A1(portrait_snd_2,     DS_PORTRAIT_SND_2)     \
+  A1(portrait_snd_3,     DS_PORTRAIT_SND_3)     \
+  A1(vk_state_1,         DS_VK_STATE_1)         \
+  A1(vk_state_2,         DS_VK_STATE_2)         \
+  A1(vk_state_3,         DS_VK_STATE_3)         \
+  A1(vk_state_4,         DS_VK_STATE_4)         \
+  A1(vk_portrait_snd_2,  DS_VK_PORTRAIT_SND_2)  \
+  A1(vk_portrait_snd_3,  DS_VK_PORTRAIT_SND_3)  \
+  A1(hud_scratch_42b,    DS_HUD_SCRATCH_42B)    \
+  A1(hud_scratch_42d,    DS_HUD_SCRATCH_42D)    \
+  A1(hud_sel_2,          DS_HUD_SEL_2)          \
+  A1(hud_sel_3,          DS_HUD_SEL_3)          \
+  A1(hud_track_1,        DS_HUD_TRACK_1)        \
+  A1(hud_track_2,        DS_HUD_TRACK_2)        \
+  A1(vk_health_2,        DS_VK_HEALTH_2)        \
+  A1(vk_health_3,        DS_VK_HEALTH_3)        \
+  A1(render_117d,        DS_RENDER_117D)        \
+  A1(render_117f,        DS_RENDER_117F)        \
+  A1(snd_track_w,        DS_SND_TRACK)          \
+  A1(dac_r_save_w,       DS_DAC_R_SAVE)
+
 struct V2StateView {
     uint8_t* ds;
     explicit V2StateView(uint8_t* ds_) : ds(ds_) {}
@@ -450,6 +479,12 @@ struct V2StateView {
     V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
 #undef V2_GS_AB1
 #undef V2_GS_ABN
+#define V2_GS_A1(name, off) \
+    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
+    void     name(uint16_t v)          { *(uint16_t*)(ds + (off)) = v; } \
+    uint16_t& name##_ref()             { return *(uint16_t*)(ds + (off)); }
+    V2_GS_ALIASES(V2_GS_A1)
+#undef V2_GS_A1
 };
 
 // Read-only view over a const DS image (same names, getters only) — for
@@ -471,6 +506,10 @@ struct V2StateViewC {
     V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
 #undef V2_GS_AB1
 #undef V2_GS_ABN
+#define V2_GS_A1(name, off) \
+    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
+    V2_GS_ALIASES(V2_GS_A1)
+#undef V2_GS_A1
 };
 
 // Inline factories: typed access at any call site without a local view.
