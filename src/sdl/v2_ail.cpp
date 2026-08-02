@@ -259,6 +259,7 @@ extern "C" uint16_t v2_ail_seq_start(uint8_t* s, uint8_t* snd, uint32_t snd_size
             v2_ail_interp_peek(0x2931), v2_ail_interp_peek(0x292F),
             v2_ail_interp_peek(0x294F));
     // timbre loop (loc_176DE)
+    int n_timbres = 0;
     for (;;) {
         uint16_t a[2] = { drv, handle };
         uint16_t req = v2_ail_call_fn_code(0x9B, a, 2);
@@ -271,7 +272,9 @@ extern "C" uint16_t v2_ail_seq_start(uint8_t* s, uint8_t* snd, uint32_t snd_size
         uint16_t c[5] = { drv, rdw(s, DS_993E_BANK), rdw(s, DS_9940_PATCH),
                           rdw(s, DS_992E_TOFF), rdw(s, DS_9930_TSEG) };
         v2_ail_call_fn_code(0x9C, c, 5);
+        n_timbres++;
     }
+    fprintf(stderr, "V2-AIL-TIMBRES: %d installed for seq=%u si=%u\n", n_timbres, ax_seq, si);
     // fnAA start(drv, handle) (loc_17735)
     {
         uint16_t a[2] = { drv, rdw(s, (uint16_t)(si - 0x66F4)) };
@@ -289,6 +292,7 @@ extern "C" void v2_ail_seq_stop_slot(uint8_t* s, uint16_t si) {
     if (!g_booted) return;
     uint16_t handle = rdw(s, (uint16_t)(si - 0x66F4));
     if (handle == 0xFFFF) return;
+
     uint16_t drv = rdw(s, DS_98E6_DRV);
     uint16_t a[2] = { drv, handle };
     v2_ail_call_fn_code(0xAB, a, 2);    // sub_1C79F stop_sequence
@@ -321,6 +325,11 @@ extern "C" void v2_ail_music_fade(uint8_t* s) {
 extern "C" uint16_t v2_ail_sfx_play(uint8_t* s, uint8_t* snd, uint32_t snd_size,
                                     uint16_t ds_val, uint16_t ax_seq) {
     if (!g_booted) return 0xFFFF;
+    {   // diagnostic isolation switch: V2_AIL_NO_SFX=1 silences the SFX chain
+        static int no_sfx = -1;
+        if (no_sfx < 0) { const char* e = getenv("V2_AIL_NO_SFX"); no_sfx = (e && e[0]=='1') ? 1 : 0; }
+        if (no_sfx) return 0xFFFF;
+    }
     if (rdw(s, 0x304) != 0) return 0xFFFF;          // eip 0x77BD SFX muted
     uint16_t sfx_seg = rdw(s, 0x2E6D);              // SFX XMID catalog segment
     uint16_t drv = rdw(s, DS_98E6_DRV);

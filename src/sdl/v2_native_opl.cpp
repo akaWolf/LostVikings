@@ -114,7 +114,15 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
                                : g_samples_played.load(std::memory_order_relaxed);
         size_t wr = g_wr.load(std::memory_order_relaxed);
         size_t nx = (wr + 1) & (NOPL_RING - 1);
-        if (nx == g_rd.load(std::memory_order_acquire)) return;  // full: drop (never block the game thread)
+        if (nx == g_rd.load(std::memory_order_acquire)) {
+            // full: drop (never block the game thread) — but LOUDLY: a
+            // dropped register write audibly corrupts patches/notes.
+            static uint64_t drops = 0;
+            if ((++drops & (drops - 1)) == 0)   // log at 1,2,4,8,...
+                fprintf(stderr, "v2_native_opl: RING FULL — %llu writes dropped so far\n",
+                        (unsigned long long)drops);
+            return;
+        }
         g_ring[wr] = { ts, (uint8_t)chip, reg, val };
         g_wr.store(nx, std::memory_order_release);
         return;
@@ -255,8 +263,10 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
         if (chunk == 0) chunk = 1;
         OPL3_GenerateStream(&g_chip, buf, chunk);
         for (uint32_t i = 0; i < chunk; i++) {
-            int32_t l = (int32_t)stereo[(donef + i) * 2]     + buf[i * 2];
-            int32_t r = (int32_t)stereo[(donef + i) * 2 + 1] + buf[i * 2 + 1];
+            // x2 level match: raw Nuked output sits ~10 dB below the DOSBox
+            // reference capture (their mixer applies OPL gain); clamped add.
+            int32_t l = (int32_t)stereo[(donef + i) * 2]     + buf[i * 2] * 2;
+            int32_t r = (int32_t)stereo[(donef + i) * 2 + 1] + buf[i * 2 + 1] * 2;
             if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
             if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
             stereo[(donef + i) * 2]     = (int16_t)l;

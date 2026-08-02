@@ -1344,9 +1344,16 @@ static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
                 bx_seg, ail_ds, blob_size, bank_size);
         if (v2_ail_boot(s, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE,
                         ail_ds, blob_size, bank_size)) {
-            // orig restart semantics: a new music start goes through the
-            // stop chain for slot 0 first (sub_17912 body) if one is active.
-            v2_ail_seq_stop_slot(s, 0);
+            // NO stop before the start. The orig sub_176bd tail registers a
+            // new sequence directly (eip 0x76BD+: pushf/cli/fn97 — no stop
+            // call); the stop that precedes a restart comes from the
+            // sub_17912 transition chain SEPARATELY, hundreds of fn67 ticks
+            // earlier — the note-off queue (blob 0x33EE, drained by ticks)
+            // settles in between. Gluing fnAB/fn98 right before fn97 (an
+            // earlier invention here) restarted the track over undrained
+            // voice state: the allocator laid voices out differently and the
+            // 4-op Connection-Select (0x104) pattern changed — audibly wrong
+            // instruments versus the DOSBox reference.
             uint16_t h = v2_ail_seq_start(s, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE,
                                           ail_ds, bx_seg, /*seq*/0, /*si*/0);
             v2_id_music = (h != 0xFFFF) ? (int)h : 0;
