@@ -34,6 +34,7 @@
 #include "v2_obj_view.h"
 
 // Access to emulated memory
+extern "C" int  v2_ail_native_on();
 extern uint8_t* v2_m2c_base;
 
 // SDL spec-key state (defined in sdl/render.cpp). Game logic ORs this in
@@ -537,6 +538,9 @@ static bool v2_audio_first_leak_logged[2][4] = {{false}};
 
 void v2_verify_audio_slots(uint8_t* ds, class AudioPool* pool, const char* side_tag, int side_idx, int frame) {
     if (!ds || !pool) return;
+    // #61 native AIL: DS slot handles come from the interpreted driver, not the
+    // SDL pools — every live slot would read as a false STALE leak here.
+    if (v2_ail_native_on()) return;
     int used = 0, stale = 0;
     for (int i = 0; i < 4; i++) {
         uint16_t h = *(uint16_t*)(ds + v2_audio_slot_h_off[i]);
@@ -1437,6 +1441,10 @@ namespace fx {
 }
 
 static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
+    // orig sub_177bb entry eip 0x77BD: TEST ds:304h, 0FFFFh; JNZ drop — the
+    // WHOLE body (audit hook, play, slot bookkeeping) sits behind the SFX-mute
+    // gate. Mirror it first so muted fires neither log nor touch DS slots.
+    if (*(const uint16_t*)(s + 0x304) != 0) return -1;
     uint16_t bx_seg = *(const uint16_t*)(s + DS_SEG_SOUND2);
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -2562,12 +2570,17 @@ static void v2_vsync_wait_10130(uint8_t* s) {
     }
     while ((int16_t)*(uint16_t*)(s + DS_VSYNC_COUNT) >= 1) {
         if (need_quit) return;
-        // #61 native AIL: the DOS INT8 kept firing during vsync waits — every
+        // #61 native AIL: the DOS INT8 kept firing during vsync waits - every
         // blocking loop in the game funnels through here (fades, transitions,
         // level loads), so pumping per wait iteration keeps the sequencer fed
         // instead of building tick debt that would burst-replay afterwards
         // (user-audible: notes held long / swallowed around transitions).
+        // V2_ONLY only: in default/verify mode ticks come solely from the
+        // FRAME_BEGIN barrier so both worlds observe identical tick counts
+        // at every mirrored chain call (deterministic frame pacing).
+#ifdef V2_ONLY
         v2_nopl_pump();
+#endif
 #ifdef V2_ONLY
         SDL_Delay(16);                // vsync 60Hz pacing for interactive
 #elif defined(HEADLESS)
@@ -2591,6 +2604,8 @@ static void v2_vsync_wait_10130(uint8_t* s) {
 // fn-test (#62): the delivery unit runs without the barrier channel that
 // normally publishes the real-DS segment — expose a setter.
 extern "C" void v2_fntest_set_current_ds(uint16_t v) { v2_current_ds_val = v; }
+// #61 bridge getter: the real-world AIL instance needs the m2c DS paragraph.
+extern "C" uint16_t v2_ail_get_real_ds(void) { return v2_current_ds_val; }
 
 // (#61) native AIL: the driver timer tick is v2_ail_tick() (fn67 on the
 // interpreted blob), pumped by v2_nopl_pump from frame_begin/blocking-loop.
@@ -6538,8 +6553,9 @@ static void v2_music_load_1775d_helper(uint8_t* s) {
 // glitch). The #ifdef V2_ONLY guards v2 from calling fade_music when orig also will.
 static void v2_music_fade_178f1_helper(const uint8_t* s) {
     if (*(uint16_t*)(s + DS_MUSIC_MUTE) != 0) return;  // music muted/off (TEST + JNZ exit)
-    // #61 native AIL: the orig fade is fnB0 set_sequence_tempo(handle, 0,
-    // 0x3E8) — the DRIVER ramps the tempo and silences itself. Exact chain.
+    // #61 native AIL: the orig fade is fnB1 (CALLF sub_1C7BD = mov ax,0B1h):
+    // fnB1(drv, handle, 0, 0x3E8) — the DRIVER ramps the sequence volume to 0
+    // over 1000 ms and silences itself. Exact chain.
     if (v2_ail_native_on() && v2_ail_booted()) {
         v2_ail_music_fade(const_cast<uint8_t*>(s));
         return;

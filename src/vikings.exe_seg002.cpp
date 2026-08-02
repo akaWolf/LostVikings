@@ -8,6 +8,15 @@
 
 #include <sys/time.h>
 
+// #61 native AIL bridge (v2_ail.cpp): sub_1bec2 redirects blob handler far
+// calls onto the real-world interpreter instance when the bridge is enabled.
+extern "C" int v2_ail_orig_enabled();
+extern "C" uint16_t v2_ail_orig_bridge(uint16_t, const uint16_t*, int);
+extern "C" uint16_t v2_ail_orig_last_dx();
+// The bridge needs the m2c DOS arena base BEFORE v2_set_m2c_base runs
+// (sub_17561 fires first thing in main): hand out the arena directly.
+extern "C" uint8_t* v2_m2c_arena(void) { return (uint8_t*)&m2c::m; }
+
  bool _group2(m2c::_offsets _i, struct m2c::_STATE* _state){
     X86_REGREF
     __disp = _i;
@@ -63,6 +72,21 @@ cs=0xd4f;eip=0x000401; 	T(CMP(dx, 0));	// 32364 cmp     dx, 0 ;~ 0D4F:0401
 cs=0xd4f;eip=0x000404; 	J(JZ(locret_1bed9));	// 32365 jz      short locret_1BED9 ;~ 0D4F:0404
 loc_1bed6:
 	// 5931
+ // #61 native-AIL bridge: dx:ax is a far pointer INTO the .ADV blob (data,
+ // not translatable m2c code). Run the handler on the real-world interpreter
+ // instance with the caller's stack words: the frame here is exactly what
+ // the blob handler would have seen ([sp]=far-ret, [sp+4]=drv, [sp+6..]=args;
+ // the stubs jmp into sub_1bec2 with the game's frame untouched). The
+ // ORIGINAL install/lookup (sub_1c537/sub_1be8a) already ran as plain m2c
+ // code over real memory to produce this offset.
+ { if (v2_ail_orig_enabled()) {
+     uint16_t _args[10];
+     for (int _i = 0; _i < 10; _i++)
+       _args[_i] = *(dw*)(raddr(ss, (uint16_t)(sp + 4 + _i * 2)));
+     ax = v2_ail_orig_bridge(ax, _args, 10);
+     dx = v2_ail_orig_last_dx();
+     J(RETF(0));
+   } }
 __disp=(dx<<16)+ax;
 cs=0xd4f;eip=0x000406; R(JMP(__dispatch_call));
 
@@ -1622,7 +1646,14 @@ cs=0xd4f;eip=0x000d50; 	J(JMP(sub_1bec2));	// 33877 jmp     near ptr sub_1BEC2 ;
 
     assert(0);
     __dispatch_call:
-	J(RETF(0));
+ // The SDL port gates the ENTIRE seg002 AIL layer with this immediate RETF:
+ // every far call into the driver services returns as a silent no-op, and
+ // the seg000 SDL inlines (forced ax values, adlmidi calls) compensate.
+ // #61: with the native bridge on, the ORIGINAL dispatcher below runs - the
+ // AIL service layer (install/stubs/timer bookkeeping) executes as real m2c
+ // code and only the far jump into the .ADV blob lands on the interpreter
+ // (loc_1bed6 bridge). Ports the layer touches (PIT, DAC) are macro-routed.
+ if (!v2_ail_orig_enabled()) { J(RETF(0)); }
 #ifdef DOSBOX_CUSTOM
     if ((__disp >> 16) == 0xf000)
 	{cs=0xf000;eip=__disp&0xffff;m2c::fix_segs();return false;}  // Jumping to BIOS

@@ -18,7 +18,7 @@
 //           [992E]/[9930]; fn9C } until 0xFFFF; fnAA
 //   stop  = sub_17912 slot body : fnAB(drv,h) → fn98(drv,h) →
 //           [si-66F4]=FFFF, [si-66EA]=FFFF
-//   fade  = sub_178f1 : fnB0(drv,h,0,0x3E8) (set_sequence_tempo → 0 over 1s)
+//   fade  = sub_178f1 : fnB1(drv,h,0,0x3E8) (sub_1C7BD volume fade to 0 over 1s)
 //   tick  = fn67(drv) at [desc+0x14]+5 Hz (= 125), pumped from the game
 //           thread by v2_nopl_pump; OPL writes route into the dual-OPL2
 //           nuked pair (v2_native_opl.cpp).
@@ -45,12 +45,25 @@
 // v2_ail_interp.cpp C API
 // ---------------------------------------------------------------------------
 extern "C" void     v2_ail_interp_load(const uint8_t*, uint32_t, const uint8_t*, uint32_t);
+extern "C" void     v2_ail_interp_use(int idx);
+extern "C" void*    v2_ail_interp_lock();
+extern "C" void     v2_ail_interp_unlock();
+extern "C" uint16_t v2_ail_interp_call(uint16_t, const uint16_t*, int);
 extern "C" void     v2_ail_interp_set_io(void (*)(uint16_t, uint8_t), uint8_t (*)(uint16_t));
 extern "C" void     v2_ail_interp_set_callback(uint16_t (*)());
 extern "C" void     v2_ail_interp_map_segment(uint16_t, uint8_t*, uint32_t);
 extern "C" uint16_t v2_ail_call_fn_code(uint16_t, const uint16_t*, int);
 extern "C" uint16_t v2_ail_interp_last_dx();
 extern "C" uint16_t v2_ail_interp_peek(uint16_t);
+
+extern "C" uint16_t v2_ail_get_real_ds();     // v2_vm.cpp bridge getter
+extern "C" uint8_t* v2_m2c_arena(void);       // m2c DOS arena (seg002), valid before v2_set_m2c_base
+#ifdef V2_ONLY
+// Standalone build links no m2c seg002 (no DOS arena at all) — the whole
+// real-world layer below is unreachable (v2_ail_orig_enabled()==0); satisfy
+// the link with a null arena.
+extern "C" uint8_t* v2_m2c_arena(void) { return nullptr; }
+#endif
 
 // v2_native_opl.cpp SBPro port model (dual-OPL2 + mixer)
 extern "C" void     v2_nopl_sbpro_out(uint16_t port, uint8_t val);
@@ -85,6 +98,49 @@ static uint8_t g_cache[0x10000 + 16];
 static bool     g_booted = false;
 static double   g_tick_hz = 0.0;
 
+// ---------------------------------------------------------------------------
+// Silent SBPro port model — for the world that must NOT reach the audible
+// chip (the shadow instance in default mode). Same latch+timer-status model
+// the smoke rig validated; writes go nowhere but the detect probe still
+// reads its own timer bits back.
+// ---------------------------------------------------------------------------
+struct SilentOpl {
+    uint8_t idx[2] = {0, 0};
+    uint8_t regs[2][256] = {{0}};
+    uint8_t mixer_idx = 0;
+    uint8_t mixer[256] = {0};
+};
+static SilentOpl g_silent;
+static void silent_out(uint16_t port, uint8_t val) {
+    if (port >= 0x220 && port <= 0x223) {
+        int b = (port - 0x220) >> 1;
+        if ((port & 1) == 0) g_silent.idx[b] = val;
+        else g_silent.regs[b][g_silent.idx[b]] = val;
+        return;
+    }
+    if (port == 0x224) { g_silent.mixer_idx = val; return; }
+    if (port == 0x225) { g_silent.mixer[g_silent.mixer_idx] = val; return; }
+}
+static uint8_t silent_in(uint16_t port) {
+    if (port >= 0x220 && port <= 0x223) {
+        uint8_t ctl = g_silent.regs[0][4];
+        if (ctl & 0x80) return 0x00;
+        if (ctl & 0x01) return 0xC0 | 0x40;
+        return 0x00;
+    }
+    if (port == 0x225) return g_silent.mixer[g_silent.mixer_idx];
+    return 0xFF;
+}
+
+// All shadow-chain fn calls go through here: CLI-model lock + instance 0.
+static uint16_t sh_call(uint16_t fn_code, const uint16_t* args, int argc) {
+    v2_ail_interp_lock();
+    v2_ail_interp_use(0);
+    uint16_t ax = v2_ail_call_fn_code(fn_code, args, argc);
+    v2_ail_interp_unlock();
+    return ax;
+}
+
 static uint16_t rdw(const uint8_t* s, uint16_t off) {
     return (uint16_t)(s[off] | (s[(uint16_t)(off + 1)] << 8));
 }
@@ -96,13 +152,15 @@ static void wrw(uint8_t* s, uint16_t off, uint16_t v) {
 // gate
 // ---------------------------------------------------------------------------
 extern "C" int v2_ail_native_on() {
-#ifdef V2_ONLY
+    // One env gate for BOTH build flavours. In V2_ONLY the shadow instance is
+    // the sole (audible) world. In default/verify the shadow instance runs
+    // SILENT while the REAL world drives the same interpreted driver through
+    // the sub_1bec2 bridge (audible) — same call+tick order in both worlds
+    // gives byte-equal driver state, which the DS verify then checks on the
+    // in-DS sequence state blocks.
     static int en = -1;
     if (en < 0) { const char* e = getenv("V2_NATIVE_AIL"); en = (e && e[0] == '1') ? 1 : 0; }
     return en;
-#else
-    return 0;   // default (verify) mode: orig plays adlmidi, v2 mirrors muted slots
-#endif
 }
 
 // seg002 ret_d4f_a53 callback model: returns cs:word_1BBF2 — the PIT divisor
@@ -135,8 +193,16 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
 
     // The interpreter works on its own copies of blob+bank (code arena); far
     // pointers arriving from the game resolve into the mapped REAL windows.
+    // Instance 0 = shadow world. Audible only in V2_ONLY; in default mode the
+    // REAL world (instance 1, fed through the sub_1bec2 bridge) owns the
+    // audible chip and the shadow stays on the silent model.
+    v2_ail_interp_use(0);
     v2_ail_interp_load(snd, blob_size, snd + bank_off, bank_size);
+#ifdef V2_ONLY
     v2_ail_interp_set_io(v2_nopl_sbpro_out, v2_nopl_sbpro_in);
+#else
+    v2_ail_interp_set_io(silent_out, silent_in);
+#endif
     v2_ail_interp_set_callback(v2_ail_pit_callback);
     v2_ail_interp_map_segment(snd_base, snd, snd_size);       // whole sound arena
     v2_ail_interp_map_segment(ds_val, s, 0x10000);            // the game DS (state blocks!)
@@ -155,7 +221,7 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     // only round-trips through cs:0x2957. Pass a recognizable marker pair.
     {
         uint16_t a[3] = { drv, 0x0A53, 0x0D4F };
-        uint16_t ax = v2_ail_call_fn_code(0x64, a, 3);
+        uint16_t ax = sh_call(0x64, a, 3);
         uint16_t dx = v2_ail_interp_last_dx();
         wrw(s, (uint16_t)(DS_98E8_DESC + 2), dx);   // eip 0x75A5 [98EA]=seg
         wrw(s, DS_98E8_DESC, ax);                    // eip 0x75A9 [98E8]=off
@@ -165,7 +231,7 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     {
         uint16_t a[5] = { drv, rdw(s, DS_86BA_IO), rdw(s, (uint16_t)(DS_86BA_IO + 2)),
                           rdw(s, (uint16_t)(DS_86BA_IO + 4)), rdw(s, (uint16_t)(DS_86BA_IO + 6)) };
-        uint16_t ax = v2_ail_call_fn_code(0x65, a, 5);
+        uint16_t ax = sh_call(0x65, a, 5);
         if (ax != 1)
             fprintf(stderr, "V2-AIL: fn65 detect returned %04X (chip model rejected?)\n", ax);
     }
@@ -179,7 +245,7 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
                           v2_ail_interp_peek((uint16_t)(doff + 0x0E)),
                           v2_ail_interp_peek((uint16_t)(doff + 0x10)),
                           v2_ail_interp_peek((uint16_t)(doff + 0x12)) };
-        v2_ail_call_fn_code(0x66, a, 5);
+        sh_call(0x66, a, 5);
         // Tick rate: fn66 stub reads [desc+0x14] and adds 5 (sub_1c61b eip
         // 0xB71-0xB7A) before registering the seg002 timer slot. SBPFM: 120+5.
         uint16_t hz = v2_ail_interp_peek((uint16_t)(doff + 0x14));
@@ -192,7 +258,7 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     uint16_t cache_size;
     {
         uint16_t a[1] = { drv };
-        cache_size = v2_ail_call_fn_code(0x99, a, 1);
+        cache_size = sh_call(0x99, a, 1);
         wrw(s, DS_9942_SIZE, cache_size);
         wrw(s, DS_A39A_INIT, 1);
     }
@@ -201,7 +267,7 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
         wrw(s, DS_9934_SEG, CACHE_PARA);            // eip 0x7615
         wrw(s, DS_9932_OFF, 0);                     // eip 0x7618
         uint16_t a[4] = { drv, 0, CACHE_PARA, cache_size };
-        v2_ail_call_fn_code(0x9A, a, 4);
+        sh_call(0x9A, a, 4);
     }
     // (orig eip 0x7636: [86B6]==8 GM special case — not our device path; its
     // chunk-0x215 load happens through the normal music-load mirror anyway.)
@@ -250,7 +316,7 @@ extern "C" uint16_t v2_ail_seq_start(uint8_t* s, uint8_t* snd, uint32_t snd_size
     uint16_t handle;
     {
         uint16_t a[8] = { drv, 0, bx_seg, ax_seq, state_off, ds_val, 0, 0 };
-        handle = v2_ail_call_fn_code(0x97, a, 8);
+        handle = sh_call(0x97, a, 8);
         wrw(s, (uint16_t)(si - 0x66F4), handle);    // eip 0x76DA
     }
     fprintf(stderr, "V2-AIL-START: bx=%04X seq=%u si=%u state=%04X:%04X -> handle=%04X "
@@ -262,7 +328,7 @@ extern "C" uint16_t v2_ail_seq_start(uint8_t* s, uint8_t* snd, uint32_t snd_size
     int n_timbres = 0;
     for (;;) {
         uint16_t a[2] = { drv, handle };
-        uint16_t req = v2_ail_call_fn_code(0x9B, a, 2);
+        uint16_t req = sh_call(0x9B, a, 2);
         wrw(s, DS_9946_REQ, req);                   // eip 0x76F0
         if (req == 0xFFFF) break;
         if (rdw(s, DS_A378_BUSY) != 0) continue;    // eip 0x76F8 (async wait)
@@ -271,14 +337,14 @@ extern "C" uint16_t v2_ail_seq_start(uint8_t* s, uint8_t* snd, uint32_t snd_size
         if (!v2_ail_scan_bank_17512(s, snd, snd_size)) return 0xFFFF;
         uint16_t c[5] = { drv, rdw(s, DS_993E_BANK), rdw(s, DS_9940_PATCH),
                           rdw(s, DS_992E_TOFF), rdw(s, DS_9930_TSEG) };
-        v2_ail_call_fn_code(0x9C, c, 5);
+        sh_call(0x9C, c, 5);
         n_timbres++;
     }
     fprintf(stderr, "V2-AIL-TIMBRES: %d installed for seq=%u si=%u\n", n_timbres, ax_seq, si);
     // fnAA start(drv, handle) (loc_17735)
     {
         uint16_t a[2] = { drv, rdw(s, (uint16_t)(si - 0x66F4)) };
-        v2_ail_call_fn_code(0xAA, a, 2);
+        sh_call(0xAA, a, 2);
     }
     return handle;
 }
@@ -295,22 +361,24 @@ extern "C" void v2_ail_seq_stop_slot(uint8_t* s, uint16_t si) {
 
     uint16_t drv = rdw(s, DS_98E6_DRV);
     uint16_t a[2] = { drv, handle };
-    v2_ail_call_fn_code(0xAB, a, 2);    // sub_1C79F stop_sequence
-    v2_ail_call_fn_code(0x98, a, 2);    // sub_1C769 release_sequence
+    sh_call(0xAB, a, 2);    // sub_1C79F stop_sequence
+    sh_call(0x98, a, 2);    // sub_1C769 release_sequence
     wrw(s, (uint16_t)(si - 0x66F4), 0xFFFF);
     wrw(s, (uint16_t)(si - 0x66EA), 0xFFFF);
 }
 
 // ---------------------------------------------------------------------------
-// music fade — sub_178f1 (eip 0x78FB-0x790D): fnB0(drv, [990C], 0, 0x3E8) =
-// set_sequence_tempo to 0 over 1000 ms. The driver ramps and silences itself.
+// music fade — sub_178f1 (eip 0x78FB-0x790D): fnB1(drv, [990C], 0, 0x3E8) via
+// CALLF sub_1C7BD (seg002 0D4F:0CED: mov ax,0B1h). The driver ramps the
+// sequence volume from its current level ([state+0x2C] <- 0x64 on call) down
+// to 0 over 1000 ms and silences itself.
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_music_fade(uint8_t* s) {
     if (!g_booted) return;
     uint16_t handle = rdw(s, (uint16_t)(0 - 0x66F4));   // [990C] (si=0 family)
     if (handle == 0xFFFF) return;
     uint16_t a[4] = { rdw(s, DS_98E6_DRV), handle, 0, 0x3E8 };
-    v2_ail_call_fn_code(0xB0, a, 4);
+    sh_call(0xB1, a, 4);    // sub_1C7BD
 }
 
 // ---------------------------------------------------------------------------
@@ -340,9 +408,9 @@ extern "C" uint16_t v2_ail_sfx_play(uint8_t* s, uint8_t* snd, uint32_t snd_size,
             return v2_ail_seq_start(s, snd, snd_size, ds_val, sfx_seg, ax_seq, (uint16_t)si);
         }
         uint16_t a[2] = { drv, handle };
-        uint16_t status = v2_ail_call_fn_code(0xAE, a, 2);      // eip 0x77EC status
+        uint16_t status = sh_call(0xAE, a, 2);      // eip 0x77EC status
         if (status == 1) continue;                              // eip 0x77F6 playing
-        v2_ail_call_fn_code(0x98, a, 2);                        // eip 0x7806 release
+        sh_call(0x98, a, 2);                        // eip 0x7806 release
         wrw(s, (uint16_t)(si - 0x66EA), ax_seq);                // eip 0x7811
         return v2_ail_seq_start(s, snd, snd_size, ds_val, sfx_seg, ax_seq, (uint16_t)si);
     }
@@ -351,16 +419,27 @@ extern "C" uint16_t v2_ail_sfx_play(uint8_t* s, uint8_t* snd, uint32_t snd_size,
 
 // ---------------------------------------------------------------------------
 // SFX stop by sequence — the shared slot-scan body of sub_1782a / sub_1787f
-// (eip 0x783E-0x787A / 0x7895-0x78D1): every slot whose seq word matches goes
-// through the fnAB/fn98 stop chain (v2_ail_seq_stop_slot = same body as the
-// sub_17912 per-slot stop). The [304] mute gate stays with the caller mirrors
-// (both orig sites test it before the scan).
+// (eip 0x783E-0x787A / 0x7895-0x78D1): every slot whose SEQ word matches goes
+// through fnAB stop + fn98 release and BOTH slot words get cleared to FFFF.
+// NOTE: unlike the sub_17912 loop there is NO [si-66F4]==FFFF guard here —
+// the orig calls fnAB/fn98 even with a FFFF handle and always clears the seq
+// word (divergence found by the headless audio-sym checker: shadow kept
+// s=0x57 in a slot the real world had wiped). The handle is re-read from the
+// slot before the fn98 push, exactly like orig eip 0x7859/0x78B0. The [304]
+// mute gate stays with the caller mirrors (both orig sites test it before
+// the scan).
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_sfx_stop_seq(uint8_t* s, uint16_t ax_seq) {
     if (!g_booted) return;
+    uint16_t drv = rdw(s, DS_98E6_DRV);
     for (int16_t si = 8; si > 0; si -= 2) {
         if (rdw(s, (uint16_t)(si - 0x66EA)) != ax_seq) continue;
-        v2_ail_seq_stop_slot(s, (uint16_t)si);
+        uint16_t a[2] = { drv, rdw(s, (uint16_t)(si - 0x66F4)) };
+        sh_call(0xAB, a, 2);                                // eip 0x7850 stop
+        a[1] = rdw(s, (uint16_t)(si - 0x66F4));             // re-read (0x7859)
+        sh_call(0x98, a, 2);                                // eip 0x7861 release
+        wrw(s, (uint16_t)(si - 0x66F4), 0xFFFF);
+        wrw(s, (uint16_t)(si - 0x66EA), 0xFFFF);
     }
 }
 
@@ -373,17 +452,101 @@ extern "C" void v2_ail_sfx_stop_seq(uint8_t* s, uint16_t ax_seq) {
 extern "C" void v2_ail_music_mute_stop(uint8_t* s) {
     if (!g_booted) return;
     uint16_t a[2] = { rdw(s, DS_98E6_DRV), rdw(s, (uint16_t)(0 - 0x66F4)) };
-    v2_ail_call_fn_code(0xAB, a, 2);
-    v2_ail_call_fn_code(0x98, a, 2);
+    sh_call(0xAB, a, 2);
+    sh_call(0x98, a, 2);
 }
 
 // ---------------------------------------------------------------------------
-// timer tick — the seg002 INT8 slot calls the blob's fn67 handler.
+// REAL-world instance (default/verify mode): fed by the sub_1bec2 bridge in
+// seg002 — the ORIGINAL m2c code runs every AIL chain (17561 init, 176bd
+// starts, 17912/1782a/1787f stops, 108c8 mutes, 178f1 fades) and only the
+// jump INTO the blob is redirected here. One flat mapping (paragraph 0 →
+// the whole m2c DOS arena) makes the instance live in the game's actual
+// memory: state blocks, XMID data, the bank and the cache buffer resolve
+// exactly like on DOS, so the driver writes the real DS at the original
+// addresses and the DS verify covers them.
+// ---------------------------------------------------------------------------
+static bool g_orig_inited = false;
+
+extern "C" int v2_ail_orig_enabled() {
+#ifdef V2_ONLY
+    return 0;                    // no m2c world in V2_ONLY builds
+#else
+    return v2_ail_native_on();
+#endif
+}
+
+static int v2_ail_orig_lazy_init() {
+    if (g_orig_inited) return 1;
+    extern uint8_t* v2_m2c_base;
+    uint8_t* base = v2_m2c_base ? v2_m2c_base : v2_m2c_arena();
+    if (!base) { fprintf(stderr, "V2-AIL-ORIG-FAIL: no m2c arena\n"); return 0; }
+    uint16_t ds_val = v2_ail_get_real_ds();
+    // The first bridged calls (sub_17561 init chain) run BEFORE
+    // v2_vm_init_shadow_early publishes the DS value; the ported EXE's data
+    // segment paragraph is a build constant: seg004 = m2c::m + 0x19F00
+    // (_data.cpp), i.e. paragraph 0x19F0.
+    if (!ds_val) ds_val = 0x19F0;
+    uint8_t* rds = base + ((uint32_t)ds_val << 4);
+    uint16_t blob_seg = rdw(rds, DS_992C_SND);
+    if (!blob_seg) { fprintf(stderr, "V2-AIL-ORIG-FAIL: [992C]=0\n"); return 0; }
+    uint8_t* blob = base + ((uint32_t)blob_seg << 4);
+    uint16_t bank_seg = rdw(rds, DS_2E6F_BANK);
+    uint8_t* bank = base + ((uint32_t)bank_seg << 4);
+    v2_ail_interp_use(1);
+    // Full 64K copies into the code arenas — the exact chunk sizes are
+    // irrelevant here: execution only ever reaches valid blob offsets, and
+    // BANK_PARA sits above 640K so the copy is a mere placeholder (the real
+    // bank is addressed through the flat DOS mapping below).
+    v2_ail_interp_load(blob, 0x10000, bank, 0x10000);
+    v2_ail_interp_set_io(v2_nopl_sbpro_out, v2_nopl_sbpro_in);   // audible world
+    v2_ail_interp_set_callback(v2_ail_pit_callback);
+    v2_ail_interp_map_segment(0, base, 0xA0000);                 // whole DOS arena
+    g_orig_inited = true;
+    if (g_tick_hz <= 0.0) {
+        // [desc+0x14]+5 exactly like the fn66 stub computes (sub_1c61b).
+        uint16_t hz = v2_ail_interp_peek((uint16_t)(0xC7 + 0x14));
+        if (hz && hz != 0xFFFF) { g_tick_hz = (double)(hz + 5); v2_nopl_set_tick_hz(g_tick_hz); }
+    }
+    fprintf(stderr, "V2-AIL-ORIG: bridge instance up (blob seg=%04X ds=%04X)\n",
+            blob_seg, ds_val);
+    return 1;
+}
+
+// The sub_1bec2 bridge: the m2c dispatcher resolved the handler offset via
+// the ORIGINAL install/lookup code (sub_1c537/sub_1be8a walk real memory);
+// we execute that handler on the real instance with the caller's stack
+// words ([sp+4]=drv, [sp+6..]=args — same frame the blob would have seen).
+// Returns ax; dx via v2_ail_orig_last_dx.
+static uint16_t g_orig_dx = 0;
+extern "C" uint16_t v2_ail_orig_bridge(uint16_t handler_off,
+                                       const uint16_t* args, int argc) {
+    if (!v2_ail_orig_enabled()) return 0;
+    v2_ail_interp_lock();
+    if (!v2_ail_orig_lazy_init()) { v2_ail_interp_unlock(); return 0; }
+    v2_ail_interp_use(1);
+    uint16_t ax = v2_ail_interp_call(handler_off, args, argc);
+    g_orig_dx = v2_ail_interp_last_dx();
+    v2_ail_interp_unlock();
+    return ax;
+}
+extern "C" uint16_t v2_ail_orig_last_dx() { return g_orig_dx; }
+
+// ---------------------------------------------------------------------------
+// timer tick — the seg002 INT8 slot calls the blob's fn67 handler. Ticks BOTH
+// live instances back-to-back under one lock: both worlds see the identical
+// tick count between any pair of mirrored chain calls (frame-barrier pacing
+// in default mode), which keeps their driver state byte-equal.
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_tick() {
-    if (!g_booted) return;
     uint16_t a[1] = { 0 };
-    v2_ail_call_fn_code(0x67, a, 1);
+    if (g_booted) sh_call(0x67, a, 1);
+    if (g_orig_inited) {
+        v2_ail_interp_lock();
+        v2_ail_interp_use(1);
+        v2_ail_call_fn_code(0x67, a, 1);
+        v2_ail_interp_unlock();
+    }
 }
 
-extern "C" int v2_ail_booted() { return g_booted ? 1 : 0; }
+extern "C" int v2_ail_booted() { return (g_booted || g_orig_inited) ? 1 : 0; }

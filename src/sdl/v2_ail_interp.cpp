@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <mutex>
 #include <cstdlib>
 #include <cstdarg>
 
@@ -76,6 +77,10 @@ public:
     uint8_t* drv = nullptr;      uint32_t drv_size = 0;
     uint8_t* bank = nullptr;     uint32_t bank_size = 0;
     uint8_t  stack_mem[STACK_SIZE] = {0};
+    // Per-instance arenas (members, NOT function-statics: two instances back
+    // the two worlds in default mode and must never share blob state).
+    uint8_t  drv_copy[0x10000 + 16] = {0};
+    uint8_t  bank_copy[0x10000 + 16] = {0};
 
     // Host hooks -------------------------------------------------------------
     // OPL/mixer port I/O. The SBPFM driver computes dx = base + 2*bh for the
@@ -101,8 +106,6 @@ public:
               const uint8_t* bank_data, uint32_t bank_sz) {
         // Full 64K arenas: the blob addresses cs:0xFFFF-ish freely (frequency
         // LUT xlat, wrap-around reads) — undersized arenas segfault the host.
-        static uint8_t drv_copy[0x10000 + 16];
-        static uint8_t bank_copy[0x10000 + 16];
         if (blob_size > sizeof(drv_copy) || bank_sz > sizeof(bank_copy)) {
             fail("blob/bank larger than the interpreter arenas");
             return;
@@ -740,10 +743,30 @@ prefix:
 }
 
 // ---------------------------------------------------------------------------
-// Singleton + C entry points (wired to the game in a later step; everything
-// stays inert unless V2_NATIVE_AIL=1, same contract as v2_native_opl.cpp).
+// Instances + C entry points (inert unless V2_NATIVE_AIL=1, same contract as
+// v2_native_opl.cpp). TWO instances back the default (verify) mode: index 0
+// drives the shadow world, index 1 the real (m2c) world — each carries its
+// own blob copy, cache bookkeeping and sequencer state, so the two worlds
+// evolve independently yet identically (same call+tick order → byte-equal
+// driver state, which is what the DS verify then confirms on the state
+// blocks the driver writes into each world's DS). All entry points act on
+// the SELECTED instance; v2_ail.cpp selects per call. A mutex serializes
+// every fn entry — the DOS original ran the whole AIL API under
+// PUSHF/CLI against the INT8 tick, and the mutex is that exact semantics
+// for our two calling threads (m2c main thread vs the v2 game thread).
 // ---------------------------------------------------------------------------
-static AilInterp g_ail;
+static AilInterp g_ails[2];
+static int g_ail_cur = 0;
+static std::recursive_mutex g_ail_mtx;
+#define g_ail (g_ails[g_ail_cur])
+
+extern "C" void v2_ail_interp_use(int idx) {
+    g_ail_cur = (idx == 1) ? 1 : 0;
+}
+extern "C" void* v2_ail_interp_lock() {           // CLI-model guard
+    g_ail_mtx.lock(); return &g_ail_mtx;
+}
+extern "C" void v2_ail_interp_unlock() { g_ail_mtx.unlock(); }
 
 extern "C" int v2_ail_interp_enabled() {
     static int en = -1;

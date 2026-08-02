@@ -128,7 +128,20 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
         return;
     }
     if (port == 0x224) { g_mixer_index = val; return; }
-    if (port == 0x225) { g_mixer[g_mixer_index] = val; return; }
+    if (port == 0x225) {
+        // SBPro mixer model: shadow registers only. Verified over full runs
+        // (init + music + SFX + level): the driver touches ONLY reg 0x0A
+        // (Mic volume, the fn65 detect probe writes 00/06); the volume
+        // registers 0x22 (Master) / 0x26 (FM) are never programmed by the
+        // game or the driver, so the hardware stays at its power-on default
+        // — exactly what an unscaled mix models. Log anything beyond the
+        // known probe so future titles/tracks can't silently need more.
+        if (g_mixer_index != 0x0A && g_mixer[g_mixer_index] != val)
+            fprintf(stderr, "v2_native_opl: MIXER[%02X] <- %02X (beyond detect probe)\n",
+                    g_mixer_index, val);
+        g_mixer[g_mixer_index] = val;
+        return;
+    }
     // Anything else the driver touches is a survey gap — log, don't guess.
     static int warn = 0;
     if (warn++ < 8) fprintf(stderr, "v2_native_opl: OUT %04X <- %02X (unmodeled port)\n", port, val);
@@ -204,8 +217,15 @@ extern "C" void v2_nopl_pump(void) {
     double spt = (double)g_rate / g_tick_hz;   // samples per tick (queue ts)
     static int frame_mode = -1;
     if (frame_mode < 0) {
+#ifdef V2_ONLY
         const char* e = getenv("V2_AIL_FRAME_TICKS");
         frame_mode = (e && e[0] == '1') ? 1 : 0;
+#else
+        // default/verify mode: ALWAYS frame-paced. Both worlds must see the
+        // same deterministic tick count between mirrored chain calls, and
+        // scenario replays must reproduce byte-identical driver state.
+        frame_mode = 1;
+#endif
         if (frame_mode) fprintf(stderr, "v2_native_opl: frame-accumulator tick mode\n");
     }
     int guard = 0;
