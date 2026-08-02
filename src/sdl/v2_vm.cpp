@@ -5989,8 +5989,8 @@ static void v2_open_data_dat_12989(uint8_t* s) {
     //   exits; sub_179fb probes the idle port (IN 0x201 -> 0xFF, NOT=0,
     //   TEST 3 == 0) -> full LOOPE -> JCXZ bail: [32882] untouched, CF=1 ->
     //   the 2A61 JC skips the 86D2..86D8 threshold writes.
-    *(uint16_t*)(s + 0xA39E) = 0x0010;         // word_3287E (calibration accum)
-    *(uint16_t*)(s + 0xA3A0) = 0xE3FF;         // word_32880 (PIT latch snapshot)
+    *(uint16_t*)(s + DS_VSYNC_CALIB) = 0x0010; // word_3287E
+    *(uint16_t*)(s + DS_PIT_LATCH) = 0xE3FF;   // word_32880
     *(uint16_t*)(s + DS_JOYSTICK_PRESENT) = 0; // ds:86DA = 0 (2A58 + no 2A7D)
 }
 
@@ -6209,9 +6209,10 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
     // Decompress chunk 2 → ds:0x687D (password/level select table)
     v2_read_chunk(2, s + 0x687D, 0x10000 - 0x687D, s);  // ds_ctx (class #22)
 
-    // Debug: dump password table (37 levels × 4 bytes at ds:0x85A5..0x8639).
-    // Orig sub_12829 reads bytes here with mask 0x7F → ASCII.
-    {
+    // V2_PWD_DUMP=1: dump the password table (37 levels × 4 bytes at
+    // ds:0x85A5..0x8639; orig sub_12829 reads them with mask 0x7F → ASCII).
+    // Handy when planning record.sh scenarios that need level passwords.
+    if (getenv("V2_PWD_DUMP")) {
         fprintf(stderr, "V2-PWD-TABLE:\n");
         for (int lvl = 0; lvl < 37; lvl++) {
             uint16_t off = 0x85A5 + lvl * 4;
@@ -12091,27 +12092,27 @@ extern "C" void v2_fntest_call_hudvga(int which, uint8_t* shadow, uint16_t ax,
 
 // sub_1200a: reset the healthbar prev-state trio [435]/[437]/[439] = 0xFFFF.
 static void v2_hud_reset_1200a(uint8_t* s) {
-    *(uint16_t*)(s + 0x435) = 0xFFFF;
-    *(uint16_t*)(s + 0x437) = 0xFFFF;
-    *(uint16_t*)(s + 0x439) = 0xFFFF;
+    *(uint16_t*)(s + DS_HUD_HEALTH) = 0xFFFF;
+    *(uint16_t*)(s + DS_VK_STATE_3) = 0xFFFF;
+    *(uint16_t*)(s + DS_VK_STATE_4) = 0xFFFF;
 }
 
 // sub_12034: reset the portrait/sound prev-state six [423..427]/[42F..433]
 // = 0xFFFF, then JMP sub_11B0B (portrait sync tail).
 static void v2_hud_reset_12034(uint8_t* s) {
-    *(uint16_t*)(s + 0x423) = 0xFFFF;
-    *(uint16_t*)(s + 0x425) = 0xFFFF;
-    *(uint16_t*)(s + 0x427) = 0xFFFF;
-    *(uint16_t*)(s + 0x42F) = 0xFFFF;
-    *(uint16_t*)(s + 0x431) = 0xFFFF;
-    *(uint16_t*)(s + 0x433) = 0xFFFF;
+    *(uint16_t*)(s + DS_PORTRAIT_PREV) = 0xFFFF;
+    *(uint16_t*)(s + DS_PORTRAIT_SND_2) = 0xFFFF;
+    *(uint16_t*)(s + DS_PORTRAIT_SND_3) = 0xFFFF;
+    *(uint16_t*)(s + DS_PORTRAIT_SND_PREV) = 0xFFFF;
+    *(uint16_t*)(s + DS_VK_STATE_1) = 0xFFFF;
+    *(uint16_t*)(s + DS_VK_STATE_2) = 0xFFFF;
     v2_portrait_sync_11b0b(s);
 }
 
 // sub_117ad: HUD full reinit — [340]=2; gated on [25CF]&1: 10cd8(ax=1,di=0)
 // HUD chunk load, then the reset/redraw chain 1200a → 1201d → 12034 → 120d1.
 static void v2_hud_full_reinit_117ad(uint8_t* s) {
-    *(uint16_t*)(s + 0x340) = 2;   // word_28820 — HUD redraw request (NOT 0x334)
+    *(uint16_t*)(s + DS_HUD_DISP_MODE) = 2;   // word_28820 — HUD redraw request (NOT 0x334)
     if (!(s[DS_LEVEL_FLAGS] & 1)) return;
     v2_load_chunk_10cd8(s, 1, 0);
     v2_hud_reset_1200a(s);
@@ -20960,8 +20961,9 @@ void v2_signal_phase(V2Phase phase, uint16_t ds_val) {
     // If render_callback_calls or word3287c_dec stops growing → render thread blocked.
     // If signal_phase_calls > phase_complete by a lot → v2 thread blocked.
     // If sub10130_spins grows but exits doesn't → word_3287c not being DEC'd → render thread issue.
-    static int fe_count = 0;
-    if (phase == V2_PHASE_FRAME_END && ++fe_count % 60 == 0) {
+    static int fe_count = 0, diag_en = -1;
+    if (diag_en < 0) diag_en = getenv("V2_BLOCK_DIAG") ? 1 : 0;
+    if (diag_en && phase == V2_PHASE_FRAME_END && ++fe_count % 60 == 0) {
         fprintf(stderr,
           "V2-BLOCK-DIAG[%d frame_ends]: render_callback=%lld word3287c_dec=%lld "
           "sub10130: spins=%lld exits=%lld | signal_phase=%lld phase_complete=%lld\n",

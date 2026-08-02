@@ -73,6 +73,8 @@ constexpr uint16_t DS_ANIM_PTR_LO    = 0x2E79; // dword_2B359 lo: anim load curs
 constexpr uint16_t DS_ANIM_PTR_HI    = 0x2E7B; // dword_2B359 hi: anim load cursor segment
 
 constexpr uint16_t DS_VSYNC_COUNT    = 0xA39C; // word_3287C: vsync wait counter (sub_10130/16775)
+constexpr uint16_t DS_VSYNC_CALIB    = 0xA39E; // word_3287E: vsync calibration accumulator (init 0x0010)
+constexpr uint16_t DS_PIT_LATCH      = 0xA3A0; // word_32880: PIT latch snapshot (init 0xE3FF)
 
 // Anim interpreter working registers + per-level chunk/resource tables
 constexpr uint16_t DS_ANIM_TIMER     = 0x0078; // anim frame delay countdown (interpreter working reg; saved per object)
