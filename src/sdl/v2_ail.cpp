@@ -356,6 +356,19 @@ extern "C" void v2_ail_sfx_stop_seq(uint8_t* s, uint16_t ax_seq) {
 }
 
 // ---------------------------------------------------------------------------
+// music mute-stop — sub_108c8 loc_10959 (eip 0x961-0x97B): fnAB stop + fn98
+// release on the music handle [990C], WITHOUT clearing the DS slot words
+// (unlike the 17912/1782a bodies — the orig mute path leaves them; the next
+// unmute start overwrites [990C] through the fn97 chain).
+// ---------------------------------------------------------------------------
+extern "C" void v2_ail_music_mute_stop(uint8_t* s) {
+    if (!g_booted) return;
+    uint16_t a[2] = { rdw(s, DS_98E6_DRV), rdw(s, (uint16_t)(0 - 0x66F4)) };
+    v2_ail_call_fn_code(0xAB, a, 2);
+    v2_ail_call_fn_code(0x98, a, 2);
+}
+
+// ---------------------------------------------------------------------------
 // timer tick — the seg002 INT8 slot calls the blob's fn67 handler.
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_tick() {

@@ -1270,6 +1270,7 @@ extern "C" void     v2_ail_seq_stop_slot(uint8_t*, uint16_t);
 extern "C" void     v2_ail_music_fade(uint8_t*);
 extern "C" uint16_t v2_ail_sfx_play(uint8_t*, uint8_t*, uint32_t, uint16_t, uint16_t);
 extern "C" void     v2_ail_sfx_stop_seq(uint8_t*, uint16_t);
+extern "C" void     v2_ail_music_mute_stop(uint8_t*);
 extern "C" void     v2_nopl_pump(void);
 static bool v2_sound_shadow_valid = false;
 
@@ -2690,11 +2691,17 @@ static void v2_audio_tick_108c8(uint8_t* s) {
         s[DS_SPEC_KEY_S] = 0;                                                   // MOV byte_3166B, 0
         s[DS_SFX_MUTE] ^= 1;                                                  // XOR byte ptr word_287E4, 1
         if (s[DS_SFX_MUTE] != 0) {                                           // JZ skips stop → do stop when nonzero
-            // Mute toggled ON: stop SFX channels via SDL handles.
+            // Mute toggled ON: stop SFX channels. Orig eip 0x8F5-0x933: per
+            // occupied slot fnAB (1c79f) + fn98 (1c769) + FFFF/FFFF words —
+            // the exact v2_ail_seq_stop_slot body in native mode.
             for (uint16_t si = 2; si < 0x0A; si += 2) {
                 uint16_t h_off = (uint16_t)(si - 0x66F4);
                 uint16_t handle = *(uint16_t*)(s + h_off);
                 if (handle != 0xFFFF) {
+                    if (v2_ail_native_on() && v2_ail_booted()) {
+                        v2_ail_seq_stop_slot(s, si);
+                        continue;
+                    }
                     v2_pool.stop_xmidi(handle);  // v2_pool — independent from orig
                     *(uint16_t*)(s + h_off) = 0xFFFF;                    // clear handle
                     *(uint16_t*)(s + (uint16_t)(si - 0x66EA)) = 0xFFFF; // clear sequence
@@ -2710,8 +2717,14 @@ static void v2_audio_tick_108c8(uint8_t* s) {
     if (s[DS_MUSIC_MUTE] != 0) {                                                 // JNZ loc_10959 (music STOP path)
         // loc_10959: music OFF. Skip if bit 15 set.
         if (!(*(uint16_t*)(s + DS_MUSIC_MUTE) & 0x8000)) {
-            uint16_t mh = v2_pool.get_music_handle();
-            if (mh != 0) v2_pool.stop_xmidi(mh);  // v2_pool — independent from orig
+            // Orig eip 0x961-0x97B: fnAB + fn98 on [990C] WITHOUT clearing
+            // the slot words (unmute restarts via 176bd and overwrites).
+            if (v2_ail_native_on() && v2_ail_booted()) {
+                v2_ail_music_mute_stop(s);
+            } else {
+                uint16_t mh = v2_pool.get_music_handle();
+                if (mh != 0) v2_pool.stop_xmidi(mh);  // v2_pool — independent from orig
+            }
         }
     } else {                                                              // music ON path
         // sub_176BD(si=0, ax=0, bx=word_2B34B): play music with sequence from ds:0x2E6B
