@@ -8944,14 +8944,8 @@ struct V2VM {
     uint16_t ch4_mul_dx = 0;
 
     // Bytecode read helpers
-    uint8_t  read_u8()  {
-        if (pc >= 0xC000) { static int _h=0; _h++; if(_h<=5) fprintf(stderr,"V2-ES-READ8: pc=%04X obj=%d\n",pc,obj); }
-        uint8_t  v = es[pc]; pc += 1; return v;
-    }
-    uint16_t read_u16() {
-        if (pc >= 0xC000) { static int _h=0; _h++; if(_h<=5) fprintf(stderr,"V2-ES-READ16: pc=%04X obj=%d\n",pc,obj); }
-        uint16_t v = *(uint16_t*)(es + pc); pc += 2; return v;
-    }
+    uint8_t  read_u8()  { uint8_t  v = es[pc]; pc += 1; return v; }
+    uint16_t read_u16() { uint16_t v = *(uint16_t*)(es + pc); pc += 2; return v; }
 
     // DS read: use shadow if within range, otherwise real DS
     uint16_t ds_read(uint16_t addr) {
@@ -8963,106 +8957,14 @@ struct V2VM {
     // DS write: write to shadow if within range (never write to real DS)
     void ds_write(uint16_t addr, uint16_t val) {
         if (addr < V2_VM_SHADOW_SIZE - 1) {
-            // V2-DS302: catch ANY VM write to music/SFX mute flags (ds:0x302/0x304).
-            // PC is anim bytecode offset, obj = current VM object id.
-            if (addr == 0x302 || addr == 0x304) {
-                extern int v2_dbg_pre_vm_iter;
-                fprintf(stderr,
-                  "V2-DS302[f%d]: obj=%02X pc=%04X addr=%04X val=%04X was=%04X\n",
-                  v2_dbg_pre_vm_iter, obj, pc, addr, val,
-                  *(uint16_t*)(shadow + addr));
-            }
-            // V2-PWWRITE: trap VM writes to password chars word_287F0..word_287F6
-            // (ds:0x310..0x316). If lv=password-entry runs and captures keys,
-            // it must store them here before sub_12829 (password check). Used to
-            // verify if lv=0026 is actually password entry mode.
-            if (addr >= 0x310 && addr <= 0x317) {
-                extern int v2_dbg_pre_vm_iter;
-                extern uint16_t v2_current_level;
-                static int _pw_n = 0;
-                if (++_pw_n <= 50) fprintf(stderr,
-                  "V2-PWWRITE[#%d f%d lv=%04X]: obj=%02X pc=%04X addr=%04X val=%04X was=%04X\n",
-                  _pw_n, v2_dbg_pre_vm_iter, v2_current_level, obj, pc, addr, val,
-                  *(uint16_t*)(shadow + addr));
-            }
-            // Trap: watch sub-sprite mode for slots 0x0030-0x0034 + addr-1 spillover
-            if (addr >= 0x117C && addr <= 0x1181) {
-                uint16_t old = *(uint16_t*)(shadow + addr);
-                if (val != old) {
-                    static int _tw2 = 0; _tw2++;
-                    if (_tw2 <= 50) fprintf(stderr, "V2-TRAP-MODE: W addr=%04X obj=%04X val=%04X was=%04X pc=%04X [%d]\n",
-                        addr, obj, val, old, pc, _tw2);
-                }
-            }
-            // Trap ds:0x8736 writes — Pattern C transient bug (~Δ=0x240 between v2/orig)
-            if ((addr == 0x8736 || addr == 0x8735 || addr == 0x8737) && val != *(uint16_t*)(shadow + addr)) {
-                static int _t8736 = 0;
-                if (_t8736 < 30) { _t8736++;
-                    extern int v2_orig_post_vm_frame;
-                    fprintf(stderr, "V2-WR-8736[f%d obj=%04X pc=%04X]: addr=%04X %04X->%04X\n",
-                        v2_orig_post_vm_frame, obj, pc, addr, *(uint16_t*)(shadow + addr), val);
-                }
-            }
-            // V2-WR-36 spam — commented (496 lines/run, ds:0x36 trace)
-            // (0x077E trace removed — root cause: VGA interrupt timing in original)
-            if (addr == 0x3CC && val != *(uint16_t*)(shadow + addr)) {
-                static int _tw = 0; if (_tw < 5) { _tw++;
-                printf("V2-VM-WRITE-3CC: obj=%04X val=%04X (was %04X)\n",
-                    obj, val, *(uint16_t*)(shadow + addr)); }
-            }
-            // V2-3FC-WR: trap ALL ds_write to mirror (0x3FC..0x413) — see WHO writes shadow mirror
-            if (addr >= 0x3FC && addr <= 0x413 && val != *(uint16_t*)(shadow + addr)) {
-                static int _v23fc = 0; _v23fc++;
-                if (_v23fc <= 100)
-                    fprintf(stderr,
-                      "V2-3FC-WR[%d]: addr=%04X(slot=%d mirror) old=%04X new=%04X obj=%02X pc=%04X\n",
-                      _v23fc, addr, (addr - (DS_HUD_ITEMS_PREV)) / 2,
-                      *(uint16_t*)(shadow + addr), val, obj, pc);
-            }
-            // V2-ERIK-WR: trap writes to Erik vel_X_field (0x164D), vel_Y_field (0x1675),
-            // flags (0x1585), anim_id (0x16ED) on level 002B. Catches ALL ds_write paths
-            // (op_56, op_5A, op_60, op_62, op_67, sub_135cf, sub_1386b, etc).
-            if (*(uint16_t*)(shadow + DS_LEVEL) == 0x002B &&
-                (addr == OBJ_ANIM_DX || addr == OBJ_ANIM_DY || addr == OBJ_FLAGS || addr == OBJ_ANIM_IDX ||
-                 addr == OBJ_VEL_X || addr == OBJ_VEL_Y) &&
-                val != *(uint16_t*)(shadow + addr)) {
-                static int _ew = 0, _ew_en = -1;   // #40 flag: gate Erik-write trap behind V2_TRACE
-                if (_ew_en < 0) _ew_en = getenv("V2_TRACE") ? 1 : 0;
-                _ew++;
-                if (_ew_en && _ew <= 300) {
-                    const char* fname =
-                        addr == OBJ_ANIM_DX ? "vel_X_field" :
-                        addr == OBJ_ANIM_DY ? "vel_Y_field" :
-                        addr == OBJ_FLAGS ? "Erik_flags" :
-                        addr == OBJ_ANIM_IDX ? "Erik_anim_id" :
-                        addr == OBJ_VEL_X ? "vel_X_acc" :
-                        addr == OBJ_VEL_Y ? "vel_Y_acc" : "?";
-                    fprintf(stderr,
-                      "V2-ERIK-WR[%d]: addr=%04X(%s) old=%04X new=%04X writer_obj=%02X pc=%04X\n",
-                      _ew, addr, fname, *(uint16_t*)(shadow + addr), val, obj, pc);
-                }
-            }
-            // Trap cmd queue write pointer (ds:0x218F = word_2A66F)
-            if (addr == DS_CMD_WRITE && val != *(uint16_t*)(shadow + addr)) {
-                static int _tcq = 0; _tcq++;
-                if (_tcq <= 50) fprintf(stderr,
-                    "V2-CMDQ-WR[%d]: addr=218F old=%04X new=%04X obj=%02X pc=%04X lv=%04X\n",
-                    _tcq, *(uint16_t*)(shadow + addr), val, obj, pc, *(uint16_t*)(shadow + DS_LEVEL));
-            }
             *(uint16_t*)(shadow + addr) = val;
         }
     }
 
     // DS byte write
     void ds_write_b(uint16_t addr, uint8_t val) {
-        if (addr < V2_VM_SHADOW_SIZE) {
-            if ((addr == 0x117D || addr == 0x117F) && val != shadow[addr]) {
-                static int _tb = 0; if (_tb < 20) { _tb++;
-                fprintf(stderr, "V2-TRAP-BYTE: addr=%04X obj=%04X val=%02X was=%02X pc=%04X [%d]\n",
-                    addr, obj, val, shadow[addr], pc, _tb); }
-            }
+        if (addr < V2_VM_SHADOW_SIZE)
             shadow[addr] = val;
-        }
     }
 
     // Field access for current object
@@ -9075,7 +8977,7 @@ struct V2VM {
 };
 
 // ObjRef backend (declared in v2_obj_view.h): forwards through the VM
-// accessors so every diagnostic trap in ds_read/ds_write keeps firing.
+// accessors (shadow bounds check + single write path).
 uint16_t ObjRef::u16(uint16_t col) const { return vm.ds_read((uint16_t)(slot + col)); }
 void     ObjRef::w16(uint16_t col, uint16_t v) const { vm.ds_write((uint16_t)(slot + col), v); }
 
