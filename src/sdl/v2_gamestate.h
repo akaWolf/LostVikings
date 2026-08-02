@@ -450,3 +450,24 @@ struct V2StateView {
 #undef V2_GS_AB1
 #undef V2_GS_ABN
 };
+
+// Read-only view over a const DS image (same names, getters only) — for
+// renderer-side code that receives `const uint8_t*`.
+struct V2StateViewC {
+    const uint8_t* ds;
+    explicit V2StateViewC(const uint8_t* ds_) : ds(ds_) {}
+#define V2_GS_A1(name, off) \
+    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
+#define V2_GS_AN(name, off, n) \
+    uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
+    V2_GS_FIELDS_W(V2_GS_A1, V2_GS_AN)
+#undef V2_GS_A1
+#undef V2_GS_AN
+#define V2_GS_AB1(name, off) \
+    uint8_t  name##_b() const          { return ds[(off)]; }
+#define V2_GS_ABN(name, off, n) \
+    const uint8_t* name##_bytes() const { return ds + (off); }
+    V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
+#undef V2_GS_AB1
+#undef V2_GS_ABN
+};

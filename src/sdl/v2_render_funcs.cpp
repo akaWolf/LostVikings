@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdio>
 #include "render_v2.h"
+#include "v2_gamestate.h"
 #include "v2_ds_layout.h"
 
 // Task #21 obj-trace ring (defined in v2_vm.cpp).
@@ -400,12 +401,14 @@ struct V2Camera {
     int tile_shift_x, tile_shift_y; // shake tile shift: eff>>3 - disp>>3
 };
 static V2Camera v2_effective_camera(const uint8_t* ds_base) {
-    uint16_t x_disp = *(const uint16_t*)(ds_base + DS_VIEWPORT_X);
-    uint16_t y_disp = *(const uint16_t*)(ds_base + DS_VIEWPORT_Y);
-    uint16_t x_some = *(const uint16_t*)(ds_base + DS_SHAKE_X);
-    uint16_t y_some = *(const uint16_t*)(ds_base + DS_SHAKE_Y);
-    uint16_t x_lvl  = *(const uint16_t*)(ds_base + DS_SCROLL_LIMIT_X);
-    uint16_t y_lvl  = *(const uint16_t*)(ds_base + DS_SCROLL_LIMIT_Y);
+    // phase D pilot: typed V2StateViewC access — same bytes, named fields.
+    V2StateViewC st(ds_base);
+    uint16_t x_disp = st.viewport_x();
+    uint16_t y_disp = st.viewport_y();
+    uint16_t x_some = st.shake_x();
+    uint16_t y_some = st.shake_y();
+    uint16_t x_lvl  = st.scroll_limit_x();
+    uint16_t y_lvl  = st.scroll_limit_y();
     V2Camera c;
     c.x_eff = (uint16_t)(x_disp + x_some);
     if (c.x_eff > x_lvl) c.x_eff = (uint16_t)(x_disp - x_some);
