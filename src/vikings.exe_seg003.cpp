@@ -677,13 +677,6 @@ loc_1cdde:
 cs=0xe25;eip=0x0005ae; 	T(MOV(cx, bp));	// 36318 mov     cx, bp ;~ 0E25:05AE
 loc_1cde0:
 	// 6106
-{ static int _orfs=0; if(si >= 0x5580 && si <= 0x5590 && _orfs < 10) { _orfs++;
-  fprintf(stderr,"ORIG-FS-OR[%d]: fs[%04X] %04X→%04X\n",_orfs,(uint16_t)si,*(uint16_t*)raddr(fs,si),*(uint16_t*)raddr(fs,si)|3);
-  if (si == 0x5586) {
-    extern uint8_t* v2_fs5586_trap_addr;
-    v2_fs5586_trap_addr = (uint8_t*)raddr(fs, 0x5586);
-    fprintf(stderr,"FS5586-ARM: trap armed at %p\n", v2_fs5586_trap_addr);
-  } } }
 cs=0xe25;eip=0x0005b0; 	X(OR(*(dw*)(raddr(fs,si)), 3));	// 36321 or      word ptr fs:[si], 3 ;~ 0E25:05B0
 cs=0xe25;eip=0x0005b4; 	T(ADD(si, 2));	// 36322 add     si, 2 ;~ 0E25:05B4
 cs=0xe25;eip=0x0005b7; 	J(LOOP(loc_1cde0));	// 36323 loop    loc_1CDE0 ;~ 0E25:05B7
@@ -2088,8 +2081,6 @@ cs=0xe25;eip=0x00112b; 	T(MOV(bp, 5));	// 37549 mov     bp, 5 ;~ 0E25:112B
 cs=0xe25;eip=0x00112e; 	T(MOV(si, *(dw*)(raddr(ds,di+0x0C4D))));	// 37550 mov     si, [di+0C4Dh] ;~ 0E25:112E
 cs=0xe25;eip=0x001132; 	T(SHR(si, 3));	// 37551 shr     si, 3 ;~ 0E25:1132
 cs=0xe25;eip=0x001135; 	T(INC(si));	// 37552 inc     si ;~ 0E25:1135
-{ static int _ocd7d=0; if(di==0x30 && _ocd7d<5) { _ocd7d++;
-  fprintf(stderr,"ORIG-CD7D-TYPE2[%d]: di=%02X cx=%04X dx=%04X si=%d bp=%d\n",_ocd7d,(uint16_t)di,(uint16_t)cx,(uint16_t)dx,si,bp); } }
 cs=0xe25;eip=0x001136; 	J(CALL(sub_1cd7d,0));	// 37553 call    sub_1CD7D ;~ 0E25:1136
 cs=0xe25;eip=0x001139; 	T(MOV(si, *(dw*)(raddr(ds,di+0x74D))));	// 37554 mov     si, [di+74Dh] ;~ 0E25:1139
 	cs=seg_offset(seg003);

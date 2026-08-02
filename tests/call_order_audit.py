@@ -113,6 +113,12 @@ def v2_raw_bodies():
                     calls.append(('sfx', 'sub_177bb'))
                 if re.search(r'fx::stop_all_sfx', code):
                     calls.append(('sfx', 'sub_17912'))
+                # параметризованный хелпер: include_anim_queue=false отрезает
+                # sub_1406d — разворачиваем как 165aa+16661 (не транзитивно)
+                if re.search(r'v2_game_loop_post_render\([^)]*false\)', code):
+                    calls.append(('hex', 'sub_165aa'))
+                    calls.append(('hex', 'sub_16661'))
+                    continue
                 for cm in V2ANY.finditer(code):
                     fn = cm.group(1)
                     if fn == name or fn.startswith('v2_fntest_'):

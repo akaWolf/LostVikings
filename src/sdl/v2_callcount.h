@@ -33,6 +33,14 @@ enum V2CallCountId {
     CC_165AA,       // page rotate
     CC_16661,       // scroll tracker
     CC_108C8,       // audio tick
+    // Wave 2 (#65): RESTRUCTURED-class mirrors + the sub_115d2 anim-queue gap
+    CC_1450B,       // palette shade save (pre pw/quit screen)
+    CC_14590,       // palette shade clear (post pw/quit; also VM op 0x3E)
+    CC_1265B,       // text print (12515 + raw 124c5)
+    CC_11569,       // viking spawn pair (level init)
+    CC_13809,       // spawn object (13809 entry)
+    CC_12CE4,       // viking health init
+    CC_1406D,       // anim queue processing (№55 gap: only 0x5C/0x91/0x1BEB)
     CC_COUNT
 };
 

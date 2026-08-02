@@ -46,7 +46,7 @@ sub_15a57 v2_vm_tile_search_up_15a57 WRAPPER 14199=(>>4)-обёртка над 1
 sub_15afd v2_vm_tile_coll_down_15afd WRAPPER тот же 14199→141ba класс (юнит 75566)
 sub_163ac v2_vm_platform_check_163ac WRAPPER тот же класс + COND-MERGE 4 сайта→1
 sub_15c37 v2_vm_xvel_obj_search_15c37 BP-PARAM 15cef/15cf5-выходы → out_dir параметр (юнит 75563)
-sub_1625d v2_ground_snap_1625d INLINE-VERIFIED лямбды tile_type/slope = 14199/16390; TODO-C: слить с экстракциями
+sub_1625d v2_ground_snap_1625d INLINE-VERIFIED слито 2026-08-04: v2_tile_type_at_14199 + v2_slope_diff_16390 (было лямбдами)
 sub_165aa v2_page_rotate_165aa PARSER 1df6a-вызов лежит ЗА финальным RETN (чужой вход 0x6656)
 sub_16661 v2_scroll_tracker_16661 OWN-TAIL 16694/166bc = собственные loc_-хвосты, экстрагированные в v2
 sub_11cbb v2_pause_items_11cbb LAMBDA стрелки 2-4: erase_old/arrow_commit-лямбды невидимы статически
@@ -59,3 +59,4 @@ sub_15911 v2_tile_coll_y_15911 COND-ORDER текстовый порядок ве
 sub_158d7 v2_vm_probe_down_158d7 PARSER-FIXED group-dispatch kloc_15a70 теперь виден — parity
 sub_12ab8 v2_alloc_segments_12ab8 LOOP-ROLLED палитро-чанки 4..0xE→2E7D..(шаг 0x300) таблицей+циклом против orig-развёртки 13 сайтов; 10e85=PORT-64K
 sub_11c52 v2_selector_blink_11c52 COND-MERGE+ORDER mode0: две 1183d/120d1-ветки → ax-условный сайт; mode1: порядок веток текстово обратен; сверено построчно 2026-08-04
+sub_14199 v2_tile_type_at_14199 WRAPPER orig = 14199→141a7→141ba трёхслойная обёртка; v2 плоская (OOB 0x400/0 + row-LUT + (tv&0xFC00)>>10 сверены построчно)

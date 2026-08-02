@@ -4538,7 +4538,6 @@ cs=0x1a2;eip=0x00107c; 	J(LOOP(loc_1107b));	// 2261 loop    loc_1107B ;~ 01A2:10
  for (int i = 0; i < 0x100; i++) setPalette((uint8_t)i, 0, 0, 0);
 cs=0x1a2;eip=0x00107e; 	J(RETN(0));	// 2262 retn ;~ 01A2:107E
 sub_11080:
- printf("sub_11080 load new level\n");
 	// 2271
 cs=0x1a2;eip=0x001080; 	X(MOV(word_2880f, 0));	// 2273 mov     word_2880F, 0 ;~ 01A2:1080
 ret_1a2_1086:
@@ -4583,9 +4582,7 @@ cs=0x1a2;eip=0x001133; 	T(MOV(si, word_2aa8d));	// 2309 mov     si, word_2AA8D ;
 cs=0x1a2;eip=0x001137; 	X(MOV(word_2aa8b, si));	// 2310 mov     word_2AA8B, si ;~ 01A2:1137
 cs=0x1a2;eip=0x00113b; 	T(MOV(di, word_2aaa9));	// 2311 mov     di, word_2AAA9 ;~ 01A2:113B
 cs=0x1a2;eip=0x00113f; 	X(MOV(word_2aa8d, di));	// 2312 mov     word_2AA8D, di ;~ 01A2:113F
-// printf("sub_11080 1\n");
 cs=0x1a2;eip=0x001143; 	J(CALL(sub_111b1,0));	// 2313 call    sub_111B1 ;~ 01A2:1143
-// printf("sub_11080 2\n");
 cs=0x1a2;eip=0x001146; 	J(CALL(sub_111df,0));	// 2314 call    sub_111DF ;~ 01A2:1146
 cs=0x1a2;eip=0x001149; 	T(CMP(word_2aa8d, 0x25));	// 2315 cmp     word_2AA8D, 25h ; '%' ;~ 01A2:1149
 cs=0x1a2;eip=0x00114e; 	J(JZ(loc_11153));	// 2316 jz      short loc_11153 ;~ 01A2:114E
@@ -4609,33 +4606,17 @@ cs=0x1a2;eip=0x001156; 	J(CALL(sub_11204,0));	// 2321 call    sub_11204 ;~ 01A2:
 	}
 cs=0x1a2;eip=0x001159; 	J(CALL(sub_11383,0));	// 2322 call    sub_11383 ;~ 01A2:1159
 cs=0x1a2;eip=0x00115c; 	J(CALL(sub_112ae,0));	// 2323 call    sub_112AE ;~ 01A2:115C
-	{ extern void v2_hw_wp_drain(); v2_hw_wp_drain();
-	  uint16_t _g=*(dw*)(raddr(ds,0x2E5D)); if(_g){uint8_t v=*(uint8_t*)raddr(_g,0); if(v!=0) fprintf(stderr,"ORIG-GS0[post-112ae]:%02X\n",v);} }
 cs=0x1a2;eip=0x00115f; 	J(CALL(sub_1133a,0));	// 2324 call    sub_1133A ;~ 01A2:115F
 cs=0x1a2;eip=0x001162; 	J(CALL(sub_1167a,0));	// 2325 call    sub_1167A ;~ 01A2:1162
-	{ extern void v2_hw_wp_drain(); v2_hw_wp_drain();
-	  uint16_t _g=*(dw*)(raddr(ds,0x2E5D)); if(_g){uint8_t v=*(uint8_t*)raddr(_g,0); if(v!=0) fprintf(stderr,"ORIG-GS0[post-1167a]:%02X\n",v);} }
 cs=0x1a2;eip=0x001165; 	J(CALL(sub_116ae,0));	// 2326 call    sub_116AE ;~ 01A2:1165
-	{ extern void v2_hw_wp_drain(); v2_hw_wp_drain();
-	  uint16_t _g=*(dw*)(raddr(ds,0x2E5D)); if(_g){uint8_t v=*(uint8_t*)raddr(_g,0); if(v!=0) fprintf(stderr,"ORIG-GS0[post-116ae]:%02X\n",v);} }
 cs=0x1a2;eip=0x001168; 	J(CALL(sub_11397,0));	// 2327 call    sub_11397 ;~ 01A2:1168
 cs=0x1a2;eip=0x00116b; 	J(CALL(sub_137f1,0));	// 2328 call    sub_137F1 ;~ 01A2:116B
 cs=0x1a2;eip=0x00116e; 	J(CALL(sub_12fb3,0));	// 2329 call    sub_12FB3 ;~ 01A2:116E
 cs=0x1a2;eip=0x001171; 	J(CALL(sub_11446,0));	// 2330 call    sub_11446 ;~ 01A2:1171
 cs=0x1a2;eip=0x001174; 	J(CALL(sub_113b0,0));	// 2331 call    sub_113B0 ;~ 01A2:1174
 cs=0x1a2;eip=0x001177; 	J(CALL(sub_113d8,0));	// 2332 call    sub_113D8 ;~ 01A2:1177
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,
-	  "BISECT-302[f%d before sub_17749]: ds:0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x00117a; 	J(CALL(sub_17749,0));	// 2333 call    sub_17749 ;~ 01A2:117A
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,
-	  "BISECT-302[f%d after sub_17749]: ds:0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
- { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
-   printf("ORIG-BEFORE-173c7: FS[960]=%04X FS[0]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0)); }
 cs=0x1a2;eip=0x00117d; 	J(CALL(sub_173c7,0));	// 2334 call    sub_173C7 ;~ 01A2:117D
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,
-	  "BISECT-302[f%d after sub_173c7]: ds:0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
- { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
-   printf("ORIG-AFTER-173c7: FS[960]=%04X FS[0]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0)); }
 	// Save FS snapshot after sub_173c7 for v2 comparison
 	{
 	  extern uint8_t v2_orig_fs_after_173c7[];
@@ -4647,19 +4628,9 @@ cs=0x1a2;eip=0x00117d; 	J(CALL(sub_173c7,0));	// 2334 call    sub_173C7 ;~ 01A2:
 	  }
 	}
 cs=0x1a2;eip=0x001180; 	J(CALL(sub_11439,0));	// 2335 call    sub_11439 ;~ 01A2:1180
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,
-	  "BISECT-302[f%d after sub_11439]: ds:0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
- { dw fs_s = *(dw*)(raddr(ds,0x2E69)); db* fsb = (db*)raddr(fs_s, 0);
-   printf("ORIG-AFTER-11439: FS[960]=%04X [962]=%04X\n", *(dw*)(fsb+0x960), *(dw*)(fsb+0x962)); }
 cs=0x1a2;eip=0x001183; 	J(CALL(sub_13ba5,0));	// 2336 call    sub_13BA5 ;~ 01A2:1183
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,
-	  "BISECT-302[f%d after sub_13ba5]: ds:0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x001186; 	J(CALL(sub_13a0e,0));	// 2337 call    sub_13A0E ;~ 01A2:1186
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,
-	  "BISECT-302[f%d after sub_13a0e (before sub_115d2)]: ds:0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x001189; 	J(CALL(sub_115d2,0));	// 2338 call    sub_115D2 ;~ 01A2:1189
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,
-	  "BISECT-302[f%d after sub_115d2]: ds:0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	// Snapshot orig DS after sub_115d2 for v2 comparison
 	if (myDrawInfo_v2) { extern void v2_save_115d2_snapshot(uint8_t*); v2_save_115d2_snapshot((uint8_t*)raddr(ds,0)); }
 cs=0x1a2;eip=0x00118c; 	J(CALL(sub_10f5d,0));	// 2339 call    sub_10F5D ;~ 01A2:118C
@@ -5122,6 +5093,7 @@ cs=0x1a2;eip=0x00155c; 	X(MOV(word_2881c, 6));	// 2835 mov     word_2881C, 6 ;~ 
 cs=0x1a2;eip=0x001562; 	X(MOV(word_288a4, 0x0FFFF));	// 2836 mov     word_288A4, 0FFFFh ;~ 01A2:1562
 cs=0x1a2;eip=0x001568; 	J(RETN(0));	// 2837 retn ;~ 01A2:1568
 sub_11569:
+ { v2_cc_orig_hit(19); } // M1 call-parity CC_11569 (#65)
 	// 2844
 cs=0x1a2;eip=0x001569; 	X(PUSH(di));	// 2846 push    di ;~ 01A2:1569
 ret_1a2_156a:
@@ -5161,32 +5133,23 @@ cs=0x1a2;eip=0x0015cc; 	T(MOV(ax, 2));	// 2878 mov     ax, 2 ;~ 01A2:15CC
 cs=0x1a2;eip=0x0015cf; 	J(JMP(sub_13809));	// 2879 jmp     sub_13809 ;~ 01A2:15CF
 sub_115d2:
 	// 2886
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d entry]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x0015d2; 	J(CALL(sub_12345,0));	// 2887 call    sub_12345 ;~ 01A2:15D2
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_12345]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 ret_1a2_15d5:
 	// 4611
 cs=0x1a2;eip=0x0015d5; 	J(CALL(sub_14207,0));	// 2888 call    sub_14207 ;~ 01A2:15D5
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_14207 (VM)]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(10); /* T_SF1_VM_END */ }
 cs=0x1a2;eip=0x0015d8; 	J(CALL(sub_1386b,0));	// 2889 call    sub_1386B ;~ 01A2:15D8
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_1386b]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(17); /* MAIN_AFTER_1386B (reused for sub_115d2 SF1) */ }
 cs=0x1a2;eip=0x0015db; 	J(CALL(sub_1625d,0));	// 2890 call    sub_1625D ;~ 01A2:15DB
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_1625d]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(18); /* MAIN_AFTER_1625D (reused) */ }
 cs=0x1a2;eip=0x0015de; 	J(CALL(sub_15546,0));	// 2891 call    sub_15546 ;~ 01A2:15DE
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_15546]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(19); /* MAIN_AFTER_15546 (reused) */ }
 cs=0x1a2;eip=0x0015e1; 	J(CALL(sub_13916,0));	// 2892 call    sub_13916 ;~ 01A2:15E1
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_13916]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(20); /* MAIN_AFTER_13916 (reused) */ }
 cs=0x1a2;eip=0x0015e4; 	J(CALL(sub_1064b,0));	// 2893 call    sub_1064B ;~ 01A2:15E4
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_1064b]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(21); /* MAIN_AFTER_1064B (reused) */ }
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x0015e7; 	J(CALL(sub_12fc6,0));	// 2894 call    sub_12FC6 ;~ 01A2:15E7
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d after sub_12fc6 (SF1 end)]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(11); /* T_SF1_POSTVM_END */ }
 cs=0x1a2;eip=0x0015ea; 	J(CALL(sub_16775,0));	// 2895 call    sub_16775 ;~ 01A2:15EA
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(12); /* T_SF1_PF1_END */ }
@@ -5202,7 +5165,6 @@ cs=0x1a2;eip=0x001600; 	T(MOV(ax, 0x0FFFE));	// 2901 mov     ax, 0FFFEh ;~ 01A2:
 cs=0x1a2;eip=0x001603; 	J(CALLF(sub_1c8f1,0));	// 2902 call    sub_1C8F1 ;~ 01A2:1603
 cs=0x1a2;eip=0x001608; 	J(CALL(sub_16775,0));	// 2903 call    sub_16775 ;~ 01A2:1608
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(13); /* T_SF1_PF2_END */ }
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d SF1 end (post-render)]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x00160b; 	J(CALL(sub_15530,0));	// 2904 call    sub_15530 ;~ 01A2:160B
 cs=0x1a2;eip=0x00160e; 	J(CALL(sub_10704,0));	// 2905 call    sub_10704 ;~ 01A2:160E
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
@@ -5219,7 +5181,6 @@ cs=0x1a2;eip=0x001627; 	T(MOV(ax, 0x0FFFE));	// 2912 mov     ax, 0FFFEh ;~ 01A2:
 cs=0x1a2;eip=0x00162a; 	J(CALLF(sub_1c8f1,0));	// 2913 call    sub_1C8F1 ;~ 01A2:162A
 cs=0x1a2;eip=0x00162f; 	J(CALL(sub_16775,0));	// 2914 call    sub_16775 ;~ 01A2:162F
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(14); /* T_SF2_PF_END */ }
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d SF2 end]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x001632; 	J(CALL(sub_10753,0));	// 2915 call    sub_10753 ;~ 01A2:1632
 cs=0x1a2;eip=0x001635; 	J(CALL(sub_13c0c,0));	// 2916 call    sub_13C0C ;~ 01A2:1635
 cs=0x1a2;eip=0x001638; 	J(CALL(sub_12fd0,0));	// 2917 call    sub_12FD0 ;~ 01A2:1638
@@ -5237,7 +5198,6 @@ cs=0x1a2;eip=0x001651; 	T(MOV(ax, 0x0FFFE));	// 2924 mov     ax, 0FFFEh ;~ 01A2:
 cs=0x1a2;eip=0x001654; 	J(CALLF(sub_1c8f1,0));	// 2925 call    sub_1C8F1 ;~ 01A2:1654
 cs=0x1a2;eip=0x001659; 	J(CALL(sub_16775,0));	// 2926 call    sub_16775 ;~ 01A2:1659
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(15); /* T_SF3_PF_END */ }
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d SF3 end]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x00165c; 	J(CALL(sub_10130,0));	// 2927 call    sub_10130 ;~ 01A2:165C
 	sub_1dd9c_main_render_loop_with_state(_state);  // RECREATED: Call our implementation before original
 cs=0x1a2;eip=0x00165f; 	v2_draw_tiles(ds); v2_draw_sprites(ds); v2_draw_ui(ds); J(CALLF(sub_1de05,0));	// 2928 call    sub_1DE05 ;~ 01A2:165F
@@ -5249,7 +5209,6 @@ cs=0x1a2;eip=0x00166a; 	J(CALLF(sub_1dd9c,0));	// 2931 call    sub_1DD9C ;~ 01A2
 cs=0x1a2;eip=0x00166f; 	T(MOV(ax, 0x0FFFE));	// 2932 mov     ax, 0FFFEh ;~ 01A2:166F
 	v2_draw_flagged_tiles(ds);
 cs=0x1a2;eip=0x001672; 	J(CALLF(sub_1c8f1,0));	// 2933 call    sub_1C8F1 ;~ 01A2:1672
-	{ extern int v2_dbg_pre_vm_iter; fprintf(stderr,"BISECT-302-115d2[f%d SF4 end (sub_115d2 exit)]: 0x302=%04X\n", v2_dbg_pre_vm_iter, word_287e2); }
 //cs=0x1a2;eip=0x001677; 	J(JMP(sub_16775));	// 2934 jmp     sub_16775 ;~ 01A2:1677
  { auto _r = set_display_memory_addr(_state);
    { extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(16); /* T_SF4_END */ }
@@ -5307,7 +5266,6 @@ locret_116e2:
 cs=0x1a2;eip=0x0016e2; 	J(RETN(0));	// 2997 retn ;~ 01A2:16E2
 sub_116e3:
 	// 3004
- printf("sub_116e3 %x\n", word_2aaa9);
 cs=0x1a2;eip=0x0016e3; 	X(MOV(word_28832, 0x1E));	// 3005 mov     word_28832, 1Eh ;~ 01A2:16E3
 ret_1a2_16e9:
 	// 4617
@@ -5386,21 +5344,6 @@ cs=0x1a2;eip=0x00178a; 	X(MOV(word_288a4, 0));	// 3086 mov     word_288A4, 0 ;~ 
 cs=0x1a2;eip=0x001790; 	J(RETN(0));	// 3087 retn ;~ 01A2:1790
 sub_11792:
 	// 3096
-{
-  // CUR-11792-ENTRY: trap orig sub_11792 entry, log condition + 0x3FC state
-  static int _cur11792 = 0; _cur11792++;
-  if (_cur11792 <= 30 || _cur11792 % 200 == 0) {
-    uint16_t lvl = *(dw*)(raddr(ds, 0x25AD));
-    uint8_t flag = *(raddr(ds, 0x25CF));
-    fprintf(stderr,
-      "CUR-11792-ENTRY[%d]: lvl=%04X 25CF=%02X enter=%d 3FC[4]=%04X 3FC[8]=%04X 3E4[4]=%04X 3E4[8]=%04X\n",
-      _cur11792, lvl, flag, ((flag & 1) && lvl != 0x2C) ? 1 : 0,
-      *(dw*)(raddr(ds, 0x3FC + 8)),
-      *(dw*)(raddr(ds, 0x3FC + 16)),
-      *(dw*)(raddr(ds, 0x3E4 + 8)),
-      *(dw*)(raddr(ds, 0x3E4 + 16)));
-  }
-}
 cs=0x1a2;eip=0x001792; 	T(TEST(byte_2aaaf, 1));	// 3098 test    byte_2AAAF, 1 ;~ 01A2:1792
 ret_1a2_1797:
 	// 4626
@@ -5415,7 +5358,6 @@ locret_117ac:
 	// 4627
 cs=0x1a2;eip=0x0017ac; 	J(RETN(0));	// 3109 retn ;~ 01A2:17AC
 sub_117ad:
- printf("sub_117ad skip=%x\n", byte_2aaaf);
 	// 3116
 cs=0x1a2;eip=0x0017ad; 	X(MOV(word_28820, 2));	// 3117 mov     word_28820, 2 ;~ 01A2:17AD
 ret_1a2_17b3:
@@ -5424,7 +5366,6 @@ cs=0x1a2;eip=0x0017b3; 	T(TEST(byte_2aaaf, 1));	// 3118 test    byte_2AAAF, 1 ;~
 cs=0x1a2;eip=0x0017b8; 	J(JZ(locret_117cf));	// 3119 jz      short locret_117CF ;~ 01A2:17B8
 cs=0x1a2;eip=0x0017ba; 	T(MOV(ax, 1));	// 3120 mov     ax, 1 ;~ 01A2:17BA
 cs=0x1a2;eip=0x0017bd; 	T(MOV(di, 0));	// 3121 mov     di, 0 ;~ 01A2:17BD
- printf("sub_117ad display\n");
 cs=0x1a2;eip=0x0017c0; 	J(CALL(sub_10cd8,0));	// 3122 call    sub_10CD8 ;~ 01A2:17C0
 cs=0x1a2;eip=0x0017c3; 	J(CALL(sub_1200a,0));	// 3123 call    sub_1200A ;~ 01A2:17C3
 cs=0x1a2;eip=0x0017c6; 	J(CALL(sub_1201d,0));	// 3124 call    sub_1201D ;~ 01A2:17C6
@@ -6428,15 +6369,6 @@ loc_1219c:
 cs=0x1a2;eip=0x00219c; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x3E4))));	// 4307 mov     ax, [di+3E4h] ;~ 01A2:219C
 cs=0x1a2;eip=0x0021a0; 	T(CMP(ax, *(dw*)(raddr(ds,di+0x3FC))));	// 4308 cmp     ax, [di+3FCh] ;~ 01A2:21A0
 cs=0x1a2;eip=0x0021a4; 	J(JZ(loc_121b0));	// 4309 jz      short loc_121B0 ;~ 01A2:21A4
-{
-  // CUR-12199-SYNC: orig sub_12199 syncs mirror 0x3FC[di] = ax (= 0x3E4[di])
-  static int _cur12199 = 0; _cur12199++;
-  if (_cur12199 <= 50)
-    fprintf(stderr,
-      "CUR-12199-SYNC[%d]: di=%04X(slot=%d) ax(=3E4)=%04X prev_3FC=%04X lvl=%04X\n",
-      _cur12199, di, di/2, ax, *(dw*)(raddr(ds, di + 0x3FC)),
-      *(dw*)(raddr(ds, 0x25AD)));
-}
 cs=0x1a2;eip=0x0021a6; 	X(MOV(*(dw*)(raddr(ds,di+0x3FC)), ax));	// 4310 mov     [di+3FCh], ax ;~ 01A2:21A6
 cs=0x1a2;eip=0x0021aa; 	J(CALL(sub_1183d,0));	// 4311 call    sub_1183D ;~ 01A2:21AA
 cs=0x1a2;eip=0x0021ad; 	J(CALL(sub_120d1,0));	// 4312 call    sub_120D1 ;~ 01A2:21AD
@@ -7188,6 +7120,7 @@ cs=0x1a2;eip=0x002654; 	X(ADD(word_2a66f, 8));	// 5107 add     word_2A66F, 8 ;~ 
 cs=0x1a2;eip=0x002659; 	X(POP(bx));	// 5108 pop     bx ;~ 01A2:2659
 cs=0x1a2;eip=0x00265a; 	J(RETN(0));	// 5109 retn ;~ 01A2:265A
 sub_1265b:
+ { v2_cc_orig_hit(18); } // M1 call-parity CC_1265B (#65)
 	// 5116
 cs=0x1a2;eip=0x00265b; 	X(PUSH(si));	// 5121 push    si ;~ 01A2:265B
 ret_1a2_265c:
@@ -7953,6 +7886,7 @@ cs=0x1a2;eip=0x002cd7; 	X(MOV(*(dw*)(raddr(ds,0x25AF)), 0x0FFFF));	// 5904 mov  
 cs=0x1a2;eip=0x002cdd; 	X(MOV(*(dw*)(raddr(ds,0x3C2)), 0x0FFFF));	// 5905 mov     word ptr ds:3C2h, 0FFFFh ;~ 01A2:2CDD
 cs=0x1a2;eip=0x002ce3; 	J(RETN(0));	// 5906 retn ;~ 01A2:2CE3
 sub_12ce4:
+ { v2_cc_orig_hit(21); } // M1 call-parity CC_12CE4 (#65)
 	// 5913
 cs=0x1a2;eip=0x002ce4; 	X(MOV(*(dw*)(raddr(ds,0x414)), 0));	// 5915 mov     word ptr ds:414h, 0 ;~ 01A2:2CE4
 ret_1a2_2cea:
@@ -9350,6 +9284,7 @@ cs=0x1a2;eip=0x003803; 	T(CMP(si, 0x28));	// 7472 cmp     si, 28h ; '(' ;~ 01A2:
 cs=0x1a2;eip=0x003806; 	J(JNZ(loc_137f4));	// 7473 jnz     short loc_137F4 ;~ 01A2:3806
 cs=0x1a2;eip=0x003808; 	J(RETN(0));	// 7474 retn ;~ 01A2:3808
 sub_13809:
+ { v2_cc_orig_hit(20); } // M1 call-parity CC_13809 (#65)
 	// 7481
 cs=0x1a2;eip=0x003809; 	X(MOV(*(dw*)(raddr(ds,0x34)), ax));	// 7483 mov     ds:34h, ax ;~ 01A2:3809
 ret_1a2_380c:
@@ -10244,6 +10179,7 @@ cs=0x1a2;eip=0x00406a; 	X(POP(es));	// 8478 pop     es ;~ 01A2:406A
 cs=0x1a2;eip=0x00406b; 	X(POP(bx));	// 8479 pop     bx ;~ 01A2:406B
 cs=0x1a2;eip=0x00406c; 	J(RETN(0));	// 8480 retn ;~ 01A2:406C
 sub_1406d:
+ { v2_cc_orig_hit(22); } // M1 call-parity CC_1406D (#65)
 	// 8487
 cs=0x1a2;eip=0x00406d; 	T(MOV(cx, *(dw*)(raddr(ds,0x8734))));	// 8489 mov     cx, ds:8734h ;~ 01A2:406D
 ret_1a2_4071:
@@ -11042,6 +10978,7 @@ cs=0x1a2;eip=0x004506; 	X(POP(si));	// 9399 pop     si ;~ 01A2:4506
 cs=0x1a2;eip=0x004507; __disp=*(dw*)(((db*)&off_30c8e)+si);
 	J(JMP(__dispatch_call));	// 9400 jmp     ds:off_30C8E[si] ;~ 01A2:4507
 sub_1450b:
+ { v2_cc_orig_hit(16); } // M1 call-parity CC_1450B (#65)
 	// 9407
 cs=0x1a2;eip=0x00450b; 	T(SHL(al, 1));	// 9409 shl     al, 1 ;~ 01A2:450B
 ret_1a2_450d:
@@ -11098,6 +11035,7 @@ cs=0x1a2;eip=0x004581; 	X(MOV(*(dw*)(raddr(ds,0x7EFE)), 4));	// 9466 mov     wor
 cs=0x1a2;eip=0x004587; 	X(MOV(*(dw*)(raddr(ds,0x7F00)), 0x8202));	// 9467 mov     word ptr ds:7F00h, 8202h ;~ 01A2:4587
 cs=0x1a2;eip=0x00458d; 	J(JMP(sub_10e99));	// 9468 jmp     sub_10E99 ;~ 01A2:458D
 sub_14590:
+ { v2_cc_orig_hit(17); } // M1 call-parity CC_14590 (#65)
 	// 9475
 cs=0x1a2;eip=0x004590; 	X(MOV(*(raddr(ds,0x342)), 0));	// 9477 mov     byte ptr ds:342h, 0 ;~ 01A2:4590
 ret_1a2_4595:
