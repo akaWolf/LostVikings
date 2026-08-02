@@ -138,8 +138,14 @@ extern "C" uint8_t v2_nopl_sbpro_in(uint16_t port) {
 // ---------------------------------------------------------------------------
 // tick pump (game thread)
 // ---------------------------------------------------------------------------
+// Base of the tick clock: samples already played when the driver booted.
+// Without it the sequencer would owe ticks for all the audio time that
+// passed before the first music start and slam through them at once.
+static uint64_t g_base_samples = 0;
+
 extern "C" void v2_nopl_set_tick_hz(double hz) {
     g_tick_hz = hz;
+    g_base_samples = g_samples_played.load(std::memory_order_relaxed);
     fprintf(stderr, "v2_native_opl: tick rate %.1f Hz (driver descriptor)\n", hz);
 }
 
@@ -163,23 +169,51 @@ extern "C" void v2_nopl_out(uint16_t port, uint8_t val) {
     (void)port; (void)val;
 }
 
-// Frame-accumulator pump: the DOS INT8 ticked at [desc+0x14]+5 Hz against a
-// 60 Hz VGA frame — 125/60 ticks per game-loop iteration. Pumping BY FRAME
-// (not by wall clock / audio cursor) keeps the driver's DS state (EVNT
-// cursor, tempo counters in shadow_ds[0x9950..]) fully deterministic for
-// replay scenarios and headless runs; the audio thread merely consumes the
-// timestamped queue at its own pace.
+// Tick pump. The DOS INT8 fired at [desc+0x14]+5 Hz by REAL TIME regardless
+// of the frame rate — and the V2_ONLY game loop is NOT 60 Hz (the phase
+// chain blocks on VSYNC waits inside sub_10130; ~19 game frames/s, see
+// v2_main.cpp timing notes). Pacing ticks per frame therefore ran the
+// sequencer ~3x slow (user-audible: background music crawled while short
+// SFX still sounded okay). Default: pace by the AUDIO clock — samples the
+// device has consumed ARE wall time, and every queued write keeps its exact
+// per-tick timestamp, so batching at frame granularity stays inaudible.
+//
+// V2_AIL_FRAME_TICKS=1 keeps the frame-accumulator mode (125/60 per pump):
+// fully deterministic driver DS state for replay/verify experiments, at the
+// cost of tempo tracking the frame rate.
 static const double NOPL_FRAME_HZ = 60.0;
 static double g_tick_acc = 0.0;
 
 extern "C" void v2_nopl_pump(void) {
     if (g_tick_hz <= 0.0) return;
     double spt = (double)g_rate / g_tick_hz;   // samples per tick (queue ts)
-    g_tick_acc += g_tick_hz / NOPL_FRAME_HZ;
+    static int frame_mode = -1;
+    if (frame_mode < 0) {
+        const char* e = getenv("V2_AIL_FRAME_TICKS");
+        frame_mode = (e && e[0] == '1') ? 1 : 0;
+        if (frame_mode) fprintf(stderr, "v2_native_opl: frame-accumulator tick mode\n");
+    }
     int guard = 0;
-    while (g_tick_acc >= 1.0 && guard++ < 64) {
-        g_tick_acc -= 1.0;
-        g_cur_ts = (uint64_t)((double)g_ticks_done * spt);
+    if (frame_mode) {
+        g_tick_acc += g_tick_hz / NOPL_FRAME_HZ;
+        while (g_tick_acc >= 1.0 && guard++ < 64) {
+            g_tick_acc -= 1.0;
+            g_cur_ts = (uint64_t)((double)g_ticks_done * spt);
+            v2_ail_tick();
+            g_ticks_done++;
+        }
+        g_cur_ts = 0;
+        return;
+    }
+    // real-time mode: ticks due by the audio cursor (relative to the boot
+    // base), small lead so freshly queued commands land slightly ahead of
+    // it instead of in its past. Queue timestamps carry the same base so
+    // the mixer's absolute sample position lines up.
+    uint64_t played = g_samples_played.load(std::memory_order_relaxed);
+    uint64_t rel = (played > g_base_samples) ? played - g_base_samples : 0;
+    uint64_t due = (uint64_t)((double)rel / spt) + 1;
+    while (g_ticks_done < due && guard++ < 64) {
+        g_cur_ts = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
         v2_ail_tick();
         g_ticks_done++;
     }
