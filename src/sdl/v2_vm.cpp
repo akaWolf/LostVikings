@@ -17342,12 +17342,6 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
     // Exact replica of sub_1424c init logic:
     // 1. Check timer flag (0x1000) + timer countdown
     uint16_t flags = *(uint16_t*)(shadow + obj_idx + OBJ_FLAGS);
-    { static int _xdbg = 0; _xdbg++;
-      if (obj_idx == 0 && _xdbg <= 50)
-        fprintf(stderr, "V2-EXEC[%d] obj=0: flags=%04X cs=%04X pc=%04X 32F=%04X anim=%04X\n",
-                _xdbg, flags, code_seg, *(uint16_t*)(shadow + obj_idx + OBJ_PC),
-                *(uint16_t*)(shadow + DS_TRANSITION), *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_IDX));
-    }
     if (flags & 0x1000) {
         uint16_t timer = *(uint16_t*)(shadow + obj_idx + OBJ_TIMER);
         if (timer != 0) {
@@ -17392,11 +17386,6 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         es_seg = anim_seg;
         uint8_t* anim_es = v2_resolve_segment(anim_seg, shadow);
         uint16_t new_pc = *(uint16_t*)(anim_es + bx_anim + 3);
-        { static int _au = 0; _au++; if (_au <= 60 && obj_idx == 0)
-            fprintf(stderr, "V2-ANIMUPD[%d]: obj=0 reason=%s anim=%d bx=%04X new_pc=%04X old_pc=%04X seg=%04X\n",
-                    _au, (flags & 0x200) ? "flag200" : "32F!=0", anim_idx, bx_anim, new_pc,
-                    *(uint16_t*)(shadow + obj_idx + OBJ_PC), anim_seg);
-        }
         *(uint16_t*)(shadow + obj_idx + OBJ_PC) = new_pc;
     }
 
@@ -17437,23 +17426,6 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         // Orig loc_142A6: MOV si,es:[bx]; AND si,0xFF; SHL si,1 — si enters
         // every handler as opcode*2 (task #15 shadow-register model).
         vm.si_track = (uint16_t)(opcode << 1);
-        // Dump bytes around 94D7 when we're about to read it
-        if (pc_before == 0x94D7) {
-            static int _dump94d7 = 0; if (_dump94d7 < 3) { _dump94d7++;
-                fprintf(stderr, "V2-EXEC-94D7[%d]: obj=%02X op=%02X es_ptr=%p vm.es=%p anim_shadow=%p\n",
-                    _dump94d7, obj_idx, opcode, (void*)vm.es, (void*)vm.es, (void*)v2_vm_shadow_animdata);
-                fprintf(stderr, "  es[94D0..94DF]:");
-                for (int i=0; i<16; i++) fprintf(stderr," %02X", vm.es[0x94D0+i]);
-                fprintf(stderr, "\n  code_seg=%04X anim_seg=%04X es_seg_used=%04X\n",
-                    *(uint16_t*)(shadow+0x14+OBJ_CODE_SEG), *(uint16_t*)(shadow+DS_SEG_ANIM), es_seg);
-            }
-        }
-        // Trace ES reads during transition VM pass (ds:0x32F != 0)
-        if (*(uint16_t*)(shadow + DS_TRANSITION) != 0 && pc_before >= 0xC000) {
-            static int _es_hi = 0; _es_hi++;
-            if (_es_hi <= 20) fprintf(stderr, "V2-ES-HI: obj=%d pc=%04X op=%02X (ES read >= 0xC000!)\n",
-                                      obj_idx, pc_before, opcode);
-        }
 
         if (opcode > 0xD7) {
             extern int v2_fntest_vm_soft;
@@ -17467,60 +17439,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
             fprintf(stderr, "FATAL: unimplemented VM opcode 0x%02X at pc=%04X obj=%d\n", opcode, pc_before, obj_idx);
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
-        // Pre-opcode snapshot for divergence detection (gameplay levels only).
-        uint16_t pre_acc = v2_vm_accumulator;
-        extern int v2_dbg_pre_vm_iter;
-        uint16_t pre_obj_141D = *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_TABLE);
-        uint16_t pre_obj_16ED = *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_IDX);
-        // Snapshot ALL obj's anim_id to detect cutscene-controller writes.
-        uint16_t pre_all_16ED[128];
-        for (int oi = 0; oi < 128; oi++)
-            pre_all_16ED[oi] = *(uint16_t*)(shadow + (oi*2) + OBJ_ANIM_IDX);
-
         v2_vm_optable[opcode](vm);
-
-        // MAIN-VM PER-OPCODE TRACE: obj=06 — ALL frames in level 002B (#85).
-        // Capture full obj 6 history to find where v2 diverges from orig.
-        // Gated behind env V2_MVM6 (off by default): this fired every op for the
-        // whole lv=002B intro sequence, flooding stderr and slowing intro to
-        // ~2.5 fps. Opt-in when the #85 obj-6 history is actually needed.
-        static int _mvm6_en = -1;
-        if (_mvm6_en < 0) _mvm6_en = getenv("V2_MVM6") ? 1 : 0;
-        if (_mvm6_en && *(uint16_t*)(shadow + DS_LEVEL) == 0x002B && obj_idx == 6) {
-            static int _mvm = 0;
-            if (++_mvm <= 20000) {
-                fprintf(stderr,
-                  "V2-MVM[f%d #%d] obj=06: op=%02X pc=%04X→%04X acc=%04X→%04X "
-                  "141D=%04X→%04X 16ED=%04X→%04X 1715=%04X 1585=%04X 132D=%04X 1355=%04X "
-                  "32F=%04X 86DE=%04X 3B8=%04X es=%04X\n",
-                  v2_dbg_pre_vm_iter, _mvm, opcode, pc_before, vm.pc,
-                  pre_acc, v2_vm_accumulator,
-                  pre_obj_141D, *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_TABLE),
-                  pre_obj_16ED, *(uint16_t*)(shadow + obj_idx + OBJ_ANIM_IDX),
-                  *(uint16_t*)(shadow + obj_idx + OBJ_TIMER),
-                  *(uint16_t*)(shadow + obj_idx + OBJ_FLAGS),
-                  *(uint16_t*)(shadow + obj_idx + OBJ_PC),
-                  *(uint16_t*)(shadow + obj_idx + OBJ_CODE_SEG),
-                  *(uint16_t*)(shadow + DS_TRANSITION),
-                  *(uint16_t*)(shadow + DS_INPUT_ACCUM),
-                  *(uint16_t*)(shadow + DS_INPUT_EDGES),
-                  vm.es);
-            }
-        }
-        // CUTSCENE-CONTROLLER trap: detect writes to obj 6's 0x16ED specifically.
-        if (*(uint16_t*)(shadow + DS_LEVEL) == 0x002B) {
-            uint16_t now6 = *(uint16_t*)(shadow + 6 + OBJ_ANIM_IDX);
-            if (now6 != pre_all_16ED[3]) {  // index 3 = obj 6 (oi*2)
-                static int _cw = 0;
-                if (++_cw <= 1000) {
-                    fprintf(stderr,
-                      "V2-MVM-ANIM-WR-OBJ6[#%d f%d]: writer_obj=%02X op=%02X pc=%04X "
-                      "→ obj6 16ED: %04X → %04X\n",
-                      _cw, v2_dbg_pre_vm_iter, obj_idx, opcode, pc_before,
-                      pre_all_16ED[3], now6);
-                }
-            }
-        }
 
         // Per-object detailed trace (configurable via v2_trace_object)
         if (obj_idx == v2_trace_object) {
