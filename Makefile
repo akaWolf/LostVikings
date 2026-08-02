@@ -143,6 +143,7 @@ CXX_SRCS := \
   src/sdl/v2_vm.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_native_opl.cpp \
+  src/sdl/v2_ail_interp.cpp \
   src/sdl/v2_keymap.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
@@ -167,7 +168,8 @@ CXX_SRCS := \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_keymap.cpp \
   src/sdl/v2_fn_test.cpp \
-  src/sdl/v2_native_opl.cpp
+  src/sdl/v2_native_opl.cpp \
+  src/sdl/v2_ail_interp.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
 CXX_SRCS += src/sdl/play.cpp
