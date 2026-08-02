@@ -4698,7 +4698,7 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
         uint16_t stride = v2gs(s).map_bp() * 2; // ax was already ds:0x25DC, shl 1
         uint16_t dx_val = 0;
         for (uint16_t i = 0; i < 0x100; i++) {
-            *(uint16_t*)(s + DS_FS_ROW_OFF_TBL + i * 2) = dx_val;
+            v2gs(s).fs_row_off_tbl(i, dx_val);
             dx_val += stride;
         }
     }

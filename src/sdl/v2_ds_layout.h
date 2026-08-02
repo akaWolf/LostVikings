@@ -203,7 +203,7 @@ constexpr uint16_t DS_PAN_GATE       = 0x92F2; // byte_317DF: pan/palette dispat
 // ---------------------------------------------------------------------------
 constexpr uint16_t DS_CHUNK_HDR      = 0x2BB4; // chunk header read buffer: fread 8B, dword@+0 = data offset
 constexpr uint16_t DS_FS_ROW_OFF_TBL = 0x8F68; // FS row->byte-offset LUT (0x100 entries, built as i*stride where stride=DS_MAP_BP*2)
-constexpr uint16_t DS_FS_PAGE_STRIDE = 0x8F6C; // FS page stride word (added to FS cursor per page)
+constexpr uint16_t DS_FS_PAGE_STRIDE = 0x8F6C; // FS page stride word = ELEMENT 2 of DS_FS_ROW_OFF_TBL (2 tile rows * stride; builder loc_16595 fills i*stride for i=0..255)
 
 // ---------------------------------------------------------------------------
 // RNG pair (op 0x0F random branch)

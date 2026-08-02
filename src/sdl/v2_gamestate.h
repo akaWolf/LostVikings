@@ -208,7 +208,7 @@
   F1(page_scratch_346,   DS_PAGE_SCRATCH_346)   \
   FN(lut_page_row,       LUT_PAGE_ROW, 78)      \
   FN(lut_subrow,         LUT_SUBROW, 8)         \
-  F1(fs_page_stride,     DS_FS_PAGE_STRIDE)     \
+  FN(fs_row_off_tbl,     DS_FS_ROW_OFF_TBL, 256) \
   F1(text_fullscreen,    DS_TEXT_FULLSCREEN)    \
   FN(glyph_buf,          DS_GLYPH_BUF, 0x1B8)   \
   F1(ui_throttle,        DS_UI_THROTTLE)        \
@@ -391,7 +391,8 @@
   BN(level_pal_chunks, 0x2E7D, 6912)           \
   BN(chunk_d_tbl,      0x497D, 1568)           \
   BN(hud_gfx_tail,     0x647D, 1024)           \
-  BN(pw_level_tbl,     0x687D, 5760)
+  BN(pw_level_tbl,     0x687D, 5760)          \
+  BN(spawn_area,       DS_SPAWN_TABLE, 1390)
 
 // Chunk-loaded DS data zones (bounds = decompressed sizes in DATA.DAT,
 // verified against the loader ladder in v2_vm.cpp:6294):
@@ -399,6 +400,10 @@
 //   chunk_d_tbl:      chunk 0xD, 0x620 at 497D (raw gap E0 to 507D follows)
 //   hud_item_gfx + hud_sel_gfx + hud_gfx_tail: chunk 0xE, 0x1800 at 507D
 //   pw_level_tbl:     chunk 2, 0x1680 at 687D..7EFD (password/level select)
+//   spawn_area:       25F6..2B64 (bounds = neighboring proven fields);
+//                     interior: 14-byte spawn/descriptor entries indexed by
+//                     OBJ_ANIM_SUB*14 (ops C7-CA), 0xFFFF-terminated walks,
+//                     pal-anim source bytes at +1/+2 of entries
 
 // ---------------------------------------------------------------------------
 // The typed state. Serializer contract: v2_gs_deserialize fills every field
@@ -468,6 +473,7 @@ int  v2_gs_roundtrip_check(const uint8_t* ds, const char* tag);
   A1(render_117d,        DS_RENDER_117D)        \
   A1(render_117f,        DS_RENDER_117F)        \
   A1(snd_track_w,        DS_SND_TRACK)          \
+  A1(fs_page_stride,     DS_FS_PAGE_STRIDE)     \
   A1(dac_r_save_w,       DS_DAC_R_SAVE)
 
 struct V2StateView {
