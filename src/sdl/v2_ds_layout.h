@@ -166,15 +166,15 @@ constexpr uint16_t VIK_HEALTH        = 0x16ED; // word_29BCD+vk row inside 120FF
 // ---------------------------------------------------------------------------
 // Static LUT bases (bytecode-index subtractive addressing: ds:[idx - BASE])
 // ---------------------------------------------------------------------------
-constexpr uint16_t LUT_SCAN_FILTER   = 0x6B34; // byte table of object types, sorted; JB/JZ scans (op 2C/2D/35, 15fb1/15fbe, 15fd0) walk ds:[i-0x6B34]
-constexpr uint16_t LUT_FIELD_OFF     = 0x6CBA; // word table: bytecode idx -> object-table column offset ([b-0x6CBA], channels/setters/field ops)
-constexpr uint16_t LUT_BIT_MASK      = 0x6C34; // word bit-mask table (collision bit idx, op 9D/9E/A1.. masks: [idx-0x6C34])
-constexpr uint16_t LUT_BIT_CLEAR     = 0x6C14; // word clear-mask table (op 9D family: AND mask [idx-0x6C14])
-constexpr uint16_t LUT_BYTE_AND      = 0x6C3C; // byte AND-mask table (op 0D: [bit-0x6C3C])
-constexpr uint16_t LUT_BYTE_OR       = 0x6C44; // byte OR-mask table (op 0E: [bit-0x6C44])
+constexpr uint16_t LUT_SCAN_FILTER   = 0x6B34; // subtractive base: DATA at ds:0x94CC (wrap of 0-0x6B34); FF-terminated type-byte lists; JB/JZ scans (op 2C/2D/35) walk ds:[i-0x6B34]
+constexpr uint16_t LUT_FIELD_OFF     = 0x6CBA; // subtractive base: DATA at ds:0x9348 (33 words, values are +OBJ_FIELD_BASE column offsets, e.g. b=2 -> 0x28 -> BBOX_Y1); [b-0x6CBA]
+constexpr uint16_t LUT_BIT_MASK      = 0x6C34; // subtractive base: DATA at ds:0x93CC (16 words 1<<i); [idx-0x6C34]
+constexpr uint16_t LUT_BIT_CLEAR     = 0x6C14; // subtractive base: DATA at ds:0x93EC (16 words ~(1<<i)); [idx-0x6C14]
+constexpr uint16_t LUT_BYTE_AND      = 0x6C3C; // subtractive base: DATA at ds:0x93C4 (8 bytes FE FD FB F7 EF DF BF 7F); [bit-0x6C3C]
+constexpr uint16_t LUT_BYTE_OR       = 0x6C44; // subtractive base: DATA at ds:0x93BC (8 bytes 01..80); [bit-0x6C44]
 constexpr uint16_t LUT_KBD_ASCII     = 0x8E68; // INT9 scancode->ASCII word LUT, 128 entries: read as ds:[scan*2 - 0x7198] (uint16 wrap lands here; #37/#62); '1'..'9','0' at scan 2..11, ENTER->0x81, vowels->0
 constexpr uint16_t DS_AUDIO_CMD_TBL  = 0x2BA6; // off_2B086: sub_1086f command dispatch table, 6 CS handler addrs + null (call off_2B086[si] @eip 0x890)
-constexpr uint16_t LUT_ROW_BASE      = 0x7098; // tile-map row base words: ds:[row*2 - 0x7098] (141ba/13fc2/render)
+constexpr uint16_t LUT_ROW_BASE      = 0x7098; // subtractive base: DATA IS fs_row_off_tbl at ds:0x8F68 (wrap of 0-0x7098); ds:[row*2 - 0x7098]
 
 // ---------------------------------------------------------------------------
 // HUD / portrait tracking
@@ -227,7 +227,7 @@ constexpr uint16_t DS_PAL_OUT        = 0x8202; // = DS_PAL_SRC + 0x300: shaded/o
 // ---------------------------------------------------------------------------
 // Per-page tile-row VGA offset LUT
 // ---------------------------------------------------------------------------
-constexpr uint16_t LUT_PAGE_ROW      = 0x89F8; // 3 pages x 0x1A rows x 2B: VGA offset of tile row y on page p (idx: +pgs[p]+(y>>3)*2); [0] = wrap target in page-copy
+constexpr uint16_t LUT_PAGE_ROW      = 0x89F8; // repeating VGA row-address table: 0x1600+i*0x2B0 period of 78 words repeated 7x + 14-word tail = 560 words to 8E58 (page bases index into the repeats; overflow-safe by repetition)
 constexpr uint16_t LUT_SUBROW        = 0x8E58; // 8 words: VGA byte offset of sub-tile row (y&7)*86 (set_display_memory_addr y_low)
 
 // ---------------------------------------------------------------------------

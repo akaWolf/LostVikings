@@ -207,11 +207,16 @@
   F1(page_copy_dst2,     DS_PAGE_COPY_DST2)     \
   F1(page_copy_src3,     DS_PAGE_COPY_SRC3)     \
   F1(page_scratch_346,   DS_PAGE_SCRATCH_346)   \
-  FN(lut_page_row,       LUT_PAGE_ROW, 78)      \
+  FN(page_row_lut,       LUT_PAGE_ROW, 560)     \
   FN(lut_subrow,         LUT_SUBROW, 8)         \
   FN(fs_row_off_tbl,     DS_FS_ROW_OFF_TBL, 256) \
   FN(kbd_ascii_lut,      LUT_KBD_ASCII, 128)    \
   FN(audio_cmd_tbl,      DS_AUDIO_CMD_TBL, 7)   \
+  FN(field_off_lut,      0x9348, 33)            \
+  FN(row43_lut,          0x938A, 25)            \
+  FN(bit_mask_lut,       0x93CC, 16)            \
+  FN(bit_clear_lut,      0x93EC, 16)            \
+  FN(word_lists_940c,    0x940C, 96)            \
   F1(text_fullscreen,    DS_TEXT_FULLSCREEN)    \
   FN(glyph_buf,          DS_GLYPH_BUF, 0x1B8)   \
   F1(ui_throttle,        DS_UI_THROTTLE)        \
@@ -412,10 +417,9 @@
   BN(coll_partner_area,0x1B25, 642)            \
   BN(cmd_ring,         0x1DA7, 1000)           \
   BN(transition_buf,   0x2193, 1000)           \
-  BN(image_data_2bbe,  0x2BBE, 671)            \
+  BN(error_msg_2bbe,   0x2BBE, 671)            \
   BN(image_data_8507,  0x8507, 306)            \
-  BN(image_data_8a94,  0x8A94, 964)            \
-  BN(image_data_9348,  0x9348, 544)
+  BN(scan_filter_lists,0x94CC, 156)
 
 // Chunk-loaded DS data zones (bounds = decompressed sizes in DATA.DAT,
 // verified against the loader ladder in v2_vm.cpp:6294):
@@ -522,6 +526,8 @@
   BN(zero_92fd,          0x92fd, 2)           \
   BN(zero_9301,          0x9301, 4)           \
   BN(hexdigit_cells,     0x931f, 39)           \
+  BN(byte_or_lut,        0x93BC, 8)             \
+  BN(byte_and_lut,       0x93C4, 8)             \
   BN(zero_98de,          0x98de, 12)           \
   BN(zero_98ec,          0x98ec, 32)           \
   BN(zero_9936,          0x9936, 8)           \
