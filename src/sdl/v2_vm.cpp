@@ -8007,27 +8007,43 @@ static const char* v2_cc_names[CC_COUNT] = {
     "121f6", "1de05", "1dd9c", "1c8f1", "1cd7d", "165aa", "16661", "108c8",
     "1450b", "14590", "1265b", "11569", "13809", "12ce4", "1406d",
 };
-static FILE* v2_cc_trace_f() {          // V2_CC_TRACE=<id>: per-hit stream
-    static FILE* f = nullptr; static int want = -2;
-    if (want == -2) {
+// V2_CC_TRACE=<id>: per-hit stream for one counter (legacy format "O %u fN").
+// V2_CC_TRACE=all: per-hit stream for EVERY counter ("O<id> %u fN") — the M2
+// golden-trace channel: a default-mode run and a V2_ONLY run of the same
+// replay must produce identical V-streams (tests/m2_golden_compare.py).
+static int v2_cc_trace_id() {
+    static int id = -2;
+    if (id == -2) {
         const char* e = getenv("V2_CC_TRACE");
-        want = e ? atoi(e) : -1;
-        if (want >= 0) f = fopen("/tmp/v2_cc_trace.log", "w");
+        id = e ? (strcmp(e, "all") == 0 ? CC_COUNT : atoi(e)) : -1;
+    }
+    return id;
+}
+static FILE* v2_cc_trace_f() {
+    static FILE* f = nullptr; static bool opened = false;
+    if (!opened) {
+        opened = true;
+        if (v2_cc_trace_id() >= 0) f = fopen("/tmp/v2_cc_trace.log", "w");
     }
     return f;
 }
-static int v2_cc_trace_id() { const char* e = getenv("V2_CC_TRACE"); return e ? atoi(e) : -1; }
 extern "C" void v2_cc_orig_hit(int id) {
     if (id < 0 || id >= CC_COUNT) return;
     v2_cc_orig[id]++;
-    if (v2_cc_trace_f() && id == v2_cc_trace_id())
+    int want = v2_cc_trace_id();
+    if (want == id && v2_cc_trace_f())
         fprintf(v2_cc_trace_f(), "O %u f%d\n", v2_cc_orig[id], v2_dbg_pre_vm_iter);
+    else if (want == CC_COUNT && v2_cc_trace_f())
+        fprintf(v2_cc_trace_f(), "O%d %u f%d\n", id, v2_cc_orig[id], v2_dbg_pre_vm_iter);
 }
 extern "C" void v2_cc_v2_hit(int id) {
     if (id < 0 || id >= CC_COUNT) return;
     v2_cc_v2[id]++;
-    if (v2_cc_trace_f() && id == v2_cc_trace_id())
+    int want = v2_cc_trace_id();
+    if (want == id && v2_cc_trace_f())
         fprintf(v2_cc_trace_f(), "V %u f%d\n", v2_cc_v2[id], v2_dbg_pre_vm_iter);
+    else if (want == CC_COUNT && v2_cc_trace_f())
+        fprintf(v2_cc_trace_f(), "V%d %u f%d\n", id, v2_cc_v2[id], v2_dbg_pre_vm_iter);
 }
 
 void v2_record_orig_phase_snap(int phase_idx) {
@@ -19601,6 +19617,19 @@ void v2_phase_render3(uint16_t ds_val) {
     }
 }
 
+// №59 (M2): orig eips 0xDB..0xE1 — word_30C14=0 + sub_108c8. Signaled BEFORE
+// sub_1086f (its own PRE_SUB_1086F barrier + the loc_108a5 flip/vsync tail),
+// so the audio-tick mirror lands in orig call order.
+void v2_phase_audio_tick(uint16_t ds_val) {
+    (void)ds_val;
+    if (!v2_frame_active) return;
+    uint8_t* s = v2_vm_shadow_ds;
+    *(uint16_t*)(s + DS_COUNTER_8734) = 0;   // word_30C14 = 0 (eip 0x00DB)
+    // sub_108c8 (eip 0x00E1): sound crossfade — ALT+S/M toggles + SDL
+    // stop/play_xmidi_external.
+    v2_audio_tick_108c8(s);
+}
+
 void v2_phase_post_flip3(uint16_t ds_val) {
     if (!v2_frame_active) return;
     v2_watch_302("POST_FLIP3");
@@ -19616,15 +19645,13 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     // effects (ds:0x117D sub-sprite mode bytes, ds:0x34/0x956A/B dialog cmd state,
     // ds:0x98DC etc). Task #115 + task #124 — both manifest as same architectural issue.
     uint8_t* s = v2_vm_shadow_ds;
-    // orig block 9 (eips 0xDB-0xE7): word_30c14=0, sub_108c8, sub_10350, sub_1086f.
+    // orig block 9 tail (eips 0xE4-0xE7): sub_10350, sub_1086f. №59: the
+    // 0xDB/0xE1 pair (word_30C14=0 + sub_108c8) moved to the dedicated
+    // V2_PHASE_AUDIO_TICK — signaled at eip 0xDB, BEFORE sub_1086f, so the
+    // 108c8 mirror runs in orig order (it used to ride this handler, i.e.
+    // after the 1086f flip+vsync pair; caught by the M2 golden trace).
     // NO sub_10130 in this block — previously v2 had v2_vsync_wait_10130(s) here, removed
     // for orig parity (orig does NOT call sub_10130 in this phase).
-    // word_30C14 = 0 (eip 0x00DB)
-    *(uint16_t*)(s + DS_COUNTER_8734) = 0;
-    // sub_108c8: sound crossfade (eip 0x00E1). Use the proper v2_audio_tick_108c8 function
-    // which handles ALT+S/M toggle + actual SDL stop_xmidi_external/play_xmidi_external
-    // (previously inline duplicate just toggled DS without making sound effects).
-    v2_audio_tick_108c8(s);
     // sub_10350: level transition check (eip 0x00E4) — F10/ALT+X/ALT+Q.
     // Structure splits into two parts:
     //   PART A: SDL spec_state OR's (mirrors orig seg000 lines 2560-2563 SDL
@@ -21202,7 +21229,7 @@ static void v2_game_thread_func() {
         static const char* phase_names[] = {
             "FRAME_BEGIN", "PRE_VM", "VM", "POST_VM",
             "RENDER1", "POST_FLIP1", "RENDER2", "POST_FLIP2",
-            "RENDER3", "POST_FLIP3", "FRAME_END",
+            "RENDER3", "AUDIO_TICK", "POST_FLIP3", "FRAME_END",
             // Blocking phases:
             "VIKING_SWITCH_LOOP", "PAUSE_LOOP",
             "TRANSITION_TEXT", "PASSWORD_PROMPT", "PRE_SUB_1086F",
@@ -21231,6 +21258,7 @@ static void v2_game_thread_func() {
             case V2_PHASE_RENDER2:      v2_phase_render2(ds); break;
             case V2_PHASE_POST_FLIP2:   v2_phase_post_flip2(ds); break;
             case V2_PHASE_RENDER3:      v2_phase_render3(ds); break;
+            case V2_PHASE_AUDIO_TICK:   { extern void v2_phase_audio_tick(uint16_t); v2_phase_audio_tick(ds); break; }
             case V2_PHASE_POST_FLIP3:   v2_phase_post_flip3(ds); break;
             case V2_PHASE_FRAME_END:    v2_phase_frame_end(ds); break;
             // === Blocking phase handlers ===

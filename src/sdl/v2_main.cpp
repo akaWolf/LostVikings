@@ -62,6 +62,10 @@ static void v2_load_static_data() {
 // Mirrors orig DOS conditional gated by word_286E2 (ds:0x202) being non-zero.
 bool g_debug_mode = false;
 
+// №59: --max-frames limit for plain V2_ONLY builds (0 = unlimited). The
+// HEADLESS hook keeps its own enforcement; this one stops the main loop.
+static int g_v2only_max_frames = 0;
+
 int main(int argc, char* argv[]) {
     printf("V2_ONLY: starting standalone v2 build (no m2c)\n");
 
@@ -82,11 +86,17 @@ int main(int argc, char* argv[]) {
         } else if (strncmp(argv[i], "--keymap=", 9) == 0) {
             keymap_path = argv[i] + 9;
         }
-#ifdef HEADLESS
         else if (strncmp(argv[i], "--max-frames=", 13) == 0) {
+            // №59: parsed in ALL V2_ONLY builds (used to be HEADLESS-only —
+            // a plain V2_ONLY replay silently ignored the limit and ran on).
+            g_v2only_max_frames = atoi(argv[i] + 13);
+#ifdef HEADLESS
             extern int g_headless_max_frames;
-            g_headless_max_frames = atoi(argv[i] + 13);
-        } else if (strncmp(argv[i], "--dump-dir=", 11) == 0) {
+            g_headless_max_frames = g_v2only_max_frames;
+#endif
+        }
+#ifdef HEADLESS
+        else if (strncmp(argv[i], "--dump-dir=", 11) == 0) {
             extern const char* g_headless_dump_dir;
             g_headless_dump_dir = argv[i] + 11;
         }
@@ -155,6 +165,8 @@ int main(int argc, char* argv[]) {
         v2_signal_phase(V2_PHASE_POST_FLIP2, ds);     phase_ms[7] = SDL_GetTicks() - t;
         t = SDL_GetTicks();
         v2_signal_phase(V2_PHASE_RENDER3, ds);        phase_ms[8] = SDL_GetTicks() - t;
+        // №59: orig 0xDB/0xE1 (word_30C14=0 + sub_108c8) run BEFORE sub_1086f
+        v2_signal_phase(V2_PHASE_AUDIO_TICK, ds);
         t = SDL_GetTicks();
         v2_signal_phase(V2_PHASE_POST_FLIP3, ds);     phase_ms[9] = SDL_GetTicks() - t;
         t = SDL_GetTicks();
@@ -198,6 +210,16 @@ int main(int argc, char* argv[]) {
         // --max-frames never runs standalone — enforce it from the main loop.
         { extern int headless_check_exit(void); headless_check_exit(); }
 #endif
+        // №59: plain V2_ONLY --max-frames enforcement (frame counter is the
+        // FRAME_BEGIN barrier increment — same counter the traces use).
+        if (g_v2only_max_frames > 0) {
+            extern int v2_dbg_pre_vm_iter;
+            if (v2_dbg_pre_vm_iter >= g_v2only_max_frames) {
+                fprintf(stderr, "V2_ONLY: --max-frames=%d reached, exiting\n",
+                        g_v2only_max_frames);
+                need_quit = true;
+            }
+        }
         frame_target_ms += FRAME_PERIOD_MS;
         uint32_t now = SDL_GetTicks();
         if ((int32_t)(frame_target_ms - now) > 0) {

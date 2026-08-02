@@ -85,7 +85,11 @@ enum V2Phase {
     V2_PHASE_RENDER2,          // rotation2 + pageflip2 (eip 0x0086..0x00A6)
     V2_PHASE_POST_FLIP2,       // sub_10753..sub_101be (eip 0x00A9..0x00B8)
     V2_PHASE_RENDER3,          // rotation3 + pageflip3 (eip 0x00BB..0x00D8)
-    V2_PHASE_POST_FLIP3,       // sub_108c8..sub_10350 (eip 0x00DB..0x00E7)
+    V2_PHASE_AUDIO_TICK,       // word_30C14=0 + sub_108c8 (eip 0x00DB..0x00E1) —
+                               // №59: signaled BEFORE sub_1086f so the 108c8
+                               // mirror runs in orig order (it used to ride
+                               // POST_FLIP3, i.e. after the 1086f flip+vsync)
+    V2_PHASE_POST_FLIP3,       // sub_10350 + sub_1086f epilogue (eip 0x00E4..0x00E7)
     V2_PHASE_FRAME_END,        // verify + cleanup
 
     // === Blocking phases (signaled around orig blocking loops) ===

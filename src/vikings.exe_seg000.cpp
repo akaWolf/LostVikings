@@ -2889,6 +2889,9 @@ cs=0x1a2;eip=0x0000d3; 	v2_draw_ui(ds); J(CALLF(sub_1e0c7,0));	// 110 call    su
 cs=0x1a2;eip=0x0000d8; 	J(CALL(sub_16775,0));	// 111 call    sub_16775 ;~ 01A2:00D8
 	{ extern void v2_record_orig_phase_snap(int); if (myDrawInfo_v2) v2_record_orig_phase_snap(8); /* RENDER3_END */ }
 	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_RENDER3, ds); // AFTER pass 3 complete
+	// №59 (M2): barrier — v2 mirrors the 0xDB/0xE1 pair (word_30C14=0 +
+	// sub_108c8) HERE, before sub_1086f, matching the orig call order.
+	if (myDrawInfo_v2) v2_signal_phase(V2_PHASE_AUDIO_TICK, ds);
 cs=0x1a2;eip=0x0000db; 	X(MOV(word_30c14, 0));	// 112 mov     word_30C14, 0 ;~ 01A2:00DB
 cs=0x1a2;eip=0x0000e1; 	J(CALL(sub_108c8,0));	// 113 call    sub_108C8 ;~ 01A2:00E1
 cs=0x1a2;eip=0x0000e4; 	J(CALL(sub_10350,0));	// 114 call    sub_10350 ;~ 01A2:00E4
