@@ -82,8 +82,10 @@ public:
     uint8_t (*in_hook)(uint16_t port) = nullptr;
     // `call far [cs:0x2957]` — AIL timer-callback pointer cell. The driver
     // never fabricates far code pointers elsewhere (survey), so this is the
-    // single far-call escape hatch.
-    void (*ail_callback_hook)() = nullptr;
+    // single far-call escape hatch. The seg002 callback (ret_d4f_a53) RETURNS
+    // the PIT divisor snapshot in AX — ours must too or the sequencer's tempo
+    // accumulator never advances.
+    uint16_t (*ail_callback_hook)() = nullptr;
     uint16_t callback_ptr_off = 0x2957;   // dword cell inside the blob
 
     bool trace = false;          // V2_AIL_TRACE=1 — per-instruction log
@@ -115,16 +117,23 @@ public:
         if (extra_n < 8) extra[extra_n++] = {para, ptr, size};
     }
 
-    // Resolve a far address to host memory. Traps on unknown segments —
-    // any hit here is a survey gap that must be modeled, never guessed.
+    // Resolve a far address to host memory. The blob NORMALIZES far pointers
+    // (linear = seg*16 + off; new seg = linear >> 4, off = linear & 0xF) while
+    // walking XMID chunks, so every mapped buffer must resolve as a paragraph
+    // RANGE, not just its base paragraph. Traps on unknown segments — any hit
+    // is a survey gap that must be modeled, never guessed.
     uint8_t* mem(uint16_t seg, uint16_t off, uint32_t len) {
         if (seg == DRV_PARA) {
             if ((uint32_t)off + len <= 0x10000) return drv + off;  // blob addresses wrap in 64K like real DS
         }
-        if (seg == BANK_PARA)  { return bank + off; }
+        if (seg >= BANK_PARA && (uint32_t)((seg - BANK_PARA) << 4) < bank_size)
+            return bank + ((seg - BANK_PARA) << 4) + off;
         if (seg == STACK_PARA) { return stack_mem + (off % STACK_SIZE); }
-        for (int i = 0; i < extra_n; i++)
-            if (extra[i].para == seg) return extra[i].ptr + off;
+        for (int i = 0; i < extra_n; i++) {
+            uint32_t delta = (uint32_t)(uint16_t)(seg - extra[i].para) << 4;
+            if (seg >= extra[i].para && delta < extra[i].size)
+                return extra[i].ptr + delta + off;
+        }
         if (seg == 0) {
             // Null far pointer dereference. The blob does these legitimately:
             // fn9B walks a sequence's TIMB chunk pointer and an empty slot is
@@ -660,7 +669,7 @@ prefix:
                 case 3: {                                                                          // call far m
                     // `call far [cs:0x2957]` — the AIL callback escape hatch.
                     if (!ea.is_reg && ea.off == callback_ptr_off && ea.seg == DRV_PARA) {
-                        if (ail_callback_hook) ail_callback_hook();
+                        if (ail_callback_hook) r.ax = ail_callback_hook();
                         break;
                     }
                     uint16_t off = rd16(ea.seg, ea.off), seg = rd16(ea.seg, (uint16_t)(ea.off + 2));
@@ -717,11 +726,17 @@ extern "C" uint16_t v2_ail_interp_call(uint16_t fn_off, const uint16_t* args, in
     return ret;
 }
 
+// Peek a word inside the working blob copy (diagnostics/verify).
+extern "C" uint16_t v2_ail_interp_peek(uint16_t off) {
+    if (!g_ail.drv || (uint32_t)off + 1 >= g_ail.drv_size) return 0xDEAD;
+    return (uint16_t)(g_ail.drv[off] | (g_ail.drv[off + 1] << 8));
+}
+
 // dx of the last call (AIL fns return far values in dx:ax — fn64 returns the
 // driver descriptor far pointer this way).
 extern "C" uint16_t v2_ail_interp_last_dx() { return g_ail.r.dx; }
 
-extern "C" void v2_ail_interp_set_callback(void (*cb)()) { g_ail.ail_callback_hook = cb; }
+extern "C" void v2_ail_interp_set_callback(uint16_t (*cb)()) { g_ail.ail_callback_hook = cb; }
 
 extern "C" void v2_ail_interp_map_segment(uint16_t para, uint8_t* ptr, uint32_t size) {
     g_ail.map_segment(para, ptr, size);
