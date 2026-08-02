@@ -2562,6 +2562,12 @@ static void v2_vsync_wait_10130(uint8_t* s) {
     }
     while ((int16_t)*(uint16_t*)(s + DS_VSYNC_COUNT) >= 1) {
         if (need_quit) return;
+        // #61 native AIL: the DOS INT8 kept firing during vsync waits — every
+        // blocking loop in the game funnels through here (fades, transitions,
+        // level loads), so pumping per wait iteration keeps the sequencer fed
+        // instead of building tick debt that would burst-replay afterwards
+        // (user-audible: notes held long / swallowed around transitions).
+        v2_nopl_pump();
 #ifdef V2_ONLY
         SDL_Delay(16);                // vsync 60Hz pacing for interactive
 #elif defined(HEADLESS)

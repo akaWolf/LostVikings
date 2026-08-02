@@ -227,7 +227,20 @@ extern "C" void v2_nopl_pump(void) {
     uint64_t played = g_samples_played.load(std::memory_order_relaxed);
     uint64_t rel = (played > g_base_samples) ? played - g_base_samples : 0;
     uint64_t due = (uint64_t)((double)rel / spt) + 1;
-    while (g_ticks_done < due && guard++ < 64) {
+    // Catch-up cap: if the game thread stalled long enough to owe more than
+    // ~0.5 s of ticks (level loads, rare host hiccups), slide the base
+    // forward instead of burst-replaying the backlog. A burst stamps events
+    // spread over hundreds of musical ms into one mixer instant — short
+    // notes vanish (key-on+off in one buffer), held notes overstay. A clean
+    // PAUSE is the right degradation; DOS never lagged its INT8.
+    if (due > g_ticks_done + 64) {
+        uint64_t excess = due - g_ticks_done - 64;
+        g_base_samples += (uint64_t)((double)excess * spt);
+        due -= excess;
+        fprintf(stderr, "v2_native_opl: tick debt %llu — paused (base slid)\n",
+                (unsigned long long)excess);
+    }
+    while (g_ticks_done < due && guard++ < 96) {
         g_cur_ts = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
         v2_ail_tick();
         g_ticks_done++;

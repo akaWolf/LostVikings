@@ -694,9 +694,18 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
   count += process_pool_in_callback(orig_pool, myBuffer, len, requested_samples);
   count += process_pool_in_callback(v2_pool,   myBuffer, len, requested_samples);
 
-  // #61 native AIL channel: mix the interpreted-driver dual-OPL2 pair on top.
-  // Inert until the driver boots (no ticks pumped → chips stay silent).
+  // #61 native AIL channel: mix the interpreted-driver OPL3 on top.
+  // Inert until the driver boots (no ticks pumped → chip stays silent).
   v2_nopl_mix((int16_t*)myBuffer, (uint32_t)(len / (2 * sizeof(int16_t))));
+
+  // Diagnostic tap: V2_AUDIO_DUMP=<path> writes the exact device-bound mix
+  // (raw s16le stereo at the obtained rate) — "what the user heard" for
+  // offline comparison against the register-trace render.
+  { static FILE* _dump = nullptr; static int _dump_init = 0;
+    if (!_dump_init) { _dump_init = 1;
+      const char* e = getenv("V2_AUDIO_DUMP");
+      if (e && e[0]) _dump = fopen(e, "wb"); }
+    if (_dump) fwrite(myBuffer, 1, len, _dump); }
 
 	// Peak amplitude detection in mix output — to verify clipping hypothesis.
 	int16_t* samples = (int16_t*)myBuffer;
