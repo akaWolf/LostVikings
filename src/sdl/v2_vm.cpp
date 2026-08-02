@@ -37,6 +37,7 @@
 // Access to emulated memory
 extern "C" int  v2_ail_native_on();
 extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_gamestate.cpp (phase D)
+extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-field state snapshot
 extern uint8_t* v2_m2c_base;
 
 // SDL spec-key state (defined in sdl/render.cpp). Game logic ORs this in
@@ -18558,6 +18559,13 @@ void v2_phase_frame_begin(uint16_t ds_val) {
             if (df && !dumped && v2_dbg_pre_vm_iter >= dumpf) {
                 FILE* f = fopen(df, "wb");
                 if (f) { fwrite(v2_vm_shadow_ds, 1, 0x10000, f); fclose(f); dumped = 1; }
+            }
+            // named-field text snapshot (V2_GS_DUMP_TEXT=<path>), same pacing
+            static int tdumped = 0;
+            const char* tf = getenv("V2_GS_DUMP_TEXT");
+            if (tf && !tdumped && v2_dbg_pre_vm_iter >= dumpf) {
+                v2_gs_dump_text(v2_vm_shadow_ds, tf);
+                tdumped = 1;
             }
             char tag[32]; snprintf(tag, sizeof(tag), "f%d", v2_dbg_pre_vm_iter);
             int gs_diffs = v2_gs_roundtrip_check(v2_vm_shadow_ds, tag);

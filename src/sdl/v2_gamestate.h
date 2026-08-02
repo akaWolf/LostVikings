@@ -430,7 +430,10 @@
 //                     entire history (neither world writes it).
 //   unused_gap_4f9d / unused_8c: dead like the tail (zero in image AND in
 //                     live dumps; full-DS hash verify never flagged them)
-//   word_200 @200:    holds 0x1234 in live dumps (writer not yet traced)
+//   word_200 @200:    C-RTL startup time low word; the m2c INT21/2C model
+//                     returns fixed cx=0x1234 dx=0x5678 (asm.cpp:513) and
+//                     the Borland RTL stores them here (0x204 = 0x5678 in
+//                     the rt_0204 zone = the high half + RTL scratch)
 //   coll_partner_area @1B25..1DA7: collision partner rows (obj<<4)+bit_idx
 //                     (live writes seen at 1BE5/1C25/1C27/1C47); bound =
 //                     the command ring neighbor

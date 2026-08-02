@@ -91,6 +91,36 @@ extern "C" void v2_gs_serialize(const V2GameState* gs, uint8_t* ds_out) {
 #undef V2_GS_SBN
 }
 
+// Named-field text dump — the phase-D state inspector. Every field the
+// serializer knows prints by name; big byte zones print as hex rows. Gated
+// by V2_GS_DUMP_TEXT=<path> at the same frame_begin hook as the roundtrip.
+extern "C" void v2_gs_dump_text(const uint8_t* ds, const char* path) {
+    static V2GameState gs;
+    v2_gs_deserialize(&gs, ds);
+    FILE* f = fopen(path, "w");
+    if (!f) return;
+#define V2_GS_P1(name, off)  fprintf(f, "%-22s @%04X = %04X\n", #name, (unsigned)(off), gs.name);
+#define V2_GS_PN(name, off, n) { \
+    fprintf(f, "%-22s @%04X [%u]:", #name, (unsigned)(off), (unsigned)(n)); \
+    for (uint32_t i = 0; i < (n); i++) fprintf(f, " %04X", gs.name[i]); \
+    fprintf(f, "\n"); }
+    V2_GS_FIELDS_W(V2_GS_P1, V2_GS_PN)
+#undef V2_GS_P1
+#undef V2_GS_PN
+#define V2_GS_PB1(name, off) fprintf(f, "%-22s @%04X = %02X\n", #name, (unsigned)(off), gs.name);
+#define V2_GS_PBN(name, off, n) { \
+    fprintf(f, "%-22s @%04X [%u]:", #name, (unsigned)(off), (unsigned)(n)); \
+    for (uint32_t i = 0; i < (n); i++) { \
+        if ((i & 31) == 0) fprintf(f, "\n  %04X:", (unsigned)((off) + i)); \
+        fprintf(f, " %02X", gs.name[i]); } \
+    fprintf(f, "\n"); }
+    V2_GS_FIELDS_B(V2_GS_PB1, V2_GS_PBN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_PB1, V2_GS_PBN)
+#undef V2_GS_PB1
+#undef V2_GS_PBN
+    fclose(f);
+}
+
 // Self-check hardening: the raw-backing serialize pass masks a field whose
 // serializer writes the wrong bytes only if it writes the SAME wrong bytes
 // the backing already held — impossible for a wrong offset (coverage would
