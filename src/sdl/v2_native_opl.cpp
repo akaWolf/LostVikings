@@ -1,26 +1,36 @@
-// v2_native_opl.cpp — #61: native AIL sound channel.
+// v2_native_opl.cpp — #61: native AIL sound channel, SBPro dual-OPL2 model.
 //
-// The converted AIL driver (seg002) talks to an AdLib chip through
-// OUT 0x388/0x389 and paces itself with its own INT8 timer hook. In DOS
-// both were hardware; here:
-//   * OUT 0x388/0x389 land in v2_nopl_out() (routed from asm2C_OUT) and are
-//     queued as (sample_timestamp, reg, val) commands;
-//   * the timer tick is pumped ON THE GAME THREAD (the m2c machine is not
-//     thread-safe) from frame_begin / blocking-loop ticks: v2_nopl_pump()
-//     computes how many driver ticks are due by the AUDIO clock and calls
-//     the driver's tick handler for each, stamping every OPL write with the
-//     tick's sample position — so the music is sample-accurate even though
-//     the pump itself is frame-granular (the DOS INT8 interleaving collapses
-//     to batched, correctly-timestamped writes);
-//   * the audio thread renders the Nuked OPL3 chip, applying queued writes
-//     at their timestamps (standard OPL-player technique).
+// The interpreted SBPFM.ADV driver (v2_ail_interp/v2_ail) talks to a Sound
+// Blaster Pro: two OPL2 chips at base+0/1 (left) and base+2/3 (right) plus
+// the SBPro mixer at base+4/5 (base = 0x220 from the DATA.DAT config tail).
+// In DOS these were hardware; here:
+//   * OUT lands in v2_nopl_sbpro_out(): register-index latches per chip,
+//     shadow register files (the fn65 detect probe READS timer status back),
+//     and each data write is queued as (sample_ts, chip, reg, val);
+//   * IN lands in v2_nopl_sbpro_in(): AdLib timer-status model over the
+//     shadow regs (reg4 bit0 T1-start → status 0xC0|0x40, bit7 reset → 0x00)
+//     and honest mixer readback — exactly the model the standalone smoke rig
+//     validated against the live detect code;
+//   * the timer tick is pumped ON THE GAME THREAD from frame_begin /
+//     blocking-loop ticks: v2_nopl_pump() computes how many driver ticks are
+//     due by the AUDIO clock and calls fn67 for each, stamping every OPL
+//     write with the tick's sample position — sample-accurate music from a
+//     frame-granular pump (the DOS INT8 interleaving collapses to batched,
+//     correctly-timestamped writes);
+//   * the audio thread renders TWO Nuked OPL3 chips (legacy OPL2 mode) and
+//     mixes chip0 into the left output, chip1 into the right — the SBPro-1
+//     stereo topology (Creative HW programming guide: 2x0/2x1 left FM chip,
+//     2x2/2x3 right FM chip).
+//
+// Tick rate comes from the driver descriptor ([desc+0x14]+5 = 125 Hz for
+// SBPFM) via v2_nopl_set_tick_hz — there is no PIT here to intercept.
 //
 // Verification channel ("shadow-VGA for sound"): V2_OPL_TRACE=<file> logs
-// every register write as "<tick> <reg> <val>" — byte-comparable across
-// runs and against golden sequencer output.
+// every register write as "<tick> <chip> <reg> <val>" — byte-comparable
+// across runs and against the standalone interpreter smoke rig.
 //
-// Activation: V2_NATIVE_AIL=1 in the environment. Off by default — the SDL
-// adlmidi channel keeps playing as before.
+// Activation: V2_NATIVE_AIL=1 in the environment (checked by v2_ail_native_on
+// on the glue side; this file's entry points are inert until ticked/written).
 
 #include <SDL.h>
 #include <atomic>
@@ -32,129 +42,189 @@ extern "C" {
 #include "../adlmidi/src/chips/nuked/nukedopl3.h"
 }
 
+extern "C" void v2_ail_tick(void);          // v2_ail.cpp — one fn67 driver tick
+
+// SDL mixer rate. play.cpp sets the obtained device rate after SDL_OpenAudio;
+// the 44100 default keeps HEADLESS builds (no play.cpp, no audio device)
+// self-contained — there the queue is never drained, only the fn67 ticks
+// matter (they advance the driver's DS state deterministically).
+static uint32_t g_rate = 44100;
+extern "C" void v2_nopl_set_mix_rate(uint32_t rate) { if (rate) g_rate = rate; }
+
 // ---------------------------------------------------------------------------
 // state
 // ---------------------------------------------------------------------------
-static opl3_chip    g_nopl_chip;
-static bool         g_nopl_inited  = false;
-static int          g_nopl_active  = -1;      // env gate, resolved lazily
-static uint8_t      g_nopl_addr    = 0;       // OPL address latch (port 0x388)
-static FILE*        g_nopl_trace   = nullptr;
+static opl3_chip    g_chip[2];              // 0 = left OPL2, 1 = right OPL2
+static bool         g_inited  = false;
+static FILE*        g_trace   = nullptr;
+static int          g_trace_resolved = 0;
 
-// Driver timer: the AIL driver programs the PIT itself (divisor captured by
-// asm2C_OUT hook → v2_nopl_set_pit_divisor). 0 = timer not installed yet.
-static uint32_t     g_nopl_pit_divisor = 0;
-static double       g_nopl_tick_hz     = 0.0;
+static uint8_t      g_index[2] = {0, 0};    // per-chip register-index latch
+static uint8_t      g_regs[2][256] = {{0}}; // shadow register files (detect probe)
+static uint8_t      g_mixer_index = 0;
+static uint8_t      g_mixer[256] = {0};
 
-// Sample clock (audio rate of the native channel).
-static const uint32_t NOPL_RATE = 49716;      // native OPL3 rate (Nuked resamples)
-static std::atomic<uint64_t> g_nopl_samples_played{0};   // audio thread advances
-static uint64_t     g_nopl_ticks_done = 0;    // game thread: driver ticks issued
-static uint64_t     g_nopl_cur_ts    = 0;     // timestamp stamped on writes of the tick being pumped
+static double       g_tick_hz = 0.0;
+
+// Sample clock: audio thread advances; game thread schedules ticks against it.
+static std::atomic<uint64_t> g_samples_played{0};
+static uint64_t     g_ticks_done = 0;
+static uint64_t     g_cur_ts    = 0;        // ts stamped on writes of the tick being pumped
 
 // Command ring: game thread produces, audio thread consumes.
-struct NoplCmd { uint64_t ts; uint16_t reg; uint8_t val; };
+struct NoplCmd { uint64_t ts; uint8_t chip; uint8_t reg; uint8_t val; };
 static const size_t NOPL_RING = 1 << 14;
-static NoplCmd      g_nopl_ring[NOPL_RING];
-static std::atomic<size_t> g_nopl_wr{0}, g_nopl_rd{0};
+static NoplCmd      g_ring[NOPL_RING];
+static std::atomic<size_t> g_wr{0}, g_rd{0};
 
-extern "C" int v2_nopl_enabled(void) {
-    if (g_nopl_active < 0) {
-        const char* e = getenv("V2_NATIVE_AIL");
-        g_nopl_active = (e && e[0] == '1') ? 1 : 0;
-        if (g_nopl_active) {
-            OPL3_Reset(&g_nopl_chip, NOPL_RATE);
+static void nopl_lazy_init() {
+    if (g_inited) return;
+    OPL3_Reset(&g_chip[0], g_rate);   // Nuked resamples its 49716 core to g_rate
+    OPL3_Reset(&g_chip[1], g_rate);
+    g_inited = true;
+    fprintf(stderr, "v2_native_opl: dual-OPL2 ACTIVE (mix rate=%u)\n", g_rate);
+}
+
+// ---------------------------------------------------------------------------
+// SBPro port model — called from the interpreter's OUT/IN hooks (game thread)
+// ---------------------------------------------------------------------------
+extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
+    if (port >= 0x220 && port <= 0x223) {
+        nopl_lazy_init();
+        int chip = (port - 0x220) >> 1;
+        if ((port & 1) == 0) { g_index[chip] = (uint8_t)val; return; }
+        uint8_t reg = g_index[chip];
+        g_regs[chip][reg] = val;
+        if (!g_trace_resolved) {
+            g_trace_resolved = 1;
             const char* t = getenv("V2_OPL_TRACE");
-            if (t && t[0]) g_nopl_trace = fopen(t, "w");
-            g_nopl_inited = true;
-            fprintf(stderr, "v2_native_opl: ACTIVE (rate=%u, trace=%s)\n",
-                    NOPL_RATE, g_nopl_trace ? "on" : "off");
+            if (t && t[0]) g_trace = fopen(t, "w");
         }
+        if (g_trace)
+            fprintf(g_trace, "%llu %d %02X %02X\n",
+                    (unsigned long long)g_ticks_done, chip, reg, val);
+        uint64_t ts = g_cur_ts ? g_cur_ts
+                               : g_samples_played.load(std::memory_order_relaxed);
+        size_t wr = g_wr.load(std::memory_order_relaxed);
+        size_t nx = (wr + 1) & (NOPL_RING - 1);
+        if (nx == g_rd.load(std::memory_order_acquire)) return;  // full: drop (never block the game thread)
+        g_ring[wr] = { ts, (uint8_t)chip, reg, val };
+        g_wr.store(nx, std::memory_order_release);
+        return;
     }
-    return g_nopl_active;
+    if (port == 0x224) { g_mixer_index = val; return; }
+    if (port == 0x225) { g_mixer[g_mixer_index] = val; return; }
+    // Anything else the driver touches is a survey gap — log, don't guess.
+    static int warn = 0;
+    if (warn++ < 8) fprintf(stderr, "v2_native_opl: OUT %04X <- %02X (unmodeled port)\n", port, val);
+}
+
+extern "C" uint8_t v2_nopl_sbpro_in(uint16_t port) {
+    if (port >= 0x220 && port <= 0x223) {
+        int chip = (port - 0x220) >> 1;
+        // AdLib detect model (validated by the smoke rig): after T1 start
+        // (reg4 bit0, mask clear) status reads 0xC0|0x40; after reset (bit7)
+        // it reads 0x00. Timer expiry is immediate in this model — the
+        // driver's 6/8-IN delay loops satisfy the settle time.
+        uint8_t ctl = g_regs[chip][4];
+        if (ctl & 0x80) return 0x00;
+        if (ctl & 0x01) return 0xC0 | 0x40;
+        return 0x00;
+    }
+    if (port == 0x225) return g_mixer[g_mixer_index];
+    return 0xFF;
 }
 
 // ---------------------------------------------------------------------------
-// OUT 0x388/0x389 routing (called from asm2C_OUT on the game thread)
+// tick pump (game thread)
 // ---------------------------------------------------------------------------
-extern "C" void v2_nopl_out(uint16_t port, uint8_t val) {
-    if (!v2_nopl_enabled()) return;
-    if (port == 0x388) { g_nopl_addr = val; return; }
-    if (port != 0x389) return;
-    // data write → queue (timestamped with the tick being pumped; writes
-    // issued outside a tick — driver init, timbre install — use "now").
-    uint64_t ts = g_nopl_cur_ts ? g_nopl_cur_ts
-                                : g_nopl_samples_played.load(std::memory_order_relaxed);
-    if (g_nopl_trace)
-        fprintf(g_nopl_trace, "%llu %02X %02X\n",
-                (unsigned long long)g_nopl_ticks_done, g_nopl_addr, val);
-    size_t wr = g_nopl_wr.load(std::memory_order_relaxed);
-    size_t nx = (wr + 1) & (NOPL_RING - 1);
-    if (nx == g_nopl_rd.load(std::memory_order_acquire)) return;  // full: drop (never blocks game thread)
-    g_nopl_ring[wr] = { ts, g_nopl_addr, val };
-    g_nopl_wr.store(nx, std::memory_order_release);
+extern "C" void v2_nopl_set_tick_hz(double hz) {
+    g_tick_hz = hz;
+    fprintf(stderr, "v2_native_opl: tick rate %.1f Hz (driver descriptor)\n", hz);
 }
 
-// PIT divisor capture (asm2C_OUT hook, see asm.cpp): the AIL driver
-// reprograms channel 0 for its tick rate.
+// Legacy PIT capture (asm2C_OUT hook in asm.cpp): in default/verify mode the
+// m2c seg002 timer service reprograms PIT channel 0 with its tick divisor.
+// The interpreted-driver path derives the rate from the descriptor instead
+// (v2_nopl_set_tick_hz above); this entry just logs the observation — the
+// pump only runs once the v2_ail glue boots, which never happens in the
+// modes where seg002 programs a PIT.
 extern "C" void v2_nopl_set_pit_divisor(uint32_t divisor) {
-    if (!v2_nopl_enabled()) return;
     if (divisor == 0) divisor = 0x10000;
-    g_nopl_pit_divisor = divisor;
-    g_nopl_tick_hz = 1193182.0 / (double)divisor;
-    fprintf(stderr, "v2_native_opl: PIT divisor=%u -> tick=%.2f Hz\n",
-            divisor, g_nopl_tick_hz);
+    fprintf(stderr, "v2_native_opl: PIT divisor=%u observed (%.2f Hz)\n",
+            divisor, 1193182.0 / (double)divisor);
 }
 
-// ---------------------------------------------------------------------------
-// tick pump (game thread): call the driver's INT8 handler for every tick due
-// by the audio clock. The handler entry is provided by v2_vm glue (it needs
-// the m2c _STATE machinery available only there).
-// ---------------------------------------------------------------------------
-extern "C" void v2_nopl_driver_tick(void);   // v2_vm.cpp glue → seg002 handler
+// Legacy AdLib port capture (asm2C_OUT hook): the m2c seg002 path emits
+// OUT 0x388/0x389 when its (never-executed-here) OPL code runs. The
+// interpreted driver uses the SBPro ports above instead; keep the symbol as
+// an explicit no-op so the asm.cpp routing stays documented and linkable.
+extern "C" void v2_nopl_out(uint16_t port, uint8_t val) {
+    (void)port; (void)val;
+}
+
+// Frame-accumulator pump: the DOS INT8 ticked at [desc+0x14]+5 Hz against a
+// 60 Hz VGA frame — 125/60 ticks per game-loop iteration. Pumping BY FRAME
+// (not by wall clock / audio cursor) keeps the driver's DS state (EVNT
+// cursor, tempo counters in shadow_ds[0x9950..]) fully deterministic for
+// replay scenarios and headless runs; the audio thread merely consumes the
+// timestamped queue at its own pace.
+static const double NOPL_FRAME_HZ = 60.0;
+static double g_tick_acc = 0.0;
 
 extern "C" void v2_nopl_pump(void) {
-    if (!v2_nopl_enabled() || g_nopl_tick_hz <= 0.0) return;
-    double spt = (double)NOPL_RATE / g_nopl_tick_hz;   // samples per tick
-    uint64_t played = g_nopl_samples_played.load(std::memory_order_relaxed);
-    // small lead so freshly queued commands land slightly ahead of the
-    // audio cursor instead of in its past
-    uint64_t due = (uint64_t)((double)played / spt) + 1;
+    if (g_tick_hz <= 0.0) return;
+    double spt = (double)g_rate / g_tick_hz;   // samples per tick (queue ts)
+    g_tick_acc += g_tick_hz / NOPL_FRAME_HZ;
     int guard = 0;
-    while (g_nopl_ticks_done < due && guard++ < 64) {
-        g_nopl_cur_ts = (uint64_t)((double)g_nopl_ticks_done * spt);
-        v2_nopl_driver_tick();
-        g_nopl_ticks_done++;
+    while (g_tick_acc >= 1.0 && guard++ < 64) {
+        g_tick_acc -= 1.0;
+        g_cur_ts = (uint64_t)((double)g_ticks_done * spt);
+        v2_ail_tick();
+        g_ticks_done++;
     }
-    g_nopl_cur_ts = 0;
+    g_cur_ts = 0;
 }
 
 // ---------------------------------------------------------------------------
-// audio-thread render: apply queued writes at their timestamps, generate.
+// audio-thread mix: apply queued writes at their timestamps, generate both
+// chips, ADD into the caller's stereo buffer (chip0 → L, chip1 → R).
 // ---------------------------------------------------------------------------
-extern "C" void v2_nopl_render(int16_t* stereo, uint32_t frames) {
-    if (!g_nopl_inited) { memset(stereo, 0, frames * 2 * sizeof(int16_t)); return; }
-    uint64_t pos = g_nopl_samples_played.load(std::memory_order_relaxed);
+extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
+    if (!g_inited) return;
+    uint64_t pos = g_samples_played.load(std::memory_order_relaxed);
     uint32_t donef = 0;
+    int16_t buf0[256 * 2], buf1[256 * 2];
     while (donef < frames) {
-        // apply all commands due at/before pos
-        size_t rd = g_nopl_rd.load(std::memory_order_relaxed);
+        size_t rd = g_rd.load(std::memory_order_relaxed);
         uint32_t chunk = frames - donef;
-        while (rd != g_nopl_wr.load(std::memory_order_acquire)) {
-            const NoplCmd& c = g_nopl_ring[rd];
+        if (chunk > 256) chunk = 256;
+        while (rd != g_wr.load(std::memory_order_acquire)) {
+            const NoplCmd& c = g_ring[rd];
             if (c.ts > pos) {
                 uint64_t gap = c.ts - pos;
                 if (gap < chunk) chunk = (uint32_t)gap;
                 break;
             }
-            OPL3_WriteRegBuffered(&g_nopl_chip, c.reg, c.val);
+            OPL3_WriteRegBuffered(&g_chip[c.chip], c.reg, c.val);
             rd = (rd + 1) & (NOPL_RING - 1);
         }
-        g_nopl_rd.store(rd, std::memory_order_release);
+        g_rd.store(rd, std::memory_order_release);
         if (chunk == 0) chunk = 1;
-        OPL3_GenerateStream(&g_nopl_chip, stereo + donef * 2, chunk);
+        OPL3_GenerateStream(&g_chip[0], buf0, chunk);
+        OPL3_GenerateStream(&g_chip[1], buf1, chunk);
+        for (uint32_t i = 0; i < chunk; i++) {
+            // legacy OPL2 mode: Nuked emits the channel to both halves of the
+            // pair — take chip0's left half for L, chip1's right half for R.
+            int32_t l = (int32_t)stereo[(donef + i) * 2]     + buf0[i * 2];
+            int32_t r = (int32_t)stereo[(donef + i) * 2 + 1] + buf1[i * 2 + 1];
+            if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
+            if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
+            stereo[(donef + i) * 2]     = (int16_t)l;
+            stereo[(donef + i) * 2 + 1] = (int16_t)r;
+        }
         donef += chunk;
         pos   += chunk;
     }
-    g_nopl_samples_played.store(pos, std::memory_order_release);
+    g_samples_played.store(pos, std::memory_order_release);
 }

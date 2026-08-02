@@ -1259,6 +1259,18 @@ static bool v2_gs_tiledata_valid = false;
 // Sound sequences read by sound opcodes (0x02, 0x04, 0xD5, 0xD7).
 static const uint32_t V2_SOUND_SHADOW_SIZE = 0x10000;
 static uint8_t v2_vm_shadow_sound[V2_SOUND_SHADOW_SIZE];
+
+// #61 native AIL glue (v2_ail.cpp / v2_native_opl.cpp)
+extern "C" int      v2_ail_native_on();
+extern "C" int      v2_ail_booted();
+extern "C" int      v2_ail_boot(uint8_t*, uint8_t*, uint32_t, uint16_t, uint32_t, uint32_t);
+extern "C" uint16_t v2_ail_seq_start(uint8_t*, uint8_t*, uint32_t, uint16_t,
+                                     uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ail_seq_stop_slot(uint8_t*, uint16_t);
+extern "C" void     v2_ail_music_fade(uint8_t*);
+extern "C" uint16_t v2_ail_sfx_play(uint8_t*, uint8_t*, uint32_t, uint16_t, uint16_t);
+extern "C" void     v2_ail_sfx_stop_seq(uint8_t*, uint16_t);
+extern "C" void     v2_nopl_pump(void);
 static bool v2_sound_shadow_valid = false;
 
 // ============================================================================
@@ -1307,6 +1319,40 @@ static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
     if (!xmidi || size == 0) return;
+    // --- #61 native AIL path (V2_NATIVE_AIL=1, V2_ONLY) -----------------
+    // Replays the EXACT orig sub_176bd tail on the interpreted Miles driver:
+    // fn97 → handle → [990C]; fn9B/17512/fn9C timbre loop; fnAA. Music call
+    // sites use ax=0, si=0 (verified: sub_178d6 eip 0x78E1-0x78EB and the
+    // sub_17561 GM site both pass ax=0, si=0).
+    if (v2_ail_native_on()) {
+        // DS paragraph for the fn97 state far pointer. In V2_ONLY the whole
+        // pipeline runs with ds_val=0 (no m2c world), but the driver treats a
+        // ZERO state segment as "slot free" (fn67 scan: cmp [slot.seg],0 →
+        // skip) — registrations pile up and the scan walks off the slot
+        // table. Use the REAL data-segment paragraph of the ported EXE:
+        // seg004 sits at m2c::m+0x19F00 (_data.cpp) → paragraph 0x19F0.
+        uint16_t ail_ds = v2_current_ds_val ? v2_current_ds_val : 0x19F0;
+        uint16_t snd_base = *(uint16_t*)(s + DS_SEG_SOUND_BASE);
+        uint32_t blob_size = 0, bank_size = 0;
+        {   auto it = v2_chunk_sizes_by_seg.find(snd_base);
+            if (it != v2_chunk_sizes_by_seg.end()) blob_size = it->second;
+            uint16_t bank_seg = *(uint16_t*)(s + DS_SEG_SOUND3);
+            auto ib = v2_chunk_sizes_by_seg.find(bank_seg);
+            if (ib != v2_chunk_sizes_by_seg.end()) bank_size = ib->second; }
+        fprintf(stderr, "V2-AIL-MUSIC-PLAY: bx_seg=%04X ds_val=%04X blob=%u bank=%u\n",
+                bx_seg, ail_ds, blob_size, bank_size);
+        if (v2_ail_boot(s, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE,
+                        ail_ds, blob_size, bank_size)) {
+            // orig restart semantics: a new music start goes through the
+            // stop chain for slot 0 first (sub_17912 body) if one is active.
+            v2_ail_seq_stop_slot(s, 0);
+            uint16_t h = v2_ail_seq_start(s, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE,
+                                          ail_ds, bx_seg, /*seq*/0, /*si*/0);
+            v2_id_music = (h != 0xFFFF) ? (int)h : 0;
+            return;
+        }
+        // boot failed → fall through to the adlmidi channel (audible fallback)
+    }
     if (v2_id_music != 0) v2_pool.stop_xmidi((uint16_t)v2_id_music);
     extern int v2_audit_v2_next_music_idx();
     extern uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx);
@@ -1407,6 +1453,15 @@ static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     // by pause entry / sub_11cbb arrow handlers via play_sfx_no_audit.
     extern void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj);
     v2_audit_log_sfx(1 /* v2 */, ax_seq, obj);
+    // #61 native AIL: exact sub_177bb tail on the interpreted driver — the
+    // slot scan/status/release/reuse logic AND the DS slot words are the
+    // driver chain's own; skip the SDL pool entirely.
+    if (v2_ail_native_on() && v2_ail_booted()) {
+        uint16_t ail_ds = v2_current_ds_val ? v2_current_ds_val : 0x19F0;
+        uint16_t h = v2_ail_sfx_play(s, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE,
+                                     ail_ds, ax_seq);
+        return (h != 0xFFFF) ? (int)h : -1;
+    }
 #ifdef V2_ONLY
     // V2_ONLY: v2 is the sole audio producer → real playback through v2_pool
     // (symmetric with v2_music_play_176bd_v2 music path).
@@ -1491,6 +1546,14 @@ static void v2_seq_stop_all_17912_v2(uint8_t* s) {
         uint16_t handle_off = (uint16_t)(si - 0x66F4); // wraps to 0x990C+
         uint16_t handle = *(uint16_t*)(s + handle_off);
         if (handle != 0xFFFF) {
+            // #61 native AIL: every slot is driver-owned — stop through the
+            // orig fnAB/fn98 chain (which also clears the DS slot words).
+            if (v2_ail_native_on() && v2_ail_booted()) {
+                if (si == 0 && (int)handle == v2_id_music) v2_id_music = 0;
+                v2_ail_seq_stop_slot(s, si);
+                si += 2;
+                continue;
+            }
             v2_pool.stop_xmidi(handle);
             // If music slot (si=0), clear v2_id_music — auto-cleared by
             // stop_xmidi_external_v2 when matching v2_pool.dontstop_handle.
@@ -2515,12 +2578,8 @@ static void v2_vsync_wait_10130(uint8_t* s) {
 // normally publishes the real-DS segment — expose a setter.
 extern "C" void v2_fntest_set_current_ds(uint16_t v) { v2_current_ds_val = v; }
 
-// (#61) native AIL: one driver timer tick. Wired to the seg002 INT8
-// handler once the driver map lands; the pump only runs under
-// V2_NATIVE_AIL=1 so the stub is inert otherwise.
-extern "C" void v2_nopl_driver_tick(void) {
-    // TODO(#61): call the converted AIL timer service entry here.
-}
+// (#61) native AIL: the driver timer tick is v2_ail_tick() (fn67 on the
+// interpreted blob), pumped by v2_nopl_pump from frame_begin/blocking-loop.
 
 extern "C" void v2_mirror_int9_char(uint8_t dos_scan) {
     uint16_t off = (uint16_t)((uint16_t)(dos_scan * 2) - 0x7198);
@@ -6453,6 +6512,12 @@ static void v2_music_load_1775d_helper(uint8_t* s) {
 // glitch). The #ifdef V2_ONLY guards v2 from calling fade_music when orig also will.
 static void v2_music_fade_178f1_helper(const uint8_t* s) {
     if (*(uint16_t*)(s + DS_MUSIC_MUTE) != 0) return;  // music muted/off (TEST + JNZ exit)
+    // #61 native AIL: the orig fade is fnB0 set_sequence_tempo(handle, 0,
+    // 0x3E8) — the DRIVER ramps the tempo and silences itself. Exact chain.
+    if (v2_ail_native_on() && v2_ail_booted()) {
+        v2_ail_music_fade(const_cast<uint8_t*>(s));
+        return;
+    }
     // Target v2_pool only — orig path's fade_music (in seg000 SDL inline) targets
     // orig_pool. Per-side pools = no double-fade conflict that the old single-pool
     // design had (when both touched the same audible slot).
@@ -9246,6 +9311,12 @@ static void v2_vm_op_sound1(V2VM& vm) {
     fprintf(stderr, "V2-OP-04[f%d obj=%02X]: stop_seq=%u muted_304=%d\n",
             v2_dbg_pre_vm_iter, cur_obj, param, muted ? 1 : 0);
     if (muted) return; // sound disabled
+    // #61 native AIL: the orig slot scan calls fnAB stop + fn98 release per
+    // matching slot and clears the DS words — no SDL fallback semantics.
+    if (v2_ail_native_on() && v2_ail_booted()) {
+        v2_ail_sfx_stop_seq(vm.shadow, param);
+        return;
+    }
     // Iterate slots, find ones matching seq=param. For each, selectively stop the
     // adlmidi player by stored handle (set by v2_vm_op_sound), then mark slot free.
     // Falls back to v2_sfx_stop_all_1782a_v2 (stop-all) if no matching slot has a valid handle.
@@ -9569,6 +9640,13 @@ static void v2_vm_op_D7(V2VM& vm) {
     bool muted = vm.ds_read(DS_SFX_MUTE) != 0;
     int matched = 0;
     uint16_t hs[4] = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
+    // #61 native AIL: same shared slot-scan body as sub_1782a.
+    if (!muted && v2_ail_native_on() && v2_ail_booted()) {
+        v2_ail_sfx_stop_seq(vm.shadow, seq);
+        fprintf(stderr, "V2-OP-D7[f%d obj=%02X]: stop_seq=%u native\n",
+                v2_dbg_pre_vm_iter, cur_obj, seq);
+        return;
+    }
     if (!muted) {
         for (int16_t si = 8; si > 0; si -= 2) {
             if (vm.ds_read((uint16_t)(si - 0x66EA)) == seq) {
@@ -18426,6 +18504,10 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         }
     }
     v2_audit_reset_fire_counters();
+    // #61 native AIL: pump the driver sequencer (fn67 ticks due by the audio
+    // clock). Game thread only — the interpreter shares the m2c-adjacent
+    // shadow state and is not thread-safe.
+    v2_nopl_pump();
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
     // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.
     // In default mode seg000 also takes snapshot at sub_12352 line 5623; both
@@ -18464,8 +18546,15 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         };
         // B2 verify: detect leaks BEFORE cleanup hides them.
 #ifdef V2_ONLY
-        v2_verify_audio_slots(v2_vm_shadow_ds, &v2_pool, "V2_ONLY shadow", 1, v2_dbg_pre_vm_iter);
-        clear_stale(v2_vm_shadow_ds, v2_pool);
+        // #61 native AIL: the driver chain owns the DS slot words — sub_177bb's
+        // own scan reuses finished slots via fnAE status + fn98 release (the
+        // DOS mechanism). The SDL stale-cleanup would clear the DS word while
+        // the driver's slot table entry stays busy → slot leak up to the 8-slot
+        // cap (observed cnt=8 lockout), so it must not run in native mode.
+        if (!(v2_ail_native_on() && v2_ail_booted())) {
+            v2_verify_audio_slots(v2_vm_shadow_ds, &v2_pool, "V2_ONLY shadow", 1, v2_dbg_pre_vm_iter);
+            clear_stale(v2_vm_shadow_ds, v2_pool);
+        }
 #else
         extern void v2_verify_audio_slots_symmetry(uint8_t*, uint8_t*, int);
         v2_verify_audio_slots(v2_vm_real_ds_ptr, &orig_pool, "default real", 0, v2_dbg_pre_vm_iter);
@@ -19590,6 +19679,9 @@ static inline void v2_blocking_loop_tick() {
     // silence (no compares ran past the freeze). Same game thread as the
     // snapshot drain — the #59 race-free invariant holds.
     v2_replay_drain_to_state();
+    // #61 native AIL: the DOS INT8 kept ticking through blocking loops —
+    // pump the driver sequencer here too (same game thread as frame_begin).
+    v2_nopl_pump();
 #ifdef HEADLESS
     extern int headless_check_exit(void);
     headless_check_exit();

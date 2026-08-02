@@ -63,9 +63,13 @@ public:
     // that far pointers the driver stores and reloads round-trip exactly.
     struct Seg { uint16_t para; uint8_t* mem; uint32_t size; };
 
-    static constexpr uint16_t DRV_PARA   = 0x2000;  // fake paragraph of the blob
-    static constexpr uint16_t BANK_PARA  = 0x3000;  // timbre bank
-    static constexpr uint16_t STACK_PARA = 0x4000;  // private stack segment
+    // Fake paragraphs live ABOVE the 640K DOS arena (real game segments are
+    // < 0xA000). The integration layer maps the game's REAL segment values
+    // (shadow DS paragraph, sound-window base) as extra ranges — those must
+    // never collide with the interpreter's service paragraphs.
+    static constexpr uint16_t DRV_PARA   = 0xF000;  // fake paragraph of the blob
+    static constexpr uint16_t BANK_PARA  = 0xE000;  // timbre bank
+    static constexpr uint16_t STACK_PARA = 0xFE00;  // private stack segment
     static constexpr uint32_t STACK_SIZE = 0x1000;
 
     AilRegs r;

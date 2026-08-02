@@ -306,6 +306,9 @@ static void reset_first_tick_in_pool(AudioPool& p, int i) {
 }
 
 void my_audio_callback(void *midi_player, Uint8 *stream, int len);
+// #61 native AIL channel (v2_native_opl.cpp)
+extern "C" void v2_nopl_set_mix_rate(uint32_t);
+extern "C" void v2_nopl_mix(int16_t*, uint32_t);
 
 static Uint8 buffer[16384]; /* Audio buffer (cherry-pick 3f2114a — fix audio glitches) */
 static struct ADLMIDI_AudioFormat s_audioFormat;
@@ -488,6 +491,9 @@ void sound_init()
 	       spec.freq, spec.format, spec.channels, spec.samples);
 	printf("SOUND-INIT: obtained  freq=%d format=0x%X channels=%d samples=%d size=%u\n",
 	       obtained.freq, obtained.format, obtained.channels, obtained.samples, obtained.size);
+
+	// #61 native AIL channel renders at the obtained device rate.
+	v2_nopl_set_mix_rate((uint32_t)obtained.freq);
 
 	myFormat = obtained.format;
 
@@ -687,6 +693,10 @@ void my_audio_callback(void *argument, Uint8 *stream, int len)
   uint8_t count = 0;
   count += process_pool_in_callback(orig_pool, myBuffer, len, requested_samples);
   count += process_pool_in_callback(v2_pool,   myBuffer, len, requested_samples);
+
+  // #61 native AIL channel: mix the interpreted-driver dual-OPL2 pair on top.
+  // Inert until the driver boots (no ticks pumped → chips stay silent).
+  v2_nopl_mix((int16_t*)myBuffer, (uint32_t)(len / (2 * sizeof(int16_t))));
 
 	// Peak amplitude detection in mix output — to verify clipping hypothesis.
 	int16_t* samples = (int16_t*)myBuffer;
