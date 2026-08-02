@@ -757,9 +757,6 @@ cs=0xe25;eip=0x00062c; 	T(SUB(dx, bp));	// 36401 sub     dx, bp ;~ 0E25:062C
 cs=0xe25;eip=0x00062e; 	T(ADD(dx, dx));	// 36402 add     dx, dx ;~ 0E25:062E
 cs=0xe25;eip=0x000630; 	T(ADD(si, si));	// 36403 add     si, si ;~ 0E25:0630
 { extern void v2_hw_wp_drain(); v2_hw_wp_drain(); }
-{ static int _fsdbg=0; if(di==0x30 && *(uint8_t*)raddr(ds,di+0x114D)==0 && _fsdbg<5) { _fsdbg++;
-  fprintf(stderr,"ORIG-FSSCAN[%d]: di=%02X si=%04X ax=%d bp=%d dx=%d fs[si]=%04X\n",
-    _fsdbg,(uint16_t)di,(uint16_t)si,(uint16_t)ax,(uint16_t)bp,(uint16_t)dx,*(uint16_t*)raddr(fs,si)); } }
 loc_1ce62:
 	// 6116
 cs=0xe25;eip=0x000632; 	T(MOV(cx, bp));	// 36406 mov     cx, bp ;~ 0E25:0632
@@ -774,26 +771,11 @@ cs=0xe25;eip=0x000642; 	T(DEC(ax));	// 36414 dec     ax ;~ 0E25:0642
 cs=0xe25;eip=0x000643; 	J(JNZ(loc_1ce62));	// 36415 jnz     short loc_1CE62 ;~ 0E25:0643
 loc_1ce75:
 	// 6118
-{ static int _onv=0; if(di==0x30 && *(uint8_t*)raddr(ds,di+0x114D)==0 && _onv<10) { _onv++;
-  // Recompute si_off and scan position to show FS values
-  int16_t _cx = (int16_t)*(uint16_t*)raddr(ds,di+0x64D) >> 3;
-  int16_t _dx = (int16_t)*(uint16_t*)raddr(ds,di+0x74D) >> 3;
-  int16_t _si = 0;
-  if (_cx >= 0) _si += _cx;
-  if (_dx >= 0) { uint16_t _bx = (uint16_t)_dx << 1; _si += (int16_t)*(uint16_t*)raddr(ds, (uint16_t)(_bx - 0x7098)); }
-  uint16_t _fs_off = (uint16_t)(_si * 2);
-  fprintf(stderr,"ORIG-NOTVIS[%d]: si=%04X ax=%04X cx_x=%d dx_y=%d xy=(%04X,%04X) fs_off=%04X fs[off]=%04X\n",
-    _onv,(uint16_t)si,(uint16_t)ax, _cx, _dx,
-    *(uint16_t*)raddr(ds,di+0x64D), *(uint16_t*)raddr(ds,di+0x74D),
-    _fs_off, (_fs_off < 0xFFFE) ? *(uint16_t*)raddr(fs, _fs_off) : 0xDEAD); } }
 cs=0xe25;eip=0x000645; 	T(XOR(ax, ax));	// 36419 xor     ax, ax ;~ 0E25:0645
 locret_1ce77:
 	// 6119
-{ static int _ov=0; if(di==0x30 && *(uint8_t*)raddr(ds,di+0x114D)==0 && _ov<5) { _ov++;
-  fprintf(stderr,"ORIG-VIS[%d]: di=%02X VISIBLE si=%04X fs[si]=%04X\n",_ov,(uint16_t)di,(uint16_t)si,*(uint16_t*)raddr(fs,si)); } }
 cs=0xe25;eip=0x000647; 	J(RETN(0));	// 36422 retn ;~ 0E25:0647
 seg003_648_proc:
-{static int s648_calls=0; if(++s648_calls<=5) printf("seg003_648_proc called #%d di=0x%x\n", s648_calls, di);}
 	// 36427
 loc_1ce78:
 //printf("loc_1ce78\n"); // ???
@@ -2617,38 +2599,11 @@ cs=0xe25;eip=0x00155c; 	T(ADD(si, 9));	// 37985 add     si, 9 ;~ 0E25:155C
 cs=0xe25;eip=0x00155f; 	J(LOOP(loc_1dd7a));	// 37986 loop    loc_1DD7A ;~ 0E25:155F
 cs=0xe25;eip=0x001561; 	J(JMP(loc_1db94));	// 37987 jmp     loc_1DB94 ;~ 0E25:1561
  sub_1dd9c: // far call
-{
-  static int s1dd9c_calls=0;
-  static bool found_objects=false;
-  s1dd9c_calls++;
-  int active=0, dispatched=0;
-  for(int _di=0xFE; _di>=0; _di-=2) {
-    uint16_t f = *(uint16_t*)raddr(ds, _di+0x44D);
-    if((f & 0x8000) && !(f & 0x6000)) dispatched++;
-    if(f & 0x8000) active++;
-  }
-  if((active > 0 && !found_objects) || s1dd9c_calls <= 3) {
-    printf("sub_1dd9c #%d: active=%d dispatched=%d DS:9568=%02x\n",
-           s1dd9c_calls, active, dispatched, *(uint8_t*)raddr(ds,0x9568));
-    if(active > 0) {
-      found_objects=true;
-      for(int _di=0xFE; _di>=0; _di-=2) {
-        uint16_t f = *(uint16_t*)raddr(ds, _di+0x44D);
-        if(f & 0x8000)
-          printf("  obj di=0x%02x flags=0x%04x x=%d y=%d\n", _di, f,
-                 *(int16_t*)raddr(ds, _di+0x64D), *(int16_t*)raddr(ds, _di+0x74D));
-      }
-    }
-  }
-}
  //cs=0xe25;eip=0x000108; 	J(RETF(0));	// 35719 retf ;~ 0E25:0108 //debug
 	// 37997
 cs=0xe25;eip=0x00156c; 	T(MOV(di, 0x0FE));	// 37999 mov     di, 0FEh ; '�' ;~ 0E25:156C
 loc_1dd9f:
 	// 6248
-{ uint16_t _f=*(uint16_t*)raddr(ds,di+0x44D); static int _oa=0;
-  if((di==0x30||di==0x36||di==0x3A) && (_f & 0x8000) && _oa<30) { _oa++;
-  fprintf(stderr,"ORIG-DD9C-ACT[%d]: di=%02X flags=%04X mode=%02X force=%02X xy=(%04X,%04X) tile=(%d,%d)\n",_oa,(uint16_t)di,_f,*(uint8_t*)raddr(ds,di+0x114D),*(uint8_t*)raddr(ds,0x9568),*(uint16_t*)raddr(ds,di+0x64D),*(uint16_t*)raddr(ds,di+0x74D),(int16_t)*(uint16_t*)raddr(ds,di+0x64D)>>3,(int16_t)*(uint16_t*)raddr(ds,di+0x74D)>>3); } }
 cs=0xe25;eip=0x00156f; 	T(TEST(*(dw*)(raddr(ds,di+0x44D)), 0x8000));	// 38002 test    word ptr [di+44Dh], 8000h ;~ 0E25:156F
 cs=0xe25;eip=0x001575; 	J(JZ(loc_1ddf0));	// 38003 jz      short loc_1DDF0 ;~ 0E25:1575
 cs=0xe25;eip=0x001577; 	T(TEST(*(dw*)(raddr(ds,di+0x44D)), 0x6000));	// 38004 test    word ptr [di+44Dh], 6000h ;~ 0E25:1577
@@ -2662,11 +2617,6 @@ cs=0xe25;eip=0x001590; 	J(JZ(loc_1ddf0));	// 38011 jz      short loc_1DDF0 ;~ 0E
 cs=0xe25;eip=0x001592; 	X(MOV(*(raddr(ds,di+0x114D)), 3));	// 38012 mov     byte ptr [di+114Dh], 3 ;~ 0E25:1592
 loc_1ddc7:
 	// 6249
-{ static int _orig_dd=0; if(di==0x30) { _orig_dd++;
-  if(_orig_dd<=30) fprintf(stderr,"ORIG-DD9C[%d]: di=%02X mode=%02X force=%02X flags=%04X vp=(%04X,%04X) xy=(%04X,%04X)\n",
-    _orig_dd,(uint16_t)di,*(uint8_t*)raddr(ds,di+0x114D),*(uint8_t*)raddr(ds,0x9568),*(uint16_t*)raddr(ds,di+0x44D),
-    *(uint16_t*)raddr(ds,0x44),*(uint16_t*)raddr(ds,0x46),
-    *(uint16_t*)raddr(ds,di+0x64D),*(uint16_t*)raddr(ds,di+0x74D)); } }
 cs=0xe25;eip=0x001597; 	X(DEC(*(raddr(ds,di+0x114D))));	// 38016 dec     byte ptr [di+114Dh] ;~ 0E25:1597
 cs=0xe25;eip=0x00159b; 	J(JNS(loc_1ddd2));	// 38017 jns     short loc_1DDD2 ;~ 0E25:159B
 cs=0xe25;eip=0x00159d; 	X(MOV(*(raddr(ds,di+0x114D)), 0));	// 38018 mov     byte ptr [di+114Dh], 0 ;~ 0E25:159D
@@ -2721,8 +2671,6 @@ cs=0xe25;eip=0x0015eb; 	J(JLE(loc_1de41));	// 38060 jle     short loc_1DE41 ;~ 0
 cs=0xe25;eip=0x0015ed; 	T(MOV(bp, 5));	// 38061 mov     bp, 5 ;~ 0E25:15ED
 cs=0xe25;eip=0x0015f0; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0F4D))));	// 38062 mov     cx, [di+0F4Dh] ;~ 0E25:15F0
 cs=0xe25;eip=0x0015f4; 	T(MOV(dx, *(dw*)(raddr(ds,di+0x104D))));	// 38063 mov     dx, [di+104Dh] ;~ 0E25:15F4
-{ static int _ode05=0; if((di==0x2E||di==0x34||di==0x38) && _ode05<40) { _ode05++;
-  static int _ocall=0; fprintf(stderr,"ORIG-DE05[c?]: di=%02X redraw %02X→%02X (si>5 path)\n", (uint16_t)di, *(uint8_t*)raddr(ds,di+0x114E), (uint8_t)(*(uint8_t*)raddr(ds,di+0x114E)-1)); } }
 cs=0xe25;eip=0x0015f8; 	X(DEC(*(raddr(ds,di+0x114E))));	// 38064 dec     byte ptr [di+114Eh] ;~ 0E25:15F8
 cs=0xe25;eip=0x0015fc; 	J(CALL(sub_1cd7d,0));	// 38065 call    sub_1CD7D ;~ 0E25:15FC
 cs=0xe25;eip=0x0015ff; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0D4D))));	// 38066 mov     cx, [di+0D4Dh] ;~ 0E25:15FF
@@ -2734,8 +2682,6 @@ loc_1de41:
 	// 6254
 cs=0xe25;eip=0x001611; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0F4D))));	// 38074 mov     cx, [di+0F4Dh] ;~ 0E25:1611
 cs=0xe25;eip=0x001615; 	T(MOV(dx, *(dw*)(raddr(ds,di+0x104D))));	// 38075 mov     dx, [di+104Dh] ;~ 0E25:1615
-{ static int _ode05b=0; if((di==0x2E||di==0x34||di==0x38) && _ode05b<40) { _ode05b++;
-  fprintf(stderr,"ORIG-DE05[c?]: di=%02X redraw %02X→%02X (si<=5 path)\n", (uint16_t)di, *(uint8_t*)raddr(ds,di+0x114E), (uint8_t)(*(uint8_t*)raddr(ds,di+0x114E)-1)); } }
 cs=0xe25;eip=0x001619; 	X(DEC(*(raddr(ds,di+0x114E))));	// 38076 dec     byte ptr [di+114Eh] ;~ 0E25:1619
 cs=0xe25;eip=0x00161d; 	J(CALL(sub_1cd7b,0));	// 38077 call    sub_1CD7B ;~ 0E25:161D
 cs=0xe25;eip=0x001620; 	T(MOV(cx, *(dw*)(raddr(ds,di+0x0D4D))));	// 38078 mov     cx, [di+0D4Dh] ;~ 0E25:1620

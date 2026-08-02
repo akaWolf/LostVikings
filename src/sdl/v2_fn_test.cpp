@@ -13453,17 +13453,24 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
     case FT_SUB_101AC: {
         // viking-switch vsync spin (16775 + [3287C]=3 + the 1B5 wait):
         // unlike 10130 this loop has NO ISR inline, so a helper thread
-        // plays the vsync tick - it zeroes the live [A39C] word inside the
+        // plays the vsync tick — it zeroes the live [A39C] word inside the
         // oracle image mid-spin. Both 1BB edges in one walk.
-        {   uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
-                          + v2_fntest_game_ds_linear() + 0xA39C;
-            std::thread t([live]() {
-                usleep(300000);
-                *(volatile uint16_t*)live = 0;
-            });
+        // The thread MUST start inside the case's own process (fork-mode
+        // child): a parent thread does not survive fork() and would write
+        // into the parent's COW image anyway → child spins to its 2s
+        // watchdog → bogus escape. Delivered via v2_fntest_child_pre_hook.
+        {   extern void (*v2_fntest_child_pre_hook)(void);
+            v2_fntest_child_pre_hook = []() {
+                uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
+                              + v2_fntest_game_ds_linear() + 0xA39C;
+                std::thread([live]() {
+                    usleep(300000);
+                    *(volatile uint16_t*)live = 0;
+                }).detach();   // dies with the case process
+            };
             static const FtWr w[] = { {0xA39C,3},{0x92FF,1} };
             CASE(w,2,r0,nullptr,0,"spin");
-            t.join();
+            v2_fntest_child_pre_hook = nullptr;
         }
         break;
     }

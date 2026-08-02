@@ -615,6 +615,13 @@ extern "C" void v2_fntest_fork_export(void* ptr, uint32_t len) {
         ft_fork_exports[ft_fork_export_n++] = FtForkExport{ (uint8_t*)ptr, len };
 }
 extern "C" void v2_fntest_fork_export_clear(void) { ft_fork_export_n = 0; }
+// Pre-call hook, run INSIDE the case's process right before the isolated
+// body (in the forked child, or in-process under FT_NO_FORK). Needed by
+// units whose oracle requires a live side-channel DURING the call (e.g.
+// sub_101ac's vsync spin: a helper thread must clear [A39C] mid-spin —
+// a thread created in the parent does not survive fork(), and the child's
+// m2c image is a private COW copy the parent cannot reach).
+extern "C" void (*v2_fntest_child_pre_hook)(void) = nullptr;
 
 struct FtForkShared {
     uint8_t  ds_image[0x10000];
@@ -632,7 +639,10 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
 {
     static int no_fork = -1;
     if (no_fork < 0) no_fork = getenv("FT_NO_FORK") ? 1 : 0;
-    if (no_fork) return v2_fntest_orig_isolated_body(fn, ds_image, io_regs);
+    if (no_fork) {
+        if (v2_fntest_child_pre_hook) v2_fntest_child_pre_hook();
+        return v2_fntest_orig_isolated_body(fn, ds_image, io_regs);
+    }
 
     static FtForkShared* sh = nullptr;
     if (!sh) {
@@ -648,6 +658,7 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
     if (pid < 0) { perror("fn-test fork"); abort(); }
     if (pid == 0) {
         // ---- child: the case runs here and dies here ----
+        if (v2_fntest_child_pre_hook) v2_fntest_child_pre_hook();
         long esc0 = v2_fntest_start_escapes;
         long mm0  = m2c::shadow_stack.m_fntest_ret_mismatch;
         bool ok = v2_fntest_orig_isolated_body(fn, ds_image, io_regs);

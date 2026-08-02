@@ -2511,6 +2511,13 @@ static void v2_vsync_wait_10130(uint8_t* s) {
 // normally publishes the real-DS segment — expose a setter.
 extern "C" void v2_fntest_set_current_ds(uint16_t v) { v2_current_ds_val = v; }
 
+// (#61) native AIL: one driver timer tick. Wired to the seg002 INT8
+// handler once the driver map lands; the pump only runs under
+// V2_NATIVE_AIL=1 so the stub is inert otherwise.
+extern "C" void v2_nopl_driver_tick(void) {
+    // TODO(#61): call the converted AIL timer service entry here.
+}
+
 extern "C" void v2_mirror_int9_char(uint8_t dos_scan) {
     uint16_t off = (uint16_t)((uint16_t)(dos_scan * 2) - 0x7198);
     if (v2_vm_shadow_ds) {
@@ -3762,512 +3769,491 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
     }
 }
 
-// sub_1DE05: dirty rect processing — DEC byte [di+0x114E] + save position.
-// Exact replica of seg003 sub_1DE05 DS side effects.
-static int v2_de05_call_count = 0; // track which DE05 call we're in
+// sub_1DE05 (seg003 38048-38217): erase moved sprites, then redraw dirty
+// background tiles.
+//
+// Pass 1 (orig 38051-38086) — for every object slot with a pending redraw
+//   count [slot+OBJ_DIRTY_CNT]: decrement it, restore the background rect at
+//   the sprite's OLD position (orig sub_1CD7D with bp=5 for large sprites,
+//   sub_1CD7B → bp=size for small), then latch CUR sprite position → OLD.
+//
+// Pass 2 (orig 38087-38214) — scan the visible 0x2B×0x19 window of the fs
+//   tile-dirty map: each run of consecutive tiles with bit0 set gets bit1
+//   cleared and its pixel span (2 bytes/tile × 8 rows, pitch 0x56) copied
+//   from the BG page to the DRAW page (orig: 8× REP MOVSB at A000; here:
+//   v2_vga_copy_span into shadow VGA at the exact orig addresses).
+//
+// Exact replica of the orig DS/fs side effects; VGA OUTs commented in place.
 static void v2_bg_latch_1DE05(uint8_t* s) {
-    v2_de05_call_count++;
-    for (int16_t di = 0xFE; di >= 0; di -= 2) {
-        if (s[di + OBJ_DIRTY_CNT] != 0) {
-            uint16_t si = (*(uint16_t*)(s + di + OBJ_STRIP_COUNT) >> 3) + 1;
-            if (si > 5) {
-                // bp = 5 path (large sprite)
-            }
-            { static int _de05t=0; if((di==0x2E||di==0x34||di==0x38) && _de05t<60) { _de05t++;
-              fprintf(stderr,"V2-DE05[c%d]: di=%02X redraw %02X→%02X mode=%02X\n", v2_de05_call_count, (uint16_t)di, s[di+OBJ_DIRTY_CNT], (uint8_t)(s[di+OBJ_DIRTY_CNT]-1), s[di+OBJ_DIRTY_MODE]); } }
-            s[di + OBJ_DIRTY_CNT]--;                                        // DEC byte [di+114Eh]
-            // sub_1CD7D/sub_1CD7B: VGA dirty rect render + set fs dirty flags
-            {
-                int16_t cx_x = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_OLD_X);  // old X
-                int16_t dx_y = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_OLD_Y);  // old Y
-                int16_t bp_v = (si > 5) ? 5 : (int16_t)si;             // bp=5 for large, si for small
-                v2_sprite_draw_1CD7D(s, cx_x, dx_y, (int16_t)si, bp_v);        // set fs dirty + VGA render (commented)
-            }
-            // Position copy: [0F4D] ← [0D4D], [104D] ← [0E4D]
-            *(uint16_t*)(s + di + OBJ_SPRITE_OLD_X) = *(uint16_t*)(s + di + OBJ_SPRITE_CUR_X);
-            *(uint16_t*)(s + di + OBJ_SPRITE_OLD_Y) = *(uint16_t*)(s + di + OBJ_SPRITE_CUR_Y);
-        }
+    // ---- Pass 1: per-object background restore (orig 38051-38086) ----
+    for (int16_t slot = 0xFE; slot >= 0; slot -= 2) {
+        if (s[slot + OBJ_DIRTY_CNT] == 0) continue;          // 38054 test byte [di+114Eh]
+        // Redraw size class = strip_count/8 + 1; >5 means "large sprite"
+        // (orig 38056-38061: bp forced to 5 on the large path).
+        uint16_t size = (*(uint16_t*)(s + slot + OBJ_STRIP_COUNT) >> 3) + 1;
+        int16_t clamped = (size > 5) ? 5 : (int16_t)size;
+        s[slot + OBJ_DIRTY_CNT]--;                           // 38064/38076 dec byte [di+114Eh]
+        // Restore background at the OLD sprite position (orig 38062-38065 /
+        // 38074-38077: cx=[di+0F4Dh], dx=[di+104Dh], call 1CD7D/1CD7B —
+        // sub_1CD7D sets fs dirty bits + VGA render, commented in orig).
+        int16_t old_x = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_OLD_X);
+        int16_t old_y = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_OLD_Y);
+        v2_sprite_draw_1CD7D(s, old_x, old_y, (int16_t)size, clamped);
+        // Latch current sprite position → OLD (orig 38066-38069 / 38078-38081:
+        // [0F4Dh]←[0D4Dh], [104Dh]←[0E4Dh]).
+        *(uint16_t*)(s + slot + OBJ_SPRITE_OLD_X) = *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_X);
+        *(uint16_t*)(s + slot + OBJ_SPRITE_OLD_Y) = *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_Y);
     }
-    // Exact replica of sub_1DE05 tile redraw loop.
-    // Verified line-by-line with seg003 lines 38087-38217.
-    // OUT(0x3C4, 0x0F02); — VGA sequencer, commented
-    // OUT(0x3CE, 0x0008); — VGA graphics, commented
-    {
-        uint16_t cx = 0x2B;                                             // 38096 mov cx, 2Bh
-        uint16_t bx = 0x19;                                             // 38097 mov bx, 19h
-        uint16_t di_fs = *(uint16_t*)(s + DS_SCROLL_ROW);                     // 38098 mov di, ds:2581h
-        di_fs <<= 1;                                                    // 38099 shl di, 1
-        di_fs = *(uint16_t*)(s + (uint16_t)(di_fs - LUT_ROW_BASE));          // 38100 mov di, [di-7098h]
-        di_fs += *(uint16_t*)(s + DS_SCROLL_COL);                             // 38101 add di, ds:257Fh
-        di_fs <<= 1;                                                    // 38102 shl di, 1
-        int16_t bp_fs = (int16_t)*(uint16_t*)(s + DS_MAP_BP);            // 38103 mov bp, ds:25DCh
-        bp_fs <<= 2;                                                    // 38104 shl bp, 2
-        bp_fs -= 0x56;                                                  // 38105 sub bp, 56h
 
-        // loc_1DE93: outer loop (bx = row counter, cx = column counter)
-        while (bx != 0) {
-            // Scan columns for dirty tile (bit 0 set)
+    // ---- Pass 2: dirty-tile scan over the visible window (orig 38087-38208) ----
+    // OUT(0x3C4, 0x0F02); — VGA sequencer: all planes (orig 38089, commented)
+    // OUT(0x3CE, 0x0008); — VGA graphics: bit mask (orig 38093, commented)
+    {
+        uint16_t cols_left = 0x2B;                           // 38096 mov cx, 2Bh
+        uint16_t rows_left = 0x19;                           // 38097 mov bx, 19h
+        // fs cursor at the window's top-left tile (orig 38098-38102):
+        //   di = LUT_ROW[[DS_SCROLL_ROW]] (word idx), +[DS_SCROLL_COL], ×2 bytes
+        uint16_t fs_cur = *(uint16_t*)(s + DS_SCROLL_ROW);
+        fs_cur <<= 1;
+        fs_cur = *(uint16_t*)(s + (uint16_t)(fs_cur - LUT_ROW_BASE));   // 38100 mov di, [di-7098h]
+        fs_cur += *(uint16_t*)(s + DS_SCROLL_COL);
+        fs_cur <<= 1;
+        // Row advance = map_width×4 − 0x56 bytes: from just-past-scanned back
+        // to the start of the next window row (orig 38103-38105).
+        int16_t row_adv = (int16_t)*(uint16_t*)(s + DS_MAP_BP);
+        row_adv <<= 2;
+        row_adv -= 0x56;
+
+        while (rows_left != 0) {                             // loc_1DE93
+            // Scan for the first dirty tile (bit0) in the rest of this row
+            // (orig 38109-38112).
             bool found = false;
-            while (cx != 0) {
-                if (di_fs < V2_FS_SHADOW_SIZE - 1 &&
-                    (*(uint16_t*)(v2_vm_shadow_fs + di_fs) & 1)) {      // 38109 test fs:[di], 1
-                    found = true; break;                                 // 38110 jnz loc_1DEAA
-                }
-                di_fs += 2;                                              // 38111 add di, 2
-                cx--;                                                    // 38112 loop
+            while (cols_left != 0) {
+                if (fs_cur < V2_FS_SHADOW_SIZE - 1 &&
+                    (*(uint16_t*)(v2_vm_shadow_fs + fs_cur) & 1)) { found = true; break; }
+                fs_cur += 2;
+                cols_left--;
             }
             if (!found) {
-                di_fs = (uint16_t)((int16_t)di_fs + bp_fs);             // 38113 add di, bp
-                cx = 0x2B;                                               // 38114 mov cx, 2Bh
-                bx--;                                                    // 38115 dec bx
-                continue;                                                // 38116 jnz loc_1DE93
+                // Row clean: advance to next row (orig 38113-38116).
+                fs_cur = (uint16_t)((int16_t)fs_cur + row_adv);
+                cols_left = 0x2B;
+                rows_left--;
+                continue;
             }
 
-            // loc_1DEAA: clear bit 1 of found tile
-            if (di_fs < V2_FS_SHADOW_SIZE - 1)
-                *(uint16_t*)(v2_vm_shadow_fs + di_fs) &= 0xFFFD;        // 38121 and fs:[di], 0FFFDh
-            di_fs += 2;                                                  // 38122 add di, 2
-            uint16_t dx_tl = 2;                                         // 38123 mov dx, 2
-            uint16_t si_row = 0x19 - bx + *(uint16_t*)(s + DS_SCROLL_ROW);    // 38124-38126
-            uint16_t ax_col = 0x2B - cx + *(uint16_t*)(s + DS_SCROLL_COL);    // 38127-38129
-            cx--;                                                        // 38130 dec cx
-            if (cx == 0) goto de05_end_row;                              // 38131 jcxz loc_1DEDE
+            // loc_1DEAA (orig 38121-38131): start a span at the found tile —
+            // clear its bit1, remember the tile's window coordinates.
+            if (fs_cur < V2_FS_SHADOW_SIZE - 1)
+                *(uint16_t*)(v2_vm_shadow_fs + fs_cur) &= 0xFFFD;
+            fs_cur += 2;
+            uint16_t span_bytes = 2;                         // 2 VGA bytes per tile
+            uint16_t tile_row = 0x19 - rows_left + *(uint16_t*)(s + DS_SCROLL_ROW);
+            uint16_t tile_col = 0x2B - cols_left + *(uint16_t*)(s + DS_SCROLL_COL);
+            cols_left--;
+            bool row_done = (cols_left == 0);                // 38131 jcxz loc_1DEDE
 
-            // loc_1DECA: continue scanning remaining columns
-            {
-                uint16_t rem = cx;
-                while (rem != 0) {
-                    if (di_fs < V2_FS_SHADOW_SIZE - 1 &&
-                        (*(uint16_t*)(v2_vm_shadow_fs + di_fs) & 1)) {   // 38134 test fs:[di], 1
-                        *(uint16_t*)(v2_vm_shadow_fs + di_fs) &= 0xFFFD; // 38136 and fs:[di], 0FFFDh
-                        di_fs += 2;                                       // 38137 add di, 2
-                        dx_tl += 2;                                       // 38138 add dx, 2
-                        rem--;                                            // 38139 loop
-                    } else {
-                        cx = rem;                                         // 38135 jz loc_1DEE4
-                        goto de05_render;
-                    }
+            // loc_1DECA (orig 38134-38139): extend the span while the next
+            // tiles are dirty too (clearing their bit1). Stops at the first
+            // clean tile (span ends mid-row) or when the row is exhausted.
+            if (!row_done) {
+                while (cols_left != 0) {
+                    if (fs_cur < V2_FS_SHADOW_SIZE - 1 &&
+                        (*(uint16_t*)(v2_vm_shadow_fs + fs_cur) & 1)) {
+                        *(uint16_t*)(v2_vm_shadow_fs + fs_cur) &= 0xFFFD;
+                        fs_cur += 2;
+                        span_bytes += 2;
+                        cols_left--;
+                    } else break;                            // 38135 jz loc_1DEE4
                 }
+                row_done = (cols_left == 0);                 // loop fell through → loc_1DEDE
             }
-            // Fall through: all remaining columns scanned
-        de05_end_row:
-            di_fs = (uint16_t)((int16_t)di_fs + bp_fs);                 // 38142 add di, bp
-            cx = 0x2B;                                                   // 38143 mov cx, 2Bh
-            bx--;                                                        // 38144 dec bx
+            if (row_done) {
+                // loc_1DEDE (orig 38142-38144): row exhausted while spanning —
+                // advance the cursor to the next row before rendering.
+                fs_cur = (uint16_t)((int16_t)fs_cur + row_adv);
+                cols_left = 0x2B;
+                rows_left--;
+            }
 
-        de05_render:
-            // loc_1DEE4: orig calls sub_1689e to redraw dirty tile (= erase sprite trail).
-            // v2 cannot replicate per-pass tile redraw without page-flip — single buffer
-            // + multi-pass swap causes flicker. Tile-based levels use full-frame redraw
-            // in v2_draw_tiles instead; intro/menu uses chunk_bg restore. dirty bit
-            // marking still happens above (v2_sprite_draw_1CD7D) which other DS-aware code uses.
-            //
-            // shadow-VGA: replay the orig loc_1DEE4 span copy into the shadow VGA at
-            // the exact orig addresses (seg003 eips 16B4-171F, verified above):
-            //   si = LUT[(si_row)*2 + ds:92FB]  (BG page row base)
-            //   di = LUT[(si_row)*2 + ds:92F7]  (DRAW page row base)
-            //   ax = (ax_col*2 + 8) & ~1        (byte column)
-            //   8 × REP MOVSB of dx_tl bytes, row pitch 0x56, all 4 planes.
+            // loc_1DEE4 (orig 38147-38199): copy the span BG page → DRAW page.
+            // Orig calls this to redraw dirty tiles (= erase sprite trail):
+            // it computes A000 offsets from the page-row LUT and does
+            // 8× REP MOVSB (rows, pitch 0x56); regs are pushed/popped around
+            // it, then `or bx,bx / jnz loc_1DE93` resumes the scan — here the
+            // while-condition performs that check.
+            // v2 display path cannot replicate per-pass tile redraw without
+            // page-flip (single buffer + multi-pass swap causes flicker):
+            // tile-based levels use full-frame redraw in v2_draw_tiles;
+            // intro/menu uses chunk_bg restore. The shadow-VGA replays the
+            // span copy at the exact orig addresses:
+            //   src = LUT[tile_row*2 + ds:92FB]  (BG page row base)
+            //   dst = LUT[tile_row*2 + ds:92F7]  (DRAW page row base)
+            //   byte_col = (tile_col*2 + 8) & ~1
             {
-                uint16_t srcrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + *(uint16_t*)(s + DS_PAGE_BG))   - 0x7608));
-                uint16_t dstrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + *(uint16_t*)(s + DS_PAGE_DRAW)) - 0x7608));
-                uint16_t offb = (uint16_t)((uint16_t)(ax_col * 2 + 8) & 0xFFFE);
+                uint16_t src_row = *(uint16_t*)(s + (uint16_t)((uint16_t)(tile_row * 2 + *(uint16_t*)(s + DS_PAGE_BG))   - 0x7608)); // 38154/38156
+                uint16_t dst_row = *(uint16_t*)(s + (uint16_t)((uint16_t)(tile_row * 2 + *(uint16_t*)(s + DS_PAGE_DRAW)) - 0x7608)); // 38155/38157
+                uint16_t byte_col = (uint16_t)((uint16_t)(tile_col * 2 + 8) & 0xFFFE);   // 38158-38160
                 extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
-                for (int r8 = 0; r8 < 8; r8++)
-                    v2_vga_copy_span((uint16_t)(dstrow + offb + r8 * 0x56),
-                                     (uint16_t)(srcrow + offb + r8 * 0x56), dx_tl);
+                for (int r = 0; r < 8; r++)
+                    v2_vga_copy_span((uint16_t)(dst_row + byte_col + r * 0x56),
+                                     (uint16_t)(src_row + byte_col + r * 0x56), span_bytes);
             }
-            (void)si_row; (void)ax_col; (void)dx_tl;
         }
     }
-    // loc_1DF5C:
-    // OUT(0x3CE, 0xFF08); — VGA graphics reset, commented
-    s[DS_SPRITE_FORCE] = 0;                                                       // 38215 mov byte ptr ds:9568h, 0
+
+    // loc_1DF5C (orig 38211-38217):
+    // OUT(0x3CE, 0xFF08); — VGA graphics: bit mask reset, commented
+    s[DS_SPRITE_FORCE] = 0;                                  // 38215 mov byte ds:9568h, 0
     // POP es; RETF
 }
 
-// sub_1DD9C: sprite render — DEC/set byte [di+0x114D] + save position.
-// Exact replica of seg003 sub_1DD9C DS side effects.
+// sub_1CDEF (seg003 36337-36422, eips 0x5BF..0x647): sprite visibility test.
+// Clips the sprite's tile rectangle (position [64D]/[74D], size from strip
+// count [C4D]) against the viewport tile window ([9168]×[916A]), then scans
+// the clipped rectangle in the fs tile-dirty map: the sprite is "visible" iff
+// any covered tile has bit0 set (orig returns NZ; ZF → caller skips).
+// Width/height start at strips/8+1 and lose one tile when the position is
+// tile-aligned (orig 36344-36351: TEST cx,7 / TEST dx,7 → DEC).
+static bool v2_sprite_visible_1CDEF(uint8_t* s, int16_t slot) {
+    int16_t px = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_X);   // 36338 [di+64Dh]
+    int16_t py = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_Y);   // 36339 [di+74Dh]
+    int16_t height = (int16_t)((*(uint16_t*)(s + slot + OBJ_STRIP_COUNT) >> 3) + 1); // 36340-36342
+    int16_t width = height;                                        // 36343 mov bp, si
+    if (!(px & 7)) width--;                                        // 36344-36346
+    if (!(py & 7)) height--;                                       // 36349-36351
+    px >>= 3;                                                      // 36354 sar cx, 3 (signed!)
+    py >>= 3;                                                      // 36355 sar dx, 3 (signed!)
+    int16_t rows = height;                                         // 36356 mov ax, si
+    int16_t fs_off = 0;                                            // 36357 mov si, 0
+
+    // X clip against viewport tile width [9168] (orig 36358-36372).
+    int16_t vw = (int16_t)*(uint16_t*)(s + DS_CLIP_LIMIT_X);
+    if (px < 0) {
+        width += px;                                               // 36360 add bp, cx
+        if (width <= 0) return false;                              // 36361 jle loc_1CE75
+    } else {
+        fs_off += px;                                              // 36366 add si, cx
+        if (px >= vw) return false;                                // 36367-36368
+        int16_t overflow = px + width - vw;                        // 36369-36370
+        if (overflow > 0) width -= overflow;                       // 36371-36372
+    }
+
+    // Y clip against viewport tile height [916A] (orig 36376-36396).
+    int16_t vh = (int16_t)*(uint16_t*)(s + DS_CLIP_LIMIT_Y);
+    if (py < 0) {
+        rows += py;                                                // 36378 add ax, dx
+        if (rows <= 0) return false;                               // 36379 jle loc_1CE75
+        // orig 36380: jmp loc_1CE58 — no bottom clip on this path
+    } else {
+        if (py >= vh) return false;                                // 36384-36385
+        uint16_t bx = (uint16_t)py << 1;                           // 36386-36387
+        fs_off += (int16_t)*(uint16_t*)(s + (uint16_t)(bx - LUT_ROW_BASE)); // 36388 add si, [bx-7098h]
+        int16_t overflow = py + rows - vh;                         // 36392-36394
+        if (overflow > 0) rows -= overflow;                        // 36395-36396
+    }
+
+    // loc_1CE58 (orig 36400-36415): scan the clipped rectangle for a dirty
+    // tile. row_skip returns the cursor from row end to next row start.
+    int16_t row_skip = ((int16_t)*(uint16_t*)(s + DS_CLIP_LIMIT_X) - width) * 2;
+    int16_t scan = fs_off * 2;                                     // 36403 add si, si
+    for (int16_t r = 0; r < rows; r++) {                           // loc_1CE62
+        for (int16_t c = 0; c < width; c++) {                      // loc_1CE64
+            uint16_t off = (uint16_t)scan;
+            if (off < V2_FS_SHADOW_SIZE - 1 &&
+                (*(uint16_t*)(v2_vm_shadow_fs + off) & 1))         // 36409 test fs:[si], 1
+                return true;                                       // 36410 jnz locret_1CE77
+            scan += 2;                                             // 36411 add si, 2
+        }
+        scan += row_skip;                                          // 36413 add si, dx
+    }
+    return false;                                                  // 36419 xor ax, ax (ZF)
+}
+
+// Type-1 sprite pass, orig seg003_648_proc @0E25:0648 (lines 36433-36451,
+// exit 36722): fixed 8×8 sprite. The early gates guarantee full visibility —
+// no partial clip exists for type 1 (word_1C830 stays FFFF → mask 0xFF).
+static void v2_draw_type1_1CE78(uint8_t* s, int16_t slot) {
+    int16_t px = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_X);
+    int16_t py = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_Y);
+    // cs:word_1C830=0xFFFF, cs:word_1C834=0, cs:word_1C832=0
+    // Viewport gates (orig 36436-36449): fully out → loc_1D154:
+    // set mode=2 (orig 36722), done.
+    int16_t edge = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140;   // 36436-36437
+    if (px >= edge)        { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36439
+    edge -= 0x147;                                                     // 36440
+    if (px <= edge)        { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36442
+    edge = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;            // 36443-36444
+    if (py >= edge)        { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36446
+    edge -= 0xB7;                                                      // 36447
+    if (py < edge)         { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36449
+    // In viewport → sub_1CD7B(si=2)
+    v2_sprite_draw_1CD7D(s, px, py, 2, 2);                         // 36450-36451
+    // shadow-VGA: exact type-1 VGA render (seg003 eips 0x698..0x704 +
+    // hflip 0x945..0x95B).
+    uint16_t y = *(uint16_t*)(s + slot + OBJ_SPRITE_Y);            // + word_1C834(=0)
+    uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));
+    uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
+                       + *(uint16_t*)(s + DS_PAGE_SHOWN));
+    uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));
+    uint16_t xw = (uint16_t)(*(uint16_t*)(s + slot + OBJ_SPRITE_X) + 0x20);
+    uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));
+    int pan = xw & 3;
+    // src: seg [94D] offset [84D] + cs:[word_1C834*2 + 0x3D] (=cs:[0x3D])
+    uint16_t spr_seg = *(uint16_t*)(s + slot + OBJ_SPRITE_SEG);
+    uint16_t spr_off = *(uint16_t*)(s + slot + OBJ_SPRITE_OFF);
+    uint16_t cs3d = v2_m2c_base
+        ? *(uint16_t*)(v2_m2c_base + (uint32_t)0x0E25 * 16 + 0x3D) : 0;
+    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+    uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
+    if (sp) {
+        extern void v2_vga_sprite8(const uint8_t*, uint16_t, int, int, uint8_t);
+        int hflip = (*(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0;
+        // engine mask sits at [si-1]; [84D] is the 1-based data
+        // offset (si), so the strip stream starts at si-1.
+        v2_vga_sprite8(sp + (uint16_t)(spr_off + cs3d - 1), di_vga, pan, hflip, 0xFF);
+    }
+}
+
+// Type-2 sprite pass, orig loc_1D8A8 @0E25:1078 (lines 37487-37781): variable-
+// height 32px-wide sprite. Four edge gates (right/left/bottom/top): fully out
+// → mode=2 + return; within the 0x1F margin → mode=2 + partial-clip state
+// (word_1C830 column mask from the 1379/138B LUTs, word_1C832/34 row clips).
+static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
+    int16_t px = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_X);   // 37490
+    int16_t py = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_Y);   // 37491
+    uint16_t col_mask = 0xFFFF, clip_bot = 0, clip_top = 0;        // 37492-37494 word_1C830/32/34
+    uint32_t cs3 = (uint32_t)0x0E25 * 16;                          // seg003 linear base
+    int16_t edge;
+
+    // X right edge: viewport_X + 0x140 (orig 37495-37508).
+    edge = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140;
+    if (px >= edge) {                                              // 37498 jge loc_1DB98
+        s[slot + OBJ_DIRTY_MODE] = 2; return;                      // 37777
+    }
+    edge -= 0x1F;                                                  // 37499
+    if (px >= edge) {                                              // 37501 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37502
+        uint16_t idx = (uint16_t)((uint16_t)(px - edge) >> 2) << 1; // 37503-37506
+        if (v2_m2c_base)
+            col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x1379 + idx); // 37507-37508
+    }
+    // X left edge: −0x140 (orig 37511-37523).
+    edge -= 0x140;                                                 // 37511
+    if (px <= edge) {                                              // 37513 jle loc_1DB98
+        s[slot + OBJ_DIRTY_MODE] = 2; return;
+    }
+    edge += 0x1F;                                                  // 37514
+    if (px < edge) {                                               // 37516 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37517
+        uint16_t idx = (uint16_t)((uint16_t)(edge - px) >> 2) << 1; // 37518-37521
+        if (v2_m2c_base)
+            col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x138B + idx); // 37522-37523
+    }
+    // Y bottom edge: viewport_Y + 0xB0 (orig 37526-37535).
+    edge = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;
+    if (py >= edge) {                                              // 37529 jge loc_1DB98
+        s[slot + OBJ_DIRTY_MODE] = 2; return;
+    }
+    edge -= 0x1F;                                                  // 37530
+    if (py >= edge) {                                              // 37532 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37533
+        clip_bot = (uint16_t)(py - edge);                          // 37534-37535 bottom rows clipped
+    }
+    // Y top edge: −0xB0 (orig 37538-37546).
+    edge -= 0xB0;                                                  // 37538
+    if (py < edge) {                                               // 37540 jl loc_1DB98
+        s[slot + OBJ_DIRTY_MODE] = 2; return;
+    }
+    edge += 0x1F;                                                  // 37541
+    if (py <= edge) {                                              // 37543 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37544
+        clip_top = (uint16_t)(edge - py);                          // 37545-37546 top rows clipped
+    }
+
+    // loc_1D95B: all bounds passed → sub_1CD7D + VGA render.
+    {
+        int16_t size = (int16_t)((*(uint16_t*)(s + slot + OBJ_STRIP_COUNT) >> 3) + 1); // 37550-37552
+        v2_sprite_draw_1CD7D(s, px, py, size, 5);                  // 37549: bp=5, 37553: call sub_1CD7D
+    }
+    // shadow-VGA: exact type-2 VGA render (seg003 eips 0x1139..0x11B8 + row
+    // engine jpt_1DA02 / hflip loc_1DBCD). Table ground truth: jpt image
+    // locations jpt_1da02=0e25:2570, jpt_1d514=0e25:2170, jpt_1d703=0e25:2370,
+    // jpt_1dbfe=0e25:2770 (src/_data.h; the m2c case COMMENTS belong to
+    // overlapping tables — do not trust).
+    if (v2_m2c_base) {
+        uint16_t y = (uint16_t)(*(uint16_t*)(s + slot + OBJ_SPRITE_Y) + clip_top); // 37554-37555
+        uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));  // 37556-37562
+        uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
+                           + *(uint16_t*)(s + DS_PAGE_SHOWN));                 // 37558-37560
+        uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));       // 37563
+        uint16_t xw = (uint16_t)(*(uint16_t*)(s + slot + OBJ_SPRITE_X) + 0x20); // 37564-37565
+        uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));                 // 37569-37570
+        int pan = xw & 3;                                                       // 37566-37568
+        uint16_t spr_off = *(uint16_t*)(s + slot + OBJ_SPRITE_OFF);            // 37571
+        uint16_t skip_top = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D + clip_top*2); // 37572-37574
+        uint16_t rows = (uint16_t)(*(uint16_t*)(s + slot + OBJ_STRIP_COUNT)
+                        - clip_top - clip_bot);                                 // 37578-37580
+        uint16_t skip_tail = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D
+                        + (uint16_t)((clip_bot + clip_top) * 2));               // 37617-37620
+        uint16_t spr_seg = *(uint16_t*)(s + slot + OBJ_SPRITE_SEG);
+        extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+        uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
+        if (sp && (int16_t)rows > 0) {
+            extern void v2_vga_sprite32_type2(const uint8_t*, uint16_t, int, int, uint8_t, int, uint16_t);
+            int hflip = (*(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0; // 37582
+            // normal engine: AND word_1C830, 0xFF (low byte);
+            // hflip variant: SHR word_1C830, 8 (high byte holds the
+            // mirrored clip mask — the 1379/138B LUT words carry both).
+            uint8_t mand = hflip ? (uint8_t)(col_mask >> 8) : (uint8_t)(col_mask & 0xFF);
+            v2_vga_sprite32_type2(sp + (uint16_t)(spr_off + skip_top - 1),
+                                  di_vga, pan, hflip, mand, rows, skip_tail);
+        }
+    }
+}
+
+// Type-4 sprite pass, orig @0E25:0B82 (lines 36965-37271): fixed 16×16
+// sprite. Same four-gate scheme as type 2 with a 0x0F margin; the row clips
+// count in half-units (bottom >>1, top &~1 rows → later >>1).
+static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
+    int16_t px = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_X);   // 36968
+    int16_t py = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_Y);   // 36969
+    uint16_t col_mask = 0xFFFF, clip_bot = 0, clip_top = 0;        // word_1C830/32/34
+    uint32_t cs3 = (uint32_t)0x0E25 * 16;
+    int16_t edge;
+
+    // X right edge (orig 36973-36986).
+    edge = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140;
+    if (px >= edge) {                                              // 36976 jge loc_1D6B1
+        s[slot + OBJ_DIRTY_MODE] = 2; return;                      // 37267
+    }
+    edge -= 0x0F;                                                  // 36977
+    if (px >= edge) {                                              // 36979 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 36980
+        uint16_t idx = (uint16_t)((uint16_t)(px - edge) >> 2) << 1; // 36981-36984
+        if (v2_m2c_base) col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E92 + idx); // 36985-36986
+    }
+    // X left edge (orig 36989-37001).
+    edge -= 0x140;                                                 // 36989
+    if (px <= edge) {                                              // 36991 jle loc_1D6B1
+        s[slot + OBJ_DIRTY_MODE] = 2; return;
+    }
+    edge += 0x0F;                                                  // 36992
+    if (px < edge) {                                               // 36994 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 36995
+        uint16_t idx = (uint16_t)((uint16_t)(edge - px) >> 2) << 1; // 36996-36999
+        if (v2_m2c_base) col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E9A + idx); // 37000-37001
+    }
+    // Y bottom edge (orig 37004-37014).
+    edge = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;
+    if (py >= edge) {                                              // 37007 jge loc_1D6B1
+        s[slot + OBJ_DIRTY_MODE] = 2; return;
+    }
+    edge -= 0x0F;                                                  // 37008
+    if (py >= edge) {                                              // 37010 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37011
+        clip_bot = (uint16_t)((uint16_t)(py - edge) >> 1);         // 37012-37014 rows→units
+    }
+    // Y top edge (orig 37017-37026).
+    edge -= 0xB0;                                                  // 37017
+    if (py < edge) {                                               // 37019 jl loc_1D6B1
+        s[slot + OBJ_DIRTY_MODE] = 2; return;
+    }
+    edge += 0x0F;                                                  // 37020
+    if (py <= edge) {                                              // 37022 (margin zone)
+        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37023
+        clip_top = (uint16_t)((uint16_t)(edge - py) & 0xFFFE);     // 37024-37026 even ROWS here
+    }
+
+    // loc_1D471: all bounds passed → sub_1CD7B(si=3, bp=3).
+    v2_sprite_draw_1CD7D(s, px, py, 3, 3);                         // 37029-37030
+    // shadow-VGA: exact type-4 VGA render (seg003 eips 0xC47..0xCCA).
+    if (v2_m2c_base) {
+        uint16_t y = (uint16_t)(*(uint16_t*)(s + slot + OBJ_SPRITE_Y) + clip_top); // 37031-37032 (rows)
+        clip_top >>= 1;                                                             // 37033 rows → units
+        uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));   // 37034-37040
+        uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
+                           + *(uint16_t*)(s + DS_PAGE_SHOWN));                  // 37036-37038
+        uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));        // 37041
+        uint16_t xw = (uint16_t)(*(uint16_t*)(s + slot + OBJ_SPRITE_X) + 0x20); // 37042-37043
+        uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));                  // 37047-37048
+        int pan = xw & 3;                                                        // 37044-37046
+        uint16_t spr_off = *(uint16_t*)(s + slot + OBJ_SPRITE_OFF);             // 37049
+        uint16_t skip_top = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D + clip_top*2); // 37050-37052
+        uint16_t units = (uint16_t)(8 - clip_top - clip_bot);                   // 37056-37058
+        uint16_t skip_tail = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D
+                        + (uint16_t)((clip_bot + clip_top) * 2));                // 37095-37098
+        uint16_t spr_seg = *(uint16_t*)(s + slot + OBJ_SPRITE_SEG);
+        extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
+        uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
+        if (sp && (int16_t)units > 0) {
+            extern void v2_vga_sprite16_type4(const uint8_t*, uint16_t, int, int, uint8_t, int, uint16_t);
+            int hflip = (*(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0; // 37060
+            uint8_t mand = hflip ? (uint8_t)(col_mask >> 8) : (uint8_t)(col_mask & 0xFF);
+            v2_vga_sprite16_type4(sp + (uint16_t)(spr_off + skip_top - 1),
+                                  di_vga, pan, hflip, mand, units, skip_tail);
+        }
+    }
+}
+
+// sub_1DD9C (seg003 37997-38035): late sprite pass — draw every active sprite
+// whose tiles were touched this frame.
+//
+// For each object slot 0xFE..0 (step −2):
+//   * skip unless flags bit15 (active) and not bits13-14 (priority skip);
+//   * unless the force flag [9568] or a pending mode [slot+114D] shortcuts
+//     it, run the sub_1CDEF visibility test; visible → mode=3;
+//   * decrement mode, clamping negative to 0 (orig 38016-38018 DEC/JNS);
+//   * dispatch by sprite type (flags&7) through the cs:[bp+15CBh] table —
+//     verified: [0]=0000 [1]=0648 [2]=1078 [3]=0000 [4]=0B82 [5-7]=0000;
+//     the type handlers live above (v2_draw_type1/2/4_*); handler 0 = NOP;
+//   * latch the just-drawn position: [0D4Dh]←[64Dh], [0E4Dh]←[74Dh].
+// Finally clear the force flag [9568] (orig 38034).
+//
+// Exact replica of the orig DS side effects; the handlers replay the VGA
+// renders into the shadow VGA.
 static void v2_late_sprites_1DD9C(uint8_t* s) {
-    for (int16_t di = 0xFE; di >= 0; di -= 2) {
-        uint16_t flags = *(uint16_t*)(s + di + OBJ_SPRITE_FLAGS);
-        if (!(flags & 0x8000)) continue;  // not active
-        if (flags & 0x6000) continue;     // priority skip
+    for (int16_t slot = 0xFE; slot >= 0; slot -= 2) {              // 37999/38032-38033
+        uint16_t flags = *(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS);
+        if (!(flags & 0x8000)) continue;                           // 38002-38003 not active
+        if (flags & 0x6000) continue;                              // 38004-38005 priority skip
 
-        bool force_render = (s[DS_SPRITE_FORCE] != 0);
-        bool dirty = (s[di + OBJ_DIRTY_MODE] != 0);
-
-        if (!force_render && !dirty) {
-            // sub_1CDEF: visibility check — exact bounds logic from original.
-            // Original checks viewport overlap AND dirty page flags (fs).
-            // v2: no dirty pages (full-frame render), so skip fs scan = always "dirty" if in viewport.
-            int16_t cx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X);   // [di+64Dh] = x pixel
-            int16_t dx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y);   // [di+74Dh] = y pixel
-            int16_t si_h = (int16_t)((*(uint16_t*)(s + di + OBJ_STRIP_COUNT) >> 3) + 1); // strip count
-            int16_t bp_w = si_h;                                    // bp = si (width = height initially)
-            if (!(cx & 7)) bp_w--;                                  // TEST cx,7; JNZ skip; DEC bp
-            if (!(dx & 7)) si_h--;                                  // TEST dx,7; JNZ skip; DEC si
-            cx >>= 3;                                               // SAR cx, 3 (signed!)
-            dx >>= 3;                                               // SAR dx, 3 (signed!)
-            int16_t ax_h = si_h;                                    // ax = si (visible height)
-            int16_t si_off = 0;                                      // MOV si, 0 (fs offset accumulator)
-
-            // X bounds check
-            bool visible = true;
-            int16_t vw = (int16_t)*(uint16_t*)(s + DS_CLIP_LIMIT_X);       // ds:9168h viewport tile width
-            if (cx < 0) {
-                bp_w += cx;                                          // ADD bp, cx (reduce width)
-                if (bp_w <= 0) visible = false;                     // JLE not_visible
-            } else {
-                si_off += cx;                                        // ADD si, cx (fs column offset)
-                if (cx >= vw) visible = false;                      // CMP cx, ds:9168h; JGE not_visible
-                else {
-                    int16_t overflow = cx + bp_w - vw;              // right edge overflow
-                    if (overflow > 0) bp_w -= overflow;              // clip right
-                }
-            }
-
-            // Y bounds check (only if X visible)
-            if (visible) {
-                int16_t vh = (int16_t)*(uint16_t*)(s + DS_CLIP_LIMIT_Y);   // ds:916Ah viewport tile height
-                if (dx < 0) {
-                    ax_h += dx;                                      // ADD ax, dx
-                    if (ax_h <= 0) visible = false;                 // JLE not_visible
-                } else {
-                    if (dx >= vh) visible = false;                  // CMP dx, ds:916Ah; JGE not_visible
-                    else {
-                        // ADD si, [bx-7098h] where bx=dx*2          ; row offset in fs
-                        uint16_t bx = (uint16_t)dx << 1;
-                        si_off += (int16_t)*(uint16_t*)(s + (uint16_t)(bx - LUT_ROW_BASE));
-                        int16_t overflow = dx + ax_h - vh;          // bottom edge overflow
-                        if (overflow > 0) ax_h -= overflow;         // clip bottom
-                    }
-                }
-            }
-
-            if (!visible) continue;
-
-            // loc_1CE58: scan fs dirty page flags in clipped tile rectangle.
-            // Original: lines 745-766 (eip 0x0628..0x0647).
-            // If ANY tile in rectangle has fs bit 0 set → visible (NZ). Otherwise → not visible (ZF).
-            {
-                int16_t dx_skip = ((int16_t)*(uint16_t*)(s + DS_CLIP_LIMIT_X) - bp_w) * 2; // (vw - bp) * 2
-                int16_t si_scan = si_off * 2;                        // ADD si, si (word offset)
-                bool fs_dirty = false;
-                for (int16_t r = 0; r < ax_h && !fs_dirty; r++) {   // loc_1CE62
-                    for (int16_t c = 0; c < bp_w; c++) {            // loc_1CE64
-                        uint16_t fs_off = (uint16_t)si_scan;
-                        if (fs_off < V2_FS_SHADOW_SIZE - 1) {
-                            uint16_t fs_val = *(uint16_t*)(v2_vm_shadow_fs + fs_off);
-                            if (fs_val & 1) { // TEST fs:[si], 1
-                                // Trace: who made this dirty?
-                                { static int _fst=0; if(di==0x30 && s[di+OBJ_DIRTY_MODE]==0 && _fst<3) { _fst++;
-                                  fprintf(stderr,"V2-FS-HIT[%d]: di=%02X fs[%04X]=%04X r=%d c=%d bp=%d ax=%d skip=%d\n",
-                                    _fst,(uint16_t)di,fs_off,fs_val,r,c,bp_w,ax_h,dx_skip); } }
-                                fs_dirty = true;                     // JNZ locret_1CE77 (visible!)
-                                break;
-                            }
-                        }
-                        si_scan += 2;                                // ADD si, 2
-                    }
-                    si_scan += dx_skip;                              // ADD si, dx
-                }
-                if (!fs_dirty) continue;                             // loc_1CE75: XOR ax, ax → not visible
-            }
-            { static int _vis=0; if(di==0x30 && _vis<5) { _vis++;
-              uint16_t _fsoff = (uint16_t)(si_off * 2);
-              uint16_t _sv = (_fsoff < V2_FS_SHADOW_SIZE - 1) ? *(uint16_t*)(v2_vm_shadow_fs + _fsoff) : 0xDEAD;
-              uint16_t _rv = 0xDEAD;
-              if (v2_m2c_base && v2_vm_real_ds_ptr) {
-                  uint16_t _fsseg = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_FS);
-                  if (_fsseg) _rv = *(uint16_t*)(v2_m2c_base + (uint32_t)_fsseg * 16 + _fsoff);
-              }
-              fprintf(stderr,"V2-VIS[%d]: mode=%02X fsoff=%04X shadow_fs=%04X real_fs=%04X (bit0: s=%d r=%d)\n",
-                _vis,s[di+OBJ_DIRTY_MODE],_fsoff,_sv,_rv,_sv&1,_rv&1); } }
-            { static int _vis2e=0; if(di==0x30 && _vis2e<5) { _vis2e++;
-              // Compute scan start offset same as orig
-              int16_t _cx2 = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X) >> 3;
-              int16_t _dx2 = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y) >> 3;
-              int16_t _soff = 0;
-              if (_cx2 >= 0) _soff += _cx2;
-              if (_dx2 >= 0) { uint16_t _bx2 = (uint16_t)_dx2 << 1; _soff += (int16_t)*(uint16_t*)(s + (uint16_t)(_bx2 - LUT_ROW_BASE)); }
-              uint16_t _fso = (uint16_t)(_soff * 2);
-              fprintf(stderr,"V2-CDEF-VIS[%d]: di=%02X fsoff=%04X fs[off]=%04X (bit0=%d)\n",
-                _vis2e,(uint16_t)di,_fso,
-                (_fso < V2_FS_SHADOW_SIZE-1) ? *(uint16_t*)(v2_vm_shadow_fs+_fso) : 0xDEAD,
-                (_fso < V2_FS_SHADOW_SIZE-1) ? (*(uint16_t*)(v2_vm_shadow_fs+_fso) & 1) : -1); } }
-            s[di + OBJ_DIRTY_MODE] = 3;                                     // MOV byte [di+114Dh], 3
+        bool force_render = (s[DS_SPRITE_FORCE] != 0);             // 38006-38007 test ds:9568h
+        bool mode_pending = (s[slot + OBJ_DIRTY_MODE] != 0);       // 38008-38009 test [di+114Dh]
+        if (!force_render && !mode_pending) {
+            if (!v2_sprite_visible_1CDEF(s, slot)) continue;       // 38010-38011 call sub_1CDEF; jz
+            s[slot + OBJ_DIRTY_MODE] = 3;                          // 38012 mov byte [di+114Dh], 3
         }
 
-        // loc_1DDC7: DEC byte [di+114Dh]
-        { static int _v2dd=0; if((di==0x30||di==0x36||di==0x3A) && _v2dd<60) { _v2dd++;
-          fprintf(stderr,"V2-DD9C[%d]: di=%02X mode=%02X force=%02X flags=%04X vp=(%04X,%04X) xy=(%04X,%04X) tile=(%d,%d) vh=%d vw=%d\n",
-            _v2dd,(uint16_t)di,s[di+OBJ_DIRTY_MODE],s[DS_SPRITE_FORCE],*(uint16_t*)(s+di+OBJ_SPRITE_FLAGS),
-            *(uint16_t*)(s+DS_VIEWPORT_X),*(uint16_t*)(s+DS_VIEWPORT_Y),
-            *(uint16_t*)(s+di+OBJ_SPRITE_X),*(uint16_t*)(s+di+OBJ_SPRITE_Y),
-            (int16_t)*(uint16_t*)(s+di+OBJ_SPRITE_X)>>3,(int16_t)*(uint16_t*)(s+di+OBJ_SPRITE_Y)>>3,
-            *(uint16_t*)(s+DS_CLIP_LIMIT_Y),*(uint16_t*)(s+DS_CLIP_LIMIT_X)); } }
-        s[di + OBJ_DIRTY_MODE]--;
-        if ((int8_t)s[di + OBJ_DIRTY_MODE] < 0)
-            s[di + OBJ_DIRTY_MODE] = 0;
+        // loc_1DDC7 (orig 38016-38018): DEC mode, clamp negative to 0.
+        s[slot + OBJ_DIRTY_MODE]--;
+        if ((int8_t)s[slot + OBJ_DIRTY_MODE] < 0)
+            s[slot + OBJ_DIRTY_MODE] = 0;
 
-        // Rendering dispatch: VGA render by sprite type (cs:[bp+15CBh]).
-        // Read handler address from dispatch table at CS:0x15CB dynamically.
-        // Verified table: [0]=0000 [1]=0648 [2]=1078 [3]=0000 [4]=0B82 [5-7]=0000.
-        // Each handler: bounds check → VGA render (commented) → sub_1CD7D.
-        // DS side effects: mode byte writes at clipping/exit, sub_1CD7D FS writes.
+        // loc_1DDD2 (orig 38021-38024): dispatch cs:[(flags&7)*2 + 15CBh].
         {
-            uint16_t sprite_type = *(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 7;
+            uint16_t sprite_type = *(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS) & 7;
             uint16_t handler = 0;
-            if (v2_m2c_base) {
-                uint16_t cs_val = 0x0E25;
-                handler = *(uint16_t*)(v2_m2c_base + (uint32_t)cs_val * 16 + sprite_type * 2 + 0x15CB);
-            }
-
-            if (handler == 0x1078) {
-                // Type 2 (loc_1d8a8): dynamic sprite. Verified seg003 lines 37487-37781.
-                // Exact replica of bounds check + DS side effects + shadow-VGA VGA render.
-                int16_t cx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X);  // 37490
-                int16_t dx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y);  // 37491
-                uint16_t c1c830 = 0xFFFF, c1c832 = 0, c1c834 = 0;     // 37492-37494 clip state
-                int16_t ax;
-                uint32_t cs3 = (uint32_t)0x0E25 * 16;                  // seg003 linear base
-                // X right bound: ax = viewport_X + 0x140
-                ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140;        // 37495-37496
-                if (cx >= ax) goto type2_exit;                         // 37498: JGE loc_1DB98
-                // X right-edge clip margin: ax -= 0x1F
-                ax -= 0x1F;                                            // 37499
-                if (cx >= ax) {                                        // 37501: JL → skip means cx >= ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37502
-                    uint16_t bx2 = (uint16_t)((uint16_t)(cx - ax) >> 2) << 1; // 37503-37506
-                    if (v2_m2c_base)
-                        c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x1379 + bx2); // 37507-37508
-                }
-                // X left bound: ax -= 0x140
-                ax -= 0x140;                                           // 37511
-                if (cx <= ax) goto type2_exit;                         // 37513: JLE loc_1DB98
-                // X left-edge clip margin: ax += 0x1F
-                ax += 0x1F;                                            // 37514
-                if (cx < ax) {                                         // 37516: JGE → skip means cx < ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37517
-                    uint16_t bx2 = (uint16_t)((uint16_t)(ax - cx) >> 2) << 1; // 37518-37521
-                    if (v2_m2c_base)
-                        c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x138B + bx2); // 37522-37523
-                }
-                // Y bottom bound: ax = viewport_Y + 0xB0
-                ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;          // 37526-37527
-                if (dx >= ax) goto type2_exit;                         // 37529: JGE loc_1DB98
-                // Y bottom-edge clip: ax -= 0x1F
-                ax -= 0x1F;                                            // 37530
-                if (dx >= ax) {                                        // 37532: JL → skip means dx >= ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37533
-                    c1c832 = (uint16_t)(dx - ax);                      // 37534-37535: bottom rows clipped
-                }
-                // Y top bound: ax -= 0xB0
-                ax -= 0xB0;                                            // 37538
-                if (dx < ax) goto type2_exit;                          // 37540: JL loc_1DB98
-                // Y top-edge clip: ax += 0x1F
-                ax += 0x1F;                                            // 37541
-                if (dx <= ax) {                                        // 37543: JG → skip means dx <= ax
-                    s[di + OBJ_DIRTY_MODE] = 2;                                // 37544
-                    c1c834 = (uint16_t)(ax - dx);                      // 37545-37546: top rows clipped
-                }
-                // loc_1D95B: all bounds passed → sub_1CD7D + VGA render
-                {
-                    int16_t si_h = (int16_t)((*(uint16_t*)(s + di + OBJ_STRIP_COUNT) >> 3) + 1); // 37550-37552
-                    v2_sprite_draw_1CD7D(s, cx, dx, si_h, 5);                 // 37549: bp=5, 37553: call sub_1CD7D
-                }
-                // shadow-VGA: exact type-2 VGA render (seg003 eips 0x1139..0x11B8 + row
-                // engine jpt_1DA02 / hflip loc_1DBCD). Table ground truth: jpt
-                // image locations jpt_1da02=0e25:2570, jpt_1d514=0e25:2170,
-                // jpt_1d703=0e25:2370, jpt_1dbfe=0e25:2770 (src/_data.h; the
-                // m2c case COMMENTS belong to overlapping tables — do not trust).
-                if (v2_m2c_base) {
-                    uint16_t y = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_Y) + c1c834); // 37554-37555
-                    uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));  // 37556-37562
-                    uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
-                                       + *(uint16_t*)(s + DS_PAGE_SHOWN));                 // 37558-37560
-                    uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));       // 37563
-                    uint16_t xw = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_X) + 0x20);  // 37564-37565
-                    uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));                 // 37569-37570
-                    int pan = xw & 3;                                                       // 37566-37568
-                    uint16_t spr_off = *(uint16_t*)(s + di + OBJ_SPRITE_OFF);              // 37571
-                    uint16_t skip_top = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D + c1c834*2); // 37572-37574
-                    uint16_t rows = (uint16_t)(*(uint16_t*)(s + di + OBJ_STRIP_COUNT)
-                                    - c1c834 - c1c832);                                     // 37578-37580
-                    uint16_t skip_tail = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D
-                                    + (uint16_t)((c1c832 + c1c834) * 2));                   // 37617-37620
-                    uint16_t spr_seg = *(uint16_t*)(s + di + OBJ_SPRITE_SEG);
-                    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
-                    uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
-                    if (sp && (int16_t)rows > 0) {
-                        extern void v2_vga_sprite32_type2(const uint8_t*, uint16_t, int, int, uint8_t, int, uint16_t);
-                        int hflip = (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0; // 37582
-                        // normal engine: AND word_1C830, 0xFF (low byte);
-                        // hflip variant: SHR word_1C830, 8 (high byte holds the
-                        // mirrored clip mask — the 1379/138B LUT words carry both).
-                        uint8_t mand = hflip ? (uint8_t)(c1c830 >> 8) : (uint8_t)(c1c830 & 0xFF);
-                        v2_vga_sprite32_type2(sp + (uint16_t)(spr_off + skip_top - 1),
-                                              di_vga, pan, hflip, mand, rows, skip_tail);
-                    }
-                }
-                goto type2_end;
-            type2_exit:
-                // loc_1DB98: sprite outside viewport → set mode=2, return.
-                s[di + OBJ_DIRTY_MODE] = 2;                                    // 37777: MOV byte [di+114Dh], 2
-                // POP di, es, ds. RETN.
-            type2_end:;
-
-            } else if (handler == 0x0648) {
-                // Type 1 (seg003_648_proc): 8x8 sprite. Verified seg003 lines 36433-36451.
-                int16_t cx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X);
-                int16_t dx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y);
-                // cs:word_1C830=0xFFFF, cs:word_1C834=0, cs:word_1C832=0
-                int16_t ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140; // 36436-36437
-                if (cx >= ax) goto type1_exit;                         // 36439
-                ax -= 0x147;                                           // 36440
-                if (cx <= ax) goto type1_exit;                         // 36442
-                ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;          // 36443-36444
-                if (dx >= ax) goto type1_exit;                         // 36446
-                ax -= 0xB7;                                            // 36447
-                if (dx < ax) goto type1_exit;                          // 36449
-                // In viewport → sub_1CD7B(si=2)
-                v2_sprite_draw_1CD7D(s, cx, dx, 2, 2);                        // 36450-36451
-                // shadow-VGA: exact type-1 VGA render (seg003 eips 0x698..0x704 +
-                // hflip 0x945..0x95B). No partial clip exists for type 1 (the
-                // early gates guarantee full visibility; loc_1D154 is a pure
-                // exit): word_1C830 stays FFFF → mask_and = 0xFF both paths.
-                {
-                    uint16_t y = *(uint16_t*)(s + di + OBJ_SPRITE_Y);   // + word_1C834(=0)
-                    uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));
-                    uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
-                                       + *(uint16_t*)(s + DS_PAGE_SHOWN));
-                    uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));
-                    uint16_t xw = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_X) + 0x20);
-                    uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));
-                    int pan = xw & 3;
-                    // src: seg [94D] offset [84D] + cs:[word_1C834*2 + 0x3D] (=cs:[0x3D])
-                    uint16_t spr_seg = *(uint16_t*)(s + di + OBJ_SPRITE_SEG);
-                    uint16_t spr_off = *(uint16_t*)(s + di + OBJ_SPRITE_OFF);
-                    uint16_t cs3d = v2_m2c_base
-                        ? *(uint16_t*)(v2_m2c_base + (uint32_t)0x0E25 * 16 + 0x3D) : 0;
-                    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
-                    uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
-                    if (sp) {
-                        extern void v2_vga_sprite8(const uint8_t*, uint16_t, int, int, uint8_t);
-                        int hflip = (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0;
-                        // engine mask sits at [si-1]; [84D] is the 1-based data
-                        // offset (si), so the strip stream starts at si-1.
-                        v2_vga_sprite8(sp + (uint16_t)(spr_off + cs3d - 1), di_vga, pan, hflip, 0xFF);
-                    }
-                }
-                goto type1_end;
-            type1_exit:
-                // loc_1D154: sprite outside → set mode=2, return.
-                s[di + OBJ_DIRTY_MODE] = 2;                                    // 36722: MOV byte [di+114Dh], 2
-                ;
-            type1_end:;
-
-            } else if (handler == 0x0B82) {
-                // Type 4 (16x16 sprite). Exact replica of seg003 lines 36965-37271
-                // incl. shadow-VGA VGA render (proven jpt_1D514/1D703 case bodies).
-                int16_t cx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X);   // 36968
-                int16_t dx = (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y);   // 36969
-                uint16_t c1c830 = 0xFFFF, c1c832 = 0, c1c834 = 0;
-                uint32_t cs3 = (uint32_t)0x0E25 * 16;
-                int16_t ax;
-                // X right bound: ax = viewport_X + 0x140
-                ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_X) + 0x140;          // 36973-36974
-                if (cx >= ax) goto type4_exit;                           // 36976: JGE loc_1D6B1
-                // X right margin: ax -= 0x0F
-                ax -= 0x0F;                                              // 36977
-                if (cx < ax) goto type4_loc_1d3fd;                       // 36979: JL loc_1D3FD
-                // Right clip path
-                s[di + OBJ_DIRTY_MODE] = 2;                                      // 36980: MOV byte [di+114Dh], 2
-                { uint16_t bx2 = (uint16_t)((uint16_t)(cx - ax) >> 2) << 1;      // 36981-36984
-                  if (v2_m2c_base) c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E92 + bx2); } // 36985-36986
-            type4_loc_1d3fd:
-                // X left bound
-                ax -= 0x140;                                             // 36989: SUB ax, 140h
-                if (cx <= ax) goto type4_exit;                           // 36991: JLE loc_1D6B1
-                // X left margin: ax += 0x0F
-                ax += 0x0F;                                              // 36992: ADD ax, 0Fh
-                if (cx >= ax) goto type4_loc_1d425;                      // 36994: JGE loc_1D425
-                // Left clip path
-                s[di + OBJ_DIRTY_MODE] = 2;                                      // 36995: MOV byte [di+114Dh], 2
-                { uint16_t bx2 = (uint16_t)((uint16_t)(ax - cx) >> 2) << 1;      // 36996-36999
-                  if (v2_m2c_base) c1c830 = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E9A + bx2); } // 37000-37001
-            type4_loc_1d425:
-                // Y bottom bound: ax = viewport_Y + 0x0B0
-                ax = (int16_t)*(uint16_t*)(s + DS_VIEWPORT_Y) + 0xB0;            // 37004-37005
-                if (dx >= ax) goto type4_exit;                           // 37007: JGE loc_1D6B1
-                // Y bottom margin: ax -= 0x0F
-                ax -= 0x0F;                                              // 37008: SUB ax, 0Fh
-                if (dx < ax) goto type4_loc_1d44c;                       // 37010: JL loc_1D44C
-                // Bottom clip path
-                s[di + OBJ_DIRTY_MODE] = 2;                                      // 37011: MOV byte [di+114Dh], 2
-                c1c832 = (uint16_t)((uint16_t)(dx - ax) >> 1);           // 37012-37014: rows→units
-            type4_loc_1d44c:
-                // Y top bound
-                ax -= 0xB0;                                              // 37017: SUB ax, 0B0h
-                if (dx < ax) goto type4_exit;                            // 37019: JL loc_1D6B1
-                // Y top margin: ax += 0x0F
-                ax += 0x0F;                                              // 37020: ADD ax, 0Fh
-                if (dx > ax) goto type4_loc_1d471;                       // 37022: JG loc_1D471
-                // Top clip path
-                s[di + OBJ_DIRTY_MODE] = 2;                                      // 37023: MOV byte [di+114Dh], 2
-                c1c834 = (uint16_t)((uint16_t)(ax - dx) & 0xFFFE);       // 37024-37026: even ROWS here
-            type4_loc_1d471:
-                // All bounds passed → sub_1CD7B(si=3, bp=3)
-                v2_sprite_draw_1CD7D(s, cx, dx, 3, 3);                          // 37029-37030
-                // shadow-VGA: exact type-4 VGA render (seg003 eips 0xC47..0xCCA).
-                if (v2_m2c_base) {
-                    uint16_t y = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_Y) + c1c834); // 37031-37032 (rows)
-                    c1c834 >>= 1;                                                           // 37033: rows → units
-                    uint16_t ylow = *(uint16_t*)(s + (uint16_t)(((y & 7) * 2) - 0x71A8));   // 37034-37040
-                    uint16_t prow_idx = (uint16_t)(((uint16_t)(y & 0xFFF8) >> 2)
-                                       + *(uint16_t*)(s + DS_PAGE_SHOWN));                  // 37036-37038
-                    uint16_t prow = *(uint16_t*)(s + (uint16_t)(prow_idx - 0x7608));        // 37041
-                    uint16_t xw = (uint16_t)(*(uint16_t*)(s + di + OBJ_SPRITE_X) + 0x20);   // 37042-37043
-                    uint16_t di_vga = (uint16_t)(ylow + prow + (xw >> 2));                  // 37047-37048
-                    int pan = xw & 3;                                                        // 37044-37046
-                    uint16_t spr_off = *(uint16_t*)(s + di + OBJ_SPRITE_OFF);               // 37049
-                    uint16_t skip_top = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D + c1c834*2);  // 37050-37052
-                    uint16_t units = (uint16_t)(8 - c1c834 - c1c832);                       // 37056-37058
-                    uint16_t skip_tail = *(uint16_t*)(v2_m2c_base + cs3 + 0x3D
-                                    + (uint16_t)((c1c832 + c1c834) * 2));                    // 37095-37098
-                    uint16_t spr_seg = *(uint16_t*)(s + di + OBJ_SPRITE_SEG);
-                    extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
-                    uint8_t* sp = spr_seg ? v2_resolve_segment(spr_seg, s) : nullptr;
-                    if (sp && (int16_t)units > 0) {
-                        extern void v2_vga_sprite16_type4(const uint8_t*, uint16_t, int, int, uint8_t, int, uint16_t);
-                        int hflip = (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0; // 37060
-                        uint8_t mand = hflip ? (uint8_t)(c1c830 >> 8) : (uint8_t)(c1c830 & 0xFF);
-                        v2_vga_sprite16_type4(sp + (uint16_t)(spr_off + skip_top - 1),
-                                              di_vga, pan, hflip, mand, units, skip_tail);
-                    }
-                }
-                goto type4_end;
-            type4_exit:
-                // loc_1D6B1: sprite outside → set mode=2, return.
-                s[di + OBJ_DIRTY_MODE] = 2;                                      // 37267: MOV byte [di+114Dh], 2
-            type4_end:;
-
-            } else if (handler != 0) {
+            if (v2_m2c_base)
+                handler = *(uint16_t*)(v2_m2c_base + (uint32_t)0x0E25 * 16
+                                       + sprite_type * 2 + 0x15CB);
+            if      (handler == 0x0648) v2_draw_type1_1CE78(s, slot);
+            else if (handler == 0x1078) v2_draw_type2_1D8A8(s, slot);
+            else if (handler == 0x0B82) v2_draw_type4_1D3B2(s, slot);
+            else if (handler != 0) {
                 // Unknown non-zero handler — not implemented, fatal
                 fprintf(stderr, "FATAL: unknown render handler 0x%04X for type %d slot %d flags=%04X\n",
-                    handler, sprite_type, di, *(uint16_t*)(s + di + OBJ_SPRITE_FLAGS));
+                    handler, sprite_type, slot, *(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS));
                 extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
             }
             // handler=0 (types 0,3,5,6,7): NOP — no render, no DS writes
         }
 
-        // Save current position as "last rendered"
-        *(uint16_t*)(s + di + OBJ_SPRITE_CUR_X) = *(uint16_t*)(s + di + OBJ_SPRITE_X);
-        *(uint16_t*)(s + di + OBJ_SPRITE_CUR_Y) = *(uint16_t*)(s + di + OBJ_SPRITE_Y);
+        // Save current position as "last rendered" (orig 38025-38028).
+        *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_X) = *(uint16_t*)(s + slot + OBJ_SPRITE_X);
+        *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_Y) = *(uint16_t*)(s + slot + OBJ_SPRITE_Y);
     }
-    // Clear force-render flag
-    s[DS_SPRITE_FORCE] = 0;
+    s[DS_SPRITE_FORCE] = 0;                                        // 38034 mov byte ds:9568h, 0
 }
 
 // sub_1DF6A: state change redraw — position copy for dirty objects.
@@ -4432,10 +4418,6 @@ static void v2_text_align_12549(uint8_t* s, uint16_t ax) {
 // Uses: word_28514 (width), word_28516 (height), word_28518, word_2851A.
 // Writes: word_2854C, word_2854E, glyph buffer entries.
 static void v2_text_frame_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
-    extern int v2_dbg_pre_vm_iter;
-    fprintf(stderr, "V2-DLG-ADD[f%d]: sub_12388 si=%04X di=%04X align=%02X lvl=%04X w=%u h=%u 956B=%02X\n",
-        v2_dbg_pre_vm_iter, si, di, align, *(uint16_t*)(s + DS_LEVEL),
-        *(uint16_t*)(s + DS_SCRATCH_34), *(uint16_t*)(s + DS_SCRATCH_36), s[DS_GLYPH_DIRTY]);
     *(uint16_t*)(s + DS_TEXT_COL) = si;                                     // word_2854C = si
     *(uint16_t*)(s + DS_TEXT_ROW) = di;                                     // word_2854E = di
     uint16_t width = *(uint16_t*)(s + DS_SCRATCH_34);                         // word_28514
@@ -4472,15 +4454,13 @@ static void v2_text_frame_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t al
           v2_glyph_put_1241e(s, 0x18, si, di); }                          // bottom-middle
     v2_glyph_put_1241e(s, 0x19, si, di);                                   // bottom-right
 
-    // Scroll indicator (0x1A/0x1B glyphs).
-    // Cherry-pick 3f2114a: orig at eip 0x23F1 added unconditional `goto loc_12415`
-    // to skip indicator render. Reason: 0x1A/0x1B stays in glyph buffer after
-    // dialog dismissal (loc_12758 cleanup not called for this bubble type) →
-    // sub_1e0c7 redraws it every frame → stale triangle artifact visible in SDL
-    // (race-aware updateDraw catches it; DOSBox occluded by VGA scanout timing).
-    // Mirrors must match — orig real_ds and v2 shadow_ds glyph buffer must agree.
-    // Trade-off: legitimate dialogs lose scroll indicator (acceptable for now).
-    if (align != 6) {                                                 // CMP al, 6; JZ loc_12415
+    // Scroll indicator (0x1A/0x1B glyphs), orig 4698-4714.
+    // History: cherry-pick 3f2114a once skipped this block in BOTH mirrors
+    // (stale 0x1A/0x1B triangle after dialog dismissal — loc_12758 cleanup
+    // not called for this bubble type). The orig-side goto is currently
+    // DISABLED (see the note at eip 0x23F1: isolating a ds:0x7EFE divergence),
+    // so both mirrors render the indicator — they must stay in lockstep.
+    if (align != 6) {                                                 // 4698-4699 CMP al, 6; JZ loc_12415
         uint16_t ind_di = *(uint16_t*)(s + DS_TEXT_ROW) + *(uint16_t*)(s + DS_SCRATCH_3A); // word_2854E + word_2851A
         uint16_t ind_si = *(uint16_t*)(s + DS_TEXT_COL) + *(uint16_t*)(s + DS_SCRATCH_38); // word_2854C + word_28518
         uint8_t ind_ch;
@@ -5407,36 +5387,49 @@ static void v2_spawn_vikings_11569(uint8_t* s, uint16_t di_table) {
     v2_spawn_object_13809(s, 2, 0xFFFF, si_anim);
 }
 
+// sub_11446 (seg000 2713-2830): spawn the level's starting objects by game
+// mode byte_2AA9A:
+//   0        — normal gameplay: spawn the single stored object, scan-start=2;
+//   2 / 4 / 5 — scripted trios: sub_11569 with position-table 0x8508 / 0x851A
+//              / 0x852C;
+//   0x10 / * — three vikings spread around the spawn point: X ±0x20/±0x40 by
+//              anim hflip bit6, Y offsets 0xFFF0/0xFFF8 (mode 0x10) or 0/0
+//              (default; orig PUSHes both then POPs — LIFO: second push is
+//              popped for the SECOND viking).
+// All non-0 modes share the loc_1154A tail: portrait/sound state → viking
+// rows, scan-start=6, prev-viking=0xFFFF.
 static void v2_game_mode_init_11446(uint8_t* s) {
-    *(uint16_t*)(s + DS_OBJ_SCAN_START) = 0; // word_2881C = 0
-    uint16_t mode = s[DS_ACTIVE_VK_SEL] & 0xFF; // byte_2AA9A, zero-extended to word
-    fprintf(stderr, "V2-11446: mode=%d 0x423=%04X OBJ_RES_HANDLE=%04X level=%04X\n",
-            mode, *(uint16_t*)(s+DS_PORTRAIT_PREV), *(uint16_t*)(s+OBJ_RES_HANDLE), *(uint16_t*)(s+DS_LEVEL));
+    *(uint16_t*)(s + DS_OBJ_SCAN_START) = 0;                 // 2713 word_2881C = 0
+    uint16_t mode = s[DS_ACTIVE_VK_SEL] & 0xFF;              // 2714-2715 byte_2AA9A
     if (mode == 0) {
-        // loc_1146a: Normal gameplay
+        // loc_1146A (2729-2741): normal gameplay — single spawn, early RETN.
         *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + DS_SPAWN_POOL0);
         *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + DS_SPAWN_X);
         *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + DS_SPAWN_Y);
         *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
         v2_spawn_object_13809(s, *(uint16_t*)(s + DS_SPAWN_CODE), 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM));
-        *(uint16_t*)(s + DS_OBJ_SCAN_START) = 2;
-        return; // RETN before loc_1154a
+        *(uint16_t*)(s + DS_OBJ_SCAN_START) = 2;             // 2740
+        return;                                              // 2741 RETN
     }
-    if (mode == 2) { v2_spawn_vikings_11569(s, 0x8508); goto loc_1154a; }
-    if (mode == 4) { v2_spawn_vikings_11569(s, 0x851A); goto loc_1154a; }
-    if (mode == 5) { v2_spawn_vikings_11569(s, 0x852C); goto loc_1154a; }
-    {
-        // Mode 0x10 and default: loc_114bd path — 3 vikings at calculated positions
-        uint16_t y_off_2, y_off_3; // pushed values (LIFO: second push = first pop)
+    if (mode == 2 || mode == 4 || mode == 5) {
+        // loc_11496/1149F/114A8 (2745-2759): table-driven viking trio.
+        uint16_t table = (mode == 2) ? 0x8508 : (mode == 4) ? 0x851A : 0x852C;
+        v2_spawn_vikings_11569(s, table);
+    } else {
+        // loc_114B1/114B9 → loc_114BD (2763-2830): three vikings around the
+        // spawn point. Y offsets are PUSHed 0xFFF8,0xFFF0 for mode 0x10
+        // (LIFO: first POP = 0xFFF0 → second viking) or 0,0 otherwise.
+        uint16_t y_off_2, y_off_3;
         if (mode == 0x10) { y_off_3 = 0xFFF8; y_off_2 = 0xFFF0; }
         else              { y_off_3 = 0;      y_off_2 = 0;      }
-        // loc_114bd: first viking (code_seg = 1) at base position
+        // First viking (code_seg = 1) at the base position (2773-2783).
         *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + DS_SPAWN_POOL0);
         *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + DS_SPAWN_X);
         *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + DS_SPAWN_Y);
         *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
         v2_spawn_object_13809(s, 1, 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM));
-        // Second viking (code_seg = 0): X ± 0x20, Y + y_off_2
+        // Second viking (code_seg = 0): X ±0x20 by anim bit6, Y + y_off_2
+        // (2784-2804).
         uint16_t base_x = *(uint16_t*)(s + DS_SPAWN_X);
         if (*(uint16_t*)(s + DS_SPAWN_ANIM) & 0x40)
             *(uint16_t*)(s + DS_TEXT_COL) = base_x + 0x20;
@@ -5445,7 +5438,8 @@ static void v2_game_mode_init_11446(uint8_t* s) {
         *(uint16_t*)(s + DS_TEXT_ROW) = y_off_2 + *(uint16_t*)(s + DS_SPAWN_Y);
         *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
         v2_spawn_object_13809(s, 0, 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM));
-        // Third viking (code_seg = 2): X ± 0x40, Y + y_off_3
+        // Third viking (code_seg = 2): X ±0x40, Y + y_off_3 (2805-2830,
+        // orig tail-jumps into sub_13809).
         if (*(uint16_t*)(s + DS_SPAWN_ANIM) & 0x40)
             *(uint16_t*)(s + DS_TEXT_COL) = base_x + 0x40;
         else
@@ -5454,8 +5448,7 @@ static void v2_game_mode_init_11446(uint8_t* s) {
         *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
         v2_spawn_object_13809(s, 2, 0xFFFF, *(uint16_t*)(s + DS_SPAWN_ANIM));
     }
-loc_1154a:
-    // Copy sound state, set mode 6
+    // loc_1154A: portrait/sound state → viking rows, mode 6.
     *(uint16_t*)(s + VIK_PORTRAIT) = *(uint16_t*)(s + (DS_PORTRAIT_PREV)); // word_29A8D = word_28903
     *(uint16_t*)(s + DS_VK_PORTRAIT_SND_2) = *(uint16_t*)(s + DS_PORTRAIT_SND_2); // word_29A8F = word_28905
     *(uint16_t*)(s + DS_VK_PORTRAIT_SND_3) = *(uint16_t*)(s + DS_PORTRAIT_SND_3); // word_29A91 = word_28907
@@ -5612,60 +5605,66 @@ static void v2_viking_health_init_12ce4(uint8_t* s) {
     *(uint16_t*)(s + DS_HUD_SCRATCH_42D) = 0;
 }
 
+// sub_116E3 (seg000 3005-3075): level-descriptor init at level (re)start.
+// Resets the RNG timer and the 3CE/3D0 scratch pair, then routes by state:
+//   password levels 0x2D-0x2F or mode 1     → transition path;
+//   mode 0x8002                             → sub_12CE4 (health init) only;
+//   mode 0x8001                             → clear the 0x800-word object
+//                                             queue at ds:2191;
+//   any other mode                          → mode:=0.
+// Transition path (loc_11733): flag 398:=1, mode:=0x8000, pick the text
+// chunk (0x2B → 0x1BB; 0x2C-0x2F → 0x1BC; else the [si+2B66]/[si+2B74]
+// transition tables also retarget the level), load it at ds:2193 and
+// tail-jump into sub_12CE4.
 static void v2_level_desc_init_116e3(uint8_t* s) {
-    *(uint16_t*)(s + DS_RNG_TIMER) = 0x1E;  // word_28832
-    *(uint16_t*)(s + DS_SCRATCH_3CE) = 0;     // word_288AE
-    *(uint16_t*)(s + DS_SCRATCH_3D0) = 0;     // word_288B0
-    uint16_t level = *(uint16_t*)(s + DS_LEVEL_LOAD); // word_2AAA9
-    // Check special levels
-    if (level == 0x2D || level == 0x2E || level == 0x2F) {
-        goto transition;
-    }
-    {
-        uint16_t ac = *(uint16_t*)(s + DS_GAME_MODE_AC); // word_288AC
-        if (ac == 1) goto transition;
-        if (ac == 0x8002) {
-            // loc_11780: jmp sub_12ce4 — tail call (unconditional!)
+    *(uint16_t*)(s + DS_RNG_TIMER) = 0x1E;    // 3005 word_28832
+    *(uint16_t*)(s + DS_SCRATCH_3CE) = 0;     // 3006 word_288AE
+    *(uint16_t*)(s + DS_SCRATCH_3D0) = 0;     // 3007 word_288B0
+    uint16_t level = *(uint16_t*)(s + DS_LEVEL_LOAD);              // 3008 word_2AAA9
+    bool transition = (level == 0x2D || level == 0x2E || level == 0x2F); // 3009-3014
+    if (!transition) {
+        uint16_t ac = *(uint16_t*)(s + DS_GAME_MODE_AC);           // 3015 word_288AC
+        if (ac == 1) {                                             // 3016-3017
+            transition = true;
+        } else if (ac == 0x8002) {
+            // 3018-3019 → loc_11780: jmp sub_12CE4 (tail call).
             v2_viking_health_init_12ce4(s);
             return;
-        }
-        if (ac == 0x8001) {
-            // loc_11720: clear 0x800 words at ds:0x2191
-            for (uint16_t di = 0; di < 0x800; di += 2) {
+        } else if (ac == 0x8001) {
+            // loc_11720 (3027-3034): clear 0x800 words at ds:2191.
+            for (uint16_t di = 0; di < 0x800; di += 2)
                 *(uint16_t*)(s + di + DS_OBJ_QUEUE_HEAD) = 0;
-            }
+            return;
+        } else {
+            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;                 // 3022-3023
             return;
         }
-        // default: clear word_288AC
-        *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
-        return;
     }
-transition:
-    // loc_11733: set transition state
-    *(uint16_t*)(s + DS_COLL_STATE_398) = 1;      // word_28878
-    *(uint16_t*)(s + DS_GAME_MODE_AC) = 0x8000; // word_288AC
-    level = *(uint16_t*)(s + DS_LEVEL_LOAD);  // reload
-    uint16_t chunk_ax;
-    if (level == 0x2B) {
-        chunk_ax = 0x1BB;
-    } else if (level >= 0x2C && level <= 0x2F) {
-        chunk_ax = 0x1BC;
+    // loc_11733 (3039-3075): transition state + text chunk load.
+    *(uint16_t*)(s + DS_COLL_STATE_398) = 1;                       // 3039 word_28878
+    *(uint16_t*)(s + DS_GAME_MODE_AC) = 0x8000;                    // 3040
+    level = *(uint16_t*)(s + DS_LEVEL_LOAD);                       // 3041 reload
+    uint16_t chunk;
+    if (level == 0x2B) {                                           // 3042-3043
+        chunk = 0x1BB;                                             // 3060
+    } else if (level >= 0x2C && level <= 0x2F) {                   // 3044-3051
+        chunk = 0x1BC;                                             // 3066
     } else {
-        // Read from transition table
-        uint16_t si = *(uint16_t*)(s + DS_HUD_SEL_SI); // word_288B4
+        // Transition tables (3052-3055): also retargets the level.
+        uint16_t si = *(uint16_t*)(s + DS_HUD_SEL_SI);             // word_288B4
         *(uint16_t*)(s + DS_LEVEL_LOAD) = *(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_LEVEL_TBL));  // 16-bit wrap
-        chunk_ax = *(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_CHUNK_TBL));                  // 16-bit wrap
+        chunk = *(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_CHUNK_TBL));                            // 16-bit wrap
     }
-    // loc_11774: load transition chunk → ds:0x2193
-    *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) = 2; // word_2A671
-    v2_read_chunk(chunk_ax, s + 0x2193, 0x10000 - 0x2193, s);
-    // jmp sub_12ce4 — tail call (unconditional!)
-    v2_viking_health_init_12ce4(s);
+    // loc_11774 (3070-3072): load the transition chunk at ds:2193.
+    *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) = 2;                       // word_2A671
+    v2_read_chunk(chunk, s + 0x2193, 0x10000 - 0x2193, s);
+    v2_viking_health_init_12ce4(s);                                // 3075 jmp sub_12CE4
 }
 
 static void v2_load_level(uint8_t* shadow); // forward decl
 static void v2_load_template(uint8_t* shadow);
 static void v2_load_level_data(uint8_t* shadow);
+static void v2_hud_sel_commit_120d1(uint8_t* s);
 static void v2_scroll_step1_10704(uint8_t* s);   // apply pending scroll, step 1 (defined after the movers)
 static void v2_scroll_step2_10753(uint8_t* s);
 
@@ -6730,11 +6729,6 @@ extern "C" void v2_fntest_call_sub_14207(uint8_t* test_shadow) {
 }
 
 static void v2_load_level_11080(uint8_t* s) {
-    extern int v2_orig_post_vm_frame, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
-    { static int _sc = 0; if (++_sc <= 10)
-        fprintf(stderr, "V2-sub_11080[%d]: pre=%d post=%d rec=%d cur_25AD=%04X next_25C9=%04X\n",
-            _sc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
-            *(uint16_t*)(s + DS_LEVEL), *(uint16_t*)(s + DS_LEVEL_LOAD)); }
     // Invalidate cross-scenario snapshots: when sub_11080 runs (level transition),
     // orig main loop is bypassed, so the orig_post_vm_entry snapshot from a previous
     // frame's main loop becomes invalid for comparison against v2_level_init_render_115d2 internal
@@ -6802,11 +6796,7 @@ static void v2_load_level_11080(uint8_t* s) {
     // sub_16880: clear VGA / render buffer
     v2_clear_pages_16880(s);
     // sub_111a1: clear sprite table
-    if (*(uint16_t*)(s + DS_LEVEL_LOAD) == 0x002B)
-        fprintf(stderr, "V2-117D: BEFORE sub_111a1: 0x%02X\n", s[DS_RENDER_117D]);
     v2_clear_sprite_table_111a1(s);
-    if (*(uint16_t*)(s + DS_LEVEL_LOAD) == 0x002B)
-        fprintf(stderr, "V2-117D: AFTER sub_111a1: 0x%02X\n", s[DS_RENDER_117D]);
     // sub_11192: clear bit flags
     v2_clear_bit_flags_11192(s);
 
@@ -6821,11 +6811,8 @@ static void v2_load_level_11080(uint8_t* s) {
     // sub_111df: clear viking state
     v2_clear_viking_state_111df(s);
     // sub_12ce4: viking health init (if level != 0x25)
-    fprintf(stderr, "V2-3BA: before 12ce4: 0x3BA=%04X\n", *(uint16_t*)(s + DS_INPUT_PREV));
-    if (new_level != 0x25) {
+    if (new_level != 0x25)
         v2_viking_health_init_12ce4(s);
-        fprintf(stderr, "V2-HEALTH: after 12ce4: 0x423=%02X 0x3BA=%04X\n", s[(DS_PORTRAIT_PREV)], *(uint16_t*)(s + DS_INPUT_PREV));
-    }
 
     // sub_117ad: word_28820=2, then if flag &1: display init chain
     *(uint16_t*)(s + DS_HUD_DISP_MODE) = 2; // word_28820
@@ -6875,19 +6862,8 @@ static void v2_load_level_11080(uint8_t* s) {
         *(uint16_t*)(s + DS_VK_STATE_2) = 0xFFFF; // word_28913
         // JMP sub_11B0B: portrait/sound state sync (tail call from sub_12034)
         v2_portrait_sync_11b0b(s);
-        // sub_120d1: HUD selector state sync + render
-        uint16_t sel1 = *(uint16_t*)(s + (DS_HUD_SEL));
-        *(uint16_t*)(s + DS_HUD_SEL_PREV) = sel1;
-        v2_draw_hud_selector(v2_current_ds_val, sel1 * 2);
-        v2_vga_selector_118ad(v2_vm_shadow_ds, sel1 * 2);
-        uint16_t sel2 = *(uint16_t*)(s + DS_HUD_SEL_2);
-        *(uint16_t*)(s + DS_HUD_SEL_PREV_2) = sel2;
-        v2_draw_hud_selector(v2_current_ds_val, (sel2 + 4) * 2);
-        v2_vga_selector_118ad(v2_vm_shadow_ds, (sel2 + 4) * 2);
-        uint16_t sel3 = *(uint16_t*)(s + DS_HUD_SEL_3);
-        *(uint16_t*)(s + DS_HUD_SEL_PREV_3) = sel3;
-        v2_draw_hud_selector(v2_current_ds_val, (sel3 + 8) * 2);
-        v2_vga_selector_118ad(v2_vm_shadow_ds, (sel3 + 8) * 2);
+        // sub_120d1: HUD selector commit (prev←cur + render ×3).
+        v2_hud_sel_commit_120d1(s);
     }
 
     // sub_11204: load level data chunks (tile graphics, tilemap, etc.)
@@ -6911,42 +6887,6 @@ static void v2_load_level_11080(uint8_t* s) {
     v2_viewport_init_113d8(s);
     // sub_17749: music/sound init at level enter. Dispatches via off_3285A[ds:0x25B7 & 0xFF].
     v2_music_dispatch(s, 0x25B7);
-    // DEBUG: check FS before and after sub_173c7
-    // Also check if GS_TILEDATA matches FS data at 0x960
-    // Gated on real side: prints REAL-DS data (V2_ONLY: frozen snapshot zeros).
-    if (v2_vm_real_ds_ptr) {
-        uint8_t* real_ds = v2_m2c_base + ((uint32_t)v2_current_ds_val << 4);
-        uint16_t fs_seg = *(uint16_t*)(real_ds + DS_SEG_FS);
-        uint8_t* rb = v2_m2c_base + (uint32_t)fs_seg * 16;
-        uint16_t cols = *(uint16_t*)(real_ds + 0x25DC);
-        uint16_t rows = *(uint16_t*)(real_ds + 0x25DE);
-        uint16_t bp = cols * 4;
-        printf("V2-FS-DBG: cols=%d rows=%d bp=%d used=%d(0x%X) fs_seg=0x%04X\n",
-               cols, rows, bp, rows*cols*8, rows*cols*8, fs_seg);
-        // Print tile (0,15) coordinates: this would be at the START of row 15
-        // Row 15 (0-indexed) starts at di = 15 * cols * 8 = 15 * 160 = 2400 = 0x960!
-        printf("V2-FS-DBG: row 15 starts at di=%d(0x%X) — matches first diff!\n",
-               15 * cols * 8, 15 * cols * 8);
-        // Check: does orig use rows=15 or rows=16+?
-        // The FS data at 0x960 looks like sub_173c7 output (tile data from GS).
-        // If orig has rows=16, it would write to [0x960..0xA5F].
-        // Total diffs span [0x960..0x1F8A] = rows * cols * 8 = N * 160
-        // 0x1F8A - 0x960 = 0x162A = 5674 / 160 = ~35.5 rows
-        // But 851 diffs * 2 = 1702 bytes. With 160 bytes/row, that's ~10.6 rows.
-        // FS diff range [0x960..0x1F8A] = 0x162B bytes span. With 851 diffs in that range.
-        // This is NOT contiguous — some positions differ, some don't.
-        // Let me check: does the ORIGINAL tilemap have more rows?
-        // The original might have a DIFFERENT tilemap or page layout.
-        // Check: how many rows would fill [0x960..0x1F8A]?
-        uint32_t span = 0x1F8A - 0x960 + 2;
-        printf("V2-FS-DBG: diff span=0x%X=%d bytes, potential rows=%.1f\n",
-               span, span, (float)span / (cols * 8));
-        // Also check: does sub_16ded write to FS? Let me check the VGA page stride.
-        printf("V2-FS-DBG: ds:DS_FS_PAGE_STRIDE (FS page stride)=%04X\n", *(uint16_t*)(real_ds + DS_FS_PAGE_STRIDE));
-        // Check shadow vs real ds:0x2E69 (FS segment address)
-        printf("V2-FS-DBG: real ds:DS_SEG_FS=%04X shadow ds:DS_SEG_FS=%04X\n",
-               *(uint16_t*)(real_ds + DS_SEG_FS), *(uint16_t*)(s + DS_SEG_FS));
-    }
     // sub_173c7: init scroll tracking
     v2_scroll_init_173c7(s);
     // FS compare with SNAPSHOT (taken right after orig sub_173c7, before game loop modifies it)
@@ -6971,100 +6911,6 @@ static void v2_load_level_11080(uint8_t* s) {
     v2_spawn_table_13ba5(s);
     // sub_13a0e: full viewport scan — create objects visible in initial viewport
     v2_spawn_visible_13a0e(s);
-    // HW watchpoint — watch REAL FS at offset 0x5586 to find who clears bit0
-    if (new_level == 0x002B && v2_m2c_base && v2_vm_real_ds_ptr) {
-        uint16_t fsseg = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_FS);
-        if (fsseg) {
-            uint8_t* real_fs_5586 = v2_m2c_base + (uint32_t)fsseg * 16 + 0x5586;
-            // v2_hw_wp_arm(real_fs_5586, "real_fs[5586]"); // DISABLED: using ds:0x3A watchpoint
-        }
-    }
-    // Dump key objects and check code_seg for obj 0x10
-    if (v2_vm_real_ds_ptr && new_level == 0x002B) {
-        fprintf(stderr, "V2-OBJ10: cs_s=%04X cs_r=%04X fl_s=%04X fl_r=%04X pc_s=%04X pc_r=%04X\n",
-            *(uint16_t*)(s + 0x10 + OBJ_CODE_SEG), *(uint16_t*)(v2_vm_real_ds_ptr + 0x10 + OBJ_CODE_SEG),
-            *(uint16_t*)(s + 0x10 + OBJ_FLAGS), *(uint16_t*)(v2_vm_real_ds_ptr + 0x10 + OBJ_FLAGS),
-            *(uint16_t*)(s + 0x10 + OBJ_PC), *(uint16_t*)(v2_vm_real_ds_ptr + 0x10 + OBJ_PC));
-        uint16_t te = *(uint16_t*)(s + DS_OBJ_COUNT);
-        for (uint16_t oi = 0; oi < te; oi += 2) {
-            uint16_t ss = *(uint16_t*)(s + oi + OBJ_SUB_SLOT);
-            uint16_t se = *(uint16_t*)(s + oi + OBJ_SUB_END);
-            uint16_t rss = *(uint16_t*)(v2_vm_real_ds_ptr + oi + OBJ_SUB_SLOT);
-            uint16_t rse = *(uint16_t*)(v2_vm_real_ds_ptr + oi + OBJ_SUB_END);
-            if (ss != 0 || rss != 0 || (ss <= 0x003C && se > 0x003C) || (rss <= 0x003C && rse > 0x003C))
-                fprintf(stderr, "V2-OBJ-SS: obj=%02X s[%04X..%04X] r[%04X..%04X]%s\n",
-                    oi, ss, se, rss, rse,
-                    ((ss <= 0x003C && se > 0x003C) || (rss <= 0x003C && rse > 0x003C)) ? " <<<< OWNS 003C" : "");
-        }
-    }
-    if (v2_vm_real_ds_ptr && new_level == 0x002B) {
-        uint16_t s_row38 = *(uint16_t*)(s + DS_ROW38_8FB4);
-        uint16_t r_row38 = *(uint16_t*)(v2_vm_real_ds_ptr + 0x8FB4);
-        uint16_t s_width = *(uint16_t*)(s + DS_MAP_BP);
-        uint16_t r_width = *(uint16_t*)(v2_vm_real_ds_ptr + 0x25DC);
-        uint16_t s_9168 = *(uint16_t*)(s + DS_CLIP_LIMIT_X);
-        uint16_t r_9168 = *(uint16_t*)(v2_vm_real_ds_ptr + 0x9168);
-        fprintf(stderr, "V2-ROWTBL: row38: s=%d r=%d width: s=%d r=%d 9168: s=%d r=%d\n",
-            s_row38, r_row38, s_width, r_width, s_9168, r_9168);
-    }
-    if (v2_vm_real_ds_ptr) {
-        fprintf(stderr, "V2-PRE-115d2: vp_x s=%04X r=%04X vp_y s=%04X r=%04X mode s=%02X r=%02X\n",
-            *(uint16_t*)(s+DS_VIEWPORT_X), *(uint16_t*)(v2_vm_real_ds_ptr+0x44),
-            *(uint16_t*)(s+DS_VIEWPORT_Y), *(uint16_t*)(v2_vm_real_ds_ptr+0x46),
-            s[DS_RENDER_117D], v2_vm_real_ds_ptr[0x117D]);
-    }
-    // Slot 0x2E redraw trace helper
-    auto slot2e_trace = [&](const char* label) {
-        if (new_level != 0x002B) return;
-        fprintf(stderr, "V2-SLOT2E[%s]: mode=%02X redraw=%02X\n", label, s[0x2E + OBJ_DIRTY_MODE], s[0x2E + OBJ_DIRTY_CNT]);
-    };
-    // FS compare helper for sub_115d2 debug
-    // fs_cmp_115d2: DISABLED — compared v2 shadow FS with live orig FS (timing artifact).
-    // Correct FS verification done by FS-SNAP-173c7 (snapshot-based, 0 diffs).
-    auto fs_cmp_115d2 = [](const char*) { };
-    auto mode_cmp_115d2 = [](const char*) { };
-    (void)fs_cmp_115d2; (void)mode_cmp_115d2;
-#if 0 // DISABLED: live FS/DS compare gives false diffs due to timing
-    fs_cmp_115d2 = [&](const char* label) {
-        if (!v2_m2c_base || !v2_vm_real_ds_ptr || new_level != 0x002B) return;
-        uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_FS);
-        if (!fs_seg) return;
-        uint8_t* rfs = v2_m2c_base + (uint32_t)fs_seg * 16;
-        uint16_t cols = *(uint16_t*)(s + DS_MAP_BP);
-        uint16_t rows = *(uint16_t*)(s + DS_MAP_HEIGHT);
-        uint32_t fs_size = (uint32_t)cols * rows * 8;
-        if (fs_size > V2_FS_SHADOW_SIZE) fs_size = V2_FS_SHADOW_SIZE;
-        int diffs = 0, bit0_diffs = 0, bit1_diffs = 0;
-        for (uint32_t i = 0; i < fs_size; i += 2) {
-            uint16_t rv = *(uint16_t*)(rfs + i);
-            uint16_t sv = *(uint16_t*)(v2_vm_shadow_fs + i);
-            if (rv != sv) {
-                diffs++;
-                if ((rv & 1) != (sv & 1)) bit0_diffs++;
-                if ((rv & 2) != (sv & 2)) bit1_diffs++;
-                if (diffs <= 5)
-                    fprintf(stderr, "  FS[%04X]: orig=%04X v2=%04X (b0:%d→%d b1:%d→%d)\n",
-                        (uint16_t)i, rv, sv, rv&1, sv&1, (rv>>1)&1, (sv>>1)&1);
-            }
-        }
-        fprintf(stderr, "V2-FS-CMP[%s]: %d diffs (bit0: %d, bit1: %d)\n",
-            label, diffs, bit0_diffs, bit1_diffs);
-    };
-    // Also compare key DS mode bytes for slots 0x2E,0x30,0x34,0x36,0x38,0x3A
-    mode_cmp_115d2 = [&](const char* label) {
-        if (!v2_vm_real_ds_ptr || new_level != 0x002B) return;
-        uint8_t* r = v2_vm_real_ds_ptr;
-        fprintf(stderr, "V2-MODE[%s]:", label);
-        static const uint16_t _slots[] = {0x2E, 0x30, 0x34, 0x36, 0x38, 0x3A};
-        for (uint16_t slot : _slots) {
-            uint8_t sm = s[slot + OBJ_DIRTY_MODE], rm = r[slot + OBJ_DIRTY_MODE];
-            uint8_t sr = s[slot + OBJ_DIRTY_CNT], rr = r[slot + OBJ_DIRTY_CNT];
-            if (sm != rm || sr != rr)
-                fprintf(stderr, " %02X(m:%02X/%02X r:%02X/%02X)", slot, sm, rm, sr, rr);
-        }
-        fprintf(stderr, "\n");
-    };
-#endif // DISABLED live compare
 
     // sub_115d2: first game loop frame — 3 render sub-frames + 4 page flips.
     // Original structure: VM runs ONCE, then 3 render passes with different post-processing.
@@ -7075,7 +6921,6 @@ static void v2_load_level_11080(uint8_t* s) {
         // Original sub_115d2 calls sub_12345, not the full sub_12352..sub_10138 sequence.
         *(uint16_t*)(s + DS_INPUT_KEYS) = 0; // word_28896
         *(uint16_t*)(s + DS_INPUT_EDGES) = 0; // word_28898
-        slot2e_trace("SF1-pre-VM");
         // sub_14207: VM execution — runs ONCE for the entire sub_115d2 call
         v2_vm_pass_14207(s);   // extracted exact sweep (live [372]/[376] re-reads)
         // PSNAP compare: at this point v2 has finished SF1 main VM. Should match
@@ -7087,7 +6932,6 @@ static void v2_load_level_11080(uint8_t* s) {
         // MUST be called — updates sub-sprite X/Y from world position deltas.
         // Exact same function as in game loop RENDER1 phase.
         v2_subsprite_walk_12fc6(s);
-        slot2e_trace("SF1-post-12fc6");
         // PSNAP compare: v2 has finished SF1 post-VM (sub_1386b..sub_1064b + sub_12fc6).
         // Should match orig snap[T_SF1_POSTVM_END] at eip 0x15E7.
         v2_compare_phase_snap(V2_PSNAP_T_SF1_POSTVM_END, "v2_level_init_render_115d2 SF1 post-postvm");
@@ -7098,36 +6942,12 @@ static void v2_load_level_11080(uint8_t* s) {
         v2_vsync_wait_10130(s); // sub_10130: VGA vsync wait
         // CALLF sub_1DE05
         v2_bg_latch_1DE05(s);
-        slot2e_trace("SF1-post-DE05");
-        fs_cmp_115d2("SF1-post-DE05");
-        // Debug: compare FS after first sub_1DE05 in init sub_115d2
-        if (new_level == 0x002B && v2_m2c_base && v2_vm_real_ds_ptr) {
-            uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_FS);
-            if (fs_seg != 0) {
-                uint8_t* real_fs = v2_m2c_base + ((uint32_t)fs_seg << 4);
-                int diffs = 0;
-                for (uint32_t i = 0; i < 0x2B * 0x19 * 2 && diffs < 5; i += 2) {
-                    uint16_t rv = *(uint16_t*)(real_fs + i);
-                    uint16_t sv = *(uint16_t*)(v2_vm_shadow_fs + i);
-                    if (rv != sv) {
-                        if (diffs == 0) fprintf(stderr, "V2-FS-INIT-SF1: after sub_1DE05:\n");
-                        fprintf(stderr, "  FS[0x%04X]: real=%04X shadow=%04X\n", (uint16_t)i, rv, sv);
-                        diffs++;
-                    }
-                }
-                if (diffs > 0) fprintf(stderr, "V2-FS-INIT-SF1: %d diffs\n", diffs);
-                else fprintf(stderr, "V2-FS-INIT-SF1: 0 diffs\n");
-            }
-        }
         // sub_1de05_dirty_update_position(NULL); // seg003 recreated
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
         // sub_165aa + sub_16661: despawn + scroll tracking
         v2_game_loop_post_render(s);
         // CALLF sub_1DD9C (1st DD9C in sub_115d2)
-        { static int _pre1=0; _pre1++; if(_pre1<=8) fprintf(stderr,"V2-115d2-PRE-DD9C1[%d]: 117D=%02X 117E=%02X flags=%04X active=%d level=%04X\n",_pre1,s[DS_RENDER_117D],s[DS_RENDER_117E],*(uint16_t*)(s+0x30+OBJ_SPRITE_FLAGS),!!(*(uint16_t*)(s+0x30+OBJ_SPRITE_FLAGS)&0x8000),*(uint16_t*)(s+DS_LEVEL)); }
         v2_late_sprites_1DD9C(s);
-        slot2e_trace("SF1-post-DD9C");
-        { static int _dd4=0; _dd4++; if(_dd4<=8) fprintf(stderr,"V2-115d2-DD9C[sf1-%d]: mode=%02X force=%02X\n",_dd4,s[DS_RENDER_117D],s[DS_SPRITE_FORCE]); }
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
@@ -7144,16 +6964,14 @@ static void v2_load_level_11080(uint8_t* s) {
             v2_scroll_step1_10704(s);
             // sub_12fcb: sub-sprite position delta type 1
             v2_subsprite_walk_12fcb(s);
-            v2_vsync_wait_10130(s); // sub_10130: VGA vsync wait
+            // sub_10130 (orig 2907, ONE call — a duplicated second call was
+            // removed in phase C: with [A39C] already 0 it was a no-op).
             v2_vsync_wait_10130(s);
             v2_bg_latch_1DE05(s);
-            fs_cmp_115d2("SF2-post-DE05");
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
             // CALLF sub_1DD9C (line 2911 in original)
             v2_late_sprites_1DD9C(s);
-            slot2e_trace("SF2-post-DD9C");
-            { static int _dd2=0; _dd2++; if(_dd2<=8) fprintf(stderr,"V2-115d2-DD9C[sf2-%d]: mode=%02X force=%02X\n",_dd2,s[DS_RENDER_117D],s[DS_SPRITE_FORCE]); }
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
             v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
@@ -7208,16 +7026,16 @@ static void v2_load_level_11080(uint8_t* s) {
                 // Moved here from sub_117ad where it was INCORRECTLY placed.
                 v2_portrait_sync_11b0b(s);
             }
+            // sub_10130 (orig 2919): vsync wait — was MISSING in v2 SF3
+            // (the SF2 duplicate call masked the count; phase C restored the
+            // orig per-sub-frame placement).
+            v2_vsync_wait_10130(s);
             // CALLF sub_1DE05 (PASS 3)
             v2_bg_latch_1DE05(s);
-            fs_cmp_115d2("SF3-post-DE05");
             // sub_165aa + sub_16661: despawn + scroll tracking
             v2_game_loop_post_render(s);
-            fs_cmp_115d2("SF3-pre-DD9C"); mode_cmp_115d2("SF3-pre-DD9C");
             // CALLF sub_1DD9C
             v2_late_sprites_1DD9C(s);
-            slot2e_trace("SF3-post-DD9C");
-            { static int _dd3=0; _dd3++; if(_dd3<=8) fprintf(stderr,"V2-115d2-DD9C[sf3-%d]: mode=%02X force=%02X\n",_dd3,s[DS_RENDER_117D],s[DS_SPRITE_FORCE]); }
             // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
             // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
             v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -7227,17 +7045,16 @@ static void v2_load_level_11080(uint8_t* s) {
             v2_compare_phase_snap(V2_PSNAP_T_SF3_PF_END, "v2_level_init_render_115d2 SF3 post-PF");
         }
         // After sub_115d2: 4th post-render block (eip 0x165C..0x1677)
+        // sub_10130 (orig 2927): vsync wait — was MISSING in v2 SF4 (see SF3).
+        v2_vsync_wait_10130(s);
         // CALLF sub_1DE05 (4th)
         v2_bg_latch_1DE05(s);
-        fs_cmp_115d2("SF4-post-DE05");
         // sub_1de05_dirty_update_position(NULL); // seg003 recreated
         // sub_1c8f1_door_rendering_with_state(_state); // seg003 recreated
         // sub_165aa + sub_16661:
         v2_game_loop_post_render(s);
-        fs_cmp_115d2("SF4-pre-DD9C"); mode_cmp_115d2("SF4-pre-DD9C");
         // CALLF sub_1DD9C
         v2_late_sprites_1DD9C(s);
-        slot2e_trace("SF4-post-DD9C");
         // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
         // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
         v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -7298,24 +7115,6 @@ static void v2_load_level_11080(uint8_t* s) {
     fprintf(stderr, "V2: sub_11080 level init complete for level %d, pageflip_count=%d, 92F7=%04X 92F9=%04X 92FB=%04X\n",
         new_level, v2_pageflip_count,
         *(uint16_t*)(s + DS_PAGE_DRAW), *(uint16_t*)(s + DS_PAGE_SHOWN), *(uint16_t*)(s + DS_PAGE_BG)); }
-    if (new_level == 0x002B) {
-        v2_hw_wp_drain(); // uncomment arm above to enable
-        fprintf(stderr, "V2-POST-INIT-002B: s[117D]=%04X s[117F]=%04X r[117D]=%04X r[117F]=%04X\n",
-            *(uint16_t*)(s+DS_RENDER_117D), *(uint16_t*)(s+DS_RENDER_117F),
-            v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr+0x117D) : 0xDEAD,
-            v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr+0x117F) : 0xDEAD);
-    }
-    // Debug: dump viking sub-sprite ranges and compare with real DS
-    if (v2_vm_real_ds_ptr && new_level >= 0x002B) {
-        for (int v = 0; v < 6; v += 2) {
-            uint16_t s_start = *(uint16_t*)(s + v + OBJ_SUB_SLOT);
-            uint16_t s_end = *(uint16_t*)(s + v + OBJ_SUB_END);
-            uint16_t r_start = *(uint16_t*)(v2_vm_real_ds_ptr + v + OBJ_SUB_SLOT);
-            uint16_t r_end = *(uint16_t*)(v2_vm_real_ds_ptr + v + OBJ_SUB_END);
-            printf("V2-INIT: viking %d: s[%04X..%04X] r[%04X..%04X]  ds:0x374=%04X\n",
-                v/2, s_start, s_end, r_start, r_end, *(uint16_t*)(s + DS_SPAWN_POOL_SEL));
-        }
-    }
     // B3: post-condition verify on input-layer state after v2_load_level_11080.
     // Two classes of fields:
     //   (a) Explicitly cleared by orig sub_11080 (verified seg000:3740-3741+10E5):
@@ -7383,8 +7182,6 @@ static void v2_load_template(uint8_t* shadow) {
     uint16_t di_idx = level * 2;
     uint16_t level_chunk = *(uint16_t*)(shadow + (uint16_t)(di_idx - 0x6BF4));
     uint16_t template_chunk = *(uint16_t*)(shadow + (uint16_t)(di_idx - 0x6B94));
-    printf("V2-TEMPLATE: level=%d di_idx=0x%X table_off=0x%04X level_chunk=0x%X template=0x%X\n",
-           level, di_idx, (uint16_t)(di_idx - 0x6BF4), level_chunk, template_chunk);
 
     // Load template → shadow animation data (ds:0x2E67)
     // Exact replica of sub_111b1: CMP ax, word_2B351; JZ skip
@@ -7396,8 +7193,6 @@ static void v2_load_template(uint8_t* shadow) {
 
     // Load level chunk → DS at offset 0x25B3 (level header)
     uint32_t lsz = v2_read_chunk(level_chunk, shadow + DS_ANIM_SCROLL_DX, 0x10000 - 0x25B3, shadow);  // ds_ctx (class #22)
-    printf("V2-TEMPLATE: loaded level chunk %d bytes. byte_2AA9A(0x25BA)=%02X, level_id=%04X\n",
-           lsz, shadow[DS_ACTIVE_VK_SEL], *(uint16_t*)(shadow + DS_LEVEL));
 }
 
 // sub_11204: load level data chunks (tile graphics, tilemap, etc.)
@@ -7407,17 +7202,15 @@ static void v2_load_level_data(uint8_t* shadow) {
     // Unused portions stay as garbage, matching real segments.
     uint8_t flags = shadow[DS_LEVEL_FLAGS];
     // Orig sub_11204:
-    //   test byte_2AAAF, 2;     jnz loc_11254
-    //   test byte_2AAAF, 0x20;  jnz loc_112a2
-    //   test byte_2AAAF, 0x40;  jnz loc_1127b
+    //   test byte_2AAAF, 2;     jnz loc_11254 (intro type 1, retn)
+    //   test byte_2AAAF, 0x20;  jnz loc_112a2 (HUD-only, jmp loc_1121b)
+    //   test byte_2AAAF, 0x40;  jnz loc_1127b (intro type 2, retn)
     //   fall through → loc_1121b (tile-based)
+    bool tile_based = false;
     if (flags & 2) {
         // loc_11254 (intro type 1) — exact copy:
-        //   ax=word_2AAC1, di=0x20C8, sub_10cd8
-        //   ax=word_2AAC1, di=0x66A8, sub_10cd8
-        //   ax=word_2AAC1, di=0xAC88, sub_10cd8
-        //   ax=0x180,      di=0,      sub_10cd8
-        //   retn
+        //   ax=word_2AAC1, di=0x20C8/0x66A8/0xAC88, sub_10cd8 ×3
+        //   ax=0x180, di=0, sub_10cd8; retn
         uint16_t chunk = *(uint16_t*)(shadow + DS_CHUNK_CUR); // word_2AAC1
         v2_load_chunk_10cd8(shadow, chunk, 0x20C8);
         v2_load_chunk_10cd8(shadow, chunk, 0x66A8);
@@ -7426,18 +7219,14 @@ static void v2_load_level_data(uint8_t* shadow) {
         v2_chunk_shadow_valid = true;
     } else if (flags & 0x20) {
         // loc_112a2 (HUD-only) — exact copy:
-        //   ax=0x211, di=0, sub_10cd8
-        //   jmp loc_1121b
+        //   ax=0x211, di=0, sub_10cd8; jmp loc_1121b
         v2_load_chunk_10cd8(shadow, 0x211, 0);
         v2_chunk_shadow_valid = true;
-        goto tile_load;
+        tile_based = true;
     } else if (flags & 0x40) {
         // loc_1127b (intro type 2) — exact copy:
-        //   ax=word_2AAC1, di=0x20C8, sub_10cd8
-        //   ax=word_2AAC1, di=0x66A8, sub_10cd8
-        //   ax=word_2AAC1, di=0xAC88, sub_10cd8
-        //   ax=0x213,      di=0,      sub_10cd8
-        //   retn
+        //   ax=word_2AAC1, di=0x20C8/0x66A8/0xAC88, sub_10cd8 ×3
+        //   ax=0x213, di=0, sub_10cd8; retn
         uint16_t chunk = *(uint16_t*)(shadow + DS_CHUNK_CUR); // word_2AAC1
         v2_load_chunk_10cd8(shadow, chunk, 0x20C8);
         v2_load_chunk_10cd8(shadow, chunk, 0x66A8);
@@ -7445,7 +7234,9 @@ static void v2_load_level_data(uint8_t* shadow) {
         v2_load_chunk_10cd8(shadow, 0x213, 0);
         v2_chunk_shadow_valid = true;
     } else {
-tile_load:
+        tile_based = true;
+    }
+    if (tile_based) {
         // loc_1121b (orig sub_11204): tile-based level — 4 LZSS decompressions.
         // Orig (eip 0x121B..0x1251):
         //   ax=word_2AAC3,   di=0, es=word_2B33F (=ds:0x2E5F tilegfx),    sub_10982
@@ -11980,6 +11771,7 @@ extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_glyph_list_c
 extern "C" void v2_fntest_call_sub_13ba5(uint8_t* test_shadow) { v2_spawn_table_13ba5(test_shadow); }
 extern "C" void v2_fntest_call_sub_12549(uint8_t* test_shadow, uint16_t ax) { v2_text_align_12549(test_shadow, ax); }
 static bool v2_pause_items_11cbb(uint8_t* shadow);
+static void v2_hud_sel_commit_120d1(uint8_t* s);
 extern "C" int v2_fntest_call_sub_11cbb(uint8_t* test_shadow) { return v2_pause_items_11cbb(test_shadow) ? 1 : 0; }
 // Unit 63: sub_15911 (Y-move search dispatcher). Return packs the three v2
 // outputs: bit0 = returned carry, bit1 = vm.carry, bits4+ = out_dir+1
@@ -20404,29 +20196,41 @@ void v2_phase_render1(uint16_t ds_val) {
 static bool v2_ds_hash_skip(uint32_t i);
 static uint32_t v2_ds_hash(uint8_t* ds);
 
+// sub_12E2D (seg000 6065-6099): pick the viking to control. Returns the slot
+// unchanged when it is not a viking row (>=6) or still alive; a dead slot
+// sets the death-scroll deltas (5,5) and walks forward (0→2→4 with wrap) up
+// to two steps to the first living slot; 0xFFFF when nobody is left.
+// Orig compares against ds:3C2, which still holds the start slot until the
+// caller stores the result.
+static uint16_t v2_viking_pick_next_12e2d(uint8_t* s, uint16_t si) {
+    if (si >= 6) return si;                                          // 6065-6066
+    if ((int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) return si; // 6067-6068
+    uint16_t start = si;
+    *(uint16_t*)(s + DS_SCROLL_DELTA_X) = 5;                         // 6069
+    *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = 5;                         // 6070
+    si += 2; if (si >= 6) si = 0;                                    // 6071-6074
+    if (si != start &&                                               // 6077-6078
+        (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0)           // 6079-6080
+        return si;
+    si += 2; if (si >= 6) si = 0;                                    // 6083-6086
+    if (si != start &&                                               // 6089-6090
+        (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0)           // 6091-6092
+        return si;
+    return 0xFFFF;                                                   // 6095
+}
+
 void v2_phase_post_flip1(uint16_t ds_val) {
     if (!v2_frame_active) return;
     v2_watch_302("POST_FLIP1");
     // PSNAP compare: catches divergence in render1 (sub_1DE05/sub_1DD9C/sub_1c8f1/sub_1e0c7/sub_16775).
     v2_compare_phase_snap(V2_PSNAP_RENDER1_END, "v2_phase_post_flip1");
     uint8_t* s = v2_vm_shadow_ds;
-    // sub_12e16: viking death check
+    // sub_12E16 (seg000 6049-6057): active-viking death check — advance
+    // [3C2] to the next living viking; none left → FRAME_FLAGS bit1.
     {
-        uint16_t si = *(uint16_t*)(s + DS_ACTIVE_VIKING);
-        uint16_t start_si = si;
-        if (si < 6 && (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) < 0) {
-            *(uint16_t*)(s + DS_SCROLL_DELTA_X) = 5;
-            *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = 5;
-            si += 2; if (si >= 6) si = 0;
-            if (si != start_si && (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) goto pf1_done;
-            si += 2; if (si >= 6) si = 0;
-            if (si == start_si) { si = 0xFFFF; goto pf1_done; }
-            if ((int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) goto pf1_done;
-            si = 0xFFFF;
-        }
-    pf1_done:
-        *(uint16_t*)(s + DS_ACTIVE_VIKING) = si;
-        if (si == 0xFFFF) *(uint16_t*)(s + DS_FRAME_FLAGS) |= 2;
+        uint16_t si = v2_viking_pick_next_12e2d(s, *(uint16_t*)(s + DS_ACTIVE_VIKING));
+        *(uint16_t*)(s + DS_ACTIVE_VIKING) = si;                     // 6051
+        if (si == 0xFFFF) *(uint16_t*)(s + DS_FRAME_FLAGS) |= 2;     // 6052-6054
     }
     // sub_15530: collision pass 2
     v2_coll_sweep_15530(s);
@@ -21439,6 +21243,24 @@ static void v2_transition_kick_102ad(uint8_t* s) {
     *(uint16_t*)(s + DS_FRAME_FLAGS) |= 1;
 }
 
+// sub_120d1 (seg000 4189-4203): commit the three HUD selectors — for each
+// viking row: prev←cur ([288FA/FC/FE]←[288F4/F6/F8]) and render the selector
+// (sub_118AD) at cur (+0/+4/+8 row bias, ×2). Orig interleaves copy/render.
+static void v2_hud_sel_commit_120d1(uint8_t* s) {
+    uint16_t sel0 = *(uint16_t*)(s + (DS_HUD_SEL));            // 4189 mov di, word_288F4
+    *(uint16_t*)(s + (DS_HUD_SEL_PREV)) = sel0;                // 4190
+    v2_draw_hud_selector(v2_current_ds_val, sel0 << 1);        // 4191-4192 call sub_118AD
+    v2_vga_selector_118ad(s, sel0 << 1);
+    uint16_t sel1 = *(uint16_t*)(s + (DS_HUD_SEL+2));          // 4193
+    *(uint16_t*)(s + (DS_HUD_SEL_PREV+2)) = sel1;              // 4194
+    v2_draw_hud_selector(v2_current_ds_val, (sel1 + 4) << 1);  // 4195-4197
+    v2_vga_selector_118ad(s, (sel1 + 4) << 1);
+    uint16_t sel2 = *(uint16_t*)(s + (DS_HUD_SEL+4));          // 4198
+    *(uint16_t*)(s + (DS_HUD_SEL_PREV+4)) = sel2;              // 4199
+    v2_draw_hud_selector(v2_current_ds_val, (sel2 + 8) << 1);  // 4200-4202
+    v2_vga_selector_118ad(s, (sel2 + 8) << 1);
+}
+
 // sub_12250: probe ONE inventory category di (0..3). Returns true with
 // ax_out = free slot offset when usable: di==3 → the special slot 0x18;
 // a category whose gate byte [di+0x449] is nonzero is rejected; otherwise
@@ -21540,16 +21362,66 @@ static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out
     return false;
 }
 
+// sub_11F47 (seg000 3998-4033): open the pick-up gates of every living
+// viking within Manhattan distance 0x40 of the active one. First closes all
+// three gate bytes ([449]=0xFFFF word + [44B]=0xFF), then clears the byte
+// [slot>>1 + 449] of each viking close enough.
+static void v2_pause_flag_nearby_11f47(uint8_t* shadow) {
+    *(uint16_t*)(shadow + DS_HUD_FIELD_449) = 0xFFFF;                    // 3999
+    shadow[DS_HUD_FORCE] = 0xFF;                                         // 4000
+    uint16_t active = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);           // 4001
+    for (uint16_t v = 0; v < 6; v += 2) {                                // 4002, 4029-4031
+        if (*(uint16_t*)(shadow + v + OBJ_RES_HANDLE) == 0) continue;    // 4005-4006
+        int16_t adx = (int16_t)*(uint16_t*)(shadow + v + OBJ_WORLD_X)
+                    - (int16_t)*(uint16_t*)(shadow + active + OBJ_WORLD_X); // 4007-4008
+        if (adx < 0) adx = -adx;                                         // 4009-4010
+        int16_t ady = (int16_t)*(uint16_t*)(shadow + v + OBJ_WORLD_Y)
+                    - (int16_t)*(uint16_t*)(shadow + active + OBJ_WORLD_Y); // 4013-4014
+        if (ady < 0) ady = -ady;                                         // 4015-4016
+        if ((int16_t)(adx + ady) < 0x40)                                 // 4019-4021
+            shadow[(v >> 1) + 0x449] = 0;                                // 4022-4025
+    }
+}
+
+// Switch-viking tail shared by the prev/next branches of pause mode 1
+// (orig 3842-3854 / 3873-3885): commit the new active viking, retarget the
+// item cursor to its selected slot, redraw the selectors (sub_120D1),
+// restart the blink timer, open nearby gates (sub_11F47), click (SFX 1).
+static void v2_pause_switch_viking(uint8_t* shadow, uint16_t viking) {
+    *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = viking;                    // 3842
+    uint16_t sel = *(uint16_t*)(shadow + viking + (DS_HUD_SEL));         // 3843
+    uint16_t slot = (uint16_t)((viking << 1) + sel);                     // 3844-3845
+    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = slot;                        // 3846
+    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) =
+        *(uint16_t*)(shadow + (uint16_t)(slot << 1) + (DS_HUD_ITEMS));   // 3847-3849
+    v2_hud_sel_commit_120d1(shadow);                                     // 3850 call sub_120D1
+    *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;                         // 3851
+    v2_pause_flag_nearby_11f47(shadow);                                  // 3852 call sub_11F47
+    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);      // 3853-3854
+}
+
+// sub_11CBB (seg000 3719-3989): pause-menu inventory interaction, one frame.
+// Returns true (orig STC) = leave the pause menu.
+//
+// Mode 0 ([28927]==0) — carrying an item, choosing where to drop it:
+//   Left/Right cycle the target category (sub_12250 probes usability),
+//   Action/Exit place the item via sub_11F93 (Exit also leaves the menu
+//   when the item was accepted).
+// Mode 1 — browsing: L1/R1 switch the active viking (walk to the next
+//   living slot + sub_120D1/sub_11F47 tail), arrows move the slot cursor
+//   (unconditional erase of the current slot first), Action picks the slot's
+//   item up (sub_121B9 + sub_120D1), Start/Select restart the blink and
+//   leave the menu.
 static bool v2_pause_items_11cbb(uint8_t* shadow) {
     extern uint16_t v2_current_ds_val;
     bool cbb_exit = false;
     uint16_t new_input = *(uint16_t*)(shadow + DS_INPUT_EDGES);
-    uint16_t w27 = *(uint16_t*)(shadow + DS_QUIT_MODE); // word_28927 (mode)
-    (void)*(uint16_t*)(shadow + DS_CUR_OBJ); // word_28522 (si_obj — unused in body)
+    uint16_t mode = *(uint16_t*)(shadow + DS_QUIT_MODE);   // 3719 word_28927
+    (void)*(uint16_t*)(shadow + DS_CUR_OBJ); // 3725 word_28522 (si — unused in body)
 
-    if (w27 == 0) {
-        // Mode 0: item selection. Verified with seg000 lines 3725-3817.
-        if (new_input == 0) goto cbb_done;
+    if (mode == 0) {
+        // Mode 0: item placement. Verified with seg000 lines 3725-3817.
+        if (new_input == 0) return false;                  // 3726-3728 → CLC
         if (new_input & 0x200) {
             // Left: find prev category via sub_12250 (seg000 3732-3761)
             // Orig: MOV di, word_28923; SHL di, 1; MOV ax, 0; CALL sub_1183d (clear current)
@@ -21585,298 +21457,122 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             // Orig eip 0x1d49: MOV ax, 1; CALL sub_177bb (play SFX 1 — selector move)
             if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
         } else if (new_input & 0x8000) {
-            // Action: sub_11F93 pick up item (seg000 4042-4091)
-            bool f93_carry = false;
-            uint16_t di = *(uint16_t*)(shadow + DS_QUIT_ACTIVE);
-            di <<= 1;
-            if (di == 0x18) {
-                uint16_t item = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                if (shadow[(uint16_t)(item + 0x8592)] == 0) {
-                    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 3);
-                    f93_carry = true;
-                } else {
-                    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 4);
-                    // orig sub_11f93 eip 0x1FBD: sub_1183d(di=0x18, ax=0x17) — render special slot
-                    v2_draw_hud_item(v2_current_ds_val, 0x18, 0x17);
-                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, 0x18, 0x17);
-                }
-            } else {
-                if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 2);
-                uint16_t ax = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax;
-                uint16_t si = *(uint16_t*)(shadow + DS_QUIT_ACTIVE);
-                si &= 0xFFFC; si >>= 1;
-                uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
-                uint16_t si2 = si << 1;
-                di2 += si2; si2 >>= 1; di2 <<= 1;
-                if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
-                    // orig sub_11f93 eip 0x1FEE: sub_1183d(di=di2, ax=0) — clear slot render
-                    v2_draw_hud_item(v2_current_ds_val, di2, 0);
-                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di2, 0);
-                    uint16_t ax2 = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) & 3;
-                    *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
-                }
-            }
-            if (!f93_carry) {
-                uint16_t di_r = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
-                uint16_t di_s = (di_r << 1) + ax_r;
-                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = di_s;
-                uint16_t di_b = (di_s << 1) & 0xFFF8;
-                bool found = false; uint16_t found_di = 0;
-                for (int cx = 0; cx < 4; cx++) {
-                    if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
-                        found = true; found_di = di_b; break;
-                    }
-                    di_b += 2;
-                }
-                if (!found) {
-                    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = 0;
-                } else {
-                    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
-                    uint16_t saved = found_di;
-                    uint16_t di3 = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                    uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
-                    di3 = ((di3 << 1) + ax3) << 1;
-                    // orig sub_121f6 eip 0x2236: sub_1183d(di=di3, ax=0) — render new slot
-                    v2_draw_hud_item(v2_current_ds_val, di3, 0);
-                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di3, 0);
-                    uint16_t si_v = saved >> 1;
-                    di3 = (di3 >> 2) & 0xFFFE;
-                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
-                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
-                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = si_v;
-                }
-                *(uint16_t*)(shadow + DS_QUIT_MODE) = 1; // mode = carrying
-            }
+            // Action (orig 3799-3802, eip 0x1D59): CALL sub_11F93 — place the
+            // carried item; the mirror includes SFX 2/3/4, the special-slot
+            // render and the loc_11FFB take-next tail (mode→1 unless refused).
+            (void)v2_item_place_11f93(shadow);
         } else if (new_input & 0x2000) {
-            // Exit: sub_11F93 + carry check (seg000 3806-3811)
-            bool f93_carry = false;
-            uint16_t di = *(uint16_t*)(shadow + DS_QUIT_ACTIVE);
-            di <<= 1;
-            if (di == 0x18) {
-                uint16_t item = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                if (shadow[(uint16_t)(item + 0x8592)] == 0) f93_carry = true;
-            } else {
-                uint16_t ax = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
-                *(uint16_t*)(shadow + di + (DS_HUD_ITEMS)) = ax;
-                uint16_t si = *(uint16_t*)(shadow + DS_QUIT_ACTIVE);
-                si &= 0xFFFC; si >>= 1;
-                uint16_t di2 = *(uint16_t*)(shadow + si + (DS_HUD_SEL));
-                uint16_t si2 = si << 1;
-                di2 += si2; si2 >>= 1; di2 <<= 1;
-                if (*(uint16_t*)(shadow + di2 + (DS_HUD_ITEMS)) == 0) {
-                    // orig sub_11f93 eip 0x1FEE: sub_1183d(di=di2, ax=0) — clear slot render
-                    v2_draw_hud_item(v2_current_ds_val, di2, 0);
-                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di2, 0);
-                    uint16_t ax2 = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) & 3;
-                    *(uint16_t*)(shadow + si2 + (DS_HUD_SEL)) = ax2;
-                }
-            }
-            if (!f93_carry) {
-                uint16_t di_r = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                uint16_t ax_r = *(uint16_t*)(shadow + di_r + (DS_HUD_SEL));
-                uint16_t di_s = (di_r << 1) + ax_r;
-                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = di_s;
-                uint16_t di_b = (di_s << 1) & 0xFFF8;
-                bool found = false; uint16_t found_di = 0;
-                for (int cx = 0; cx < 4; cx++) {
-                    if (*(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) != 0) {
-                        found = true; found_di = di_b; break;
-                    }
-                    di_b += 2;
-                }
-                if (!found) {
-                    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = 0;
-                } else {
-                    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + found_di + (DS_HUD_ITEMS));
-                    uint16_t saved = found_di;
-                    uint16_t di3 = *(uint16_t*)(shadow + DS_HUD_DRAW_DI);
-                    uint16_t ax3 = *(uint16_t*)(shadow + di3 + (DS_HUD_SEL));
-                    di3 = ((di3 << 1) + ax3) << 1;
-                    // orig sub_121f6 eip 0x2236: sub_1183d(di=di3, ax=0) — render new slot
-                    v2_draw_hud_item(v2_current_ds_val, di3, 0);
-                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di3, 0);
-                    uint16_t si_v = saved >> 1;
-                    di3 = (di3 >> 2) & 0xFFFE;
-                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) = si_v;
-                    *(uint16_t*)(shadow + di3 + (DS_HUD_SEL)) &= 3;
-                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = si_v;
-                }
-                *(uint16_t*)(shadow + DS_QUIT_MODE) = 1;
-            }
-            if (!f93_carry) cbb_exit = true;
+            // Exit (orig 3806-3811, eip 0x1D66): CALL sub_11F93; place accepted
+            // (no carry) → STC → leave the pause menu. №49: this path used a
+            // TRIMMED inline copy (no SFX 2/3/4, no special-slot render) — the
+            // orig calls the SAME full sub_11F93 as the Action path.
+            if (!v2_item_place_11f93(shadow)) cbb_exit = true;
         }
     } else {
-        // Mode 1: carrying item — viking switch + directional placement
-        if (new_input == 0) goto cbb_done;
+        // Mode 1: browsing — viking switch + cursor moves + pickup.
+        if (new_input == 0) return false;                  // 3822-3824 → CLC
+        // Prev viking (orig 3828-3854): walk backwards 4→2→0 with wrap and
+        // stop at the FIRST living slot ([di+15ADh]!=0); if that is the
+        // active viking itself (full circle) — no switch. Orig loops
+        // unbounded (safe: pause requires a living active viking); v2
+        // bounds the walk to one full circle of 3 slots.
+        // №49-fix: the switch tail now mirrors orig exactly — sub_120D1
+        // (selector renders, was missing) and NO extra sub_1183d call.
         if (new_input & 0x20) {
-            uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            for (int tries = 0; tries < 3; tries++) {
-                di_v -= 2; if ((int16_t)di_v < 0) di_v = 4;
-                if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
-                    di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
-                    *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
-                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + (DS_HUD_SEL));
-                    uint16_t di_s = (di_v << 1) + ax_i;
-                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = di_s;
-                    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + (di_s << 1) + (DS_HUD_ITEMS));
-                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
-                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
-                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
-                    *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-                    *(uint16_t*)(shadow + DS_HUD_FIELD_449) = 0xFFFF;
-                    shadow[DS_HUD_FORCE] = 0xFF;
-                    uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-                    for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-                        if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
-                        int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
-                                     - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
-                        if (ax_d < 0) ax_d = -ax_d;
-                        int16_t dx_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_Y)
-                                     - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_Y);
-                        if (dx_d < 0) dx_d = -dx_d;
-                        uint16_t dist = (uint16_t)ax_d + (uint16_t)dx_d;
-                        if ((int16_t)dist < 0x40) shadow[(si_f47 >> 1) + 0x449] = 0;
-                    }
-                    // sub_1183d: render new viking's slot — orig calls inside switch
-                    v2_draw_hud_item(v2_current_ds_val, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
-                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
-                    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
-                    break;
-                }
+            uint16_t viking = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);   // 3830
+            for (int step = 0; step < 3; step++) {
+                viking -= 2;                                             // 3833 sub di, 2
+                if ((int16_t)viking < 0) viking = 4;                     // 3834-3835
+                if (*(uint16_t*)(shadow + viking + OBJ_RES_HANDLE) == 0) // 3838-3839
+                    continue;
+                if (viking != *(uint16_t*)(shadow + DS_ACTIVE_VIKING))   // 3840-3841
+                    v2_pause_switch_viking(shadow, viking);              // 3842-3854
+                break;
             }
         }
+        // Next viking (orig 3858-3885): same walk forwards 0→2→4 with wrap.
         if (new_input & 0x10) {
-            uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            for (int tries = 0; tries < 3; tries++) {
-                di_v += 2; if (di_v >= 6) di_v = 0;
-                if (*(uint16_t*)(shadow + di_v + OBJ_RES_HANDLE) != 0 &&
-                    di_v != *(uint16_t*)(shadow + DS_ACTIVE_VIKING)) {
-                    *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = di_v;
-                    uint16_t ax_i = *(uint16_t*)(shadow + di_v + (DS_HUD_SEL));
-                    uint16_t di_s = (di_v << 1) + ax_i;
-                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = di_s;
-                    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + (di_s << 1) + (DS_HUD_ITEMS));
-                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
-                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
-                    *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
-                    *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-                    *(uint16_t*)(shadow + DS_HUD_FIELD_449) = 0xFFFF;
-                    shadow[DS_HUD_FORCE] = 0xFF;
-                    uint16_t di_f47 = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-                    for (uint16_t si_f47 = 0; si_f47 < 6; si_f47 += 2) {
-                        if (*(uint16_t*)(shadow + si_f47 + OBJ_RES_HANDLE) == 0) continue;
-                        int16_t ax_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_X)
-                                     - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_X);
-                        if (ax_d < 0) ax_d = -ax_d;
-                        int16_t dx_d = (int16_t)*(uint16_t*)(shadow + si_f47 + OBJ_WORLD_Y)
-                                     - (int16_t)*(uint16_t*)(shadow + di_f47 + OBJ_WORLD_Y);
-                        if (dx_d < 0) dx_d = -dx_d;
-                        uint16_t dist = (uint16_t)ax_d + (uint16_t)dx_d;
-                        if ((int16_t)dist < 0x40) shadow[(si_f47 >> 1) + 0x449] = 0;
-                    }
-                    v2_draw_hud_item(v2_current_ds_val, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
-                    v2_vga_hud_item_1183d(v2_vm_shadow_ds, di_s << 1, *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD));
-                    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
-                    break;
-                }
+            uint16_t viking = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);   // 3860
+            for (int step = 0; step < 3; step++) {
+                viking += 2;                                             // 3863 add di, 2
+                if (viking >= 6) viking = 0;                             // 3864-3866
+                if (*(uint16_t*)(shadow + viking + OBJ_RES_HANDLE) == 0) // 3869-3870
+                    continue;
+                if (viking != *(uint16_t*)(shadow + DS_ACTIVE_VIKING))   // 3871-3872
+                    v2_pause_switch_viking(shadow, viking);              // 3873-3885
+                break;
             }
         }
-        // Mode 1 arrow handlers (Left/Right/Up/Down): orig pattern erases OLD
-        // slot BEFORE state change (eip 0x1EEC-0x1EF5: di=word_28923 OLD,
-        // ax=word_28921 OLD, CALL sub_1183d). Without erase, selector frame
-        // stays at old position when cursor moves.
+        // Mode 1 arrow handlers (Left/Right/Up/Down), orig 3889-3969: each
+        // pressed arrow FIRST erases the current slot unconditionally
+        // (sub_1183d at word_28923<<1 / word_28921 — e.g. 3891-3894), THEN
+        // moves the cursor only when the corresponding SEL bit allows it.
+        // №49-fix: the erase used to sit inside the move-condition.
         auto erase_old_slot = [&]() {
             uint16_t old_di = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1;
             uint16_t old_ax = *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD);
             v2_draw_hud_item(v2_current_ds_val, old_di, old_ax);
             v2_vga_hud_item_1183d(v2_vm_shadow_ds, old_di, old_ax);
         };
-        if (new_input & 0x200) {
-            uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 1) {
-                erase_old_slot();
-                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) &= 0xFFFE;
-                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) &= 0xFFFE;
-                uint16_t bx = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1;
-                *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
-                *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-                if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+        // Retarget the blink item to the (possibly moved) cursor slot and
+        // restart the blink timer — shared tail of all four arrows
+        // (e.g. 3900-3906 for Left).
+        auto arrow_commit = [&]() {
+            uint16_t bx = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1;
+            *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
+            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+        };
+        if (new_input & 0x200) {                                     // Left, 3889-3906
+            erase_old_slot();                                        // 3891-3894
+            uint16_t viking = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
+            if (*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 1) {  // 3896-3897
+                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) &= 0xFFFE; // 3898
+                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) &= 0xFFFE;     // 3899
+                arrow_commit();                                      // 3900-3906
             }
         }
-        if (new_input & 0x100) {
-            uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (!(*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 1)) {
-                erase_old_slot();
-                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) |= 1;
-                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) |= 1;
-                uint16_t bx = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1;
-                *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
-                *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-                if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+        if (new_input & 0x100) {                                     // Right, 3910-3927
+            erase_old_slot();                                        // 3912-3915
+            uint16_t viking = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
+            if (!(*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 1)) { // 3917-3918
+                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) |= 1;   // 3919
+                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) |= 1;          // 3920
+                arrow_commit();                                      // 3921-3927
             }
         }
-        if (new_input & 0x800) {
-            uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 2) {
-                erase_old_slot();
-                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) &= 0xFFFD;
-                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) &= 0xFFFD;
-                uint16_t bx = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1;
-                *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
-                *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-                if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+        if (new_input & 0x800) {                                     // Up, 3931-3948
+            erase_old_slot();                                        // 3933-3936
+            uint16_t viking = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
+            if (*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 2) {  // 3938-3939
+                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) &= 0xFFFD; // 3940
+                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) &= 0xFFFD;     // 3941
+                arrow_commit();                                      // 3942-3948
             }
         }
-        if (new_input & 0x400) {
-            uint16_t di_v = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            if (!(*(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) & 2)) {
-                erase_old_slot();
-                *(uint16_t*)(shadow + di_v + (DS_HUD_SEL)) |= 2;
-                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) |= 2;
-                uint16_t bx = *(uint16_t*)(shadow + DS_QUIT_ACTIVE) << 1;
-                *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
-                *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-                if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+        if (new_input & 0x400) {                                     // Down, 3952-3969
+            erase_old_slot();                                        // 3954-3957
+            uint16_t viking = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
+            if (!(*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 2)) { // 3959-3960
+                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) |= 2;   // 3961
+                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) |= 2;          // 3962
+                arrow_commit();                                      // 3963-3969
             }
         }
         if (new_input & 0x8000) {
-            // sub_121B9 (seg000 4326-4345) + sub_120D1
-            uint16_t di_b = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);
-            *(uint16_t*)(shadow + DS_HUD_DRAW_DI) = di_b;
-            uint16_t ax_b = *(uint16_t*)(shadow + di_b + (DS_HUD_SEL));
-            di_b = ((di_b << 1) + ax_b) << 1;
-            uint16_t item = *(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS));
-            if (item != 0) {
-                *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = item;
-                *(uint16_t*)(shadow + di_b + (DS_HUD_ITEMS)) = 0;
-                *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = di_b >> 1;
-                *(uint16_t*)(shadow + DS_QUIT_MODE) = 0;
-                *(uint16_t*)(shadow + DS_QUIT_BLINK) = 9;
-                if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 2);
-            }
-            // sub_120D1: orig draws all 3 viking selectors UNCONDITIONALLY
-            // after DS prev=cur copy. Without selector redraw, mode 0 blink
-            // (after pickup mode→0) overdraws selector frame via item draw,
-            // and loc_1205B doesn't redraw (prev==cur now). User sees selector
-            // disappear from selected item after F-pickup.
-            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV)) = *(uint16_t*)(shadow + (DS_HUD_SEL));
-            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1);
-            v2_vga_selector_118ad(v2_vm_shadow_ds, *(uint16_t*)(shadow + (DS_HUD_SEL)) << 1);
-            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(shadow + (DS_HUD_SEL+2));
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1);
-            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(shadow + (DS_HUD_SEL+2)) + 4) << 1);
-            *(uint16_t*)(shadow + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(shadow + (DS_HUD_SEL+4));
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1);
-            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(shadow + (DS_HUD_SEL+4)) + 8) << 1);
+            // Pick up (orig 3973-3976): CALL sub_121B9 (pop the selected
+            // item → carry mode 0) then CALL sub_120D1 (selector commit,
+            // UNCONDITIONAL — even when the slot was empty). Without the
+            // selector redraw, mode 0 blink after pickup overdraws the
+            // selector frame and loc_1205B doesn't redraw (prev==cur now).
+            v2_item_pop_121b9(shadow);                               // 3975
+            v2_hud_sel_commit_120d1(shadow);                         // 3976
         }
-        if (new_input & 0x3000) {
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
-            cbb_exit = true;
+        if (new_input & 0x3000) {                          // 3979-3983
+            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;   // 3981
+            cbb_exit = true;                               // 3982 STC
         }
     }
-    cbb_done:
     return cbb_exit;
 }
 
