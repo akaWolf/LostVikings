@@ -472,7 +472,8 @@ struct V2StateView {
 #undef V2_GS_AN
 #define V2_GS_AB1(name, off) \
     uint8_t  name##_b() const          { return ds[(off)]; } \
-    void     name##_b(uint8_t v)       { ds[(off)] = v; }
+    void     name##_b(uint8_t v)       { ds[(off)] = v; } \
+    uint8_t& name##_bref()             { return ds[(off)]; }
 #define V2_GS_ABN(name, off, n) \
     uint8_t* name##_bytes()            { return ds + (off); } \
     const uint8_t* name##_bytes() const { return ds + (off); }

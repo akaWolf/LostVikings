@@ -1559,7 +1559,7 @@ static void v2_music_start_178d6_v2(uint8_t* s) {
 // "Production" impl — no replay knowledge. v2 callers go through fx::stop_all_sfx.
 static void v2_seq_stop_all_17912_v2(uint8_t* s) {
     if (v2gs(s).music_mute() != 0 && v2gs(s).sfx_mute() != 0) return;
-    uint16_t si = (s[DS_SND_FLAG] == 1) ? 2 : 0;
+    uint16_t si = (v2gs(s).snd_flag_b() == 1) ? 2 : 0;
     while ((int16_t)si < 0x0A) {
         uint16_t handle_off = (uint16_t)(si - 0x66F4); // wraps to 0x990C+
         uint16_t handle = *(uint16_t*)(s + handle_off);
@@ -2430,7 +2430,7 @@ static void v2_pal_anim_10ffc(uint8_t* s) {
     uint16_t pal_base = v2gs(s).pal_src_ptr(); // word_303E0 = palette data pointer
     for (int16_t bx = 7; bx >= 0; bx--) {
         uint8_t mask = s[(uint16_t)(bx - LUT_BYTE_OR)]; // bit mask from table
-        if (!(s[DS_PAL_ANIM_EN] & mask)) continue;          // byte_2AA63: animation enable bits
+        if (!(v2gs(s).pal_anim_en_b() & mask)) continue;          // byte_2AA63: animation enable bits
         if (s[bx + DS_PAL_ANIM_TIMER] != 0) continue;          // timer not zero → skip
         s[bx + DS_PAL_ANIM_TIMER] = s[bx + DS_PAL_ANIM_RELOAD];            // reset timer from reload value
         uint8_t end_color = s[bx + DS_PAL_ANIM_END];
@@ -2519,7 +2519,7 @@ static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di)
     s[DS_PAL_SHADE_R] = (uint8_t)(al << 1);                                  // SHL al, 1; MOV ds:342h, al
     s[DS_PAL_SHADE_G] = (uint8_t)((uint8_t)si << 1);                        // SHL al, 1; MOV ds:343h, al
     s[DS_PAL_SHADE_B] = (uint8_t)((uint8_t)di << 1);                        // SHL al, 1; MOV ds:344h, al
-    s[DS_PAL_FLAGS] |= 1;                                                 // OR byte ptr ds:7EFDh, 1
+    v2gs(s).pal_flags_bref() |= 1;                                                 // OR byte ptr ds:7EFDh, 1
     v2gs(s).pal_req(4);                                   // MOV word ptr ds:7EFEh, 4
     v2gs(s).pal_src_ptr(DS_PAL_OUT);                              // MOV word ptr ds:7F00h, 8202h
     // JMP sub_10E99: palette correction — writes 768 bytes to ds:0x8202
@@ -2681,10 +2681,10 @@ static void v2_pal_rotate_back_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
 // block shifts down, saved entry lands at end; sub_1020f for cur>end: the reverse).
 // DS writes: DEC [si+0x258C], word_303DE=2, palette buffer rotations at ds:0x8202+ area.
 static void v2_pal_ui_cycle_101be(uint8_t* s) {
-    if (s[DS_PAL_ANIM_EN] == 0)                                     // TEST byte_2AA63, 0FFh; JZ loc_1020b
+    if (v2gs(s).pal_anim_en_b() == 0)                                     // TEST byte_2AA63, 0FFh; JZ loc_1020b
         return;                                                     // early exit — NO word_303DE write
     for (int16_t si = 7; si >= 0; si--) {                           // si=7; DEC si; JNS
-        uint8_t mask = s[DS_PAL_ANIM_EN];                                    // byte_2AA63
+        uint8_t mask = v2gs(s).pal_anim_en_b();                                    // byte_2AA63
         if (!(s[(uint16_t)(si - LUT_BYTE_OR)] & mask)) continue;        // TEST [si-6C44h], al; JZ
         if (s[si + DS_PAL_ANIM_TIMER] == 0) continue;                         // TEST [si+258Ch]; JZ
         s[si + DS_PAL_ANIM_TIMER]--;                                           // DEC [si+258Ch]
@@ -2715,10 +2715,10 @@ static void v2_audio_tick_108c8(uint8_t* s) {
     uint16_t ax = v2gs(s).music_mute() & v2gs(s).sfx_mute();  // word_287E2 & word_287E4
     if (ax & 0x8000) return;                                              // TEST ax, 8000h; JNZ ret
     V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:sub_108c8");
-    s[DS_SPEC_KEY_S] = sdl_spec_get(0x918B);  // SDL S — exact orig INT9
-    if (s[DS_KEY_ALT] != 1) return;        // CMP byte_31684, 1; JNZ ret
-    if (s[DS_SPEC_KEY_S] == 1) {              // CMP byte_3166B, 1; JNZ skip
-        s[DS_SPEC_KEY_S] = 0;                                                   // MOV byte_3166B, 0
+    v2gs(s).spec_key_s_b(sdl_spec_get(0x918B));  // SDL S — exact orig INT9
+    if (v2gs(s).key_alt_b() != 1) return;        // CMP byte_31684, 1; JNZ ret
+    if (v2gs(s).spec_key_s_b() == 1) {              // CMP byte_3166B, 1; JNZ skip
+        v2gs(s).spec_key_s_b(0);                                                   // MOV byte_3166B, 0
         s[DS_SFX_MUTE] ^= 1;                                                  // XOR byte ptr word_287E4, 1
         if (s[DS_SFX_MUTE] != 0) {                                           // JZ skips stop → do stop when nonzero
             // Mute toggled ON: stop SFX channels. Orig eip 0x8F5-0x933: per
@@ -2740,9 +2740,9 @@ static void v2_audio_tick_108c8(uint8_t* s) {
         }
     }
     // loc_10935: music toggle
-    s[DS_SPEC_KEY_M] = sdl_spec_get(0x919E);  // SDL M — exact orig INT9
-    if (s[DS_SPEC_KEY_M] != 1) return;        // CMP byte_3167E, 1; JNZ ret
-    s[DS_SPEC_KEY_M] = 0;                                                       // MOV byte_3167E, 0
+    v2gs(s).spec_key_m_b(sdl_spec_get(0x919E));  // SDL M — exact orig INT9
+    if (v2gs(s).spec_key_m_b() != 1) return;        // CMP byte_3167E, 1; JNZ ret
+    v2gs(s).spec_key_m_b(0);                                                       // MOV byte_3167E, 0
     s[DS_MUSIC_MUTE] ^= 1;                                                      // XOR byte ptr word_287E2, 1
     if (s[DS_MUSIC_MUTE] != 0) {                                                 // JNZ loc_10959 (music STOP path)
         // loc_10959: music OFF. Skip if bit 15 set.
@@ -2768,11 +2768,11 @@ static void v2_audio_tick_108c8(uint8_t* s) {
 // sub_1686f (seg000): VGA mode restore on exit. Verified with seg000 lines 15588-15597.
 // Called from exit cleanup only (sub_10dba). DS write: [92FF]=0 if [9300]!=FF.
 static void v2_vga_mode_restore_1686f(uint8_t* s) {
-    uint8_t al = s[DS_VGA_MODE_BYTE];                                             // MOV al, ds:9300h
+    uint8_t al = v2gs(s).vga_mode_byte_b();                                             // MOV al, ds:9300h
     if (al == 0xFF) return;                                              // CMP al, FFh; JZ ret
     // MOV ah, 0
     // INT 10h — VIDEO SET MODE — commented
-    s[DS_VGA_PAGE_FLAG] = 0;                                                       // MOV byte ptr ds:92FFh, 0
+    v2gs(s).vga_page_flag_b(0);                                                       // MOV byte ptr ds:92FFh, 0
 }
 
 // sub_100bb (seg000): Render pass 3 + post-flip 3 + frame end. DEAD CODE (0 direct callers).
@@ -2948,7 +2948,7 @@ static void v2_viking_cycle_12e84(uint8_t* s) {
 
 // sub_12e79: gate — byte ds:0x25BA != 0 → sub_12e84.
 static void v2_viking_cycle_12e79(uint8_t* s) {
-    if (s[DS_ACTIVE_VK_SEL] != 0) v2_viking_cycle_12e84(s);
+    if (v2gs(s).active_vk_sel_b() != 0) v2_viking_cycle_12e84(s);
 }
 
 static void v2_hud_health_120ff(uint8_t* s);
@@ -2961,7 +2961,7 @@ static void v2_portrait_sync_11b0b(uint8_t* s);
 static void v2_viking_proximity_11f47(uint8_t* s) {
     v2_cc_v2_hit(5);   // M1 call-parity CC_11F47 (#65)
     v2gs(s).hud_field_449(0xFFFF);     // word_28929
-    s[DS_HUD_FORCE] = 0xFF;                          // byte_2892B
+    v2gs(s).hud_force_b(0xFF);                          // byte_2892B
     uint16_t di = v2gs(s).active_viking();
     for (uint16_t si = 0; si < 6; si += 2) {
         if (*(uint16_t*)(s + si + OBJ_RES_HANDLE) == 0) continue;
@@ -3004,7 +3004,7 @@ static void v2_hud_sel_sync_1205b(uint8_t* s) {
 // 120ff (healthbars) → 12199 (item sync) → loc_1205B (selector sync) →
 // 11b0b (portraits).
 static void v2_hud_update_11792(uint8_t* s) {
-    if (!(s[DS_LEVEL_FLAGS] & 1) || v2gs(s).level() == 0x2C) return;
+    if (!(v2gs(s).level_flags_b() & 1) || v2gs(s).level() == 0x2C) return;
     v2_hud_health_120ff(s);
     v2_hud_item_sync_12199(s);
     v2_hud_sel_sync_1205b(s);
@@ -3723,10 +3723,10 @@ static void v2_sprite_draw_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t
 // VGA writes: sub_1E16D renders glyph pixels to es:0xA000 — commented for v2.
 static void v2_glyph_flush_1E0C7(uint8_t* s) {
     // line 3037: TEST byte ptr ds:956Bh, 0FFh                      ; glyph dirty flag
-    if (s[DS_GLYPH_DIRTY] == 0) return;                                      // JZ locret_1E16C
+    if (v2gs(s).glyph_dirty_b() == 0) return;                                      // JZ locret_1E16C
 
     // line 3041: TEST byte ptr ds:25CFh, 0E0h                      ; HUD mode bits
-    if (s[DS_LEVEL_FLAGS] & 0xE0) {                                         // JZ loc_1E0E4
+    if (v2gs(s).level_flags_b() & 0xE0) {                                         // JZ loc_1E0E4
         // line 3043: CMP word ptr ds:98DCh, 3                      ; throttle check
         if ((int16_t)v2gs(s).ui_throttle() > 3) return;          // JG locret_1E16C
         // line 3045: INC word ptr ds:98DCh                         ; throttle increment
@@ -3810,7 +3810,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
             // line 3085-3088: dirty flag condition
             bool set_dirty = true;
             if (v2gs(s).text_fullscreen() == 0) {                    // TEST word ds:9569h
-                if (s[DS_LEVEL_FLAGS] & 0xE0) {                             // TEST byte ds:25CFh, 0E0h
+                if (v2gs(s).level_flags_b() & 0xE0) {                             // TEST byte ds:25CFh, 0E0h
                     set_dirty = false;                               // JNZ loc_1E147 (skip OR)
                 }
             }
@@ -3983,7 +3983,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
 
     // loc_1DF5C (orig 38211-38217):
     // OUT(0x3CE, 0xFF08); — VGA graphics: bit mask reset, commented
-    s[DS_SPRITE_FORCE] = 0;                                  // 38215 mov byte ds:9568h, 0
+    v2gs(s).sprite_force_b(0);                                  // 38215 mov byte ds:9568h, 0
     // POP es; RETF
 }
 
@@ -4298,7 +4298,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         if (!(flags & 0x8000)) continue;                           // 38002-38003 not active
         if (flags & 0x6000) continue;                              // 38004-38005 priority skip
 
-        bool force_render = (s[DS_SPRITE_FORCE] != 0);             // 38006-38007 test ds:9568h
+        bool force_render = (v2gs(s).sprite_force_b() != 0);             // 38006-38007 test ds:9568h
         bool mode_pending = (s[slot + OBJ_DIRTY_MODE] != 0);       // 38008-38009 test [di+114Dh]
         if (!force_render && !mode_pending) {
             if (!v2_sprite_visible_1CDEF(s, slot)) continue;       // 38010-38011 call sub_1CDEF; jz
@@ -4333,7 +4333,7 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_X) = *(uint16_t*)(s + slot + OBJ_SPRITE_X);
         *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_Y) = *(uint16_t*)(s + slot + OBJ_SPRITE_Y);
     }
-    s[DS_SPRITE_FORCE] = 0;                                        // 38034 mov byte ds:9568h, 0
+    v2gs(s).sprite_force_b(0);                                        // 38034 mov byte ds:9568h, 0
 }
 
 // sub_1DF6A: state change redraw — position copy for dirty objects.
@@ -4639,8 +4639,8 @@ static void v2_clear_viking_state_111df(uint8_t* s) {
 static void v2_glyph_list_clear_12816(uint8_t* s) {
     extern int v2_dbg_pre_vm_iter;
     fprintf(stderr, "V2-DLG-CLR[f%d]: sub_12816 lvl=%04X 956B_before=%02X\n",
-        v2_dbg_pre_vm_iter, v2gs(s).level(), s[DS_GLYPH_DIRTY]);
-    s[DS_GLYPH_DIRTY] = 0; // byte_31A4B
+        v2_dbg_pre_vm_iter, v2gs(s).level(), v2gs(s).glyph_dirty_b());
+    v2gs(s).glyph_dirty_b(0); // byte_31A4B
     memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2); // REP STOSW
 }
 
@@ -4648,7 +4648,7 @@ static void v2_glyph_list_clear_12816(uint8_t* s) {
 // Reads viking type + item data for each viking from spawn table.
 static uint16_t v2_hud_init_1133a(uint8_t* s, uint16_t di) {
     uint16_t ax = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE));   // 16-bit wrap
-    s[DS_PAL_ANIM_EN] = (uint8_t)ax; // byte_2AA63
+    v2gs(s).pal_anim_en_b((uint8_t)ax); // byte_2AA63
     di += 2;
     for (uint16_t si = 0; ; si++) {
         ax = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE)) & 0xFF;
@@ -4708,7 +4708,7 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
 // Centers viewport on viking, clamps to scroll limits.
 static void v2_viewport_init_113d8(uint8_t* s) {
     uint16_t si = 0;
-    if (s[DS_ACTIVE_VK_SEL] != 0) si = v2gs(s).active_viking(); // byte_2AA9A, word_288A2
+    if (v2gs(s).active_vk_sel_b() != 0) si = v2gs(s).active_viking(); // byte_2AA9A, word_288A2
 
     // X: center on viking, clamp to [0, scroll_X_limit]
     int16_t ax = ObjMem{s, si}.i16(OBJ_WORLD_X) - 0xA0;   // 16-bit wrap (unit 46, div #21)
@@ -4738,7 +4738,7 @@ static void v2_viewport_init_113d8(uint8_t* s) {
 // For tile levels: nested loop height × width, copies tile data to FS with VGA page layout.
 // Also copies GS row data to DS at ds:0x2E65 offset.
 static void v2_scroll_init_173c7(uint8_t* s) {
-    if (s[DS_LEVEL_FLAGS] & 0x42) {
+    if (v2gs(s).level_flags_b() & 0x42) {
         // loc_1744f: chunk/intro level — clear FS segment
         // es = fs = ds:0x2E69, clear 0x3020 dwords = 0xC080 bytes
         memset(v2_vm_shadow_fs, 0, 0x3020 * 4);
@@ -4747,7 +4747,7 @@ static void v2_scroll_init_173c7(uint8_t* s) {
     }
     // Normal tile level: build FS from ES (tilemap) + GS (tile masks)
     uint16_t cols = v2gs(s).map_bp();  // map width in tiles
-    printf("V2-173C7: cols=%d rows=%d bp=%d flag=%02X\n", cols, v2gs(s).map_height(), cols*4, s[DS_LEVEL_FLAGS]);
+    printf("V2-173C7: cols=%d rows=%d bp=%d flag=%02X\n", cols, v2gs(s).map_height(), cols*4, v2gs(s).level_flags_b());
     uint16_t rows = v2gs(s).map_height();  // map height in tiles
     uint16_t bp = cols * 4;  // FS row stride (4 bytes per tile in FS)
     uint8_t* es = v2_vm_shadow_tilemap;       // tilemap (ES = ds:0x2E63)
@@ -4995,7 +4995,7 @@ static void v2_scroll_spawn_tracker_1673c(uint8_t* s) {
 // if !(byte_2AAAF & 0x42): call sub_16ded (VGA tile row rendering)
 // then jmp sub_16775 (page flip — tail call)
 static void v2_render_flag_init_11439(uint8_t* s) {
-    if (!(s[DS_LEVEL_FLAGS] & 0x42)) {
+    if (!(v2gs(s).level_flags_b() & 0x42)) {
         v2_vga_band_16ded(s);                // CALL sub_16DED (extracted, unit 136)
     }
     // jmp sub_16775: page flip (tail call)
@@ -5317,7 +5317,7 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
     uint16_t active = v2gs(shadow).active_viking(); // word_288A2
     uint16_t prev = v2gs(shadow).prev_viking();   // word_288A4
 
-    uint8_t flag_9a = shadow[DS_ACTIVE_VK_SEL]; // byte_2AA9A
+    uint8_t flag_9a = v2gs(shadow).active_vk_sel_b(); // byte_2AA9A
     if (flag_9a == 0) return;          // TEST ...,0xFF; JZ locret_1081C
 
     { uint16_t _lv = v2gs(shadow).level(); static int _dm2=0;
@@ -5477,7 +5477,7 @@ static void v2_spawn_vikings_11569(uint8_t* s, uint16_t di_table) {
 // rows, scan-start=6, prev-viking=0xFFFF.
 static void v2_game_mode_init_11446(uint8_t* s) {
     v2gs(s).obj_scan_start(0);                 // 2713 word_2881C = 0
-    uint16_t mode = s[DS_ACTIVE_VK_SEL] & 0xFF;              // 2714-2715 byte_2AA9A
+    uint16_t mode = v2gs(s).active_vk_sel_b() & 0xFF;              // 2714-2715 byte_2AA9A
     if (mode == 0) {
         // loc_1146A (2729-2741): normal gameplay — single spawn, early RETN.
         v2gs(s).spawn_pool_sel(v2gs(s).spawn_pool0());
@@ -5562,7 +5562,7 @@ static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
     }
     // Copy word_303EB → word_2AA88, byte_303ED → byte_2AA8A
     v2gs(s).dac_r_save_w(*(uint16_t*)(s + DS_DAC_R));
-    s[DS_DAC_B_SAVE] = s[DS_DAC_B];
+    v2gs(s).dac_b_save_b(s[DS_DAC_B]);
     // jmp sub_10e99: palette color correction (copies 7F02 → 8202 with shading)
     v2_pal_correct_10e99(s);
     return di + 2;
@@ -6424,7 +6424,7 @@ static void v2_vga_modex_init_167ff(uint8_t* s) {
     // INT 10h/0Fh: get current video mode → ds:0x9300
     // Original saves current mode before switching to Mode X.
     // v2 standalone: no VGA, write 0x03 (text mode, expected diff)
-    s[DS_VGA_MODE_BYTE] = 0x00; // INT 10h/0Fh returns 0 in SDL wrapper (no real VGA mode)
+    v2gs(s).vga_mode_byte_b(0x00); // INT 10h/0Fh returns 0 in SDL wrapper (no real VGA mode)
 
     // sub_16807: set VGA Mode X. Verified with seg000 lines 14223-14309.
     // INT(0x10, ax=0x13);         // Set video mode 13h (320x200 256-color)
@@ -6452,13 +6452,13 @@ static void v2_vga_modex_init_167ff(uint8_t* s) {
     }
 
     // ds:0x92FF = 1 (VGA mode initialized flag)
-    s[DS_VGA_PAGE_FLAG] = 1;
+    v2gs(s).vga_page_flag_b(1);
 }
 
 // sub_12ca3: game state initialization — clear misc state variables.
 static void v2_game_state_init_12ca3(uint8_t* s) {
-    s[DS_SCRATCH_32E] = 0;                        // byte ds:32Eh
-    s[DS_SCRATCH_28] = 0;                // byte ds:28h
+    v2gs(s).scratch_32e_b(0);                        // byte ds:32Eh
+    v2gs(s).scratch_28_b(0);                // byte ds:28h
     v2gs(s).hud_sel_si(0);         // word ds:3D4h
     v2gs(s).game_mode_ac(0);         // word ds:3CCh (word_288AC)
     v2gs(s).scratch_336(0);         // word ds:336h
@@ -6574,7 +6574,7 @@ static void v2_music_fade_178f1_helper(const uint8_t* s) {
 static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset) {
     uint16_t snd_type = *(uint16_t*)(s + type_byte_offset) & 0xFF;
     fprintf(stderr, "V2-MUSIC-DISPATCH: off=%04X snd_type=%u 25B7=%02X 25B8=%02X 25B9=%02X 25AF=%04X 302=%04X\n",
-        type_byte_offset, snd_type, s[DS_SND_TYPE], s[DS_SND_TRACK], s[DS_SND_FLAG],
+        type_byte_offset, snd_type, v2gs(s).snd_type_b(), v2gs(s).snd_track_b(), v2gs(s).snd_flag_b(),
         v2gs(s).music_track(), v2gs(s).music_mute());
     switch (snd_type) {
         case 0:  // loc_17791: sub_1775d + sub_176bd
@@ -6983,7 +6983,7 @@ static void v2_load_level_11080(uint8_t* s) {
     v2gs(s).obj_count(0); // word_28852 (table end — will be set by object creation)
     v2gs(s).cmd_read(0); // word_2B044
     v2gs(s).cmd_write(0); // word_2A66F
-    s[DS_GLYPH_DIRTY] = 0;                // byte_31A4B
+    v2gs(s).glyph_dirty_b(0);                // byte_31A4B
     v2gs(s).shake_src_x(0); // word_2887A
     v2gs(s).shake_src_y(0); // word_2887C
     v2gs(s).shake_gate_x(0); // word_28882
@@ -7225,7 +7225,7 @@ static void v2_load_level_data(uint8_t* shadow) {
     // Do NOT clear shadow segments — init_shadow_early copied the same garbage
     // as real segments. v2_read_chunk overwrites the decompressed portion.
     // Unused portions stay as garbage, matching real segments.
-    uint8_t flags = shadow[DS_LEVEL_FLAGS];
+    uint8_t flags = v2gs(shadow).level_flags_b();
     // Orig sub_11204:
     //   test byte_2AAAF, 2;     jnz loc_11254 (intro type 1, retn)
     //   test byte_2AAAF, 0x20;  jnz loc_112a2 (HUD-only, jmp loc_1121b)
@@ -7375,13 +7375,13 @@ void v2_render_callback() {
     //   m2c-added: myDrawInfo->myPixelOffset = al / 2
     //   DEC word_3287C
     //   palette dispatch via off_17974[word_303DE]
-    if (s[DS_PAN_GATE] != 0) {                    // byte_317df at ds:0x92F2 (gate)
+    if (v2gs(s).pan_gate_b() != 0) {                    // byte_317df at ds:0x92F2 (gate)
         // CRTC pixel pan mirror — update v2 render buffer offset.
         // orig writes to VGA hardware via OUT(0x3C0); m2c port mirrors via
         // myDrawInfo->myPixelOffset. v2 mirrors via myDrawInfo_v2->myPixelOffset
         // so v2 render output also reflects pan adjustment.
         if (myDrawInfo_v2) {
-            uint8_t al = s[DS_PIXEL_PAN];          // byte_317CE at ds:0x92EE
+            uint8_t al = v2gs(s).pixel_pan_b();          // byte_317CE at ds:0x92EE
             myDrawInfo_v2->myPixelOffset = al / 2;
         }
     }
@@ -7522,8 +7522,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // sub_14590 (only from loc_10469 path)
             v2_cc_v2_hit(CC_14590);   // M1 wave-2 (#65) — pw-path copy
             shadow[DS_PAL_SHADE_R] = 0; shadow[DS_PAL_SHADE_G] = 0; shadow[DS_PAL_SHADE_B] = 0;
-            shadow[DS_PAL_FLAGS] &= 0xFE;
-            if (shadow[DS_PAL_FLAGS] == 0)
+            v2gs(shadow).pal_flags_bref() &= 0xFE;
+            if (v2gs(shadow).pal_flags_b() == 0)
                 v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
             v2gs(shadow).pal_req(4);
             v2_pal_correct_10e99(shadow);
@@ -7645,7 +7645,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     //   V2_ONLY: orig not running → no signal. v2 drives full pause loop itself
     //            via v2_run_pause_entry + spin v2_run_pause_loop until exit.
 #ifdef V2_ONLY
-    if ((shadow[DS_LEVEL_FLAGS] & 1) && (v2gs(shadow).input_edges() & 0x2000)) {
+    if ((v2gs(shadow).level_flags_b() & 1) && (v2gs(shadow).input_edges() & 0x2000)) {
         // Mirror orig sub_11ba5 entry: clear bit, plays pause SFX, init state, render block.
         v2gs(shadow).frame_flags_ref() &= 0xFFFB;       // clear word_28814 bit 4 (analog viking switch)
         extern void v2_run_pause_entry(uint8_t*);
@@ -8817,7 +8817,7 @@ static void v2_page_rotate_165aa(uint8_t* shadow) {
             // Original: CALLF sub_1DF6A (position copy + VGA redraw)
             v2_dirty_obj_pos_1DF6A(shadow);
             // Original: MOV byte ptr ds:9568h, 1
-            shadow[DS_SPRITE_FORCE] = 1;
+            v2gs(shadow).sprite_force_b(1);
         }
         // ds:0x9568 is cleared by v2_late_sprites_1DD9C (via s[0x9568] = 0 at end of loop)
         // Do NOT clear it here — it must persist until sub_1DD9C reads it.
@@ -12195,12 +12195,12 @@ extern "C" void v2_fntest_call_hudvga(int which, uint8_t* shadow, uint16_t ax,
     case 8: v2_hud_update_11792(shadow); break;
     case 9: v2_viking_proximity_11f47(shadow); break;
     case 10:   // sub_103ca: quit-prompt path — force the F10 spec key
-        shadow[DS_KEY_F10] = 1; shadow[DS_KEY_ALT] = 0;
+        v2gs(shadow).key_f10_b(1); v2gs(shadow).key_alt_b(0);
         v2_pw_pre_loop(shadow);
         break;
     case 11:   // sub_1047c: pause-prompt path — no quit keys
-        shadow[DS_KEY_F10] = 0; shadow[DS_KEY_ALT] = 0;
-        shadow[DS_KEY_X] = 0; shadow[DS_KEY_Q] = 0;
+        v2gs(shadow).key_f10_b(0); v2gs(shadow).key_alt_b(0);
+        v2gs(shadow).key_x_b(0); v2gs(shadow).key_q_b(0);
         v2_pw_pre_loop(shadow);
         break;
     }
@@ -12230,7 +12230,7 @@ static void v2_hud_reset_12034(uint8_t* s) {
 // HUD chunk load, then the reset/redraw chain 1200a → 1201d → 12034 → 120d1.
 static void v2_hud_full_reinit_117ad(uint8_t* s) {
     v2gs(s).hud_disp_mode(2);   // word_28820 — HUD redraw request (NOT 0x334)
-    if (!(s[DS_LEVEL_FLAGS] & 1)) return;
+    if (!(v2gs(s).level_flags_b() & 1)) return;
     v2_load_chunk_10cd8(s, 1, 0);
     v2_hud_reset_1200a(s);
     v2_hud_items_full_1201d(s);
@@ -12990,7 +12990,7 @@ static void v2_vm_op_3E(V2VM& vm) {
     vm.ds_write_b(DS_PAL_SHADE_R, 0);
     vm.ds_write_b(DS_PAL_SHADE_G, 0);
     vm.ds_write_b(DS_PAL_SHADE_B, 0);
-    uint8_t flags = vm.shadow[DS_PAL_FLAGS] & 0xFE;
+    uint8_t flags = v2gs(vm.shadow).pal_flags_b() & 0xFE;
     vm.ds_write_b(DS_PAL_FLAGS, flags);
     if (flags == 0) {
         vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_SRC);
@@ -13439,7 +13439,7 @@ static void v2_vm_op_4C(V2VM& vm) {
     vm.ds_write_b(DS_PAL_SHADE_G2, (uint8_t)(g << 1));
     uint8_t b = vm.read_u8();
     vm.ds_write_b(DS_PAL_SHADE_B2, (uint8_t)(b << 1));
-    uint8_t flags = vm.shadow[DS_PAL_FLAGS];
+    uint8_t flags = v2gs(vm.shadow).pal_flags_b();
     vm.ds_write_b(DS_PAL_FLAGS, flags | 2);
     vm.ds_write(DS_PAL_REQ, 4);
     vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
@@ -13454,7 +13454,7 @@ static void v2_vm_op_4D(V2VM& vm) {
     vm.ds_write_b(DS_PAL_SHADE_R2, 0);
     vm.ds_write_b(DS_PAL_SHADE_G2, 0);
     vm.ds_write_b(DS_PAL_SHADE_B2, 0);
-    uint8_t flags = vm.shadow[DS_PAL_FLAGS] & 0xFD;
+    uint8_t flags = v2gs(vm.shadow).pal_flags_b() & 0xFD;
     vm.ds_write_b(DS_PAL_FLAGS, flags);
     if (flags == 0) {
         vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_SRC);
@@ -16607,7 +16607,7 @@ static void v2_vm_op_3D(V2VM& vm) {
     vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)(r << 1));
     vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)(g << 1));
     vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)(b << 1));
-    uint8_t flags = vm.shadow[DS_PAL_FLAGS];
+    uint8_t flags = v2gs(vm.shadow).pal_flags_b();
     vm.ds_write_b(DS_PAL_FLAGS, flags | 1);
     vm.ds_write(DS_PAL_REQ, 4);
     vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
@@ -18149,7 +18149,7 @@ static void v2_page_flip_16775(uint8_t* s) {
         if (x_offset > x_level_size)
             x_offset = x_disp - x_some;
         uint8_t x_low_bits = x_offset & 0x3;
-        s[DS_PIXEL_PAN] = x_low_bits * 2;
+        v2gs(s).pixel_pan_b(x_low_bits * 2);
     }
     v2gs(s).vsync_count(1);                                     // word_3287C = 1
     v2gs(s).saved_vp_x(v2gs(s).viewport_x());               // save viewport X
@@ -18357,9 +18357,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 // i.e. XOR fires ONLY when byte_3166B == 1. Previous inline had inverted
                 // branch — toggled DS[0x304] every frame when no key pressed → diverged.
                 V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:run_anim_vm:sub_108c8");
-                s[DS_SPEC_KEY_S] = sdl_spec_get(0x918B);  // SDL S — exact orig INT9
-                if (s[DS_KEY_ALT] == 1 && s[DS_SPEC_KEY_S] == 1) {
-                    s[DS_SPEC_KEY_S] = 0;   // byte_3166B = 0
+                v2gs(s).spec_key_s_b(sdl_spec_get(0x918B));  // SDL S — exact orig INT9
+                if (v2gs(s).key_alt_b() == 1 && v2gs(s).spec_key_s_b() == 1) {
+                    v2gs(s).spec_key_s_b(0);   // byte_3166B = 0
                     s[DS_SFX_MUTE] ^= 1;   // word_287E4 ^= 1
                     if (s[DS_SFX_MUTE] & 1) {
                         // Toggle set → stop sounds on channel si=2..8
@@ -18374,9 +18374,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     }
                 }
                 // Part 2: music channel toggle (byte_3167E ds:0x919E)
-                s[DS_SPEC_KEY_M] = sdl_spec_get(0x919E);  // SDL M — exact orig INT9
-                if (s[DS_SPEC_KEY_M] == 1) {
-                    s[DS_SPEC_KEY_M] = 0;   // byte_3167E = 0
+                v2gs(s).spec_key_m_b(sdl_spec_get(0x919E));  // SDL M — exact orig INT9
+                if (v2gs(s).spec_key_m_b() == 1) {
+                    v2gs(s).spec_key_m_b(0);   // byte_3167E = 0
                     s[DS_MUSIC_MUTE] ^= 1;   // word_287E2 ^= 1
                     if (!(s[DS_MUSIC_MUTE] & 1)) {
                         // sub_176bd(si=0, ax=0, bx=ds:0x2E6B) — AIL play, skipped
@@ -18396,16 +18396,16 @@ void v2_run_animation_vm(uint16_t ds_val) {
         if (v2gs(s).cmd_write() == 0) {
             bool trigger = false;
             // Frame-frozen snap mirror (see seg000.cpp sub_10350 notes).
-            s[DS_KEY_F10] = sdl_spec_get(DS_KEY_F10);  // F10
+            v2gs(s).key_f10_b(sdl_spec_get(DS_KEY_F10));  // F10
             V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:run_anim_vm:sub_10350");
-            s[DS_KEY_X] = sdl_spec_get(DS_KEY_X);  // X
-            s[DS_KEY_Q] = sdl_spec_get(DS_KEY_Q);  // Q
-            if (s[DS_KEY_F10] == 1) trigger = true;
-            else if (s[DS_KEY_ALT] == 1) {
-                if (s[DS_KEY_X] == 1 || s[DS_KEY_Q] == 1) trigger = true;
+            v2gs(s).key_x_b(sdl_spec_get(DS_KEY_X));  // X
+            v2gs(s).key_q_b(sdl_spec_get(DS_KEY_Q));  // Q
+            if (v2gs(s).key_f10_b() == 1) trigger = true;
+            else if (v2gs(s).key_alt_b() == 1) {
+                if (v2gs(s).key_x_b() == 1 || v2gs(s).key_q_b() == 1) trigger = true;
             }
             if (trigger) {
-                if (v2gs(s).game_mode_ac() == 0x8000 || (s[DS_LEVEL_FLAGS] & 8)) {
+                if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
                     // loc_10e35: orig path = QUIT to DOS, NOT level reload.
                     // sub_16546 (VGA cleanup, no DS writes), sub_1754c (AIL exit),
                     // INT 21h/49 (free DOS memory), INT 21h/4C (terminate program).
@@ -18443,8 +18443,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         // tail JMP sub_14590 (orig loc_103b7 eip 0x3C6)
                         v2_cc_v2_hit(CC_14590);
                         s[DS_PAL_SHADE_R] = 0; s[DS_PAL_SHADE_G] = 0; s[DS_PAL_SHADE_B] = 0;
-                        s[DS_PAL_FLAGS] &= 0xFE;
-                        if (s[DS_PAL_FLAGS] == 0)
+                        v2gs(s).pal_flags_bref() &= 0xFE;
+                        if (v2gs(s).pal_flags_b() == 0)
                             v2gs(s).pal_src_ptr(DS_PAL_SRC);
                         v2gs(s).pal_req(4);
                         v2_pal_correct_10e99(s);            // JMP sub_10E99 tail
@@ -18656,7 +18656,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
 // init value while orig updates them to match ds:0x15AD/0x15AF/0x15B1.
 static void v2_portrait_sync_11b0b_per_frame(uint8_t* s) {
     // Same gating as orig sub_11792: only run if HUD active and not on level 0x2C.
-    if (!(s[DS_LEVEL_FLAGS] & 1) || v2gs(s).level() == 0x2C) return;
+    if (!(v2gs(s).level_flags_b() & 1) || v2gs(s).level() == 0x2C) return;
     // Viking 1
     if (*(uint16_t*)(s + (DS_PORTRAIT_SND)) != *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) ||
         *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + (DS_PORTRAIT_PREV))) {
@@ -19412,10 +19412,10 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         // shadow stays in lockstep with real (both update or both stay sticky
         // from sub_108c8 OR-in). Running PART A unconditionally would update
         // shadow even when orig skipped → divergence at 0x91A4 etc.
-        s[DS_KEY_F10] = sdl_spec_get(DS_KEY_F10);
+        v2gs(s).key_f10_b(sdl_spec_get(DS_KEY_F10));
         V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:V2_ONLY:PART_A");
-        s[DS_KEY_X] = sdl_spec_get(DS_KEY_X);
-        s[DS_KEY_Q] = sdl_spec_get(DS_KEY_Q);
+        v2gs(s).key_x_b(sdl_spec_get(DS_KEY_X));
+        v2gs(s).key_q_b(sdl_spec_get(DS_KEY_Q));
 #endif
 #ifdef V2_ONLY
         // PART B (V2_ONLY only): detect F10/ALT+X/ALT+Q and drive quit-prompt.
@@ -19432,12 +19432,12 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         // inline impl had broken loop body (no render calls) → menu invisible,
         // music_play looped (field-reported bug).
         bool trigger = false;
-        if (s[DS_KEY_F10] == 1) trigger = true;
-        else if (s[DS_KEY_ALT] == 1) {
-            if (s[DS_KEY_X] == 1 || s[DS_KEY_Q] == 1) trigger = true;
+        if (v2gs(s).key_f10_b() == 1) trigger = true;
+        else if (v2gs(s).key_alt_b() == 1) {
+            if (v2gs(s).key_x_b() == 1 || v2gs(s).key_q_b() == 1) trigger = true;
         }
         if (trigger) {
-            if (v2gs(s).game_mode_ac() == 0x8000 || (s[DS_LEVEL_FLAGS] & 8)) {
+            if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
                 // loc_10E35: direct QUIT to DOS (orig: sub_16546 VGA cleanup +
                 // sub_1754c AIL exit + INT 21h/4C). v2: stop sound + _exit(0).
                 orig_pool.stop_all_sfx();
@@ -19465,8 +19465,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                     // where sub_1450b ran). Clear palette transform + restore
                     // default via sub_10e99. Same as ESC path at line 5867.
                     s[DS_PAL_SHADE_R] = 0; s[DS_PAL_SHADE_G] = 0; s[DS_PAL_SHADE_B] = 0;
-                    s[DS_PAL_FLAGS] &= 0xFE;
-                    if (s[DS_PAL_FLAGS] == 0)
+                    v2gs(s).pal_flags_bref() &= 0xFE;
+                    if (v2gs(s).pal_flags_b() == 0)
                         v2gs(s).pal_src_ptr(DS_PAL_SRC);
                     v2gs(s).pal_req(4);
                     v2_pal_correct_10e99(s);
@@ -19559,9 +19559,9 @@ void v2_phase_frame_end(uint16_t ds_val) {
                 // unconditionally → when F5 pressed AND F6 SDL state=1, v2 set
                 // shadow[0x91AC]=1 but orig never touched real[0x91AC] (skipped F6
                 // OR via JNZ from F5 path) → divergence at FIRST MISMATCH.
-                s[DS_SPEC_KEY_F5] = sdl_spec_get(0x91AB);  // SDL F5 — exact orig INT9
-                if (s[DS_SPEC_KEY_F5] == 1) { // byte_3168B == 1 (F5: prev level)
-                    s[DS_SPEC_KEY_F5] = 0; // SDL port: clear byte (no INT 9 KEYUP path)
+                v2gs(s).spec_key_f5_b(sdl_spec_get(0x91AB));  // SDL F5 — exact orig INT9
+                if (v2gs(s).spec_key_f5_b() == 1) { // byte_3168B == 1 (F5: prev level)
+                    v2gs(s).spec_key_f5_b(0); // SDL port: clear byte (no INT 9 KEYUP path)
                     v2gs(s).frame_flags_ref() |= 1; // OR word_28814, 1
                     int16_t ax = level;
                     ax -= 1; // DEC ax
@@ -19569,9 +19569,9 @@ void v2_phase_frame_end(uint16_t ds_val) {
                     v2gs(s).level_load((uint16_t)ax); // MOV word_2AAA9, ax
                 } else {
                     // loc_10121: F5 didn't fire → check F6 (orig line 2177)
-                    s[DS_SPEC_KEY_F6] = sdl_spec_get(0x91AC);  // SDL F6 — exact orig INT9
-                    if (s[DS_SPEC_KEY_F6] == 1) { // byte_3168C == 1 (F6: next level)
-                        s[DS_SPEC_KEY_F6] = 0; // SDL port: clear byte (no INT 9 KEYUP path)
+                    v2gs(s).spec_key_f6_b(sdl_spec_get(0x91AC));  // SDL F6 — exact orig INT9
+                    if (v2gs(s).spec_key_f6_b() == 1) { // byte_3168C == 1 (F6: next level)
+                        v2gs(s).spec_key_f6_b(0); // SDL port: clear byte (no INT 9 KEYUP path)
                         v2gs(s).frame_flags_ref() |= 1; // OR word_28814, 1
                         // word_2AAA9 already set by VM (next level destination)
                     }
@@ -19771,9 +19771,9 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
     // sub_101be: palette animation DEC pass (writes ds:[7EFE] = 2 if loop ran)
     // ROOT-CAUSE diag: tag this callsite (viking switch loop, mirror of eip 0x0174).
     { static int _vc = 0; _vc++;
-      if (shadow[DS_PAL_ANIM_EN] != 0 && _vc <= 300) {
+      if (v2gs(shadow).pal_anim_en_b() != 0 && _vc <= 300) {
         fprintf(stderr, "V2-101BE-VSW[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
-            _vc, shadow[DS_PAL_ANIM_EN],
+            _vc, v2gs(shadow).pal_anim_en_b(),
             shadow[DS_PAL_ANIM_TIMER], shadow[DS_PAL_ANIM_TIMER_1], shadow[DS_PAL_ANIM_TIMER_2], shadow[DS_PAL_ANIM_TIMER_3],
             shadow[DS_PAL_ANIM_TIMER_4], shadow[DS_PAL_ANIM_TIMER_5], shadow[DS_PAL_ANIM_TIMER_6], shadow[DS_PAL_ANIM_TIMER_7]);
       }
@@ -19834,7 +19834,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
         v2gs(s).scratch_34(2);
         v2_text_render_124c5(s, si_pos, di_pos, bx_text);
-        s[DS_GLYPH_DIRTY] = 1;
+        v2gs(s).glyph_dirty_b(1);
         bx_read += 0x08;
     } else if (cmd_type == 6) {
         // off_2B086[6] = loc_127e4: palette color 3 update (orig OUT 0x3C8,3 +
@@ -19856,14 +19856,14 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
         uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
         v2_glyph_put_1241e(s, ch, si_pos, di_pos);
-        s[DS_GLYPH_DIRTY] = 1;
+        v2gs(s).glyph_dirty_b(1);
         bx_read += 0x08;
     } else if (cmd_type == 2) {
         // off_2B086[2] = loc_12758. Line-by-line mirror of orig (seg000:6304-6355).
         // Each block annotated with orig eip (01A2:XXXX).
         v2gs(s).text_fullscreen(1);                          // 01A2:2759 mov word_31A49, 1
         v2gs(s).ui_throttle(0);                          // 01A2:275F mov word_31DBC, 0
-        if (s[DS_LEVEL_FLAGS] & 0xE0) {                                // 01A2:2765 test byte_2AAAF, 0E0h
+        if (v2gs(s).level_flags_b() & 0xE0) {                                // 01A2:2765 test byte_2AAAF, 0E0h
             v2_page_flip_16775(s); v2_swap_render_buf();             // 01A2:276C sub_16775
             v2_vsync_wait_10130(s);                                   // 01A2:276F sub_10130
             v2_draw_ui(v2_current_ds_val);                     // m2c port: v2_draw_ui (was inline before sub_1E0C7)
@@ -19902,7 +19902,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_page_flip_16775(s); v2_swap_render_buf();                 // 01A2:27B2 sub_16775
         v2_vsync_wait_10130(s);                                       // 01A2:27B5 sub_10130
         v2gs(s).text_fullscreen(0);                          // 01A2:27B8 mov word_31A49, 0
-        s[DS_GLYPH_DIRTY] = 0;                                         // 01A2:27BE mov byte_31A4B, 0
+        v2gs(s).glyph_dirty_b(0);                                         // 01A2:27BE mov byte_31A4B, 0
         v2gs(s).ui_throttle(0);                          // 01A2:27C3 mov word_31DBC, 0
         memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2);                      // 01A2:27CC..27D4 rep stosw (ax=0, cx=1B8)
         bx_read += 2;                                          // 01A2:27D7 add bx, 2
@@ -20027,7 +20027,7 @@ static void v2_cmd_text_12709(uint8_t* s, uint16_t bx_read) {
     uint16_t save_si = si_pos, save_di = di_pos;
     v2_text_frame_12388(s, si_pos, di_pos, (uint8_t)ax_align);
     v2_text_render_124c5(s, save_si + 1, save_di + 1, bx_text);
-    s[DS_GLYPH_DIRTY] = 1;
+    v2gs(s).glyph_dirty_b(1);
 }
 
 // sub_1265b: print text ax at (si, di) — sub_12515(ax) + bx=[2850A] +
@@ -20052,7 +20052,7 @@ static void v2_text_print_1265b(uint8_t* s, uint16_t ax, uint16_t si, uint16_t d
 // chain into the blocking pw loop) is class L — verified live via the
 // V2_PHASE_PW_* machinery; this predicate is the diffable prefix.
 static bool v2_pw_gate_1041c(const uint8_t* s) {
-    return s[DS_ACTIVE_VK_SEL] != 0 &&                       // byte_2AA9A
+    return v2gs(s).active_vk_sel_b() != 0 &&                       // byte_2AA9A
            (v2gs(s).frame_flags() & 3) == 0 &&    // word_28814 & 3
            (v2gs(s).input_edges() & 0x1000) != 0 && // word_28898 ESC
            v2gs(s).cmd_write() == 0;        // word_2A66F
@@ -20696,9 +20696,9 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     //   F10 alone:    byte_31690 == 1
     //   ALT+X:        byte_31684 == 1 && byte_31679 == 1
     //   ALT+Q:        byte_31684 == 1 && byte_3165c == 1
-    bool is_quit_path = (shadow[DS_KEY_F10] == 1) ||
-                        (shadow[DS_KEY_ALT] == 1 && shadow[DS_KEY_X] == 1) ||
-                        (shadow[DS_KEY_ALT] == 1 && shadow[DS_KEY_Q] == 1);
+    bool is_quit_path = (v2gs(shadow).key_f10_b() == 1) ||
+                        (v2gs(shadow).key_alt_b() == 1 && v2gs(shadow).key_x_b() == 1) ||
+                        (v2gs(shadow).key_alt_b() == 1 && v2gs(shadow).key_q_b() == 1);
     uint16_t ax_first = is_quit_path ? 3 : 2;
     uint16_t si_first = is_quit_path ? 0x0D : 0x0F;
 
@@ -20752,7 +20752,7 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // sub_104a1 prelude: DS writes + first render pair (eip 0x04A1-0x04C0)
     v2gs(shadow).quit_blink(0x11);          // word_28925
     v2gs(shadow).quit_active(1);             // word_28923 = cursor pos
-    shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B
+    v2gs(shadow).glyph_dirty_b(1);                            // byte_31A4B
     // №58: orig eip 0x4B4-0x4B9 (PUSHF/CLI; MOV ax,3Fh; OUT 3C9,al ×3; POPF)
     // writes DAC color 3 = white — the index was armed by the OUT 3C8,3 in
     // sub_103ca (0x3D5) / sub_1047c (0x487). Mirror into the shadow DAC.
@@ -20799,11 +20799,11 @@ static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
     else if (ni & 0x1000) { exit_ax = 1; exit = true; consumed_bit = 0x1000; }
     else {
         // Y/N: live state read (no snap) — see seg000 sub_105cb note about why.
-        shadow[DS_SPEC_KEY_Y] = sdl_spec_state_get(0x9181);  // SDL Y — live atomic
-        if (shadow[DS_SPEC_KEY_Y] != 0) { exit_ax = 0; exit = true; }
+        v2gs(shadow).spec_key_y_b(sdl_spec_state_get(0x9181));  // SDL Y — live atomic
+        if (v2gs(shadow).spec_key_y_b() != 0) { exit_ax = 0; exit = true; }
         else {
-            shadow[DS_SPEC_KEY_N] = sdl_spec_state_get(0x919D);  // SDL N — live atomic
-            if (shadow[DS_SPEC_KEY_N] != 0) { exit_ax = 1; exit = true; }
+            v2gs(shadow).spec_key_n_b(sdl_spec_state_get(0x919D));  // SDL N — live atomic
+            if (v2gs(shadow).spec_key_n_b() != 0) { exit_ax = 1; exit = true; }
             else { exit_ax = 0; exit = false; }
         }
     }
@@ -20895,8 +20895,8 @@ static void v2_pw_post_loop(uint8_t* shadow) {
     // entered the path that called sub_1450b.
     if (v2_pw_did_save_1450b) {
         shadow[DS_PAL_SHADE_R] = 0; shadow[DS_PAL_SHADE_G] = 0; shadow[DS_PAL_SHADE_B] = 0;
-        shadow[DS_PAL_FLAGS] &= 0xFE;
-        if (shadow[DS_PAL_FLAGS] == 0)
+        v2gs(shadow).pal_flags_bref() &= 0xFE;
+        if (v2gs(shadow).pal_flags_b() == 0)
             v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
         v2gs(shadow).pal_req(4);
         v2_pal_correct_10e99(shadow);
