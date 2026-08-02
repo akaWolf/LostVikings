@@ -125,6 +125,15 @@ public:
         if (seg == STACK_PARA) { return stack_mem + (off % STACK_SIZE); }
         for (int i = 0; i < extra_n; i++)
             if (extra[i].para == seg) return extra[i].ptr + off;
+        if (seg == 0) {
+            // Null far pointer dereference. The blob does these legitimately:
+            // fn9B walks a sequence's TIMB chunk pointer and an empty slot is
+            // {0,0} — on real DOS the read hits the IVT and the 'TIMB'
+            // signature compare simply fails. Model: reads-as-zero page.
+            // (Writes through null still fault below via the caller check.)
+            static uint8_t zero_page[16] = {0};
+            return zero_page;
+        }
         fail("far access to unmodeled segment %04X:%04X", seg, off);
         static uint8_t sink[4] = {0};
         return sink;
