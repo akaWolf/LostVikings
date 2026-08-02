@@ -95,8 +95,10 @@ public:
     // ------------------------------------------------------------------ setup
     void load(const uint8_t* blob, uint32_t blob_size,
               const uint8_t* bank_data, uint32_t bank_sz) {
-        static uint8_t drv_copy[0x8000];
-        static uint8_t bank_copy[0x4000];
+        // Full 64K arenas: the blob addresses cs:0xFFFF-ish freely (frequency
+        // LUT xlat, wrap-around reads) — undersized arenas segfault the host.
+        static uint8_t drv_copy[0x10000 + 16];
+        static uint8_t bank_copy[0x10000 + 16];
         if (blob_size > sizeof(drv_copy) || bank_sz > sizeof(bank_copy)) {
             fail("blob/bank larger than the interpreter arenas");
             return;
@@ -126,13 +128,20 @@ public:
         if (seg == DRV_PARA) {
             if ((uint32_t)off + len <= 0x10000) return drv + off;  // blob addresses wrap in 64K like real DS
         }
-        if (seg >= BANK_PARA && (uint32_t)((seg - BANK_PARA) << 4) < bank_size)
-            return bank + ((seg - BANK_PARA) << 4) + off;
+        if (seg >= BANK_PARA && (uint32_t)((seg - BANK_PARA) << 4) < bank_size) {
+            uint32_t lin = ((uint32_t)(seg - BANK_PARA) << 4) + off;
+            if (lin + len <= 0x10000) return bank + lin;   // 64K arena
+        }
         if (seg == STACK_PARA) { return stack_mem + (off % STACK_SIZE); }
         for (int i = 0; i < extra_n; i++) {
             uint32_t delta = (uint32_t)(uint16_t)(seg - extra[i].para) << 4;
-            if (seg >= extra[i].para && delta < extra[i].size)
-                return extra[i].ptr + delta + off;
+            if (seg >= extra[i].para && delta < extra[i].size) {
+                if (delta + off + len <= extra[i].size) return extra[i].ptr + delta + off;
+                fail("mapped segment %04X overrun at +%05X (size %05X)",
+                     extra[i].para, delta + off, extra[i].size);
+                static uint8_t sink2[4] = {0};
+                return sink2;
+            }
         }
         if (seg == 0) {
             // Null far pointer dereference. The blob does these legitimately:
@@ -539,6 +548,8 @@ prefix:
         case 0xFB: r.if_ = true; break;   // sti
         case 0xFC: r.df = false; break;   // cld
         case 0xFD: r.df = true; break;    // std
+        case 0xD7: { uint16_t off = (uint16_t)(r.bx + (uint8_t)r.ax);                   // xlat
+                     r.ax = (uint16_t)((r.ax & 0xFF00) | rd8(sreg(seg_override >= 0 ? seg_override : 3), off)); break; }
         case 0x98: r.ax = (uint16_t)(int16_t)(int8_t)r.ax; break;                        // cbw
         case 0x99: r.dx = (r.ax & 0x8000) ? 0xFFFF : 0x0000; break;                      // cwd
 
@@ -574,6 +585,17 @@ prefix:
                     case 0x6F: { if (out_hook) { uint16_t v = rd16(sreg(seg_override >= 0 ? seg_override : 3), r.si);
                                  out_hook(r.dx, (uint8_t)v); out_hook(r.dx, (uint8_t)(v >> 8)); }
                                  r.si = (uint16_t)(r.si + (r.df ? -2 : 2)); break; }                                            // outsw
+                    case 0xAE: { sub8((uint8_t)r.ax, rd8(r.es, r.di));                                                          // scasb
+                                 r.di = (uint16_t)(r.di + (r.df ? -1 : 1));
+                                 if (r.zf != is_repe) goto rep_done; break; }
+                    case 0xAF: { sub16(r.ax, rd16(r.es, r.di));                                                                 // scasw
+                                 r.di = (uint16_t)(r.di + (r.df ? -2 : 2));
+                                 if (r.zf != is_repe) goto rep_done; break; }
+                    case 0xA7: { sub16(rd16(sreg(seg_override >= 0 ? seg_override : 3), r.si), rd16(r.es, r.di));               // cmpsw
+                                 r.si = (uint16_t)(r.si + (r.df ? -2 : 2)); r.di = (uint16_t)(r.di + (r.df ? -2 : 2));
+                                 if (r.zf != is_repe) goto rep_done; break; }
+                    case 0xAC: { r.ax = (uint16_t)((r.ax & 0xFF00) | rd8(sreg(seg_override >= 0 ? seg_override : 3), r.si));    // lodsb
+                                 r.si = (uint16_t)(r.si + (r.df ? -1 : 1)); break; }
                     default: fail("rep with unmodeled string op %02X", sop); return;
                 }
             }
@@ -587,6 +609,14 @@ prefix:
                      r.si = (uint16_t)(r.si + (r.df ? -2 : 2)); r.di = (uint16_t)(r.di + (r.df ? -2 : 2)); break; }
         case 0x6E: { if (out_hook) out_hook(r.dx, rd8(sreg(seg_override >= 0 ? seg_override : 3), r.si));
                      r.si = (uint16_t)(r.si + (r.df ? -1 : 1)); break; }
+        case 0xAE: { sub8((uint8_t)r.ax, rd8(r.es, r.di)); r.di = (uint16_t)(r.di + (r.df ? -1 : 1)); break; }   // scasb
+        case 0xAF: { sub16(r.ax, rd16(r.es, r.di)); r.di = (uint16_t)(r.di + (r.df ? -2 : 2)); break; }          // scasw
+        case 0xAC: { r.ax = (uint16_t)((r.ax & 0xFF00) | rd8(sreg(seg_override >= 0 ? seg_override : 3), r.si)); // lodsb
+                     r.si = (uint16_t)(r.si + (r.df ? -1 : 1)); break; }
+        case 0xAD: { r.ax = rd16(sreg(seg_override >= 0 ? seg_override : 3), r.si);                              // lodsw
+                     r.si = (uint16_t)(r.si + (r.df ? -2 : 2)); break; }
+        case 0xAA: { wr8(r.es, r.di, (uint8_t)r.ax); r.di = (uint16_t)(r.di + (r.df ? -1 : 1)); break; }         // stosb
+        case 0xAB: { wr16(r.es, r.di, r.ax); r.di = (uint16_t)(r.di + (r.df ? -2 : 2)); break; }                 // stosw
 
         // ---- shifts (group 2) ---------------------------------------------
         case 0xD0: case 0xD1: case 0xD2: case 0xD3: {
