@@ -52,6 +52,7 @@
   F1(anim_slot_end,      DS_ANIM_SLOT_END)      \
   F1(accumulator,        DS_ACCUMULATOR)        \
   F1(flag_202,           DS_FLAG_202)           \
+  F1(word_200,           0x0200)                \
   F1(last_char,          DS_LAST_CHAR)          \
   F1(music_mute,         DS_MUSIC_MUTE)         \
   F1(sfx_mute,           DS_SFX_MUTE)           \
@@ -240,6 +241,12 @@
   F1(seg_sound_base,     DS_SEG_SOUND_BASE)     \
   F1(sound_init_932,     DS_SOUND_INIT_932)     \
   F1(xmi_buf_ptr,        DS_XMI_BUF_PTR)        \
+  F1(ail_timbre_toff,    0x992E)                \
+  F1(ail_timbre_tseg,    0x9930)                \
+  F1(ail_req_bank,       0x993E)                \
+  F1(ail_req_patch,      0x9940)                \
+  F1(ail_req_raw,        0x9946)                \
+  FN(ail_state_ptrs,     0x9920, 5)             \
   F1(sound_field_942,    DS_SOUND_FIELD_942)    \
   F1(ail_music_state,    DS_AIL_MUSIC_STATE)    \
   F1(ail_init_done,      DS_AIL_INIT_DONE)      \
@@ -392,7 +399,18 @@
   BN(chunk_d_tbl,      0x497D, 1568)           \
   BN(hud_gfx_tail,     0x647D, 1024)           \
   BN(pw_level_tbl,     0x687D, 5760)          \
-  BN(spawn_area,       DS_SPAWN_TABLE, 1390)
+  BN(spawn_area,       DS_SPAWN_TABLE, 1390)  \
+  BN(ail_seq_states,   0x9950, 2600)           \
+  BN(unused_tail,      0xA3A2, 23646)         \
+  BN(unused_gap_4f9d,  0x4F9D, 224)            \
+  BN(unused_8c,        0x008C, 372)            \
+  BN(coll_partner_area,0x1B25, 642)            \
+  BN(cmd_ring,         0x1DA7, 1000)           \
+  BN(transition_buf,   0x2193, 1000)           \
+  BN(image_data_2bbe,  0x2BBE, 671)            \
+  BN(image_data_8507,  0x8507, 306)            \
+  BN(image_data_8a94,  0x8A94, 964)            \
+  BN(image_data_9348,  0x9348, 544)
 
 // Chunk-loaded DS data zones (bounds = decompressed sizes in DATA.DAT,
 // verified against the loader ladder in v2_vm.cpp:6294):
@@ -400,10 +418,111 @@
 //   chunk_d_tbl:      chunk 0xD, 0x620 at 497D (raw gap E0 to 507D follows)
 //   hud_item_gfx + hud_sel_gfx + hud_gfx_tail: chunk 0xE, 0x1800 at 507D
 //   pw_level_tbl:     chunk 2, 0x1680 at 687D..7EFD (password/level select)
+//   ail_state_ptrs[5] @9920 -> {9950,9B58,9D60,9F68,A170}: five XMID
+//                     sequence state blocks of 0x208 bytes each =
+//                     ail_seq_states @9950..A378 (ends exactly at
+//                     DS_AIL_MUSIC_STATE; pointer table read from the live
+//                     DS dump, stride 0x208 uniform)
+//   unused_tail @A3A2..10000: DGROUP BSS reserve. Proof it is dead: all
+//                     zeros in the EXE image, all zeros in live DS dumps at
+//                     the END of level1 and empty replays, and the full-DS
+//                     hash verify never flagged the range in the project's
+//                     entire history (neither world writes it).
+//   unused_gap_4f9d / unused_8c: dead like the tail (zero in image AND in
+//                     live dumps; full-DS hash verify never flagged them)
+//   word_200 @200:    holds 0x1234 in live dumps (writer not yet traced)
+//   coll_partner_area @1B25..1DA7: collision partner rows (obj<<4)+bit_idx
+//                     (live writes seen at 1BE5/1C25/1C27/1C47); bound =
+//                     the command ring neighbor
+//   cmd_ring @1DA7..218F: command ring buffer body (write/read cursors are
+//                     the DS_CMD_WRITE/DS_CMD_READ fields)
+//   transition_buf @2193..257B: transition-chunk load / queue body area
+//   image_data_2bbe/8507/8a94/9348: immutable image data — byte-identical
+//                     across ds_static, empty-replay and level1-end dumps
 //   spawn_area:       25F6..2B64 (bounds = neighboring proven fields);
 //                     interior: 14-byte spawn/descriptor entries indexed by
 //                     OBJ_ANIM_SUB*14 (ops C7-CA), 0xFFFF-terminated walks,
 //                     pal-anim source bytes at +1/+2 of entries
+
+// Gap-fill zones (generated; classes proven by the three-dump protocol:
+// ds_static image + live empty-replay dump + live level1-end dump, plus
+// the project-wide full-DS hash verify history):
+//   zero_*  = dead reserve;  image_* = immutable data;  rt_* = runtime
+#define V2_GS_FIELDS_GAPFILL(B1, BN) \
+  BN(zero_0000,          0x0000, 40)           \
+  BN(zero_0029,          0x0029, 1)           \
+  BN(zero_002c,          0x002c, 6)           \
+  BN(zero_003c,          0x003c, 2)           \
+  BN(zero_0048,          0x0048, 36)           \
+  BN(zero_0070,          0x0070, 8)           \
+  BN(zero_007e,          0x007e, 2)           \
+  BN(zero_0082,          0x0082, 8)           \
+  BN(rt_0204,            0x0204, 136)           \
+  BN(zero_028e,          0x028e, 116)           \
+  BN(zero_0306,          0x0306, 2)           \
+  BN(zero_0309,          0x0309, 7)           \
+  BN(zero_0318,          0x0318, 22)           \
+  BN(zero_0333,          0x0333, 1)           \
+  BN(zero_0338,          0x0338, 4)           \
+  BN(zero_033e,          0x033e, 2)           \
+  BN(rt_0354,            0x0354, 30)           \
+  BN(rt_0378,            0x0378, 20)           \
+  BN(zero_03bc,          0x03bc, 6)           \
+  BN(zero_03c8,          0x03c8, 2)           \
+  BN(zero_03d2,          0x03d2, 2)           \
+  BN(zero_0420,          0x0420, 1)           \
+  BN(zero_044c,          0x044c, 1)           \
+  BN(zero_25a9,          0x25a9, 1)           \
+  BN(zero_25b1,          0x25b1, 2)           \
+  BN(zero_25c5,          0x25c5, 4)           \
+  BN(rt_25cd,            0x25cd, 2)           \
+  BN(rt_25d0,            0x25d0, 12)           \
+  BN(rt_25e0,            0x25e0, 1)           \
+  BN(rt_25e7,            0x25e7, 15)           \
+  BN(image_2ba6,         0x2ba6, 14)           \
+  BN(zero_8502,          0x8502, 2)           \
+  BN(image_863d,         0x863d, 111)           \
+  BN(rt_86b0,            0x86b0, 2)           \
+  BN(rt_86ba,            0x86ba, 10)           \
+  BN(zero_86c6,          0x86c6, 10)           \
+  BN(zero_86d2,          0x86d2, 8)           \
+  BN(image_86e0,         0x86e0, 6)           \
+  BN(image_871c,         0x871c, 24)           \
+  BN(rt_8736,            0x8736, 120)           \
+  BN(image_897c,         0x897c, 124)           \
+  BN(image_8e68,         0x8e68, 256)           \
+  BN(zero_916c,          0x916c, 16)           \
+  BN(zero_917d,          0x917d, 4)           \
+  BN(zero_9182,          0x9182, 9)           \
+  BN(zero_918c,          0x918c, 13)           \
+  BN(zero_919a,          0x919a, 3)           \
+  BN(zero_919f,          0x919f, 5)           \
+  BN(zero_91a5,          0x91a5, 6)           \
+  BN(zero_91ad,          0x91ad, 3)           \
+  BN(zero_91b1,          0x91b1, 61)           \
+  BN(zero_91f0,          0x91f0, 26)           \
+  BN(zero_920c,          0x920c, 4)           \
+  BN(zero_9212,          0x9212, 12)           \
+  BN(zero_9220,          0x9220, 4)           \
+  BN(zero_9228,          0x9228, 2)           \
+  BN(zero_9230,          0x9230, 46)           \
+  BN(zero_9262,          0x9262, 24)           \
+  BN(zero_9280,          0x9280, 2)           \
+  BN(zero_928a,          0x928a, 2)           \
+  BN(zero_928e,          0x928e, 2)           \
+  BN(zero_9292,          0x9292, 92)           \
+  BN(rt_92ef,            0x92ef, 3)           \
+  BN(rt_92f3,            0x92f3, 4)           \
+  BN(zero_92fd,          0x92fd, 2)           \
+  BN(zero_9301,          0x9301, 4)           \
+  BN(image_931f,         0x931f, 39)           \
+  BN(zero_98de,          0x98de, 12)           \
+  BN(zero_98ec,          0x98ec, 32)           \
+  BN(rt_990e,            0x990e, 18)           \
+  BN(zero_9936,          0x9936, 8)           \
+  BN(zero_9944,          0x9944, 2)           \
+  BN(zero_9948,          0x9948, 8)           \
+  BN(image_a37a,         0xa37a, 32)
 
 // ---------------------------------------------------------------------------
 // The typed state. Serializer contract: v2_gs_deserialize fills every field
@@ -420,6 +539,7 @@ struct V2GameState {
 #define V2_GS_MB1(name, off)     uint8_t name;
 #define V2_GS_MBN(name, off, n)  uint8_t name[n];
   V2_GS_FIELDS_B(V2_GS_MB1, V2_GS_MBN)
+  V2_GS_FIELDS_GAPFILL(V2_GS_MB1, V2_GS_MBN)
 #undef V2_GS_MB1
 #undef V2_GS_MBN
   // uncovered DS bytes, verbatim (shrinks as fields get carved out)

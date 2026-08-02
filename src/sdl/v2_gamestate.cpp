@@ -39,6 +39,7 @@ static void cov_build(void) {
 #define V2_GS_CB1(name, off)     cov_mark((off), 1, #name);
 #define V2_GS_CBN(name, off, n)  cov_mark((off), (n), #name);
     V2_GS_FIELDS_B(V2_GS_CB1, V2_GS_CBN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_CB1, V2_GS_CBN)
 #undef V2_GS_CB1
 #undef V2_GS_CBN
     g_cov_built = true;
@@ -66,6 +67,7 @@ extern "C" void v2_gs_deserialize(V2GameState* gs, const uint8_t* ds) {
 #define V2_GS_DB1(name, off)     gs->name = ds[(off)];
 #define V2_GS_DBN(name, off, n)  memcpy(gs->name, ds + (off), (n));
     V2_GS_FIELDS_B(V2_GS_DB1, V2_GS_DBN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_DB1, V2_GS_DBN)
 #undef V2_GS_DB1
 #undef V2_GS_DBN
     memcpy(gs->raw, ds, 0x10000);   // backing; covered bytes unused on serialize
@@ -84,6 +86,7 @@ extern "C" void v2_gs_serialize(const V2GameState* gs, uint8_t* ds_out) {
 #define V2_GS_SB1(name, off)     ds_out[(off)] = gs->name;
 #define V2_GS_SBN(name, off, n)  memcpy(ds_out + (off), gs->name, (n));
     V2_GS_FIELDS_B(V2_GS_SB1, V2_GS_SBN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_SB1, V2_GS_SBN)
 #undef V2_GS_SB1
 #undef V2_GS_SBN
 }

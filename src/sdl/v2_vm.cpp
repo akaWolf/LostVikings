@@ -18550,6 +18550,15 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         static int gs_rt = -1;
         if (gs_rt < 0) { const char* e = getenv("V2_GS_ROUNDTRIP"); gs_rt = (e && e[0]=='1') ? 1 : 0; }
         if (gs_rt && v2_vm_shadow_ds) {
+            // one-shot live-DS dump for carve research (V2_GS_DUMP_DS=<path>)
+            static int dumped = 0;
+            const char* df = getenv("V2_GS_DUMP_DS");
+            int dumpf = 300;
+            if (const char* fe = getenv("V2_GS_DUMP_FRAME")) dumpf = atoi(fe);
+            if (df && !dumped && v2_dbg_pre_vm_iter >= dumpf) {
+                FILE* f = fopen(df, "wb");
+                if (f) { fwrite(v2_vm_shadow_ds, 1, 0x10000, f); fclose(f); dumped = 1; }
+            }
             char tag[32]; snprintf(tag, sizeof(tag), "f%d", v2_dbg_pre_vm_iter);
             int gs_diffs = v2_gs_roundtrip_check(v2_vm_shadow_ds, tag);
 #ifdef HEADLESS
