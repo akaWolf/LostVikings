@@ -105,6 +105,16 @@ public:
         bank = bank_copy; bank_size = bank_sz;
     }
 
+    // Extra host-mapped segments (XMID data, the game's DS for the state
+    // block fn97 receives, ...). Registered by the integration layer.
+    struct ExtraSeg { uint16_t para; uint8_t* ptr; uint32_t size; };
+    ExtraSeg extra[8]; int extra_n = 0;
+    void map_segment(uint16_t para, uint8_t* ptr, uint32_t size) {
+        for (int i = 0; i < extra_n; i++)
+            if (extra[i].para == para) { extra[i].ptr = ptr; extra[i].size = size; return; }
+        if (extra_n < 8) extra[extra_n++] = {para, ptr, size};
+    }
+
     // Resolve a far address to host memory. Traps on unknown segments —
     // any hit here is a survey gap that must be modeled, never guessed.
     uint8_t* mem(uint16_t seg, uint16_t off, uint32_t len) {
@@ -113,6 +123,8 @@ public:
         }
         if (seg == BANK_PARA)  { return bank + off; }
         if (seg == STACK_PARA) { return stack_mem + (off % STACK_SIZE); }
+        for (int i = 0; i < extra_n; i++)
+            if (extra[i].para == seg) return extra[i].ptr + off;
         fail("far access to unmodeled segment %04X:%04X", seg, off);
         static uint8_t sink[4] = {0};
         return sink;
@@ -701,6 +713,10 @@ extern "C" uint16_t v2_ail_interp_call(uint16_t fn_off, const uint16_t* args, in
 extern "C" uint16_t v2_ail_interp_last_dx() { return g_ail.r.dx; }
 
 extern "C" void v2_ail_interp_set_callback(void (*cb)()) { g_ail.ail_callback_hook = cb; }
+
+extern "C" void v2_ail_interp_map_segment(uint16_t para, uint8_t* ptr, uint32_t size) {
+    g_ail.map_segment(para, ptr, size);
+}
 
 // Look a function code up in the blob's own fn table: word[0] = table offset
 // (0x2D right after the size prefix convention), entries are {word fn_code,
