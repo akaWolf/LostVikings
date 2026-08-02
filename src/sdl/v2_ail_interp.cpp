@@ -517,6 +517,11 @@ prefix:
         case 0xEC: r.ax = (uint16_t)((r.ax & 0xFF00) | (in_hook ? in_hook(r.dx) : 0xFF)); break;
         case 0xE6: { uint8_t p = fetch8(); if (out_hook) out_hook(p, (uint8_t)r.ax); break; }
         case 0xEE: if (out_hook) out_hook(r.dx, (uint8_t)r.ax); break;
+        case 0xEF: if (out_hook) { out_hook(r.dx, (uint8_t)r.ax);                     // out dx, ax:
+                                   out_hook((uint16_t)(r.dx + 1), (uint8_t)(r.ax >> 8)); } break;  // AL->dx, AH->dx+1
+        case 0xED: { uint8_t lo = in_hook ? in_hook(r.dx) : 0xFF;                     // in ax, dx
+                     uint8_t hi = in_hook ? in_hook((uint16_t)(r.dx + 1)) : 0xFF;
+                     r.ax = (uint16_t)(lo | (hi << 8)); break; }
 
         // ---- string ops (rep-prefixed forms handled here) ------------------
         case 0xF2: case 0xF3: {   // repne / rep(e)
@@ -689,4 +694,38 @@ extern "C" uint16_t v2_ail_interp_call(uint16_t fn_off, const uint16_t* args, in
         g_ail.fault = 0;   // one report per call; state may be inconsistent
     }
     return ret;
+}
+
+// dx of the last call (AIL fns return far values in dx:ax — fn64 returns the
+// driver descriptor far pointer this way).
+extern "C" uint16_t v2_ail_interp_last_dx() { return g_ail.r.dx; }
+
+extern "C" void v2_ail_interp_set_callback(void (*cb)()) { g_ail.ail_callback_hook = cb; }
+
+// Look a function code up in the blob's own fn table: word[0] = table offset
+// (0x2D right after the size prefix convention), entries are {word fn_code,
+// word handler_off} pairs terminated by fn_code == 0xFFFF. SBPFM carries 38
+// pairs (64..C2). Returns 0 when absent — 0 is never a valid handler (the
+// table itself lives at the segment start).
+extern "C" uint16_t v2_ail_fn_lookup(uint16_t fn_code) {
+    if (!g_ail.drv) return 0;
+    uint16_t tab = (uint16_t)(g_ail.drv[0] | (g_ail.drv[1] << 8));
+    for (uint32_t p = tab; p + 4 <= g_ail.drv_size; p += 4) {
+        uint16_t fn  = (uint16_t)(g_ail.drv[p]     | (g_ail.drv[p + 1] << 8));
+        uint16_t off = (uint16_t)(g_ail.drv[p + 2] | (g_ail.drv[p + 3] << 8));
+        if (fn == 0xFFFF) break;
+        if (fn == fn_code) return off;
+    }
+    return 0;
+}
+
+// Convenience: call by AIL function code with the sub_1bec2 stack shape —
+// args[0] must be the driver id (0 in our single-blob model).
+extern "C" uint16_t v2_ail_call_fn_code(uint16_t fn_code, const uint16_t* args, int argc) {
+    uint16_t off = v2_ail_fn_lookup(fn_code);
+    if (!off) {
+        fprintf(stderr, "AIL-INTERP: fn code %02X not in the blob table\n", fn_code);
+        return 0;
+    }
+    return v2_ail_interp_call(off, args, argc);
 }
