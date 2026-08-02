@@ -433,7 +433,8 @@ struct V2StateView {
 
 #define V2_GS_A1(name, off) \
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
-    void     name(uint16_t v)          { *(uint16_t*)(ds + (off)) = v; }
+    void     name(uint16_t v)          { *(uint16_t*)(ds + (off)) = v; } \
+    uint16_t& name##_ref()             { return *(uint16_t*)(ds + (off)); }
 #define V2_GS_AN(name, off, n) \
     uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); } \
     void     name(uint32_t i, uint16_t v) { *(uint16_t*)(ds + (off) + 2u * i) = v; }
@@ -471,3 +472,7 @@ struct V2StateViewC {
 #undef V2_GS_AB1
 #undef V2_GS_ABN
 };
+
+// Inline factories: typed access at any call site without a local view.
+static inline V2StateView  v2gs(uint8_t* ds)        { return V2StateView(ds); }
+static inline V2StateViewC v2gs(const uint8_t* ds)  { return V2StateViewC(ds); }
