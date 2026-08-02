@@ -58,3 +58,4 @@ sub_158f5 v2_vm_xdir_tile_check_158f5 WRAPPER 159d3/159ec-обёртки X0/X1 �
 sub_15911 v2_tile_coll_y_15911 COND-ORDER текстовый порядок веток up/down перестановлен; динамика = одна ветка
 sub_158d7 v2_vm_probe_down_158d7 PARSER-FIXED group-dispatch kloc_15a70 теперь виден — parity
 sub_12ab8 v2_alloc_segments_12ab8 LOOP-ROLLED палитро-чанки 4..0xE→2E7D..(шаг 0x300) таблицей+циклом против orig-развёртки 13 сайтов; 10e85=PORT-64K
+sub_11c52 v2_selector_blink_11c52 COND-MERGE+ORDER mode0: две 1183d/120d1-ветки → ax-условный сайт; mode1: порядок веток текстово обратен; сверено построчно 2026-08-04

@@ -21685,20 +21685,11 @@ static void v2_selector_blink_11c52(uint8_t* s) {
             uint16_t ax = (cnt & 0x10) ? *(uint16_t*)(s + DS_HUD_BLINK_FIELD) : 0;
             v2_draw_hud_item(v2_current_ds_val, di, ax);  // sub_1183d mirror
             v2_vga_hud_item_1183d(v2_vm_shadow_ds, di, ax);
-            // Mirror orig sub_11c52 eip 0x1C7A/0x1C8B: CALL sub_120d1 AFTER
-            // sub_1183d in BOTH branches (SET/CLEAR). sub_120d1 redraws all 3
-            // viking selectors (orig line 5471-5491) — needed because v2_draw_hud_item
-            // 16x16 overdraws selector frame area. Without this redraw, selector
-            // disappears after first blink phase.
-            *(uint16_t*)(s + (DS_HUD_SEL_PREV)) = *(uint16_t*)(s + (DS_HUD_SEL));
-            v2_draw_hud_selector(v2_current_ds_val, *(uint16_t*)(s + (DS_HUD_SEL)) << 1);
-            v2_vga_selector_118ad(v2_vm_shadow_ds, *(uint16_t*)(s + (DS_HUD_SEL)) << 1);
-            *(uint16_t*)(s + (DS_HUD_SEL_PREV+2)) = *(uint16_t*)(s + (DS_HUD_SEL+2));
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + (DS_HUD_SEL+2)) + 4) << 1);
-            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(s + (DS_HUD_SEL+2)) + 4) << 1);
-            *(uint16_t*)(s + (DS_HUD_SEL_PREV+4)) = *(uint16_t*)(s + (DS_HUD_SEL+4));
-            v2_draw_hud_selector(v2_current_ds_val, (*(uint16_t*)(s + (DS_HUD_SEL+4)) + 8) << 1);
-            v2_vga_selector_118ad(v2_vm_shadow_ds, (*(uint16_t*)(s + (DS_HUD_SEL+4)) + 8) << 1);
+            // Orig 3675/3684: CALL sub_120D1 after sub_1183d in BOTH blink
+            // branches (SET/CLEAR) — the 16x16 item draw overdraws the
+            // selector frames, 120D1 repaints all three (deduped: was the
+            // THIRD inline copy of the selector-commit body).
+            (void)v2_hud_selectors_120d1(s);
         }
     } else {
         // Mode 1: alternate blink path (loc_11c8f) — selector mode
