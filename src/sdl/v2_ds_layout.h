@@ -172,6 +172,8 @@ constexpr uint16_t LUT_BIT_MASK      = 0x6C34; // word bit-mask table (collision
 constexpr uint16_t LUT_BIT_CLEAR     = 0x6C14; // word clear-mask table (op 9D family: AND mask [idx-0x6C14])
 constexpr uint16_t LUT_BYTE_AND      = 0x6C3C; // byte AND-mask table (op 0D: [bit-0x6C3C])
 constexpr uint16_t LUT_BYTE_OR       = 0x6C44; // byte OR-mask table (op 0E: [bit-0x6C44])
+constexpr uint16_t LUT_KBD_ASCII     = 0x8E68; // INT9 scancode->ASCII word LUT, 128 entries: read as ds:[scan*2 - 0x7198] (uint16 wrap lands here; #37/#62); '1'..'9','0' at scan 2..11, ENTER->0x81, vowels->0
+constexpr uint16_t DS_AUDIO_CMD_TBL  = 0x2BA6; // off_2B086: sub_1086f command dispatch table, 6 CS handler addrs + null (call off_2B086[si] @eip 0x890)
 constexpr uint16_t LUT_ROW_BASE      = 0x7098; // tile-map row base words: ds:[row*2 - 0x7098] (141ba/13fc2/render)
 
 // ---------------------------------------------------------------------------
@@ -483,7 +485,9 @@ constexpr uint16_t DS_SPEC_KEY_M            = 0x919E; // byte_3167E: spec key M 
 constexpr uint16_t DS_SPEC_KEY_F5           = 0x91AB; // byte_3168B: spec key F5 state (prev level; ==1)
 constexpr uint16_t DS_SPEC_KEY_F6           = 0x91AC; // byte_3168C: spec key F6 state (next level; ==1)
 constexpr uint16_t DS_SOUND_FIELD_8EA       = 0x98EA; // word_31DCA: sound-init field (set 0xFFFF)
-constexpr uint16_t DS_MUSIC_ID              = 0x990C; // word_31DEC: current music resource id (v2_id_music)
+constexpr uint16_t DS_MUSIC_ID              = 0x990C; // word_31DEC: slot 0 of the 5-word sequence HANDLE table [si-0x66F4] (si=0 music, 2..8 SFX -> 990C..9914); the parallel SEQ table [si-0x66EA] is 9916..991E
+constexpr uint16_t DS_SOUND_DISPATCH_TBL    = 0xA37A; // off_3285A: music dispatch table, 5 CS handler addrs (7791/77B1/78F1/775D/77B1) - sub_17749 reads via type byte
+constexpr uint16_t DS_SND_DESC_OFF_TBL      = 0xA384; // 11 words, 5-byte-record offsets 1D0..202 (sound descriptor table index)
 constexpr uint16_t DS_SOUND_INIT_92A        = 0x992A; // word_31E0A: sound-init field (cleared 0)
 constexpr uint16_t DS_SEG_SOUND_BASE        = 0x992C; // word_31E0C: sound resource base segment (snd_base)
 constexpr uint16_t DS_SOUND_INIT_932        = 0x9932; // word_31E12: sound-init field (cleared 0)

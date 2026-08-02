@@ -210,6 +210,8 @@
   FN(lut_page_row,       LUT_PAGE_ROW, 78)      \
   FN(lut_subrow,         LUT_SUBROW, 8)         \
   FN(fs_row_off_tbl,     DS_FS_ROW_OFF_TBL, 256) \
+  FN(kbd_ascii_lut,      LUT_KBD_ASCII, 128)    \
+  FN(audio_cmd_tbl,      DS_AUDIO_CMD_TBL, 7)   \
   F1(text_fullscreen,    DS_TEXT_FULLSCREEN)    \
   FN(glyph_buf,          DS_GLYPH_BUF, 0x1B8)   \
   F1(ui_throttle,        DS_UI_THROTTLE)        \
@@ -236,7 +238,8 @@
   FN(vm_setter_tbl,      DS_VM_SETTER_TBL, 5)   \
   FN(vm_optable,         DS_VM_OPTABLE, 216)    \
   F1(sound_field_8ea,    DS_SOUND_FIELD_8EA)    \
-  F1(music_id,           DS_MUSIC_ID)           \
+  FN(seq_handle_slots,   DS_MUSIC_ID, 5)        \
+  FN(seq_seq_slots,      0x9916, 5)             \
   F1(sound_init_92a,     DS_SOUND_INIT_92A)     \
   F1(seg_sound_base,     DS_SEG_SOUND_BASE)     \
   F1(sound_init_932,     DS_SOUND_INIT_932)     \
@@ -250,6 +253,8 @@
   F1(sound_field_942,    DS_SOUND_FIELD_942)    \
   F1(ail_music_state,    DS_AIL_MUSIC_STATE)    \
   F1(ail_init_done,      DS_AIL_INIT_DONE)      \
+  FN(sound_dispatch_tbl, DS_SOUND_DISPATCH_TBL, 5) \
+  FN(snd_desc_off_tbl,   DS_SND_DESC_OFF_TBL, 11) \
   F1(vsync_count,        DS_VSYNC_COUNT)        \
   F1(vsync_calib,        DS_VSYNC_CALIB)        \
   F1(pit_latch,          DS_PIT_LATCH)
@@ -482,18 +487,16 @@
   BN(rt_25d0,            0x25d0, 12)           \
   BN(rt_25e0,            0x25e0, 1)           \
   BN(rt_25e7,            0x25e7, 15)           \
-  BN(image_2ba6,         0x2ba6, 14)           \
   BN(zero_8502,          0x8502, 2)           \
-  BN(image_863d,         0x863d, 111)           \
+  BN(rtl_io_error_msg,   0x863d, 111)          \
   BN(rt_86b0,            0x86b0, 2)           \
   BN(rt_86ba,            0x86ba, 10)           \
   BN(zero_86c6,          0x86c6, 10)           \
   BN(zero_86d2,          0x86d2, 8)           \
   BN(image_86e0,         0x86e0, 6)           \
-  BN(image_871c,         0x871c, 24)           \
+  BN(data_pairs_871c,    0x871c, 24)           \
   BN(rt_8736,            0x8736, 120)           \
-  BN(image_897c,         0x897c, 124)           \
-  BN(image_8e68,         0x8e68, 256)           \
+  BN(shade_ramps_897c,   0x897c, 124)          \
   BN(zero_916c,          0x916c, 16)           \
   BN(zero_917d,          0x917d, 4)           \
   BN(zero_9182,          0x9182, 9)           \
@@ -518,14 +521,13 @@
   BN(rt_92f3,            0x92f3, 4)           \
   BN(zero_92fd,          0x92fd, 2)           \
   BN(zero_9301,          0x9301, 4)           \
-  BN(image_931f,         0x931f, 39)           \
+  BN(hexdigit_cells,     0x931f, 39)           \
   BN(zero_98de,          0x98de, 12)           \
   BN(zero_98ec,          0x98ec, 32)           \
-  BN(rt_990e,            0x990e, 18)           \
   BN(zero_9936,          0x9936, 8)           \
   BN(zero_9944,          0x9944, 2)           \
   BN(zero_9948,          0x9948, 8)           \
-  BN(image_a37a,         0xa37a, 32)
+  BN(pad_a37a_none,      0xa39a, 0)
 
 // ---------------------------------------------------------------------------
 // The typed state. Serializer contract: v2_gs_deserialize fills every field
@@ -597,6 +599,7 @@ int  v2_gs_roundtrip_check(const uint8_t* ds, const char* tag);
   A1(render_117f,        DS_RENDER_117F)        \
   A1(snd_track_w,        DS_SND_TRACK)          \
   A1(fs_page_stride,     DS_FS_PAGE_STRIDE)     \
+  A1(music_id,           DS_MUSIC_ID)           \
   A1(dac_r_save_w,       DS_DAC_R_SAVE)
 
 struct V2StateView {
