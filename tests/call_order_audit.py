@@ -37,7 +37,8 @@ def load(p):
 
 # loc_-входы, имеющие v2-зеркала (JMP на них = вызов): Y-муверы и др.
 LOC_MIRRORED = {'loc_174e9': 'sub_174e9', 'loc_174bf': 'sub_174bf',
-                'loc_17496': 'sub_17496', 'loc_1746c': 'sub_1746c'}
+                'loc_17496': 'sub_17496', 'loc_1746c': 'sub_1746c',
+                'loc_13a74': 'sub_13a74', 'loc_13a54': 'sub_13a54'}
 
 # v2-зеркала БЕЗ hex-суффикса (исторические имена) → их orig sub_.
 # Дополняет docs2/ref/V2_FUNCTION_NAMES.md; без этого их вызовы невидимы
@@ -72,6 +73,8 @@ def parse_orig():
                 code = ln.split('//')[0]
             for cm in re.finditer(r'J\((?:CALL|CALLF)\((sub_[0-9a-f]+)', code):
                 bodies[cur].append(cm.group(1))
+            for cm in re.finditer(r'CALL\(_group\d+,m2c::k(?:sub|loc)_([0-9a-f]+)\)', code):
+                bodies[cur].append('sub_' + cm.group(1))   # group-dispatch call
             jm = re.search(r'J\(JMP\((sub_[0-9a-f]+)\)\)', code)
             if jm: bodies[cur].append(jm.group(1))   # tail call == call, для сверки
             lm = re.search(r'J\(JMP\((loc_[0-9a-f]+)\)\)', code)
@@ -81,7 +84,7 @@ def parse_orig():
 
 # ---- 2. v2: v2_*_HEX → последовательность вызовов v2_*_HEX ---------------
 V2NAME = re.compile(r'\bv2_[a-z0-9_]*_([0-9a-fA-F]{4,5})\b')
-V2ANY  = re.compile(r'\b(v2_[a-z0-9_]+)\s*\(')
+V2ANY  = re.compile(r'\b(v2_[a-zA-Z0-9_]+)\s*\(')   # CAPS: v2_..._15DA8
 
 def v2_raw_bodies():
     """Тела ВСЕХ v2_*-функций: имя → список сырых вызовов
@@ -118,7 +121,7 @@ def v2_raw_bodies():
                         tgt = NONHEX_MIRRORS[fn]
                         if tgt: calls.append(('hex', tgt))
                         continue
-                    hm = re.match(r'v2_[a-z0-9_]+_([0-9a-fA-F]{4,5})$', fn)
+                    hm = re.match(r'v2_[a-zA-Z0-9_]+?_([0-9a-fA-F]{4,5})$', fn)
                     if hm:
                         a = hm.group(1).lower()
                         calls.append(('hex', 'sub_1' + a if len(a) == 4 else 'sub_' + a))
@@ -144,7 +147,7 @@ def v2_bodies():
     for name in raw:
         if name.startswith('v2_fntest_'):
             continue
-        am = re.match(r'v2_[a-z0-9_]+_([0-9a-fA-F]{4,5})$', name)
+        am = re.match(r'v2_[a-zA-Z0-9_]+?_([0-9a-fA-F]{4,5})$', name)
         if not am: continue
         addr = am.group(1).lower()
         calls = flatten(name, raw)

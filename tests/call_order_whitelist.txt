@@ -50,3 +50,10 @@ sub_1625d v2_ground_snap_1625d INLINE-VERIFIED лямбды tile_type/slope = 14
 sub_165aa v2_page_rotate_165aa PARSER 1df6a-вызов лежит ЗА финальным RETN (чужой вход 0x6656)
 sub_16661 v2_scroll_tracker_16661 OWN-TAIL 16694/166bc = собственные loc_-хвосты, экстрагированные в v2
 sub_11cbb v2_pause_items_11cbb LAMBDA стрелки 2-4: erase_old/arrow_commit-лямбды невидимы статически
+sub_13a34 v2_scroll_spawn_down_13a34 LOC-EXTRACT orig loc_13a94-петля (внутри CALL 13ae0 per-entry) ↔ v2-hex-экстракция 13a94
+sub_13a14 v2_scroll_spawn_up_13a14 LOC-EXTRACT тот же класс
+sub_13a54 v2_scroll_spawn_right_13a54 LOC-EXTRACT тот же класс
+sub_13a74 v2_scroll_spawn_left_13a74 LOC-EXTRACT тот же класс
+sub_158f5 v2_vm_xdir_tile_check_158f5 WRAPPER 159d3/159ec-обёртки X0/X1 → ядро 159f6×2 ветки (юнит 158f5)
+sub_15911 v2_tile_coll_y_15911 COND-ORDER текстовый порядок веток up/down перестановлен; динамика = одна ветка
+sub_158d7 v2_vm_probe_down_158d7 PARSER-FIXED group-dispatch kloc_15a70 теперь виден — parity
