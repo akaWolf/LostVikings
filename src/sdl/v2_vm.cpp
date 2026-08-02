@@ -701,7 +701,7 @@ void v2_verify_render_buf(int frame) {
         static int _tc = 0;
         if (_tc < 24) {
             uint8_t* _rds = v2_m2c_base + v2_fntest_game_ds_linear();
-            uint16_t gr = *(uint16_t*)(_rds + DS_SEG_TILEGFX);
+            uint16_t gr = v2gs(_rds).seg_tilegfx();
             extern uint8_t* v2_vm_get_shadow_ds();
             uint8_t* shd2 = v2_vm_get_shadow_ds();
             uint16_t gs = shd2 ? *(uint16_t*)(shd2 + DS_SEG_TILEGFX) : 0;
@@ -975,9 +975,9 @@ void v2_verify_render_buf(int frame) {
                     "sh vp=(%d,%d) sc=(%04X,%04X) | rl vp=(%d,%d) sc=(%04X,%04X)\n",
                     frame, hard_diff, first_hard_x, first_hard_y, myDrawInfo->myOffset,
                     *(int16_t*)(sh + 0x44), *(int16_t*)(sh + 0x46),
-                    *(uint16_t*)(sh + DS_SCROLL_COL), *(uint16_t*)(sh + DS_SCROLL_ROW),
+                    v2gs(sh).scroll_col(), v2gs(sh).scroll_row(),
                     rl ? *(int16_t*)(rl + 0x44) : -1, rl ? *(int16_t*)(rl + 0x46) : -1,
-                    rl ? *(uint16_t*)(rl + DS_SCROLL_COL) : 0xDEAD, rl ? *(uint16_t*)(rl + DS_SCROLL_ROW) : 0xDEAD);
+                    rl ? v2gs(rl).scroll_col() : 0xDEAD, rl ? v2gs(rl).scroll_row() : 0xDEAD);
             for (int obj = 0; obj <= 0xFE; obj += 2) {
                 uint16_t sf = *(uint16_t*)(sh + obj + OBJ_SPRITE_FLAGS);
                 uint16_t rf = rl ? *(uint16_t*)(rl + obj + OBJ_SPRITE_FLAGS) : 0;
@@ -1012,10 +1012,10 @@ void v2_verify_render_buf(int frame) {
                 "orig_hash=%08X v2_hash=%08X page_off=0x%X roles=%04X/%04X/%04X "
                 "vp=(%d,%d) shake=(%d,%d) sc=(%04X,%04X)\n",
                 frame, hard_diff, lag_diff, first_hard_x, first_hard_y, h_orig, h_v2, page_offset,
-                *(uint16_t*)(shd + DS_PAGE_DRAW), *(uint16_t*)(shd + DS_PAGE_SHOWN), *(uint16_t*)(shd + DS_PAGE_BG),
+                v2gs(shd).page_draw(), v2gs(shd).page_shown(), v2gs(shd).page_bg(),
                 *(int16_t*)(shd + 0x44), *(int16_t*)(shd + 0x46),
                 *(int16_t*)(shd + DS_SHAKE_X), *(int16_t*)(shd + DS_SHAKE_Y),
-                *(uint16_t*)(shd + DS_SCROLL_COL), *(uint16_t*)(shd + DS_SCROLL_ROW));
+                v2gs(shd).scroll_col(), v2gs(shd).scroll_row());
         // Task #23: pixel dump of the traced object's 24x16 area, orig vs v2,
         // on divergent frames (event-based, first 3).
         if (v2_objtrace_di != 0xFFFF) {
@@ -2178,7 +2178,7 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
     // Original: fread(raddr(ds,0x2BBC), 2, 1, data_handle)
     uint16_t decompressed_size;
     if (fread(&decompressed_size, 2, 1, v2_data_handle) != 1) return 0;
-    *(uint16_t*)(dctx + DS_DECOMP_SIZE) = decompressed_size;
+    v2gs(dctx).decomp_size(decompressed_size);
 
     // Original sub_10982: ecx = compressed_size (including 2-byte header already read).
     // After reading the 2-byte header, file position = chunk_offset + 2.
@@ -3021,17 +3021,17 @@ static uint16_t v2_hud_selectors_120d1(uint8_t* s) {
     uint16_t dsv = v2_current_ds_val;
     // viking 1: word_288fa (0x41A) = word_288f4 (0x414)
     uint16_t v1 = *(uint16_t*)(s + (DS_HUD_SEL));
-    *(uint16_t*)(s + DS_HUD_SEL_PREV) = v1;
+    v2gs(s).hud_sel_prev(0, v1);
     v2_draw_hud_selector(dsv, v1 * 2);
     v2_vga_selector_118ad(s, v1 * 2);
     // viking 2: word_288fc (0x41C) = word_288f6 (0x416)
     uint16_t v2v = v2gs(s).hud_sel_2();
-    *(uint16_t*)(s + DS_HUD_SEL_PREV_2) = v2v;
+    v2gs(s).hud_sel_prev(1, v2v);
     v2_draw_hud_selector(dsv, (v2v + 4) * 2);
     v2_vga_selector_118ad(s, (v2v + 4) * 2);
     // viking 3: word_288fe (0x41E) = word_288f8 (0x418)
     uint16_t v3 = v2gs(s).hud_sel_3();
-    *(uint16_t*)(s + DS_HUD_SEL_PREV_3) = v3;
+    v2gs(s).hud_sel_prev(2, v3);
     v2_draw_hud_selector(dsv, (v3 + 8) * 2);
     v2_vga_selector_118ad(s, (v3 + 8) * 2);
     return (uint16_t)((v3 + 8) * 2);
@@ -6323,10 +6323,10 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
 
     // Post-chunk init: "STRT" marker + VGA/rendering constants
     // Original: lines 6454-6478 in seg000 (eip 0x2C12..0x2CA2)
-    *(uint16_t*)(s + DS_PW_CHAR0) = 0x53; // 'S'
-    *(uint16_t*)(s + DS_PW_CHAR1) = 0x54; // 'T'
-    *(uint16_t*)(s + DS_PW_CHAR2) = 0x52; // 'R'
-    *(uint16_t*)(s + DS_PW_CHAR3) = 0x54; // 'T'
+    v2gs(s).pw_chars(0, 0x53); // 'S'
+    v2gs(s).pw_chars(1, 0x54); // 'T'
+    v2gs(s).pw_chars(2, 0x52); // 'R'
+    v2gs(s).pw_chars(3, 0x54); // 'T'
     v2gs(s).spec_mask_27c(0x800);
     v2gs(s).spec_mask_282(0x200);
     v2gs(s).spec_mask_286(0x100);
@@ -6750,7 +6750,7 @@ static uint16_t v2_vm_di_track = 0;
 // once at si=0xFFFE, wrapping the field addresses to 0x1943/0x196B
 // (divergence #30, same class as #29).
 static void v2_clear_velocities_15517(uint8_t* ds) {
-    uint16_t si = (uint16_t)(*(uint16_t*)(ds + DS_OBJ_COUNT) - 2);
+    uint16_t si = (uint16_t)(v2gs(ds).obj_count() - 2);
     do {
         *(uint16_t*)(ds + (uint16_t)(si + OBJ_VEL_X)) = 0;
         *(uint16_t*)(ds + (uint16_t)(si + OBJ_VEL_Y)) = 0;
@@ -7818,10 +7818,10 @@ static bool v2_gameloop_obj_search_down_15fbe(uint8_t* ds, uint16_t filter_si, u
     uint16_t y_check = *(uint16_t*)(ds + obj_di + OBJ_BBOX_Y1) + 1;
     *(uint16_t*)(ds + 0x34) = filter_si;
     *(uint16_t*)(ds + 0x36) = y_check;
-    uint16_t table_end = *(uint16_t*)(ds + DS_OBJ_COUNT);
+    uint16_t table_end = v2gs(ds).obj_count();
     for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         if (*(uint16_t*)(ds + si + OBJ_CODE_SEG) == 0) continue;
-        if (si == *(uint16_t*)(ds + DS_CUR_OBJ)) continue;
+        if (si == v2gs(ds).cur_obj()) continue;
         *(uint16_t*)(ds + 0x3A) = si;
         uint8_t obj_type = (uint8_t)*(uint16_t*)(ds + si + OBJ_TYPE_ID);
         uint16_t flt = filter_si;
@@ -10834,7 +10834,7 @@ static void v2_vm_op_31(V2VM& vm) {
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
     v2_vm_probe_front_158e6(vm, anim_idx, di);
     // off_30C8E[si=2] = loc_144f3: carry → skip 2, no carry → jump
-    uint16_t cs_addr = *(uint16_t*)(vm.shadow + DS_VM_DISPATCH_TBL + 2);
+    uint16_t cs_addr = v2gs(vm.shadow).vm_subdispatch_tbl(1);
     if (cs_addr == 0x44F3) {
         if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
     } else if (cs_addr == 0x44E9) {
@@ -21296,7 +21296,7 @@ static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx) {
 // FS render-buffer hash — bounded by alloc size. Reads m2c flat memory.
 static uint32_t v2_fs_hash(uint8_t* ds) {
     if (!v2_m2c_base) return 0;
-    uint16_t fs_seg = *(uint16_t*)(ds + DS_SEG_FS);
+    uint16_t fs_seg = v2gs(ds).seg_fs();
     if (!fs_seg) return 0;
     extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
     uint16_t size_para = v2_get_alloc_size_para(fs_seg);
