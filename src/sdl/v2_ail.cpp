@@ -393,11 +393,6 @@ extern "C" void v2_ail_music_fade(uint8_t* s) {
 extern "C" uint16_t v2_ail_sfx_play(uint8_t* s, uint8_t* snd, uint32_t snd_size,
                                     uint16_t ds_val, uint16_t ax_seq) {
     if (!g_booted) return 0xFFFF;
-    {   // diagnostic isolation switch: V2_AIL_NO_SFX=1 silences the SFX chain
-        static int no_sfx = -1;
-        if (no_sfx < 0) { const char* e = getenv("V2_AIL_NO_SFX"); no_sfx = (e && e[0]=='1') ? 1 : 0; }
-        if (no_sfx) return 0xFFFF;
-    }
     if (rdw(s, 0x304) != 0) return 0xFFFF;          // eip 0x77BD SFX muted
     uint16_t sfx_seg = rdw(s, 0x2E6D);              // SFX XMID catalog segment
     uint16_t drv = rdw(s, DS_98E6_DRV);

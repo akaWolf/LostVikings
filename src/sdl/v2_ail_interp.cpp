@@ -164,21 +164,9 @@ public:
         return sink;
     }
 
-    // Diagnostic watch (V2_AIL_WATCH_CH=1): log writes to the per-channel
-    // timbre-slot table [0x1289..0x1298] and program table [0x12A9..0x12C8]
-    // with the writing IP — pinpoints who rebinds channels on restarts.
-    int watch_ch = -1;
     uint8_t  rd8 (uint16_t seg, uint16_t off) { return *mem(seg, off, 1); }
     uint16_t rd16(uint16_t seg, uint16_t off) { return (uint16_t)(rd8(seg, off) | (rd8(seg, (uint16_t)(off + 1)) << 8)); }
-    void wr8 (uint16_t seg, uint16_t off, uint8_t v)  {
-        if (watch_ch < 0) { const char* e = getenv("V2_AIL_WATCH_CH"); watch_ch = (e && e[0]=='1') ? 1 : 0; }
-        if (watch_ch && seg == DRV_PARA &&
-            ((off >= 0x1289 && off <= 0x12A8) || (off >= 0x12A9 && off <= 0x12C8)))
-            fprintf(stderr, "AIL-WATCH ip=%04X %s[%02X] <- %02X\n", r.ip,
-                    off <= 0x12A8 ? "slot" : "prog",
-                    off <= 0x12A8 ? off - 0x1289 : off - 0x12A9, v);
-        *mem(seg, off, 1) = v;
-    }
+    void wr8 (uint16_t seg, uint16_t off, uint8_t v)  { *mem(seg, off, 1) = v; }
     void wr16(uint16_t seg, uint16_t off, uint16_t v) { wr8(seg, off, (uint8_t)v); wr8(seg, (uint16_t)(off + 1), (uint8_t)(v >> 8)); }
 
     void push(uint16_t v) { r.sp = (uint16_t)(r.sp - 2); wr16(r.ss, r.sp, v); }
