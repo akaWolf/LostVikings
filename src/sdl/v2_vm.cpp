@@ -18403,7 +18403,6 @@ void v2_watch_302(const char* tag) {
 void v2_phase_frame_begin(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     (void)ds_val;
-    v2_watch_302("FRAME_BEGIN");
     // Increment frame counter at FRAME_BEGIN barrier — single sync point both
     // orig and v2 cross together. Counter stays constant for entire outer
     // frame (incl. sub_115d2 internal sub-frames where orig doesn't signal
@@ -18491,9 +18490,8 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // (sets bit 0 of shadow[0x0334]) → PRE_VM sub_10138 → v2_load_level_11080.
     // This matches the original game architecture.
     if (v2_current_level == 0xFFFF) {
-        uint16_t target_level = *(uint16_t*)(v2_vm_shadow_ds + 0x25C9);
+        uint16_t target_level = *(uint16_t*)(v2_vm_shadow_ds + DS_LEVEL_LOAD);
         printf("V2: initial level load → %d, running v2_load_level_11080\n", target_level);
-        *(uint16_t*)(v2_vm_shadow_ds + 0x25C9) = target_level;
         v2_load_level_11080(v2_vm_shadow_ds);
         v2_current_level = target_level;
     }
@@ -18531,7 +18529,6 @@ static void v2_portrait_sync_11b0b_per_frame(uint8_t* s) {
 
 void v2_phase_pre_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("PRE_VM");
     // NOTE: counter increment moved to v2_phase_frame_begin (FRAME_BEGIN barrier)
     // so that orig+v2 see same v2_dbg_pre_vm_iter throughout the entire outer
     // frame — including sub_115d2 internal sub-frames where orig doesn't signal.
@@ -18560,26 +18557,6 @@ void v2_phase_pre_vm(uint16_t ds_val) {
     // Real DS = after orig sub_12352..sub_1673c. Shadow DS = after v2 pre_vm.
     static int pre_vm_frame = 0;
     pre_vm_frame++;
-    // Trap DS[0x0484] — track when hflip flag for sub-sprite di=0x36 diverges
-    if (v2_vm_real_ds_ptr) {
-        uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x0484);
-        uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + 0x0484);
-        static bool _0484_diverged = false;
-        if (rv != sv && !_0484_diverged) {
-            _0484_diverged = true;
-            fprintf(stderr, "V2-TRAP-0484[f%d]: FIRST DIVERGE real=%04X shadow=%04X\n", pre_vm_frame, rv, sv);
-            // Also check what object di=0x36 state is
-            uint8_t* r = v2_vm_real_ds_ptr; uint8_t* s = v2_vm_shadow_ds;
-            fprintf(stderr, "  di=0x36: flags r=%04X s=%04X X r=%04X s=%04X Y r=%04X s=%04X\n",
-                *(uint16_t*)(r+0x483), *(uint16_t*)(s+DS_HUD_FIELD_483),
-                *(uint16_t*)(r+0x36+OBJ_SPRITE_X), *(uint16_t*)(s+0x36+OBJ_SPRITE_X),
-                *(uint16_t*)(r+0x36+OBJ_SPRITE_Y), *(uint16_t*)(s+0x36+OBJ_SPRITE_Y));
-            fprintf(stderr, "  di=0x36: mode r=%02X s=%02X sprite r=%04X s=%04X owner anim r=%04X s=%04X\n",
-                r[0x36+OBJ_DIRTY_MODE], s[0x36+OBJ_DIRTY_MODE],
-                *(uint16_t*)(r+0x36+OBJ_SPRITE_OFF), *(uint16_t*)(s+0x36+OBJ_SPRITE_OFF),
-                *(uint16_t*)(r+0x36+OBJ_FLAGS), *(uint16_t*)(s+0x36+OBJ_FLAGS));
-        }
-    }
     if (v2_vm_real_ds_ptr) {
         uint8_t* real = v2_vm_real_ds_ptr;
         uint8_t* shad = v2_vm_shadow_ds;
@@ -18673,59 +18650,12 @@ void v2_phase_vm(uint16_t ds_val) {
             }
         }
     }
-    if (_vm_frame <= 2) fprintf(stderr, "V2-VM-START[%d]: trace_len_before_reset=%d table_end=%04X\n",
-                                _vm_frame, v2_trace_len, *(uint16_t*)(v2_vm_shadow_ds + DS_OBJ_COUNT));
     v2_trace_len = 0;
     extern int v2_coll_trace_len; v2_coll_trace_len = 0;  // #175
-
-    // Moved to v2_phase_pre_vm
-    // Pre-VM DS compare removed from here
-    if (false) {
-        uint8_t* real = v2_vm_real_ds_ptr;
-        uint8_t* shad = v2_vm_shadow_ds;
-        fprintf(stderr, "V2-INIT-CMP: table_end real=%04X shadow=%04X\n",
-               *(uint16_t*)(real + DS_OBJ_COUNT), *(uint16_t*)(shad + DS_OBJ_COUNT));
-        uint16_t te = *(uint16_t*)(real + DS_OBJ_COUNT);
-        for (uint16_t si = 0; si < te && si < 20; si += 2) {
-            uint16_t r_pc = *(uint16_t*)(real + si + OBJ_PC);
-            uint16_t s_pc = *(uint16_t*)(shad + si + OBJ_PC);
-            uint16_t r_fl = *(uint16_t*)(real + si + OBJ_FLAGS);
-            uint16_t s_fl = *(uint16_t*)(shad + si + OBJ_FLAGS);
-            uint16_t r_cs = *(uint16_t*)(real + si + OBJ_CODE_SEG);
-            uint16_t s_cs = *(uint16_t*)(shad + si + OBJ_CODE_SEG);
-            uint16_t r_an = *(uint16_t*)(real + si + OBJ_ANIM_IDX);
-            uint16_t s_an = *(uint16_t*)(shad + si + OBJ_ANIM_IDX);
-            uint16_t r_acc = *(uint16_t*)(real + DS_ACCUMULATOR);
-            uint16_t s_acc = *(uint16_t*)(shad + 0x8A);
-            if (r_pc != s_pc || r_fl != s_fl || r_cs != s_cs || r_an != s_an) {
-                fprintf(stderr, "  obj=%d: PC r=%04X s=%04X  FL r=%04X s=%04X  CS r=%04X s=%04X  AN r=%04X s=%04X\n",
-                       si, r_pc, s_pc, r_fl, s_fl, r_cs, s_cs, r_an, s_an);
-            }
-        }
-        uint16_t r_acc = *(uint16_t*)(real + DS_ACCUMULATOR);
-        uint16_t s_acc = *(uint16_t*)(shad + 0x8A);
-        if (r_acc != s_acc) fprintf(stderr, "  ACC: real=%04X shadow=%04X\n", r_acc, s_acc);
-    }
 
     // sub_14207 init: sub_15517 + clear priority + collision (eip 0x4207-0x4210)
     v2_vm_pass_14207_init(v2_vm_shadow_ds);
 
-    // Task #85: trace obj 6 (dinosaur) for missing op_sound diagnosis.
-    // Bite SFX missed at f1535/f1543, mouth animation at f1173-f1194.
-    // Trace windows around those frames to compare orig vs v2 opcode sequences.
-    { extern int v2_dbg_pre_vm_iter;
-      extern uint16_t v2_trace_object;
-      int f = v2_dbg_pre_vm_iter;
-      if ((f >= 1170 && f <= 1200) || (f >= 1530 && f <= 1550)) v2_trace_object = 6;
-      else v2_trace_object = 0xFFFF;
-    }
-
-    { static int _vf = 0; _vf++;
-      uint16_t r3CC = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + DS_GAME_MODE_AC) : 0xDEAD;
-      if (_vf <= 2000)
-        printf("V2-VM-PHASE: f=%d te=%d lv=%04X s3CC=%04X r3CC=%04X s334=%04X\n",
-          _vf, *(uint16_t*)(v2_vm_shadow_ds + DS_OBJ_COUNT), *(uint16_t*)(v2_vm_shadow_ds + DS_LEVEL), *(uint16_t*)(v2_vm_shadow_ds + DS_GAME_MODE_AC),
-          r3CC, *(uint16_t*)(v2_vm_shadow_ds + DS_FRAME_FLAGS)); }
     // Re-read ds:0x372 each iteration — VM opcode 0x14 creates objects and increases table_end
     for (uint16_t si = 0; si < *(uint16_t*)(v2_vm_shadow_ds + DS_OBJ_COUNT); si += 2) {
         v2_vm_execute_object(v2_vm_shadow_ds, si);
@@ -18748,19 +18678,6 @@ void v2_phase_vm(uint16_t ds_val) {
       }
       v2_orig_anim_cmd_count = 0;
       v2_v2_anim_cmd_count = 0;
-    }
-    // Trap 0x0484 after VM — did VM cause the divergence?
-    if (v2_vm_real_ds_ptr) {
-        uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x0484);
-        uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + 0x0484);
-        static bool _0484_vm_diverged = false;
-        if (rv != sv && !_0484_vm_diverged) {
-            _0484_vm_diverged = true;
-            static int _pvf2 = 0;
-            fprintf(stderr, "V2-TRAP-0484-VM[f%d]: DIVERGE AFTER VM real=%04X shadow=%04X\n", _pvf2, rv, sv);
-        }
-        static int _pvf2_ctr = 0; _pvf2_ctr++;
-        (void)_pvf2_ctr; // suppress unused
     }
     // Full DS compare right after both VMs complete, before post-VM
     { static int _pvf = 0; _pvf++;
@@ -18925,7 +18842,6 @@ std::mutex v2_render_tick_mutex;
 void v2_vm_trace_compare(); // forward decl
 void v2_phase_post_vm(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("POST_VM");
     // SFX audit L1: per-frame count check (orig vs v2 SFX call counts).
     // Called at frame boundary (post-VM) — by now both threads have processed VM ops.
     v2_audit_check_frame_end();
@@ -18954,18 +18870,7 @@ void v2_phase_post_vm(uint16_t ds_val) {
         });
     }
 #endif
-    // Check 0x077C before and after post_vm
-    auto chk = [](const char* fn) {
-        if (!v2_vm_real_ds_ptr) return;
-        uint16_t rv = *(uint16_t*)(v2_vm_real_ds_ptr + 0x077C);
-        uint16_t sv = *(uint16_t*)(v2_vm_shadow_ds + DS_PROBE_77C);
-        static bool _found = false;
-        if (rv != sv && !_found) { _found = true;
-            fprintf(stderr, "V2-PVM-077C[%s]: DIVERGE real=%04X shadow=%04X\n", fn, rv, sv); }
-    };
-    chk("PVM-entry");
     v2_game_loop_post_vm(v2_vm_shadow_ds);
-    chk("PVM-post-postvm");
 #ifndef V2_ONLY
     // #175: collision-VM trace compare — placed AFTER v2_game_loop_post_vm,
     // because v2's collision VM (v2_run_collision_vm) runs inside it. orig's
@@ -18985,7 +18890,6 @@ void v2_phase_post_vm(uint16_t ds_val) {
 
 void v2_phase_render1(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("RENDER1");
     // PSNAP compare: v2 shadow should match orig POST_VM_END.
     v2_compare_phase_snap(V2_PSNAP_POST_VM_END, "v2_phase_render1");
     uint8_t* s = v2_vm_shadow_ds;
@@ -18995,27 +18899,6 @@ void v2_phase_render1(uint16_t ds_val) {
     // Both orig and v2 leave residuals — they just differ by 2.
     // Fix: clear sub-sprite residuals after sub_11080 transition, before first render.
     // This matches what happens in the original when the game loop restarts.
-
-    // Per-function 0x077C check.
-    // R1-entry uses orig snapshot from end of post-VM (after-sub_1064b, idx=4) —
-    // time-aligned with v2 entering render1 right after post-VM completes.
-    // Other points (post-12fc6 etc.) are render-internal — orig hasn't snapshotted
-    // there, so they would compare against live real DS and race. Disabled until
-    // render-side snapshots are wired.
-    auto chk077C = [&](const char* fn, const uint8_t* snap) {
-        if (!snap) return;
-        uint16_t rv = *(uint16_t*)(snap + 0x077C);
-        uint16_t sv = *(uint16_t*)(s + DS_PROBE_77C);
-        static bool _found = false;
-        if (rv != sv && !_found) {
-            _found = true;
-            fprintf(stderr, "V2-R1-077C[%s]: DIVERGE orig_snap=%04X shadow=%04X\n", fn, rv, sv);
-        }
-    };
-    {
-        const uint8_t* snap4 = v2_orig_post_vm_ds_valid[4] ? v2_orig_post_vm_ds_bytes[4] : nullptr;
-        chk077C("R1-entry", snap4);
-    }
 
     // sub_12fc6(bx=0): sub-sprite position update type 0 (eip 0x004B) —
     // consolidated into v2_subsprite_walk_12fc6 (exact sub_1227e + object/slot do-while).
@@ -19046,30 +18929,8 @@ void v2_phase_render1(uint16_t ds_val) {
     v2_draw_sprites_late(v2_current_ds_val);
     v2_pixwatch_stage("p2a-sprites-late");
 
-    // FS compare DISABLED — was comparing with live orig FS (timing artifact).
-    // Correct FS verification done by FS-SNAP-173c7 (snapshot-based).
-    if (false && v2_vm_real_ds_ptr && v2_m2c_base) {
-        static int _fsc = 0; _fsc++;
-        if (_fsc <= 100) {
-            uint16_t fs_seg = *(uint16_t*)(v2_vm_real_ds_ptr + DS_SEG_FS);
-            if (fs_seg) {
-                uint8_t* rfs = v2_m2c_base + (uint32_t)fs_seg * 16;
-                int fd = 0;
-                uint32_t fs_size = (uint32_t)*(uint16_t*)(v2_vm_shadow_ds+0x25DC) * *(uint16_t*)(v2_vm_shadow_ds+0x25DE) * 8;
-                if (fs_size > 0xC080) fs_size = 0xC080;
-                for (uint32_t i = 0; i < fs_size && fd < 5; i += 2) {
-                    uint16_t rv = *(uint16_t*)(rfs + i);
-                    uint16_t sv = *(uint16_t*)(v2_vm_shadow_fs + i);
-                    if (rv != sv) {
-                        if (fd == 0) fprintf(stderr, "V2-FS-RENDER1[f%d]:\n", _fsc);
-                        fprintf(stderr, "  FS[%04X]: orig=%04X v2=%04X\n", (uint16_t)i, rv, sv);
-                        fd++;
-                    }
-                }
-            }
-        }
-    }
-
+    // FS verification: FS-SNAP-173c7 (snapshot-based) — a live-FS compare here
+    // raced with orig timing and was removed.
     // sub_1C8F1: flagged tiles
     v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE); v2_draw_flagged_tiles(v2_current_ds_val);
     // sub_1E0C7: UI
@@ -19107,7 +18968,6 @@ static uint16_t v2_viking_pick_next_12e2d(uint8_t* s, uint16_t si) {
 
 void v2_phase_post_flip1(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("POST_FLIP1");
     // PSNAP compare: catches divergence in render1 (sub_1DE05/sub_1DD9C/sub_1c8f1/sub_1e0c7/sub_16775).
     v2_compare_phase_snap(V2_PSNAP_RENDER1_END, "v2_phase_post_flip1");
     uint8_t* s = v2_vm_shadow_ds;
@@ -19196,7 +19056,6 @@ void v2_phase_post_flip1(uint16_t ds_val) {
 
 void v2_phase_render2(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("RENDER2");
     // PSNAP compare: catches divergence in post_flip1 (12e16/15530/10704/12fcb/12d2c).
     v2_compare_phase_snap(V2_PSNAP_POST_FLIP1_END, "v2_phase_render2");
     // Mirrors orig pass 2 (eip 0x0086..0x00A6).
@@ -19229,7 +19088,6 @@ void v2_phase_render2(uint16_t ds_val) {
 
 void v2_phase_post_flip2(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("POST_FLIP2");
     // PSNAP compare: catches divergence in render2.
     v2_compare_phase_snap(V2_PSNAP_RENDER2_END, "v2_phase_post_flip2");
     uint8_t* s = v2_vm_shadow_ds;
@@ -19308,7 +19166,6 @@ static void v2_palette_probe(uint8_t* s) {
 
 void v2_phase_render3(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("RENDER3");
     // PSNAP compare: catches divergence in post_flip2 (10753/13c0c/12fd0/11792/101be).
     v2_compare_phase_snap(V2_PSNAP_POST_FLIP2_END, "v2_phase_render3");
     v2_palette_probe(v2_vm_shadow_ds);
@@ -19364,7 +19221,6 @@ void v2_phase_audio_tick(uint16_t ds_val) {
 
 void v2_phase_post_flip3(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("POST_FLIP3");
 #ifdef HEADLESS
     // HEADLESS: enforce --max-frames timeout. Exit cleanly when reached.
     extern int headless_check_exit(void);
@@ -19525,7 +19381,6 @@ void v2_phase_post_flip3(uint16_t ds_val) {
 
 void v2_phase_frame_end(uint16_t ds_val) {
     if (!v2_frame_active) return;
-    v2_watch_302("FRAME_END");
     v2_frame_active = false;
     // Per-frame divergence + stuck-state verify (gameplay-level only)
     v2_frame_end_verify();
