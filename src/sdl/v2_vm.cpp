@@ -10481,18 +10481,10 @@ static void v2_vm_probe_down_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di
     bool found_a = v2_vm_tile_search_down_15A70(vm, filter_si, obj_di);
     if (found_a) {
         vm.carry = true;
-        static bool dbg158 = false;
-        if (!dbg158) { dbg158 = true;
-            printf("V2-DBG: sub_158d7 obj=%d filter=%d: loc_15A70 found → carry=true\n", vm.obj, filter_si);
-        }
         return;
     }
     bool found_b = v2_vm_obj_search_down_15fbe(vm, filter_si, obj_di);
     vm.carry = found_b;
-    static bool dbg158b = false;
-    if (!dbg158b && found_b) { dbg158b = true;
-        printf("V2-DBG: sub_158d7 obj=%d filter=%d: sub_15fbe found → carry=true\n", vm.obj, filter_si);
-    }
 }
 
 // 0x14 (sub_14f59): Object creation. Full implementation.
@@ -12244,7 +12236,7 @@ static bool v2_vm_obj_coll_scan_1614e(V2VM& vm, uint16_t filter_si, uint16_t obj
 static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t di,
                             int16_t& out_dir, uint16_t& out_partner);
 static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di,
-                            int16_t& out_tile_ax, bool dbg);
+                                       int16_t& out_tile_ax);
 extern "C" int32_t v2_fntest_call_scan(uint8_t* test_shadow, int which,
                                        uint16_t filter, uint16_t obj) {
     V2VM vm{};
@@ -12265,7 +12257,7 @@ extern "C" int32_t v2_fntest_call_scan(uint8_t* test_shadow, int which,
     case 2: { uint16_t dir = 0;
               if (v2_yvel_obj_search_15c93(vm, filter, obj, dir)) r = dir; break; }
     default: { int16_t tile_ax = 0;
-               if (v2_vm_tile_coll_down_15afd(vm, filter, obj, tile_ax, false)) r = (uint16_t)tile_ax; break; }
+               if (v2_vm_tile_coll_down_15afd(vm, filter, obj, tile_ax)) r = (uint16_t)tile_ax; break; }
     }
     v2_replay_verify_active = saved_rv;
     v2_vm_acc_base = saved_acc;
@@ -12467,7 +12459,7 @@ static void v2_vm_x_snap_obj_15d6b(V2VM& vm, int16_t ax_dir, uint16_t si_partner
 // walk), [di+0x150D] pushed+restored around the slope probe.
 // Orig does NOT write ds:0x34 — only ds:0x6C (filter) and ds:0x6E (di).
 // (sub_15911, the Y-tile check for BOTH directions, has its own writers via loc_15a7d/64; not here.)
-static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& out_tile_ax, bool dbg) {
+static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di, int16_t& out_tile_ax) {
     bool tile_found = false;
     int16_t tile_ax = 0; // result for sub_15972
 
@@ -12475,7 +12467,6 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
     // TRUE difference (SF^OF of the SUB) is > 0, not the truncated int16.
     ObjRef self0{vm, di};
     int32_t y_moved = (int32_t)self0.world_y() - (int32_t)self0.y_prev();
-    if (dbg) fprintf(stderr, "  y_moved=%d\n", (int)y_moved);
     if (y_moved > 0) {
         vm.ds_write(DS_TEXT_COL, filter_si);
         vm.ds_write(DS_TEXT_ROW, di);
@@ -12489,34 +12480,28 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
             flt++;
         }
 
-        if (dbg) fprintf(stderr, "  filt_val=%02X\n", filt_val);
         if (filt_val >= 0x30 && filt_val != 0xFF) {
             uint16_t obj_x = self0.u16(OBJ_WORLD_X);
             int16_t adj_y = (int16_t)(self0.y_prev() - self0.world_y() + self0.bbox_y1());
             uint16_t tt = (v2_vm_tile_read_141ba(vm, obj_x >> 4, (uint16_t)adj_y >> 4) & 0xFC00) >> 10;
-            if (dbg) fprintf(stderr, "  obj_x=%04X adj_y=%04X tt=%02X\n", obj_x, adj_y, tt);
             if (tt >= 0x30) {
                 vm.ds_write(DS_SCRATCH_3A, tt);
                 di = vm.ds_read(DS_TEXT_ROW);
                 ObjRef selfA{vm, di};
                 uint16_t cur_y_end = selfA.u16(OBJ_BBOX_Y1);
                 uint16_t tt2 = (v2_vm_tile_read_141ba(vm, obj_x >> 4, cur_y_end >> 4) & 0xFC00) >> 10;
-                if (dbg) fprintf(stderr, "  cur_y_end=%04X tt2=%02X\n", cur_y_end, tt2);
                 if (tt2 < 0x30) {
                     uint16_t saved = cur_y_end;
                     uint16_t temp = (tt2 & 0xFFF0) - 1;
                     selfA.w16(OBJ_BBOX_Y1, temp);
                     uint16_t slope_tt = vm.ds_read(DS_SCRATCH_3A);
                     int16_t sr = v2_slope_diff_16390(vm.shadow, slope_tt, obj_x, (uint16_t)vm.obj);
-                    if (dbg) fprintf(stderr, "  saved=%04X temp=%04X slope_tt=%02X sr=%d\n",
-                        saved, temp, slope_tt, sr);
                     if (sr >= 0) {
                         // Orig eip 0x5B72: MOV ds:32h, ax (=sr from sub_16390) — used at eip 0x5B7D ADD ax, ds:32h.
                         vm.ds_write(DS_MODE_WORD, (uint16_t)sr);
                         selfA.w16(OBJ_BBOX_Y1, saved);
                         tile_ax = (int16_t)((uint16_t)((saved & 0xF) + (uint16_t)sr + 1) | 0x8000);
                         tile_found = true;
-                        if (dbg) fprintf(stderr, "  PATH=A tile_ax=%04X\n", (uint16_t)tile_ax);
                     } else {
                         // Orig loc_15b84: just POP into [di+150Dh] — restore saved.
                         selfA.w16(OBJ_BBOX_Y1, saved);
@@ -12541,12 +12526,9 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
             uint16_t obj_x = selfB.u16(OBJ_WORLD_X);
             uint16_t cur_y = selfB.u16(OBJ_BBOX_Y1);
             uint16_t tt3 = (v2_vm_tile_read_141ba(vm, obj_x >> 4, cur_y >> 4) & 0xFC00) >> 10;
-            if (dbg) fprintf(stderr, "  loc_15b88: cur_y=%04X tt3=%02X\n", cur_y, tt3);
             if (tt3 >= 0x30) {
                 int16_t sr = v2_slope_diff_16390(vm.shadow, tt3, obj_x, di);
-                if (dbg) fprintf(stderr, "    sr=%d\n", sr);
                 if (sr >= 0) { tile_ax = (int16_t)((uint16_t)sr | 0x8000); tile_found = true;
-                    if (dbg) fprintf(stderr, "    PATH=B tile_ax=%04X\n", (uint16_t)tile_ax);
                 } else {
                     // orig eip 0x5BA8: jmp loc_15c2d → CLC RET, skipping horizontal scan
                     skip_horizontal = true;
@@ -12612,15 +12594,6 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
 // Path 3 (ds:0x390 == 0): check bit in [obj+0x13F5] → collision if set
 static bool v2_vm_collision_check_1584e(V2VM& vm) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
-    static int _coll_dbg = 0;
-    bool dbg = (vm.obj == 0 && _coll_dbg < 30);
-    if (dbg) {
-        _coll_dbg++;
-        fprintf(stderr, "V2-COLL-1584E[%d]: obj=0 state=%d Y=%04X Y_prev=%04X Y_end=%04X Y_start=%04X\n",
-            _coll_dbg, state,
-            vm.ds_read(vm.obj + OBJ_WORLD_Y), vm.ds_read(vm.obj + OBJ_Y_PREV),
-            vm.ds_read(vm.obj + OBJ_BBOX_Y1), vm.ds_read(vm.obj + OBJ_BBOX_Y0));
-    }
 
     if (state == 0) {
         // loc_15886: INC bx + check bit in collision flags
@@ -12650,11 +12623,10 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
         uint16_t di = vm.global_r(DS_CUR_OBJ);
         vm.di_track = di;   // orig 0x585F: MOV di,ds:42h; scans preserve DI (task #15)
         uint16_t filter_si = (uint16_t)filter;
-        if (dbg) fprintf(stderr, "  filter_byte=%02X di=%04X\n", filter, di);
 
         // sub_15AFD: downward tile collision (extracted — see v2_vm_tile_coll_down_15afd above).
         int16_t tile_ax = 0; // result for sub_15972
-        bool tile_found = v2_vm_tile_coll_down_15afd(vm, filter_si, di, tile_ax, dbg);
+        bool tile_found = v2_vm_tile_coll_down_15afd(vm, filter_si, di, tile_ax);
         di = vm.global_r(DS_CUR_OBJ);
         bool collision_found = false;
         if (tile_found) {
@@ -14525,44 +14497,6 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
         uint8_t cmd = vm.es[anim_bx++];
         if (cmd <= 0x1A) v2_op_anim_count[cmd]++;  // B5 coverage
         uint16_t handler = *(uint16_t*)(vm.shadow +DS_CMD_HANDLER_TBL + cmd * 2);
-        // PER-OPCODE TRACE for ALL objects on level 0x002B (looking for cutscene
-        // controller — object that writes other obj's anim_id at 0x16ED).
-        // Shows pre-state; companion trap below logs writes to *any* obj's 0x16ED.
-        if (*(uint16_t*)(vm.shadow + DS_LEVEL) == 0x002B) {
-            static int _v2_op_trace = 0, _v2_op_en = -1;   // #40 flag: gate the per-op cutscene trace behind V2_TRACE
-            if (_v2_op_en < 0) _v2_op_en = getenv("V2_TRACE") ? 1 : 0;
-            if (_v2_op_en && ++_v2_op_trace <= 1500) {
-                fprintf(stderr,
-                  "V2-OP[%d] obj=%02X: bx=%04X cmd=%02X hdlr=%04X anim=%04X PC=%04X "
-                  "acc=%04X 32F=%04X 86DE=%04X 3B6=%04X 3B8=%04X "
-                  "X=%04X Y=%04X\n",
-                  _v2_op_trace, vm.obj, bx_before, cmd, handler,
-                  vm.ds_read(vm.obj + OBJ_ANIM_IDX),  // this obj's anim ID
-                  vm.ds_read(vm.obj + OBJ_PC),  // PC
-                  vm.ds_read(DS_ACCUMULATOR),             // accumulator
-                  vm.ds_read(DS_TRANSITION),
-                  vm.ds_read(DS_INPUT_ACCUM),           // input keys
-                  vm.ds_read(DS_INPUT_KEYS),            // current input
-                  vm.ds_read(DS_INPUT_EDGES),            // edge input
-                  vm.ds_read(vm.obj + OBJ_WORLD_X),  // X
-                  vm.ds_read(vm.obj + OBJ_WORLD_Y)); // Y
-            }
-            // CUTSCENE CONTROLLER TRAP: snapshot all 16ED before opcode, compare after
-            uint16_t pre_16ED[10];
-            for (int i = 0; i < 10; i++)
-                pre_16ED[i] = *(uint16_t*)(vm.shadow + (i * 2) + OBJ_ANIM_IDX);
-            // (Run opcode below in normal flow, then compare via post-trap.)
-            // Stash for post-check via static so post-block can find it:
-            extern uint16_t v2_op_pre_16ED[10];
-            extern uint16_t v2_op_who;
-            extern uint16_t v2_op_cmd;
-            extern uint16_t v2_op_bx;
-            for (int i = 0; i < 10; i++) v2_op_pre_16ED[i] = pre_16ED[i];
-            v2_op_who = vm.obj;
-            v2_op_cmd = cmd;
-            v2_op_bx = bx_before;
-        }
-
         // Debug: catch invalid anim commands
         if (cmd > 0x1A) {
             static bool dbg = false;
@@ -14595,25 +14529,6 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
 
         bool _ok = v2_vm_exec_anim_cmd(vm, handler, anim_bx, cmd);
 
-        // POST-OPCODE TRAP: detect any 0x16ED writes (anim_id changes for ANY obj).
-        // This finds the cutscene controller — the obj whose VM modifies others' anim.
-        if (*(uint16_t*)(vm.shadow + DS_LEVEL) == 0x002B) {
-            extern uint16_t v2_op_pre_16ED[10];
-            extern uint16_t v2_op_who, v2_op_cmd, v2_op_bx;
-            for (int i = 0; i < 10; i++) {
-                uint16_t now = *(uint16_t*)(vm.shadow + (i * 2) + OBJ_ANIM_IDX);
-                if (now != v2_op_pre_16ED[i]) {
-                    static int _aid_trace = 0;
-                    if (++_aid_trace <= 100) {
-                        fprintf(stderr,
-                          "V2-ANIM-WR[%d]: writer_obj=%02X cmd=%02X bx=%04X "
-                          "→ target_obj=%02X OBJ_ANIM_IDX: %04X → %04X\n",
-                          _aid_trace, v2_op_who, v2_op_cmd, v2_op_bx,
-                          i * 2, v2_op_pre_16ED[i], now);
-                    }
-                }
-            }
-        }
 
         if (!_ok) {
             // Record trace entry
@@ -14631,10 +14546,6 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
 }
 
 // Globals for cutscene controller trap (defined here, declared extern above).
-uint16_t v2_op_pre_16ED[10] = {0};
-uint16_t v2_op_who = 0;
-uint16_t v2_op_cmd = 0;
-uint16_t v2_op_bx = 0;
 
 // Execute a single anim cmd. Returns true = continue (next cmd), false = exit (end/delay).
 static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd) {
