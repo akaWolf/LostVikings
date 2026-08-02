@@ -142,6 +142,7 @@ CXX_SRCS := \
   src/sdl/v2_render_funcs.cpp \
   src/sdl/v2_vm.cpp \
   src/sdl/v2_input_recorder.cpp \
+  src/sdl/v2_native_opl.cpp \
   src/sdl/v2_keymap.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
@@ -165,7 +166,8 @@ CXX_SRCS := \
   src/sdl/v2_vm.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_keymap.cpp \
-  src/sdl/v2_fn_test.cpp
+  src/sdl/v2_fn_test.cpp \
+  src/sdl/v2_native_opl.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
 CXX_SRCS += src/sdl/play.cpp
@@ -206,6 +208,12 @@ endif
 
 CXX_SRCS += $(ADL_SRCS)
 CXX_OBJS := $(patsubst %.cpp, $(OBJDIR)/%.o, $(CXX_SRCS))
+# (#61) native AIL channel: the Nuked OPL3 core is already in the default
+# C_SRCS; HEADLESS builds (audio stub) need it explicitly for the silent
+# render + V2_OPL_TRACE verification channel.
+ifdef HEADLESS
+C_SRCS += src/adlmidi/src/chips/nuked/nukedopl3.c
+endif
 C_OBJS   := $(patsubst %.c,   $(OBJDIR)/%.o, $(C_SRCS))
 ALL_OBJS := $(CXX_OBJS) $(C_OBJS)
 DEPS     := $(ALL_OBJS:.o=.d)

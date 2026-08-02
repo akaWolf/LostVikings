@@ -232,7 +232,42 @@ static int v2_pit_lohi = 0;
 extern "C" int v2_fntest_pit_jitter;
 extern "C" int v2_fntest_pit_jitter = 0;
 static int v2_pit_jitter_phase = 0;
+// (#61) native AIL channel hooks — see src/sdl/v2_native_opl.cpp
+extern "C" int  v2_nopl_enabled(void);
+extern "C" void v2_nopl_out(uint16_t port, uint8_t val);
+extern "C" void v2_nopl_set_pit_divisor(uint32_t divisor);
+static int v2_pit_mode_pending = 0;      // 0x34/0x36 written to 0x43 → next two 0x40 bytes = divisor
+static uint32_t v2_pit_divisor_lo = 0;
+static int v2_pit_divisor_phase = 0;
+
 void asm2C_OUT(int16_t address, int data,_STATE* _state) {
+	// (#61) AdLib register file → native OPL queue (game thread)
+	if ((uint16_t)address == 0x388 || (uint16_t)address == 0x389) {
+		v2_nopl_out((uint16_t)address, (uint8_t)data);
+		return;
+	}
+	if ((uint16_t)address == 0x40 && v2_pit_mode_pending) {
+		// PIT channel-0 divisor reload (lo, then hi) — the AIL driver
+		// programs its tick rate here.
+		if (v2_pit_divisor_phase == 0) {
+			v2_pit_divisor_lo = (uint8_t)data;
+			v2_pit_divisor_phase = 1;
+		} else {
+			uint32_t div = ((uint32_t)(uint8_t)data << 8) | v2_pit_divisor_lo;
+			v2_pit_mode_pending = 0;
+			v2_pit_divisor_phase = 0;
+			v2_nopl_set_pit_divisor(div);
+		}
+		return;
+	}
+	if ((uint16_t)address == 0x43 && ((data & 0x30) == 0x30)) {
+		// mode byte with both access bits (lo+hi reload, e.g. 0x34/0x36):
+		// a rate program follows on port 0x40 — distinct from the 0x00
+		// latch command modeled below.
+		v2_pit_mode_pending = 1;
+		v2_pit_divisor_phase = 0;
+		return;
+	}
 	if ((uint16_t)address == 0x43) {           // PIT latch command
 		uint16_t step = 0x1C00;
 		// (#60 fact) elapsed is measured between latch pairs — the SECOND
