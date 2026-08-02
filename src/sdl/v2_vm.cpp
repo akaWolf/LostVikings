@@ -1385,7 +1385,7 @@ static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
         v2_pool.set_dontstop((uint16_t)v2_id_music);
         // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax` with si=0 (music
         // call site uses si=0). Stores music handle at ds:0x990C (slot 0).
-        *(uint16_t*)(s + DS_MUSIC_ID) = (uint16_t)v2_id_music;
+        v2gs(s).music_id((uint16_t)v2_id_music);
     }
 }
 
@@ -2315,7 +2315,7 @@ static void v2_load_chunk_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
     uint16_t plane_size = v2_read_raw_chunk(ax, v2_vm_shadow_chunk, V2_CHUNK_SHADOW_SIZE,
                                             shadow + DS_CHUNK_HDR);
     if (plane_size == 0) return;    // orig error paths → sub_10dba DOS-abort (class E)
-    *(uint16_t*)(shadow + DS_DECOMP_SIZE) = plane_size; // ds:0x2BBC = plane_size (mirror orig)
+    v2gs(shadow).decomp_size(plane_size); // ds:0x2BBC = plane_size (mirror orig)
     if (di == 0) {
         v2_draw_hud_background(v2_current_ds_val, chunk_seg, plane_size);
     } else {
@@ -2413,7 +2413,7 @@ static uint32_t v2_fs_hash_shadow();
 // Original: OUT 0x3C8=0 (start color), REP OUTSB 0x300 bytes to port 0x3C9, then setPalette().
 // For v2: palette in shadow DS at 0x8202, applied by render callback. DS write: word_303DE=0.
 static void v2_pal_dac_write_10fe6(uint8_t* s) {
-    *(uint16_t*)(s + DS_PAL_REQ) = 0; // word_303DE = 0 (palette write complete)
+    v2gs(s).pal_req(0); // word_303DE = 0 (palette write complete)
     // Original VGA DAC write:
     // OUT(0x3C8, 0);  // start at color 0
     // REP OUTSB ds:0x8202, 0x300 bytes → port 0x3C9
@@ -2426,7 +2426,7 @@ static void v2_pal_dac_write_10fe6(uint8_t* s) {
 // Each slot: check enable flag, copy timer, compute color range, write partial palette to VGA DAC.
 // DS writes: [bx+0x258C] = timer copy, word_303DE = 0. VGA: OUT + setPalette for affected ranges.
 static void v2_pal_anim_10ffc(uint8_t* s) {
-    *(uint16_t*)(s + DS_PAL_REQ) = 0; // word_303DE = 0
+    v2gs(s).pal_req(0); // word_303DE = 0
     uint16_t pal_base = v2gs(s).pal_src_ptr(); // word_303E0 = palette data pointer
     for (int16_t bx = 7; bx >= 0; bx--) {
         uint8_t mask = s[(uint16_t)(bx - LUT_BYTE_OR)]; // bit mask from table
@@ -2495,8 +2495,8 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
         s[DS_PAL_SHADE_G] = (uint8_t)bx; // byte_28823
         s[DS_PAL_SHADE_B] = (uint8_t)bx; // byte_28824
         v2_pal_shade_10f03(s);                    // sub_10f03: palette shading → ds:0x8202
-        *(uint16_t*)(s + DS_PAL_REQ) = 4;       // word_303DE = 4 (request palette write)
-        *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;  // word_303E0 = shaded palette pointer
+        v2gs(s).pal_req(4);       // word_303DE = 4 (request palette write)
+        v2gs(s).pal_src_ptr(DS_PAL_OUT);  // word_303E0 = shaded palette pointer
         // Original: CALL sub_16775; CALL sub_10130
         v2_page_flip_16775(s);                     // sub_16775: page flip DS writes
         v2_vsync_wait_10130(s);                     // sub_10130: vsync + palette dispatch (DS: DEC A39C)
@@ -2504,7 +2504,7 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
     s[DS_PAL_SHADE_R] = 0;                                                       // MOV byte_28822, 0
     s[DS_PAL_SHADE_G] = 0;                                                       // MOV byte_28823, 0
     s[DS_PAL_SHADE_B] = 0;                                                       // MOV byte_28824, 0
-    *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;                                  // MOV word_303E0, 8202h
+    v2gs(s).pal_src_ptr(DS_PAL_OUT);                                  // MOV word_303E0, 8202h
 }
 
 static void v2_pal_correct_10e99(uint8_t* s); // forward decl for v2_save_game_1450b
@@ -2520,8 +2520,8 @@ static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di)
     s[DS_PAL_SHADE_G] = (uint8_t)((uint8_t)si << 1);                        // SHL al, 1; MOV ds:343h, al
     s[DS_PAL_SHADE_B] = (uint8_t)((uint8_t)di << 1);                        // SHL al, 1; MOV ds:344h, al
     s[DS_PAL_FLAGS] |= 1;                                                 // OR byte ptr ds:7EFDh, 1
-    *(uint16_t*)(s + DS_PAL_REQ) = 4;                                   // MOV word ptr ds:7EFEh, 4
-    *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT;                              // MOV word ptr ds:7F00h, 8202h
+    v2gs(s).pal_req(4);                                   // MOV word ptr ds:7EFEh, 4
+    v2gs(s).pal_src_ptr(DS_PAL_OUT);                              // MOV word ptr ds:7F00h, 8202h
     // JMP sub_10E99: palette correction — writes 768 bytes to ds:0x8202
     v2_pal_correct_10e99(s);
 }
@@ -2703,7 +2703,7 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
             v2_pal_rotate_back_1020f(s, (uint16_t)si, DS_PAL_SRC);
         }
     }
-    *(uint16_t*)(s + DS_PAL_REQ) = 2;                                  // word_303DE = 2
+    v2gs(s).pal_req(2);                                  // word_303DE = 2
 }
 
 // sub_108c8 (seg000): Sound state toggle + cleanup.
@@ -2898,8 +2898,8 @@ static void v2_vga_selector_118ad(uint8_t* s, uint16_t di_in) {
 static uint16_t v2_viking_death_scan_12e2d(uint8_t* s, uint16_t si) {
     if (si >= 6) return si;
     if ((int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) return si;
-    *(uint16_t*)(s + DS_SCROLL_DELTA_X) = 5;
-    *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = 5;
+    v2gs(s).scroll_delta_x(5);
+    v2gs(s).scroll_delta_y(5);
     uint16_t start = v2gs(s).active_viking();
     si += 2; if (si >= 6) si = 0;
     if (si != start && (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) return si;
@@ -2913,7 +2913,7 @@ static uint16_t v2_viking_death_scan_12e2d(uint8_t* s, uint16_t si) {
 static void v2_viking_death_next_12e16(uint8_t* s) {
     uint16_t si = v2gs(s).active_viking();
     si = v2_viking_death_scan_12e2d(s, si);
-    *(uint16_t*)(s + DS_ACTIVE_VIKING) = si;
+    v2gs(s).active_viking(si);
     if (si == 0xFFFF) v2gs(s).frame_flags_ref() |= 2;
 }
 
@@ -2940,9 +2940,9 @@ static void v2_viking_cycle_12e84(uint8_t* s) {
         uint16_t di_v = ObjMem{s, (uint16_t)si_v}.sub_slot();
         *(uint16_t*)(s + di_v + OBJ_SPRITE_FLAGS) &= 0xDFFF;
         s[di_v + OBJ_DIRTY_MODE] = 2;
-        *(uint16_t*)(s + DS_ACTIVE_VIKING) = (uint16_t)si_v;
-        *(uint16_t*)(s + DS_SCROLL_DELTA_X) = 5;
-        *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = 5;
+        v2gs(s).active_viking((uint16_t)si_v);
+        v2gs(s).scroll_delta_x(5);
+        v2gs(s).scroll_delta_y(5);
     }
 }
 
@@ -2960,7 +2960,7 @@ static void v2_portrait_sync_11b0b(uint8_t* s);
 // byte [si>>1 + 0x449] = 0. Uses signed JNS/NEG absolute values.
 static void v2_viking_proximity_11f47(uint8_t* s) {
     v2_cc_v2_hit(5);   // M1 call-parity CC_11F47 (#65)
-    *(uint16_t*)(s + DS_HUD_FIELD_449) = 0xFFFF;     // word_28929
+    v2gs(s).hud_field_449(0xFFFF);     // word_28929
     s[DS_HUD_FORCE] = 0xFF;                          // byte_2892B
     uint16_t di = v2gs(s).active_viking();
     for (uint16_t si = 0; si < 6; si += 2) {
@@ -4443,7 +4443,7 @@ static void v2_text_lookup_12515(uint8_t* s, uint16_t ax) {
     uint16_t si = ax << 1;                                           // SHL ax, 1
     uint8_t* seg001 = v2_m2c_base + 0x9480;
     uint16_t text_off = *(uint16_t*)(seg001 + si);                   // es:[si+0]
-    *(uint16_t*)(s + DS_TEXT_IDX) = text_off;                               // MOV word_2850A, ax
+    v2gs(s).text_idx(text_off);                               // MOV word_2850A, ax
     { extern int v2_dbg_pre_vm_iter;
       fprintf(stderr, "V2-2850A-HELPER[f%d]: ax_in=%04X seg001_off=%04X text_off=%04X\n",
               v2_dbg_pre_vm_iter, ax, si, text_off); }
@@ -4456,9 +4456,9 @@ static void v2_text_dims_12529(uint8_t* s, uint16_t& bx) {
     if (!v2_m2c_base) return;
     uint8_t* seg001 = v2_m2c_base + 0x9480;
     uint16_t width = (uint16_t)seg001[bx];                           // ah=0; al=es:[bx]
-    *(uint16_t*)(s + DS_SCRATCH_34) = width;                                  // word_28514
+    v2gs(s).scratch_34(width);                                  // word_28514
     uint16_t height = (uint16_t)seg001[bx + 1];                     // al=es:[bx+1]
-    *(uint16_t*)(s + DS_SCRATCH_36) = height;                                 // word_28516
+    v2gs(s).scratch_36(height);                                 // word_28516
     bx += 2;                                                         // ADD bx, 2
 }
 
@@ -4488,8 +4488,8 @@ static void v2_text_align_12549(uint8_t* s, uint16_t ax) {
         // default → loc_1257a: x = width/2, y = 0
         x_off = width >> 1; y_off = 0;
     }
-    *(uint16_t*)(s + DS_SCRATCH_38) = x_off;                                  // word_28518
-    *(uint16_t*)(s + DS_SCRATCH_3A) = y_off;                                  // word_2851A
+    v2gs(s).scratch_38(x_off);                                  // word_28518
+    v2gs(s).scratch_3a(y_off);                                  // word_2851A
 }
 
 // sub_12388: draw text box frame to glyph buffer.
@@ -4498,8 +4498,8 @@ static void v2_text_align_12549(uint8_t* s, uint16_t ax) {
 // Uses: word_28514 (width), word_28516 (height), word_28518, word_2851A.
 // Writes: word_2854C, word_2854E, glyph buffer entries.
 static void v2_text_frame_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t align) {
-    *(uint16_t*)(s + DS_TEXT_COL) = si;                                     // word_2854C = si
-    *(uint16_t*)(s + DS_TEXT_ROW) = di;                                     // word_2854E = di
+    v2gs(s).text_col(si);                                     // word_2854C = si
+    v2gs(s).text_row(di);                                     // word_2854E = di
     uint16_t width = v2gs(s).scratch_34();                         // word_28514
     uint16_t height = v2gs(s).scratch_36();                       // word_28516
 
@@ -4566,7 +4566,7 @@ static void v2_text_frame_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t al
 static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
     if (!v2_m2c_base) return;
     uint8_t* seg001 = v2_m2c_base + 0x9480;
-    *(uint16_t*)(s + DS_TEXT_COL) = si;                                     // MOV word_2854C, si
+    v2gs(s).text_col(si);                                     // MOV word_2854C, si
     uint16_t cx = v2gs(s).scratch_34() - 2;                       // MOV cx, word_28514; SUB cx, 2
 
     while (true) {                                                    // loc_124d8
@@ -4632,7 +4632,7 @@ static void v2_clear_viking_state_111df(uint8_t* s) {
     s[DS_PAL_SHADE_R2] = 0; // byte_28825
     s[DS_PAL_SHADE_G2] = 0; // byte_28826
     s[DS_PAL_SHADE_B2] = 0; // byte_28827
-    *(uint16_t*)(s + DS_SCRATCH_348) = 0; // word_28828
+    v2gs(s).scratch_348(0); // word_28828
 }
 
 // sub_12816: clear UI glyph list — byte_31A4B=0, clear 0x1B8 words at ds:0x956C
@@ -4686,11 +4686,11 @@ static void v2_clear_sprite_res_12fb3(uint8_t* s) {
 // sub_113b0: init scroll limits from map dimensions (word_2AABC/word_2AABE = ds:0x25DC/0x25DE).
 static void v2_scroll_limits_113b0(uint8_t* s) {
     uint16_t width = v2gs(s).map_bp();   // word_2AABC (map width in tiles)
-    *(uint16_t*)(s + DS_CLIP_LIMIT_X) = width * 2;         // word_31648
-    *(uint16_t*)(s + DS_SCROLL_LIMIT_X) = width * 16 - 0x140; // word_2AA84 (scroll X limit)
+    v2gs(s).clip_limit_x(width * 2);         // word_31648
+    v2gs(s).scroll_limit_x(width * 16 - 0x140); // word_2AA84 (scroll X limit)
     uint16_t height = v2gs(s).map_height();   // word_2AABE (map height in tiles)
-    *(uint16_t*)(s + DS_CLIP_LIMIT_Y) = height * 2;        // word_3164A
-    *(uint16_t*)(s + DS_SCROLL_LIMIT_Y) = height * 16 - 0xB0; // word_2AA86 (scroll Y limit)
+    v2gs(s).clip_limit_y(height * 2);        // word_3164A
+    v2gs(s).scroll_limit_y(height * 16 - 0xB0); // word_2AA86 (scroll Y limit)
     // jmp loc_16595: build row lookup table at ds:0x8F68 (256 entries).
     // ax = ds:0x25DC (from above), shl 1 = row stride in tilemap words.
     // ds:[0x8F68 + i*2] = i * stride for i=0..255.
@@ -4714,10 +4714,10 @@ static void v2_viewport_init_113d8(uint8_t* s) {
     int16_t ax = ObjMem{s, si}.i16(OBJ_WORLD_X) - 0xA0;   // 16-bit wrap (unit 46, div #21)
     if (ax < 0) ax = 0;
     if (ax > (int16_t)v2gs(s).scroll_limit_x()) ax = (int16_t)v2gs(s).scroll_limit_x();
-    *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;   // word_28524 (viewport X)
-    *(uint16_t*)(s + DS_SAVED_VP_X) = (uint16_t)ax;   // word_2AA5B
+    v2gs(s).viewport_x((uint16_t)ax);   // word_28524 (viewport X)
+    v2gs(s).saved_vp_x((uint16_t)ax);   // word_2AA5B
     uint16_t scroll_x = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + DS_SCROLL_COL) = scroll_x;        // word_2AA5F
+    v2gs(s).scroll_col(scroll_x);        // word_2AA5F
     *(uint16_t*)(s + DS_SCROLL_DISP_X) = scroll_x;        // word_317CF
     *(uint16_t*)(s + DS_SCROLL_DISP_X2) = scroll_x >> 1;   // word_317D3
 
@@ -4725,10 +4725,10 @@ static void v2_viewport_init_113d8(uint8_t* s) {
     ax = ObjMem{s, si}.i16(OBJ_WORLD_Y) - 0x58;   // 16-bit wrap
     if (ax < 0) ax = 0;
     if (ax > (int16_t)v2gs(s).scroll_limit_y()) ax = (int16_t)v2gs(s).scroll_limit_y();
-    *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;   // word_28526 (viewport Y)
-    *(uint16_t*)(s + DS_SAVED_VP_Y) = (uint16_t)ax;   // word_2AA5D
+    v2gs(s).viewport_y((uint16_t)ax);   // word_28526 (viewport Y)
+    v2gs(s).saved_vp_y((uint16_t)ax);   // word_2AA5D
     uint16_t scroll_y = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + DS_SCROLL_ROW) = scroll_y;        // word_2AA61
+    v2gs(s).scroll_row(scroll_y);        // word_2AA61
     *(uint16_t*)(s + DS_SCROLL_DISP_Y) = scroll_y;        // word_317D1
     *(uint16_t*)(s + DS_SCROLL_DISP_Y2) = scroll_y >> 1;   // word_317D5
 }
@@ -4799,9 +4799,9 @@ static void v2_vga_band_16ded(uint8_t* s) {
     if (di_y < 0) di_y = 0;                                        // JGE loc_16df7
     uint16_t di2 = (uint16_t)di_y << 1;                            // 0x6df7
     uint16_t bx = *(uint16_t*)(s + (uint16_t)(di2 - LUT_ROW_BASE)); // 0x6dfb row LUT
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_2) = di2 + v2gs(s).page_shown(); // 0x6dff/0x6e03
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_3) = di2 + v2gs(s).page_bg();    // 0x6e08/0x6e0c
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_1) = di2 + v2gs(s).page_draw();  // 0x6e11/0x6e15
+    v2gs(s).page_rowcur_2(di2 + v2gs(s).page_shown()); // 0x6dff/0x6e03
+    v2gs(s).page_rowcur_3(di2 + v2gs(s).page_bg());    // 0x6e08/0x6e0c
+    v2gs(s).page_rowcur_1(di2 + v2gs(s).page_draw());  // 0x6e11/0x6e15
     int16_t dx_x = (int16_t)v2gs(s).scroll_col() - 1;   // 0x6e19/0x6e1d
     if (dx_x < 0) dx_x = 0;                                        // JGE loc_16e23
     bx += (uint16_t)dx_x;                                          // 0x6e23
@@ -4809,11 +4809,11 @@ static void v2_vga_band_16ded(uint8_t* s) {
     uint16_t dx2 = ((uint16_t)dx_x << 1) + 8;                      // 0x6e27/0x6e29
     for (int cx = 0; cx < 0x19; cx++) {                            // 0x6e2c loc_16e2f
         uint16_t p2 = v2gs(s).page_rowcur_2();
-        *(uint16_t*)(s + DS_PAGE_VGA_3) = *(uint16_t*)(s + (uint16_t)(p2 - 0x7608)) + dx2; // 930D
+        v2gs(s).page_vga_3(*(uint16_t*)(s + (uint16_t)(p2 - 0x7608)) + dx2); // 930D
         uint16_t p3 = v2gs(s).page_rowcur_3();
-        *(uint16_t*)(s + DS_PAGE_VGA_1) = *(uint16_t*)(s + (uint16_t)(p3 - 0x7608)) + dx2; // 930F
+        v2gs(s).page_vga_1(*(uint16_t*)(s + (uint16_t)(p3 - 0x7608)) + dx2); // 930F
         uint16_t p1 = v2gs(s).page_rowcur_1();
-        *(uint16_t*)(s + DS_PAGE_VGA_2) = *(uint16_t*)(s + (uint16_t)(p1 - 0x7608)) + dx2; // 930B
+        v2gs(s).page_vga_2(*(uint16_t*)(s + (uint16_t)(p1 - 0x7608)) + dx2); // 930B
         v2_tile_row_16dc1(s, bx, 1);         // CALL sub_16DC1 (43-tile row, di = ds:930B)
         v2_page_copy_col_171dc(s);           // CALL sub_171DC
         bx += v2gs(s).fs_page_stride();                 // 0x6e5f
@@ -4836,21 +4836,19 @@ static void v2_vga_scroll_col_left_16e75(uint8_t* s) {
     uint16_t di_pg1 = di_r + v2gs(s).page_shown();        // 0x6e87 +[92F9]
     uint8_t cl_v = 0x9C;                                             // 0x6e8d
     s[DS_PAGE_SPLIT_1A] = cl_v - (uint8_t)(di_pg1 % cl_v);           // 0x6e8f DIV/SUB -> 9311
-    *(uint16_t*)(s + DS_PAGE_COPY_DST1) =
-        *(uint16_t*)(s + (uint16_t)(di_pg1 - 0x7608));               // 0x6e97 -> 9317
+    v2gs(s).page_copy_dst1(*(uint16_t*)(s + (uint16_t)(di_pg1 - 0x7608)));               // 0x6e97 -> 9317
     if (s[DS_PAGE_SPLIT_1A] < 0x32) {                                // 0x6e9f JNC
         s[DS_PAGE_SPLIT_1B] = 0x32 - s[DS_PAGE_SPLIT_1A];            // 0x6ea6 -> 9312
         s[DS_PAGE_SPLIT_1A] <<= 2; s[DS_PAGE_SPLIT_1B] <<= 2;        // 0x6eb0/0x6eb5
-        *(uint16_t*)(s + DS_PAGE_COPY_SRC2) = *(uint16_t*)(s + LUT_PAGE_ROW); // 0x6eba -> 9319
+        v2gs(s).page_copy_src2(*(uint16_t*)(s + LUT_PAGE_ROW)); // 0x6eba -> 9319
     } else { s[DS_PAGE_SPLIT_1A] = 0xC8; s[DS_PAGE_SPLIT_1B] = 0; }  // loc_16ec4
     uint16_t di_pg2 = di_r + v2gs(s).page_bg();           // loc_16ece +[92FB]
     s[DS_PAGE_SPLIT_2A] = cl_v - (uint8_t)(di_pg2 % cl_v);           // 0x6ed5 -> 9313
-    *(uint16_t*)(s + DS_PAGE_COPY_DST2) =
-        *(uint16_t*)(s + (uint16_t)(di_pg2 - 0x7608));               // 0x6edf -> 931B
+    v2gs(s).page_copy_dst2(*(uint16_t*)(s + (uint16_t)(di_pg2 - 0x7608)));               // 0x6edf -> 931B
     if (s[DS_PAGE_SPLIT_2A] < 0x32) {                                // 0x6ee7
         s[DS_PAGE_SPLIT_2B] = 0x32 - s[DS_PAGE_SPLIT_2A];            // 0x6eee -> 9314
         s[DS_PAGE_SPLIT_2A] <<= 2; s[DS_PAGE_SPLIT_2B] <<= 2;        // 0x6ef8/0x6efd
-        *(uint16_t*)(s + DS_PAGE_COPY_SRC3) = *(uint16_t*)(s + LUT_PAGE_ROW); // 0x6f02 -> 931D
+        v2gs(s).page_copy_src3(*(uint16_t*)(s + LUT_PAGE_ROW)); // 0x6f02 -> 931D
     } else { s[DS_PAGE_SPLIT_2A] = 0xC8; s[DS_PAGE_SPLIT_2B] = 0; }  // loc_16f0c
     uint16_t di_pg3 = di_r + v2gs(s).page_draw();         // loc_16f16 +[92F7]
     uint16_t di_vga3 = *(uint16_t*)(s + (uint16_t)(di_pg3 - 0x7608)); // 0x6f1b
@@ -4864,7 +4862,7 @@ static void v2_vga_scroll_col_left_16e75(uint8_t* s) {
     v2gs(s).page_copy_src2_ref() += ax_col + 8;               // 0x6f39/0x6f3d
     v2gs(s).page_copy_dst2_ref() += ax_col + 8;               // 0x6f42/0x6f46
     v2gs(s).page_copy_src3_ref() += ax_col + 8;               // 0x6f4b/0x6f4f
-    *(uint16_t*)(s + DS_PAGE_COPY_SRC1) = di_vga3;                   // 0x6f54 -> 9315
+    v2gs(s).page_copy_src1(di_vga3);                   // 0x6f54 -> 9315
     v2_tile_col_16dd9(s, bx_r);                                      // 0x6f58 CALL sub_16DD9
     v2_page_copy_row_1712b(s);                                       // 0x6f5b CALL sub_1712B
 }
@@ -4880,21 +4878,19 @@ static void v2_vga_scroll_col_right_16f5f(uint8_t* s) {
     uint16_t di_pg1 = di_r + v2gs(s).page_shown();        // 0x6f71 +[92F9]
     uint8_t cl_v = 0x9C;                                             // 0x6f77
     s[DS_PAGE_SPLIT_1A] = cl_v - (uint8_t)(di_pg1 % cl_v);           // 0x6f79 -> 9311
-    *(uint16_t*)(s + DS_PAGE_COPY_DST1) =
-        *(uint16_t*)(s + (uint16_t)(di_pg1 - 0x7608));               // 0x6f81 -> 9317
+    v2gs(s).page_copy_dst1(*(uint16_t*)(s + (uint16_t)(di_pg1 - 0x7608)));               // 0x6f81 -> 9317
     if (s[DS_PAGE_SPLIT_1A] < 0x32) {                                // 0x6f89
         s[DS_PAGE_SPLIT_1B] = 0x32 - s[DS_PAGE_SPLIT_1A];            // 0x6f90 -> 9312
         s[DS_PAGE_SPLIT_1A] <<= 2; s[DS_PAGE_SPLIT_1B] <<= 2;        // 0x6f9a/0x6f9f
-        *(uint16_t*)(s + DS_PAGE_COPY_SRC2) = *(uint16_t*)(s + LUT_PAGE_ROW); // 0x6fa4 -> 9319
+        v2gs(s).page_copy_src2(*(uint16_t*)(s + LUT_PAGE_ROW)); // 0x6fa4 -> 9319
     } else { s[DS_PAGE_SPLIT_1A] = 0xC8; s[DS_PAGE_SPLIT_1B] = 0; }  // loc_16fae
     uint16_t di_pg2 = di_r + v2gs(s).page_bg();           // loc_16fb8 +[92FB]
     s[DS_PAGE_SPLIT_2A] = cl_v - (uint8_t)(di_pg2 % cl_v);           // 0x6fc1 -> 9313
-    *(uint16_t*)(s + DS_PAGE_COPY_DST2) =
-        *(uint16_t*)(s + (uint16_t)(di_pg2 - 0x7608));               // 0x6fc9 -> 931B
+    v2gs(s).page_copy_dst2(*(uint16_t*)(s + (uint16_t)(di_pg2 - 0x7608)));               // 0x6fc9 -> 931B
     if (s[DS_PAGE_SPLIT_2A] < 0x32) {                                // 0x6fd1
         s[DS_PAGE_SPLIT_2B] = 0x32 - s[DS_PAGE_SPLIT_2A];            // 0x6fd8 -> 9314
         s[DS_PAGE_SPLIT_2A] <<= 2; s[DS_PAGE_SPLIT_2B] <<= 2;        // 0x6fe2/0x6fe7
-        *(uint16_t*)(s + DS_PAGE_COPY_SRC3) = *(uint16_t*)(s + LUT_PAGE_ROW); // -> 931D
+        v2gs(s).page_copy_src3(*(uint16_t*)(s + LUT_PAGE_ROW)); // -> 931D
     } else { s[DS_PAGE_SPLIT_2A] = 0xC8; s[DS_PAGE_SPLIT_2B] = 0; }
     uint16_t di_pg3 = di_r + v2gs(s).page_draw();         // +[92F7]
     uint16_t di_vga3 = *(uint16_t*)(s + (uint16_t)(di_pg3 - 0x7608));
@@ -4906,7 +4902,7 @@ static void v2_vga_scroll_col_right_16f5f(uint8_t* s) {
     v2gs(s).page_copy_src2_ref() += ax_col + 8;
     v2gs(s).page_copy_dst2_ref() += ax_col + 8;
     v2gs(s).page_copy_src3_ref() += ax_col + 8;
-    *(uint16_t*)(s + DS_PAGE_COPY_SRC1) = di_vga3;                   // -> 9315
+    v2gs(s).page_copy_src1(di_vga3);                   // -> 9315
     v2_tile_col_16dd9(s, bx_r);                                      // CALL sub_16DD9
     v2_page_copy_row_1712b(s);                                       // CALL sub_1712B
 }
@@ -4920,19 +4916,19 @@ static void v2_vga_scroll_row_top_17049(uint8_t* s) {
     if ((int16_t)di_r > 0) di_r--; else di_r = 0;                    // 0x704d DEC/JGE
     di_r <<= 1;                                                      // 0x7053
     uint16_t bx_r = *(uint16_t*)(s + (uint16_t)(di_r - LUT_ROW_BASE)); // 0x7057
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_2) = di_r + v2gs(s).page_shown(); // 0x705b -> 9305
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_3) = di_r + v2gs(s).page_bg();    // 0x7064 -> 9307
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_1) = di_r + v2gs(s).page_draw();  // 0x706d -> 9309
+    v2gs(s).page_rowcur_2(di_r + v2gs(s).page_shown()); // 0x705b -> 9305
+    v2gs(s).page_rowcur_3(di_r + v2gs(s).page_bg());    // 0x7064 -> 9307
+    v2gs(s).page_rowcur_1(di_r + v2gs(s).page_draw());  // 0x706d -> 9309
     uint16_t dx_col = *(uint16_t*)(s + DS_SCROLL_DISP_X);            // 0x7075 dx=[92EF]
     if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;              // 0x7079 DEC/JGE
     bx_r += dx_col; bx_r <<= 1;                                      // 0x707f/0x7081
     dx_col = dx_col * 2 + 8;                                         // 0x7083/0x7085
     uint16_t pg1 = v2gs(s).page_rowcur_2();               // 0x7088
-    *(uint16_t*)(s + DS_PAGE_VGA_3) = *(uint16_t*)(s + (uint16_t)(pg1 - 0x7608)) + dx_col; // 930D
+    v2gs(s).page_vga_3(*(uint16_t*)(s + (uint16_t)(pg1 - 0x7608)) + dx_col); // 930D
     uint16_t pg2 = v2gs(s).page_rowcur_3();               // 0x7096
-    *(uint16_t*)(s + DS_PAGE_VGA_1) = *(uint16_t*)(s + (uint16_t)(pg2 - 0x7608)) + dx_col; // 930F
+    v2gs(s).page_vga_1(*(uint16_t*)(s + (uint16_t)(pg2 - 0x7608)) + dx_col); // 930F
     uint16_t pg3 = v2gs(s).page_rowcur_1();               // 0x70a4
-    *(uint16_t*)(s + DS_PAGE_VGA_2) = *(uint16_t*)(s + (uint16_t)(pg3 - 0x7608)) + dx_col; // 930B
+    v2gs(s).page_vga_2(*(uint16_t*)(s + (uint16_t)(pg3 - 0x7608)) + dx_col); // 930B
     v2_tile_row_16dc1(s, bx_r, 0);                                   // 0x70b2 CALL sub_16DC1
     v2_page_copy_col_171dc(s);                                       // 0x70b5 JMP sub_171DC
 }
@@ -4947,19 +4943,19 @@ static void v2_vga_scroll_row_bottom_170b9(uint8_t* s) {
     uint16_t di_r = (sum >= 0) ? (uint16_t)sum : 0;                  // JGE / MOV di,0
     di_r <<= 1;                                                      // 0x70c5
     uint16_t bx_r = *(uint16_t*)(s + (uint16_t)(di_r - LUT_ROW_BASE)); // 0x70c9
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_2) = di_r + v2gs(s).page_shown(); // 0x70cd -> 9305
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_3) = di_r + v2gs(s).page_bg();    // 0x70d6 -> 9307
-    *(uint16_t*)(s + DS_PAGE_ROWCUR_1) = di_r + v2gs(s).page_draw();  // 0x70df -> 9309
+    v2gs(s).page_rowcur_2(di_r + v2gs(s).page_shown()); // 0x70cd -> 9305
+    v2gs(s).page_rowcur_3(di_r + v2gs(s).page_bg());    // 0x70d6 -> 9307
+    v2gs(s).page_rowcur_1(di_r + v2gs(s).page_draw());  // 0x70df -> 9309
     uint16_t dx_col = *(uint16_t*)(s + DS_SCROLL_DISP_X);            // 0x70e7 dx=[92EF]
     if ((int16_t)dx_col > 0) dx_col--; else dx_col = 0;              // 0x70eb DEC/JGE
     bx_r += dx_col; bx_r <<= 1;                                      // 0x70f1/0x70f3
     dx_col = dx_col * 2 + 8;                                         // 0x70f5/0x70f7
     uint16_t pg1 = v2gs(s).page_rowcur_2();               // 0x70fa
-    *(uint16_t*)(s + DS_PAGE_VGA_3) = *(uint16_t*)(s + (uint16_t)(pg1 - 0x7608)) + dx_col; // 930D
+    v2gs(s).page_vga_3(*(uint16_t*)(s + (uint16_t)(pg1 - 0x7608)) + dx_col); // 930D
     uint16_t pg2 = v2gs(s).page_rowcur_3();               // 0x7108
-    *(uint16_t*)(s + DS_PAGE_VGA_1) = *(uint16_t*)(s + (uint16_t)(pg2 - 0x7608)) + dx_col; // 930F
+    v2gs(s).page_vga_1(*(uint16_t*)(s + (uint16_t)(pg2 - 0x7608)) + dx_col); // 930F
     uint16_t pg3 = v2gs(s).page_rowcur_1();               // 0x7116
-    *(uint16_t*)(s + DS_PAGE_VGA_2) = *(uint16_t*)(s + (uint16_t)(pg3 - 0x7608)) + dx_col; // 930B
+    v2gs(s).page_vga_2(*(uint16_t*)(s + (uint16_t)(pg3 - 0x7608)) + dx_col); // 930B
     v2_tile_row_16dc1(s, bx_r, 0);                                   // 0x7124 CALL sub_16DC1
     v2_page_copy_col_171dc(s);                                       // 0x7127 JMP sub_171DC
 }
@@ -5014,12 +5010,12 @@ static bool v2_spawn_permanent_entry_13bbd(uint8_t* s, uint16_t si, uint16_t di)
     if (spawn_x == 0xFFFF) return true;                                    // 0x3bc4 -> loc_13c0a STC
     if (!(*(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 10))) & 0x800)) // 0x3bc6 TEST [di+2600],800h
         return false;                                                      // loc_13c08 CLC
-    *(uint16_t*)(s + DS_MODE_WORD) = si;                                   // 0x3bd0 ds:32 = si
-    *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE));         // 0x3bd4
-    *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 2)));   // 0x3bdb
-    *(uint16_t*)(s + DS_SPAWN_TBL_LO) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 4))); // 0x3be2
-    *(uint16_t*)(s + DS_SPAWN_TBL_HI) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 6))); // 0x3be9
-    *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 12))); // 0x3bf0
+    v2gs(s).mode_word(si);                                   // 0x3bd0 ds:32 = si
+    v2gs(s).text_col(*(uint16_t*)(s + (uint16_t)(di + DS_SPAWN_TABLE)));         // 0x3bd4
+    v2gs(s).text_row(*(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 2))));   // 0x3bdb
+    v2gs(s).spawn_tbl_lo(*(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 4)))); // 0x3be2
+    v2gs(s).spawn_tbl_hi(*(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 6)))); // 0x3be9
+    v2gs(s).spawn_pool_sel(*(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 12)))); // 0x3bf0
     uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 8)));  // 0x3bf7 ax=[di+25FE]
     uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di + (DS_SPAWN_TABLE + 10)));     // 0x3bfb si=[di+2600]
     // 0x3bff: di = ds:32 (the saved spawn index) -> call sub_13809
@@ -5030,7 +5026,7 @@ static bool v2_spawn_permanent_entry_13bbd(uint8_t* s, uint16_t si, uint16_t di)
 // sub_13ba5 (seg000 eips 0x3ba5..0x3bbc): init permanent objects from the
 // spawn table (flag 0x800 in ds:[di+0x2600]) regardless of viewport position.
 static void v2_spawn_table_13ba5(uint8_t* s) {
-    *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;                                 // 0x3ba5 ds:42 = FFFF
+    v2gs(s).cur_obj(0xFFFF);                                 // 0x3ba5 ds:42 = FFFF
     for (uint16_t si = 0, di = 0; ; si++, di += 0x0E) {                    // 0x3bab/0x3bae + 0x3bb6/0x3bb7
         if (v2_spawn_permanent_entry_13bbd(s, si, di)) break;              // loc_13bb1 CALL / JC
     }
@@ -5056,14 +5052,14 @@ static void v2_despawn_bounds_13c0c(uint8_t* s) {
     uint16_t vpx = v2gs(s).viewport_x();
     uint16_t ax_raw = (uint16_t)(vpx - 0x10);
     *(uint16_t*)(s + DS_SCRATCH_34) = ((int16_t)vpx >= (int16_t)0x10) ? ax_raw : 0;
-    *(uint16_t*)(s + DS_SCRATCH_36) = (uint16_t)(ax_raw + 0x160); // uses ORIGINAL ax
+    v2gs(s).scratch_36((uint16_t)(ax_raw + 0x160)); // uses ORIGINAL ax
     // Y (orig eips 0x3C25-0x3C36): SUB ax,10h; JNS (= bit15 of the RESULT);
     // MOV ax,0 — here ax IS clamped, so BOTH ds:0x38 and ds:0x3A derive from
     // the clamped value (the old dead function derived 0x3A from raw).
     ax_raw = (uint16_t)(v2gs(s).viewport_y() - 0x10);
     if (ax_raw & 0x8000) ax_raw = 0;             // JNS taken = bit15 clear
-    *(uint16_t*)(s + DS_SCRATCH_38) = ax_raw;
-    *(uint16_t*)(s + DS_SCRATCH_3A) = (uint16_t)(ax_raw + 0xD0);
+    v2gs(s).scratch_38(ax_raw);
+    v2gs(s).scratch_3a((uint16_t)(ax_raw + 0xD0));
     // Despawn loop (orig eips 0x3C3C-0x3C90), si=6..table_end. Each check is
     // ADD/SUB (16-bit wrap, flags discarded) then SUB bound + JL/JGE — i.e. a
     // SIGNED COMPARE of the wrapped sum against the bound read from memory.
@@ -5101,7 +5097,7 @@ static bool v2_spawn_visible_entry_13ae0(uint8_t* s, uint16_t si_idx, uint16_t d
     if ((int16_t)(uint16_t)(sy + hh) <  (int16_t)v2gs(s).scratch_38()) return false; // 0x3b16
     if ((int16_t)(uint16_t)(sy - hh) >= (int16_t)v2gs(s).scratch_3a()) return false; // 0x3b27
     // 0x3b2a: ds:32 = spawn index — written BEFORE the dedup scan.
-    *(uint16_t*)(s + DS_MODE_WORD) = si_idx;
+    v2gs(s).mode_word(si_idx);
     // Dedup scan from ds:33C: POST-test loop (orig loc_13b32 body first,
     // ADD si,2 / CMP si,[372] / JL at the bottom) — the START slot is tested
     // even when [33C] >= [372] (divergence #36: the old pre-test form skipped
@@ -5119,19 +5115,19 @@ static bool v2_spawn_visible_entry_13ae0(uint8_t* s, uint16_t si_idx, uint16_t d
     uint16_t save_36 = v2gs(s).scratch_36();
     uint16_t save_38 = v2gs(s).scratch_38();
     uint16_t save_3A = v2gs(s).scratch_3a();
-    *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + (uint16_t)(di_off + DS_SPAWN_TABLE));        // 0x3b5d
-    *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 2)));  // 0x3b64
-    *(uint16_t*)(s + DS_SPAWN_TBL_LO) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 4))); // 0x3b6b
-    *(uint16_t*)(s + DS_SPAWN_TBL_HI) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 6))); // 0x3b72
-    *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 12))); // 0x3b79
+    v2gs(s).text_col(*(uint16_t*)(s + (uint16_t)(di_off + DS_SPAWN_TABLE)));        // 0x3b5d
+    v2gs(s).text_row(*(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 2))));  // 0x3b64
+    v2gs(s).spawn_tbl_lo(*(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 4)))); // 0x3b6b
+    v2gs(s).spawn_tbl_hi(*(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 6)))); // 0x3b72
+    v2gs(s).spawn_pool_sel(*(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 12)))); // 0x3b79
     uint16_t code_seg_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 8)));  // 0x3b80
     uint16_t anim_idx = *(uint16_t*)(s + (uint16_t)(di_off + (DS_SPAWN_TABLE + 10)));     // 0x3b84
     // 0x3b88: di = ds:32 -> call sub_13809
     v2_spawn_object_13809(s, code_seg_idx, v2gs(s).mode_word(), anim_idx);
-    *(uint16_t*)(s + DS_SCRATCH_3A) = save_3A;       // 0x3b8f POP-restore
-    *(uint16_t*)(s + DS_SCRATCH_38) = save_38;
-    *(uint16_t*)(s + DS_SCRATCH_36) = save_36;
-    *(uint16_t*)(s + DS_SCRATCH_34) = save_34;
+    v2gs(s).scratch_3a(save_3A);       // 0x3b8f POP-restore
+    v2gs(s).scratch_38(save_38);
+    v2gs(s).scratch_36(save_36);
+    v2gs(s).scratch_34(save_34);
     return false;                                    // loc_13ba1 CLC
 }
 
@@ -5139,11 +5135,11 @@ static bool v2_spawn_visible_entry_13ae0(uint8_t* s, uint16_t si_idx, uint16_t d
 // Called from sub_13a14/sub_13a34/loc_13a54/loc_13a74 (scroll spawn) and sub_13a0e (init spawn).
 // Bounds (ds:0x34/0x36/0x38/0x3A) must be set by caller before calling.
 static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
-    if ((int16_t)v2gs(s).scratch_34() < 0) *(uint16_t*)(s + DS_SCRATCH_34) = 0;
-    if ((int16_t)v2gs(s).scratch_36() < 0) *(uint16_t*)(s + DS_SCRATCH_36) = 0;
-    if ((int16_t)v2gs(s).scratch_38() < 0) *(uint16_t*)(s + DS_SCRATCH_38) = 0;
-    if ((int16_t)v2gs(s).scratch_3a() < 0) *(uint16_t*)(s + DS_SCRATCH_3A) = 0;
-    *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+    if ((int16_t)v2gs(s).scratch_34() < 0) v2gs(s).scratch_34(0);
+    if ((int16_t)v2gs(s).scratch_36() < 0) v2gs(s).scratch_36(0);
+    if ((int16_t)v2gs(s).scratch_38() < 0) v2gs(s).scratch_38(0);
+    if ((int16_t)v2gs(s).scratch_3a() < 0) v2gs(s).scratch_3a(0);
+    v2gs(s).cur_obj(0xFFFF);
     for (uint16_t si_idx = 0, di_off = 0; ; si_idx++, di_off += 0x0E) {
         if (v2_spawn_visible_entry_13ae0(s, si_idx, di_off)) break;   // CALL / JC
     }
@@ -5153,13 +5149,13 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
 // ds:34/36 = vp_x-0x10 .. +0x160; ds:38/3A = vp_y-0x10 .. +0xD0.
 static void v2_viewport_bounds_139ef(uint8_t* s) {
     uint16_t ax = v2gs(s).viewport_x() - 0x10;   // 0x39ef/0x39f2
-    *(uint16_t*)(s + DS_SCRATCH_34) = ax;                   // 0x39f5
+    v2gs(s).scratch_34(ax);                   // 0x39f5
     ax += 0x160;                                            // 0x39f8
-    *(uint16_t*)(s + DS_SCRATCH_36) = ax;                   // 0x39fb
+    v2gs(s).scratch_36(ax);                   // 0x39fb
     ax = v2gs(s).viewport_y() - 0x10;            // 0x39fe/0x3a01
-    *(uint16_t*)(s + DS_SCRATCH_38) = ax;                   // 0x3a04
+    v2gs(s).scratch_38(ax);                   // 0x3a04
     ax += 0xD0;                                             // 0x3a07
-    *(uint16_t*)(s + DS_SCRATCH_3A) = ax;                   // 0x3a0a
+    v2gs(s).scratch_3a(ax);                   // 0x3a0a
 }
 
 // sub_13a14 (eips 0x3a14..0x3a32): scroll-up spawn band (thin Y strip above
@@ -5167,13 +5163,13 @@ static void v2_viewport_bounds_139ef(uint8_t* s) {
 // then the loc_13a94 clamp+spawn scan.
 static void v2_scroll_spawn_up_13a14(uint8_t* s) {
     uint16_t ax = v2gs(s).viewport_x() - 0x10;   // 0x3a14/0x3a17
-    *(uint16_t*)(s + DS_SCRATCH_34) = ax;                   // 0x3a1a
+    v2gs(s).scratch_34(ax);                   // 0x3a1a
     ax += 0x20;                                             // 0x3a1d
-    *(uint16_t*)(s + DS_SCRATCH_36) = ax;                   // 0x3a20
+    v2gs(s).scratch_36(ax);                   // 0x3a20
     ax = v2gs(s).viewport_y() - 0x10;            // 0x3a23/0x3a26
-    *(uint16_t*)(s + DS_SCRATCH_38) = ax;                   // 0x3a29
+    v2gs(s).scratch_38(ax);                   // 0x3a29
     ax += 0xD0;                                             // 0x3a2c
-    *(uint16_t*)(s + DS_SCRATCH_3A) = ax;                   // 0x3a2f
+    v2gs(s).scratch_3a(ax);                   // 0x3a2f
     v2_spawn_bounds_scan_13a94(s);                          // 0x3a32 JMP loc_13a94
 }
 
@@ -5181,13 +5177,13 @@ static void v2_scroll_spawn_up_13a14(uint8_t* s) {
 // (ds:36 = vp_x+0x150; ds:34 = that-0x20; ds:38/3A = vp_y-0x10 .. +0xD0).
 static void v2_scroll_spawn_down_13a34(uint8_t* s) {
     uint16_t ax = v2gs(s).viewport_x() + 0x150;  // 0x3a34/0x3a37
-    *(uint16_t*)(s + DS_SCRATCH_36) = ax;                   // 0x3a3a
+    v2gs(s).scratch_36(ax);                   // 0x3a3a
     ax -= 0x20;                                             // 0x3a3d
-    *(uint16_t*)(s + DS_SCRATCH_34) = ax;                   // 0x3a40
+    v2gs(s).scratch_34(ax);                   // 0x3a40
     ax = v2gs(s).viewport_y() - 0x10;            // 0x3a43/0x3a46
-    *(uint16_t*)(s + DS_SCRATCH_38) = ax;                   // 0x3a49
+    v2gs(s).scratch_38(ax);                   // 0x3a49
     ax += 0xD0;                                             // 0x3a4c
-    *(uint16_t*)(s + DS_SCRATCH_3A) = ax;                   // 0x3a4f
+    v2gs(s).scratch_3a(ax);                   // 0x3a4f
     v2_spawn_bounds_scan_13a94(s);                          // 0x3a52 JMP loc_13a94
 }
 
@@ -5195,13 +5191,13 @@ static void v2_scroll_spawn_down_13a34(uint8_t* s) {
 // sub_1673c; ds:3A = vp_y+0xC0; ds:38 = that-0x20; ds:34/36 = vp_x-0x10..+0x160).
 static void v2_scroll_spawn_right_13a54(uint8_t* s) {
     uint16_t ax = v2gs(s).viewport_y() + 0xC0;   // 0x3a54/0x3a57
-    *(uint16_t*)(s + DS_SCRATCH_3A) = ax;                   // 0x3a5a
+    v2gs(s).scratch_3a(ax);                   // 0x3a5a
     ax -= 0x20;                                             // 0x3a5d
-    *(uint16_t*)(s + DS_SCRATCH_38) = ax;                   // 0x3a60
+    v2gs(s).scratch_38(ax);                   // 0x3a60
     ax = v2gs(s).viewport_x() - 0x10;            // 0x3a63/0x3a66
-    *(uint16_t*)(s + DS_SCRATCH_34) = ax;                   // 0x3a69
+    v2gs(s).scratch_34(ax);                   // 0x3a69
     ax += 0x160;                                            // 0x3a6c
-    *(uint16_t*)(s + DS_SCRATCH_36) = ax;                   // 0x3a6f
+    v2gs(s).scratch_36(ax);                   // 0x3a6f
     v2_spawn_bounds_scan_13a94(s);                          // 0x3a72 JMP loc_13a94
 }
 
@@ -5209,13 +5205,13 @@ static void v2_scroll_spawn_right_13a54(uint8_t* s) {
 // sub_1673c; ds:38/3A = vp_y-0x10..+0x20; ds:34/36 = vp_x-0x10..+0x160).
 static void v2_scroll_spawn_left_13a74(uint8_t* s) {
     uint16_t ax = v2gs(s).viewport_y() - 0x10;   // 0x3a74/0x3a77
-    *(uint16_t*)(s + DS_SCRATCH_38) = ax;                   // 0x3a7a
+    v2gs(s).scratch_38(ax);                   // 0x3a7a
     ax += 0x20;                                             // 0x3a7d
-    *(uint16_t*)(s + DS_SCRATCH_3A) = ax;                   // 0x3a80
+    v2gs(s).scratch_3a(ax);                   // 0x3a80
     ax = v2gs(s).viewport_x() - 0x10;            // 0x3a83/0x3a86
-    *(uint16_t*)(s + DS_SCRATCH_34) = ax;                   // 0x3a89
+    v2gs(s).scratch_34(ax);                   // 0x3a89
     ax += 0x160;                                            // 0x3a8c
-    *(uint16_t*)(s + DS_SCRATCH_36) = ax;                   // 0x3a8f
+    v2gs(s).scratch_36(ax);                   // 0x3a8f
     v2_spawn_bounds_scan_13a94(s);                          // 0x3a92 jmp $+2 -> loc_13a94
 }
 
@@ -5292,8 +5288,8 @@ static uint16_t v2_load_anims_116ae(uint8_t* s, uint16_t di) {
             // es = es + (di >> 4) + 1, di = 0
             uint16_t di_after = (uint16_t)(buf_di + (uint16_t)sz);
             uint16_t new_es = buf_es + (di_after >> 4) + 1;
-            *(uint16_t*)(s + DS_ANIM_PTR_HI) = new_es;  // segment
-            *(uint16_t*)(s + DS_ANIM_PTR_LO) = 0;        // offset = 0
+            v2gs(s).anim_ptr_hi(new_es);  // segment
+            v2gs(s).anim_ptr_lo(0);        // offset = 0
         }
         di += 5;
         si += 2;
@@ -5349,8 +5345,8 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
     }
     if (!on_screen) {
         // loc_10862: viking out of viewport (or slot >= 6) -> clear keys, return
-        *(uint16_t*)(shadow + DS_INPUT_KEYS) = 0; // word_28896
-        *(uint16_t*)(shadow + DS_INPUT_EDGES) = 0; // word_28898
+        v2gs(shadow).input_keys(0); // word_28896
+        v2gs(shadow).input_edges(0); // word_28898
         return;
     }
 
@@ -5372,20 +5368,20 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
             }
         }
         // loc_107c9: update prev + reset counter
-        *(uint16_t*)(shadow + DS_PREV_VIKING) = active;
-        *(uint16_t*)(shadow + DS_BLINK_COUNTER) = 0x15; // word_288A6 = 21
+        v2gs(shadow).prev_viking(active);
+        v2gs(shadow).blink_counter(0x15); // word_288A6 = 21
     }
 
     // loc_107d5: blink counter processing
     uint16_t blink = v2gs(shadow).blink_counter(); // word_288A6
     if (blink != 0) { // Original: TEST word_288A6, FFFFh; JZ return (no active<6 check)
         blink -= 1; // DEC word_288A6
-        *(uint16_t*)(shadow + DS_BLINK_COUNTER) = blink;
+        v2gs(shadow).blink_counter(blink);
         uint16_t di = active;
         if (blink & 2) {
             // Bit 1 set after decrement: extra DEC + hide sprite
             blink -= 1;
-            *(uint16_t*)(shadow + DS_BLINK_COUNTER) = blink;
+            v2gs(shadow).blink_counter(blink);
             uint16_t sub_di = ObjMem{shadow, di}.sub_slot();
             ObjMem sub{shadow, sub_di};                          // hidden sub-sprite slot
             { uint16_t _ta = (uint16_t)(sub_di + OBJ_DIRTY_MODE);
@@ -5436,8 +5432,8 @@ static void v2_portrait_sync_11b0b(uint8_t* s) {
 // Does NOT use di passthrough — reads from word_2AAAB (ds:0x25CB).
 static void v2_collision_lut_init_11397(uint8_t* s) {
     uint16_t di_val = v2gs(s).level_load_aux(); // word_2AAAB
-    *(uint16_t*)(s + DS_PAN_X) = *(uint16_t*)(s + (uint16_t)(di_val - 0x7AC2)) & 0xFF; // word_28886
-    *(uint16_t*)(s + DS_PAN_Y) = *(uint16_t*)(s + (uint16_t)(di_val - 0x7ABC)) & 0xFF; // word_28888
+    v2gs(s).pan_x(*(uint16_t*)(s + (uint16_t)(di_val - 0x7AC2)) & 0xFF); // word_28886
+    v2gs(s).pan_y(*(uint16_t*)(s + (uint16_t)(di_val - 0x7ABC)) & 0xFF); // word_28888
 }
 
 // sub_11446: game mode init. NOT just sound — creates game objects based on mode.
@@ -5449,22 +5445,22 @@ static void v2_collision_lut_init_11397(uint8_t* s) {
 static void v2_spawn_vikings_11569(uint8_t* s, uint16_t di_table) {
     v2_cc_v2_hit(CC_11569);   // M1 wave-2 (#65)
     // First viking (code_seg = 1)
-    *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + di_table);
-    *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + di_table + 2);
+    v2gs(s).text_col(*(uint16_t*)(s + di_table));
+    v2gs(s).text_row(*(uint16_t*)(s + di_table + 2));
     uint16_t si_anim = *(uint16_t*)(s + di_table + 4) | v2gs(s).spawn_anim();
-    *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+    v2gs(s).cur_obj(0xFFFF);
     v2_spawn_object_13809(s, 1, 0xFFFF, si_anim);
     // Second viking (code_seg = 0)
-    *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + di_table + 6);
-    *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + di_table + 8);
+    v2gs(s).text_col(*(uint16_t*)(s + di_table + 6));
+    v2gs(s).text_row(*(uint16_t*)(s + di_table + 8));
     si_anim = *(uint16_t*)(s + di_table + 0xA) | v2gs(s).spawn_anim();
-    *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+    v2gs(s).cur_obj(0xFFFF);
     v2_spawn_object_13809(s, 0, 0xFFFF, si_anim);
     // Third viking (code_seg = 2) — tail call (jmp sub_13809)
-    *(uint16_t*)(s + DS_TEXT_COL) = *(uint16_t*)(s + di_table + 0xC);
-    *(uint16_t*)(s + DS_TEXT_ROW) = *(uint16_t*)(s + di_table + 0xE);
+    v2gs(s).text_col(*(uint16_t*)(s + di_table + 0xC));
+    v2gs(s).text_row(*(uint16_t*)(s + di_table + 0xE));
     si_anim = *(uint16_t*)(s + di_table + 0x10) | v2gs(s).spawn_anim();
-    *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+    v2gs(s).cur_obj(0xFFFF);
     v2_spawn_object_13809(s, 2, 0xFFFF, si_anim);
 }
 
@@ -5480,16 +5476,16 @@ static void v2_spawn_vikings_11569(uint8_t* s, uint16_t di_table) {
 // All non-0 modes share the loc_1154A tail: portrait/sound state → viking
 // rows, scan-start=6, prev-viking=0xFFFF.
 static void v2_game_mode_init_11446(uint8_t* s) {
-    *(uint16_t*)(s + DS_OBJ_SCAN_START) = 0;                 // 2713 word_2881C = 0
+    v2gs(s).obj_scan_start(0);                 // 2713 word_2881C = 0
     uint16_t mode = s[DS_ACTIVE_VK_SEL] & 0xFF;              // 2714-2715 byte_2AA9A
     if (mode == 0) {
         // loc_1146A (2729-2741): normal gameplay — single spawn, early RETN.
-        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = v2gs(s).spawn_pool0();
-        *(uint16_t*)(s + DS_TEXT_COL) = v2gs(s).spawn_x();
-        *(uint16_t*)(s + DS_TEXT_ROW) = v2gs(s).spawn_y();
-        *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+        v2gs(s).spawn_pool_sel(v2gs(s).spawn_pool0());
+        v2gs(s).text_col(v2gs(s).spawn_x());
+        v2gs(s).text_row(v2gs(s).spawn_y());
+        v2gs(s).cur_obj(0xFFFF);
         v2_spawn_object_13809(s, v2gs(s).spawn_code(), 0xFFFF, v2gs(s).spawn_anim());
-        *(uint16_t*)(s + DS_OBJ_SCAN_START) = 2;             // 2740
+        v2gs(s).obj_scan_start(2);             // 2740
         return;                                              // 2741 RETN
     }
     if (mode == 2 || mode == 4 || mode == 5) {
@@ -5504,37 +5500,37 @@ static void v2_game_mode_init_11446(uint8_t* s) {
         if (mode == 0x10) { y_off_3 = 0xFFF8; y_off_2 = 0xFFF0; }
         else              { y_off_3 = 0;      y_off_2 = 0;      }
         // First viking (code_seg = 1) at the base position (2773-2783).
-        *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = v2gs(s).spawn_pool0();
-        *(uint16_t*)(s + DS_TEXT_COL) = v2gs(s).spawn_x();
-        *(uint16_t*)(s + DS_TEXT_ROW) = v2gs(s).spawn_y();
-        *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+        v2gs(s).spawn_pool_sel(v2gs(s).spawn_pool0());
+        v2gs(s).text_col(v2gs(s).spawn_x());
+        v2gs(s).text_row(v2gs(s).spawn_y());
+        v2gs(s).cur_obj(0xFFFF);
         v2_spawn_object_13809(s, 1, 0xFFFF, v2gs(s).spawn_anim());
         // Second viking (code_seg = 0): X ±0x20 by anim bit6, Y + y_off_2
         // (2784-2804).
         uint16_t base_x = v2gs(s).spawn_x();
         if (v2gs(s).spawn_anim() & 0x40)
-            *(uint16_t*)(s + DS_TEXT_COL) = base_x + 0x20;
+            v2gs(s).text_col(base_x + 0x20);
         else
-            *(uint16_t*)(s + DS_TEXT_COL) = base_x - 0x20;
-        *(uint16_t*)(s + DS_TEXT_ROW) = y_off_2 + v2gs(s).spawn_y();
-        *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+            v2gs(s).text_col(base_x - 0x20);
+        v2gs(s).text_row(y_off_2 + v2gs(s).spawn_y());
+        v2gs(s).cur_obj(0xFFFF);
         v2_spawn_object_13809(s, 0, 0xFFFF, v2gs(s).spawn_anim());
         // Third viking (code_seg = 2): X ±0x40, Y + y_off_3 (2805-2830,
         // orig tail-jumps into sub_13809).
         if (v2gs(s).spawn_anim() & 0x40)
-            *(uint16_t*)(s + DS_TEXT_COL) = base_x + 0x40;
+            v2gs(s).text_col(base_x + 0x40);
         else
-            *(uint16_t*)(s + DS_TEXT_COL) = base_x - 0x40;
-        *(uint16_t*)(s + DS_TEXT_ROW) = y_off_3 + v2gs(s).spawn_y();
-        *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;
+            v2gs(s).text_col(base_x - 0x40);
+        v2gs(s).text_row(y_off_3 + v2gs(s).spawn_y());
+        v2gs(s).cur_obj(0xFFFF);
         v2_spawn_object_13809(s, 2, 0xFFFF, v2gs(s).spawn_anim());
     }
     // loc_1154A: portrait/sound state → viking rows, mode 6.
     *(uint16_t*)(s + VIK_PORTRAIT) = *(uint16_t*)(s + (DS_PORTRAIT_PREV)); // word_29A8D = word_28903
     *(uint16_t*)(s + DS_VK_PORTRAIT_SND_2) = *(uint16_t*)(s + DS_PORTRAIT_SND_2); // word_29A8F = word_28905
     *(uint16_t*)(s + DS_VK_PORTRAIT_SND_3) = *(uint16_t*)(s + DS_PORTRAIT_SND_3); // word_29A91 = word_28907
-    *(uint16_t*)(s + DS_OBJ_SCAN_START) = 6;    // word_2881C
-    *(uint16_t*)(s + DS_PREV_VIKING) = 0xFFFF; // word_288A4
+    v2gs(s).obj_scan_start(6);    // word_2881C
+    v2gs(s).prev_viking(0xFFFF); // word_288A4
 }
 
 // sub_11383: find end of spawn table. Returns di = end index + 2.
@@ -5581,18 +5577,18 @@ static void v2_flash_timers_12d2c(uint8_t* s) {
         if (v2gs(s).shake_src_x() != 0)
             v2gs(s).shake_x_ref() ^= v2gs(s).shake_src_x();
         else
-            *(uint16_t*)(s + DS_SHAKE_X) = 0;
+            v2gs(s).shake_x(0);
     } else {
-        *(uint16_t*)(s + DS_SHAKE_X) = 0;
+        v2gs(s).shake_x(0);
     }
     if (v2gs(s).shake_gate_y() != 0) {
         v2gs(s).shake_gate_y_ref() -= 1;
         if (v2gs(s).shake_src_y() != 0)
             v2gs(s).shake_y_ref() ^= v2gs(s).shake_src_y();
         else
-            *(uint16_t*)(s + DS_SHAKE_Y) = 0;
+            v2gs(s).shake_y(0);
     } else {
-        *(uint16_t*)(s + DS_SHAKE_Y) = 0;
+        v2gs(s).shake_y(0);
     }
 }
 extern "C" void v2_fntest_call_sub_12d2c(uint8_t* test_shadow) { v2_flash_timers_12d2c(test_shadow); }
@@ -5631,8 +5627,8 @@ extern "C" uint8_t* v2_fntest_sprite_shadow_win(uint32_t off) {
 
 // sub_11784: init active viking. word_288A2=0, word_288A4=0. 0 bytes consumed.
 static void v2_active_viking_init_11784(uint8_t* s) {
-    *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0; // word_288A2 (active viking)
-    *(uint16_t*)(s + DS_PREV_VIKING) = 0; // word_288A4 (previous viking)
+    v2gs(s).active_viking(0); // word_288A2 (active viking)
+    v2gs(s).prev_viking(0); // word_288A4 (previous viking)
 }
 
 // sub_16880: clear VGA pages. Clears ALL 64KB of VGA memory (viewport + HUD + all 3 pages).
@@ -5699,9 +5695,9 @@ static void v2_viking_health_init_12ce4(uint8_t* s) {
 // transition tables also retarget the level), load it at ds:2193 and
 // tail-jump into sub_12CE4.
 static void v2_level_desc_init_116e3(uint8_t* s) {
-    *(uint16_t*)(s + DS_RNG_TIMER) = 0x1E;    // 3005 word_28832
-    *(uint16_t*)(s + DS_SCRATCH_3CE) = 0;     // 3006 word_288AE
-    *(uint16_t*)(s + DS_SCRATCH_3D0) = 0;     // 3007 word_288B0
+    v2gs(s).rng_timer(0x1E);    // 3005 word_28832
+    v2gs(s).scratch_3ce(0);     // 3006 word_288AE
+    v2gs(s).scratch_3d0(0);     // 3007 word_288B0
     uint16_t level = v2gs(s).level_load();              // 3008 word_2AAA9
     bool transition = (level == 0x2D || level == 0x2E || level == 0x2F); // 3009-3014
     if (!transition) {
@@ -5718,13 +5714,13 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
                 *(uint16_t*)(s + di + DS_OBJ_QUEUE_HEAD) = 0;
             return;
         } else {
-            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;                 // 3022-3023
+            v2gs(s).game_mode_ac(0);                 // 3022-3023
             return;
         }
     }
     // loc_11733 (3039-3075): transition state + text chunk load.
-    *(uint16_t*)(s + DS_COLL_STATE_398) = 1;                       // 3039 word_28878
-    *(uint16_t*)(s + DS_GAME_MODE_AC) = 0x8000;                    // 3040
+    v2gs(s).coll_state_398(1);                       // 3039 word_28878
+    v2gs(s).game_mode_ac(0x8000);                    // 3040
     level = v2gs(s).level_load();                       // 3041 reload
     uint16_t chunk;
     if (level == 0x2B) {                                           // 3042-3043
@@ -5734,11 +5730,11 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
     } else {
         // Transition tables (3052-3055): also retargets the level.
         uint16_t si = v2gs(s).hud_sel_si();             // word_288B4
-        *(uint16_t*)(s + DS_LEVEL_LOAD) = *(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_LEVEL_TBL));  // 16-bit wrap
+        v2gs(s).level_load(*(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_LEVEL_TBL)));  // 16-bit wrap
         chunk = *(uint16_t*)(s + (uint16_t)(si + DS_TRANSITION_CHUNK_TBL));                            // 16-bit wrap
     }
     // loc_11774 (3070-3072): load the transition chunk at ds:2193.
-    *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) = 2;                       // word_2A671
+    v2gs(s).obj_queue_head(2);                       // word_2A671
     v2_read_chunk(chunk, s + 0x2193, 0x10000 - 0x2193, s);
     v2_viking_health_init_12ce4(s);                                // 3075 jmp sub_12CE4
 }
@@ -5770,7 +5766,7 @@ static bool v2_slot_alloc_13d68(uint8_t* s, uint16_t si) {
     if (ds374 == 0)      { di = 0x48; lim = 0x100; }   // loc_13d8c
     else if (ds374 == 1) { di = 0x30; lim = 0x50;  }   // loc_13d81
     else                 { di = 0;    lim = 0x30;  }
-    *(uint16_t*)(s + DS_MODE_WORD) = lim;
+    v2gs(s).mode_word(lim);
     for (;;) {
         // loc_13d95: slot check runs BEFORE the limit compare (orig order:
         // test slot, advance, JL back) — the start slot is always tested.
@@ -5780,9 +5776,9 @@ static bool v2_slot_alloc_13d68(uint8_t* s, uint16_t si) {
             if ((int16_t)di >= (int16_t)lim) return true;   // loc_13da8: STC
         }
         // loc_13daa: record candidate start/end unconditionally.
-        *(uint16_t*)(s + DS_SCRATCH_3A) = di;
+        v2gs(s).scratch_3a(di);
         uint16_t end = (uint16_t)(ObjMem{s, si}.sub_count() * 2 + di);
-        *(uint16_t*)(s + DS_SCRATCH_38) = end;
+        v2gs(s).scratch_38(end);
         // loc_13db9: verify the run is contiguous. Both exits compare for
         // EQUALITY (JZ), exactly like orig — not >=.
         for (;;) {
@@ -5895,7 +5891,7 @@ static bool v2_obj_template_init_13e52(uint8_t* s, uint16_t si, uint16_t bx) {
     obj.w16(OBJ_ANIM_SUB, v2gs(s).scratch_36());            // 0x3e5d [si+16C5] = ds:36
     obj.w16(OBJ_FLAGS,    v2gs(s).scratch_38());            // 0x3e64 [si+1585] = ds:38
     obj.w16(OBJ_SPAWN_POOL, v2gs(s).spawn_pool_sel());      // 0x3e6b [si+169D] = ds:374
-    *(uint16_t*)(s + DS_SPAWN_POOL_SEL) = 0;                           // 0x3e72 ds:374 = 0
+    v2gs(s).spawn_pool_sel(0);                           // 0x3e72 ds:374 = 0
     uint16_t sprite_base = 0;
     if (v2_sprite_res_lookup_12f82(s, *(uint16_t*)(aes + bx), &sprite_base))
         return true;                                                   // 0x3e7e JC -> RETN (CF=1)
@@ -5954,8 +5950,7 @@ static bool v2_obj_template_init_13e52(uint8_t* s, uint16_t si, uint16_t bx) {
     // 0x3f9d: ds:3E0 signed<0 -> derive half sizes from the h/w fields.
     uint16_t half_ax = v2gs(s).spawn_tbl_lo();              // 0x3f9d ax = ds:3E0
     if ((int16_t)half_ax < 0) {                                        // 0x3fa3 JGE loc_13fb4
-        *(uint16_t*)(s + DS_SPAWN_TBL_HI) =
-            (uint16_t)(obj.u16(OBJ_HEIGHT) >> 1);                      // 0x3fa5..0x3fab ds:3E2
+        v2gs(s).spawn_tbl_hi((uint16_t)(obj.u16(OBJ_HEIGHT) >> 1));                      // 0x3fa5..0x3fab ds:3E2
         half_ax = (uint16_t)(obj.u16(OBJ_WIDTH) >> 1);                 // 0x3fae/0x3fb2
     }
     obj.w16(OBJ_HALF_W, half_ax);                                      // loc_13fb4 [si+14BD]
@@ -5970,9 +5965,9 @@ static bool v2_obj_template_init_13e52(uint8_t* s, uint16_t si, uint16_t bx) {
 static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
                           uint16_t si_anim) {
     v2_cc_v2_hit(CC_13809);   // M1 wave-2 (#65)
-    *(uint16_t*)(s + DS_SCRATCH_34) = code_seg_idx;                    // 0x3809
-    *(uint16_t*)(s + DS_SCRATCH_36) = di_spawn;                        // 0x380c
-    *(uint16_t*)(s + DS_SCRATCH_38) = si_anim;                         // 0x3810
+    v2gs(s).scratch_34(code_seg_idx);                    // 0x3809
+    v2gs(s).scratch_36(di_spawn);                        // 0x380c
+    v2gs(s).scratch_38(si_anim);                         // 0x3810
     // sub_13d30 gate + sub_13d52 slot probe (extracted, units 121-122).
     if (v2_spawn_gate_13d30(s, di_spawn)) return -1;   // 0x3817 JC loc_13866 (denied)
     int32_t slot = v2_spawn_slot_13d52(s);             // 0x3819
@@ -6003,7 +5998,7 @@ static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t
     }
     // loc_1384d: update table end
     if ((int16_t)new_si >= (int16_t)v2gs(s).obj_count()) {  // CMP si,ds:372 / JL
-        *(uint16_t*)(s + DS_OBJ_COUNT) = new_si + 2;   // 0x3853/0x3857
+        v2gs(s).obj_count(new_si + 2);   // 0x3853/0x3857
     }
     return (int32_t)new_si;                            // loc_1385c: DI=SI, CLC
 }
@@ -6024,13 +6019,13 @@ static void v2_dos_init_12948(uint8_t* s) {
     // sub_16528: save/set INT 9h (keyboard) handler — not needed (SDL handles input)
     // INT 21h/35h: old INT 24h vector → ds:0x86AC/0x86AE
     // v2 standalone: no DOS, write 0 (expected diff)
-    *(uint16_t*)(s + DS_INT24_VECTOR) = 0;
-    *(uint16_t*)(s + DS_INT24_VECTOR_HI) = 0;
+    v2gs(s).int24_vector(0);
+    v2gs(s).int24_vector_hi(0);
 
     // INT 21h/2Ch: get current time → PRNG seed (dword at ds:0x8639)
     // asm.cpp returns fixed cx=0x1234, dx=0x5678 for deterministic PRNG
-    *(uint16_t*)(s + DS_RNG_SEED) = 0x5678; // dx
-    *(uint16_t*)(s + DS_STARTUP_CX) = 0x1234; // cx
+    v2gs(s).rng_seed_lo(0x5678); // dx
+    v2gs(s).startup_cx(0x1234); // cx
 }
 
 // sub_12989: open DATA.DAT, read header, validate, read game config.
@@ -6069,15 +6064,15 @@ static void v2_open_data_dat_12989(uint8_t* s) {
     // Original: gs=F000, sum 0x7FF8 words, XOR with INT 21h/36h + INT 21h/30h.
     // Copy protection check. Copy from real DS if available, else 0.
     if (v2_vm_real_ds_ptr) {
-        *(uint16_t*)(s + DS_BIOS_CHECKSUM) = *(uint16_t*)(v2_vm_real_ds_ptr + 0x86D0);
+        v2gs(s).bios_checksum(*(uint16_t*)(v2_vm_real_ds_ptr + 0x86D0));
     } else {
-        *(uint16_t*)(s + DS_BIOS_CHECKSUM) = 0;
+        v2gs(s).bios_checksum(0);
     }
 
     // Copy sound driver flags from game header
     // Original: ds:0x302 = ds:0x86B2, ds:0x304 = ds:0x86B4
-    *(uint16_t*)(s + DS_MUSIC_MUTE) = v2gs(s).music_mute_src();
-    *(uint16_t*)(s + DS_SFX_MUTE) = v2gs(s).sfx_mute_src();
+    v2gs(s).music_mute(v2gs(s).music_mute_src());
+    v2gs(s).sfx_mute(v2gs(s).sfx_mute_src());
 
     // INT 10h/1Ah: VGA display combination check — not needed (we know it's VGA)
     // CPU detection (EFLAGS test) — not needed (we're on modern CPU)
@@ -6091,9 +6086,9 @@ static void v2_open_data_dat_12989(uint8_t* s) {
     //   exits; sub_179fb probes the idle port (IN 0x201 -> 0xFF, NOT=0,
     //   TEST 3 == 0) -> full LOOPE -> JCXZ bail: [32882] untouched, CF=1 ->
     //   the 2A61 JC skips the 86D2..86D8 threshold writes.
-    *(uint16_t*)(s + DS_VSYNC_CALIB) = 0x0010; // word_3287E
-    *(uint16_t*)(s + DS_PIT_LATCH) = 0xE3FF;   // word_32880
-    *(uint16_t*)(s + DS_JOYSTICK_PRESENT) = 0; // ds:86DA = 0 (2A58 + no 2A7D)
+    v2gs(s).vsync_calib(0x0010); // word_3287E
+    v2gs(s).pit_latch(0xE3FF);   // word_32880
+    v2gs(s).joystick_present(0); // ds:86DA = 0 (2A58 + no 2A7D)
 }
 
 // sub_12ab8: segment allocation + initial data load.
@@ -6222,12 +6217,12 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
     // Original: sub_10d9f(bx) = INT 21h/48h: allocate bx paragraphs, returns segment in ax.
     // v2 calls sub_10d9f (DosMemAlloc wrapper) to get the same segment addresses.
     // Uses v2_alloc_recorded_10d9f which replays allocation results recorded by original.
-    *(uint16_t*)(s + DS_SEG_TILEGFX) = v2_alloc_recorded_10d9f(0x8B8);   // tilegfx
-    *(uint16_t*)(s + DS_SEG_GS) = v2_alloc_recorded_10d9f(0x200);   // GS masks
-    *(uint16_t*)(s + DS_SEG_TILEDATA) = v2_alloc_recorded_10d9f(0x360);   // GS tiledata
-    *(uint16_t*)(s + DS_SEG_TILEMAP) = v2_alloc_recorded_10d9f(0x313);   // tilemap
-    *(uint16_t*)(s + DS_SEG_FS) = v2_alloc_recorded_10d9f(0xC08);   // FS
-    *(uint16_t*)(s + DS_SEG_SPRITE) = v2_alloc_recorded_10d9f(0x700);   // sprites
+    v2gs(s).seg_tilegfx(v2_alloc_recorded_10d9f(0x8B8));   // tilegfx
+    v2gs(s).seg_gs(v2_alloc_recorded_10d9f(0x200));   // GS masks
+    v2gs(s).seg_tiledata(v2_alloc_recorded_10d9f(0x360));   // GS tiledata
+    v2gs(s).seg_tilemap(v2_alloc_recorded_10d9f(0x313));   // tilemap
+    v2gs(s).seg_fs(v2_alloc_recorded_10d9f(0xC08));   // FS
+    v2gs(s).seg_sprite(v2_alloc_recorded_10d9f(0x700));   // sprites
 
     // Sound driver check: if !(ds:0x302 & ds:0x304 & 0x8000)
     // Original allocates sound driver buffer, decompresses 3 sound chunks, inits AIL.
@@ -6235,8 +6230,8 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
     if (!(v2gs(s).music_mute() & v2gs(s).sfx_mute() & 0x8000)) {
         // sub_10d9f(0xE47) → ds:0x992C (sound driver buffer base seg)
         uint16_t sound_buf_seg = v2_alloc_recorded_10d9f(0xE47);
-        *(uint16_t*)(s + DS_SEG_SOUND_BASE) = sound_buf_seg;
-        *(uint16_t*)(s + DS_SOUND_INIT_92A) = 0;
+        v2gs(s).seg_sound_base(sound_buf_seg);
+        v2gs(s).sound_init_92a(0);
 
         // Mirror orig flow (seg000:6458-6480): allocate one buffer, decompress 3 chunks
         // sequentially with sub_10E85 normalization (es += (di>>4)+1, di=0) between.
@@ -6259,7 +6254,7 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
         // New cur_off (bytes) = ((sz >> 4) + 1) * 16 = (sz & ~15) + 16, plus prior cur_off.
         cur_off = (cur_off + sz1) & ~15u;
         cur_off += 16;
-        *(uint16_t*)(s + DS_SEG_SOUND3) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
+        v2gs(s).seg_sound3((uint16_t)(sound_buf_seg + (cur_off >> 4)));
         // Chunk 2: 0x20C + ds:0x86B8 (sound bank)
         uint16_t chunk2_seg = sound_buf_seg + (uint16_t)(cur_off >> 4);
         uint32_t sz2 = v2_read_chunk((uint16_t)(0x20C + base86B8),
@@ -6268,7 +6263,7 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
         v2_chunk_sizes_by_seg[chunk2_seg] = sz2;
         cur_off = (cur_off + sz2) & ~15u;
         cur_off += 16;
-        *(uint16_t*)(s + DS_SEG_SOUND2) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
+        v2gs(s).seg_sound2((uint16_t)(sound_buf_seg + (cur_off >> 4)));
         // Chunk 3: 0x207 + ds:0x86B8
         uint16_t chunk3_seg = sound_buf_seg + (uint16_t)(cur_off >> 4);
         uint32_t sz3 = v2_read_chunk((uint16_t)(0x207 + base86B8),
@@ -6277,21 +6272,21 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
         v2_chunk_sizes_by_seg[chunk3_seg] = sz3;
         cur_off = (cur_off + sz3) & ~15u;
         cur_off += 16;
-        *(uint16_t*)(s + DS_SEG_SOUND) = (uint16_t)(sound_buf_seg + (cur_off >> 4));
+        v2gs(s).seg_sound((uint16_t)(sound_buf_seg + (cur_off >> 4)));
         v2_sound_shadow_valid = true;
     }
 
     // sub_10d9f(0x2ABA) → ds:0x2E77 (chunk buffer)
-    *(uint16_t*)(s + DS_SEG_CHUNK) = v2_alloc_recorded_10d9f(0x2ABA);
-    *(uint16_t*)(s + DS_ANIM_INIT_OFF) = 0;
-    *(uint16_t*)(s + DS_ANIM_PTR_HI) = v2gs(s).seg_chunk();
-    *(uint16_t*)(s + DS_ANIM_PTR_LO) = 0;
+    v2gs(s).seg_chunk(v2_alloc_recorded_10d9f(0x2ABA));
+    v2gs(s).anim_init_off(0);
+    v2gs(s).anim_ptr_hi(v2gs(s).seg_chunk());
+    v2gs(s).anim_ptr_lo(0);
 
     // sub_10d9f(0xC00) → ds:0x2E67 (animdata)
-    *(uint16_t*)(s + DS_SEG_ANIM) = v2_alloc_recorded_10d9f(0xC00);
+    v2gs(s).seg_anim(v2_alloc_recorded_10d9f(0xC00));
     // Decompress chunk 0x1C6 → animdata
     // ds:0x2E71 = 0x1C6 (current template chunk ID)
-    *(uint16_t*)(s + DS_TEMPLATE_CHUNK) = 0x1C6;
+    v2gs(s).template_chunk(0x1C6);
     v2_read_chunk(0x1C6, v2_vm_shadow_animdata, V2_ANIMDATA_SHADOW_SIZE);
     v2_animdata_shadow_valid = true;
 
@@ -6332,26 +6327,26 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
     *(uint16_t*)(s + DS_PW_CHAR1) = 0x54; // 'T'
     *(uint16_t*)(s + DS_PW_CHAR2) = 0x52; // 'R'
     *(uint16_t*)(s + DS_PW_CHAR3) = 0x54; // 'T'
-    *(uint16_t*)(s + DS_SPEC_MASK_27C) = 0x800;
-    *(uint16_t*)(s + DS_SPEC_MASK_282) = 0x200;
-    *(uint16_t*)(s + DS_SPEC_MASK_286) = 0x100;
-    *(uint16_t*)(s + DS_SPEC_MASK_284) = 0x400;
-    *(uint16_t*)(s + DS_SPEC_MASK_28C) = 0x400;
-    *(uint16_t*)(s + DS_SPEC_MASK_226) = 0x20;
-    *(uint16_t*)(s + DS_SPEC_MASK_27A) = 0x20;
-    *(uint16_t*)(s + DS_SPEC_MASK_290) = 0x10;
-    *(uint16_t*)(s + DS_SPEC_MASK_27E) = 0x10;
-    *(uint16_t*)(s + DS_SPEC_MASK_1EE) = 0x1000;
-    *(uint16_t*)(s + DS_SPEC_MASK_21E) = 0x1000;
-    *(uint16_t*)(s + DS_SPEC_MASK_260) = 0x2000;
-    *(uint16_t*)(s + DS_SPEC_MASK_20A) = 0x2000;
-    *(uint16_t*)(s + DS_SPEC_MASK_22A) = 0x80;
-    *(uint16_t*)(s + DS_SPEC_MASK_22E) = 0x8000;
-    *(uint16_t*)(s + DS_SPEC_MASK_25E) = 0x8000;
-    *(uint16_t*)(s + DS_SPEC_MASK_224) = 0x8000;
-    *(uint16_t*)(s + DS_SPEC_MASK_288) = 0x8000;
-    *(uint16_t*)(s + DS_SPEC_MASK_210) = 0x40;
-    *(uint16_t*)(s + DS_SPEC_MASK_22C) = 0x4000;
+    v2gs(s).spec_mask_27c(0x800);
+    v2gs(s).spec_mask_282(0x200);
+    v2gs(s).spec_mask_286(0x100);
+    v2gs(s).spec_mask_284(0x400);
+    v2gs(s).spec_mask_28c(0x400);
+    v2gs(s).spec_mask_226(0x20);
+    v2gs(s).spec_mask_27a(0x20);
+    v2gs(s).spec_mask_290(0x10);
+    v2gs(s).spec_mask_27e(0x10);
+    v2gs(s).spec_mask_1ee(0x1000);
+    v2gs(s).spec_mask_21e(0x1000);
+    v2gs(s).spec_mask_260(0x2000);
+    v2gs(s).spec_mask_20a(0x2000);
+    v2gs(s).spec_mask_22a(0x80);
+    v2gs(s).spec_mask_22e(0x8000);
+    v2gs(s).spec_mask_25e(0x8000);
+    v2gs(s).spec_mask_224(0x8000);
+    v2gs(s).spec_mask_288(0x8000);
+    v2gs(s).spec_mask_210(0x40);
+    v2gs(s).spec_mask_22c(0x4000);
 
     // Apply DOS MCB headers into shadow buffers — DosMemAlloc placed MCBs at
     // (alloc_seg-1)*16 in m2c flat memory, which aliases into shadow buffers
@@ -6368,15 +6363,15 @@ static void v2_ail_init_17561(uint8_t* s) {
     // Every DS write replicated instruction-by-instruction.
 
     // 1. ds:A39Ah = 0 (entry)
-    *(uint16_t*)(s + DS_AIL_INIT_DONE) = 0;
+    v2gs(s).ail_init_done(0);
     // 2. ds:A378h = 0
-    *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 0;
+    v2gs(s).ail_music_state(0);
     // 3. CALLF sub_1C1EA — AIL startup detect. NOP for v2.
 
     // 4. Sound check: (ds:302 & ds:304) & 0x8000
     if ((v2gs(s).music_mute() & v2gs(s).sfx_mute()) & 0x8000) {
         // Sound disabled → loc_17693: just set ds:A39A = 1 and return
-        *(uint16_t*)(s + DS_AIL_INIT_DONE) = 1;
+        v2gs(s).ail_init_done(1);
         return;
     }
 
@@ -6387,35 +6382,35 @@ static void v2_ail_init_17561(uint8_t* s) {
     //    In practice: always succeeds in original game.
 
     // 7. sub_1C5EF(handle) → ds:98EA = dx (GTL segment), ds:98E8 = ax (GTL offset)
-    *(uint16_t*)(s + DS_SOUND_FIELD_8EA) = 0xFFFF; // dx = 0xFFFF in practice
+    v2gs(s).sound_field_8ea(0xFFFF); // dx = 0xFFFF in practice
 
     // 8. sub_1C615 validation → ax = 1 (hardcoded in m2c). If 0 → failure.
 
     // 9. sub_1C76F(handle) → ds:9942 = ax = 0xE00 (hardcoded)
-    *(uint16_t*)(s + DS_SOUND_FIELD_942) = 0x0E00;
+    v2gs(s).sound_field_942(0x0E00);
 
     // 10. ds:A39A = 1
-    *(uint16_t*)(s + DS_AIL_INIT_DONE) = 1;
+    v2gs(s).ail_init_done(1);
 
     // 11. sub_10D96(bx=0xE00, ax=0) → DosMemAlloc → ds:9934 = segment
-    *(uint16_t*)(s + DS_XMI_BUF_PTR) = v2_alloc_recorded_10d9f(0xE1);
+    v2gs(s).xmi_buf_ptr(v2_alloc_recorded_10d9f(0xE1));
     // 12. ds:9932 = 0
-    *(uint16_t*)(s + DS_SOUND_INIT_932) = 0;
+    v2gs(s).sound_init_932(0);
 
     // 13. CALLF sub_1C775 — AIL XMI buffer setup. NOP for v2.
 
     // 14. If ds:86B6h == 8 → ds:A378 = 1
     if (v2gs(s).sound_card() == 8) {
-        *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 1;
+        v2gs(s).ail_music_state(1);
         // 15. If also ds:86B8h == 3 → decompress chunk 0x215, play music
         if (v2gs(s).music_card() == 3) {
-            *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 0;
+            v2gs(s).ail_music_state(0);
             // INT 21h print string — NOP
             // Decompress chunk 0x215 → sound data segment ds:2E6B
             // For v2: chunk already loaded by v2_alloc_segments_12ab8 (sound chunk path)
             // Mirror orig sub_176bd(ax=0, bx=ds:2E6B, si=0) — play music
             fx::play_music(s, v2gs(s).seg_sound());
-            *(uint16_t*)(s + DS_AIL_MUSIC_STATE) = 1;
+            v2gs(s).ail_music_state(1);
         }
     }
     // locret_17678: return (success)
@@ -6464,23 +6459,23 @@ static void v2_vga_modex_init_167ff(uint8_t* s) {
 static void v2_game_state_init_12ca3(uint8_t* s) {
     s[DS_SCRATCH_32E] = 0;                        // byte ds:32Eh
     s[DS_SCRATCH_28] = 0;                // byte ds:28h
-    *(uint16_t*)(s + DS_HUD_SEL_SI) = 0;         // word ds:3D4h
-    *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;         // word ds:3CCh (word_288AC)
-    *(uint16_t*)(s + DS_SCRATCH_336) = 0;         // word ds:336h
-    *(uint16_t*)(s + DS_SCRATCH_34A) = 0;         // word ds:34Ah
-    *(uint16_t*)(s + DS_SCRATCH_34C) = 0;         // word ds:34Ch
-    *(uint16_t*)(s + DS_FRAME_FLAGS) = 0;         // word ds:334h
-    *(uint16_t*)(s + DS_SCRATCH_331) = 0;         // word ds:331h
-    *(uint16_t*)(s + DS_MUSIC_TRACK) = 0xFFFF;   // word ds:25AFh (current music track = none)
-    *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0xFFFF;    // word ds:3C2h (active viking = none)
+    v2gs(s).hud_sel_si(0);         // word ds:3D4h
+    v2gs(s).game_mode_ac(0);         // word ds:3CCh (word_288AC)
+    v2gs(s).scratch_336(0);         // word ds:336h
+    v2gs(s).scratch_34a(0);         // word ds:34Ah
+    v2gs(s).scratch_34c(0);         // word ds:34Ch
+    v2gs(s).frame_flags(0);         // word ds:334h
+    v2gs(s).scratch_331(0);         // word ds:331h
+    v2gs(s).music_track(0xFFFF);   // word ds:25AFh (current music track = none)
+    v2gs(s).active_viking(0xFFFF);    // word ds:3C2h (active viking = none)
 }
 
 // sub_108b8: set starting level + init health.
 // Calls sub_12ce4 (health init), sets word_2AAA9 = 0x27 (level 39), word_288A2 = 0.
 static void v2_start_level_set_108b8(uint8_t* s) {
     v2_viking_health_init_12ce4(s);                      // sub_12CE4: health init
-    *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x27;     // word_2AAA9 = starting level (39 = 0x27)
-    *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0;        // word_288A2 = active viking = 0
+    v2gs(s).level_load(0x27);     // word_2AAA9 = starting level (39 = 0x27)
+    v2gs(s).active_viking(0);        // word_288A2 = active viking = 0
 }
 
 // v2_startup: one-time initialization — replaces eip 0x0000..0x0014 call chain.
@@ -6513,7 +6508,7 @@ static void v2_startup(uint8_t* s) {
     // MUST be after ds_static.bin load (which would overwrite earlier writes).
     extern bool g_debug_mode;
     if (g_debug_mode) {
-        *(uint16_t*)(s + DS_FLAG_202) = 1;
+        v2gs(s).flag_202(1);
         printf("V2-STARTUP: shadow word_286E2=1 (debug cheats enabled)\n");
     }
 
@@ -6528,7 +6523,7 @@ static void v2_music_load_1775d_helper(uint8_t* s) {
     uint16_t new_track = *(uint16_t*)(s + DS_SND_TRACK) & 0xFF;
     if (new_track == v2gs(s).music_track()) return;
     if (new_track == 0xFFFF) return;
-    *(uint16_t*)(s + DS_MUSIC_TRACK) = new_track;
+    v2gs(s).music_track(new_track);
     uint16_t chunk_table_idx = new_track * 2;
     uint16_t chunk_rel = *(uint16_t*)(s + (uint16_t)(chunk_table_idx - 0x5C7C));
     uint16_t chunk_id = chunk_rel + v2gs(s).music_card();
@@ -6797,7 +6792,7 @@ static void v2_vm_pass_14207(uint8_t* shadow) {
                       (int16_t)v2gs(shadow).prio_count()))     // live CMP/JL
                     break;
             }
-            *(uint16_t*)(shadow + DS_PRIO_COUNT) = 0;
+            v2gs(shadow).prio_count(0);
         }
     }
 }
@@ -6820,8 +6815,8 @@ extern "C" void v2_fntest_call_sub_14207(uint8_t* test_shadow) {
 
 // sub_12345 (eips 0x2345..0x2351): input state clear.
 static void v2_input_clear_12345(uint8_t* s) {
-    *(uint16_t*)(s + DS_INPUT_KEYS) = 0;   // word_28896
-    *(uint16_t*)(s + DS_INPUT_EDGES) = 0;  // word_28898
+    v2gs(s).input_keys(0);   // word_28896
+    v2gs(s).input_edges(0);  // word_28898
 }
 
 // sub_10f5d (eips 0xF5D..0xF9F): palette fade-in — bx from 0x46 down to 0
@@ -6836,15 +6831,15 @@ static void v2_pal_fade_in_10f5d(uint8_t* s) {
         s[DS_PAL_SHADE_G] = (uint8_t)bx;
         s[DS_PAL_SHADE_B] = (uint8_t)bx;
         v2_pal_shade_10f03(s);                       // sub_10F03: shade -> ds:0x8202
-        *(uint16_t*)(s + DS_PAL_REQ) = 4;            // word_303DE = 4 (request)
-        *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_OUT; // word_303E0 = 0x8202
+        v2gs(s).pal_req(4);            // word_303DE = 4 (request)
+        v2gs(s).pal_src_ptr(DS_PAL_OUT); // word_303E0 = 0x8202
         v2_page_flip_16775(s);
         v2_vsync_wait_10130(s);
     }
     s[DS_PAL_SHADE_R] = 0;
     s[DS_PAL_SHADE_G] = 0;
     s[DS_PAL_SHADE_B] = 0;
-    *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_SRC;   // word_303E0 = 0x7F02 (normal)
+    v2gs(s).pal_src_ptr(DS_PAL_SRC);   // word_303E0 = 0x7F02 (normal)
 }
 
 // sub_115d2 (eips 0x15D2..0x1677): first game-loop frame of a freshly loaded
@@ -6982,25 +6977,25 @@ static void v2_load_level_11080(uint8_t* s) {
     // (e.g. addr=0x14E4 cross-scenario). Re-enabled when next main-loop sub_1386b runs.
     extern void v2_invalidate_postvm_snaps(); v2_invalidate_postvm_snaps();
     // Clear game state variables (20+ words)
-    *(uint16_t*)(s + DS_TRANSITION) = 0; // word_2880F
-    *(uint16_t*)(s + DS_SCROLL_LOCK_X) = 0; // word_28874
-    *(uint16_t*)(s + DS_SCROLL_LOCK_Y) = 0; // word_28876
-    *(uint16_t*)(s + DS_OBJ_COUNT) = 0; // word_28852 (table end — will be set by object creation)
-    *(uint16_t*)(s + DS_CMD_READ) = 0; // word_2B044
-    *(uint16_t*)(s + DS_CMD_WRITE) = 0; // word_2A66F
+    v2gs(s).transition(0); // word_2880F
+    v2gs(s).scroll_lock_x(0); // word_28874
+    v2gs(s).scroll_lock_y(0); // word_28876
+    v2gs(s).obj_count(0); // word_28852 (table end — will be set by object creation)
+    v2gs(s).cmd_read(0); // word_2B044
+    v2gs(s).cmd_write(0); // word_2A66F
     s[DS_GLYPH_DIRTY] = 0;                // byte_31A4B
-    *(uint16_t*)(s + DS_SHAKE_SRC_X) = 0; // word_2887A
-    *(uint16_t*)(s + DS_SHAKE_SRC_Y) = 0; // word_2887C
-    *(uint16_t*)(s + DS_SHAKE_GATE_X) = 0; // word_28882
-    *(uint16_t*)(s + DS_SHAKE_GATE_Y) = 0; // word_28884
-    *(uint16_t*)(s + DS_SCRATCH_3D6) = 0; // word_288B6
-    *(uint16_t*)(s + DS_COLL_STATE_398) = 0; // word_28878
-    *(uint16_t*)(s + DS_COLL_STATE_392) = 0; // word_28872
-    *(uint16_t*)(s + DS_SCRATCH_348) = 0; // word_28828
-    *(uint16_t*)(s + DS_COUNTER_8734) = 0; // word_30C14
-    *(uint16_t*)(s + DS_BLINK_COUNTER) = 0; // word_288A6
-    *(uint16_t*)(s + DS_INPUT_ACCUM) = 0; // word_30BBE
-    *(uint16_t*)(s + DS_INPUT_JOY) = 0; // word_30BBC
+    v2gs(s).shake_src_x(0); // word_2887A
+    v2gs(s).shake_src_y(0); // word_2887C
+    v2gs(s).shake_gate_x(0); // word_28882
+    v2gs(s).shake_gate_y(0); // word_28884
+    v2gs(s).scratch_3d6(0); // word_288B6
+    v2gs(s).coll_state_398(0); // word_28878
+    v2gs(s).coll_state_392(0); // word_28872
+    v2gs(s).scratch_348(0); // word_28828
+    v2gs(s).counter_8734(0); // word_30C14
+    v2gs(s).blink_counter(0); // word_288A6
+    v2gs(s).input_accum(0); // word_30BBE
+    v2gs(s).input_joy(0); // word_30BBC
     // Mirror orig sub_11080 word_30bbe clear (eip 0x10E5) on input_keys/input_keys_v2.
     // These are m2c port SDL adapter held-state trackers — not present in orig DOS,
     // but used by v2_input_intro_mask. Without this sync, held key across level
@@ -7012,8 +7007,8 @@ static void v2_load_level_11080(uint8_t* s) {
         __atomic_store_n(&input_keys, (uint16_t)0, __ATOMIC_RELAXED);
         __atomic_store_n(&input_keys_v2, (uint16_t)0, __ATOMIC_RELAXED);
     }
-    *(uint16_t*)(s + DS_INPUT_KEYS) = 0; // word_28896
-    *(uint16_t*)(s + DS_INPUT_EDGES) = 0; // word_28898
+    v2gs(s).input_keys(0); // word_28896
+    v2gs(s).input_edges(0); // word_28898
 
     // sub_10fa0: palette fade to black
     v2_pal_fade_seq_10fa0(s);
@@ -7026,14 +7021,14 @@ static void v2_load_level_11080(uint8_t* s) {
     v2_glyph_list_clear_12816(s);
 
     // VGA page init
-    *(uint16_t*)(s + DS_PAGE_DRAW) = 0;    // word_317D7
-    *(uint16_t*)(s + DS_PAGE_SHOWN) = 0x34; // word_317D9
-    *(uint16_t*)(s + DS_PAGE_BG) = 0x68; // word_317DB
+    v2gs(s).page_draw(0);    // word_317D7
+    v2gs(s).page_shown(0x34); // word_317D9
+    v2gs(s).page_bg(0x68); // word_317DB
 
     // Reset animation buffer pointer (dword_2B359) from initial values
     // Original: mov ax, word_2B355; mov dword_2B359, ax; mov ax, word_2B357; mov dword_2B359+2, ax
-    *(uint16_t*)(s + DS_ANIM_PTR_LO) = v2gs(s).anim_init_off(); // dword offset = initial offset (0)
-    *(uint16_t*)(s + DS_ANIM_PTR_HI) = v2gs(s).seg_chunk(); // dword segment = chunk buffer segment
+    v2gs(s).anim_ptr_lo(v2gs(s).anim_init_off()); // dword offset = initial offset (0)
+    v2gs(s).anim_ptr_hi(v2gs(s).seg_chunk()); // dword segment = chunk buffer segment
 
     // sub_116e3: init level descriptor
     v2_level_desc_init_116e3(s);
@@ -7048,9 +7043,9 @@ static void v2_load_level_11080(uint8_t* s) {
 
     // Save level number
     uint16_t old_level = v2gs(s).level(); // word_2AA8D
-    *(uint16_t*)(s + DS_LEVEL_PREV) = old_level; // word_2AA8B = old
+    v2gs(s).level_prev(old_level); // word_2AA8B = old
     uint16_t new_level = v2gs(s).level_load(); // word_2AAA9
-    *(uint16_t*)(s + DS_LEVEL) = new_level; // word_2AA8D = new
+    v2gs(s).level(new_level); // word_2AA8D = new
 
     // sub_111b1: template + level header load (NOT tile chunks — those come after sub_117ad)
     v2_load_template(s);
@@ -7216,7 +7211,7 @@ static void v2_load_template(uint8_t* shadow) {
     // Load template → shadow animation data (ds:0x2E67)
     // Exact replica of sub_111b1: CMP ax, word_2B351; JZ skip
     if (template_chunk != 0xFFFF && template_chunk != v2gs(shadow).template_chunk()) {
-        *(uint16_t*)(shadow + DS_TEMPLATE_CHUNK) = template_chunk;
+        v2gs(shadow).template_chunk(template_chunk);
         uint32_t sz = v2_read_chunk(template_chunk, v2_vm_shadow_animdata, V2_ANIMDATA_SHADOW_SIZE);
         if (sz > 0) { v2_animdata_shadow_valid = true; }
     }
@@ -7291,7 +7286,7 @@ static void v2_load_level_data(uint8_t* shadow) {
         // 3. main_chunk → tilemap (ds:0x2E63 shadow); save decompressed size to ds:0x2E65
         uint32_t sz3 = v2_read_chunk(main_chunk, v2_vm_shadow_tilemap, V2_TILEMAP_SHADOW_SIZE, shadow);
         v2_tilemap_shadow_valid = true;
-        *(uint16_t*)(shadow + DS_DECOMP_DI_END) = (uint16_t)sz3; // word_2B345 = di after decomp
+        v2gs(shadow).decomp_di_end((uint16_t)sz3); // word_2B345 = di after decomp
 
         // 4. bg_chunk → gs_tiledata (ds:0x2E5D shadow) — tail call in orig
         v2_read_chunk(bg_chunk, v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE, shadow);
@@ -7466,7 +7461,7 @@ static void v2_do_render_and_swap(); // forward decl
 //   - v2 sub_10138 mirror inside v2_cmd_loop_1086f (when transition flag set during cmd loop)
 static void v2_run_transition_chain(uint8_t* shadow) {
     // 1. word_28814 = 0  (orig line 2206)
-    *(uint16_t*)(shadow + DS_FRAME_FLAGS) = 0;
+    v2gs(shadow).frame_flags(0);
     // 2. sub_1774f: level-exit music dispatch via off_3285A[ds:0x25B9 & 0xFF]
     v2_music_dispatch(shadow, 0x25B9);
     // 3. INC word_2880F (ds:0x032F)
@@ -7529,8 +7524,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             shadow[DS_PAL_SHADE_R] = 0; shadow[DS_PAL_SHADE_G] = 0; shadow[DS_PAL_SHADE_B] = 0;
             shadow[DS_PAL_FLAGS] &= 0xFE;
             if (shadow[DS_PAL_FLAGS] == 0)
-                *(uint16_t*)(shadow + DS_PAL_SRC_PTR) = DS_PAL_SRC;
-            *(uint16_t*)(shadow + DS_PAL_REQ) = 4;
+                v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
+            v2gs(shadow).pal_req(4);
             v2_pal_correct_10e99(shadow);
         }
     }
@@ -7551,7 +7546,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         uint16_t buttons = v2gs(shadow).frame_flags();
         if (buttons & 2) {
             // bit 2: set word_2AAA9=0x25, then fall through to bit 1 processing.
-            *(uint16_t*)(shadow + DS_LEVEL_LOAD) = 0x25; // word_2AAA9
+            v2gs(shadow).level_load(0x25); // word_2AAA9
             // fall through
         }
         // Check bit 1 (also reached by bit 2 fall-through):
@@ -7564,7 +7559,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     v2gs(shadow).level(), v2gs(shadow).level_load());
             }
             // Original: clear buttons, sub_1774f, INC word_2880F, sub_14207, JMP sub_11080.
-            *(uint16_t*)(shadow + DS_FRAME_FLAGS) = 0;
+            v2gs(shadow).frame_flags(0);
             // sub_1774f: level-exit music dispatch via off_3285A[ds:0x25B9 & 0xFF].
             // Same dispatch as sub_17749 but reads ds:0x25B9 (current level's exit_sound)
             // instead of ds:0x25B7. Typically case 2 (fade) here; sub_11080 will reload
@@ -7692,9 +7687,9 @@ static void v2_scroll_left_17496(uint8_t* s, int16_t si_speed) {
     ax -= si_speed;
     if (ax < 0) ax = 0;
     int16_t dx = (int16_t)v2gs(s).viewport_x() - ax;
-    *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;
-    *(uint16_t*)(s + DS_SCROLL_COL) = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + DS_SCROLL_DELTA_X) = (uint16_t)dx;
+    v2gs(s).viewport_x((uint16_t)ax);
+    v2gs(s).scroll_col((uint16_t)ax >> 3);
+    v2gs(s).scroll_delta_x((uint16_t)dx);
 }
 
 static void v2_scroll_right_1746c(uint8_t* s, int16_t si_speed) {
@@ -7705,9 +7700,9 @@ static void v2_scroll_right_1746c(uint8_t* s, int16_t si_speed) {
     uint16_t limit = v2gs(s).scroll_limit_x();
     if ((uint16_t)ax >= limit) ax = (int16_t)limit;
     int16_t dx = ax - (int16_t)v2gs(s).viewport_x();
-    *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;
-    *(uint16_t*)(s + DS_SCROLL_COL) = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + DS_SCROLL_DELTA_X) = (uint16_t)dx;
+    v2gs(s).viewport_x((uint16_t)ax);
+    v2gs(s).scroll_col((uint16_t)ax >> 3);
+    v2gs(s).scroll_delta_x((uint16_t)dx);
 }
 
 static void v2_scroll_up_174e9(uint8_t* s, int16_t si_speed) {
@@ -7717,9 +7712,9 @@ static void v2_scroll_up_174e9(uint8_t* s, int16_t si_speed) {
     ax -= si_speed;
     if (ax < 0) ax = 0;
     int16_t dx = (int16_t)v2gs(s).viewport_y() - ax;
-    *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;
-    *(uint16_t*)(s + DS_SCROLL_ROW) = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = (uint16_t)dx;
+    v2gs(s).viewport_y((uint16_t)ax);
+    v2gs(s).scroll_row((uint16_t)ax >> 3);
+    v2gs(s).scroll_delta_y((uint16_t)dx);
 }
 
 static void v2_scroll_down_174bf(uint8_t* s, int16_t si_speed) {
@@ -7730,9 +7725,9 @@ static void v2_scroll_down_174bf(uint8_t* s, int16_t si_speed) {
     uint16_t limit = v2gs(s).scroll_limit_y();
     if ((uint16_t)ax >= limit) ax = (int16_t)limit;
     int16_t dx = ax - (int16_t)v2gs(s).viewport_y();
-    *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;
-    *(uint16_t*)(s + DS_SCROLL_ROW) = (uint16_t)ax >> 3;
-    *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = (uint16_t)dx;
+    v2gs(s).viewport_y((uint16_t)ax);
+    v2gs(s).scroll_row((uint16_t)ax >> 3);
+    v2gs(s).scroll_delta_y((uint16_t)dx);
 }
 
 // sub_10704 / sub_10753 (orig eips 0x704-0x752 / 0x753-0x7A1): apply the
@@ -7767,12 +7762,12 @@ static void v2_scroll_step2_10753(uint8_t* s) { v2_scroll_apply(s, DS_SCROLL_STE
 // difference itself. The old code compared the sign of the difference, which
 // diverges when the subtraction overflows.
 static void v2_camera_follow_1064b(uint8_t* s) {
-    *(uint16_t*)(s + DS_SCROLL_DELTA_X) = 0; // word_2882E
-    *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = 0; // word_28830
-    *(uint16_t*)(s + DS_SCROLL_AMT_LEFT) = 0; // word_288B8
-    *(uint16_t*)(s + DS_SCROLL_AMT_RIGHT) = 0; // word_288BA
-    *(uint16_t*)(s + DS_SCROLL_AMT_UP) = 0; // word_288BE
-    *(uint16_t*)(s + DS_SCROLL_AMT_DOWN) = 0; // word_288BC
+    v2gs(s).scroll_delta_x(0); // word_2882E
+    v2gs(s).scroll_delta_y(0); // word_28830
+    v2gs(s).scroll_amt_left(0); // word_288B8
+    v2gs(s).scroll_amt_right(0); // word_288BA
+    v2gs(s).scroll_amt_up(0); // word_288BE
+    v2gs(s).scroll_amt_down(0); // word_288BC
 
     uint16_t di = v2gs(s).active_viking(); // active viking
 
@@ -7783,14 +7778,14 @@ static void v2_camera_follow_1064b(uint8_t* s) {
         if ((int16_t)sum > (int16_t)obj) {                 // JLE not taken
             uint16_t amt = (uint16_t)(sum - obj);          // wrapped SUB value
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10; // CMP si,10h; JL
-            *(uint16_t*)(s + DS_SCROLL_AMT_LEFT) = amt;
+            v2gs(s).scroll_amt_left(amt);
             v2_scroll_left_17496(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
         } else {                                           // loc_10698
             uint16_t diff = (uint16_t)(obj - v2gs(s).viewport_x());
             if ((int16_t)diff > (int16_t)0xB0) {           // SUB si,0B0h; JLE
                 uint16_t amt = (uint16_t)(diff - 0xB0);
                 if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
-                *(uint16_t*)(s + DS_SCROLL_AMT_RIGHT) = amt;
+                v2gs(s).scroll_amt_right(amt);
                 v2_scroll_right_1746c(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
             }
         }
@@ -7802,14 +7797,14 @@ static void v2_camera_follow_1064b(uint8_t* s) {
         if ((int16_t)sum > (int16_t)obj) {
             uint16_t amt = (uint16_t)(sum - obj);
             if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
-            *(uint16_t*)(s + DS_SCROLL_AMT_UP) = amt;
+            v2gs(s).scroll_amt_up(amt);
             v2_scroll_up_174e9(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
         } else {
             uint16_t diff = (uint16_t)(obj - v2gs(s).viewport_y());
             if ((int16_t)diff > (int16_t)0x60) {
                 uint16_t amt = (uint16_t)(diff - 0x60);
                 if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
-                *(uint16_t*)(s + DS_SCROLL_AMT_DOWN) = amt;
+                v2gs(s).scroll_amt_down(amt);
                 v2_scroll_down_174bf(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
             }
         }
@@ -8566,7 +8561,7 @@ static int16_t v2_slope_diff_16390(uint8_t* shadow, uint16_t tile_ax, uint16_t x
 static void v2_ground_snap_1625d(uint8_t* shadow) {
         uint16_t table_end = v2gs(shadow).obj_count();
         for (uint16_t di = 0; di == 0 || (int16_t)di < (int16_t)table_end; di += 2) {   // orig do-while (ADD di,2; CMP di,[372]; JL)
-            *(uint16_t*)(shadow + DS_CUR_OBJ) = di;
+            v2gs(shadow).cur_obj(di);
             if (*(uint16_t*)(shadow + di + OBJ_CODE_SEG) == 0) continue;       // loc_16260
             if (!(*(uint16_t*)(shadow + di + OBJ_FLAGS) & 0x2000)) continue; // loc_1626e
             *(uint16_t*)(shadow + di + OBJ_FLAGS) &= 0xDFFF;                // loc_16279: clear 0x2000
@@ -8657,7 +8652,7 @@ static void v2_coll_pass_1555c(uint8_t* shadow, uint16_t si) {
 // sub_15530 (seg000 eip 0x5530): collision pass 2 — [0x390]=0xFFFF, then the
 // slot do-while calling sub_15569 per slot (alive gate inside the callee).
 static void v2_coll_sweep_15530(uint8_t* shadow) {
-    *(uint16_t*)(shadow + DS_COLL_PHASE) = 0xFFFF;
+    v2gs(shadow).coll_phase(0xFFFF);
     uint16_t table_end = v2gs(shadow).obj_count();
     for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2)   // orig do-while
         v2_coll_pass_15569(shadow, si);
@@ -8665,7 +8660,7 @@ static void v2_coll_sweep_15530(uint8_t* shadow) {
 
 // clear per-object collision-result field + run collision-detect VM (orig sub_15546/1555c)
 static void v2_clear_coll_run_vm_15546(uint8_t* shadow) {
-        *(uint16_t*)(shadow + DS_COLL_PHASE) = 1;
+        v2gs(shadow).coll_phase(1);
         uint16_t table_end = v2gs(shadow).obj_count();
         for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
             v2_coll_pass_1555c(shadow, si);
@@ -8694,8 +8689,8 @@ static void v2_collision_resolve_13916(uint8_t* shadow) {
             else {
                 // Complex case (< 0x100): collision push with flip detection
                 uint16_t di_coll = coll_state; // collision partner object
-                *(uint16_t*)(shadow + DS_TEXT_ROW) = di_coll;
-                *(uint16_t*)(shadow + DS_TEXT_COL) = si;
+                v2gs(shadow).text_row(di_coll);
+                v2gs(shadow).text_col(si);
                 // Check flip flags XOR between objects
                 uint16_t flags_xor = *(uint16_t*)(shadow + di_coll + OBJ_FLAGS) ^
                                      *(uint16_t*)(shadow + si + OBJ_FLAGS);
@@ -8782,39 +8777,39 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 static void v2_page_rotate_165aa(uint8_t* shadow) {
     v2_cc_v2_hit(13);   // M1 call-parity CC_165AA (#65)
         uint16_t ax = v2gs(shadow).page_shown();   // 0x65aa
-        *(uint16_t*)(shadow + DS_PAGE_DRAW) = ax;             // 0x65ad
+        v2gs(shadow).page_draw(ax);             // 0x65ad
         uint16_t dx = v2gs(shadow).page_bg();
         uint16_t si = (v2gs(shadow).viewport_y() & 0xFFF8) >> 2;
 
         if (ax == 0) {
             // loc_165ef: state 0 → next pair (0x34, 0x68)
-            *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x34;
-            *(uint16_t*)(shadow + DS_PAGE_BG) = 0x68;
+            v2gs(shadow).page_shown(0x34);
+            v2gs(shadow).page_bg(0x68);
             uint16_t a = *(uint16_t*)(shadow + (uint16_t)(si - 0x75D6));
             uint16_t b = *(uint16_t*)(shadow + (uint16_t)(si - 0x75A4));
             if (a >= b) {
-                *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x68;
-                *(uint16_t*)(shadow + DS_PAGE_BG) = 0x34;
+                v2gs(shadow).page_shown(0x68);
+                v2gs(shadow).page_bg(0x34);
             }
         } else if (ax == 0x34) {
             // loc_16620: state 0x34 → next pair (0x68, 0)
-            *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x68;
-            *(uint16_t*)(shadow + DS_PAGE_BG) = 0;
+            v2gs(shadow).page_shown(0x68);
+            v2gs(shadow).page_bg(0);
             uint16_t a = *(uint16_t*)(shadow + (uint16_t)(si - 0x75A2));
             uint16_t b = *(uint16_t*)(shadow + (uint16_t)(si - 0x7570));
             if (a >= b) {
-                *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0;
-                *(uint16_t*)(shadow + DS_PAGE_BG) = 0x68;
+                v2gs(shadow).page_shown(0);
+                v2gs(shadow).page_bg(0x68);
             }
         } else {
             // default: state other → next pair (0, 0x34)
-            *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0;
-            *(uint16_t*)(shadow + DS_PAGE_BG) = 0x34;
+            v2gs(shadow).page_shown(0);
+            v2gs(shadow).page_bg(0x34);
             uint16_t a = *(uint16_t*)(shadow + (uint16_t)(si - 0x760A));
             uint16_t b = *(uint16_t*)(shadow + (uint16_t)(si - 0x75D8));
             if (a >= b) {
-                *(uint16_t*)(shadow + DS_PAGE_SHOWN) = 0x34;
-                *(uint16_t*)(shadow + DS_PAGE_BG) = 0;
+                v2gs(shadow).page_shown(0x34);
+                v2gs(shadow).page_bg(0);
             }
         }
         // loc_1664f: if page changed → call sub_1df6a + flag dirty
@@ -8847,8 +8842,8 @@ static void v2_anim_queue_1406d(uint8_t* shadow) {
         do {   // single-pass block: break == orig JMP loc_14191
             uint16_t pos_x = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78C8));  // 0x4083
             uint16_t pos_y = *(uint16_t*)(shadow + (uint16_t)(bx - 0x78C6));  // 0x408a
-            *(uint16_t*)(shadow + DS_TEXT_COL) = pos_x;                       // 0x4087
-            *(uint16_t*)(shadow + DS_TEXT_ROW) = pos_y;                       // 0x408e
+            v2gs(shadow).text_col(pos_x);                       // 0x4087
+            v2gs(shadow).text_row(pos_y);                       // 0x408e
             // Viewport X bounds (0x4097-0x40A1): (pos_x - vp_x + 0x10) JA 0x160 → skip.
             uint16_t ax_x = (uint16_t)(pos_x - v2gs(shadow).viewport_x() + 0x10);
             if (ax_x > 0x160) break;
@@ -8862,8 +8857,8 @@ static void v2_anim_queue_1406d(uint8_t* shadow) {
             if (ax_y < 8)      clip |= 0x0C;                   // 0x40c6 JNC / OR dx,0Ch
             if (ax_y > 0xC8)   clip |= 0x03;                   // 0x40ce JBE / OR dx,3
             // Mutate ds:0x6C/0x6E (0x40D6-0x40E0, after the bound checks).
-            *(uint16_t*)(shadow + DS_TEXT_COL) = (pos_x >> 2) + 8;
-            *(uint16_t*)(shadow + DS_TEXT_ROW) = pos_y >> 2;
+            v2gs(shadow).text_col((pos_x >> 2) + 8);
+            v2gs(shadow).text_row(pos_y >> 2);
             // shadow-VGA: exact orig 2×2 quadrant renders, TWO passes
             // (page 92F9 then 92FB) — seg000 eips 0x40E5..0x418E.
             {
@@ -10997,9 +10992,9 @@ static void v2_despawn_13c93(V2VM& vm, uint16_t di) {
             uint16_t spawn_idx = ObjRef{vm, di}.u16(OBJ_ANIM_SUB); // 0x3d10 si=[16C5]
             uint16_t di_off = (uint16_t)(spawn_idx * 0x0E);        // 0x3d14 MUL 0Eh
             uint16_t save_42 = v2gs(s).cur_obj();       // 0x3d1d PUSH [42]
-            *(uint16_t*)(s + DS_CUR_OBJ) = 0xFFFF;                 // 0x3d21
+            v2gs(s).cur_obj(0xFFFF);                 // 0x3d21
             v2_spawn_visible_entry_13ae0(s, spawn_idx, di_off);    // 0x3d27 CALL sub_13AE0
-            *(uint16_t*)(s + DS_CUR_OBJ) = save_42;                // 0x3d2a POP [42]
+            v2gs(s).cur_obj(save_42);                // 0x3d2a POP [42]
         }
     }
 }
@@ -12234,7 +12229,7 @@ static void v2_hud_reset_12034(uint8_t* s) {
 // sub_117ad: HUD full reinit — [340]=2; gated on [25CF]&1: 10cd8(ax=1,di=0)
 // HUD chunk load, then the reset/redraw chain 1200a → 1201d → 12034 → 120d1.
 static void v2_hud_full_reinit_117ad(uint8_t* s) {
-    *(uint16_t*)(s + DS_HUD_DISP_MODE) = 2;   // word_28820 — HUD redraw request (NOT 0x334)
+    v2gs(s).hud_disp_mode(2);   // word_28820 — HUD redraw request (NOT 0x334)
     if (!(s[DS_LEVEL_FLAGS] & 1)) return;
     v2_load_chunk_10cd8(s, 1, 0);
     v2_hud_reset_1200a(s);
@@ -14194,7 +14189,7 @@ static void v2_vm_op_55(V2VM& vm) {
         //                              RCL ax,3; XOR word_28832, ax; acc=ax (rotated)
         uint16_t ax = v2gs(vm.shadow).rng_timer();   // ax = word_28832
         ax = (ax >> 8) | (ax << 8);                        // XCHG ah,al
-        *(uint16_t*)(vm.shadow + DS_RNG_TIMER) = ax;             // word_28832 = ax
+        v2gs(vm.shadow).rng_timer(ax);             // word_28832 = ax
         // RCL ax,3 — 17-bit rotate (CF=0 from dispatch SHL)
         { uint32_t v17 = (uint32_t)ax; v17 = ((v17 << 3) | (v17 >> 14)) & 0x1FFFF; ax = (uint16_t)(v17 & 0xFFFF); }
         v2gs(vm.shadow).rng_timer_ref() ^= ax;            // XOR word_28832, ax
@@ -16897,8 +16892,8 @@ void orig_coll_ring_dump(int target_frame, const char* tag) {
 }
 
 static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
-    *(uint16_t*)(shadow + DS_CUR_OBJ) = obj_si;
-    *(uint16_t*)(shadow + DS_COLL_BIT_IDX) = 0;
+    v2gs(shadow).cur_obj(obj_si);
+    v2gs(shadow).coll_bit_idx(0);
     uint16_t code_seg = *(uint16_t*)(shadow + obj_si + OBJ_CODE_SEG);
     uint16_t pc = *(uint16_t*)(shadow + obj_si + OBJ_PC);
 
@@ -17288,10 +17283,10 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
     }
 
     // 2. Store current obj to ds:0x42
-    *(uint16_t*)(shadow + DS_CUR_OBJ) = obj_idx;
+    v2gs(shadow).cur_obj(obj_idx);
 
     // 3. Clear ds:0x38E
-    *(uint16_t*)(shadow + DS_COLL_BIT_IDX) = 0;
+    v2gs(shadow).coll_bit_idx(0);
 
     int slot = obj_idx / 2;
     if (slot >= 128) return;
@@ -18156,9 +18151,9 @@ static void v2_page_flip_16775(uint8_t* s) {
         uint8_t x_low_bits = x_offset & 0x3;
         s[DS_PIXEL_PAN] = x_low_bits * 2;
     }
-    *(uint16_t*)(s + DS_VSYNC_COUNT) = 1;                                     // word_3287C = 1
-    *(uint16_t*)(s + DS_SAVED_VP_X) = v2gs(s).viewport_x();               // save viewport X
-    *(uint16_t*)(s + DS_SAVED_VP_Y) = v2gs(s).viewport_y();               // save viewport Y
+    v2gs(s).vsync_count(1);                                     // word_3287C = 1
+    v2gs(s).saved_vp_x(v2gs(s).viewport_x());               // save viewport X
+    v2gs(s).saved_vp_y(v2gs(s).viewport_y());               // save viewport Y
     *(uint16_t*)(s + DS_SCROLL_DISP_X) = v2gs(s).scroll_col();             // scroll row state
     *(uint16_t*)(s + DS_SCROLL_DISP_Y) = v2gs(s).scroll_row();             // scroll col state
     // VGA buffer swap (equivalent of page flip)
@@ -18351,7 +18346,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
         v2_pal_ui_cycle_101be(s);
 
         // word_30C14 = 0 (eip 0x00DB — end of frame marker)
-        *(uint16_t*)(s + DS_COUNTER_8734) = 0;
+        v2gs(s).counter_8734(0);
 
         // sub_108c8: sound crossfade management (eip 0x00E1). Exact replica.
         // ds:0x302 (word_287E2) & ds:0x304 (word_287E4) bit 15 → skip.
@@ -18450,8 +18445,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         s[DS_PAL_SHADE_R] = 0; s[DS_PAL_SHADE_G] = 0; s[DS_PAL_SHADE_B] = 0;
                         s[DS_PAL_FLAGS] &= 0xFE;
                         if (s[DS_PAL_FLAGS] == 0)
-                            *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_SRC;
-                        *(uint16_t*)(s + DS_PAL_REQ) = 4;
+                            v2gs(s).pal_src_ptr(DS_PAL_SRC);
+                        v2gs(s).pal_req(4);
                         v2_pal_correct_10e99(s);            // JMP sub_10E99 tail
                     }
                     // orig sub_103ca quit-path epilogue: TEST word_28814, 2 →
@@ -19108,8 +19103,8 @@ static uint16_t v2_viking_pick_next_12e2d(uint8_t* s, uint16_t si) {
     if (si >= 6) return si;                                          // 6065-6066
     if ((int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0) return si; // 6067-6068
     uint16_t start = si;
-    *(uint16_t*)(s + DS_SCROLL_DELTA_X) = 5;                         // 6069
-    *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = 5;                         // 6070
+    v2gs(s).scroll_delta_x(5);                         // 6069
+    v2gs(s).scroll_delta_y(5);                         // 6070
     si += 2; if (si >= 6) si = 0;                                    // 6071-6074
     if (si != start &&                                               // 6077-6078
         (int16_t)*(uint16_t*)(s + si + OBJ_ANIM_IDX) >= 0)           // 6079-6080
@@ -19130,7 +19125,7 @@ void v2_phase_post_flip1(uint16_t ds_val) {
     // [3C2] to the next living viking; none left → FRAME_FLAGS bit1.
     {
         uint16_t si = v2_viking_pick_next_12e2d(s, v2gs(s).active_viking());
-        *(uint16_t*)(s + DS_ACTIVE_VIKING) = si;                     // 6051
+        v2gs(s).active_viking(si);                     // 6051
         if (si == 0xFFFF) v2gs(s).frame_flags_ref() |= 2;     // 6052-6054
     }
     // sub_15530: collision pass 2
@@ -19149,9 +19144,9 @@ void v2_phase_post_flip1(uint16_t ds_val) {
                 if ((uint16_t)ax >= limit) ax = limit;
             }
             uint16_t dx = (dir < 0) ? (v2gs(s).viewport_x() - (uint16_t)ax) : ((uint16_t)ax - v2gs(s).viewport_x());
-            *(uint16_t*)(s + DS_VIEWPORT_X) = (uint16_t)ax;
-            *(uint16_t*)(s + DS_SCROLL_COL) = (uint16_t)ax >> 3;
-            *(uint16_t*)(s + DS_SCROLL_DELTA_X) = dx;
+            v2gs(s).viewport_x((uint16_t)ax);
+            v2gs(s).scroll_col((uint16_t)ax >> 3);
+            v2gs(s).scroll_delta_x(dx);
         };
         auto scroll_ud = [&](int dir, uint16_t amount) {
             if (v2gs(s).scroll_lock_y() != 0) return;
@@ -19165,9 +19160,9 @@ void v2_phase_post_flip1(uint16_t ds_val) {
                 if ((uint16_t)ax >= limit) ax = limit;
             }
             uint16_t dx = (dir < 0) ? (v2gs(s).viewport_y() - (uint16_t)ax) : ((uint16_t)ax - v2gs(s).viewport_y());
-            *(uint16_t*)(s + DS_VIEWPORT_Y) = (uint16_t)ax;
-            *(uint16_t*)(s + DS_SCROLL_ROW) = (uint16_t)ax >> 3;
-            *(uint16_t*)(s + DS_SCROLL_DELTA_Y) = dx;
+            v2gs(s).viewport_y((uint16_t)ax);
+            v2gs(s).scroll_row((uint16_t)ax >> 3);
+            v2gs(s).scroll_delta_y(dx);
         };
         uint16_t v;
         v = v2gs(s).scroll_amt_left();
@@ -19368,7 +19363,7 @@ void v2_phase_audio_tick(uint16_t ds_val) {
     (void)ds_val;
     if (!v2_frame_active) return;
     uint8_t* s = v2_vm_shadow_ds;
-    *(uint16_t*)(s + DS_COUNTER_8734) = 0;   // word_30C14 = 0 (eip 0x00DB)
+    v2gs(s).counter_8734(0);   // word_30C14 = 0 (eip 0x00DB)
     // sub_108c8 (eip 0x00E1): sound crossfade — ALT+S/M toggles + SDL
     // stop/play_xmidi_external.
     v2_audio_tick_108c8(s);
@@ -19472,8 +19467,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                     s[DS_PAL_SHADE_R] = 0; s[DS_PAL_SHADE_G] = 0; s[DS_PAL_SHADE_B] = 0;
                     s[DS_PAL_FLAGS] &= 0xFE;
                     if (s[DS_PAL_FLAGS] == 0)
-                        *(uint16_t*)(s + DS_PAL_SRC_PTR) = DS_PAL_SRC;
-                    *(uint16_t*)(s + DS_PAL_REQ) = 4;
+                        v2gs(s).pal_src_ptr(DS_PAL_SRC);
+                    v2gs(s).pal_req(4);
                     v2_pal_correct_10e99(s);
                 }
                 // Post-loop: check word_28814 & 2 → loc_10E35 (Y in quit prompt
@@ -19555,7 +19550,7 @@ void v2_phase_frame_end(uint16_t ds_val) {
         // Ensure shadow word_286E2 stays set in --debug mode after level reloads
         // (sub_11080 wipes it). Mirrors what orig startup did once at boot.
         extern bool g_debug_mode;
-        if (g_debug_mode) *(uint16_t*)(s + DS_FLAG_202) = 1;
+        if (g_debug_mode) v2gs(s).flag_202(1);
         if (level < 0x25) {
             uint16_t w286e2 = v2gs(s).flag_202(); // word_286E2 (debug build flag)
             if (w286e2 != 0) {
@@ -19571,7 +19566,7 @@ void v2_phase_frame_end(uint16_t ds_val) {
                     int16_t ax = level;
                     ax -= 1; // DEC ax
                     if (ax < 0) ax = 0;
-                    *(uint16_t*)(s + DS_LEVEL_LOAD) = (uint16_t)ax; // MOV word_2AAA9, ax
+                    v2gs(s).level_load((uint16_t)ax); // MOV word_2AAA9, ax
                 } else {
                     // loc_10121: F5 didn't fire → check F6 (orig line 2177)
                     s[DS_SPEC_KEY_F6] = sdl_spec_get(0x91AC);  // SDL F6 — exact orig INT9
@@ -19695,10 +19690,10 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
     extern uint16_t v2_input_snapshot;
     uint16_t ax = v2_input_snapshot;
 #endif
-    *(uint16_t*)(shadow + DS_INPUT_KEYS) = ax;
+    v2gs(shadow).input_keys(ax);
     uint16_t prev = v2gs(shadow).input_prev();
-    *(uint16_t*)(shadow + DS_INPUT_EDGES) = (ax ^ prev) & ax;
-    *(uint16_t*)(shadow + DS_INPUT_PREV) = ax;
+    v2gs(shadow).input_edges((ax ^ prev) & ax);
+    v2gs(shadow).input_prev(ax);
 }
 
 // V2_PHASE_VIKING_SWITCH_LOOP handler — one iteration of orig sub_10138 loc_10169.
@@ -19812,8 +19807,8 @@ void v2_cmd_loop_1086f(uint8_t* s) {
     uint16_t bx_write = v2gs(s).cmd_write();
     if (bx_read == bx_write) {
         // Drained — orig at loc_108a5: clear pointers + sub_16775 + sub_10130
-        *(uint16_t*)(s + DS_CMD_WRITE) = 0;
-        *(uint16_t*)(s + DS_CMD_READ) = 0;
+        v2gs(s).cmd_write(0);
+        v2gs(s).cmd_read(0);
         v2_page_flip_16775(s); v2_swap_render_buf();
         v2_vsync_wait_10130(s);
         return;
@@ -19837,7 +19832,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
         uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
         uint16_t bx_text = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
-        *(uint16_t*)(s + DS_SCRATCH_34) = 2;
+        v2gs(s).scratch_34(2);
         v2_text_render_124c5(s, si_pos, di_pos, bx_text);
         s[DS_GLYPH_DIRTY] = 1;
         bx_read += 0x08;
@@ -19866,8 +19861,8 @@ void v2_cmd_loop_1086f(uint8_t* s) {
     } else if (cmd_type == 2) {
         // off_2B086[2] = loc_12758. Line-by-line mirror of orig (seg000:6304-6355).
         // Each block annotated with orig eip (01A2:XXXX).
-        *(uint16_t*)(s + DS_TEXT_FULLSCREEN) = 1;                          // 01A2:2759 mov word_31A49, 1
-        *(uint16_t*)(s + DS_UI_THROTTLE) = 0;                          // 01A2:275F mov word_31DBC, 0
+        v2gs(s).text_fullscreen(1);                          // 01A2:2759 mov word_31A49, 1
+        v2gs(s).ui_throttle(0);                          // 01A2:275F mov word_31DBC, 0
         if (s[DS_LEVEL_FLAGS] & 0xE0) {                                // 01A2:2765 test byte_2AAAF, 0E0h
             v2_page_flip_16775(s); v2_swap_render_buf();             // 01A2:276C sub_16775
             v2_vsync_wait_10130(s);                                   // 01A2:276F sub_10130
@@ -19906,9 +19901,9 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_dirty_tile_scan_1C8F1(v2_vm_shadow_ds, 0xFFFE);                 // 01A2:27AD sub_1C8F1(ax=FFFE)
         v2_page_flip_16775(s); v2_swap_render_buf();                 // 01A2:27B2 sub_16775
         v2_vsync_wait_10130(s);                                       // 01A2:27B5 sub_10130
-        *(uint16_t*)(s + DS_TEXT_FULLSCREEN) = 0;                          // 01A2:27B8 mov word_31A49, 0
+        v2gs(s).text_fullscreen(0);                          // 01A2:27B8 mov word_31A49, 0
         s[DS_GLYPH_DIRTY] = 0;                                         // 01A2:27BE mov byte_31A4B, 0
-        *(uint16_t*)(s + DS_UI_THROTTLE) = 0;                          // 01A2:27C3 mov word_31DBC, 0
+        v2gs(s).ui_throttle(0);                          // 01A2:27C3 mov word_31DBC, 0
         memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2);                      // 01A2:27CC..27D4 rep stosw (ax=0, cx=1B8)
         bx_read += 2;                                          // 01A2:27D7 add bx, 2
     } else if (cmd_type == 4) {
@@ -19918,7 +19913,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         bx_read += 2;
     }
     // orig eip 0x894: MOV word_2b044, bx — save advanced read pos
-    *(uint16_t*)(s + DS_CMD_READ) = bx_read;
+    v2gs(s).cmd_read(bx_read);
 
     // ============================================================================
     // orig eip 0x898: v2_draw_ui + sub_1E0C7 (renders shadow UI to render buffer)
@@ -19975,10 +19970,10 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t ax = 0;
         if (v2gs(s).joystick_present() != 0) ax = v2gs(s).input_joy();
         ax = v2_input_or(s, ax);
-        *(uint16_t*)(s + DS_INPUT_KEYS) = ax;
+        v2gs(s).input_keys(ax);
         uint16_t prev = v2gs(s).input_prev();
-        *(uint16_t*)(s + DS_INPUT_EDGES) = (ax ^ prev) & ax;
-        *(uint16_t*)(s + DS_INPUT_PREV) = ax;
+        v2gs(s).input_edges((ax ^ prev) & ax);
+        v2gs(s).input_prev(ax);
     }
 #endif
     // sub_10138 emulation: orig (eip 0x138-0x14A) tests bits 4/1/2 of word_28814:
@@ -20007,7 +20002,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         } else if (btns & 1) {
             v2_run_transition_chain(s);
         } else if (btns & 2) {
-            *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x25;
+            v2gs(s).level_load(0x25);
             v2_run_transition_chain(s);
         }
     }
@@ -20078,8 +20073,8 @@ static void v2_demo_input_12d72(uint8_t* s) {
     } else if (ax == (int16_t)0x8000 || ax == (int16_t)0x8002) {
         // loc_12dd2: replay path
         if (v2gs(s).input_keys() & 0x1000) {
-            *(uint16_t*)(s + DS_SCRATCH_3CE) = 0xFFFF;
-            *(uint16_t*)(s + DS_SCRATCH_3D0) = 0xFFFF;
+            v2gs(s).scratch_3ce(0xFFFF);
+            v2gs(s).scratch_3d0(0xFFFF);
         }
         if (v2gs(s).scratch_3ce() != 0) {
             v2gs(s).scratch_3ce_ref() -= 1;
@@ -20087,18 +20082,18 @@ static void v2_demo_input_12d72(uint8_t* s) {
         } else {
             // loc_12dfa: pop (keys,count) pair from the ds:0x2191 queue
             uint16_t bx = v2gs(s).obj_queue_head();
-            *(uint16_t*)(s + DS_INPUT_ACCUM) = *(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD));
-            *(uint16_t*)(s + DS_SCRATCH_3D0) = *(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD));
+            v2gs(s).input_accum(*(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)));
+            v2gs(s).scratch_3d0(*(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)));
             uint16_t cnt = *(uint16_t*)(s + (uint16_t)(bx + DS_TRANSITION_CHUNK_BUF));
-            *(uint16_t*)(s + DS_SCRATCH_3CE) = cnt - 1;
-            *(uint16_t*)(s + DS_OBJ_QUEUE_HEAD) = bx + 4;
+            v2gs(s).scratch_3ce(cnt - 1);
+            v2gs(s).obj_queue_head(bx + 4);
         }
     } else {
         // record path
         if (v2gs(s).scratch_3ce() == 0) {
             // loc_12dc4: seed tracking
-            *(uint16_t*)(s + DS_SCRATCH_3D0) = v2gs(s).input_keys();
-            *(uint16_t*)(s + DS_SCRATCH_3CE) = 1;
+            v2gs(s).scratch_3d0(v2gs(s).input_keys());
+            v2gs(s).scratch_3ce(1);
         } else {
             uint16_t cur = v2gs(s).input_keys();
             uint16_t prev = v2gs(s).scratch_3d0();
@@ -20113,8 +20108,8 @@ static void v2_demo_input_12d72(uint8_t* s) {
                 v2gs(s).obj_queue_head_ref() += 2;
                 *(uint16_t*)(s + (uint16_t)(bx + DS_OBJ_QUEUE_HEAD)) = v2gs(s).scratch_3ce();
                 v2gs(s).obj_queue_head_ref() += 2;
-                *(uint16_t*)(s + DS_SCRATCH_3D0) = cur;
-                *(uint16_t*)(s + DS_SCRATCH_3CE) = 1;
+                v2gs(s).scratch_3d0(cur);
+                v2gs(s).scratch_3ce(1);
             }
         }
     }
@@ -20129,38 +20124,38 @@ static void v2_transition_kick_102ad(uint8_t* s) {
         uint16_t level = v2gs(s).level();
         if (level == 0x2B) {
             if (v2gs(s).input_keys() != 0xFFFF) {
-                *(uint16_t*)(s + DS_GAME_MODE_AC) = 1;
+                v2gs(s).game_mode_ac(1);
             } else {
-                *(uint16_t*)(s + DS_LEVEL_LOAD) = 0;
-                *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0;
-                *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+                v2gs(s).level_load(0);
+                v2gs(s).active_viking(0);
+                v2gs(s).game_mode_ac(0);
             }
         } else if (level == 0x2C) {
-            *(uint16_t*)(s + DS_ACTIVE_VIKING) = 0;
-            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+            v2gs(s).active_viking(0);
+            v2gs(s).game_mode_ac(0);
         } else if (level == 0x2D) {
-            *(uint16_t*)(s + DS_GAME_MODE_AC) = 1;
+            v2gs(s).game_mode_ac(1);
         } else if (level == 0x2E) {
-            *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x27;
-            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+            v2gs(s).level_load(0x27);
+            v2gs(s).game_mode_ac(0);
         } else {
             uint16_t si = v2gs(s).hud_sel_si();
             si += 2;
             uint16_t ax = *(uint16_t*)(s + si + DS_TRANSITION_LEVEL_TBL);
             if (ax == 0xFFFF) si = 0;
-            *(uint16_t*)(s + DS_HUD_SEL_SI) = si;
-            *(uint16_t*)(s + DS_LEVEL_LOAD) = 0x27;
-            *(uint16_t*)(s + DS_GAME_MODE_AC) = 0;
+            v2gs(s).hud_sel_si(si);
+            v2gs(s).level_load(0x27);
+            v2gs(s).game_mode_ac(0);
         }
     } else if (ac_u == 0x8002) {
-        *(uint16_t*)(s + DS_LEVEL_LOAD) = v2gs(s).level();
+        v2gs(s).level_load(v2gs(s).level());
     } else {
         uint16_t bx = v2gs(s).obj_queue_head();
         *(uint16_t*)(s + (uint16_t)(bx + DS_TRANSITION_CHUNK_BUF)) = 0x1000;
         *(uint16_t*)(s + (uint16_t)(bx + 0x2195)) = 0xFFFF;
         v2gs(s).obj_queue_head_ref() += 2;
-        *(uint16_t*)(s + DS_GAME_MODE_AC) = 0x8002;
-        *(uint16_t*)(s + DS_LEVEL_LOAD) = v2gs(s).level();
+        v2gs(s).game_mode_ac(0x8002);
+        v2gs(s).level_load(v2gs(s).level());
     }
     v2gs(s).frame_flags_ref() |= 1;
 }
@@ -20178,15 +20173,15 @@ static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in) {
     v2_cc_v2_hit(8);   // M1 call-parity CC_121F6 (#65)
     uint16_t ax_r = *(uint16_t*)(s + di_in + (DS_HUD_SEL));
     uint16_t di_s = (uint16_t)((di_in << 1) + ax_r);
-    *(uint16_t*)(s + DS_QUIT_ACTIVE) = di_s;
+    v2gs(s).quit_active(di_s);
     uint16_t di_b = (uint16_t)((di_s << 1) & 0xFFF8);
     bool found = false; uint16_t found_di = 0;
     for (int cx = 0; cx < 4; cx++) {
         if (*(uint16_t*)(s + di_b + (DS_HUD_ITEMS)) != 0) { found = true; found_di = di_b; break; }
         di_b += 2;
     }
-    if (!found) { *(uint16_t*)(s + DS_HUD_BLINK_FIELD) = 0; return; }
-    *(uint16_t*)(s + DS_HUD_BLINK_FIELD) = *(uint16_t*)(s + found_di + (DS_HUD_ITEMS));
+    if (!found) { v2gs(s).hud_blink_field(0); return; }
+    v2gs(s).hud_blink_field(*(uint16_t*)(s + found_di + (DS_HUD_ITEMS)));
     uint16_t saved = found_di;
     uint16_t di3 = v2gs(s).hud_draw_di();
     uint16_t ax3 = *(uint16_t*)(s + di3 + (DS_HUD_SEL));
@@ -20197,7 +20192,7 @@ static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in) {
     di3 = (uint16_t)((di3 >> 2) & 0xFFFE);
     *(uint16_t*)(s + di3 + (DS_HUD_SEL)) = si_v;
     *(uint16_t*)(s + di3 + (DS_HUD_SEL)) &= 3;
-    *(uint16_t*)(s + DS_QUIT_ACTIVE) = si_v;
+    v2gs(s).quit_active(si_v);
 }
 
 // sub_11f93: place the carried item. Special slot 0x18: usable-LUT
@@ -20234,7 +20229,7 @@ static bool v2_item_place_11f93(uint8_t* s) {
         }
     }
     v2_item_take_next_121f6(s, v2gs(s).hud_draw_di());   // loc_11FFB
-    *(uint16_t*)(s + DS_QUIT_MODE) = 1;
+    v2gs(s).quit_mode(1);
     return false;                                          // CLC
 }
 
@@ -20244,17 +20239,17 @@ static bool v2_item_place_11f93(uint8_t* s) {
 static void v2_item_pop_121b9(uint8_t* s) {
     v2_cc_v2_hit(7);   // M1 call-parity CC_121B9 (#65)
     uint16_t di = v2gs(s).active_viking();
-    *(uint16_t*)(s + DS_HUD_DRAW_DI) = di;
+    v2gs(s).hud_draw_di(di);
     uint16_t ax = *(uint16_t*)(s + di + (DS_HUD_SEL));
     di = (uint16_t)(((di << 1) + ax) << 1);
     uint16_t item = *(uint16_t*)(s + di + (DS_HUD_ITEMS));
     if (item == 0) return;
-    *(uint16_t*)(s + DS_HUD_BLINK_FIELD) = item;
+    v2gs(s).hud_blink_field(item);
     *(uint16_t*)(s + di + (DS_HUD_ITEMS)) = 0;
     di >>= 1;
-    *(uint16_t*)(s + DS_QUIT_ACTIVE) = di;
-    *(uint16_t*)(s + DS_QUIT_MODE) = 0;
-    *(uint16_t*)(s + DS_QUIT_BLINK) = 9;
+    v2gs(s).quit_active(di);
+    v2gs(s).quit_mode(0);
+    v2gs(s).quit_blink(9);
     if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 2);
 }
 
@@ -20274,14 +20269,13 @@ static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out
 // item cursor to its selected slot, redraw the selectors (sub_120D1),
 // restart the blink timer, open nearby gates (sub_11F47), click (SFX 1).
 static void v2_pause_switch_viking(uint8_t* shadow, uint16_t viking) {
-    *(uint16_t*)(shadow + DS_ACTIVE_VIKING) = viking;                    // 3842
+    v2gs(shadow).active_viking(viking);                    // 3842
     uint16_t sel = *(uint16_t*)(shadow + viking + (DS_HUD_SEL));         // 3843
     uint16_t slot = (uint16_t)((viking << 1) + sel);                     // 3844-3845
-    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = slot;                        // 3846
-    *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) =
-        *(uint16_t*)(shadow + (uint16_t)(slot << 1) + (DS_HUD_ITEMS));   // 3847-3849
+    v2gs(shadow).quit_active(slot);                        // 3846
+    v2gs(shadow).hud_blink_field(*(uint16_t*)(shadow + (uint16_t)(slot << 1) + (DS_HUD_ITEMS)));   // 3847-3849
     (void)v2_hud_selectors_120d1(shadow);                                     // 3850 call sub_120D1
-    *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;                         // 3851
+    v2gs(shadow).quit_blink(0x11);                         // 3851
     v2_viking_proximity_11f47(shadow);                                   // 3852 call sub_11F47
     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);      // 3853-3854
 }
@@ -20313,14 +20307,14 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             // Orig: MOV di, word_28923; SHL di, 1; MOV ax, 0; CALL sub_1183d (clear current)
             v2_draw_hud_item(v2_current_ds_val, v2gs(shadow).quit_active() << 1, 0);
             v2_vga_hud_item_1183d(v2_vm_shadow_ds, v2gs(shadow).quit_active() << 1, 0);
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            v2gs(shadow).quit_blink(0x11);
             uint16_t di_cat = v2gs(shadow).quit_active() >> 2;
             for (int safe = 0; safe < 8; safe++) {
                 di_cat = (uint16_t)(di_cat - 1);
                 if ((int16_t)di_cat < 0) di_cat = 3;
                 uint16_t ax_r = 0;
                 if (v2_hud_cat_probe_12250(shadow, di_cat, ax_r)) {
-                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = ax_r >> 1; break;
+                    v2gs(shadow).quit_active(ax_r >> 1); break;
                 }
             }
             // Orig eip 0x1d09: MOV ax, 1; CALL sub_177bb (play SFX 1 — selector move)
@@ -20330,14 +20324,14 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             // Orig: MOV di, word_28923; SHL di, 1; MOV ax, 0; CALL sub_1183d (clear current)
             v2_draw_hud_item(v2_current_ds_val, v2gs(shadow).quit_active() << 1, 0);
             v2_vga_hud_item_1183d(v2_vm_shadow_ds, v2gs(shadow).quit_active() << 1, 0);
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            v2gs(shadow).quit_blink(0x11);
             uint16_t di_cat = v2gs(shadow).quit_active() >> 2;
             for (int safe = 0; safe < 8; safe++) {
                 di_cat++;
                 if ((int16_t)di_cat >= 4) di_cat = 0;
                 uint16_t ax_r = 0;
                 if (v2_hud_cat_probe_12250(shadow, di_cat, ax_r)) {
-                    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = ax_r >> 1; break;
+                    v2gs(shadow).quit_active(ax_r >> 1); break;
                 }
             }
             // Orig eip 0x1d49: MOV ax, 1; CALL sub_177bb (play SFX 1 — selector move)
@@ -20405,8 +20399,8 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
         // (e.g. 3900-3906 for Left).
         auto arrow_commit = [&]() {
             uint16_t bx = v2gs(shadow).quit_active() << 1;
-            *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + bx + (DS_HUD_ITEMS));
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            v2gs(shadow).hud_blink_field(*(uint16_t*)(shadow + bx + (DS_HUD_ITEMS)));
+            v2gs(shadow).quit_blink(0x11);
             if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
         };
         if (new_input & 0x200) {                                     // Left, 3889-3906
@@ -20455,7 +20449,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             (void)v2_hud_selectors_120d1(shadow);                         // 3976
         }
         if (new_input & 0x3000) {                          // 3979-3983
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;   // 3981
+            v2gs(shadow).quit_blink(0x11);   // 3981
             cbb_exit = true;                               // 3982 STC
         }
     }
@@ -20477,7 +20471,7 @@ static void v2_selector_blink_11c52(uint8_t* s) {
     if (mode != 1) {
         // Mode 0: regular item slot blink (sub_11c52 main path)
         uint16_t cnt = v2gs(s).quit_blink() - 1;  // DEC word_28925
-        *(uint16_t*)(s + DS_QUIT_BLINK) = cnt;
+        v2gs(s).quit_blink(cnt);
         if ((cnt & 0x0F) == 0) {
             uint16_t di = v2gs(s).quit_active() << 1;
             uint16_t ax = (cnt & 0x10) ? v2gs(s).hud_blink_field() : 0;
@@ -20492,7 +20486,7 @@ static void v2_selector_blink_11c52(uint8_t* s) {
     } else {
         // Mode 1: alternate blink path (loc_11c8f) — selector mode
         uint16_t cnt = v2gs(s).quit_blink() - 1;
-        *(uint16_t*)(s + DS_QUIT_BLINK) = cnt;
+        v2gs(s).quit_blink(cnt);
         if ((cnt & 0x0F) == 0) {
             uint16_t di = v2gs(s).quit_active() << 1;
             if (cnt & 0x10) {
@@ -20525,8 +20519,8 @@ void v2_run_pause_entry(uint8_t* shadow) {
     // Plays SFX 0 (pause sound). Allocates handle in shadow's slot 0 (ds:0x990E).
     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 0);
     // Mirror orig sub_11ba5 eips 0x1bbd..0x1c1c (DS-only writes; render skipped).
-    *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;     // word_28925 = 0x11
-    *(uint16_t*)(shadow + DS_QUIT_MODE) = 1;         // word_28927 = 1 (mode = carrying)
+    v2gs(shadow).quit_blink(0x11);     // word_28925 = 0x11
+    v2gs(shadow).quit_mode(1);         // word_28927 = 1 (mode = carrying)
     // Viking sprite flags update: di = word_288A2, sprite_di = ds:[di+0x1A85].
     {
         uint16_t di = v2gs(shadow).active_viking();                  // word_288A2
@@ -20559,9 +20553,9 @@ void v2_run_pause_entry(uint8_t* shadow) {
         uint16_t si = *(uint16_t*)(shadow + di + (DS_HUD_SEL));
         di <<= 1;
         si += di;
-        *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = si;                            // word_28923
+        v2gs(shadow).quit_active(si);                            // word_28923
         si <<= 1;
-        *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) = *(uint16_t*)(shadow + si + (DS_HUD_ITEMS)); // word_28921
+        v2gs(shadow).hud_blink_field(*(uint16_t*)(shadow + si + (DS_HUD_ITEMS))); // word_28921
     }
     // sub_11f47: viking proximity check (extracted).
     v2_viking_proximity_11f47(shadow);
@@ -20606,19 +20600,19 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
         int16_t ax = (int16_t)v2gs(shadow).game_mode_ac();
         if (ax == (int16_t)0x8000 || ax == (int16_t)0x8002) {
             if (v2gs(shadow).input_keys() & 0x1000) {
-                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = 0xFFFF;
-                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = 0xFFFF;
+                v2gs(shadow).scratch_3ce(0xFFFF);
+                v2gs(shadow).scratch_3d0(0xFFFF);
             }
             if (v2gs(shadow).scratch_3ce() != 0) {
                 v2gs(shadow).scratch_3ce_ref() -= 1;
                 v2gs(shadow).input_accum_ref() |= v2gs(shadow).scratch_3d0();
             } else {
                 uint16_t bx = v2gs(shadow).obj_queue_head();
-                *(uint16_t*)(shadow + DS_INPUT_ACCUM) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
-                *(uint16_t*)(shadow + DS_SCRATCH_3D0) = *(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD);
+                v2gs(shadow).input_accum(*(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD));
+                v2gs(shadow).scratch_3d0(*(uint16_t*)(shadow + bx + DS_OBJ_QUEUE_HEAD));
                 uint16_t cnt = *(uint16_t*)(shadow + bx + DS_TRANSITION_CHUNK_BUF);
-                *(uint16_t*)(shadow + DS_SCRATCH_3CE) = cnt - 1;
-                *(uint16_t*)(shadow + DS_OBJ_QUEUE_HEAD) = bx + 4;
+                v2gs(shadow).scratch_3ce(cnt - 1);
+                v2gs(shadow).obj_queue_head(bx + 4);
             }
         }
         // orig eip 0x1c40-0x1c4a: TEST word_28898, 0x1000; JZ loc_11c4b; STC.
@@ -20756,8 +20750,8 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     }
 
     // sub_104a1 prelude: DS writes + first render pair (eip 0x04A1-0x04C0)
-    *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;          // word_28925
-    *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = 1;             // word_28923 = cursor pos
+    v2gs(shadow).quit_blink(0x11);          // word_28925
+    v2gs(shadow).quit_active(1);             // word_28923 = cursor pos
     shadow[DS_GLYPH_DIRTY] = 1;                            // byte_31A4B
     // №58: orig eip 0x4B4-0x4B9 (PUSHF/CLI; MOV ax,3Fh; OUT 3C9,al ×3; POPF)
     // writes DAC color 3 = white — the index was armed by the OUT 3C8,3 in
@@ -20788,14 +20782,14 @@ static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
     if (ni & 0x200) {
         if (v2gs(shadow).quit_active() != 0) {
             v2gs(shadow).quit_active_ref() -= 1;    // DEC word_28923
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            v2gs(shadow).quit_blink(0x11);
             v2_text_print_1265b(shadow, 4, 0x16, 0x0F);    // sub_1265b
         }
     }
     if (ni & 0x100) {
         if (v2gs(shadow).quit_active() == 0) {
             v2gs(shadow).quit_active_ref() += 1;    // INC word_28923
-            *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;
+            v2gs(shadow).quit_blink(0x11);
             v2_text_print_1265b(shadow, 5, 0x10, 0x0F);    // sub_1265b
         }
     }
@@ -20825,7 +20819,7 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
     extern uint16_t v2_current_ds_val;
     extern void v2_swap_render_buf();
     v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
-    *(uint16_t*)(shadow + DS_VSYNC_COUNT) = 1;            // word_3287C
+    v2gs(shadow).vsync_count(1);            // word_3287C
     v2_vsync_wait_10130(shadow);
     // m2c-inline at orig line 2746: v2_draw_tiles/sprites/ui before sub_1DE05
     v2_draw_tiles(v2_current_ds_val);
@@ -20837,9 +20831,9 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
     // dialog drawn but invisible (only blink branch swaps every ~16 iters).
     v2_swap_render_buf();
     v2_bg_latch_1DE05(shadow);
-    *(uint16_t*)(shadow + DS_VSYNC_COUNT) = 1;
+    v2gs(shadow).vsync_count(1);
     v2_vsync_wait_10130(shadow);
-    *(uint16_t*)(shadow + DS_VSYNC_COUNT) = 1;
+    v2gs(shadow).vsync_count(1);
     v2_vsync_wait_10130(shadow);
     // sub_12352 (input): default mode → INPUT_UPDATE signal already updated
     // shadow_28896/8/A. V2_ONLY → drive ourselves.
@@ -20871,8 +20865,8 @@ static void v2_pw_post_loop(uint8_t* shadow) {
 #endif
     if (exit_ax == 0) v2gs(shadow).frame_flags_ref() |= 2;   // OR word_28814, 2
     // loc_104FF: cleanup renders (orig lines 2779-2807, two iterations of full render block)
-    *(uint16_t*)(shadow + DS_TEXT_FULLSCREEN) = 1;            // word_31A49 = 1
-    *(uint16_t*)(shadow + DS_UI_THROTTLE) = 0;            // word_31DBC = 0
+    v2gs(shadow).text_fullscreen(1);            // word_31A49 = 1
+    v2gs(shadow).ui_throttle(0);            // word_31DBC = 0
     extern uint16_t v2_current_ds_val;
     for (int i = 0; i < 2; i++) {
         v2_vsync_wait_10130(shadow);
@@ -20892,7 +20886,7 @@ static void v2_pw_post_loop(uint8_t* shadow) {
         v2_glyph_flush_1E0C7(shadow);
         v2_page_flip_16775(shadow);
     }
-    *(uint16_t*)(shadow + DS_TEXT_FULLSCREEN) = 0;            // word_31A49 = 0
+    v2gs(shadow).text_fullscreen(0);            // word_31A49 = 0
     v2_glyph_list_clear_12816(shadow);                          // sub_12816: clear glyph buffer
     // Orig JMP sub_14590 (loc_103b7 eip 0x3C6 / loc_10469 eip 0x478) after the
     // dialog loop exits. Body at seg000 line 10262+: clears ds:0x342/343/344=0,
@@ -20903,8 +20897,8 @@ static void v2_pw_post_loop(uint8_t* shadow) {
         shadow[DS_PAL_SHADE_R] = 0; shadow[DS_PAL_SHADE_G] = 0; shadow[DS_PAL_SHADE_B] = 0;
         shadow[DS_PAL_FLAGS] &= 0xFE;
         if (shadow[DS_PAL_FLAGS] == 0)
-            *(uint16_t*)(shadow + DS_PAL_SRC_PTR) = DS_PAL_SRC;
-        *(uint16_t*)(shadow + DS_PAL_REQ) = 4;
+            v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
+        v2gs(shadow).pal_req(4);
         v2_pal_correct_10e99(shadow);
         v2_pw_did_save_1450b = false;
     }
