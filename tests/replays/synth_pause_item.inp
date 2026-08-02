@@ -1,0 +1,89 @@
+# Synthetic scenario (№49 coverage): pause/inventory item interaction.
+# Built on the level1.inp prefix (frames <3580 — title skip; world state
+# identical to the level1 replay). Long holds: the [3B8] input-word gates
+# sample once per frame and some consumers add a %4 frame gate.
+#
+# Exercises v2_pause_items_11cbb mode 1 branches (sub_11BA5 loop, TAB entry):
+#   LCTRL ×2   — viking switch (v2_pause_switch_viking: sub_120D1 selector
+#                renders + sub_11F47 distance gates + SFX 1);
+#   RIGHT ×2   — cursor move + the SECOND press hits the "already there"
+#                path: №49-fix's UNCONDITIONAL erase-old (sub_1183d) fires
+#                with no cursor change;
+#   DOWN ×2, LEFT, UP — remaining arrows incl. one more "at edge" press;
+#   F          — pickup on the level-1 start slot (EMPTY: sub_121B9 empty
+#                path + UNCONDITIONAL sub_120D1 commit);
+#   TAB        — 0x3000 exit path (blink=0x11 + leave the menu).
+# Mode-0 branches (Action/Exit while CARRYING an item) need a level with an
+# item actually picked up — requires a human-recorded replay (see
+# SCENARIOS.md `inventory`); the start inventory on level 1 is empty.
+17 KD SPACE
+19 KU SPACE
+23 KD SPACE
+24 KU SPACE
+34 KD SPACE
+35 KU SPACE
+53 KD SPACE
+54 KU SPACE
+111 KU Y
+113 KU S
+113 KU S
+113 KU Q
+113 KU N
+114 KU F
+114 KU E
+114 KU D
+114 KU A
+2839 KU R
+2839 KU R
+2839 KU M
+2839 KU D
+3511 KU DEL
+3511 KU Y
+3511 KU Y
+3511 KU X
+3511 KU X
+3511 KU X
+3512 KU S
+3512 KU S
+3512 KU R
+3512 KU R
+3512 KU Q
+3512 KU N
+3512 KU M
+3512 KU F
+3512 KU E
+3560 KU E
+3560 KU N
+3560 KU Q
+3561 KU Y
+# Level 0 (STRT) starts ~frame 3500 INSIDE the tutorial dialog blocking
+# loop — the main loop (and the sub_11BA5 gate) does not run until the
+# dialog is dismissed. Two SPACE taps close it (same as the level1 replay).
+3580 KD SPACE
+3600 KU SPACE
+3660 KD SPACE
+3680 KU SPACE
+# Inventory menu (sub_11BA5: HUD flag & TAB edge).
+3800 KD TAB
+3840 KU TAB
+3900 KD LCTRL
+3940 KU LCTRL
+4000 KD LCTRL
+4040 KU LCTRL
+4100 KD RIGHT
+4140 KU RIGHT
+4200 KD RIGHT
+4240 KU RIGHT
+4300 KD DOWN
+4340 KU DOWN
+4400 KD DOWN
+4440 KU DOWN
+4500 KD LEFT
+4540 KU LEFT
+4600 KD UP
+4640 KU UP
+4700 KD F
+4740 KU F
+4800 KD TAB
+4840 KU TAB
+# end-frame 5000

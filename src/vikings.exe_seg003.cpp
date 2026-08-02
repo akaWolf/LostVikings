@@ -5,6 +5,7 @@
  */
 
                 #include "vikings.exe.h"
+extern "C" void v2_cc_orig_hit(int); // M1 call-parity (#65)
 
 extern uint8_t getPixel(uint8_t plane, uint32_t plane_offset);
 extern void drawPixel(uint8_t plane, uint32_t plane_offset, uint32_t color);
@@ -28,6 +29,7 @@ static int current_plane = 0;
     _group3:
     _begin:
  sub_1c8f1: // far call
+ { extern void v2_cc_orig_hit(int); v2_cc_orig_hit(11); } // M1 call-parity CC_1C8F1 (#65)
 	//printf("sub_1c8f1\n"); // doors small artefact
 //cs=0xe25;eip=0x000108; 	J(RETF(0));	// 35719 retf ;~ 0E25:0108 //debug
 	// 35680
@@ -612,6 +614,7 @@ cs=0xe25;eip=0x000548; 	J(JMP(loc_1c937));	// 36244 jmp     loc_1C937 ;~ 0E25:05
 	// 36249
 cs=0xe25;eip=0x00054b; 	T(MOV(bp, si));	// 36251 mov     bp, si ;~ 0E25:054B
  sub_1cd7d: // near call
+ { extern void v2_cc_orig_hit(int); v2_cc_orig_hit(12); } // M1 call-parity CC_1CD7D (#65)
 //printf("sub_1cd7d\n"); // update after object movement
 //cs=0xe25;eip=0x000108; 	J(RETN(0));	// 35719 retf ;~ 0E25:0108 //debug
 	// 36258
@@ -2599,6 +2602,7 @@ cs=0xe25;eip=0x00155c; 	T(ADD(si, 9));	// 37985 add     si, 9 ;~ 0E25:155C
 cs=0xe25;eip=0x00155f; 	J(LOOP(loc_1dd7a));	// 37986 loop    loc_1DD7A ;~ 0E25:155F
 cs=0xe25;eip=0x001561; 	J(JMP(loc_1db94));	// 37987 jmp     loc_1DB94 ;~ 0E25:1561
  sub_1dd9c: // far call
+ { extern void v2_cc_orig_hit(int); v2_cc_orig_hit(10); } // M1 call-parity CC_1DD9C (#65)
  //cs=0xe25;eip=0x000108; 	J(RETF(0));	// 35719 retf ;~ 0E25:0108 //debug
 	// 37997
 cs=0xe25;eip=0x00156c; 	T(MOV(di, 0x0FE));	// 37999 mov     di, 0FEh ; '�' ;~ 0E25:156C
@@ -2652,6 +2656,7 @@ cs=0xe25;eip=0x0015c3; 	J(JGE(loc_1dd9f));	// 38033 jge     short loc_1DD9F ;~ 0
 cs=0xe25;eip=0x0015c5; 	X(MOV(*(raddr(ds,0x9568)), 0));	// 38034 mov     byte ptr ds:9568h, 0 ;~ 0E25:15C5
 cs=0xe25;eip=0x0015ca; 	J(RETF(0));	// 38035 retf ;~ 0E25:15CA
  sub_1de05: // far call
+ { extern void v2_cc_orig_hit(int); v2_cc_orig_hit(9); } // M1 call-parity CC_1DE05 (#65)
 //printf("sub_1de05\n"); // redraw objects after movement
  //cs=0xe25;eip=0x000108; 	J(RETF(0));	// 35719 retf ;~ 0E25:0108 //debug
 	// 38048

@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <SDL2/SDL.h>
 #include "render_v2.h"
+#include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
 #include "v2_obj_view.h"
 
@@ -2404,10 +2405,11 @@ static void v2_pal_shade_10f03(uint8_t* s) {
 
 static void v2_vsync_wait_10130(uint8_t* s); // forward decl
 static void v2_pal_fade_seq_10fa0(uint8_t* s) {
-    // Original: loop bx from 0 to 0x45 (70 iterations).
-    // NOTE: orig seg000 has debug hack "bx = 0x45" (line 3246) that reduces to 1 iteration.
-    // v2 MUST match orig behavior.
-    for (uint16_t bx = 0x45; bx <= 0x45; bx++) {
+    // Fade to black — bx from 0 up to 0x45, 70 iterations (orig 2141-2155).
+    // №51: the orig-side "bx = 0x45" debug override has been REMOVED (note at
+    // seg000 eip 0xFA1) — the full fade loop is the original behaviour; v2's
+    // single-iteration copy was matching the stale hack (M1 call-parity).
+    for (uint16_t bx = 0; bx <= 0x45; bx++) {
         s[DS_PAL_SHADE_R] = (uint8_t)bx; // byte_28822
         s[DS_PAL_SHADE_G] = (uint8_t)bx; // byte_28823
         s[DS_PAL_SHADE_B] = (uint8_t)bx; // byte_28824
@@ -2467,6 +2469,7 @@ static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di)
 // ============================================================================
 extern void v2_render_callback();  // v2 mirror of sub_1797b (defined below)
 static void v2_vsync_wait_10130(uint8_t* s) {
+    v2_cc_v2_hit(0);   // M1 call-parity CC_10130 (#65)
     extern bool need_quit;
     // #32 localization probe: entry counter value = deterministic iteration
     // count of this wait (v2_render_callback DECs once per loop pass).
@@ -2652,6 +2655,7 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
 // DS writes: byte_3166B (ds:0x918B), word_287E4 (ds:0x0304), sound handles (ds:0x990E-0x9914),
 //            byte_3167E (ds:0x919E), word_287E2 (ds:0x0302).
 static void v2_audio_tick_108c8(uint8_t* s) {
+    v2_cc_v2_hit(15);   // M1 call-parity CC_108C8 (#65)
     uint16_t ax = *(uint16_t*)(s + DS_MUSIC_MUTE) & *(uint16_t*)(s + DS_SFX_MUTE);  // word_287E2 & word_287E4
     if (ax & 0x8000) return;                                              // TEST ax, 8000h; JNZ ret
     V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:sub_108c8");
@@ -2786,6 +2790,7 @@ static void v2_vga_portrait_11aa4(uint8_t* s, uint16_t si_in, uint16_t di_in) {
 // 0x7A9E]; passes (3 @di), (0 @di+1), (1 @di+1), (2 @di+1); 16 rows × 2×MOVSW
 // (4 bytes), stride 0x52+4 = 0x56; SI contiguous (16×4 per pass).
 static void v2_vga_hud_item_1183d(uint8_t* s, uint16_t di_in, uint16_t ax_item) {
+    v2_cc_v2_hit(2);   // M1 call-parity CC_1183D (#65)
     extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
     if (di_in == 0x18 && ax_item == 0) ax_item = 0x17;
     uint16_t si = (uint16_t)(0x507D + (ax_item << 8));
@@ -2804,6 +2809,7 @@ static void v2_vga_hud_item_1183d(uint8_t* s, uint16_t di_in, uint16_t ax_item) 
 // (plane, si_off, di_off, width) writes extracted VERBATIM from the m2c inline
 // hooks of display_selector. si = 0x637D fixed; di = ds:[di_in − 0x7A9E].
 static void v2_vga_selector_118ad(uint8_t* s, uint16_t di_in) {
+    v2_cc_v2_hit(3);   // M1 call-parity CC_118AD (#65)
     extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
     static const struct { uint8_t pl; uint16_t so, dofs; uint8_t w; } T[] = {
         // generated from src inlines (56 entries, planes 3/0/1/2 groups of 14)
@@ -2885,6 +2891,7 @@ static void v2_portrait_sync_11b0b(uint8_t* s);
 // alive viking (portrait != 0): |dx|+|dy| to the active one < 0x40 →
 // byte [si>>1 + 0x449] = 0. Uses signed JNS/NEG absolute values.
 static void v2_viking_proximity_11f47(uint8_t* s) {
+    v2_cc_v2_hit(5);   // M1 call-parity CC_11F47 (#65)
     *(uint16_t*)(s + DS_HUD_FIELD_449) = 0xFFFF;     // word_28929
     s[DS_HUD_FORCE] = 0xFF;                          // byte_2892B
     uint16_t di = *(uint16_t*)(s + DS_ACTIVE_VIKING);
@@ -2942,6 +2949,7 @@ static void v2_hud_update_11792(uint8_t* s) {
 // continues from that value (genuine DOS bug, replicated bit-exact).
 // Returns the clobbered DI.
 static uint16_t v2_hud_selectors_120d1(uint8_t* s) {
+    v2_cc_v2_hit(4);   // M1 call-parity CC_120D1 (#65)
     uint16_t dsv = v2_current_ds_val;
     // viking 1: word_288fa (0x41A) = word_288f4 (0x414)
     uint16_t v1 = *(uint16_t*)(s + (DS_HUD_SEL));
@@ -3532,6 +3540,7 @@ static void v2_pal_correct_10e99(uint8_t* s) {
 // DS reads: ds:0x2581, ds:0x257F, ds:0x25DC, ds:[di-0x7098].
 // FS writes: AND fs:[di], ax (clears dirty flag bit 0).
 static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
+    v2_cc_v2_hit(11);   // M1 call-parity CC_1C8F1 (#65)
     uint16_t cx = 0x2B;                                              // MOV cx, 2Bh (columns)
     uint16_t bx = 0x19;                                              // MOV bx, 19h (rows)
     // line 36-40: di = row_offset_table[ds:0x2581] + ds:0x257F, scaled
@@ -3575,6 +3584,7 @@ static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
 // For each tile in clipped rect: OR fs:[si_off], 3.
 // Also renders to VGA (sub_1C8F1 style) — VGA part skipped for v2.
 static void v2_sprite_draw_1CD7D(uint8_t* s, int16_t cx_x, int16_t dx_y, int16_t si_h, int16_t bp_w) {
+    v2_cc_v2_hit(12);   // M1 call-parity CC_1CD7D (#65)
     // line 615-619: if !(cx & 7) → DEC bp                          ; TEST cx, 7; JNZ; DEC bp
     if (!(cx_x & 7)) bp_w--;
     // line 622-624: if !(dx & 7) → DEC si                          ; TEST dx, 7; JNZ; DEC si
@@ -3785,6 +3795,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
 //
 // Exact replica of the orig DS/fs side effects; VGA OUTs commented in place.
 static void v2_bg_latch_1DE05(uint8_t* s) {
+    v2_cc_v2_hit(9);   // M1 call-parity CC_1DE05 (#65)
     // ---- Pass 1: per-object background restore (orig 38051-38086) ----
     for (int16_t slot = 0xFE; slot >= 0; slot -= 2) {
         if (s[slot + OBJ_DIRTY_CNT] == 0) continue;          // 38054 test byte [di+114Eh]
@@ -4213,6 +4224,7 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
 // Exact replica of the orig DS side effects; the handlers replay the VGA
 // renders into the shadow VGA.
 static void v2_late_sprites_1DD9C(uint8_t* s) {
+    v2_cc_v2_hit(10);   // M1 call-parity CC_1DD9C (#65)
     for (int16_t slot = 0xFE; slot >= 0; slot -= 2) {              // 37999/38032-38033
         uint16_t flags = *(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS);
         if (!(flags & 0x8000)) continue;                           // 38002-38003 not active
@@ -5664,7 +5676,6 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
 static void v2_load_level(uint8_t* shadow); // forward decl
 static void v2_load_template(uint8_t* shadow);
 static void v2_load_level_data(uint8_t* shadow);
-static void v2_hud_sel_commit_120d1(uint8_t* s);
 static void v2_scroll_step1_10704(uint8_t* s);   // apply pending scroll, step 1 (defined after the movers)
 static void v2_scroll_step2_10753(uint8_t* s);
 
@@ -6863,7 +6874,7 @@ static void v2_load_level_11080(uint8_t* s) {
         // JMP sub_11B0B: portrait/sound state sync (tail call from sub_12034)
         v2_portrait_sync_11b0b(s);
         // sub_120d1: HUD selector commit (prev←cur + render ×3).
-        v2_hud_sel_commit_120d1(s);
+        (void)v2_hud_selectors_120d1(s);
     }
 
     // sub_11204: load level data chunks (tile graphics, tilemap, etc.)
@@ -7082,10 +7093,13 @@ static void v2_load_level_11080(uint8_t* s) {
         else fprintf(stderr, "V2-115d2-VERIFY: %d diffs total\n", dc);
         fflush(stderr);
     }
-    // sub_10f5d: palette fade in. Original: loop bx from 0x46 to 0 (71 iterations).
-    // NOTE: orig seg000 has debug hack "bx = 0" (line 3218) that reduces to 1 iteration.
-    // v2 MUST match orig behavior — use bx=0 to match page flip count.
-    for (int16_t bx = 0; bx >= 0; bx--) {
+    // sub_10f5d: palette fade in — bx from 0x46 down to 0, 71 iterations
+    // (orig 2112-2126). №51: the orig-side "bx = 0" debug override has been
+    // REMOVED (see the note at seg000 eip 0xF5E) — the full fade loop is the
+    // original behaviour; v2's single-iteration copy was matching the stale
+    // hack. Caught by the M1 call-parity channel (sub_16775 −70 per level
+    // start).
+    for (int16_t bx = 0x46; bx >= 0; bx--) {
         s[DS_PAL_SHADE_R] = (uint8_t)bx;
         s[DS_PAL_SHADE_G] = (uint8_t)bx;
         s[DS_PAL_SHADE_B] = (uint8_t)bx;
@@ -8698,6 +8712,26 @@ static const int v2_psnap_watch_count = (int)(sizeof(v2_psnap_watch)/sizeof(v2_p
 extern int v2_orig_post_vm_frame; // already declared
 
 // Called by orig at each phase boundary (from seg000 hooks).
+// ---- M1 call-parity channel (task #65, docs2/VERIFICATION_GAPS_ANALYSIS) ----
+// Cumulative per-procedure call counters on both mirror sides. The orig
+// vector is snapshotted alongside each phase snap; v2's vector is compared
+// against the snapshot at the same logical point. Catches calls invisible
+// to state diffs (SFX, vsync waits, renders — divergence classes A/D).
+#include "v2_callcount.h"
+static uint32_t v2_cc_orig[CC_COUNT] = {0};
+static uint32_t v2_cc_v2[CC_COUNT]   = {0};
+static uint32_t v2_cc_snap[V2_PSNAP_COUNT][CC_COUNT] = {{0}};
+static const char* v2_cc_names[CC_COUNT] = {
+    "10130", "16775", "1183d", "118ad", "120d1", "11f47", "11f93", "121b9",
+    "121f6", "1de05", "1dd9c", "1c8f1", "1cd7d", "165aa", "16661", "108c8",
+};
+extern "C" void v2_cc_orig_hit(int id) {
+    if (id >= 0 && id < CC_COUNT) v2_cc_orig[id]++;
+}
+extern "C" void v2_cc_v2_hit(int id) {
+    if (id >= 0 && id < CC_COUNT) v2_cc_v2[id]++;
+}
+
 void v2_record_orig_phase_snap(int phase_idx) {
     if (phase_idx < 0 || phase_idx >= V2_PSNAP_COUNT) return;
     if (!v2_vm_real_ds_ptr) return;
@@ -8710,6 +8744,7 @@ void v2_record_orig_phase_snap(int phase_idx) {
     memcpy(v2_psnap_ds[phase_idx], v2_vm_real_ds_ptr, 0x10000);
     v2_psnap_valid[phase_idx] = true;
     v2_psnap_frame[phase_idx] = v2_orig_post_vm_frame;
+    memcpy(v2_cc_snap[phase_idx], v2_cc_orig, sizeof(v2_cc_orig));  // M1 vector
     // Soft watchpoint (task #21 letter classes): report which phase window
     // rewrote the watched page byte (armed by v2_a2_snapshot_page, V2_A2_WP).
     {
@@ -8823,6 +8858,42 @@ void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name) {
     if (!v2_psnap_valid[prev_phase_idx]) return;
     if (!v2_vm_shadow_ds) return;
     v2_psnap_compare_count[prev_phase_idx]++;
+    // M1 call-parity: v2's cumulative call vector must equal the orig vector
+    // captured with this snap. A skew names the exact procedure whose call
+    // count diverged — even when the call has no DS trace.
+    // The pre-mirror prefix (title/logo/intro up to the FIRST compared snap)
+    // is modelled by v2 through the DS/VGA channels, not call-for-call — its
+    // orig-side counts are captured once as a VISIBLE base (logged, never a
+    // silent skip) and subtracted; any skew after that point is real.
+    {
+        static bool cc_base_taken = false;
+        static int64_t cc_base[CC_COUNT] = {0};
+        if (!cc_base_taken) {
+            cc_base_taken = true;
+            char buf[512]; int off = 0;
+            for (int id = 0; id < CC_COUNT; id++) {
+                cc_base[id] = (int64_t)v2_cc_snap[prev_phase_idx][id] - (int64_t)v2_cc_v2[id];
+                if (cc_base[id])
+                    off += snprintf(buf + off, sizeof(buf) - off, " %s%+lld",
+                                    v2_cc_names[id], (long long)cc_base[id]);
+            }
+            fprintf(stderr, "V2-CALLPAR-BASE[f%d %s]:%s\n",
+                    v2_orig_post_vm_frame, v2_psnap_names[prev_phase_idx],
+                    off ? buf : " (all zero)");
+        }
+        static int cc_prints[CC_COUNT] = {0};
+        for (int id = 0; id < CC_COUNT; id++) {
+            int64_t o = (int64_t)v2_cc_snap[prev_phase_idx][id] - cc_base[id];
+            int64_t v = (int64_t)v2_cc_v2[id];
+            if (o != v && cc_prints[id] < 4) {
+                cc_prints[id]++;
+                fprintf(stderr,
+                    "V2-CALLPAR[f%d %s]: sub_%s orig=%lld v2=%lld (%+lld)\n",
+                    v2_orig_post_vm_frame, v2_psnap_names[prev_phase_idx],
+                    v2_cc_names[id], (long long)o, (long long)v, (long long)(v - o));
+            }
+        }
+    }
     // Architectural phase-misalignment skip: at FRAME_BEGIN snap, orig captures
     // real_ds BEFORE its own sub_12352 runs (seg000:1961). v2 at PRE_VM entry
     // has already received V2_PHASE_INPUT_UPDATE signal (fired at end of orig
@@ -9263,6 +9334,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 // directly without the extra sub_16661 (object create/destroy on scroll) that
 // v2_game_loop_post_render also runs. Bit-exact match to orig.
 static void v2_page_rotate_165aa(uint8_t* shadow) {
+    v2_cc_v2_hit(13);   // M1 call-parity CC_165AA (#65)
         uint16_t ax = *(uint16_t*)(shadow + DS_PAGE_SHOWN);   // 0x65aa
         *(uint16_t*)(shadow + DS_PAGE_DRAW) = ax;             // 0x65ad
         uint16_t dx = *(uint16_t*)(shadow + DS_PAGE_BG);
@@ -9425,6 +9497,7 @@ static void v2_mark_dirty_bottom_166bc(uint8_t* s) {
 // marks. Axis 1: [257F] vs [92EF] — JL: 16e75+166e8, JG: 16f5f+16710.
 // Axis 2: [2581] vs [92F1] — JZ: RETN, JL: 17049+loc_16694, JG: 170b9+loc_166bc.
 static void v2_scroll_tracker_16661(uint8_t* shadow) {
+    v2_cc_v2_hit(14);   // M1 call-parity CC_16661 (#65)
     uint16_t ax_y = *(uint16_t*)(shadow + DS_SCROLL_COL);             // 0x6661
     uint16_t cx_y = *(uint16_t*)(shadow + DS_SCROLL_DISP_X);          // 0x6664
     if (ax_y != cx_y) {                                               // 0x666a JZ
@@ -11771,7 +11844,6 @@ extern "C" void v2_fntest_call_sub_12816(uint8_t* test_shadow) { v2_glyph_list_c
 extern "C" void v2_fntest_call_sub_13ba5(uint8_t* test_shadow) { v2_spawn_table_13ba5(test_shadow); }
 extern "C" void v2_fntest_call_sub_12549(uint8_t* test_shadow, uint16_t ax) { v2_text_align_12549(test_shadow, ax); }
 static bool v2_pause_items_11cbb(uint8_t* shadow);
-static void v2_hud_sel_commit_120d1(uint8_t* s);
 extern "C" int v2_fntest_call_sub_11cbb(uint8_t* test_shadow) { return v2_pause_items_11cbb(test_shadow) ? 1 : 0; }
 // Unit 63: sub_15911 (Y-move search dispatcher). Return packs the three v2
 // outputs: bit0 = returned carry, bit1 = vm.carry, bits4+ = out_dir+1
@@ -18817,6 +18889,7 @@ static void v2_do_render() {
 // ======================================================================
 int v2_pageflip_count = 0;
 static void v2_page_flip_16775(uint8_t* s) {
+    v2_cc_v2_hit(1);   // M1 call-parity CC_16775 (#65)
     // Cross-mode pixel parity probe (task #25): env V2_FRAMESUM=1 prints a
     // CRC of the v2 frame at every page flip — the SAME call sites exist in
     // the default and V2_ONLY builds, so the two streams compare 1:1.
@@ -21243,24 +21316,6 @@ static void v2_transition_kick_102ad(uint8_t* s) {
     *(uint16_t*)(s + DS_FRAME_FLAGS) |= 1;
 }
 
-// sub_120d1 (seg000 4189-4203): commit the three HUD selectors — for each
-// viking row: prev←cur ([288FA/FC/FE]←[288F4/F6/F8]) and render the selector
-// (sub_118AD) at cur (+0/+4/+8 row bias, ×2). Orig interleaves copy/render.
-static void v2_hud_sel_commit_120d1(uint8_t* s) {
-    uint16_t sel0 = *(uint16_t*)(s + (DS_HUD_SEL));            // 4189 mov di, word_288F4
-    *(uint16_t*)(s + (DS_HUD_SEL_PREV)) = sel0;                // 4190
-    v2_draw_hud_selector(v2_current_ds_val, sel0 << 1);        // 4191-4192 call sub_118AD
-    v2_vga_selector_118ad(s, sel0 << 1);
-    uint16_t sel1 = *(uint16_t*)(s + (DS_HUD_SEL+2));          // 4193
-    *(uint16_t*)(s + (DS_HUD_SEL_PREV+2)) = sel1;              // 4194
-    v2_draw_hud_selector(v2_current_ds_val, (sel1 + 4) << 1);  // 4195-4197
-    v2_vga_selector_118ad(s, (sel1 + 4) << 1);
-    uint16_t sel2 = *(uint16_t*)(s + (DS_HUD_SEL+4));          // 4198
-    *(uint16_t*)(s + (DS_HUD_SEL_PREV+4)) = sel2;              // 4199
-    v2_draw_hud_selector(v2_current_ds_val, (sel2 + 8) << 1);  // 4200-4202
-    v2_vga_selector_118ad(s, (sel2 + 8) << 1);
-}
-
 // sub_12250: probe ONE inventory category di (0..3). Returns true with
 // ax_out = free slot offset when usable: di==3 → the special slot 0x18;
 // a category whose gate byte [di+0x449] is nonzero is rejected; otherwise
@@ -21271,6 +21326,7 @@ static void v2_hud_sel_commit_120d1(uint8_t* s) {
 // slot (1183d di3,0), retarget [di3>>2&~1 +414]=found>>1 &3, [443]=found>>1;
 // none → [441]=0.
 static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in) {
+    v2_cc_v2_hit(8);   // M1 call-parity CC_121F6 (#65)
     uint16_t ax_r = *(uint16_t*)(s + di_in + (DS_HUD_SEL));
     uint16_t di_s = (uint16_t)((di_in << 1) + ax_r);
     *(uint16_t*)(s + DS_QUIT_ACTIVE) = di_s;
@@ -21301,6 +21357,7 @@ static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in) {
 // clear-render it and retarget [si+414]. Common tail loc_11FFB:
 // take-next via 121f6(di=[421]), [447]=1, CLC. Returns true = CARRY (refused).
 static bool v2_item_place_11f93(uint8_t* s) {
+    v2_cc_v2_hit(6);   // M1 call-parity CC_11F93 (#65)
     uint16_t di = (uint16_t)(*(uint16_t*)(s + DS_QUIT_ACTIVE) << 1);
     if (di == 0x18) {
         uint16_t item = *(uint16_t*)(s + DS_HUD_BLINK_FIELD);
@@ -21336,6 +21393,7 @@ static bool v2_item_place_11f93(uint8_t* s) {
 // di=[3C2]; [421]=di; slot=((di<<1)+[di+414])<<1; empty → return; else
 // [441]=item, [slot+3E4]=0, [443]=slot>>1, [447]=0, [445]=9, SFX 2.
 static void v2_item_pop_121b9(uint8_t* s) {
+    v2_cc_v2_hit(7);   // M1 call-parity CC_121B9 (#65)
     uint16_t di = *(uint16_t*)(s + DS_ACTIVE_VIKING);
     *(uint16_t*)(s + DS_HUD_DRAW_DI) = di;
     uint16_t ax = *(uint16_t*)(s + di + (DS_HUD_SEL));
@@ -21362,27 +21420,6 @@ static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out
     return false;
 }
 
-// sub_11F47 (seg000 3998-4033): open the pick-up gates of every living
-// viking within Manhattan distance 0x40 of the active one. First closes all
-// three gate bytes ([449]=0xFFFF word + [44B]=0xFF), then clears the byte
-// [slot>>1 + 449] of each viking close enough.
-static void v2_pause_flag_nearby_11f47(uint8_t* shadow) {
-    *(uint16_t*)(shadow + DS_HUD_FIELD_449) = 0xFFFF;                    // 3999
-    shadow[DS_HUD_FORCE] = 0xFF;                                         // 4000
-    uint16_t active = *(uint16_t*)(shadow + DS_ACTIVE_VIKING);           // 4001
-    for (uint16_t v = 0; v < 6; v += 2) {                                // 4002, 4029-4031
-        if (*(uint16_t*)(shadow + v + OBJ_RES_HANDLE) == 0) continue;    // 4005-4006
-        int16_t adx = (int16_t)*(uint16_t*)(shadow + v + OBJ_WORLD_X)
-                    - (int16_t)*(uint16_t*)(shadow + active + OBJ_WORLD_X); // 4007-4008
-        if (adx < 0) adx = -adx;                                         // 4009-4010
-        int16_t ady = (int16_t)*(uint16_t*)(shadow + v + OBJ_WORLD_Y)
-                    - (int16_t)*(uint16_t*)(shadow + active + OBJ_WORLD_Y); // 4013-4014
-        if (ady < 0) ady = -ady;                                         // 4015-4016
-        if ((int16_t)(adx + ady) < 0x40)                                 // 4019-4021
-            shadow[(v >> 1) + 0x449] = 0;                                // 4022-4025
-    }
-}
-
 // Switch-viking tail shared by the prev/next branches of pause mode 1
 // (orig 3842-3854 / 3873-3885): commit the new active viking, retarget the
 // item cursor to its selected slot, redraw the selectors (sub_120D1),
@@ -21394,9 +21431,9 @@ static void v2_pause_switch_viking(uint8_t* shadow, uint16_t viking) {
     *(uint16_t*)(shadow + DS_QUIT_ACTIVE) = slot;                        // 3846
     *(uint16_t*)(shadow + DS_HUD_BLINK_FIELD) =
         *(uint16_t*)(shadow + (uint16_t)(slot << 1) + (DS_HUD_ITEMS));   // 3847-3849
-    v2_hud_sel_commit_120d1(shadow);                                     // 3850 call sub_120D1
+    (void)v2_hud_selectors_120d1(shadow);                                     // 3850 call sub_120D1
     *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;                         // 3851
-    v2_pause_flag_nearby_11f47(shadow);                                  // 3852 call sub_11F47
+    v2_viking_proximity_11f47(shadow);                                   // 3852 call sub_11F47
     if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);      // 3853-3854
 }
 
@@ -21566,7 +21603,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             // selector redraw, mode 0 blink after pickup overdraws the
             // selector frame and loc_1205B doesn't redraw (prev==cur now).
             v2_item_pop_121b9(shadow);                               // 3975
-            v2_hud_sel_commit_120d1(shadow);                         // 3976
+            (void)v2_hud_selectors_120d1(shadow);                         // 3976
         }
         if (new_input & 0x3000) {                          // 3979-3983
             *(uint16_t*)(shadow + DS_QUIT_BLINK) = 0x11;   // 3981

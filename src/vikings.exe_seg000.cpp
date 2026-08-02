@@ -16,6 +16,7 @@
 #include <mutex>
 #include <atomic>
 #include <map>
+extern "C" void v2_cc_orig_hit(int); // M1 call-parity (#65)
 
 int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
 // Sound API uses unique 16-bit handles (mirrors AIL design).
@@ -1560,6 +1561,7 @@ cs=0x1a2;eip=0x006dc0; 	J(RETN(0));	// 16086 retn ;~ 01A2:6DC0
 bool display_selector(m2c::_STATE *_state)
 {
     X86_REGREF
+ { v2_cc_orig_hit(3); } // M1 call-parity CC_118AD (#65, port-replaced sub_118ad)
 	  //m2c::_STATE *_state;
 	  //sub_118ad:
 //cs=0x1a2;eip=0x0018ac; 	J(RETN(0));	// 3288 retn ;~ 01A2:18AC
@@ -1764,6 +1766,7 @@ cs=0x1a2;eip=0x001aa3; 	J(RETN(0));	// 3433 retn ;~ 01A2:1AA3
 bool draw_inventory_item(m2c::_STATE *_state)
 {
     X86_REGREF
+ { v2_cc_orig_hit(2); } // M1 call-parity CC_1183D (#65, port-replaced sub_1183d)
 	  //m2c::_STATE *_state;
 	//sub_1183d:
 //cs=0x1a2;eip=0x00183c; 	J(RETN(0));	// 3208 retn ;~ 01A2:183C
@@ -1869,6 +1872,7 @@ bool set_display_memory_addr(m2c::_STATE *_state)
 {
   orig_pageflip_count++;
   X86_REGREF
+ { v2_cc_orig_hit(1); } // M1 call-parity CC_16775 (#65, port-replaced sub_16775)
 	//m2c::_STATE *_state;
   	// 15428
 cs=0x1a2;eip=0x006775; 	X(PUSH(cx));	// 15430 push    cx ;~ 01A2:6775
@@ -2986,6 +2990,9 @@ loc_1012d:
 	// 4375
 cs=0x1a2;eip=0x00012d; 	J(JMP(loc_1001e));	// 146 jmp     loc_1001E ;~ 01A2:012D
 sub_10130:
+ // M1 CC_10130 hit moved to the exit below: the spin loops back THROUGH
+ // this label (JGE sub_10130 @0x135), so an entry hit counts spin turns
+ // (2 per call at [A39C]=1), not calls.
 	// 153
 	// ======================================================================
 	// VGA VSYNC WAIT (sub_10130, eip 0x0130-0x0137)
@@ -3051,6 +3058,7 @@ ret_1a2_135:
  if (word_3287c >= 1) { sub_1797b(0, _state); }   // DEC + palette dispatch (game thread)
 cs=0x1a2;eip=0x000135; 	J(JGE(sub_10130));	// 156 jge     short sub_10130 ;~ 01A2:0135
  { extern std::atomic<int64_t> v2_dbg_sub10130_exits; v2_dbg_sub10130_exits++; }
+ { v2_cc_orig_hit(0); } // M1 call-parity CC_10130 (#65) — at exit, see label note
 cs=0x1a2;eip=0x000137; 	J(RETN(0));	// 157 retn ;~ 01A2:0137
 sub_10138:
 	// 164
@@ -4018,6 +4026,7 @@ cs=0x1a2;eip=0x0008bb; 	X(MOV(word_2aaa9, 0x27));	// 1131 mov     word_2AAA9, 27
 cs=0x1a2;eip=0x0008c1; 	X(MOV(word_288a2, 0));	// 1132 mov     word_288A2, 0 ;~ 01A2:08C1
 cs=0x1a2;eip=0x0008c7; 	J(RETN(0));	// 1133 retn ;~ 01A2:08C7
 sub_108c8:
+ { v2_cc_orig_hit(15); } // M1 call-parity CC_108C8 (#65)
 	// 1140
 	{
 	  uint8_t alt = sdl_spec_get(0x91A4);
@@ -6093,6 +6102,7 @@ loc_11f45:
 cs=0x1a2;eip=0x001f45; 	T(CLC);	// 3988 clc ;~ 01A2:1F45
 cs=0x1a2;eip=0x001f46; 	J(RETN(0));	// 3989 retn ;~ 01A2:1F46
 sub_11f47:
+ { v2_cc_orig_hit(5); } // M1 call-parity CC_11F47 (#65)
 	// 3996
 cs=0x1a2;eip=0x001f47; 	X(PUSH(si));	// 3998 push    si ;~ 01A2:1F47
 ret_1a2_1f48:
@@ -6132,6 +6142,7 @@ cs=0x1a2;eip=0x001f8f; 	J(JL(loc_11f5a));	// 4031 jl      short loc_11F5A ;~ 01A
 cs=0x1a2;eip=0x001f91; 	X(POP(si));	// 4032 pop     si ;~ 01A2:1F91
 cs=0x1a2;eip=0x001f92; 	J(RETN(0));	// 4033 retn ;~ 01A2:1F92
 sub_11f93:
+ { v2_cc_orig_hit(6); } // M1 call-parity CC_11F93 (#65)
 	// 4040
 cs=0x1a2;eip=0x001f93; 	T(MOV(di, word_28923));	// 4042 mov     di, word_28923 ;~ 01A2:1F93
 ret_1a2_1f97:
@@ -6297,6 +6308,7 @@ locret_120d0:
 	// 4710
 cs=0x1a2;eip=0x0020d0; 	J(RETN(0));	// 4182 retn ;~ 01A2:20D0
 sub_120d1:
+ { v2_cc_orig_hit(4); } // M1 call-parity CC_120D1 (#65)
 	// 4187
 cs=0x1a2;eip=0x0020d1; 	T(MOV(di, word_288f4));	// 4189 mov     di, word_288F4 ;~ 01A2:20D1
 ret_1a2_20d5:
@@ -6429,6 +6441,7 @@ cs=0x1a2;eip=0x0021b3; 	T(CMP(di, 0x18));	// 4316 cmp     di, 18h ;~ 01A2:21B3
 cs=0x1a2;eip=0x0021b6; 	J(JL(loc_1219c));	// 4317 jl      short loc_1219C ;~ 01A2:21B6
 cs=0x1a2;eip=0x0021b8; 	J(RETN(0));	// 4318 retn ;~ 01A2:21B8
 sub_121b9:
+ { v2_cc_orig_hit(7); } // M1 call-parity CC_121B9 (#65)
 	// 4325
 cs=0x1a2;eip=0x0021b9; 	T(MOV(di, word_288a2));	// 4326 mov     di, word_288A2 ;~ 01A2:21B9
 ret_1a2_21bd:
@@ -6453,6 +6466,7 @@ locret_121f5:
 	// 4728
 cs=0x1a2;eip=0x0021f5; 	J(RETN(0));	// 4345 retn ;~ 01A2:21F5
 sub_121f6:
+ { v2_cc_orig_hit(8); } // M1 call-parity CC_121F6 (#65)
 	// 4352
 cs=0x1a2;eip=0x0021f6; 	T(MOV(ax, *(dw*)(raddr(ds,di+0x414))));	// 4353 mov     ax, [di+414h] ;~ 01A2:21F6
 ret_1a2_21fa:
@@ -15679,6 +15693,7 @@ cs=0x1a2;eip=0x0065a5; 	T(ADD(dx, ax));	// 15181 add     dx, ax ;~ 01A2:65A5
 cs=0x1a2;eip=0x0065a7; 	J(LOOP(loc_165a0));	// 15182 loop    loc_165A0 ;~ 01A2:65A7
 cs=0x1a2;eip=0x0065a9; 	J(RETN(0));	// 15183 retn ;~ 01A2:65A9
 sub_165aa:
+ { v2_cc_orig_hit(13); } // M1 call-parity CC_165AA (#65)
 	// 15189
  { static int rot_cnt = 0; rot_cnt++; if(rot_cnt<=80) fprintf(stderr,"ORIG-165aa[%d]: IN 92F9=%04X 92FB=%04X vp_y=%04X level=%04X\n", rot_cnt, *(dw*)(raddr(ds,0x92F9)), *(dw*)(raddr(ds,0x92FB)), *(dw*)(raddr(ds,0x46)), *(dw*)(raddr(ds,0x25AD)));
    static dw _prev_level2 = 0xFFFF; dw _cur_level2 = *(dw*)(raddr(ds,0x25AD));
@@ -15746,6 +15761,7 @@ cs=0x1a2;eip=0x006656; 	J(CALLF(sub_1df6a,0));	// 15248 call    sub_1DF6A ;~ 01A
 cs=0x1a2;eip=0x00665b; 	X(MOV(*(raddr(ds,0x9568)), 1));	// 15249 mov     byte ptr ds:9568h, 1 ;~ 01A2:665B
 cs=0x1a2;eip=0x006660; 	J(RETN(0));	// 15250 retn ;~ 01A2:6660
 sub_16661:
+ { v2_cc_orig_hit(14); } // M1 call-parity CC_16661 (#65)
 	// 15257
 cs=0x1a2;eip=0x006661; 	T(MOV(ax, *(dw*)(raddr(ds,0x257F))));	// 15259 mov     ax, ds:257Fh ;~ 01A2:6661
 ret_1a2_6664:
