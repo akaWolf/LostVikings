@@ -158,6 +158,9 @@
   F1(cmd_write,          DS_CMD_WRITE)          \
   F1(obj_queue_head,     DS_OBJ_QUEUE_HEAD)     \
   F1(cmd_read,           DS_CMD_READ)           \
+  FN(transition_level_tbl, DS_TRANSITION_LEVEL_TBL, 7) \
+  FN(transition_chunk_tbl, DS_TRANSITION_CHUNK_TBL, 6) \
+  FN(scroll_px_lut,      DS_SCROLL_STEP2_TBL, 19) \
   F1(decomp_size,        DS_DECOMP_SIZE)
 
 // Segment registry + loader cursors + sound/config words
@@ -384,7 +387,18 @@
   B1(glyph_dirty,      DS_GLYPH_DIRTY)         \
   BN(hud_sel_gfx,      DS_HUD_SEL_GFX, 256)    \
   BN(hud_item_gfx,     DS_HUD_ITEM_GFX, 4864)  \
-  BN(chunk_hdr,        DS_CHUNK_HDR, 8)
+  BN(chunk_hdr,        DS_CHUNK_HDR, 8)        \
+  BN(level_pal_chunks, 0x2E7D, 6912)           \
+  BN(chunk_d_tbl,      0x497D, 1568)           \
+  BN(hud_gfx_tail,     0x647D, 1024)           \
+  BN(pw_level_tbl,     0x687D, 5760)
+
+// Chunk-loaded DS data zones (bounds = decompressed sizes in DATA.DAT,
+// verified against the loader ladder in v2_vm.cpp:6294):
+//   level_pal_chunks: chunks 4..0xC, 9 x 0x300 at 2E7D..497D (level tables)
+//   chunk_d_tbl:      chunk 0xD, 0x620 at 497D (raw gap E0 to 507D follows)
+//   hud_item_gfx + hud_sel_gfx + hud_gfx_tail: chunk 0xE, 0x1800 at 507D
+//   pw_level_tbl:     chunk 2, 0x1680 at 687D..7EFD (password/level select)
 
 // ---------------------------------------------------------------------------
 // The typed state. Serializer contract: v2_gs_deserialize fills every field

@@ -54,8 +54,8 @@ constexpr uint16_t DS_LEVEL_FLAGS    = 0x25CF; // byte_2AAAF: level flags (bit0 
 constexpr uint16_t DS_SPAWN_TABLE    = 0x25F6; // level object spawn/descriptor table: 14-byte (0x0E) entries, 0xFFFF-terminated (chunk_id/type/x/...); VM ops C7-CA index by OBJ_ANIM_SUB
 constexpr uint16_t DS_CMD_WRITE      = 0x218F; // word_2A66F: command-buffer write offset
 constexpr uint16_t DS_CMD_READ       = 0x2B64; // word_2B044: command-buffer read offset
-constexpr uint16_t DS_TRANSITION_LEVEL_TBL = 0x2B66; // level-transition table: level-id field (indexed by DS_HUD_SEL_SI)
-constexpr uint16_t DS_TRANSITION_CHUNK_TBL = 0x2B74; // level-transition table: chunk-id field (indexed by DS_HUD_SEL_SI)
+constexpr uint16_t DS_TRANSITION_LEVEL_TBL = 0x2B66; // level-transition table: 7 words (6 level ids + 0xFFFF terminator, ds_static: 02 09 08 0F 17 19 FFFF); walker si+=2 with wrap-to-0 on FFFF (loc_1031F)
+constexpr uint16_t DS_TRANSITION_CHUNK_TBL = 0x2B74; // level-transition table: 6 chunk ids (ds_static: 1A2 1A3 1A4 1A6 1A5 1C0), parallel to the level table, same si index
 constexpr uint16_t DS_CMD_BUF        = 0x1DA7; // command entry base (type/si/di/param/text fields)
 constexpr uint16_t DS_CMD_ENTRY_SI   = 0x1DA9; // command entry +2: si/value1 field (base DS_CMD_BUF+2)
 constexpr uint16_t DS_CMD_ENTRY_DI   = 0x1DAB; // command entry +4: di/value2 field
@@ -271,7 +271,7 @@ constexpr uint16_t DS_SCROLL_AMT_LEFT   = 0x03D8; // word_288B8: pending scroll 
 constexpr uint16_t DS_SCROLL_AMT_RIGHT  = 0x03DA; // word_288BA: pending scroll amount, right
 constexpr uint16_t DS_SCROLL_AMT_DOWN   = 0x03DC; // word_288BC: pending scroll amount, down
 constexpr uint16_t DS_SCROLL_AMT_UP     = 0x03DE; // word_288BE: pending scroll amount, up
-constexpr uint16_t DS_SCROLL_STEP2_TBL  = 0x2B80; // scroll step-2 pixel LUT (v2_scroll_step2_10753, after flip 2)
+constexpr uint16_t DS_SCROLL_STEP2_TBL  = 0x2B80; // scroll pixel LUT base (one rising table 0,0,0,1,1,1..6 = 19 words to 0x2BA6; STEP1/AMT are +2/+4 shifted bases into the SAME table)
 constexpr uint16_t DS_SCROLL_STEP1_TBL  = 0x2B82; // scroll step-1 pixel LUT (v2_scroll_step1_10704 + scroll_lr/ud, indexed by amount*2)
 constexpr uint16_t DS_SCROLL_AMT_TBL    = 0x2B84; // scroll amount->pixel LUT (camera_follow_1064b + scroll movers, indexed by amt*2)
 
