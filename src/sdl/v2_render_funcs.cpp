@@ -428,12 +428,13 @@ void v2_draw_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
+    V2StateViewC st(ds_base);   // phase D: typed field access
     uint8_t* buf = v2_render_buf;
 
     // Tile map segment (FS)
-    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
+    uint16_t fs_seg = st.seg_fs();
     // Tile graphics segment
-    uint16_t tgfx_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
+    uint16_t tgfx_seg = st.seg_tilegfx();
     // V2-DRAWT-DBG: log entry state every 60 frames
     {
         static int _dt_dbg = 0; _dt_dbg++;
@@ -442,8 +443,8 @@ void v2_draw_tiles(uint16_t ds_val) {
               "V2-DRAWT-DBG[%d]: ds=%04X fs_seg=%04X tgfx_seg=%04X 25CF=%02X 25AD=%04X 25C9=%04X\n",
               _dt_dbg, ds_val, fs_seg, tgfx_seg,
               ds_base[DS_LEVEL_FLAGS],
-              *(uint16_t*)(ds_base + DS_LEVEL),
-              *(uint16_t*)(ds_base + DS_LEVEL_LOAD));
+              st.level(),
+              st.level_load());
         }
     }
 
@@ -476,8 +477,8 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
 #endif
 
-    uint16_t scroll_x = *(uint16_t*)(ds_base + DS_SCROLL_ROW);   // tile-row scroll (vp_y>>3)
-    uint16_t scroll_y = *(uint16_t*)(ds_base + DS_SCROLL_COL);   // tile-column scroll (vp_x>>3)
+    uint16_t scroll_x = st.scroll_row();   // tile-row scroll (vp_y>>3)
+    uint16_t scroll_y = st.scroll_col();   // tile-column scroll (vp_x>>3)
 
     // Sub-tile pixel offset from viewport pixel position.
     // Mirrors orig set_display_memory_addr (sub_16775, seg000.cpp:1105):
@@ -579,8 +580,9 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 #endif
     if (!v2_m2c_base) return;
     uint8_t* ds_base = v2_get_ds_base(ds_val);
-    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
-    uint16_t tgfx_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
+    V2StateViewC st(ds_base);   // phase D: typed field access
+    uint16_t fs_seg = st.seg_fs();
+    uint16_t tgfx_seg = st.seg_tilegfx();
     if (!fs_seg || !tgfx_seg) return;
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
@@ -589,8 +591,8 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
 #endif
-    uint16_t scroll_x = *(uint16_t*)(ds_base + DS_SCROLL_ROW);
-    uint16_t scroll_y = *(uint16_t*)(ds_base + DS_SCROLL_COL);
+    uint16_t scroll_x = st.scroll_row();
+    uint16_t scroll_y = st.scroll_col();
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
     // №60: dw-exact shake fold (see v2_effective_camera).
     V2Camera cam = v2_effective_camera(ds_base);
@@ -693,6 +695,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
+    V2StateViewC st(ds_base);   // phase D: typed field access
 
     uint8_t* buf = v2_render_buf;
 
@@ -758,7 +761,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                 int16_t ax_h = si_h;
                 int16_t si_off = 0;
                 bool visible = true;
-                int16_t vw = (int16_t)*(uint16_t*)(ds_base + DS_CLIP_LIMIT_X);
+                int16_t vw = (int16_t)st.clip_limit_x();
                 if (cx < 0) { bp_w += cx; if (bp_w <= 0) visible = false; }
                 else {
                     si_off += cx;
@@ -766,7 +769,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                     else { int16_t ov = cx + bp_w - vw; if (ov > 0) bp_w -= ov; }
                 }
                 if (visible) {
-                    int16_t vh = (int16_t)*(uint16_t*)(ds_base + DS_CLIP_LIMIT_Y);
+                    int16_t vh = (int16_t)st.clip_limit_y();
                     if (dxv < 0) { ax_h += dxv; if (ax_h <= 0) visible = false; }
                     else {
                         if (dxv >= vh) visible = false;
@@ -778,7 +781,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                     }
                 }
                 if (visible) {
-                    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
+                    uint16_t fs_seg = st.seg_fs();
 #ifdef V2_RENDER_FROM_SHADOW
                     uint8_t* fs_base = v2_resolve_segment(fs_seg);
                     if (!fs_base) fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
@@ -812,7 +815,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
                 int t_slot = 9;
                 int fs_word = -1;
                 {
-                    uint16_t fs_seg2 = *(uint16_t*)(ds_base + DS_SEG_FS);
+                    uint16_t fs_seg2 = st.seg_fs();
                     uint8_t* fsb2 = v2_resolve_segment(fs_seg2);
                     if (!fsb2) fsb2 = v2_m2c_base + ((uint32_t)fs_seg2 << 4);
                     int16_t oy2 = (int16_t)*(uint16_t*)(ds_base + obj + OBJ_SPRITE_Y);
@@ -835,7 +838,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
 
         {
             static int spr_printed = 0;
-            uint16_t cur_lvl = *(uint16_t*)(ds_base + DS_LEVEL);
+            uint16_t cur_lvl = st.level();
             if (spr_printed < 15 && cur_lvl < 38) {
                 spr_printed++;
                 printf("V2-SPR[l%d]: obj=%02x fl=%04x t=%d xy=(%d,%d) seg=%04x off=%04x scr=(%d,%d)\n",
@@ -910,7 +913,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         uint8_t* sprite = seg_base + sprite_off - 1;
         {
             static int cmp_mismatch = 0;
-            uint16_t cur_lvl = *(uint16_t*)(ds_base + DS_LEVEL);
+            uint16_t cur_lvl = st.level();
             // real-vs-shadow compare only meaningful when orig updates real
             // memory (V2_ONLY: dynamic segments in the snapshot buffer stay 0).
             if (v2_vm_get_real_ds() && cur_lvl < 38 && cmp_mismatch < 10) {
@@ -1051,11 +1054,12 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
+    V2StateViewC st(ds_base);   // phase D: typed field access
     uint8_t* buf = v2_render_buf;
 
-    uint16_t fs_seg = *(uint16_t*)(ds_base + DS_SEG_FS);
-    uint16_t tgfx_seg = *(uint16_t*)(ds_base + DS_SEG_TILEGFX);
-    uint16_t gs_seg = *(uint16_t*)(ds_base + DS_SEG_GS);
+    uint16_t fs_seg = st.seg_fs();
+    uint16_t tgfx_seg = st.seg_tilegfx();
+    uint16_t gs_seg = st.seg_gs();
     if (!fs_seg || !tgfx_seg || !gs_seg) return;
 
 #ifdef V2_RENDER_FROM_SHADOW
@@ -1073,8 +1077,8 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint8_t* gs_base = v2_m2c_base + ((uint32_t)gs_seg << 4);
 #endif
 
-    uint16_t scroll_x = *(uint16_t*)(ds_base + DS_SCROLL_ROW);
-    uint16_t scroll_y = *(uint16_t*)(ds_base + DS_SCROLL_COL);
+    uint16_t scroll_x = st.scroll_row();
+    uint16_t scroll_y = st.scroll_col();
 
     // Sub-tile pixel offset (same as v2_draw_tiles).
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
@@ -1130,6 +1134,7 @@ void v2_draw_ui(uint16_t ds_val) {
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
+    V2StateViewC st(ds_base);   // phase D: typed field access
     uint8_t* buf = v2_render_buf;
 
     // Scan UI element list: 40 columns × 22 rows at ds:0x956C
@@ -1151,7 +1156,7 @@ void v2_draw_ui(uint16_t ds_val) {
         if (nz != _last_nz) {
             extern int v2_dbg_pre_vm_iter;
             fprintf(stderr, "V2-UI-COUNT[f%d render=%d lvl=%04X]: nz_cells=%d rows: ",
-                v2_dbg_pre_vm_iter, _frame, *(uint16_t*)(ds_base + DS_LEVEL), nz);
+                v2_dbg_pre_vm_iter, _frame, st.level(), nz);
             for (int r = 0; r < 22; r++)
                 if (rows_used[r]) fprintf(stderr, "r%d=%d ", r, rows_used[r]);
             fprintf(stderr, "byte_956B=%02X\n", ds_base[DS_GLYPH_DIRTY]);
