@@ -13711,9 +13711,14 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
     return grid.fail ? 1 : 0;
 }
 
+extern "C" int v2_fntest_running = 0;   // unit-world marker (forked cases inherit)
+
 extern "C" int v2_fntest_selftest_env(void) {
     const char* env = getenv("FNSELFTEST");
     if (!env || !env[0]) return -1;
+    v2_fntest_running = 1;   // AIL native gate must stay closed in the unit
+                             // world: synthetic DS has garbage segment words,
+                             // the bridge would boot the interpreter on them.
 
     uint32_t ds_lin = v2_fntest_game_ds_linear();
     if (ds_lin & 0xF) {

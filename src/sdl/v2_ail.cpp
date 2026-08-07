@@ -151,15 +151,21 @@ static void wrw(uint8_t* s, uint16_t off, uint16_t v) {
 // ---------------------------------------------------------------------------
 // gate
 // ---------------------------------------------------------------------------
+extern "C" int v2_fntest_running;   // v2_fn_test.cpp unit-world marker
+
 extern "C" int v2_ail_native_on() {
-    // One env gate for BOTH build flavours. In V2_ONLY the shadow instance is
-    // the sole (audible) world. In default/verify the shadow instance runs
-    // SILENT while the REAL world drives the same interpreted driver through
-    // the sub_1bec2 bridge (audible) — same call+tick order in both worlds
-    // gives byte-equal driver state, which the DS verify then checks on the
-    // in-DS sequence state blocks.
+    // Native AIL is THE sound path (user-approved by ear on both flavours,
+    // 2026-08-06). In V2_ONLY the shadow instance is the sole (audible)
+    // world. In default/verify the shadow instance runs SILENT while the
+    // REAL world drives the same interpreted driver through the sub_1bec2
+    // bridge (audible) — same call+tick order in both worlds gives
+    // byte-equal driver state, checked by the DS verify.
+    // V2_NATIVE_AIL=0 is the emergency fallback while the legacy SDL channel
+    // is being dismantled. The unit world stays OFF: synthetic DS holds
+    // garbage segment words and must never boot the interpreter.
+    if (v2_fntest_running) return 0;
     static int en = -1;
-    if (en < 0) { const char* e = getenv("V2_NATIVE_AIL"); en = (e && e[0] == '1') ? 1 : 0; }
+    if (en < 0) { const char* e = getenv("V2_NATIVE_AIL"); en = (e && e[0] == '0') ? 0 : 1; }
     return en;
 }
 
