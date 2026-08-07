@@ -216,7 +216,8 @@
   FN(row43_lut,          0x938A, 25)            \
   FN(bit_mask_lut,       0x93CC, 16)            \
   FN(bit_clear_lut,      0x93EC, 16)            \
-  FN(word_lists_940c,    0x940C, 96)            \
+  FN(level_chunk_tbl,    0x940C, 48)            \
+  FN(level_template_tbl, 0x946C, 48)            \
   F1(text_fullscreen,    DS_TEXT_FULLSCREEN)    \
   FN(glyph_buf,          DS_GLYPH_BUF, 0x1B8)   \
   F1(ui_throttle,        DS_UI_THROTTLE)        \
@@ -419,7 +420,9 @@
   BN(cmd_ring,         0x1DA7, 1000)           \
   BN(transition_buf,   0x2193, 1000)           \
   BN(error_msg_2bbe,   0x2BBE, 671)            \
-  BN(image_data_8507,  0x8507, 306)            \
+  B1(pad_8507,         0x8507)                 \
+  BN(viking_spawn_triplets, 0x8508, 54)        \
+  BN(data_853e,        0x853E, 251)            \
   BN(scan_filter_lists,0x94CC, 156)
 
 // Chunk-loaded DS data zones (bounds = decompressed sizes in DATA.DAT,
@@ -457,8 +460,24 @@
 //   cmd_ring @1DA7..218F: command ring buffer body (write/read cursors are
 //                     the DS_CMD_WRITE/DS_CMD_READ fields)
 //   transition_buf @2193..257B: transition-chunk load / queue body area
-//   image_data_2bbe/8507/8a94/9348: immutable image data — byte-identical
-//                     across ds_static, empty-replay and level1-end dumps
+//   level_chunk_tbl/level_template_tbl @940C/946C: parallel 48-entry
+//                     per-level tables read by sub_111b1 as [level*2-0x6BF4]
+//                     / [level*2-0x6B94] (chunk id / template id, FFFF=none)
+//   subsprite_off_tbl @871C: sub-sprite data pointers read as
+//                     [(si-0x30)-0x78E4] in the 1358C loop — values are the
+//                     1-based OBJ_SPRITE_OFF offsets (12 slots si=30..46)
+//   viking_spawn_triplets @8508: 3 records x 18B, each = three {x,y,anim}
+//                     viking spawn points fed to sub_13809 via sub_11569
+//                     (static sites di=8508/851A/852C); data_853e tail holds
+//                     high-bit-ASCII letters (password-style), readers TBD
+//   row43_lut @938A:  25 x i*0x2B — tile-row to VGA WORD offset (43 = 86/2
+//                     word pitch, 25 = 200/8 screen tile rows)
+//   error_msg_2bbe:   ASCII error text (immutable image data)
+//   rt_8736 (3x32B slots @8736/8756/8776): first slot holds a far record
+//                     {seg,~,len} on levels (l1: 5D24 = seg_sound_base+4B0,
+//                     inside the sound window; empty: zeros) — the writer
+//                     uses computed addressing (no literal refs anywhere);
+//                     sound-descriptor slots, exact writer TBD
 //   spawn_area:       25F6..2B64 (bounds = neighboring proven fields).
 //                     Content is LEVEL-VARIABLE, two overlapping views:
 //                     (a) 14-byte entries indexed OBJ_ANIM_SUB*14 — word
@@ -510,7 +529,7 @@
   BN(zero_86c6,          0x86c6, 10)           \
   BN(zero_86d2,          0x86d2, 8)           \
   BN(image_86e0,         0x86e0, 6)           \
-  BN(data_pairs_871c,    0x871c, 24)           \
+  BN(subsprite_off_tbl,  0x871c, 24)           \
   BN(rt_8736,            0x8736, 120)           \
   BN(shade_ramps_897c,   0x897c, 124)          \
   BN(zero_916c,          0x916c, 16)           \
