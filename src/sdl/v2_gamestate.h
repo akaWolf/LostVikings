@@ -414,7 +414,8 @@
   BN(unused_tail,      0xA3A2, 23646)         \
   BN(unused_gap_4f9d,  0x4F9D, 224)            \
   BN(unused_8c,        0x008C, 372)            \
-  BN(coll_partner_area,0x1B25, 642)            \
+  BN(coll_partner_tbl, 0x1B25, 624)            \
+  BN(coll_area_pad,    0x1D95, 18)             \
   BN(cmd_ring,         0x1DA7, 1000)           \
   BN(transition_buf,   0x2193, 1000)           \
   BN(error_msg_2bbe,   0x2BBE, 671)            \
@@ -443,18 +444,29 @@
 //                     returns fixed cx=0x1234 dx=0x5678 (asm.cpp:513) and
 //                     the Borland RTL stores them here (0x204 = 0x5678 in
 //                     the rt_0204 zone = the high half + RTL scratch)
-//   coll_partner_area @1B25..1DA7: collision partner rows (obj<<4)+bit_idx
-//                     (live writes seen at 1BE5/1C25/1C27/1C47); bound =
-//                     the command ring neighbor
+//   coll_partner_tbl @1B25: rows of 16 bytes addressed (obj<<4)+bit_idx;
+//                     obj is EVEN (slot*2) so live rows interleave with
+//                     unused ones; bit_idx resets to 0 per frame and grows
+//                     +2 per collision opcode — the 16-entry mask LUTs cap
+//                     the meaningful range at one 16-byte row. 0x270 bytes
+//                     to obj 0x26 + an 18-byte pad to the command ring.
+//   cmd_ring @1DA7:   VARIABLE-length command stream, not fixed records:
+//                     a type word (4 / 8 / 0xA ...) followed by type-specific
+//                     args; writers advance DS_CMD_WRITE by 2/8/... bytes,
+//                     the reader drains at DS_CMD_READ
 //   cmd_ring @1DA7..218F: command ring buffer body (write/read cursors are
 //                     the DS_CMD_WRITE/DS_CMD_READ fields)
 //   transition_buf @2193..257B: transition-chunk load / queue body area
 //   image_data_2bbe/8507/8a94/9348: immutable image data — byte-identical
 //                     across ds_static, empty-replay and level1-end dumps
-//   spawn_area:       25F6..2B64 (bounds = neighboring proven fields);
-//                     interior: 14-byte spawn/descriptor entries indexed by
-//                     OBJ_ANIM_SUB*14 (ops C7-CA), 0xFFFF-terminated walks,
-//                     pal-anim source bytes at +1/+2 of entries
+//   spawn_area:       25F6..2B64 (bounds = neighboring proven fields).
+//                     Content is LEVEL-VARIABLE, two overlapping views:
+//                     (a) 14-byte entries indexed OBJ_ANIM_SUB*14 — word
+//                     x @+0 (FFFF = terminator), flags @+10 (bit 0x800 =
+//                     permanent spawn, 13bbd); (b) the 1133a HUD/pal-anim
+//                     prefix: en-byte, then 3-byte (reload,start,end)
+//                     records each followed by an FFFF-terminated word
+//                     sub-list. A fixed field carve is impossible by design.
 
 // Gap-fill zones (generated; classes proven by the three-dump protocol:
 // ds_static image + live empty-replay dump + live level1-end dump, plus
