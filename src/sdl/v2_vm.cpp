@@ -1663,9 +1663,9 @@ static inline uint16_t v2_input_or(uint8_t* shadow, uint16_t ax_prev) {
     // V2_ONLY: render thread keeps shadow[0x86DE] (word_30bbe) updated correctly
     // for both intro mode (writes 0xFFFF) and normal mode (OR-bit). Read shadow
     // directly — no input_keys/input mask layer needed. Race-free atomic read.
-    extern uint16_t sdl_input_press_snap_get();
+    // (#81) no press_snap: tap delivery is new_kd-based in v2_read_input_12352_iter.
     uint16_t shadow_30bbe = *(volatile uint16_t*)(shadow + DS_INPUT_ACCUM);
-    return ax_prev | shadow_30bbe | sdl_input_press_snap_get();
+    return ax_prev | shadow_30bbe;
 #else
     return ax_prev | v2_input_snapshot;
 #endif
@@ -1689,12 +1689,13 @@ static inline uint16_t v2_input_or(uint8_t* shadow, uint16_t ax_prev) {
 uint16_t v2_input_intro_mask(uint16_t prev_ax_or, uint16_t word_288ac, uint16_t input) {
     static uint16_t prev_intro_keys = 0;
     static bool     intro_signal_sticky = false;
-    extern uint16_t sdl_input_press_snap_get();
-    uint16_t press_snap = sdl_input_press_snap_get();
+    // (#81) press_snap removed: it OR'd a consumed press into the LEVEL word
+    // for a whole extra frame. Taps are delivered by the draining sub_12352
+    // call itself (new_kd OR at both call sites).
     if (word_288ac != 0x8000) {
         prev_intro_keys = 0;
         intro_signal_sticky = false;
-        return prev_ax_or | input | press_snap;
+        return prev_ax_or | input;
     }
     // INTRO MODE replication of orig INT9 ISR (eip 0x64CA dispatch + 0x651F
     // default). Orig: ANY keyboard event in intro sets word_30bbe = 0xFFFF
@@ -1705,8 +1706,8 @@ uint16_t v2_input_intro_mask(uint16_t prev_ax_or, uint16_t word_288ac, uint16_t 
     // behavior exactly. See render.cpp KEYDOWN handler.
     if (input != prev_intro_keys) intro_signal_sticky = true;
     prev_intro_keys = input;
-    if (intro_signal_sticky) return prev_ax_or | press_snap | 0xFFFF;
-    return prev_ax_or | input | press_snap;
+    if (intro_signal_sticky) return prev_ax_or | 0xFFFF;
+    return prev_ax_or | input;
 }
 static uint16_t v2_word30BBE_snapshot = 0; // snapshot of word_30BBE at barrier sync point
 
@@ -19484,33 +19485,23 @@ static void v2_audio_tick_108c8(uint8_t* s);
 //   ds:[03B8] = (ax ^ ds:[03BA]) & ax    // newly pressed (edge-trigger)
 //   ds:[03BA] = ax                       // previous frame
 static void v2_read_input_12352_iter(uint8_t* shadow) {
-    // SDL adapter compensation mirror — see seg000 sub_12352 LAYER 1+2 comment.
+    // SDL adapter compensation mirror — see seg000 sub_12352 (#81) comment:
+    // single-delivery, no cross-frame latch. new_kd forces the prev word so
+    // the edge fires in THIS call, and is OR'd into this call's ax below.
+    uint16_t new_kd;
     {
-        extern uint16_t sdl_input_press_snap_get();
-        extern uint16_t g_press_snap_consumed_shadow_this_frame;
         extern uint16_t g_last_sub12352_new_keydowns;
-        extern uint16_t sdl_input_press_snap;
-        extern bool g_is_first_sub12352_shadow;
-
 #ifdef V2_ONLY
         extern std::atomic<uint16_t> sdl_input_press_edges;
-        uint16_t new_kd = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
-        if (new_kd) sdl_input_press_snap |= new_kd;
+        new_kd = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
+        g_last_sub12352_new_keydowns = new_kd;
 #else
-        uint16_t new_kd = g_last_sub12352_new_keydowns;
+        // default mode: orig sub_12352 drained press_edges and stashed the
+        // value — shadow must force the SAME bits on its own prev copy.
+        new_kd = g_last_sub12352_new_keydowns;
 #endif
         if (new_kd) {
             v2gs(shadow).input_prev_ref() &= (uint16_t)~new_kd;
-        }
-
-        if (g_is_first_sub12352_shadow) {
-            uint16_t snap = sdl_input_press_snap_get();
-            uint16_t fresh_snap = (uint16_t)(snap & ~g_press_snap_consumed_shadow_this_frame);
-            if (fresh_snap) {
-                v2gs(shadow).input_prev_ref() &= (uint16_t)~fresh_snap;
-                g_press_snap_consumed_shadow_this_frame |= fresh_snap;
-            }
-            g_is_first_sub12352_shadow = false;
         }
     }
 #ifdef V2_ONLY
@@ -19531,6 +19522,8 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
     extern uint16_t input_keys;
     uint16_t w288ac = v2gs(shadow).game_mode_ac();
     ax = v2_input_intro_mask(ax, w288ac, input_keys);
+    // (#81) tap delivery — same OR as the orig call site (normal mode only).
+    if (w288ac != 0x8000) ax |= new_kd;
 #else
     // Default mode: orig sub_12352 already folded the replay word (word_30bbc /
     // 0x86DC), word_30bbe (0x86DE) and intro_mask(input_keys) into its final ax
@@ -20635,7 +20628,8 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
 // ax=1; spec-key Y ([9181], live SDL state — the m2c port refreshes the DS
 // byte right before the TEST) → CF=1 ax=0; N ([919D]) → CF=1 ax=1; else
 // CF=0. The port also consumes the taken Enter/ESC edge from
-// sdl_input_press_snap (inline in orig sub_105cb) — kept here.
+// (#81: the press_snap consume that was inline in orig sub_105cb is gone
+// with the snap itself).
 static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
     uint16_t ni = v2gs(shadow).input_edges();
     if (ni & 0x200) {
@@ -20652,10 +20646,9 @@ static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
             v2_text_print_1265b(shadow, 5, 0x10, 0x0F);    // sub_1265b
         }
     }
-    uint16_t consumed_bit = 0;
     uint16_t exit_ax; bool exit;
-    if (ni & 0x8000) { exit_ax = v2gs(shadow).quit_active(); exit = true; consumed_bit = 0x8000; }
-    else if (ni & 0x1000) { exit_ax = 1; exit = true; consumed_bit = 0x1000; }
+    if (ni & 0x8000) { exit_ax = v2gs(shadow).quit_active(); exit = true; }
+    else if (ni & 0x1000) { exit_ax = 1; exit = true; }
     else {
         // Y/N: live state read (no snap) — see seg000 sub_105cb note about why.
         v2gs(shadow).spec_key_y_b(sdl_spec_state_get(0x9181));  // SDL Y — live atomic
@@ -20666,10 +20659,9 @@ static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
             else { exit_ax = 0; exit = false; }
         }
     }
-    if (exit && consumed_bit) {
-        extern uint16_t sdl_input_press_snap;
-        sdl_input_press_snap = (uint16_t)(sdl_input_press_snap & ~consumed_bit);
-    }
+    // (#81) the explicit press_snap consume that lived here is gone with the
+    // snap itself: the orig post-loop sub_12352 (eip 0x04F1) now kills the
+    // edge exactly like DOS, and nothing resurrects it next frame.
     *out_ax = exit_ax;
     return exit;
 }

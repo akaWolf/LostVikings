@@ -330,45 +330,22 @@ extern "C" void sdl_int9_note_keydown(int sdl_scancode) {
       }
 }
 
-// Non-static so sub_12352 (seg000.cpp) and v2_read_input_12352_iter (v2_vm.cpp) can
-// OR into it directly during per-call drain — see LAYER 1 comments in both.
-uint16_t sdl_input_press_snap = 0;
-uint16_t sdl_input_press_snap_get() { return sdl_input_press_snap; }
-
-// SDL INT-9 ISR mirror: tracks which press_snap bits have already had their
-// "force edge" applied this frame. Reset at frame_begin (sdl_spec_snapshot_take).
-// Used by sub_12352 to clear matching word_2889a bits on the first call of
-// the frame so that brief KEYDOWN+KEYUP (which lands between main sub_12352
-// calls due to 9 FPS frame duration > 80ms typical hold) still produces an
-// edge in word_28898. Without this, sub_1086f recursion's sub_12352 sets
-// word_2889a sticky → next frame's main sub_12352 computes edge=0 (false-negative).
-//
-// Two separate flags: orig runs in game thread and consumes via seg000 sub_12352.
-// v2 mirror runs in v2 thread (default mode) or game thread (V2_ONLY) and
-// consumes via v2_read_input_12352_iter. Each side must clear ITS OWN word_2889a copy.
-// Sharing one flag would cause v2 mirror to skip its shadow clear (orig already
-// consumed) → DS-DIFF at 0x03B8/9.
-uint16_t g_press_snap_consumed_this_frame = 0;        // orig side (seg000 sub_12352)
-uint16_t g_press_snap_consumed_shadow_this_frame = 0; // v2 side (v2_read_input_12352_iter)
-
-// is-first-sub12352 flag: only the FIRST sub_12352 of a frame (main sub_12352
-// at eip 0x001E) should consume snap bits via LAYER 2 (and mark them for snap
-// clear at next frame_begin). Recursion sub_12352 (inside sub_1086f cmd
-// dispatch, sub_104a1 quit-prompt loop, sub_10138 viking-switch loop) still
-// drains edges via LAYER 1 (for word_2889a clear) but skips LAYER 2 so the
-// snap bit persists into NEXT frame's main sub_12352 — that's where VM iter
-// will pick it up. Without this, recursion's LAYER 2 fire would consume snap
-// and next frame's main would get edge=0 → VM iter misses press.
-// Reset to true at frame_begin (sdl_spec_snapshot_take), set to false at end
-// of each sub_12352 call.
-bool g_is_first_sub12352_orig = true;
-bool g_is_first_sub12352_shadow = true;
+// (#81) The cross-frame press_snap latch ("LAYER 2") is GONE. It replayed a
+// press into the NEXT frame's first sub_12352 — but the original gates every
+// wait-loop exit with a second sub_12352 call (eip 0x0191 / 0x04F1) precisely
+// so a consumed press CANNOT leak into gameplay (prev=ax → edge=0). The latch
+// resurrected it one frame later (edge via the prev-force, level via the
+// intro_mask OR) → dialog-skip SPACE made the viking jump; DOSBox does not.
+// Tap compensation (KEYDOWN+KEYUP entirely between two sub_12352 calls) is
+// now handled where the tap is DELIVERED: the draining sub_12352 call ORs
+// new_kd into its own ax (one-call visibility — the exact "INT9 would have
+// caught it" semantic), and forces word_2889a so the edge fires there once.
 
 // Per-sub_12352-call edges drain → captures KEYDOWN events that arrived since
 // last sub_12352 call. Needed for blocking loops (sub_104a1 quit-prompt,
 // sub_10138 viking-switch wait, sub_104A1 transition-text) where many
-// sub_12352 calls fire within a single main game frame without intervening
-// FRAME_BEGIN to refresh press_snap. orig drains in seg000 sub_12352, stashes
+// sub_12352 calls fire within a single main game frame without an
+// intervening FRAME_BEGIN. orig drains in seg000 sub_12352, stashes
 // the value here, and v2_read_input_12352_iter reads it (default mode) or drains
 // itself (V2_ONLY). Atomically updated by game thread; v2 thread reads after
 // INPUT_UPDATE signal-handler barrier.
@@ -407,7 +384,8 @@ extern int       v2_dbg_pre_vm_iter;
 extern "C" void enter_trace_sub12352() {
 #ifndef V2_ONLY
     int armed = g_enter_trace_arm.load(std::memory_order_relaxed);
-    bool any_enter_bit = ((word_30bbe | word_28896 | word_28898 | word_2889a | input_keys | sdl_input_press_snap) & 0x8000) != 0;
+    bool any_enter_bit = ((word_30bbe | word_28896 | word_28898 | word_2889a | input_keys
+                           | sdl_input_press_edges.load(std::memory_order_relaxed)) & 0x8000) != 0;
     if (armed <= 0 && !any_enter_bit) return;
     int seq = g_enter_seq.load(std::memory_order_relaxed);
     uint32_t ms = enter_trace_ms_now();
@@ -415,11 +393,12 @@ extern "C" void enter_trace_sub12352() {
     fprintf(stderr,
             "ENTER-TRACE-SUB12352 seq=%d arm=%d t=%ums dkd=%ums "
             "w30bbe=%04X w28896=%04X w28898=%04X w2889a=%04X input_keys=%04X "
-            "press_snap=%04X w30bba=%04X w30bbc=%04X w288ac=%04X "
+            "press_edges=%04X w30bba=%04X w30bbc=%04X w288ac=%04X "
             "queue: rd=%04X wr=%04X | f=%d w287e2=%04X\n",
             seq, armed, ms, dkd,
             word_30bbe, word_28896, word_28898, word_2889a, input_keys,
-            sdl_input_press_snap, word_30bba, word_30bbc, word_288ac,
+            sdl_input_press_edges.load(std::memory_order_relaxed),
+            word_30bba, word_30bbc, word_288ac,
             word_2b044, word_2a66f, v2_dbg_pre_vm_iter, word_287e2);
     if (armed > 0) g_enter_trace_arm.fetch_sub(1, std::memory_order_relaxed);
 #endif
@@ -470,18 +449,9 @@ void sdl_spec_snapshot_take() {
         uint8_t latch = sdl_spec_press_latch[i].exchange(0, std::memory_order_relaxed);
         sdl_spec_snap[i] = (uint8_t)(sdl_spec_state[i].load(std::memory_order_relaxed) | latch);
     }
-    // Snap update with immediate consume clear:
-    //   1. Clear bits that fired as edge in main sub_12352 of the just-finished
-    //      frame (consumed_this_frame is set ONLY by main sub_12352, not by
-    //      recursion — see g_is_first_sub12352_* gating in LAYER 2).
-    //   2. Reset consumed trackers + is-first flags for the new frame.
-    //   3. OR-accumulate any new KEYDOWNs since last drain.
-    sdl_input_press_snap &= (uint16_t)~(g_press_snap_consumed_this_frame | g_press_snap_consumed_shadow_this_frame);
-    g_press_snap_consumed_this_frame        = 0;
-    g_press_snap_consumed_shadow_this_frame = 0;
-    g_is_first_sub12352_orig                = true;
-    g_is_first_sub12352_shadow              = true;
-    sdl_input_press_snap |= sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
+    // (#81) no press_snap here anymore: sdl_input_press_edges stays untouched
+    // at the frame boundary and is drained by the NEXT sub_12352 call itself
+    // (LAYER 1 + same-call ax OR) — single-delivery, no cross-frame replay.
     // #37b: drain the INT9 letter channel - one char per frame boundary,
     // written to BOTH real and shadow DS by v2_mirror_int9_char.
     {
@@ -760,7 +730,7 @@ void updateDraw()
 					 // Edge accumulator: catches brief KEYDOWN+KEYUP-same-iter race.
 					 // Filter !repeat: only initial press fires the force-edge clear in
 					 // sub_12352. Without this, SDL auto-repeat fires KEYDOWN every ~50ms
-					 // with repeat=1 → edges OR'd every repeat → press_snap=bit every frame
+					 // with repeat=1 → edges OR'd every repeat → new_kd=bit every frame
 					 // → sub_12352 clears word_2889a every frame → held key retriggers
 					 // edge every frame (scroll explosion). Held keys are tracked via
 					 // word_30bbe/input_keys (stays set until KEYUP) — edge fires once on

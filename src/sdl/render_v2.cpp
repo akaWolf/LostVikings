@@ -177,6 +177,13 @@ void render_thread_proc_v2(void* _state)
                   // password screen never received letters/Enter. Same shared
                   // writer as render.cpp (typematic repeats included).
                   sdl_int9_note_keydown(event.key.keysym.scancode);
+                  // (#81) tap accumulator: without this V2_ONLY lost any
+                  // KEYDOWN+KEYUP shorter than one 12352 interval (the
+                  // default-window handler feeds it in render.cpp:794).
+                  if (key_val && !event.key.repeat) {
+                      extern std::atomic<uint16_t> sdl_input_press_edges;
+                      sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
+                  }
                   input_keys |= key_val; input_keys_v2 |= key_val;
               } else {
                   input_keys &= ~key_val; input_keys_v2 &= ~key_val;

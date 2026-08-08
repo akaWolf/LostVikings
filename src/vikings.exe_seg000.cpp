@@ -3705,10 +3705,8 @@ cs=0x1a2;eip=0x000617; 	T(TEST(word_28898, 0x8000));	// 781 test    word_28898, 
 cs=0x1a2;eip=0x00061d; 	J(JZ(loc_10624));	// 782 jz      short loc_10624 ;~ 01A2:061D
 cs=0x1a2;eip=0x00061f; 	T(MOV(ax, word_28923));	// 783 mov     ax, word_28923 ;~ 01A2:061F
 cs=0x1a2;eip=0x000622; 	T(STC);	// 784 stc ;~ 01A2:0622
-	// SDL consume: dialog took Enter edge to exit. Clear sdl_input_press_snap
-	// 0x8000 bit so next frame's main sub_12352 LAYER 2 doesn't re-fire edge
-	// → no spurious viking jump in gameplay frame after dialog exit.
-	{ extern uint16_t sdl_input_press_snap; sdl_input_press_snap = (uint16_t)(sdl_input_press_snap & ~0x8000); }
+	// (#81) press_snap consume removed with the snap itself: the post-loop
+	// sub_12352 at eip 0x04F1 kills the edge exactly like DOS.
 cs=0x1a2;eip=0x000623; 	J(RETN(0));	// 785 retn ;~ 01A2:0623
 loc_10624:
 	// 4439
@@ -3716,8 +3714,7 @@ cs=0x1a2;eip=0x000624; 	T(TEST(word_28898, 0x1000));	// 789 test    word_28898, 
 cs=0x1a2;eip=0x00062a; 	J(JZ(loc_10631));	// 790 jz      short loc_10631 ;~ 01A2:062A
 cs=0x1a2;eip=0x00062c; 	T(MOV(ax, 1));	// 791 mov     ax, 1 ;~ 01A2:062C
 cs=0x1a2;eip=0x00062f; 	T(STC);	// 792 stc ;~ 01A2:062F
-	// SDL consume: dialog took ESC edge to exit. Same rationale as Enter above.
-	{ extern uint16_t sdl_input_press_snap; sdl_input_press_snap = (uint16_t)(sdl_input_press_snap & ~0x1000); }
+	// (#81) press_snap consume removed — see Enter branch note above.
 cs=0x1a2;eip=0x000630; 	J(RETN(0));	// 793 retn ;~ 01A2:0630
 loc_10631:
 	// 4440
@@ -6612,45 +6609,32 @@ sub_12352:
 	// orig sub_108c8 (main thread) reads snap at time T. v2_audio_tick_108c8 (v2 thread)
 	// reads snap at time T+400ms when ALT was released between. snap captures
 	// release → orig=1 v2=0 → divergence at ds:0x91A4. snap_take stays at
-	// frame_begin only (sdl_input_press_snap-style) — orig+v2 race-free.
+	// frame_begin only — orig+v2 race-free.
 	// Brief F10 < frame_period taps may be missed (orig DOS catches via INT9 sync).
 	// SDL adapter compensation for async event processing. Orig INT9 ISR was
 	// sync (interrupt context fires between any two instructions). Our render
 	// thread polls SDL events at variable cadence — KEYDOWN may land between
 	// sub_12352 calls without word_30bbe being updated in time. Result: brief
 	// KEYDOWN+KEYUP entirely between game-thread sub_12352 calls would lose
-	// the edge. LAYER 1+2 capture press_edges accumulator to fire force-edge.
+	// the edge.
 	//
-	// LAYER 1 (per call): drain edges → clear word_2889a + accumulate to snap.
-	// Edge fires this call (no consume mark — snap propagates to next frame).
-	// LAYER 2 (first sub_12352 of frame): consume snap into edge fire +
-	// mark consumed (so snap_take clears it next frame_begin).
-	// Dialog handlers (sub_105cb / v2_pw_iter_body) explicitly clear snap
-	// bits they consumed via dialog exit (Enter / ESC) to prevent spurious
-	// gameplay edge in frame following dialog close.
+	// (#81) Single-delivery model, exact DOS edge semantics:
+	// LAYER 1 (per call): drain accumulated KEYDOWNs (new_kd) → clear their
+	// word_2889a bits (edge fires THIS call) and OR new_kd into this call's
+	// ax below (so a tap whose KEYUP already happened is still visible in ax
+	// for exactly one call — "INT9 would have caught it"). No cross-frame
+	// latch: the original kills leftover edges itself with the second
+	// sub_12352 at every wait-loop exit (eip 0x0191 / 0x04F1) and clears
+	// 3B6/3B8 at level load — a press consumed by a dialog loop must NOT
+	// resurrect in the next frame (dialog-skip SPACE jump bug, gone).
 	{
 		extern std::atomic<uint16_t> sdl_input_press_edges;
-		extern uint16_t sdl_input_press_snap_get();
-		extern uint16_t g_press_snap_consumed_this_frame;
 		extern uint16_t g_last_sub12352_new_keydowns;
-		extern bool g_is_first_sub12352_orig;
 
 		uint16_t new_kd = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
 		g_last_sub12352_new_keydowns = new_kd;
 		if (new_kd) {
 			word_2889a = (uint16_t)(word_2889a & ~new_kd);
-			extern uint16_t sdl_input_press_snap;
-			sdl_input_press_snap |= new_kd;
-		}
-
-		if (g_is_first_sub12352_orig) {
-			uint16_t snap = sdl_input_press_snap_get();
-			uint16_t fresh_snap = (uint16_t)(snap & ~g_press_snap_consumed_this_frame);
-			if (fresh_snap) {
-				word_2889a = (uint16_t)(word_2889a & ~fresh_snap);
-				g_press_snap_consumed_this_frame |= fresh_snap;
-			}
-			g_is_first_sub12352_orig = false;
 		}
 	}
 	// 4610
@@ -6670,6 +6654,10 @@ cs=0x1a2;eip=0x002363; 	T(OR(ax, word_30bbe));	// 4619 or      ax, word_30BBE ;~
 	{
 		extern uint16_t v2_input_intro_mask(uint16_t prev_ax_or, uint16_t word_288ac, uint16_t input);
 		ax = v2_input_intro_mask(ax, word_288ac, input_keys);
+		// (#81) tap delivery: a KEYDOWN drained by THIS call is part of this
+		// call's input even if its KEYUP already cleared word_30bbe/input_keys.
+		extern uint16_t g_last_sub12352_new_keydowns;
+		if (word_288ac != 0x8000) ax = (uint16_t)(ax | g_last_sub12352_new_keydowns);
 	}
 	// V2: snapshot input_keys at the EXACT moment orig reads it — before any race
 	if (myDrawInfo_v2) { extern uint16_t v2_input_snapshot; v2_input_snapshot = ax; }
