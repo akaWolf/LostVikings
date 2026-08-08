@@ -1,0 +1,19 @@
+# generated: password entry for slot 16 ("TTRS") — full-level
+# verify coverage (phase D amplifier). The attract chain brings
+# up the password scene (level 38) by itself at ~f110; four
+# letters + RETURN load the level; then 1500 frames of play.
+230 KD RETURN
+233 KU RETURN
+258 KD P
+261 KU P
+278 KD T
+281 KU T
+293 KD T
+296 KU T
+308 KD R
+311 KU R
+323 KD S
+326 KU S
+358 KD RETURN
+361 KU RETURN
+# end-frame 2261

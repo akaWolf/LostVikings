@@ -1,0 +1,19 @@
+# generated: password entry for slot 36 ("MSTR") — full-level
+# verify coverage (phase D amplifier). The attract chain brings
+# up the password scene (level 38) by itself at ~f110; four
+# letters + RETURN load the level; then 1500 frames of play.
+230 KD RETURN
+233 KU RETURN
+258 KD P
+261 KU P
+278 KD M
+281 KU M
+293 KD S
+296 KU S
+308 KD T
+311 KU T
+323 KD R
+326 KU R
+358 KD RETURN
+361 KU RETURN
+# end-frame 2261

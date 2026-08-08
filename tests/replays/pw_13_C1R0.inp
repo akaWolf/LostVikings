@@ -1,0 +1,19 @@
+# generated: password entry for slot 13 ("C1R0") — full-level
+# verify coverage (phase D amplifier). The attract chain brings
+# up the password scene (level 38) by itself at ~f110; four
+# letters + RETURN load the level; then 1500 frames of play.
+230 KD RETURN
+233 KU RETURN
+258 KD P
+261 KU P
+278 KD C
+281 KU C
+293 KD 1
+296 KU 1
+308 KD R
+311 KU R
+323 KD 0
+326 KU 0
+358 KD RETURN
+361 KU RETURN
+# end-frame 2261

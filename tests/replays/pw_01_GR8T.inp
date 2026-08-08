@@ -1,0 +1,19 @@
+# generated: password entry for slot 1 ("GR8T") — full-level
+# verify coverage (phase D amplifier). The attract chain brings
+# up the password scene (level 38) by itself at ~f110; four
+# letters + RETURN load the level; then 1500 frames of play.
+230 KD RETURN
+233 KU RETURN
+258 KD P
+261 KU P
+278 KD G
+281 KU G
+293 KD R
+296 KU R
+308 KD 8
+311 KU 8
+323 KD T
+326 KU T
+358 KD RETURN
+361 KU RETURN
+# end-frame 2261

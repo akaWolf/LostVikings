@@ -1,0 +1,19 @@
+# generated: password entry for slot 25 ("NFL8") — full-level
+# verify coverage (phase D amplifier). The attract chain brings
+# up the password scene (level 38) by itself at ~f110; four
+# letters + RETURN load the level; then 1500 frames of play.
+230 KD RETURN
+233 KU RETURN
+258 KD P
+261 KU P
+278 KD N
+281 KU N
+293 KD F
+296 KU F
+308 KD L
+311 KU L
+323 KD 8
+326 KU 8
+358 KD RETURN
+361 KU RETURN
+# end-frame 2261

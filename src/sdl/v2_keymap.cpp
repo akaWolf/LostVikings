@@ -255,7 +255,11 @@ SDL_Keycode v2_keymap_action_to_sdl(const char* action) {
     if (!action) return SDLK_UNKNOWN;
     if (g_map.empty()) load_defaults();
     for (const auto& e : g_map) if (strcmp(e.action, action) == 0) return e.sdl_key;
-    return SDLK_UNKNOWN;
+    // Replay files may carry RAW KEY tokens (named keys, single chars a-z/0-9)
+    // besides mapped action names — the password replays type letters, and
+    // the historical synth_pw_enter used the 'ESCAPE' spelling that only the
+    // key-token parser knows. Fall back to it.
+    return parse_sdl_key(action);
 }
 
 const KeyMapEntry* v2_keymap_entries(size_t* out_count) {

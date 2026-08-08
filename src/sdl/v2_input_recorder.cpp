@@ -109,6 +109,14 @@ void log_keyboard_event(const SDL_Event* e) {
     g_pending_record.push_back({action, (uint8_t)(e->type == SDL_KEYDOWN ? 0 : 1)});
 }
 
+// Replay clock: equals the frame counter on the normal path, but keeps
+// ADVANCING inside blocking loops (pw screen, dialogs, viking-switch spins)
+// where v2_dbg_pre_vm_iter freezes — otherwise events timestamped past the
+// loop entry would never become due and no replay could ever type a
+// password. FRAME_BEGIN re-syncs it to the real frame; each blocking-tick
+// drain advances it by one virtual frame.
+long g_replay_clock = 0;
+
 bool dequeue_due_replay(SDL_Event* out) {
     if (g_replay_pos >= g_replay_queue.size()) {
         if (!g_replay_exhausted_logged && !g_replay_queue.empty()) {
@@ -119,8 +127,8 @@ bool dequeue_due_replay(SDL_Event* out) {
         return false;
     }
     const ReplayEvent& e = g_replay_queue[g_replay_pos];
-    if (e.frame > v2_dbg_pre_vm_iter)
-        return false;  // event gated to a future frame — not due yet
+    if ((long)e.frame > g_replay_clock)
+        return false;  // event gated to a future (virtual) frame — not due yet
     SDL_zerop(out);
     out->type = (e.kind == 0) ? SDL_KEYDOWN : SDL_KEYUP;
     out->key.keysym.sym = e.keycode;
@@ -141,6 +149,12 @@ bool dequeue_due_replay(SDL_Event* out) {
 // wrapper no longer hands KD/KU to the render loops (see below).
 int v2_replay_drain_impl(void) {
     if (g_mode != MODE_REPLAY) return 0;
+    // clock: catch up to the real frame counter when it moves; advance one
+    // virtual frame per drain call while it is frozen (blocking loops).
+    if ((long)v2_dbg_pre_vm_iter > g_replay_clock)
+        g_replay_clock = v2_dbg_pre_vm_iter;
+    else
+        g_replay_clock++;
     int applied = 0;
     SDL_Event e;
     while (dequeue_due_replay(&e)) {
