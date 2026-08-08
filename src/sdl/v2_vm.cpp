@@ -2513,6 +2513,13 @@ static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset);
 extern "C" void v2_fntest_call_music_dispatch(uint8_t* shadow, uint16_t off) {
     v2_music_dispatch(shadow, off);
 }
+// (#84) units sub_10f5d/sub_10fa0 pair-diff: the fade mirrors are static.
+static void v2_pal_fade_in_10f5d(uint8_t* s);
+static void v2_pal_fade_seq_10fa0(uint8_t* s);
+extern "C" void v2_fntest_call_fade(uint8_t* shadow, int fade_in) {
+    if (fade_in) v2_pal_fade_in_10f5d(shadow);
+    else         v2_pal_fade_seq_10fa0(shadow);
+}
 // #61 bridge getter: the real-world AIL instance needs the m2c DS paragraph.
 extern "C" uint16_t v2_ail_get_real_ds(void) { return v2_current_ds_val; }
 

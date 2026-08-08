@@ -585,6 +585,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_12AB8 = 462,   // 6x DosMemAlloc + boot chunk loads
             FT_SUB_17749 = 463,   // music dispatch by [25B7]
             FT_SUB_1774F = 464,   // music dispatch by [25B9]
+            FT_SUB_10F5D = 465,   // palette fade-in
+            FT_SUB_10FA0 = 466,   // palette fade-out
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -762,7 +764,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_128d1", "sub_16440", "sub_11080", "sub_16563", "sub_17a44",
                                  "sub_17791", "sub_101ac", "sub_124a9",
                                  "sub_1797b", "sub_179fb", "sub_10dba", "sub_16807",
-                                 "sub_12ab8", "sub_17749", "sub_1774f" };
+                                 "sub_12ab8", "sub_17749", "sub_1774f",
+                                 "sub_10f5d", "sub_10fa0" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -14060,6 +14063,89 @@ static long ft_selftest_musicdisp(FtId id, uint32_t seed)
     return fails ? 1 : 0;
 }
 
+
+// ============================================================================
+// (#84) units sub_10f5d / sub_10fa0 — the palette fade loops (L-class).
+// PAIR-DIFF against v2_pal_fade_in_10f5d / v2_pal_fade_seq_10fa0. Both sides
+// spin sub_10130 on [A39C] 0x46/0x47 times — each side gets its own vsync
+// helper thread zeroing the live word (oracle: child_pre_hook loop-thread,
+// dies with the case process; v2: a parent thread with a stop flag).
+// Channel: full-DS diff (shade triplet finals, [7EFE]/[7F00], the whole
+// shaded palette block at [8202] after the last step).
+extern "C" void v2_fntest_call_fade(uint8_t* shadow, int fade_in);
+static std::atomic<int> ft_fade_v2_stop{0};
+
+static long ft_selftest_fade(FtId id, uint32_t seed)
+{
+    (void)seed;
+    void* fn = v2_fntest_orig_fnptr(id);
+    int fade_in = (id == FT_SUB_10F5D) ? 1 : 0;
+    const char* nm = g_name[id];
+    v2_set_m2c_base(v2_fntest_m2c_base());
+
+    static uint8_t orig_img[0x10010];
+    static uint8_t shad_img[0x10010];
+    uint16_t regs[8];
+    long cases = 0, fails = 0;
+
+    extern void (*v2_fntest_child_pre_hook)(void);
+    v2_fntest_child_pre_hook = []() {
+        uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
+                      + v2_fntest_game_ds_linear() + 0xA39C;
+        std::thread([live]() {
+            for (;;) { *(volatile uint16_t*)live = 0; usleep(200); }
+        }).detach();   // dies with the case process
+    };
+
+    for (int c = 0; c < 2; c++) {
+        cases++;
+        memcpy(orig_img, g_synth_base, 0x10000);
+        ft_fill_tail(orig_img);
+        ft_wr16(orig_img, 0xA39C, 0);
+        if (c == 1) {   // non-trivial source palette: ramp over [7F02..0x8201]
+            for (int i = 0; i < 0x300; i++) orig_img[0x7F02 + i] = (uint8_t)(i * 7 + 3);
+        }
+        memcpy(shad_img, orig_img, sizeof(orig_img));
+
+        memset(regs, 0, sizeof(regs));
+        long esc0 = v2_fntest_start_escapes;
+        v2_fntest_orig_isolated(fn, orig_img, regs);
+        if (v2_fntest_start_escapes != esc0) {
+            cases--;
+            fprintf(stderr, "FNSELFTEST-UB[%s c%d]: escaped\n", nm, c);
+            continue;
+        }
+
+        ft_fade_v2_stop.store(0, std::memory_order_relaxed);
+        std::thread v2t([&]() {
+            while (!ft_fade_v2_stop.load(std::memory_order_relaxed)) {
+                *(volatile uint16_t*)(shad_img + 0xA39C) = 0;
+                usleep(100);
+            }
+        });
+        v2_fntest_call_fade(shad_img, fade_in);
+        ft_fade_v2_stop.store(1, std::memory_order_relaxed);
+        v2t.join();
+        *(uint16_t*)(shad_img + 0xA39C) = 0;   // helper timing residue
+        *(uint16_t*)(orig_img + 0xA39C) = 0;
+
+        long f = 0, budget = 8;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (orig_img[a] == shad_img[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            f++;
+            if (budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s c%d]: ds:%04X orig=%02X v2=%02X\n",
+                        nm, c, a, orig_img[a], shad_img[a]);
+        }
+        if (f) fails++;
+    }
+    v2_fntest_child_pre_hook = nullptr;
+    fprintf(stderr, "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+            nm, cases - fails, cases, cases, fails, fails ? "  <<< DIVERGENCE" : "");
+    return fails ? 1 : 0;
+}
+
 extern "C" int v2_fntest_selftest_env(void) {
     const char* env = getenv("FNSELFTEST");
     if (!env || !env[0]) return -1;
@@ -14562,6 +14648,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_12ab8")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12AB8, ft_seed(0xD0500034u)); }
     if (all || strstr(env, "sub_17749")) { matched = true; rc |= ft_selftest_musicdisp(FT_SUB_17749, ft_seed(0xD0500035u)); }
     if (all || strstr(env, "sub_1774fd")) { matched = true; rc |= ft_selftest_musicdisp(FT_SUB_1774F, ft_seed(0xD0500036u)); }
+    if (all || strstr(env, "sub_10f5d")) { matched = true; rc |= ft_selftest_fade(FT_SUB_10F5D, ft_seed(0xD0500037u)); }
+    if (all || strstr(env, "sub_10fa0")) { matched = true; rc |= ft_selftest_fade(FT_SUB_10FA0, ft_seed(0xD0500038u)); }
     if (all || strstr(env, "sub_108c8")) { matched = true; rc |= ft_port_native_skip("sub_108c8"); }
     if (all || strstr(env, "sub_17337")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17337, ft_seed(0xD0500010u)); }
     if (all || strstr(env, "sub_172d3")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_172D3, ft_seed(0xD0500011u)); }
