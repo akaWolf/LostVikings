@@ -163,10 +163,9 @@ extern "C" int v2_ail_native_on() {
     // V2_NATIVE_AIL=0 is the emergency fallback while the legacy SDL channel
     // is being dismantled. The unit world stays OFF: synthetic DS holds
     // garbage segment words and must never boot the interpreter.
-    if (v2_fntest_running) return 0;
-    static int en = -1;
-    if (en < 0) { const char* e = getenv("V2_NATIVE_AIL"); en = (e && e[0] == '0') ? 0 : 1; }
-    return en;
+    // #79 B5: the emergency fallback env gate is gone with the legacy channel —
+    // native is unconditional outside the unit world.
+    return !v2_fntest_running;
 }
 
 // seg002 ret_d4f_a53 callback model: returns cs:word_1BBF2 — the PIT divisor

@@ -91,7 +91,7 @@ ADL_DEFINES := -DADLMIDI_DISABLE_DOSBOX_EMULATOR \
                -DADLMIDI_DISABLE_OPAL_EMULATOR \
                -DADLMIDI_DISABLE_JAVA_EMULATOR
 
-INCLUDES := -I ./src/aux/ -I ./src/rendering/ -I src/adlmidi/include
+INCLUDES := -I ./src/aux/ -I ./src/rendering/
 
 V2_DEFINES := -DV2_RENDER_FROM_SHADOW
 # V2_ONLY: build v2 standalone (skip orig m2c main loop + DS-hash compare).
