@@ -1,5 +1,12 @@
 // Восстанавливаем базовую версию
 #include "seg003_implementation.h"
+
+/* (#84) fn-test isolation: the RECREATED seg003 layer is port scaffolding
+ * (a duplicate renderer next to the original CALLF path). Inside the unit
+ * isolator it would paint extras into the oracle drawBuffer that the v2
+ * model legitimately does not have — silence it there. */
+extern int v2_fntest_isolated_active;
+
 #include <string.h>
 #include <stdio.h>
 
@@ -115,6 +122,7 @@ void sub_1d3b2_static_object_drawing(GameObject* object) {
 // sub_1de05 - Dirty Update Position
 // ============================================================================
 void sub_1de05_dirty_update_position(GameObject* object) {
+    if (v2_fntest_isolated_active) return;  /* (#84) unit-world: scaffolding off */
     (void)object;
 }
 
@@ -153,7 +161,8 @@ void sub_1c8f1_door_rendering(void) {
     // TODO: Implement door rendering
 }
 
-void sub_1c8f1_door_rendering_with_state(void* _state) { 
+void sub_1c8f1_door_rendering_with_state(void* _state) {
+    if (v2_fntest_isolated_active) return;  /* (#84) unit-world: scaffolding off */ 
     (void)_state; 
 }
 
@@ -164,5 +173,6 @@ void sub_1c8f1_door_rendering_with_state(void* _state) {
 // в seg003_f9e_proc (перехват). Воспроизведение — в render_callback_v2.
 // Фаза 3: здесь будет независимый рендерер (без seg003).
 void sub_1dd9c_main_render_loop_with_state(void* _state_ptr) {
+    if (v2_fntest_isolated_active) return;  /* (#84) unit-world: scaffolding off */
     (void)_state_ptr;
 }

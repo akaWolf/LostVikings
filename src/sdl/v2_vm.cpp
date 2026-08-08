@@ -2516,6 +2516,19 @@ extern "C" void v2_fntest_call_music_dispatch(uint8_t* shadow, uint16_t off) {
 // (#84) units sub_10f5d/sub_10fa0 pair-diff: the fade mirrors are static.
 static void v2_pal_fade_in_10f5d(uint8_t* s);
 static void v2_pal_fade_seq_10fa0(uint8_t* s);
+static void v2_level_init_render_115d2(uint8_t* s);
+extern "C" void v2_fntest_call_115d2(uint8_t* shadow) {
+#ifdef V2_RENDER_FROM_SHADOW
+    // unit world: the draw layer gates on v2_vm_in_frame (render thread
+    // frame bracket) — arm it for the mirrored call.
+    extern bool v2_vm_in_frame;
+    bool save = v2_vm_in_frame; v2_vm_in_frame = true;
+    v2_level_init_render_115d2(shadow);
+    v2_vm_in_frame = save;
+#else
+    v2_level_init_render_115d2(shadow);
+#endif
+}
 extern "C" void v2_fntest_call_fade(uint8_t* shadow, int fade_in) {
     if (fade_in) v2_pal_fade_in_10f5d(shadow);
     else         v2_pal_fade_seq_10fa0(shadow);
@@ -6791,6 +6804,10 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     v2_game_loop_post_render(s, /*include_anim_queue=*/false);
     // CALLF sub_1DD9C (1st DD9C in sub_115d2)
     v2_late_sprites_1DD9C(s);
+    // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
+    // scan (the scan clears bit 0 — drawing must read the flags first).
+    // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
@@ -6816,6 +6833,10 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     v2_game_loop_post_render(s, /*include_anim_queue=*/false);
     // CALLF sub_1DD9C (line 2911 in original)
     v2_late_sprites_1DD9C(s);
+    // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
+    // scan (the scan clears bit 0 — drawing must read the flags first).
+    // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
 
@@ -6854,6 +6875,10 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // CALLF sub_1DD9C
     v2_late_sprites_1DD9C(s);
     // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
+    // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
+    // scan (the scan clears bit 0 — drawing must read the flags first).
+    // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
     // sub_16775: PAGE FLIP 4
@@ -6872,6 +6897,10 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // CALLF sub_1DD9C
     v2_late_sprites_1DD9C(s);
     // CALLF sub_1dd9c; // seg003: sprite render — v2 full-frame
+    // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
+    // scan (the scan clears bit 0 — drawing must read the flags first).
+    // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
     v2_page_flip_16775(s); // PAGE FLIP 5 (tail jmp sub_16775 at eip 0x1677)

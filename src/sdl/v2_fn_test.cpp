@@ -587,6 +587,7 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_1774F = 464,   // music dispatch by [25B9]
             FT_SUB_10F5D = 465,   // palette fade-in
             FT_SUB_10FA0 = 466,   // palette fade-out
+            FT_SUB_115D2 = 467,   // level-init transition render
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -765,7 +766,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_17791", "sub_101ac", "sub_124a9",
                                  "sub_1797b", "sub_179fb", "sub_10dba", "sub_16807",
                                  "sub_12ab8", "sub_17749", "sub_1774f",
-                                 "sub_10f5d", "sub_10fa0" };
+                                 "sub_10f5d", "sub_10fa0", "sub_115d2" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -14146,6 +14147,125 @@ static long ft_selftest_fade(FtId id, uint32_t seed)
     return fails ? 1 : 0;
 }
 
+
+// ============================================================================
+// (#84) unit sub_115d2 — the level-init transition render (L-class): one VM
+// pass + four render sub-frames with five page flips / vsync waits. PAIR-
+// DIFF against v2_level_init_render_115d2 on the K3 channel (tilegfx/FS
+// seeds, drawBuffer vs shadow-VGA, full-DS diff) with fade-style vsync
+// helpers on both sides. Empty object table ([372]=0) exercises the wrap
+// semantics families (15517 sweep, despawn walks) already unit-proven.
+extern "C" void v2_fntest_call_115d2(uint8_t* shadow);
+
+static long ft_selftest_115d2(uint32_t seed)
+{
+    FtSynthStats grid;
+    long diff_budget = 24;
+    FtRng rng(seed);
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    v2_fntest_set_current_ds((uint16_t)(v2_fntest_game_ds_linear() >> 4));
+    uint8_t* mbase = (uint8_t*)v2_fntest_m2c_base();
+    uint8_t* tz = mbase + (uint32_t)FT_VM_TESTSEG * 16;
+    uint8_t* fz = mbase + (uint32_t)FT_FS_SEG * 16;
+    uint8_t* a000 = mbase + 0xA0000u;
+    uint8_t* db = v2_fntest_drawbuffer_ptr();
+    uint8_t* vga = v2_fntest_vga_ptr();
+    static uint8_t saved_tz[0x10000], saved_fz[0x10000], saved_a000[0x10000];
+
+    extern void (*v2_fntest_child_pre_hook)(void);
+    v2_fntest_child_pre_hook = []() {
+        uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
+                      + v2_fntest_game_ds_linear() + 0xA39C;
+        std::thread([live]() {
+            for (;;) { *(volatile uint16_t*)live = 0; usleep(200); }
+        }).detach();
+    };
+
+    auto CASE = [&](const char* tag) {
+        grid.cases++;
+        memcpy(saved_tz, tz, 0x10000);
+        memcpy(saved_fz, fz, 0x10000);
+        memcpy(saved_a000, a000, 0x10000);
+        for (uint32_t a = 0; a < 0x10000; a++) tz[a] = (uint8_t)rng.next();
+        memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
+        for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
+        memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
+        memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
+        ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);
+        ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);
+        ft_wr16(g_synth_in, DS_FS_PAGE_STRIDE, 0x00AC);
+        ft_wr16(g_synth_in, 0x2581, 0x0008);
+        ft_wr16(g_synth_in, 0x257F, 0x0004);
+        ft_wr16(g_synth_in, 0x372, 0);        // empty object table
+        ft_wr16(g_synth_in, 0xA39C, 0);
+        ft_fill_tail(g_synth_in);
+        // K3 channel semantics (same as unit 11439): the ORACLE run fills
+        // BOTH buffers — the legacy drawBuffer via the real seg003 CALLFs
+        // and the shadow VGA via the v2_vga_* mirrors inlined at the orig
+        // sites. The diff of those two IS the VGA verdict; the v2 helper
+        // call below is the DS-pair channel only.
+        memset(db, 0xCC, 65536 * 4);
+        memset(vga, 0xCC, 65536 * 4);
+        memcpy(g_synth_orig, g_synth_in, sizeof(g_synth_orig));
+        uint16_t regs[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        v2_fntest_fs_override = FT_FS_SEG;
+        long esc0 = ft_ub_marks();
+        v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_115D2), g_synth_orig, regs);
+        v2_fntest_fs_override = 0;
+        bool esc = ft_ub_marks() != esc0;
+        memcpy(a000, saved_a000, 0x10000);
+        memcpy(fz, saved_fz, 0x10000);
+        if (esc) {
+            grid.cases--;
+            memcpy(tz, saved_tz, 0x10000);
+            fprintf(stderr, "FNSELFTEST-UB[sub_115d2 %s]: escaped\n", tag);
+            return;
+        }
+        memcpy(g_scratch, g_synth_in, sizeof(g_scratch));
+        {   // v2-side vsync helper (the mirror spins v2 sub_10130 five times)
+            std::atomic<int> stop{0};
+            std::thread vt([&]() {
+                while (!stop.load(std::memory_order_relaxed)) {
+                    *(volatile uint16_t*)(g_scratch + 0xA39C) = 0;
+                    usleep(100);
+                }
+            });
+            v2_fntest_call_115d2(g_scratch);
+            stop.store(1, std::memory_order_relaxed);
+            vt.join();
+        }
+        memcpy(tz, saved_tz, 0x10000);
+        *(uint16_t*)(g_scratch + 0xA39C) = 0;
+        *(uint16_t*)(g_synth_orig + 0xA39C) = 0;
+        long diffs = 0;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (g_scratch[a] == g_synth_orig[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            diffs++;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: ds addr=%04X orig=%02X v2=%02X\n",
+                        tag, a, g_synth_orig[a], g_scratch[a]);
+        }
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            diffs++;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: vga lin=%06X orig=%02X v2=%02X\n",
+                        tag, a, db[a], vga[a]);
+            if (diffs > 40) break;
+        }
+        if (diffs) grid.fail++; else grid.pass++;
+    };
+    CASE("empty-a");
+    CASE("empty-b");
+    v2_fntest_child_pre_hook = nullptr;
+    fprintf(stderr,
+        "FNSELFTEST-SUMMARY[sub_115d2]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+        grid.pass, grid.cases, grid.cases, grid.fail,
+        grid.fail ? "  <<< DIVERGENCE" : "");
+    return grid.fail ? 1 : 0;
+}
+
 extern "C" int v2_fntest_selftest_env(void) {
     const char* env = getenv("FNSELFTEST");
     if (!env || !env[0]) return -1;
@@ -14650,6 +14770,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_1774fd")) { matched = true; rc |= ft_selftest_musicdisp(FT_SUB_1774F, ft_seed(0xD0500036u)); }
     if (all || strstr(env, "sub_10f5d")) { matched = true; rc |= ft_selftest_fade(FT_SUB_10F5D, ft_seed(0xD0500037u)); }
     if (all || strstr(env, "sub_10fa0")) { matched = true; rc |= ft_selftest_fade(FT_SUB_10FA0, ft_seed(0xD0500038u)); }
+    if (all || strstr(env, "sub_115d2")) { matched = true; rc |= ft_selftest_115d2(ft_seed(0xD0500039u)); }
     if (all || strstr(env, "sub_108c8")) { matched = true; rc |= ft_port_native_skip("sub_108c8"); }
     if (all || strstr(env, "sub_17337")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17337, ft_seed(0xD0500010u)); }
     if (all || strstr(env, "sub_172d3")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_172D3, ft_seed(0xD0500011u)); }

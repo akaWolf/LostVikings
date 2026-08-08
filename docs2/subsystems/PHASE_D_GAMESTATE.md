@@ -56,5 +56,11 @@ carrier and this document is the checklist of the switch points.
 Remaining refinement queue (all optional before the switch):
 - interior carving of `spawn_area` / `rt_*` zones, semantics for `image_*`
   tables (0x8E68 row LUT candidate, 0x2BA6 CS-address table, 0x863D block);
-- the 17 deliberate special word forms + 109 named element byte forms;
+- the deliberate special word forms + named element byte forms
+  (re-inventoried 2026-08-06, #84: zero raw-constant sites remain; the
+  computed forms all address through named DS_*/OBJ_* constants or the
+  ObjMem/view layers — e.g. cmd-entry writes go via `bx + DS_CMD_ENTRY_*`,
+  scroll steps via `v*2 + DS_SCROLL_STEP1_TBL`. Wrapping those into
+  dedicated accessors is pure cosmetics for the carrier switch, not a
+  verification debt);
 - extending the ObjMem/ObjRef named-getter vocabulary as code needs it.
