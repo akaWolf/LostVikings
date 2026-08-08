@@ -132,6 +132,8 @@ extern "C" void     v2_fntest_call_sub_135cf(uint8_t* test_shadow, uint16_t di);
 extern "C" uint8_t* v2_fntest_vga_ptr(void);
 extern "C" uint8_t* v2_fntest_drawbuffer_ptr(void);
 extern "C" void v2_fntest_fork_export(void* ptr, uint32_t len);
+extern "C" void v2_fntest_fork_export_clear(void);
+extern "C" void v2_fntest_set_in201(int);
 extern "C" uint8_t* v2_fntest_drawinfo_ptr(void);
 extern "C" uint32_t v2_fntest_drawinfo_size(void);
 extern "C" void     v2_fntest_set_gs_tiledata(const uint8_t* data, uint32_t len);
@@ -576,6 +578,11 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_17791 = 455,   // ambient music restart gate
             FT_SUB_101AC = 456,   // viking-switch vsync spin entry
             FT_SUB_124A9 = 457,   // dialog glyph-line printer
+            FT_SUB_1797B = 458,   // render tick (#84 revision wave)
+            FT_SUB_179FB = 459,   // joystick axis read
+            FT_SUB_10DBA = 460,   // fatal error chain
+            FT_SUB_16807 = 461,   // VGA Mode-X init
+            FT_SUB_12AB8 = 462,   // 6x DosMemAlloc + boot chunk loads
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -751,7 +758,9 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_1754c", "sub_17561", "sub_10138",
                                  "sub_1775d", "sub_12352", "sub_1673c", "sub_177bb", "sub_100bb",
                                  "sub_128d1", "sub_16440", "sub_11080", "sub_16563", "sub_17a44",
-                                 "sub_17791", "sub_101ac", "sub_124a9" };
+                                 "sub_17791", "sub_101ac", "sub_124a9",
+                                 "sub_1797b", "sub_179fb", "sub_10dba", "sub_16807",
+                                 "sub_12ab8" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -12834,6 +12843,133 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         }
         break;
     }
+    case FT_SUB_1797B: {
+        // (#84) render tick: [92FF] gate → cs:128A8 busy gate → panning OUTs
+        // + DEC [A39C] + palette dispatch off_17974 by [7EFE] (0=nullsub,
+        // 2=sub_10ffc, 4=sub_10fe6 — both have direct units; transitive
+        // here). The m2c body exits the dispatch group with a plain
+        // `return 0` (the RETF is commented) — the isolator classes that as
+        // an escape BY CONSTRUCTION, so every case runs with expect_escape
+        // and the DS contract ([A39C] DEC) is asserted by hand on the
+        // shared post-oracle image.
+        v2_fntest_drawinfo_ptr();   // m2c inline dereferences myDrawInfo (#179)
+        auto a39c = [&](uint16_t want, const char* tag) {
+            uint16_t got = (uint16_t)(g_synth_orig[0xA39C] | (g_synth_orig[0xA39D] << 8));
+            if (got != want) {
+                grid.fail++; grid.pass--;
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_1797b %s]: [A39C]=%04X want %04X\n",
+                        tag, got, want);
+            }
+        };
+        {   static const FtWr w[] = { {0x92FF,0},{0xA39C,5},{0x7EFE,0} };
+            CASE(w,3,r0,nullptr,0,"gate-off",1);      // [92FF]=0 → no DEC
+            a39c(5, "gate-off");
+        }
+        {   v2_fntest_set_128a8(1);
+            static const FtWr w[] = { {0x92FF,1},{0xA39C,5},{0x7EFE,0} };
+            CASE(w,3,r0,nullptr,0,"int21-busy",1);    // busy → no DEC either
+            a39c(5, "int21-busy");
+            v2_fntest_set_128a8(0);
+        }
+        {   static const FtWr w[] = { {0x92FF,1},{0xA39C,5},{0x7EFE,0},{0x92CE,0x22} };
+            CASE(w,4,r0,nullptr,0,"tick-null",1);     // DEC fires, bp=0 nullsub
+            a39c(4, "tick-null");
+        }
+        {   static const FtWr w[] = { {0x92FF,1},{0xA39C,1},{0x7EFE,4},{0x92CE,0} };
+            CASE(w,4,r0,nullptr,0,"tick-10fe6",1);    // bp=4 palette restore arm
+            a39c(0, "tick-10fe6");
+        }
+        {   // bp=2 (sub_10ffc): full palette-load path — DS effects are the
+            // 10ffc unit's contract; here we assert only the DEC + dispatch
+            // survives (10ffc reads [7F00] ptr chain — give it a sane zero
+            // block so it walks the null palette).
+            static const FtWr w[] = { {0x92FF,1},{0xA39C,2},{0x7EFE,2},
+                                      {0x7F00,0},{0x7F02,0} };
+            CASE(w,5,r0,nullptr,0,"tick-10ffc",1);
+            a39c(1, "tick-10ffc");
+        }
+        break;
+    }
+    case FT_SUB_179FB: {
+        // (#84) joystick axis read: CX preload = [A39E] (calibration), the
+        // 0x201 model returns v2_fntest_in201 — NOT al,201-idle decides the
+        // masked LOOPE exits. Contract channels: CF (io_regs[7]), ax/bx
+        // (io_regs[0]/[1]), [A3A2] latch of the first-exit cx.
+        {   // idle port 0xFF → NOT=0, TEST al,3 == 0 → LOOPE spins cx dry →
+            // JCXZ → STC fail path.
+            v2_fntest_set_in201(0xFF);
+            static const FtWr w[] = { {0xA39E,0x40} };
+            CASE(w,1,r0,nullptr,0,"drain-stc");
+        }
+        {   // both axis bits low from the start (port idle 0xFC → NOT=3):
+            // first LOOPE exits at once, ah = 3^3=0 → the 17A32 both-done
+            // exit (ax=bx=[A3A2]).
+            v2_fntest_set_in201(0xFC);
+            static const FtWr w[] = { {0xA39E,0x40} };
+            CASE(w,1,r0,nullptr,0,"both-instant");
+        }
+        {   // one axis held: idle 0xFE → NOT=1 (bit0 set), ah=1^3=2 →
+            // second LOOPE spins on bit1 until cx dries → the 7A26 TEST
+            // ah,1 route (bit1 pending → 17A2B X-exit).
+            v2_fntest_set_in201(0xFE);
+            static const FtWr w[] = { {0xA39E,0x30} };
+            CASE(w,1,r0,nullptr,0,"axis-x");
+        }
+        {   v2_fntest_set_in201(0xFD);  // bit1 first → ah=1 → 17A39 Y-exit
+            static const FtWr w[] = { {0xA39E,0x30} };
+            CASE(w,1,r0,nullptr,0,"axis-y");
+        }
+        v2_fntest_set_in201(0xFF);
+        break;
+    }
+    case FT_SUB_10DBA: {
+        // (#84) fatal-error chain: shutdown calls (16546/1754c/INT21 close/
+        // 1686f/1292f), two INT21-09 prints, then the ax hex-decode into
+        // [B57..B5A] via the LUT at [-0x6CE1] and the INT21-4C terminate —
+        // which the isolator's INT21 guard turns into an escape. The escape
+        // IS the contract (same criterion as the 1041c unit); DS decode
+        // effects are checked via the shared image before the terminate.
+        {   FtRegs r{}; r.ax = 0; r.bx = 0x1000;
+            CASE(nullptr,0,r,nullptr,0,"ax0-skip-decode",1);
+        }
+        {   FtRegs r{}; r.ax = 0x1234; r.bx = 0x1000;
+            CASE(nullptr,0,r,nullptr,0,"ax-decode",1);
+        }
+        break;
+    }
+    case FT_SUB_16807: {
+        // (#84) VGA Mode-X init: INT10 mode 13h + sequencer/CRTC program
+        // (m2c models the port side; one misc-out is commented). Calls
+        // sub_1106f (its own unit exists). Single honest pass — the value
+        // channel is the port model + [A3A0-zone] side effects staying
+        // silent; branch content is linear.
+        CASE(nullptr,0,r0,nullptr,0,"modex-init");
+        break;
+    }
+    case FT_SUB_12AB8: {
+        // The oracle's chunk loads read the REAL DATA.DAT — arm the file
+        // hook (class-D pattern; a null data_handle segfaults fseek).
+        if (!v2_fntest_set_data_file("DATA.DAT")) {
+            fprintf(stderr, "FNSELFTEST[sub_12ab8]: DATA.DAT not available\n");
+            grid.fail++; break;
+        }
+        // (#84) boot allocator: 7 fixed-size DosMemAlloc paragraphs into
+        // [2E5D..2E77] (MCB model — deterministic; the segment WORDS sit in
+        // the documented ds_skip), the [302]&[304]&0x8000 sound gate, three
+        // sound chunks (0x1C7+[86B6] / 0x20C,0x207+[86B8] via 10e85 para
+        // advance) and the boot table chunks 4..0xA straight into DS at
+        // [2E7D..0x407D] — those LZSS bytes are the direct diff channel.
+        // Building blocks 10d9f/10982/10e85 all have direct units.
+        {   static const FtWr w[] = { {0x302,0x8000},{0x304,0x8000},
+                                      {0x86B6,5},{0x86B8,2} };
+            CASE(w,4,r0,nullptr,0,"sound-skip");
+        }
+        {   static const FtWr w[] = { {0x302,0},{0x304,0},
+                                      {0x86B6,5},{0x86B8,2} };
+            CASE(w,4,r0,nullptr,0,"full-boot");
+        }
+        break;
+    }
     case FT_SUB_179A8: {
         // joystick timer calibration: the 8253 latch model (OUT 43h ->
         // latched lo/hi reads, coarse down-step) makes the elapsed check
@@ -13726,6 +13862,119 @@ static int ft_port_native_skip(const char* name) {
 
 extern "C" int v2_fntest_running;       // defined in v2_ail.cpp (links in all flavours)
 
+
+// ============================================================================
+// (#84) unit sub_12352d — PAIR-DIFF for the input-read core (the existing
+// FT_SUB_12352 dosio unit walks oracle branches only, #60). Direct-diffable
+// since #81: the SDL adapter is two deterministic globals now.
+// Contract (post-#81 orig body):
+//   LAYER1: new_kd = press_edges.exchange(0); g_last = new_kd;
+//           if new_kd: [3BA] &= ~new_kd
+//   ax = ([86DA]? joystick path — held 0 here; covered by the dosio unit)
+//        | [86DE];  ax = intro_mask(ax, [3CC], input_keys);
+//   if [3CC]!=0x8000: ax |= new_kd
+//   [3B6]=ax; [3B8]=(ax^[3BA])&ax; [3BA]=ax
+// Battle pair mirrored exactly: oracle → hand-latch [3B6] into
+// v2_input_snapshot → shadow iter (consumes the latch + the SAME new_kd via
+// g_last, forces its own prev) → triplet diff + canaries. intro_mask statics
+// are fork-virgin per oracle case (the parent never calls it), so both intro
+// paths (sticky and pass-through) are directly reachable.
+extern uint16_t g_last_sub12352_new_keydowns;
+extern "C" void v2_fntest_call_12352_iter(uint8_t* shadow);
+
+static long ft_selftest_sub12352d(uint32_t seed)
+{
+    void* fn = v2_fntest_orig_fnptr(446);
+    if (!fn) { fprintf(stderr, "FNSELFTEST[sub_12352d]: no fnptr\n"); return 1; }
+    extern std::atomic<uint16_t> sdl_input_press_edges;
+    extern uint16_t input_keys;
+
+    static uint8_t orig_img[0x10010];
+    static uint8_t shad_img[0x10010];
+    uint16_t regs[8];
+
+    v2_fntest_fork_export_clear();
+    v2_fntest_fork_export(&sdl_input_press_edges, sizeof(sdl_input_press_edges));
+    v2_fntest_fork_export(&g_last_sub12352_new_keydowns, 2);
+
+    long cases = 0, fails = 0, grid_total = 0, grid_pass = 0;
+    uint32_t rng = seed;
+    auto next = [&rng]() { rng = rng * 1664525u + 1013904223u; return rng; };
+
+    const uint16_t Pv[] = {0, 0xFFFF, 0x8000, 0x0040, 0xC0C0, 0x1234};
+    const uint16_t Hv[] = {0, 0x8000, 0x0040, 0xFFFF, 0x2010};
+    const uint16_t Kv[] = {0, 0x8000, 0x00C0, 0x5555};
+    const uint16_t Ev[] = {0, 0x8000, 0x0040, 0xFFFF};
+    const uint16_t Mv[] = {0, 0x8000, 1, 0x7FFF};   // 0x8000 = intro mode
+
+    auto run_case = [&](uint16_t P, uint16_t H, uint16_t K, uint16_t E,
+                        uint16_t M, bool grid) -> void {
+        cases++;
+        memset(orig_img, 0, sizeof(orig_img));
+        *(uint16_t*)(orig_img + 0x3B6) = (uint16_t)(P ^ 0x1111); // stale cur
+        *(uint16_t*)(orig_img + 0x3B8) = (uint16_t)(P ^ 0x2222); // stale edge
+        *(uint16_t*)(orig_img + 0x3BA) = P;
+        *(uint16_t*)(orig_img + 0x86DA) = 0;      // joystick absent
+        *(uint16_t*)(orig_img + 0x86DC) = 0xBEEF; // must stay unread
+        *(uint16_t*)(orig_img + 0x86DE) = H;
+        *(uint16_t*)(orig_img + 0x3CC)  = M;
+        *(uint16_t*)(orig_img + 0x3B4)  = 0xCAFE; // canaries
+        *(uint16_t*)(orig_img + 0x3BC)  = 0xF00D;
+        memcpy(shad_img, orig_img, sizeof(orig_img));
+
+        input_keys = K;
+        sdl_input_press_edges.store(E, std::memory_order_relaxed);
+        g_last_sub12352_new_keydowns = 0xDEAD;
+        memset(regs, 0, sizeof(regs));
+
+        long esc0 = v2_fntest_start_escapes;
+        v2_fntest_orig_isolated(fn, orig_img, regs);
+        if (v2_fntest_start_escapes != esc0) { cases--; return; }
+
+        uint16_t post_edges = sdl_input_press_edges.load(std::memory_order_relaxed);
+        uint16_t post_last  = g_last_sub12352_new_keydowns;
+        long f = 0;
+        if (post_edges != 0) { f++; if (fails < 20) fprintf(stderr,
+            "FNSELFTEST[sub_12352d]: edges not drained: %04X\n", post_edges); }
+        if (post_last != E) { f++; if (fails < 20) fprintf(stderr,
+            "FNSELFTEST[sub_12352d]: g_last=%04X != E=%04X\n", post_last, E); }
+
+        extern uint16_t v2_input_snapshot;
+        v2_input_snapshot = *(uint16_t*)(orig_img + 0x3B6);
+        input_keys = K;
+        v2_fntest_call_12352_iter(shad_img);
+
+        static const uint16_t addrs[5] = {0x3B4, 0x3B6, 0x3B8, 0x3BA, 0x3BC};
+        for (uint16_t a : addrs) {
+            uint16_t ov = *(uint16_t*)(orig_img + a);
+            uint16_t sv = *(uint16_t*)(shad_img + a);
+            if (ov != sv) {
+                f++;
+                if (fails < 20)
+                    fprintf(stderr, "FNSELFTEST[sub_12352d]: ds:%04X orig=%04X v2=%04X "
+                            "(P=%04X H=%04X K=%04X E=%04X M=%04X)\n",
+                            a, ov, sv, P, H, K, E, M);
+            }
+        }
+        if (grid) { grid_total++; if (!f) grid_pass++; }
+        if (f) fails++;
+    };
+
+    for (uint16_t P : Pv) for (uint16_t H : Hv) for (uint16_t K : Kv)
+        for (uint16_t E : Ev) for (uint16_t M : Mv)
+            run_case(P, H, K, E, M, true);
+    for (int i = 0; i < 20000; i++) {
+        uint16_t M = (next() & 3) ? (uint16_t)(next() & 0x7FFF) : 0x8000;
+        run_case((uint16_t)next(), (uint16_t)next(), (uint16_t)next(),
+                 (uint16_t)next(), M, false);
+    }
+
+    v2_fntest_fork_export_clear();
+    fprintf(stderr, "FNSELFTEST-SUMMARY[sub_12352d]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+            grid_pass, grid_total, cases, fails, fails ? "  <<< DIVERGENCE" : "");
+    return fails ? 1 : 0;
+}
+
 extern "C" int v2_fntest_selftest_env(void) {
     const char* env = getenv("FNSELFTEST");
     if (!env || !env[0]) return -1;
@@ -14221,6 +14470,11 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_167ff")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_167FF, ft_seed(0xD05000Cu)); }
     if (all || strstr(env, "sub_17912")) { matched = true; rc |= ft_port_native_skip("sub_17912"); }
     if (all || strstr(env, "sub_179a8")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_179A8, ft_seed(0xD05000Eu)); }
+    if (all || strstr(env, "sub_1797b")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1797B, ft_seed(0xD0500030u)); }
+    if (all || strstr(env, "sub_179fb")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_179FB, ft_seed(0xD0500031u)); }
+    if (all || strstr(env, "sub_10dba")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10DBA, ft_seed(0xD0500032u)); }
+    if (all || strstr(env, "sub_16807")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16807, ft_seed(0xD0500033u)); }
+    if (all || strstr(env, "sub_12ab8")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12AB8, ft_seed(0xD0500034u)); }
     if (all || strstr(env, "sub_108c8")) { matched = true; rc |= ft_port_native_skip("sub_108c8"); }
     if (all || strstr(env, "sub_17337")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17337, ft_seed(0xD0500010u)); }
     if (all || strstr(env, "sub_172d3")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_172D3, ft_seed(0xD0500011u)); }
@@ -14230,7 +14484,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_17561")) { matched = true; rc |= ft_port_native_skip("sub_17561"); }
     if (all || strstr(env, "sub_10138")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10138, ft_seed(0xD0500016u)); }
     if (all || strstr(env, "sub_1775d")) { matched = true; rc |= ft_port_native_skip("sub_1775d"); }
-    if (all || strstr(env, "sub_12352")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12352, ft_seed(0xD0500018u)); }
+    if (all || strstr(env, "sub_12352")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12352, ft_seed(0xD0500018u));
+                                           rc |= ft_selftest_sub12352d(ft_seed(0x12352001u)); }
     if (all || strstr(env, "sub_15c37")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_15C37, ft_seed(0xD0500019u)); }
     if (all || strstr(env, "sub_12e2d")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12E2D, ft_seed(0xD050001Au)); }
     if (all || strstr(env, "sub_1673c")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1673C, ft_seed(0xD050001Bu)); }

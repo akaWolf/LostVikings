@@ -383,6 +383,9 @@ extern int       v2_dbg_pre_vm_iter;
 // Called from sub_12352 right after word_28898 / word_2889a are set.
 extern "C" void enter_trace_sub12352() {
 #ifndef V2_ONLY
+    // fn-test: synthetic 0x8000-bit presets would print a line per case
+    // (millions) — the diagnostic is for live runs only.
+    { extern int v2_fntest_running; if (v2_fntest_running) return; }
     int armed = g_enter_trace_arm.load(std::memory_order_relaxed);
     bool any_enter_bit = ((word_30bbe | word_28896 | word_28898 | word_2889a | input_keys
                            | sdl_input_press_edges.load(std::memory_order_relaxed)) & 0x8000) != 0;

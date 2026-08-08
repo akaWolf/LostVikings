@@ -2501,6 +2501,12 @@ static void v2_vsync_wait_10130(uint8_t* s) {
 // fn-test (#62): the delivery unit runs without the barrier channel that
 // normally publishes the real-DS segment — expose a setter.
 extern "C" void v2_fntest_set_current_ds(uint16_t v) { v2_current_ds_val = v; }
+// (#84) unit sub_12352: the shadow-side mirror is static — export a call
+// wrapper for the fn-test runner (same body the INPUT_UPDATE signal runs).
+static void v2_read_input_12352_iter(uint8_t* shadow);
+extern "C" void v2_fntest_call_12352_iter(uint8_t* shadow) {
+    v2_read_input_12352_iter(shadow);
+}
 // #61 bridge getter: the real-world AIL instance needs the m2c DS paragraph.
 extern "C" uint16_t v2_ail_get_real_ds(void) { return v2_current_ds_val; }
 

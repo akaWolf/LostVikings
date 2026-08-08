@@ -323,6 +323,11 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 455: return (void*)&seg000_7791_proc;  // ambient music restart gate
     case 456: return (void*)&seg000_1ac_proc;   // viking-switch vsync spin
     case 457: return (void*)&seg000_24a9_proc;  // dialog glyph-line printer
+    case 458: return (void*)&sub_1797b;         // render tick (panning+DEC+palette dispatch)
+    case 459: return (void*)&sub_179fb;         // joystick axis read (0x201 bit decay)
+    case 460: return (void*)&sub_10dba;         // fatal error chain (hex decode + terminate)
+    case 461: return (void*)&sub_16807;         // VGA Mode-X init (INT10 + CRTC program)
+    case 462: return (void*)&sub_12ab8;         // 6x DosMemAlloc + boot chunk loads
     case 343: return (void*)&sub_15f2c;         // op2C partner-scan (direct, no dispatcher)
     default: return 0;
     }
