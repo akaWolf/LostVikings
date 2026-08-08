@@ -1238,6 +1238,7 @@ extern "C" uint16_t v2_ail_sfx_play(uint8_t*, uint8_t*, uint32_t, uint16_t, uint
 extern "C" void     v2_ail_sfx_stop_seq(uint8_t*, uint16_t);
 extern "C" void     v2_ail_music_mute_stop(uint8_t*);
 extern "C" void     v2_nopl_pump(void);
+
 static bool v2_sound_shadow_valid = false;
 
 // ============================================================================
@@ -7775,6 +7776,11 @@ static uint8_t v2_orig_post_vm_ds_bytes[5][0x10000];
 static bool    v2_orig_post_vm_ds_valid[5] = {0};
 int v2_orig_post_vm_frame = 0; // bumps on each idx=0 record (once per game frame)
 static uint32_t v2_ds_hash(uint8_t* ds); // forward; defined later in this file
+// (#83) The former snap-pair hold + spin-pump + AIL-checkpoint scaffolding
+// is GONE: the audible path is the sink instance (audio thread, sample-clock
+// ticks — v2_ail.cpp), and the real+shadow verify pair is back on purely
+// frame-based ticks at the phase barriers, where no snap race exists.
+
 void v2_record_orig_post_vm_hash(int idx) {
     if (idx < 0 || idx >= 5) return;
     if (!v2_vm_real_ds_ptr) return;
@@ -18455,9 +18461,9 @@ void v2_phase_frame_begin(uint16_t ds_val) {
 #endif
         }
     }
-    // #61 native AIL: pump the driver sequencer (fn67 ticks due by the audio
-    // clock). Game thread only — the interpreter shares the m2c-adjacent
-    // shadow state and is not thread-safe.
+    // #61 native AIL: pump the verify-pair sequencer (V2_ONLY: the audible
+    // one). Default is frame-based again (#83) — the audible sink ticks on
+    // the audio thread instead.
     v2_nopl_pump();
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
     // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.
@@ -19592,7 +19598,8 @@ static inline void v2_blocking_loop_tick() {
     // snapshot drain — the #59 race-free invariant holds.
     v2_replay_drain_to_state();
     // #61 native AIL: the DOS INT8 kept ticking through blocking loops —
-    // pump the driver sequencer here too (same game thread as frame_begin).
+    // pump the (frame-based) verify-pair sequencer here too; in V2_ONLY this
+    // is the audible instance.
     v2_nopl_pump();
 #ifdef HEADLESS
     extern int headless_check_exit(void);

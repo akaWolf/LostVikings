@@ -147,6 +147,62 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
     if (warn++ < 8) fprintf(stderr, "v2_native_opl: OUT %04X <- %02X (unmodeled port)\n", port, val);
 }
 
+// ---------------------------------------------------------------------------
+// (#83) SINK port model — audio thread. Same SBPro translation, but the
+// register write goes STRAIGHT into the chip (we are already on the mixer
+// thread, right before sample generation) — no ring, no timestamps, sample-
+// accurate like DOSBox. Separate index latches/regs: the game-thread model
+// above belongs to the (now silent) verify pair and the V2_ONLY world.
+// ---------------------------------------------------------------------------
+static uint8_t g_sink_index[2] = {0, 0};
+static uint8_t g_sink_regs[2][256] = {{0}};
+static uint8_t g_sink_mixer_index = 0;
+static uint8_t g_sink_mixer[256] = {0};
+
+extern "C" void v2_nopl_sink_out(uint16_t port, uint8_t val) {
+    if (port >= 0x220 && port <= 0x223) {
+        nopl_lazy_init();
+        int chip = (port - 0x220) >> 1;
+        if ((port & 1) == 0) { g_sink_index[chip] = (uint8_t)val; return; }
+        uint8_t reg = g_sink_index[chip];
+        g_sink_regs[chip][reg] = val;
+        if (!g_trace_resolved) {
+            g_trace_resolved = 1;
+            const char* t = getenv("V2_OPL_TRACE");
+            if (t && t[0]) g_trace = fopen(t, "w");
+        }
+        if (g_trace)
+            fprintf(g_trace, "%llu %d %02X %02X\n",
+                    (unsigned long long)g_ticks_done, chip, reg, val);
+        OPL3_WriteRegBuffered(&g_chip, (uint16_t)((chip << 8) | reg), val);
+        return;
+    }
+    if (port == 0x224) { g_sink_mixer_index = val; return; }
+    if (port == 0x225) {
+        if (g_sink_mixer_index != 0x0A && g_sink_mixer[g_sink_mixer_index] != val)
+            fprintf(stderr, "v2_native_opl: SINK MIXER[%02X] <- %02X (beyond detect probe)\n",
+                    g_sink_mixer_index, val);
+        g_sink_mixer[g_sink_mixer_index] = val;
+        return;
+    }
+    static int warn = 0;
+    if (warn++ < 8) fprintf(stderr, "v2_native_opl: SINK OUT %04X <- %02X (unmodeled port)\n", port, val);
+}
+
+extern "C" uint8_t v2_nopl_sink_in(uint16_t port) {
+    if (port >= 0x220 && port <= 0x223) {
+        uint8_t ctl = g_sink_regs[0][4];
+        if (ctl & 0x80) return 0x00;
+        if (ctl & 0x01) return 0xC0 | 0x40;
+        return 0x00;
+    }
+    if (port == 0x225) return g_sink_mixer[g_sink_mixer_index];
+    return 0xFF;
+}
+
+extern "C" double   v2_nopl_get_tick_hz(void) { return g_tick_hz; }
+extern "C" uint32_t v2_nopl_get_rate(void)    { return g_rate; }
+
 extern "C" uint8_t v2_nopl_sbpro_in(uint16_t port) {
     if (port >= 0x220 && port <= 0x223) {
         // AdLib detect model (validated by the smoke rig): after T1 start
@@ -212,22 +268,13 @@ extern "C" void v2_nopl_out(uint16_t port, uint8_t val) {
 static const double NOPL_FRAME_HZ = 60.0;
 static double g_tick_acc = 0.0;
 
+static int nopl_frame_mode(void);
+extern "C" void v2_ail_sink_pump(uint64_t);   // (#83) audible sink driver (v2_ail.cpp)
+
 extern "C" void v2_nopl_pump(void) {
     if (g_tick_hz <= 0.0) return;
     double spt = (double)g_rate / g_tick_hz;   // samples per tick (queue ts)
-    static int frame_mode = -1;
-    if (frame_mode < 0) {
-#ifdef V2_ONLY
-        const char* e = getenv("V2_AIL_FRAME_TICKS");
-        frame_mode = (e && e[0] == '1') ? 1 : 0;
-#else
-        // default/verify mode: ALWAYS frame-paced. Both worlds must see the
-        // same deterministic tick count between mirrored chain calls, and
-        // scenario replays must reproduce byte-identical driver state.
-        frame_mode = 1;
-#endif
-        if (frame_mode) fprintf(stderr, "v2_native_opl: frame-accumulator tick mode\n");
-    }
+    int frame_mode = nopl_frame_mode();
     int guard = 0;
     if (frame_mode) {
         g_tick_acc += g_tick_hz / NOPL_FRAME_HZ;
@@ -268,16 +315,45 @@ extern "C" void v2_nopl_pump(void) {
     g_cur_ts = 0;
 }
 
+// Tick pacing mode, decided once.
+// (#83) default/verify: ALWAYS frame-paced again — real+shadow are the
+// deterministic verify pair and no longer feed the chip (the audible path
+// is the sink instance, ticked on the sample clock in v2_nopl_mix).
+// V2_ONLY: the single (audible) instance paces by the audio clock;
+// V2_AIL_FRAME_TICKS=1 keeps its deterministic frame mode for replays.
+static int nopl_frame_mode(void) {
+    static int frame_mode = -1;
+    if (frame_mode < 0) {
+#ifdef V2_ONLY
+        const char* e = getenv("V2_AIL_FRAME_TICKS");
+        frame_mode = (e && e[0] == '1') ? 1 : 0;
+#else
+        frame_mode = 1;
+#endif
+        if (frame_mode) fprintf(stderr, "v2_native_opl: frame-accumulator tick mode\n");
+    }
+    return frame_mode;
+}
+
 // ---------------------------------------------------------------------------
 // audio-thread mix: apply queued writes at their timestamps, generate both
 // chips, ADD into the caller's stereo buffer (chip0 → L, chip1 → R).
 // ---------------------------------------------------------------------------
 extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
+    // (#83) audible sink: BEFORE the g_inited gate — the chip now comes up
+    // via the sink's own OPL writes (fn65 probe during the drained init
+    // chain), so the sink must get its first pump while the chip is still
+    // down or neither ever starts. No-op until the bridge publishes
+    // (and always in V2_ONLY, which has no bridge).
+    v2_ail_sink_pump(g_samples_played.load(std::memory_order_relaxed));
     if (!g_inited) return;
     uint64_t pos = g_samples_played.load(std::memory_order_relaxed);
     uint32_t donef = 0;
     int16_t buf[256 * 2];
     while (donef < frames) {
+        // (#83) per-chunk sink service: sample-clock fn67 ticks + call drain
+        // right before generating this chunk — DOS INT8 semantics.
+        v2_ail_sink_pump(pos);
         size_t rd = g_rd.load(std::memory_order_relaxed);
         uint32_t chunk = frames - donef;
         if (chunk > 256) chunk = 256;

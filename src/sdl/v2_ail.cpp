@@ -36,6 +36,9 @@
 // symmetric design (a second interpreter instance fed from real memory) is a
 // later #61 stage.
 
+#include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -52,6 +55,19 @@ extern "C" uint16_t v2_ail_interp_call(uint16_t, const uint16_t*, int);
 extern "C" void     v2_ail_interp_set_io(void (*)(uint16_t, uint8_t), uint8_t (*)(uint16_t));
 extern "C" void     v2_ail_interp_set_callback(uint16_t (*)());
 extern "C" void     v2_ail_interp_map_segment(uint16_t, uint8_t*, uint32_t);
+extern "C" void     v2_ail_interp_set_code_para(uint16_t);
+extern "C" void     v2_ail_sinki_load(const uint8_t*, uint32_t, const uint8_t*, uint32_t);
+extern "C" void     v2_ail_sinki_map(uint16_t, uint8_t*, uint32_t);
+extern "C" void     v2_ail_sinki_map_front(uint16_t, uint8_t*, uint32_t);
+extern "C" void     v2_ail_sinki_set_io(void (*)(uint16_t, uint8_t), uint8_t (*)(uint16_t));
+extern "C" void     v2_ail_sinki_set_callback(uint16_t (*)());
+extern "C" uint16_t v2_ail_sinki_call(uint16_t, const uint16_t*, int);
+extern "C" uint16_t v2_ail_sinki_fn_lookup(uint16_t);
+extern "C" void     v2_ail_sink_publish(uint8_t*, uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_nopl_sink_out(uint16_t, uint8_t);
+extern "C" uint8_t  v2_nopl_sink_in(uint16_t);
+extern "C" double   v2_nopl_get_tick_hz(void);
+extern "C" uint32_t v2_nopl_get_rate(void);
 extern "C" uint16_t v2_ail_call_fn_code(uint16_t, const uint16_t*, int);
 extern "C" uint16_t v2_ail_interp_last_dx();
 extern "C" uint16_t v2_ail_interp_peek(uint16_t);
@@ -169,11 +185,21 @@ extern "C" int v2_ail_native_on() {
 }
 
 // seg002 ret_d4f_a53 callback model: returns cs:word_1BBF2 — the PIT divisor
-// snapshot seg002 keeps for the AIL timer. Our timer model paces fn67 by the
-// audio clock instead of the PIT; the divisor value only feeds the driver's
-// internal rate bookkeeping. 0x7FFF mirrors the seg002 power-on default
-// (sub_1bedc reprograms it later on real DOS — not modeled, no PIT here).
+// snapshot seg002 keeps for the AIL timer (the LIVE m2c install wrapper
+// sub_1c0b7 writes it when it programs the PIT with the driver's rate).
+// (#82b) default mode returns the REAL cell byte-for-byte: with the real
+// instance running the arena blob (code_para fix) the driver actually SEES
+// the callback ptr sub_1c537 installed at [2957] and calls here for its
+// tempo bookkeeping — the old 0x7FFF constant made music run ~3.4x slow
+// (32767 vs the real 9546 divisor). V2_ONLY has no m2c world and no live
+// installer: the copy's [2957] cell stays null, the blob never takes this
+// path, and the power-on 0x7FFF stands in.
+#ifndef V2_ONLY
+extern uint16_t& word_1bbf2;   // m2c cs:word_1BBF2 (0d4f:0122)
+static uint16_t v2_ail_pit_callback() { return word_1bbf2; }
+#else
 static uint16_t v2_ail_pit_callback() { return 0x7FFF; }
+#endif
 
 // ---------------------------------------------------------------------------
 // boot — exact sub_17561 tail over the interpreter
@@ -499,9 +525,17 @@ static int v2_ail_orig_lazy_init() {
     // BANK_PARA sits above 640K so the copy is a mere placeholder (the real
     // bank is addressed through the flat DOS mapping below).
     v2_ail_interp_load(blob, 0x10000, bank, 0x10000);
-    v2_ail_interp_set_io(v2_nopl_sbpro_out, v2_nopl_sbpro_in);   // audible world
+    // (#83) The real instance is SILENT again: the audible path is the SINK
+    // instance (audio thread, sample-clock ticks). Real+shadow are the
+    // deterministic frame-tick verify pair — neither feeds the chip.
+    v2_ail_interp_set_io(silent_out, silent_in);
     v2_ail_interp_set_callback(v2_ail_pit_callback);
     v2_ail_interp_map_segment(0, base, 0xA0000);                 // whole DOS arena
+    // (#82) run the blob AT its real segment: descriptor/config live in the
+    // arena, so the orig init chain (LES bx,[98E8] with dx=cs) reads what
+    // fn64/fn65 actually produced. With the fake DRV_PARA the descriptor far
+    // ptr came back F000:00C7 → fn66 got zero IO base → silent OPL.
+    v2_ail_interp_set_code_para(blob_seg);
     g_orig_inited = true;
     if (g_tick_hz <= 0.0) {
         // [desc+0x14]+5 exactly like the fn66 stub computes (sub_1c61b).
@@ -510,7 +544,128 @@ static int v2_ail_orig_lazy_init() {
     }
     fprintf(stderr, "V2-AIL-ORIG: bridge instance up (blob seg=%04X ds=%04X)\n",
             blob_seg, ds_val);
+    // (#83) publish the sink build parameters — the audio thread constructs
+    // the sink lazily from these on its first pump.
+    v2_ail_sink_publish(base, blob_seg, bank_seg, ds_val);
     return 1;
+}
+
+// ---------------------------------------------------------------------------
+// (#83) SINK — the audible instance. Design: v2_ail_orig_bridge duplicates
+// every bridged call into a SPSC ring (game thread side). The audio callback
+// (v2_nopl_mix → v2_ail_sink_pump) builds the instance on first use, drains
+// the ring with a per-callback budget and runs fn67 ticks on the SAMPLE
+// clock — i.e. the sink lives exactly like the single DOS driver instance
+// (real-time INT8, immediate SFX), while the verify pair stays frame-based
+// and silent. The sink writes its XMID state into a PRIVATE DS copy and its
+// timbre cache into a PRIVATE buffer (map_front windows) — it can never
+// touch the verified worlds.
+// ---------------------------------------------------------------------------
+struct SinkCall { uint16_t off; uint16_t argc; uint16_t args[10]; };
+static const size_t SINK_RING = 2048;
+static SinkCall g_sink_ring[SINK_RING];
+static std::atomic<size_t> g_sink_wr{0}, g_sink_rd{0};
+
+static std::atomic<uint8_t*> g_sink_base{nullptr};
+static std::atomic<uint32_t> g_sink_params{0};   // blob_seg<<16 | ds_val
+static std::atomic<uint16_t> g_sink_bank_seg{0};
+
+extern "C" void v2_ail_sink_publish(uint8_t* base, uint16_t blob_seg,
+                                    uint16_t bank_seg, uint16_t ds_val) {
+    g_sink_bank_seg.store(bank_seg, std::memory_order_relaxed);
+    g_sink_params.store(((uint32_t)blob_seg << 16) | ds_val, std::memory_order_relaxed);
+    g_sink_base.store(base, std::memory_order_release);
+}
+
+// Game-thread side: enqueue one bridged call for the sink. Drop-on-full is
+// loud — a lost start/stop desyncs what the user HEARS (never the verify).
+static void v2_ail_sink_note_call(uint16_t off, const uint16_t* args, int argc) {
+    size_t wr = g_sink_wr.load(std::memory_order_relaxed);
+    size_t nx = (wr + 1) & (SINK_RING - 1);
+    if (nx == g_sink_rd.load(std::memory_order_acquire)) {
+        static uint64_t drops = 0;
+        if ((++drops & (drops - 1)) == 0)
+            fprintf(stderr, "V2-AIL-SINK: call ring FULL — %llu dropped\n",
+                    (unsigned long long)drops);
+        return;
+    }
+    SinkCall& c = g_sink_ring[wr];
+    c.off = off;
+    c.argc = (uint16_t)((argc > 10) ? 10 : argc);
+    for (int i = 0; i < c.argc; i++) c.args[i] = args[i];
+    g_sink_wr.store(nx, std::memory_order_release);
+}
+
+// --- everything below runs on the AUDIO thread only ------------------------
+static bool     g_sink_built = false;
+static uint8_t  g_sink_ds[0x10000];
+static uint8_t  g_sink_cache[sizeof(g_cache)];
+static uint16_t g_sink_fn9a_off = 0;     // resolved after build for the cache hook
+static uint64_t g_sink_ticks = 0;
+static uint64_t g_sink_tick_base = 0;    // sample position of the sink build
+
+static void v2_ail_sink_build(uint64_t pos) {
+    uint8_t* base = g_sink_base.load(std::memory_order_acquire);
+    if (!base) return;
+    uint32_t bp = g_sink_params.load(std::memory_order_relaxed);
+    uint16_t blob_seg = (uint16_t)(bp >> 16), ds_val = (uint16_t)bp;
+    uint16_t bank_seg = g_sink_bank_seg.load(std::memory_order_relaxed);
+    uint8_t* blob = base + ((uint32_t)blob_seg << 4);
+    uint8_t* bank = base + ((uint32_t)bank_seg << 4);
+    v2_ail_sinki_load(blob, 0x10000, bank, 0x10000);
+    v2_ail_sinki_set_io(v2_nopl_sink_out, v2_nopl_sink_in);
+    v2_ail_sinki_set_callback(v2_ail_pit_callback);
+    v2_ail_sinki_map(0, base, 0xA0000);                     // flat arena (reads)
+    memcpy(g_sink_ds, base + ((uint32_t)ds_val << 4), 0x10000);
+    v2_ail_sinki_map_front(ds_val, g_sink_ds, 0x10000);     // private XMID state
+    g_sink_fn9a_off = v2_ail_sinki_fn_lookup(0x9A);
+    g_sink_tick_base = pos;
+    g_sink_ticks = 0;
+    g_sink_built = true;
+    fprintf(stderr, "V2-AIL-SINK: up (blob=%04X ds=%04X bank=%04X)\n",
+            blob_seg, ds_val, bank_seg);
+}
+
+extern "C" void v2_ail_sink_pump(uint64_t pos) {
+    if (!g_sink_built) {
+        if (!g_sink_base.load(std::memory_order_acquire)) return;
+        v2_ail_sink_build(pos);
+        if (!g_sink_built) return;
+    }
+    // 1) drain bridged calls (budget: heavy fns — timbre loads — must not
+    //    starve the sample generator; leftovers run next callback, ~6ms away)
+    int budget = 8;
+    size_t rd = g_sink_rd.load(std::memory_order_relaxed);
+    while (budget-- > 0 && rd != g_sink_wr.load(std::memory_order_acquire)) {
+        SinkCall& c = g_sink_ring[rd];
+        // cache-alloc interception: the duplicated fn9A carries the REAL
+        // heap segment; the sink must write its timbre cache privately.
+        if (g_sink_fn9a_off && c.off == g_sink_fn9a_off && c.argc >= 3)
+            v2_ail_sinki_map_front(c.args[2], g_sink_cache, sizeof(g_sink_cache));
+        v2_ail_sinki_call(c.off, c.args, c.argc);
+        rd = (rd + 1) & (SINK_RING - 1);
+    }
+    g_sink_rd.store(rd, std::memory_order_release);
+    // 2) fn67 ticks on the sample clock (the DOS INT8): due by wall audio
+    //    time since build; same catch-up cap semantics as the V2_ONLY pump.
+    double hz = v2_nopl_get_tick_hz();
+    if (hz <= 0.0) return;
+    double spt = (double)v2_nopl_get_rate() / hz;
+    uint64_t rel = (pos > g_sink_tick_base) ? pos - g_sink_tick_base : 0;
+    uint64_t due = (uint64_t)((double)rel / spt);
+    if (due > g_sink_ticks + 64) {
+        uint64_t excess = due - g_sink_ticks - 64;
+        g_sink_tick_base += (uint64_t)((double)excess * spt);
+        due -= excess;
+    }
+    uint16_t off67 = v2_ail_sinki_fn_lookup(0x67);
+    if (!off67) return;
+    int guard = 0;
+    uint16_t a[1] = { 0 };
+    while (g_sink_ticks < due && guard++ < 96) {
+        v2_ail_sinki_call(off67, a, 1);
+        g_sink_ticks++;
+    }
 }
 
 // The sub_1bec2 bridge: the m2c dispatcher resolved the handler offset via
@@ -528,6 +683,13 @@ extern "C" uint16_t v2_ail_orig_bridge(uint16_t handler_off,
     uint16_t ax = v2_ail_interp_call(handler_off, args, argc);
     g_orig_dx = v2_ail_interp_last_dx();
     v2_ail_interp_unlock();
+    // (#83) mirror the call into the audible sink (audio thread consumes).
+    // HEADLESS has no audio device → no consumer: don't queue (the ring
+    // would only fill up and spam drop warnings).
+#ifndef HEADLESS
+    { extern int v2_fntest_running;
+      if (!v2_fntest_running) v2_ail_sink_note_call(handler_off, args, argc); }
+#endif
     return ax;
 }
 extern "C" uint16_t v2_ail_orig_last_dx() { return g_orig_dx; }

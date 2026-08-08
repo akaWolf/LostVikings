@@ -100,6 +100,16 @@ public:
     bool trace = false;          // V2_AIL_TRACE=1 — per-instruction log
     int  fault = 0;              // non-zero: interpreter hit something unmodeled
     char fault_msg[128] = {0};
+    // (#82) Code paragraph the blob RUNS at. Shadow instance keeps the fake
+    // DRV_PARA + drv_copy arena (its world never dereferences the value).
+    // The REAL instance sets this to the game's actual blob segment ([992C])
+    // so code fetches AND intra-blob data (the fn64 descriptor, the fn65
+    // config writes, the cs:0x2957 callback cell) all resolve through the
+    // flat DOS-arena mapping — the ORIGINAL m2c code then reads the very
+    // same bytes (LES bx,[98E8] with dx=cs=real segment), which is what the
+    // pre-#79 SDL init stubs used to fake. drv_copy stays a dead placeholder
+    // for the real instance.
+    uint16_t code_para = DRV_PARA;
 
     // ------------------------------------------------------------------ setup
     void load(const uint8_t* blob, uint32_t blob_size,
@@ -315,7 +325,7 @@ public:
     static constexpr uint16_t SENTINEL_IP = 0xFFFF;
 
     uint16_t call_fn(uint16_t fn_off, const uint16_t* args, int argc) {
-        r.cs = DRV_PARA; r.ds = DRV_PARA; r.es = DRV_PARA;
+        r.cs = code_para; r.ds = code_para; r.es = code_para;
         r.ss = STACK_PARA; r.sp = (uint16_t)(STACK_SIZE - 2);
         for (int i = argc - 1; i >= 0; i--) push(args[i]);
         push(SENTINEL_CS); push(SENTINEL_IP);   // far return frame
@@ -705,19 +715,19 @@ prefix:
                 case 2: push(r.ip); r.ip = ea_rd16(ea); break;                                     // call near r/m
                 case 3: {                                                                          // call far m
                     // `call far [cs:0x2957]` — the AIL callback escape hatch.
-                    if (!ea.is_reg && ea.off == callback_ptr_off && ea.seg == DRV_PARA) {
+                    if (!ea.is_reg && ea.off == callback_ptr_off && ea.seg == code_para) {
                         if (ail_callback_hook) r.ax = ail_callback_hook();
                         break;
                     }
                     uint16_t off = rd16(ea.seg, ea.off), seg = rd16(ea.seg, (uint16_t)(ea.off + 2));
                     push(r.cs); push(r.ip); r.cs = seg; r.ip = off;
-                    if (seg != DRV_PARA) fail("call far to unmodeled segment %04X:%04X", seg, off);
+                    if (seg != code_para) fail("call far to unmodeled segment %04X:%04X", seg, off);
                     break;
                 }
                 case 4: r.ip = ea_rd16(ea); break;                                                 // jmp near r/m
                 case 5: { uint16_t off = rd16(ea.seg, ea.off), seg = rd16(ea.seg, (uint16_t)(ea.off + 2));
                           r.cs = seg; r.ip = off;
-                          if (seg != DRV_PARA) fail("jmp far to unmodeled segment"); break; }
+                          if (seg != code_para) fail("jmp far to unmodeled segment"); break; }
                 case 6: push(ea_rd16(ea)); break;                                                  // push r/m
                 default: fail("FF /%d unmodeled", ea.reg_field); return;
             }
@@ -783,10 +793,17 @@ extern "C" uint16_t v2_ail_interp_call(uint16_t fn_off, const uint16_t* args, in
     return ret;
 }
 
-// Peek a word inside the working blob copy (diagnostics/verify).
+// Peek a word inside the working blob (diagnostics/verify). Reads through
+// the instance's code paragraph so the REAL instance peeks the arena blob.
 extern "C" uint16_t v2_ail_interp_peek(uint16_t off) {
     if (!g_ail.drv || (uint32_t)off + 1 >= g_ail.drv_size) return 0xDEAD;
-    return (uint16_t)(g_ail.drv[off] | (g_ail.drv[off + 1] << 8));
+    return g_ail.rd16(g_ail.code_para, off);
+}
+
+// (#82) Run the blob at its REAL paragraph (flat-arena resolve for code and
+// intra-blob data) instead of the fake DRV_PARA copy. Real instance only.
+extern "C" void v2_ail_interp_set_code_para(uint16_t para) {
+    g_ail.code_para = para;
 }
 
 // dx of the last call (AIL fns return far values in dx:ax — fn64 returns the
@@ -794,6 +811,62 @@ extern "C" uint16_t v2_ail_interp_peek(uint16_t off) {
 extern "C" uint16_t v2_ail_interp_last_dx() { return g_ail.r.dx; }
 
 extern "C" void v2_ail_interp_set_callback(uint16_t (*cb)()) { g_ail.ail_callback_hook = cb; }
+
+// ---------------------------------------------------------------------------
+// (#83) SINK instance — the audible "speaker" of the default/verify build.
+// A third, verification-free driver instance that mirrors every bridged real
+// call and ticks in the AUDIO callback by the sample clock — i.e. it behaves
+// exactly like the one DOS instance (real-time INT8), while the real+shadow
+// verify pair stays on deterministic frame ticks and never feeds the chip.
+// Audio-thread only after build (queue drain + ticks); no locks needed.
+// ---------------------------------------------------------------------------
+static AilInterp g_sink_i;
+
+extern "C" void v2_ail_sinki_load(const uint8_t* blob, uint32_t bs,
+                                  const uint8_t* bank, uint32_t ks) {
+    g_sink_i.load(blob, bs, bank, ks);
+}
+// Ordinary (append) mapping — used for the flat DOS arena.
+extern "C" void v2_ail_sinki_map(uint16_t para, uint8_t* ptr, uint32_t size) {
+    g_sink_i.map_segment(para, ptr, size);
+}
+// Priority (prepend) mapping — narrow private windows (the DS copy, the
+// cache) that must shadow the flat arena: resolution scans extra[] in
+// order, so the narrow entry has to sit in front of the flat one.
+extern "C" void v2_ail_sinki_map_front(uint16_t para, uint8_t* ptr, uint32_t size) {
+    for (int i = 0; i < g_sink_i.extra_n; i++)
+        if (g_sink_i.extra[i].para == para) { g_sink_i.extra[i] = {para, ptr, size}; return; }
+    if (g_sink_i.extra_n < 8) {
+        for (int i = g_sink_i.extra_n; i > 0; i--) g_sink_i.extra[i] = g_sink_i.extra[i - 1];
+        g_sink_i.extra[0] = {para, ptr, size};
+        g_sink_i.extra_n++;
+    }
+}
+extern "C" void v2_ail_sinki_set_io(void (*out_fn)(uint16_t, uint8_t),
+                                    uint8_t (*in_fn)(uint16_t)) {
+    g_sink_i.out_hook = out_fn;
+    g_sink_i.in_hook = in_fn;
+}
+extern "C" void v2_ail_sinki_set_callback(uint16_t (*cb)()) { g_sink_i.ail_callback_hook = cb; }
+extern "C" uint16_t v2_ail_sinki_call(uint16_t fn_off, const uint16_t* args, int argc) {
+    uint16_t ret = g_sink_i.call_fn(fn_off, args, argc);
+    if (g_sink_i.fault) {
+        fprintf(stderr, "AIL-SINK: fn @%04X faulted: %s\n", fn_off, g_sink_i.fault_msg);
+        g_sink_i.fault = 0;
+    }
+    return ret;
+}
+extern "C" uint16_t v2_ail_sinki_fn_lookup(uint16_t fn_code) {
+    if (!g_sink_i.drv) return 0;
+    uint16_t tab = (uint16_t)(g_sink_i.drv[0] | (g_sink_i.drv[1] << 8));
+    for (uint32_t p = tab; p + 4 <= g_sink_i.drv_size; p += 4) {
+        uint16_t fn  = (uint16_t)(g_sink_i.drv[p]     | (g_sink_i.drv[p + 1] << 8));
+        uint16_t off = (uint16_t)(g_sink_i.drv[p + 2] | (g_sink_i.drv[p + 3] << 8));
+        if (fn == 0xFFFF) break;
+        if (fn == fn_code) return off;
+    }
+    return 0;
+}
 
 extern "C" void v2_ail_interp_map_segment(uint16_t para, uint8_t* ptr, uint32_t size) {
     g_ail.map_segment(para, ptr, size);
