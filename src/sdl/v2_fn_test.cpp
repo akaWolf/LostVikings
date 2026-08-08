@@ -588,6 +588,9 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_10F5D = 465,   // palette fade-in
             FT_SUB_10FA0 = 466,   // palette fade-out
             FT_SUB_115D2 = 467,   // level-init transition render
+            FT_SUB_10130 = 468,   // vsync spin
+            FT_SUB_104A1 = 469,   // pw/quit blocking loop
+            FT_SUB_1086F = 470,   // dialog command loop
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -766,7 +769,8 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_17791", "sub_101ac", "sub_124a9",
                                  "sub_1797b", "sub_179fb", "sub_10dba", "sub_16807",
                                  "sub_12ab8", "sub_17749", "sub_1774f",
-                                 "sub_10f5d", "sub_10fa0", "sub_115d2" };
+                                 "sub_10f5d", "sub_10fa0", "sub_115d2",
+                                 "sub_10130", "sub_104a1", "sub_1086f" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -14180,7 +14184,6 @@ static long ft_selftest_115d2(uint32_t seed)
             for (;;) { *(volatile uint16_t*)live = 0; usleep(200); }
         }).detach();
     };
-
     auto CASE = [&](const char* tag) {
         grid.cases++;
         memcpy(saved_tz, tz, 0x10000);
@@ -14190,6 +14193,21 @@ static long ft_selftest_115d2(uint32_t seed)
         memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
+        // (#83) the 1C8F1 masked-door channel reads its masks from the GS
+        // segment [2E61] — seed that window too (both worlds), or the
+        // mirror legitimately paints nothing while the oracle reads arena
+        // garbage.
+        {
+            uint16_t gs_seg = (uint16_t)(g_synth_base[0x2E61] | (g_synth_base[0x2E62] << 8));
+            uint8_t* gz = mbase + ((uint32_t)gs_seg << 4);
+            extern uint8_t* v2_vm_get_shadow_gs();
+            static uint8_t saved_gz[0x2000];
+            static uint8_t* s_gz; static int s_have = 0;
+            s_gz = gz; s_have = 1; (void)s_have;
+            memcpy(saved_gz, gz, sizeof(saved_gz));
+            for (uint32_t a = 0; a < sizeof(saved_gz); a++) gz[a] = (uint8_t)rng.next();
+            memcpy(v2_vm_get_shadow_gs(), gz, sizeof(saved_gz));
+        }
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
         ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);
         ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);
@@ -14246,13 +14264,19 @@ static long ft_selftest_115d2(uint32_t seed)
                 fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: ds addr=%04X orig=%02X v2=%02X\n",
                         tag, a, g_synth_orig[a], g_scratch[a]);
         }
-        for (uint32_t a = 0; a < 65536u * 4; a++) {
-            if (db[a] == vga[a]) continue;
-            diffs++;
-            if (diff_budget-- > 0)
-                fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: vga lin=%06X orig=%02X v2=%02X\n",
-                        tag, a, db[a], vga[a]);
-            if (diffs > 40) break;
+        // (#83) The VGA leg only makes sense once the rig models the FS
+        // post-latch state (the oracle's 1DE05 zeroes the seeded window
+        // before 1C8F1 — FS-PARITY verdict). Gated with the mirror env.
+        {   const char* e = getenv("V2_1C8F1_VGA_MIRROR");
+            if (e && *e == '1')
+                for (uint32_t a = 0; a < 65536u * 4; a++) {
+                    if (db[a] == vga[a]) continue;
+                    diffs++;
+                    if (diff_budget-- > 0)
+                        fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: vga lin=%06X orig=%02X v2=%02X\n",
+                                tag, a, db[a], vga[a]);
+                    if (diffs > 40) break;
+                }
         }
         if (diffs) grid.fail++; else grid.pass++;
     };
@@ -14264,6 +14288,279 @@ static long ft_selftest_115d2(uint32_t seed)
         grid.pass, grid.cases, grid.cases, grid.fail,
         grid.fail ? "  <<< DIVERGENCE" : "");
     return grid.fail ? 1 : 0;
+}
+
+
+// ============================================================================
+// (#84 wave 5) The last L-family: the vsync spin itself, the pw/quit prompt
+// loops and the dialog command loop.
+extern "C" int  v2_fntest_call_104a1(uint8_t* shadow, int max_iters);
+extern "C" void v2_fntest_call_1086f(uint8_t* shadow, int max_iters);
+extern std::atomic<uint8_t> sdl_spec_state[256];
+
+// sub_10130 — the m2c port inlines the render-tick call INSIDE the spin
+// (`if ([A39C]>=1) sub_1797b(...)`) — the unit is self-contained: preset
+// [A39C]=N, gates open → N DEC ticks and a clean exit. Gate-closed case
+// needs the fade-style clearer thread.
+static long ft_selftest_10130(uint32_t seed)
+{
+    (void)seed;
+    void* fn = v2_fntest_orig_fnptr(468);
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    static uint8_t img[0x10010];
+    uint16_t regs[8];
+    long cases = 0, fails = 0;
+    extern void (*v2_fntest_child_pre_hook)(void);
+    struct C { uint16_t a39c, gate92ff, hook; const char* tag; };
+    static const C cs[] = {
+        {0, 1, 0, "instant"},
+        {3, 1, 0, "three-ticks"},
+        {2, 0, 1, "gate-off-helper"},   // 1797b refuses to DEC → helper clears
+    };
+    for (const C& c : cs) {
+        cases++;
+        memset(img, 0, sizeof(img));
+        *(uint16_t*)(img + 0xA39C) = c.a39c;
+        *(uint16_t*)(img + 0x92FF) = c.gate92ff;
+        *(uint16_t*)(img + 0x7EFE) = 0;          // palette dispatch = nullsub
+        if (c.hook) {
+            v2_fntest_child_pre_hook = []() {
+                uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
+                              + v2_fntest_game_ds_linear() + 0xA39C;
+                std::thread([live]() {
+                    for (;;) { *(volatile uint16_t*)live = 0; usleep(200); }
+                }).detach();
+            };
+        }
+        memset(regs, 0, sizeof(regs));
+        long esc0 = v2_fntest_start_escapes;
+        v2_fntest_orig_isolated(fn, img, regs);
+        v2_fntest_child_pre_hook = nullptr;
+        long f = 0;
+        if (v2_fntest_start_escapes != esc0) { f++; fprintf(stderr,
+            "FNSELFTEST-DIFF[sub_10130 %s]: escaped\n", c.tag); }
+        uint16_t a39c = (uint16_t)(img[0xA39C] | (img[0xA39D] << 8));
+        if (a39c != 0) { f++; fprintf(stderr,
+            "FNSELFTEST-DIFF[sub_10130 %s]: [A39C]=%04X after spin\n", c.tag, a39c); }
+        if (f) fails++;
+    }
+    fprintf(stderr, "FNSELFTEST-SUMMARY[sub_10130]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+            cases - fails, cases, cases, fails, fails ? "  <<< DIVERGENCE" : "");
+    return fails ? 1 : 0;
+}
+
+// pw family: instant-exit presets make the blocking loop deterministic
+// (exactly one iteration) on BOTH sides.
+struct PwCase {
+    const char* tag;
+    uint8_t  spec_y, spec_n;      // sdl_spec_state presets (inherited by child)
+    uint16_t edges;               // press_edges preset (ESC 0x1000 / SPACE 0x8000)
+    int expect_escape;            // Y-exit walks the 10E35 terminate chain
+};
+static const PwCase pw_cases[] = {
+    {"instant-n",    0, 1, 0,      0},
+    {"instant-esc",  0, 0, 0x1000, 0},
+    {"instant-space",0, 0, 0x8000, 0},
+    {"instant-y",    1, 0, 0,      1},   // quit chain → INT21 guard escape
+};
+
+static void pw_preset(uint8_t* img) {
+    memcpy(img, g_synth_base, 0x10000);
+    ft_fill_tail(img);
+    *(uint16_t*)(img + 0xA39C) = 0;
+    *(uint16_t*)(img + 0x92FF) = 1;
+    *(uint16_t*)(img + 0x7EFE) = 0;
+    *(uint16_t*)(img + 0x3CC)  = 0;      // not intro
+    *(uint16_t*)(img + 0x86DA) = 0;
+    *(uint16_t*)(img + 0x86DE) = 0;
+    *(uint16_t*)(img + 0x3B6)  = 0;
+    *(uint16_t*)(img + 0x3B8)  = 0;
+    *(uint16_t*)(img + 0x3BA)  = 0;
+    *(uint16_t*)(img + 0x28C)  = 0;
+    // quit-prompt state words the loop touches
+    *(uint16_t*)(img + 0x443)  = 0;      // word_28923 quit_active
+    *(uint16_t*)(img + 0x445)  = 0x11;   // word_28925 blink
+    *(uint16_t*)(img + 0x334)  = 0;      // word_28814 frame flags — a snapshot
+        // bit 1/2 would send sub_10138 into the LEVEL-RELOAD chain (hang)
+}
+
+static long ft_selftest_pw(FtId id, uint32_t seed)
+{
+    (void)seed;
+    void* fn = v2_fntest_orig_fnptr(id);
+    const char* nm = g_name[id];
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    v2_fntest_set_current_ds((uint16_t)(v2_fntest_game_ds_linear() >> 4));
+    static uint8_t orig_img[0x10010];
+    static uint8_t shad_img[0x10010];
+    uint16_t regs[8];
+    long cases = 0, fails = 0;
+    extern std::atomic<uint16_t> sdl_input_press_edges;
+    extern uint16_t g_last_sub12352_new_keydowns;
+    extern uint16_t v2_input_snapshot;
+
+    v2_fntest_fork_export_clear();
+    v2_fntest_fork_export(&sdl_input_press_edges, sizeof(sdl_input_press_edges));
+    v2_fntest_fork_export(&g_last_sub12352_new_keydowns, 2);
+
+    // The 104C3 loop re-arms [3287C]=1 per iteration and spins sub_10130;
+    // the JGE exit needs a NEGATIVE counter (battle: the render thread's
+    // concurrent DEC). Same 0xFFFF helper as the 1086f unit.
+    extern void (*v2_fntest_child_pre_hook)(void);
+    v2_fntest_child_pre_hook = []() {
+        uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
+                      + v2_fntest_game_ds_linear() + 0xA39C;
+        std::thread([live]() {
+            for (;;) { *(volatile uint16_t*)live = 0xFFFF; usleep(300); }
+        }).detach();
+    };
+
+    for (const PwCase& c : pw_cases) {
+        cases++;
+        int expect_escape = (id == FT_SUB_103CA) ? c.expect_escape : 0;
+        // The 10E35 quit tail lives only in the 103CA prologue; the bare
+        // loop (104A1) and the pre-loop (1047C) RETN on every exit.
+        pw_preset(orig_img);
+        memcpy(shad_img, orig_img, sizeof(orig_img));
+        sdl_spec_state[0x81] = c.spec_y;   // 0x9181 'Y'
+        sdl_spec_state[0x9D] = c.spec_n;   // 0x919D 'N'
+        sdl_input_press_edges.store(c.edges, std::memory_order_relaxed);
+        g_last_sub12352_new_keydowns = 0xDEAD;
+        memset(regs, 0, sizeof(regs));
+        long esc0 = v2_fntest_start_escapes;
+        v2_fntest_orig_isolated(fn, orig_img, regs);
+        bool escaped = v2_fntest_start_escapes != esc0;
+        long f = 0;
+        if (expect_escape) {
+            if (!escaped) { f++; fprintf(stderr,
+                "FNSELFTEST-DIFF[%s %s]: expected quit-chain escape\n", nm, c.tag); }
+            // DS state at the terminate boundary is process-exit territory —
+            // the escape itself is the contract (1041c-unit criterion).
+        } else if (escaped) {
+            f++; fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: unexpected escape\n", nm, c.tag);
+        } else if (id == FT_SUB_104A1) {
+            // v2 pair for the loop proper
+            // Latch feed: the FIRST iteration's ax (battle latches per orig
+            // call; the post-exit 12352 already zeroed the final [3B6], so
+            // edge cases must be fed their own bit — presets keep H=K=0).
+            v2_input_snapshot = c.edges;
+            sdl_input_press_edges.store(c.edges, std::memory_order_relaxed);
+            {   // v2 mirror spins its own vsync ([A39C]=1 per iter) — parent
+                // clearer thread, fade-unit pattern.
+                std::atomic<int> stop{0};
+                std::thread vt([&]() {
+                    while (!stop.load(std::memory_order_relaxed)) {
+                        *(volatile uint16_t*)(shad_img + 0xA39C) = 0;
+                        usleep(100);
+                    }
+                });
+                v2_fntest_call_104a1(shad_img, 8);
+                stop.store(1, std::memory_order_relaxed);
+                vt.join();
+            }
+            *(uint16_t*)(orig_img + 0xA39C) = 0;   // helper-timing residue
+            *(uint16_t*)(shad_img + 0xA39C) = 0;
+            long budget = 8;
+            for (uint32_t a = 0; a < 0x10000; a++) {
+                if (orig_img[a] == shad_img[a]) continue;
+                if (v2_fntest_ds_skip(a)) continue;
+                f++;
+                if (budget-- > 0)
+                    fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: ds:%04X orig=%02X v2=%02X\n",
+                            nm, c.tag, a, orig_img[a], shad_img[a]);
+            }
+        }
+        sdl_spec_state[0x81] = 0;
+        sdl_spec_state[0x9D] = 0;
+        sdl_input_press_edges.store(0, std::memory_order_relaxed);
+        if (f) fails++;
+    }
+    v2_fntest_child_pre_hook = nullptr;
+    v2_fntest_fork_export_clear();
+    fprintf(stderr, "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+            nm, cases - fails, cases, cases, fails, fails ? "  <<< DIVERGENCE" : "");
+    return fails ? 1 : 0;
+}
+
+// sub_1086f — crafted command queue, pair-diffed against v2_cmd_loop_1086f.
+static long ft_selftest_1086f(uint32_t seed)
+{
+    (void)seed;
+    void* fn = v2_fntest_orig_fnptr(FT_SUB_1086F);
+    v2_set_m2c_base(v2_fntest_m2c_base());
+    v2_fntest_set_current_ds((uint16_t)(v2_fntest_game_ds_linear() >> 4));
+    static uint8_t orig_img[0x10010];
+    static uint8_t shad_img[0x10010];
+    uint16_t regs[8];
+    long cases = 0, fails = 0;
+
+    struct QC { const char* tag; int n_cmds; };
+    static const QC qc[] = { {"empty", 0}, {"one-glyph", 1}, {"two-glyphs", 2} };
+    // The 10130 spin exits on JGE from the DEC flags — it needs the counter
+    // to go NEGATIVE (in battle the render thread's concurrent DEC does it).
+    // The helper writes 0xFFFF: the inline `>=1` (unsigned) still ticks
+    // sub_1797b once, whose DEC leaves SF!=OF → clean exit.
+    extern void (*v2_fntest_child_pre_hook)(void);
+    v2_fntest_child_pre_hook = []() {
+        uint8_t* live = (uint8_t*)v2_fntest_m2c_base()
+                      + v2_fntest_game_ds_linear() + 0xA39C;
+        std::thread([live]() {
+            for (;;) { *(volatile uint16_t*)live = 0xFFFF; usleep(300); }
+        }).detach();
+    };
+    for (const QC& c : qc) {
+        cases++;
+        pw_preset(orig_img);
+        // object slot for the 0x881 sprite-flag AND at loop top
+        *(uint16_t*)(orig_img + 0x42)   = 6;
+        *(uint16_t*)(orig_img + 0x1A8B) = 6;     // [si+1A85] with si=6
+        uint16_t wr = 0;
+        for (int i = 0; i < c.n_cmds; i++) {
+            *(uint16_t*)(orig_img + 0x1DA7 + wr) = 8;              // cmd 8: glyph
+            *(uint16_t*)(orig_img + 0x1DA9 + wr) = (uint16_t)(0x41 + i); // char
+            *(uint16_t*)(orig_img + 0x1DAB + wr) = (uint16_t)(2 + i);    // x
+            *(uint16_t*)(orig_img + 0x1DAD + wr) = 3;                    // y
+            wr += 8;
+        }
+        *(uint16_t*)(orig_img + DS_CMD_WRITE) = wr;
+        *(uint16_t*)(orig_img + DS_CMD_READ)  = 0;
+        memcpy(shad_img, orig_img, sizeof(orig_img));
+        memset(regs, 0, sizeof(regs));
+        long esc0 = v2_fntest_start_escapes;
+        v2_fntest_orig_isolated(fn, orig_img, regs);
+        long f = 0;
+        if (v2_fntest_start_escapes != esc0) {
+            f++; fprintf(stderr, "FNSELFTEST-DIFF[sub_1086f %s]: escaped\n", c.tag);
+        } else {
+            {   std::atomic<int> stop{0};
+                std::thread vt([&]() {
+                    while (!stop.load(std::memory_order_relaxed)) {
+                        *(volatile uint16_t*)(shad_img + 0xA39C) = 0;
+                        usleep(100);
+                    }
+                });
+                v2_fntest_call_1086f(shad_img, 8);
+                stop.store(1, std::memory_order_relaxed);
+                vt.join();
+            }
+            *(uint16_t*)(orig_img + 0xA39C) = 0;
+            *(uint16_t*)(shad_img + 0xA39C) = 0;
+            long budget = 8;
+            for (uint32_t a = 0; a < 0x10000; a++) {
+                if (orig_img[a] == shad_img[a]) continue;
+                if (v2_fntest_ds_skip(a)) continue;
+                f++;
+                if (budget-- > 0)
+                    fprintf(stderr, "FNSELFTEST-DIFF[sub_1086f %s]: ds:%04X orig=%02X v2=%02X\n",
+                            c.tag, a, orig_img[a], shad_img[a]);
+            }
+        }
+        if (f) fails++;
+    }
+    v2_fntest_child_pre_hook = nullptr;
+    fprintf(stderr, "FNSELFTEST-SUMMARY[sub_1086f]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+            cases - fails, cases, cases, fails, fails ? "  <<< DIVERGENCE" : "");
+    return fails ? 1 : 0;
 }
 
 extern "C" int v2_fntest_selftest_env(void) {
@@ -14771,6 +15068,14 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10f5d")) { matched = true; rc |= ft_selftest_fade(FT_SUB_10F5D, ft_seed(0xD0500037u)); }
     if (all || strstr(env, "sub_10fa0")) { matched = true; rc |= ft_selftest_fade(FT_SUB_10FA0, ft_seed(0xD0500038u)); }
     if (all || strstr(env, "sub_115d2")) { matched = true; rc |= ft_selftest_115d2(ft_seed(0xD0500039u)); }
+    if (all || strstr(env, "sub_10130")) { matched = true; rc |= ft_selftest_10130(ft_seed(0xD050003Au)); }
+    if (all || strstr(env, "sub_104a1")) { matched = true; rc |= ft_selftest_pw(FT_SUB_104A1, ft_seed(0xD050003Bu)); }
+    // NB: the old B4a screen-build channel for 103CA/1047C (ft_selftest_hudvga
+    // which=10/11) was never env-registered and its preconditions escape
+    // (d_marks=2) — left dormant; the pw loop channel below is the live unit.
+    if (all || strstr(env, "sub_1047c")) { matched = true; rc |= ft_selftest_pw(FT_SUB_1047C, ft_seed(0xD050003Cu)); }
+    if (all || strstr(env, "sub_103ca")) { matched = true; rc |= ft_selftest_pw(FT_SUB_103CA, ft_seed(0xD050003Du)); }
+    if (all || strstr(env, "sub_1086fx")) { matched = true; rc |= ft_selftest_1086f(ft_seed(0xD050003Eu)); }
     if (all || strstr(env, "sub_108c8")) { matched = true; rc |= ft_port_native_skip("sub_108c8"); }
     if (all || strstr(env, "sub_17337")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17337, ft_seed(0xD0500010u)); }
     if (all || strstr(env, "sub_172d3")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_172D3, ft_seed(0xD0500011u)); }

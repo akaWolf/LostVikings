@@ -333,6 +333,9 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 465: return (void*)&sub_10f5d;         // palette fade-in (0x47 vsync steps)
     case 466: return (void*)&sub_10fa0;         // palette fade-out (0x46 vsync steps)
     case 467: return (void*)&sub_115d2;         // level-init transition render (VM + 4 subframes)
+    case 468: return (void*)&sub_10130;         // vsync spin (inline 1797b tick model)
+    case 469: return (void*)&sub_104a1;         // pw/quit prompt blocking loop
+    case 470: return (void*)&sub_1086f;         // dialog command loop
     case 343: return (void*)&sub_15f2c;         // op2C partner-scan (direct, no dispatcher)
     default: return 0;
     }

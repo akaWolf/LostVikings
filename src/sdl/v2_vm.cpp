@@ -2529,6 +2529,48 @@ extern "C" void v2_fntest_call_115d2(uint8_t* shadow) {
     v2_level_init_render_115d2(shadow);
 #endif
 }
+// (#84 wave 5) pw-family pair: bare-entry + (input-iter + pw-iter)* + post.
+static void v2_pw_pre_loop(uint8_t* shadow);
+extern bool v2_pw_did_save_1450b;   // defined near the pw helpers below
+static bool v2_pw_iter_body(uint8_t* shadow);
+static void v2_pw_post_loop(uint8_t* shadow);
+extern "C" int v2_fntest_call_104a1(uint8_t* shadow, int max_iters) {
+    // BARE sub_104a1 entry (eip 0x4A1-0x4C0): blink=0x11, quit_active=1,
+    // glyph-dirty=1, DAC color 3 = white (0x3F triplet). The full prelude
+    // (1450b save + QUIT? prints) belongs to the 1047C/103CA callers —
+    // v2_pw_pre_loop mirrors THAT and is not part of this pair.
+    v2gs(shadow).quit_blink(0x11);          // word_28925
+    v2gs(shadow).quit_active_ref() = 1;     // word_28923
+    v2gs(shadow).glyph_dirty_b(1);          // byte_31A4B
+    // DAC color 3 = white: OUT-only in the orig entry (no DS bytes; the
+    // [7F0B]-mirror writes belong to the 1041C/10389 callers).
+    v2_dac_shadow[9] = 0x3F; v2_dac_shadow[10] = 0x3F; v2_dac_shadow[11] = 0x3F;
+    v2_pw_did_save_1450b = false;           // post-loop 14590 tail gated off
+    int it = 0;
+    while (it++ < max_iters) {
+        v2_read_input_12352_iter(shadow);
+        if (v2_pw_iter_body(shadow)) break;
+    }
+    // orig exit path (eip 0x4F1): one more sub_12352 — the edge killer.
+    // Post-exit the key is gone, so the latch feed for this call is 0.
+    { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
+    { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
+    v2_read_input_12352_iter(shadow);
+    v2_pw_post_loop(shadow);
+    return it;
+}
+static void v2_cmd_loop_1086f(uint8_t* shadow);
+extern "C" void v2_fntest_call_1086f(uint8_t* shadow, int max_iters) {
+    // battle handler processes ONE cmd (or the empty-tail) per signal —
+    // loop it the way the orig loop spins. Empty tail resets both cursors
+    // to 0, so "processed the tail" == read==write afterwards.
+    for (int i = 0; i < max_iters; i++) {
+        bool was_empty = *(uint16_t*)(shadow + DS_CMD_READ)
+                      == *(uint16_t*)(shadow + DS_CMD_WRITE);
+        v2_cmd_loop_1086f(shadow);
+        if (was_empty) break;
+    }
+}
 extern "C" void v2_fntest_call_fade(uint8_t* shadow, int fade_in) {
     if (fade_in) v2_pal_fade_in_10f5d(shadow);
     else         v2_pal_fade_seq_10fa0(shadow);
@@ -3159,6 +3201,70 @@ static void v2_vga_tile_1689E(uint8_t* s, uint16_t tile_word, uint16_t di_vga) {
         }
     }
 }
+// (#83) shadow-VGA mirror of seg003 sub_1C8F1's DRAW half. The orig scans
+// the visible 25x43 FS window; a word with bit0 (dirty request) gets bit0
+// cleared (the DS/FS side of that lives in v2_dirty_tile_scan_1C8F1), and
+// if bit3 (door/masked visible) is ALSO set the tile is repainted through
+// the masked jpt_1c9b1 engine onto the SHOWN page ([92F9] row LUT
+// [-0x7608] + (col*2+8)&0xFFFE). This mirror reads the FRESH flags, so it
+// must run BEFORE the clearing scan — exactly like the orig draw happens
+// inside the same pass that clears. Geometry line-verified against seg003
+// 0E25:00C1-0x14D; pixel math shared with v2_render_tile_masked.
+static void v2_vga_flagged_1C8F1(uint8_t* s) {
+    // (#83 WIP gate) The mirror's geometry is line-derived but the unit
+    // still shows an asymmetric diff (v2 paints where the oracle does not
+    // on seeded FS/GS) — root not yet closed (suspect: pre-1C8F1 FS flag
+    // mutations by the 1DE05/1DD9C chain diverging on synthetic worlds).
+    // Default OFF until the unit closes; V2_1C8F1_VGA_MIRROR=1 enables.
+    {   static int en = -1;
+        if (en < 0) { const char* e = getenv("V2_1C8F1_VGA_MIRROR"); en = (e && *e=='1') ? 1 : 0; }
+        if (!en) return;
+    }
+    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+    uint16_t row0 = v2gs(s).scroll_row();          // ds:2581
+    uint16_t col0 = v2gs(s).scroll_col();          // ds:257F
+    uint16_t di_fs = *(uint16_t*)(s + (uint16_t)(row0 * 2 - LUT_ROW_BASE));
+    di_fs = (uint16_t)((uint16_t)(di_fs + col0) * 2);
+    uint16_t bp_step = (uint16_t)(*(uint16_t*)(s + DS_MAP_BP) * 4 - 0x56); // [25DC]*4-0x56
+    uint8_t* tgfx = v2_vm_get_shadow_tilegfx();
+    uint8_t* gsb  = v2_vm_get_shadow_gs();
+    if (!tgfx || !gsb) return;
+    uint16_t page = *(uint16_t*)(s + DS_PAGE_SHOWN);               // ds:92F9
+    for (int r = 0; r < 0x19; r++) {
+        for (int c = 0; c < 0x2B; c++) {
+            uint16_t mo = di_fs;
+            di_fs = (uint16_t)(di_fs + 2);
+            uint16_t tw = (mo < V2_FS_SHADOW_SIZE - 1)
+                        ? *(uint16_t*)(v2_vm_shadow_fs + mo) : 0;
+            if (!(tw & 1) || !(tw & 8)) continue;   // orig: TEST 9/TEST 1 gates + TEST 8 draw
+            // VGA destination: row LUT via the SHOWN page (0E25:0118-0x137)
+            uint16_t lrow = (uint16_t)((uint16_t)(r + row0) * 2 + page);
+            uint16_t di_vga = *(uint16_t*)(s + (uint16_t)(lrow - 0x7608));
+            uint16_t colb = (uint16_t)((((uint16_t)(c + col0) * 2) + 8) & 0xFFFE);
+            di_vga = (uint16_t)(di_vga + colb);
+            uint16_t off = (uint16_t)(tw & 0xFFC0);
+            bool hflip = (tw & 0x10) != 0, vflip = (tw & 0x20) != 0;
+            const uint8_t* tile = tgfx + off;
+            const uint8_t* mask = gsb + (off >> 3);
+            for (int ty = 0; ty < 8; ty++) {
+                int sy = vflip ? 7 - ty : ty;
+                for (int tx = 0; tx < 8; tx++) {
+                    int sx = hflip ? 7 - tx : tx;
+                    int plane = tx & 3, byte_idx = tx >> 2;
+                    int strip = ty >> 2, row = ty & 3;
+                    int mb = plane * 2 + strip;
+                    int mbit = 7 - (row * 2 + byte_idx);
+                    if (!(mask[mb] & (1 << mbit))) continue;
+                    uint8_t color = tile[plane * 16 + strip * 8 + row * 2 + byte_idx];
+                    uint32_t addr = (uint32_t)(uint16_t)(di_vga + sy * 0x56 + (sx >> 2));
+                    v2_vga_glyph_px(addr, (uint32_t)(sx & 3), color);
+                }
+            }
+        }
+        di_fs = (uint16_t)(di_fs + bp_step);
+    }
+}
+
 static void v2_tile_row_16dc1(uint8_t* s, uint16_t bx_fs, uint16_t /*unused*/) {
     // Verified with seg000 lines 14410-14428 (eip 0x6DC1..0x6DD8).
     // PUSH bx, cx, di; MOV cx, 0x2B;
@@ -6807,6 +6913,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    // (#83) plus the shadow-VGA mirror of the orig draw half.
+    v2_vga_flagged_1C8F1(s);
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6836,6 +6944,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    // (#83) plus the shadow-VGA mirror of the orig draw half.
+    v2_vga_flagged_1C8F1(s);
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6878,6 +6988,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    // (#83) plus the shadow-VGA mirror of the orig draw half.
+    v2_vga_flagged_1C8F1(s);
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6900,6 +7012,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
+    // (#83) plus the shadow-VGA mirror of the orig draw half.
+    v2_vga_flagged_1C8F1(s);
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -20559,7 +20673,7 @@ static bool v2_pw_last_exit_valid = false;
 // called v2_save_game_1450b (sets shadow[0x342/343/344]=8). When true, v2_pw_post_loop
 // must mirror orig's JMP sub_14590 cleanup at end-of-flow (clears those bytes
 // + re-runs palette transform).
-static bool v2_pw_did_save_1450b = false;
+bool v2_pw_did_save_1450b = false;   // non-static: the wave-5 bare-entry wrapper gates it
 
 // Step 2: PRE-LOOP setup. Mirrors orig's pre-sub_104a1 setup, choosing
 // between sub_1047c (ESC path, ax=2) and sub_103ca (F10/ALT+X/ALT+Q path,
