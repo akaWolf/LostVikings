@@ -64,6 +64,11 @@ extern "C" void     v2_ail_sinki_set_callback(uint16_t (*)());
 extern "C" uint16_t v2_ail_sinki_call(uint16_t, const uint16_t*, int);
 extern "C" uint16_t v2_ail_sinki_fn_lookup(uint16_t);
 extern "C" void     v2_ail_sink_publish(uint8_t*, uint16_t, uint16_t, uint16_t);
+extern "C" uint16_t v2_ail_fn_lookup(uint16_t);
+extern "C" int      v2_ail_interp_current(void);
+#ifdef HEADLESS
+void headless_dump_divergence(const char*, int, const char*);  // C++ linkage
+#endif
 extern "C" void     v2_nopl_sink_out(uint16_t, uint8_t);
 extern "C" uint8_t  v2_nopl_sink_in(uint16_t);
 extern "C" double   v2_nopl_get_tick_hz(void);
@@ -126,25 +131,48 @@ struct SilentOpl {
     uint8_t mixer_idx = 0;
     uint8_t mixer[256] = {0};
 };
-static SilentOpl g_silent;
+// (#85) per-instance silent state: both worlds run on silent IO now (the
+// audible path is the sink) — a SHARED latch would let one world's index
+// write leak into the other's data write. Indexed by the interp cursor.
+static SilentOpl g_silent[2];
+// (#85) verify channels, reset+compared at the FRAME_BEGIN barrier:
+//  - OPL stream hash/count per world: FNV over every (port,val) the driver
+//    would have sent to the chip. Catches timing-sensitive register traffic
+//    whose DS footprint cancels out.
+//  - AIL call parity per handler offset (same ADV blob in both worlds →
+//    offsets are directly comparable): real increments in the bridge,
+//    shadow in sh_call, fn67 ticks on both legs of v2_ail_tick.
+static uint32_t g_oplhash[2] = {0x811C9DC5u, 0x811C9DC5u};
+static uint32_t g_oplcnt[2] = {0, 0};
+#define AILPAR_SLOTS 0x4000
+static uint32_t g_ailpar[2][AILPAR_SLOTS];
+static inline void v2_ailpar_note(int world, uint16_t off) {
+    if (off < AILPAR_SLOTS) g_ailpar[world][off]++;
+}
 static void silent_out(uint16_t port, uint8_t val) {
+    int w = v2_ail_interp_current() ? 1 : 0;
+    g_oplhash[w] = (g_oplhash[w] ^ port) * 16777619u;
+    g_oplhash[w] = (g_oplhash[w] ^ val) * 16777619u;
+    g_oplcnt[w]++;
+    SilentOpl& s = g_silent[w];
     if (port >= 0x220 && port <= 0x223) {
         int b = (port - 0x220) >> 1;
-        if ((port & 1) == 0) g_silent.idx[b] = val;
-        else g_silent.regs[b][g_silent.idx[b]] = val;
+        if ((port & 1) == 0) s.idx[b] = val;
+        else s.regs[b][s.idx[b]] = val;
         return;
     }
-    if (port == 0x224) { g_silent.mixer_idx = val; return; }
-    if (port == 0x225) { g_silent.mixer[g_silent.mixer_idx] = val; return; }
+    if (port == 0x224) { s.mixer_idx = val; return; }
+    if (port == 0x225) { s.mixer[s.mixer_idx] = val; return; }
 }
 static uint8_t silent_in(uint16_t port) {
+    SilentOpl& s = g_silent[v2_ail_interp_current() ? 1 : 0];
     if (port >= 0x220 && port <= 0x223) {
-        uint8_t ctl = g_silent.regs[0][4];
+        uint8_t ctl = s.regs[0][4];
         if (ctl & 0x80) return 0x00;
         if (ctl & 0x01) return 0xC0 | 0x40;
         return 0x00;
     }
-    if (port == 0x225) return g_silent.mixer[g_silent.mixer_idx];
+    if (port == 0x225) return s.mixer[s.mixer_idx];
     return 0xFF;
 }
 
@@ -152,6 +180,7 @@ static uint8_t silent_in(uint16_t port) {
 static uint16_t sh_call(uint16_t fn_code, const uint16_t* args, int argc) {
     v2_ail_interp_lock();
     v2_ail_interp_use(0);
+    v2_ailpar_note(0, v2_ail_fn_lookup(fn_code));   // (#85) call parity, shadow leg
     uint16_t ax = v2_ail_call_fn_code(fn_code, args, argc);
     v2_ail_interp_unlock();
     return ax;
@@ -406,8 +435,11 @@ extern "C" void v2_ail_seq_stop_slot(uint8_t* s, uint16_t si) {
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_music_fade(uint8_t* s) {
     if (!g_booted) return;
+    // (#85 call-parity catch) NO handle gate: orig sub_178f1 tests only
+    // [302] and always issues fnB1 with [990C] as-is — a stopped-music
+    // transition passes handle 0xFFFF and the driver no-ops it itself.
+    // The old `handle==FFFF return` here broke per-frame call parity.
     uint16_t handle = rdw(s, (uint16_t)(0 - 0x66F4));   // [990C] (si=0 family)
-    if (handle == 0xFFFF) return;
     uint16_t a[4] = { rdw(s, DS_98E6_DRV), handle, 0, 0x3E8 };
     sh_call(0xB1, a, 4);    // sub_1C7BD
 }
@@ -680,6 +712,7 @@ extern "C" uint16_t v2_ail_orig_bridge(uint16_t handler_off,
     v2_ail_interp_lock();
     if (!v2_ail_orig_lazy_init()) { v2_ail_interp_unlock(); return 0; }
     v2_ail_interp_use(1);
+    v2_ailpar_note(1, handler_off);                 // (#85) call parity, real leg
     uint16_t ax = v2_ail_interp_call(handler_off, args, argc);
     g_orig_dx = v2_ail_interp_last_dx();
     v2_ail_interp_unlock();
@@ -702,13 +735,72 @@ extern "C" uint16_t v2_ail_orig_last_dx() { return g_orig_dx; }
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_tick() {
     uint16_t a[1] = { 0 };
-    if (g_booted) sh_call(0x67, a, 1);
+    if (g_booted) sh_call(0x67, a, 1);              // parity noted inside
     if (g_orig_inited) {
         v2_ail_interp_lock();
         v2_ail_interp_use(1);
+        v2_ailpar_note(1, v2_ail_fn_lookup(0x67));  // (#85) real tick leg
         v2_ail_call_fn_code(0x67, a, 1);
         v2_ail_interp_unlock();
     }
 }
 
 extern "C" int v2_ail_booted() { return (g_booted || g_orig_inited) ? 1 : 0; }
+
+// ---------------------------------------------------------------------------
+// (#85) FRAME_BEGIN barrier verify: AIL call parity + OPL stream parity.
+// Called from v2_phase_frame_begin (v2 thread; the orig thread is parked on
+// the signal, so both worlds' counters are quiescent). Any mismatch is a
+// divergence: same fatality path as the DS verify in headless.
+// ---------------------------------------------------------------------------
+extern "C" void v2_ail_parity_verify(int frame) {
+#ifdef V2_ONLY
+    (void)frame;    // single world — nothing to compare
+#else
+    extern int v2_fntest_running;
+    if (v2_fntest_running) return;
+    static bool boot_frame_skipped = false;
+    if (!(g_booted && g_orig_inited)) {   // pre-boot frames: both silent
+        // still reset so a lone early call can't linger into the booted era
+        memset(g_ailpar, 0, sizeof(g_ailpar));
+        g_oplhash[0] = g_oplhash[1] = 0x811C9DC5u;
+        g_oplcnt[0] = g_oplcnt[1] = 0;
+        return;
+    }
+    if (!boot_frame_skipped) {
+        // The boot frame itself is legitimately asymmetric: the real world
+        // boots through the FULL seg002 wrappers (install/describe with
+        // their service query at blob off 27C8), while the shadow boot is
+        // the exact 17561-TAIL model (fn calls only). Parity is a strict
+        // per-frame contract from the first post-boot frame on.
+        boot_frame_skipped = true;
+        memset(g_ailpar, 0, sizeof(g_ailpar));
+        g_oplhash[0] = g_oplhash[1] = 0x811C9DC5u;
+        g_oplcnt[0] = g_oplcnt[1] = 0;
+        return;
+    }
+    long bad = 0;
+    for (int off = 0; off < AILPAR_SLOTS; off++) {
+        if (g_ailpar[0][off] == g_ailpar[1][off]) continue;
+        if (bad < 8)
+            fprintf(stderr, "V2-AILPAR-DIVERGE[f%d]: off=%04X shadow=%u real=%u\n",
+                    frame, off, g_ailpar[0][off], g_ailpar[1][off]);
+        bad++;
+    }
+    bool oplbad = (g_oplhash[0] != g_oplhash[1]) || (g_oplcnt[0] != g_oplcnt[1]);
+    if (oplbad)
+        fprintf(stderr, "V2-OPLSTREAM-DIVERGE[f%d]: shadow=%08X/%u real=%08X/%u\n",
+                frame, g_oplhash[0], g_oplcnt[0], g_oplhash[1], g_oplcnt[1]);
+    if (bad || oplbad) {
+#ifdef HEADLESS
+        char buf[96];
+        snprintf(buf, sizeof(buf), "ail parity: %ld call slots, opl %s", bad,
+                 oplbad ? "hash/count mismatch" : "ok");
+        headless_dump_divergence(bad ? "ail-call-parity" : "opl-stream", frame, buf);
+#endif
+    }
+    memset(g_ailpar, 0, sizeof(g_ailpar));
+    g_oplhash[0] = g_oplhash[1] = 0x811C9DC5u;
+    g_oplcnt[0] = g_oplcnt[1] = 0;
+#endif
+}

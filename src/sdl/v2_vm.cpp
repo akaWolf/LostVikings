@@ -1238,6 +1238,7 @@ extern "C" uint16_t v2_ail_sfx_play(uint8_t*, uint8_t*, uint32_t, uint16_t, uint
 extern "C" void     v2_ail_sfx_stop_seq(uint8_t*, uint16_t);
 extern "C" void     v2_ail_music_mute_stop(uint8_t*);
 extern "C" void     v2_nopl_pump(void);
+extern "C" void     v2_ail_parity_verify(int);       // (#85) barrier verify
 
 static bool v2_sound_shadow_valid = false;
 
@@ -18630,6 +18631,38 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // one). Default is frame-based again (#83) — the audible sink ticks on
     // the audio thread instead.
     v2_nopl_pump();
+    // (#85) AIL call-parity + OPL-stream parity barrier check (both worlds
+    // quiescent here; resets the per-frame counters).
+    v2_ail_parity_verify(v2_dbg_pre_vm_iter);
+    // (#85 batch 3) semantic GameState invariants on the shadow image —
+    // catches corruption classes byte-diff only shows post-factum. Iron
+    // ones only (each proven by construction):
+    //   (a) the three VGA page roles are a permutation of {0,0x34,0x68};
+    //   (b) the command-buffer cursors keep read <= write (108a5 resets
+    //       both to 0; write grows, read chases).
+    if (v2_vm_shadow_ds) {
+        uint8_t* s_ = v2_vm_shadow_ds;
+        uint16_t p1 = *(uint16_t*)(s_ + DS_PAGE_DRAW);
+        uint16_t p2 = *(uint16_t*)(s_ + DS_PAGE_SHOWN);
+        uint16_t p3 = *(uint16_t*)(s_ + DS_PAGE_BG);
+        uint16_t lo = p1 < p2 ? (p1 < p3 ? p1 : p3) : (p2 < p3 ? p2 : p3);
+        uint16_t hi = p1 > p2 ? (p1 > p3 ? p1 : p3) : (p2 > p3 ? p2 : p3);
+        uint16_t mid = (uint16_t)(p1 ^ p2 ^ p3 ^ lo ^ hi);
+        bool pages_ok = (lo == 0 && mid == 0x34 && hi == 0x68);
+        uint16_t crd = *(uint16_t*)(s_ + DS_CMD_READ);
+        uint16_t cwr = *(uint16_t*)(s_ + DS_CMD_WRITE);
+        bool cmd_ok = (crd <= cwr);
+        if (!pages_ok || !cmd_ok) {
+            fprintf(stderr, "V2-GSINV-DIVERGE[f%d]: pages=%04X/%04X/%04X%s cmd=%04X..%04X%s\n",
+                    v2_dbg_pre_vm_iter, p1, p2, p3, pages_ok ? "" : " BAD",
+                    crd, cwr, cmd_ok ? "" : " BAD");
+#ifdef HEADLESS
+            extern void headless_dump_divergence(const char*, int, const char*);
+            headless_dump_divergence("gs-invariant", v2_dbg_pre_vm_iter,
+                                     pages_ok ? "cmd cursor order" : "page role permutation");
+#endif
+        }
+    }
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
     // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.
     // In default mode seg000 also takes snapshot at sub_12352 line 5623; both

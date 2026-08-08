@@ -765,6 +765,9 @@ extern "C" void* v2_ail_interp_lock() {           // CLI-model guard
     g_ail_mtx.lock(); return &g_ail_mtx;
 }
 extern "C" void v2_ail_interp_unlock() { g_ail_mtx.unlock(); }
+// (#85) which instance is currently selected (0=shadow, 1=real) — the
+// silent-IO hook uses it to attribute the OPL stream hash per world.
+extern "C" int v2_ail_interp_current(void) { return g_ail_cur; }
 
 extern "C" int v2_ail_interp_enabled() {
     static int en = -1;
