@@ -2507,6 +2507,12 @@ static void v2_read_input_12352_iter(uint8_t* shadow);
 extern "C" void v2_fntest_call_12352_iter(uint8_t* shadow) {
     v2_read_input_12352_iter(shadow);
 }
+// (#84) unit sub_17749/sub_1774f pair-diff: the music dispatcher mirror is
+// static — export a call wrapper.
+static void v2_music_dispatch(uint8_t* s, uint16_t type_byte_offset);
+extern "C" void v2_fntest_call_music_dispatch(uint8_t* shadow, uint16_t off) {
+    v2_music_dispatch(shadow, off);
+}
 // #61 bridge getter: the real-world AIL instance needs the m2c DS paragraph.
 extern "C" uint16_t v2_ail_get_real_ds(void) { return v2_current_ds_val; }
 
@@ -6428,8 +6434,11 @@ static void v2_music_load_1775d_helper(uint8_t* s) {
     uint16_t es_seg   = v2gs(s).seg_sound();
     uint32_t off = (uint32_t)((uint16_t)(es_seg - snd_base)) * 16;
     if (off < V2_SOUND_SHADOW_SIZE) {
+        // ds_ctx = s: the fread header mirror ([2BB4]/[2BBC], class #46)
+        // must land on the DS this helper operates on (in battle s IS the
+        // global shadow; the unit runs it on a private image).
         uint32_t sz = v2_read_chunk(chunk_id, v2_vm_shadow_sound + off,
-                                    V2_SOUND_SHADOW_SIZE - off);
+                                    V2_SOUND_SHADOW_SIZE - off, s);
         v2_chunk_sizes_by_seg[es_seg] = sz;
     }
 }

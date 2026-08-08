@@ -583,6 +583,8 @@ enum FtId { FT_SUB_15972 = 0, FT_SUB_161A1 = 1, FT_SUB_15DA8 = 2, FT_SUB_15D6B =
             FT_SUB_10DBA = 460,   // fatal error chain
             FT_SUB_16807 = 461,   // VGA Mode-X init
             FT_SUB_12AB8 = 462,   // 6x DosMemAlloc + boot chunk loads
+            FT_SUB_17749 = 463,   // music dispatch by [25B7]
+            FT_SUB_1774F = 464,   // music dispatch by [25B9]
             FT_COUNT };
 
 struct FtRegs { uint16_t ax, bx, cx, dx, si, di, bp; };
@@ -760,7 +762,7 @@ const char* g_name[FT_COUNT] = { "sub_15972", "sub_161a1", "sub_15da8", "sub_15d
                                  "sub_128d1", "sub_16440", "sub_11080", "sub_16563", "sub_17a44",
                                  "sub_17791", "sub_101ac", "sub_124a9",
                                  "sub_1797b", "sub_179fb", "sub_10dba", "sub_16807",
-                                 "sub_12ab8" };
+                                 "sub_12ab8", "sub_17749", "sub_1774f" };
 
 // Buffers carry a 16-byte tail past the 64KB window: a WORD read at offset
 // 0xFFFF touches byte 0x10000, which the m2c oracle reads LINEARLY from the
@@ -13975,6 +13977,89 @@ static long ft_selftest_sub12352d(uint32_t seed)
     return fails ? 1 : 0;
 }
 
+
+// ============================================================================
+// (#84) units sub_17749 / sub_1774f — the two music dispatchers (si=[25B7]
+// or [25B9], AND 0xFF, JMP off_3285A[si*2]). PAIR-DIFF against
+// v2_music_dispatch. Handler tails are symmetric no-ops in the unit world:
+// orig sub_176bd/177bb sit behind the fn-test RETN gates and the v2 fx::
+// chain early-returns on the unbooted driver; sub_1775d (type 0/3) runs its
+// REAL DS math + chunk load on both sides — [25AF] is the direct channel
+// (chunk bytes land outside the DS image: the class-D units own that).
+// Types >4 read past the 5-entry table (jump into data) — documented UB,
+// not generated.
+extern "C" void v2_fntest_call_music_dispatch(uint8_t* shadow, uint16_t off);
+
+static long ft_selftest_musicdisp(FtId id, uint32_t seed)
+{
+    (void)seed;
+    void* fn = v2_fntest_orig_fnptr(id);
+    uint16_t type_off = (id == FT_SUB_17749) ? 0x25B7 : 0x25B9;
+    const char* nm = g_name[id];
+    if (!v2_fntest_set_data_file("DATA.DAT")) {
+        fprintf(stderr, "FNSELFTEST[%s]: DATA.DAT not available\n", nm);
+        return 1;
+    }
+    v2_set_m2c_base(v2_fntest_m2c_base());
+
+    static uint8_t orig_img[0x10010];
+    static uint8_t shad_img[0x10010];
+    uint16_t regs[8];
+    long cases = 0, fails = 0;
+
+    struct MC { uint16_t type, mute, trk, cur; const char* tag; };
+    static const MC mc[] = {
+        {0, 0x0000, 0x05, 0x03, "t0-load-play"},
+        {0, 0x8000, 0x05, 0x03, "t0-muted"},
+        {1, 0x0000, 0x05, 0x03, "t1-nop"},
+        {2, 0x0000, 0x05, 0x03, "t2-fade"},
+        {3, 0x0000, 0x05, 0x03, "t3-load"},
+        {3, 0x0000, 0x05, 0x05, "t3-same-track"},
+        {3, 0x0000, 0xFF, 0x03, "t3-ff-track"},
+        {4, 0x0000, 0x05, 0x03, "t4-nop"},
+    };
+    for (const MC& c : mc) {
+        cases++;
+        memcpy(orig_img, g_synth_base, 0x10000);
+        ft_fill_tail(orig_img);
+        ft_wr16(orig_img, type_off, c.type);
+        ft_wr16(orig_img, 0x302, c.mute);
+        ft_wr16(orig_img, 0x304, c.mute);
+        orig_img[0x25B8] = (uint8_t)c.trk;          // track byte
+        ft_wr16(orig_img, 0x25AF, c.cur);
+        ft_wr16(orig_img, 0x86B8, 2);
+        // chunk dest: INSIDE the shadow sound window ([992C]+0x100 paras) so
+        // the v2 helper's off-gate passes; for the oracle this segment is a
+        // plain m2c paragraph (the child's COW copy takes the write).
+        uint16_t snd_base = (uint16_t)(g_synth_base[0x992C] | (g_synth_base[0x992D] << 8));
+        ft_wr16(orig_img, 0x2E6B, (uint16_t)(snd_base + 0x100));
+        memcpy(shad_img, orig_img, sizeof(orig_img));
+
+        memset(regs, 0, sizeof(regs));
+        long esc0 = v2_fntest_start_escapes;
+        v2_fntest_orig_isolated(fn, orig_img, regs);
+        if (v2_fntest_start_escapes != esc0) {
+            cases--;
+            fprintf(stderr, "FNSELFTEST-UB[%s %s]: escaped\n", nm, c.tag);
+            continue;
+        }
+        v2_fntest_call_music_dispatch(shad_img, type_off);
+        long f = 0, budget = 8;
+        for (uint32_t a = 0; a < 0x10000; a++) {
+            if (orig_img[a] == shad_img[a]) continue;
+            if (v2_fntest_ds_skip(a)) continue;
+            f++;
+            if (budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[%s %s]: ds:%04X orig=%02X v2=%02X\n",
+                        nm, c.tag, a, orig_img[a], shad_img[a]);
+        }
+        if (f) fails++;
+    }
+    fprintf(stderr, "FNSELFTEST-SUMMARY[%s]: grid %ld/%ld — total cases=%ld fail=%ld%s\n",
+            nm, cases - fails, cases, cases, fails, fails ? "  <<< DIVERGENCE" : "");
+    return fails ? 1 : 0;
+}
+
 extern "C" int v2_fntest_selftest_env(void) {
     const char* env = getenv("FNSELFTEST");
     if (!env || !env[0]) return -1;
@@ -14475,6 +14560,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_10dba")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10DBA, ft_seed(0xD0500032u)); }
     if (all || strstr(env, "sub_16807")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16807, ft_seed(0xD0500033u)); }
     if (all || strstr(env, "sub_12ab8")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12AB8, ft_seed(0xD0500034u)); }
+    if (all || strstr(env, "sub_17749")) { matched = true; rc |= ft_selftest_musicdisp(FT_SUB_17749, ft_seed(0xD0500035u)); }
+    if (all || strstr(env, "sub_1774fd")) { matched = true; rc |= ft_selftest_musicdisp(FT_SUB_1774F, ft_seed(0xD0500036u)); }
     if (all || strstr(env, "sub_108c8")) { matched = true; rc |= ft_port_native_skip("sub_108c8"); }
     if (all || strstr(env, "sub_17337")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17337, ft_seed(0xD0500010u)); }
     if (all || strstr(env, "sub_172d3")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_172D3, ft_seed(0xD0500011u)); }

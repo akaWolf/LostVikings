@@ -328,6 +328,8 @@ extern "C" void* v2_fntest_orig_fnptr(int id) {
     case 460: return (void*)&sub_10dba;         // fatal error chain (hex decode + terminate)
     case 461: return (void*)&sub_16807;         // VGA Mode-X init (INT10 + CRTC program)
     case 462: return (void*)&sub_12ab8;         // 6x DosMemAlloc + boot chunk loads
+    case 463: return (void*)&sub_17749;         // music dispatch by [25B7]
+    case 464: return (void*)&sub_1774f;         // music dispatch by [25B9]
     case 343: return (void*)&sub_15f2c;         // op2C partner-scan (direct, no dispatcher)
     default: return 0;
     }
