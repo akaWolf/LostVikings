@@ -5,7 +5,10 @@ A native Linux / Windows port of the 1992 DOS game **The Lost Vikings**
 executable through an m2c decompiler and wrapping the resulting C++ in an
 SDL2 shell. A parallel **v2 mirror** is being grown alongside the
 m2c-decompiled code with the goal of fully replacing the original VM
-bytecode-for-bytecode, frame-for-frame.
+bytecode-for-bytecode, frame-for-frame. Sound is NATIVE: the original
+Miles/AIL driver blob (SBPFM.ADV) from `DATA.DAT` runs inside an 8086
+interpreter and its OPL3 writes are rendered by the Nuked core — the same
+register stream a real Sound Blaster Pro got in 1992.
 
 [![Build](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml/badge.svg)](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml)
 
@@ -298,9 +301,12 @@ src/
   sdl/headless/           HEADLESS mode entry + dump infra
   sdl/keymap_editor/      standalone keymap editor binary
   sdl/render.cpp          shared SDL window / event loop for orig mode
-  sdl/play.cpp            audio (XMI / SFX via adlmidi)
+  sdl/play.cpp            SDL audio device (mixes the native OPL3 render)
+  sdl/v2_ail_interp.cpp   8086 interpreter running the ORIGINAL SBPFM.ADV
+  sdl/v2_ail.cpp          AIL glue: driver boot, seg002 bridge, tick pump
+  sdl/v2_native_opl.cpp   Nuked OPL3 chip model + tick pacing + mixdown
   rendering/seg003_*.{c,h}  hand-written seg003 helpers
-  adlmidi/                git submodule, OPL3 synthesis
+  adlmidi/                git submodule; ONLY chips/nuked/nukedopl3.c is built
 tests/                    HEADLESS test scripts + replays
 .github/workflows/build.yml  CI: linux + windows × {default, V2_ONLY}
 ```

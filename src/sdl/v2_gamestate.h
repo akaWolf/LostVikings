@@ -70,6 +70,7 @@
   F1(scroll_delta_y,     DS_SCROLL_DELTA_Y)     \
   F1(rng_timer,          DS_RNG_TIMER)          \
   F1(rng_seed_lo,        DS_RNG_SEED)           \
+  FN(pal_chunk_addr_tbl, 0x854A, 11)            \
   F1(obj_count,          DS_OBJ_COUNT)          \
   F1(spawn_pool_sel,     DS_SPAWN_POOL_SEL)     \
   F1(prio_count,         DS_PRIO_COUNT)         \
@@ -260,7 +261,7 @@
   F1(ail_music_state,    DS_AIL_MUSIC_STATE)    \
   F1(ail_init_done,      DS_AIL_INIT_DONE)      \
   FN(sound_dispatch_tbl, DS_SOUND_DISPATCH_TBL, 5) \
-  FN(snd_desc_off_tbl,   DS_SND_DESC_OFF_TBL, 11) \
+  FN(music_track_chunk_tbl, DS_SND_DESC_OFF_TBL, 11) \
   F1(vsync_count,        DS_VSYNC_COUNT)        \
   F1(vsync_calib,        DS_VSYNC_CALIB)        \
   F1(pit_latch,          DS_PIT_LATCH)
@@ -422,7 +423,9 @@
   BN(error_msg_2bbe,   0x2BBE, 671)            \
   B1(pad_8507,         0x8507)                 \
   BN(viking_spawn_triplets, 0x8508, 54)        \
-  BN(data_853e,        0x853E, 251)            \
+  BN(pan_luts,         0x853E, 12)             \
+  BN(zone_8560,        0x8560, 69)             \
+  BN(level_passwords,  0x85A5, 148)            \
   BN(scan_filter_lists,0x94CC, 156)
 
 // Chunk-loaded DS data zones (bounds = decompressed sizes in DATA.DAT,
@@ -466,6 +469,12 @@
 //   subsprite_off_tbl @871C: sub-sprite data pointers read as
 //                     [(si-0x30)-0x78E4] in the 1358C loop — values are the
 //                     1-based OBJ_SPRITE_OFF offsets (12 slots si=30..46)
+//   pan_luts @853E: PAN X ([di-0x7AC2] wrap) and PAN Y ([di-0x7ABC] wrap,
+//                     base +6) byte-pair tables read at eip 0x139B/0x13A5
+//   pal_chunk_addr_tbl[11] @854A: the ORIG source of the level-table loader
+//                     ladder (2E7D 317D .. 507D — the v2_vm:6297 list mirrors it)
+//   level_passwords @85A5: 37 levels x 4 high-bit-ASCII letters, ends
+//                     exactly at rng_seed (first entry = "STRT")
 //   viking_spawn_triplets @8508: 3 records x 18B, each = three {x,y,anim}
 //                     viking spawn points fed to sub_13809 via sub_11569
 //                     (static sites di=8508/851A/852C); data_853e tail holds
