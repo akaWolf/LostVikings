@@ -13711,7 +13711,20 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
     return grid.fail ? 1 : 0;
 }
 
-extern "C" int v2_fntest_running = 0;   // unit-world marker (forked cases inherit)
+
+// PORT-NATIVE unit class (#79, stage B0): these procedures' unit oracle WAS
+// the legacy SDL sound-channel inline (being removed); the unit world keeps
+// the native gate hard-off (v2_fntest_running), so after the removal both
+// sides degenerate to no-ops and the units would compare emptiness. Family
+// coverage lives elsewhere: default DS-parity over the whole interpreted
+// driver + the V2_ONLY native smoke + the 15-scenario replay set.
+static int ft_port_native_skip(const char* name) {
+    fprintf(stderr, "FNSELFTEST-SUMMARY[%s]: SKIPPED-PORT-NATIVE "
+            "(oracle was the removed SDL channel)\n", name);
+    return 0;
+}
+
+extern "C" int v2_fntest_running;       // defined in v2_ail.cpp (links in all flavours)
 
 extern "C" int v2_fntest_selftest_env(void) {
     const char* env = getenv("FNSELFTEST");
@@ -13784,7 +13797,7 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_13031")) { matched = true; rc |= ft_selftest_anim(FT_SUB_13031, ft_seed(0x13031001u)); }
     if (all || strstr(env, "anim00_130a2")) { matched = true; rc |= ft_selftest_anim_cmd("anim00_130a2", 0x00, 0xA0000001u); }
     if (all || strstr(env, "anim01_130ef")) { matched = true; rc |= ft_selftest_anim_cmd("anim01_130ef", 0x01, 0xA0100001u); }
-    if (all || strstr(env, "anim02_177b2")) { matched = true; rc |= ft_selftest_anim_cmd("anim02_177b2", 0x02, 0xA0200001u); }
+    if (all || strstr(env, "anim02_177b2")) { matched = true; rc |= ft_port_native_skip("anim02_177b2"); }
     if (all || strstr(env, "anim03_134d3")) { matched = true; rc |= ft_selftest_anim_cmd("anim03_134d3", 0x03, 0xA0300001u); }
     if (all || strstr(env, "anim04_13674")) { matched = true; rc |= ft_selftest_anim_cmd("anim04_13674", 0x04, 0xA0400001u); }
     if (all || strstr(env, "anim05_134ca")) { matched = true; rc |= ft_selftest_anim_cmd("anim05_134ca", 0x05, 0xA0500001u); }
@@ -14119,10 +14132,10 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_15f2c")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_15F2C, ft_seed(0x9044001u)); }
     if (all || strstr(env, "sub_16252")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_16252, ft_seed(0x9045001u)); }
     if (all || strstr(env, "sub_177b2")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_177B2, ft_seed(0x9046001u)); }
-    if (all || strstr(env, "sub_1782a")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1782A, ft_seed(0x9047001u)); }
-    if (all || strstr(env, "sub_1787f")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1787F, ft_seed(0x9048001u)); }
-    if (all || strstr(env, "sub_178d6")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_178D6, ft_seed(0x9049001u)); }
-    if (all || strstr(env, "sub_178f1")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_178F1, ft_seed(0x9050001u)); }
+    if (all || strstr(env, "sub_1782a")) { matched = true; rc |= ft_port_native_skip("sub_1782a"); }
+    if (all || strstr(env, "sub_1787f")) { matched = true; rc |= ft_port_native_skip("sub_1787f"); }
+    if (all || strstr(env, "sub_178d6")) { matched = true; rc |= ft_port_native_skip("sub_178d6"); }
+    if (all || strstr(env, "sub_178f1")) { matched = true; rc |= ft_port_native_skip("sub_178f1"); }
     if (all || strstr(env, "sub_1367c")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1367C, ft_seed(0xB101001u)); }
     if (all || strstr(env, "sub_1368c")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1368C, ft_seed(0xB102001u)); }
     if (all || strstr(env, "sub_1369c")) { matched = true; rc |= ft_selftest_op_unit(FT_SUB_1369C, ft_seed(0xB103001u)); }
@@ -14206,22 +14219,22 @@ extern "C" int v2_fntest_selftest_env(void) {
     if (all || strstr(env, "sub_16546")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16546, ft_seed(0xD05000Au)); }
     if (all || strstr(env, "sub_1686f")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1686F, ft_seed(0xD05000Bu)); }
     if (all || strstr(env, "sub_167ff")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_167FF, ft_seed(0xD05000Cu)); }
-    if (all || strstr(env, "sub_17912")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17912, ft_seed(0xD05000Du)); }
+    if (all || strstr(env, "sub_17912")) { matched = true; rc |= ft_port_native_skip("sub_17912"); }
     if (all || strstr(env, "sub_179a8")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_179A8, ft_seed(0xD05000Eu)); }
-    if (all || strstr(env, "sub_108c8")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_108C8, ft_seed(0xD05000Fu)); }
+    if (all || strstr(env, "sub_108c8")) { matched = true; rc |= ft_port_native_skip("sub_108c8"); }
     if (all || strstr(env, "sub_17337")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17337, ft_seed(0xD0500010u)); }
     if (all || strstr(env, "sub_172d3")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_172D3, ft_seed(0xD0500011u)); }
     if (all || strstr(env, "sub_11ba5")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_11BA5, ft_seed(0xD0500012u)); }
     if (all || strstr(env, "sub_10350")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10350, ft_seed(0xD0500013u)); }
     if (all || strstr(env, "sub_1754c")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1754C, ft_seed(0xD0500014u)); }
-    if (all || strstr(env, "sub_17561")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_17561, ft_seed(0xD0500015u)); }
+    if (all || strstr(env, "sub_17561")) { matched = true; rc |= ft_port_native_skip("sub_17561"); }
     if (all || strstr(env, "sub_10138")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_10138, ft_seed(0xD0500016u)); }
-    if (all || strstr(env, "sub_1775d")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1775D, ft_seed(0xD0500017u)); }
+    if (all || strstr(env, "sub_1775d")) { matched = true; rc |= ft_port_native_skip("sub_1775d"); }
     if (all || strstr(env, "sub_12352")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12352, ft_seed(0xD0500018u)); }
     if (all || strstr(env, "sub_15c37")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_15C37, ft_seed(0xD0500019u)); }
     if (all || strstr(env, "sub_12e2d")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_12E2D, ft_seed(0xD050001Au)); }
     if (all || strstr(env, "sub_1673c")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_1673C, ft_seed(0xD050001Bu)); }
-    if (all || strstr(env, "sub_177bb")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_177BB, ft_seed(0xD050001Cu)); }
+    if (all || strstr(env, "sub_177bb")) { matched = true; rc |= ft_port_native_skip("sub_177bb"); }
     if (all || strstr(env, "sub_100bb")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_100BB, ft_seed(0xD050001Du)); }
     if (all || strstr(env, "sub_128d1")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_128D1, ft_seed(0xD050001Eu)); }
     if (all || strstr(env, "sub_16440")) { matched = true; rc |= ft_selftest_dosio(FT_SUB_16440, ft_seed(0xD050001Fu)); }

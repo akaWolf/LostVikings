@@ -151,7 +151,7 @@ static void wrw(uint8_t* s, uint16_t off, uint16_t v) {
 // ---------------------------------------------------------------------------
 // gate
 // ---------------------------------------------------------------------------
-extern "C" int v2_fntest_running;   // v2_fn_test.cpp unit-world marker
+extern "C" int v2_fntest_running = 0;   // set by v2_fn_test.cpp (absent in V2_ONLY builds)
 
 extern "C" int v2_ail_native_on() {
     // Native AIL is THE sound path (user-approved by ear on both flavours,

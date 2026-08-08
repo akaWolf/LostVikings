@@ -45,6 +45,7 @@ for l in $logs; do
 line=$(grep -h "FNSELFTEST-SUMMARY" "$l" 2>/dev/null | tail -1)
 if [ -z "$line" ]; then echo "FAIL(no-summary): $l"; rc=1
 elif echo "$line" | grep -q "total cases=0 "; then echo "FAIL(empty: all cases escaped)[$(basename $l)]: $line"; rc=1
+elif echo "$line" | grep -q "SKIPPED-PORT-NATIVE"; then echo "SKIP[$(basename $l)]: $line"
 elif echo "$line" | grep -q "fail=0"; then echo "PASS[$(basename $l)]: $line"
 else echo "FAIL[$(basename $l)]: $line"; rc=1
 fi

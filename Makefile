@@ -180,10 +180,7 @@ CXX_SRCS += src/sdl/play.cpp
 endif
 endif
 
-# adlmidi sources — excluded in HEADLESS (no real audio playback, audit infra
-# uses deterministic handles from v2_audit_compute_handle, no synthesis needed).
 ifdef HEADLESS
-ADL_SRCS :=
 C_SRCS := \
   src/rendering/seg003_implementation.c \
   src/rendering/seg003_sdl_adapter.c
@@ -193,26 +190,13 @@ CXX_SRCS += \
   src/sdl/headless/headless_dump.cpp \
   src/sdl/headless/headless_audio_stub.cpp
 else
-ADL_SRCS := \
-  src/adlmidi/src/adlmidi.cpp \
-  src/adlmidi/src/adlmidi_load.cpp \
-  src/adlmidi/src/adlmidi_midiplay.cpp \
-  src/adlmidi/src/adlmidi_opl3.cpp \
-  src/adlmidi/src/adlmidi_private.cpp \
-  src/adlmidi/src/adlmidi_sequencer.cpp \
-  src/adlmidi/src/inst_db.cpp \
-  src/adlmidi/src/chips/nuked_opl3.cpp \
-  src/adlmidi/src/chips/nuked_opl3_v174.cpp
-
+# #79: the adlmidi player library is GONE — only the Nuked OPL3 core stays
+# (the render chip of the native interpreted AIL driver, v2_native_opl.cpp).
 C_SRCS := \
   src/rendering/seg003_implementation.c \
   src/rendering/seg003_sdl_adapter.c \
-  src/adlmidi/src/wopl/wopl_file.c \
-  src/adlmidi/src/chips/nuked/nukedopl3_174.c \
   src/adlmidi/src/chips/nuked/nukedopl3.c
 endif
-
-CXX_SRCS += $(ADL_SRCS)
 CXX_OBJS := $(patsubst %.cpp, $(OBJDIR)/%.o, $(CXX_SRCS))
 # (#61) native AIL channel: the Nuked OPL3 core is already in the default
 # C_SRCS; HEADLESS builds (audio stub) need it explicitly for the silent

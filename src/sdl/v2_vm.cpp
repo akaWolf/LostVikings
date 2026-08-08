@@ -36,6 +36,7 @@
 
 // Access to emulated memory
 extern "C" int  v2_ail_native_on();
+extern "C" int  v2_fntest_running;    // unit-world marker (v2_ail.cpp)
 extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_gamestate.cpp (phase D)
 extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-field state snapshot
 extern uint8_t* v2_m2c_base;
@@ -47,10 +48,10 @@ extern uint8_t sdl_spec_state_get(uint16_t off);
 
 // SDL/adlmidi sound API (defined in sdl/play.cpp).
 // In default mode the orig also calls these; in V2_ONLY only v2 calls them.
-// v2 uses methods on independent v2_pool instance (defined in play.cpp). Same
-// class as orig_pool — only the instance differs. v2_pool is globally_muted in
+// #79: the per-side SDL AudioPools are gone; sound is the native interpreted
+// driver (v2_ail). The lines below describe the OLD architecture in
 // default mode (no audio output) but slot tracking continues for DS verify.
-#include "play.h"
+// #79: play.h (AudioPool) removed — native AIL is the only sound path
 
 // ============================================================================
 // SFX AUDIT INFRASTRUCTURE
@@ -539,50 +540,8 @@ static int v2_audio_stale_streak[2][4] = {{0}};
 // Per-(side, slot) one-shot first-leak log gate.
 static bool v2_audio_first_leak_logged[2][4] = {{false}};
 
-void v2_verify_audio_slots(uint8_t* ds, class AudioPool* pool, const char* side_tag, int side_idx, int frame) {
-    if (!ds || !pool) return;
-    // #61 native AIL: DS slot handles come from the interpreted driver, not the
-    // SDL pools — every live slot would read as a false STALE leak here.
-    if (v2_ail_native_on()) return;
-    int used = 0, stale = 0;
-    for (int i = 0; i < 4; i++) {
-        uint16_t h = *(uint16_t*)(ds + v2_audio_slot_h_off[i]);
-        uint16_t s = *(uint16_t*)(ds + v2_audio_slot_s_off[i]);
-        if (h == 0xFFFF) {
-            v2_audio_stale_streak[side_idx][i] = 0;
-            continue;
-        }
-        used++;
-        bool active = pool->is_handle_active(h);
-        if (active) {
-            v2_audio_stale_streak[side_idx][i] = 0;
-            continue;
-        }
-        stale++;
-        v2_audio_stale_streak[side_idx][i]++;
-        // First-ever leak in this slot → log.
-        if (!v2_audio_first_leak_logged[side_idx][i]) {
-            v2_audio_first_leak_logged[side_idx][i] = true;
-            fprintf(stderr, "V2-AUDIO-LEAK[%s f%d]: slot=%d handle=0x%04X seq=0x%04X STALE (first sighting)\n",
-                    side_tag, frame, i, h, s);
-        }
-        // Chronic leak → log every 60 frames.
-        int streak = v2_audio_stale_streak[side_idx][i];
-        if (streak == 60 || (streak > 60 && streak % 600 == 0)) {
-            fprintf(stderr, "V2-AUDIO-LEAK-CHRONIC[%s f%d]: slot=%d handle=0x%04X seq=0x%04X stale for %d frames\n",
-                    side_tag, frame, i, h, s, streak);
-        }
-    }
-    // Capacity-exhaustion signal: 3+ slots simultaneously stale = approaching the
-    // 4-slot DS capacity with no room for new SFX → real bug class (#126 elevator).
-    if (stale >= 3) {
-        static int _all_stale_logged[2] = {0};
-        if (++_all_stale_logged[side_idx] == 1 || _all_stale_logged[side_idx] % 600 == 0) {
-            fprintf(stderr, "V2-AUDIO-CAPACITY-LEAK[%s f%d]: %d/%d DS slots stale (capacity-exhaustion risk)\n",
-                    side_tag, frame, stale, used);
-        }
-    }
-}
+// #79: v2_verify_audio_slots (SDL-pool leak checker) removed with the pools —
+// the native driver owns slot lifecycle; the DS-vs-DS symmetry check remains.
 
 // ============================================================================
 // Render buffer compare (A2): viewport region pixel-level orig vs v2 verify.
@@ -1319,11 +1278,10 @@ static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out
 // Symmetric with sub_177bb pattern: V2_ONLY → real producer; default mode →
 // muted reservation. Both modes use deterministic handle so orig (real) and v2
 // (muted) reserve slots with matching handles → ds:0x990C matches in shadow.
-// v2 music play: operates on independent v2_pool. No #ifdef V2_ONLY needed —
-// v2_pool is globally_muted in default mode (set in sound_init), so no audio
-// output, but slot tracking continues for DS verify symmetry. In V2_ONLY,
-// v2_pool is unmuted and produces audible audio.
+// v2 music play — native driver chain (fn97 register + timbres + fnAA).
 static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
+    // unit-world symmetry with the orig-side fntest RETN gate (#79)
+    if (v2_fntest_running) return;
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
     if (!xmidi || size == 0) return;
@@ -1366,28 +1324,9 @@ static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
             v2_id_music = (h != 0xFFFF) ? (int)h : 0;
             return;
         }
-        // boot failed → fall through to the adlmidi channel (audible fallback)
+        // native boot failed → no audible fallback anymore (#79)
     }
-    if (v2_id_music != 0) v2_pool.stop_xmidi((uint16_t)v2_id_music);
-    extern int v2_audit_v2_next_music_idx();
-    extern uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx);
-    int play_idx = v2_audit_v2_next_music_idx();
-    uint16_t handle = v2_audit_compute_music_handle(bx_seg, play_idx);
-    // V2_ONLY: v2 is the sole audio producer → mute=false (real playback).
-    // Default mode: orig produces real audio, v2 only reserves slot for DS verify
-    // symmetry → mute=true (no producer thread, no audio output).
-#ifdef V2_ONLY
-    bool mute = false;
-#else
-    bool mute = true;
-#endif
-    v2_id_music = v2_pool.play_xmidi_external_with_handle_and_mute(xmidi, size, -1, handle, mute);
-    if (v2_id_music > 0) {
-        v2_pool.set_dontstop((uint16_t)v2_id_music);
-        // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax` with si=0 (music
-        // call site uses si=0). Stores music handle at ds:0x990C (slot 0).
-        v2gs(s).music_id((uint16_t)v2_id_music);
-    }
+    fprintf(stderr, "V2-MUSIC: native driver not booted — music start dropped\n");
 }
 
 // orig sub_177bb SDL inline (vikings.exe_seg000.cpp:15905-15909).
@@ -1444,6 +1383,8 @@ namespace fx {
 }
 
 static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
+    // unit-world symmetry with the orig-side fntest RETN gate (#79)
+    if (v2_fntest_running) return 0;
     // orig sub_177bb entry eip 0x77BD: TEST ds:304h, 0FFFFh; JNZ drop — the
     // WHOLE body (audit hook, play, slot bookkeeping) sits behind the SFX-mute
     // gate. Mirror it first so muted fires neither log nor touch DS slots.
@@ -1481,64 +1422,16 @@ static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
                                      ail_ds, ax_seq);
         return (h != 0xFFFF) ? (int)h : -1;
     }
-#ifdef V2_ONLY
-    // V2_ONLY: v2 is the sole audio producer → real playback through v2_pool
-    // (symmetric with v2_music_play_176bd_v2 music path).
-    int sdl_handle = v2_pool.play_xmidi_external_with_handle_and_mute(xmidi, size, (int)ax_seq, handle, false);
-#else
-    // Default mode: orig plays audible audio via orig_pool (orig sub_177bb SDL
-    // inline). v2 only mirrors DS slot bookkeeping for verify symmetry — no
-    // pool slot needed. Returning deterministic handle directly avoids creating
-    // mute slots in orig_pool that leak `is_handle_active=true` forever
-    // (no natural-end for slots without producer), which previously jammed the
-    // 4-entry DS slot table after ~4 SFX in a level → stop opcodes couldn't
-    // find new SFX (elevator/dialog sounds stuck).
-    (void)xmidi; (void)size;
-    int sdl_handle = (int)handle;
-#endif
-
-    // Mirror orig sub_177bb SDL inline (vikings.exe_seg000.cpp:16179-16202): on
-    // play success, scan slots si=8,6,4,2 for first free (FFFF or stale handle),
-    // store handle+seq. Anim cmd 0x77B2 falls through to sub_177bb in orig so
-    // anim-fired SFX also gets slot bookkeeping; v2 must mirror at production
-    // helper level (not per-call-site) to keep both paths symmetric — without
-    // this, ds:0x9912/0x991C diverges at f175 (FIRST MISMATCH, op_2F).
-    if (sdl_handle > 0 && sdl_handle <= 0xFFFE) {
-        // Only check 0xFFFF (matches orig DOS asm at loc_177ca: CMP [si-66F4],
-        // FFFFh). Earlier added is_handle_active() to detect stale handles,
-        // but it raced between orig and v2 threads → DS divergence (f168 was
-        // typical). Reverted to strict orig behavior — see v2_phase_frame_begin
-        // TODO comment for proper stale-slot cleanup design.
-        for (int si = 8; si > 0; si -= 2) {
-            uint16_t handle_off = (uint16_t)(si - 0x66F4);
-            uint16_t seq_off    = (uint16_t)(si - 0x66EA);
-            uint16_t cur = *(uint16_t*)(s + handle_off);
-            if (cur == 0xFFFF) {
-                *(uint16_t*)(s + handle_off) = (uint16_t)sdl_handle;
-                *(uint16_t*)(s + seq_off)    = ax_seq & 0xFF;
-                break;
-            }
-        }
-    }
-    return (int)sdl_handle;
-}
-
-// orig sub_1782a SDL inline (vikings.exe_seg000.cpp:15976).
-// Stops all SFX (music protected by v2_pool.dontstop_handle).
-// Targets v2_pool unconditionally — in default mode this is no-op (v2 doesn't
-// reserve SFX slots in any pool); in V2_ONLY v2_pool holds the real audible
-// SFX slots so this actually stops audio. Orig path's audible audio is stopped
-// by orig sub_1782a SDL inline (targets orig_pool), independent of this.
-static void v2_sfx_stop_all_1782a_v2() {
-    v2_pool.stop_all_sfx();
+    // #79: the SDL pool playback + deterministic-handle slot store are gone —
+    // the native driver chain above is the only producer and owns the DS
+    // slot words itself.
+    (void)xmidi; (void)size; (void)handle;
+    fprintf(stderr, "V2-SFX: native driver not booted — SFX %u dropped\n", ax_seq);
+    return -1;
 }
 
 // orig sub_178d6 (vikings.exe_seg000.cpp:16062): if music not muted, replay it.
-// Removed #ifdef V2_ONLY gate — in default mode orig plays music via orig_pool
-// AND writes real_ds[0x990C] = handle. v2 mirror must symmetrically write
-// shadow_ds[0x990C] via fx::play_music → v2_music_play_176bd_v2 (which reserves
-// muted slot in v2_pool and writes shadow_ds[0x990C] with deterministic
-// handle). Without this, anim VM op_D5 paths cause DS divergence at 0x990C.
+// op_D5 music start — both worlds drive the same native chain.
 static void v2_music_start_178d6_v2(uint8_t* s) {
     if (v2gs(s).music_mute() != 0) return;  // music muted/off
     uint16_t bx_seg = v2gs(s).seg_sound();
@@ -1573,9 +1466,8 @@ static void v2_seq_stop_all_17912_v2(uint8_t* s) {
                 si += 2;
                 continue;
             }
-            v2_pool.stop_xmidi(handle);
-            // If music slot (si=0), clear v2_id_music — auto-cleared by
-            // stop_xmidi_external_v2 when matching v2_pool.dontstop_handle.
+            // not-booted path (unit world / pre-boot): DS bookkeeping only —
+            // mirrors the orig loop whose fnAB/fn98 CALLFs are deaf there.
             if (si == 0 && (int)handle == v2_id_music) v2_id_music = 0;
             *(uint16_t*)(s + handle_off) = 0xFFFF;
             *(uint16_t*)(s + (uint16_t)(si - 0x66EA)) = 0xFFFF;
@@ -2733,7 +2625,7 @@ static void v2_audio_tick_108c8(uint8_t* s) {
                         v2_ail_seq_stop_slot(s, si);
                         continue;
                     }
-                    v2_pool.stop_xmidi(handle);  // v2_pool — independent from orig
+                    ;  // #79: pool stop gone — native chain owns stops
                     *(uint16_t*)(s + h_off) = 0xFFFF;                    // clear handle
                     *(uint16_t*)(s + (uint16_t)(si - 0x66EA)) = 0xFFFF; // clear sequence
                 }
@@ -2750,12 +2642,8 @@ static void v2_audio_tick_108c8(uint8_t* s) {
         if (!(v2gs(s).music_mute() & 0x8000)) {
             // Orig eip 0x961-0x97B: fnAB + fn98 on [990C] WITHOUT clearing
             // the slot words (unmute restarts via 176bd and overwrites).
-            if (v2_ail_native_on() && v2_ail_booted()) {
-                v2_ail_music_mute_stop(s);
-            } else {
-                uint16_t mh = v2_pool.get_music_handle();
-                if (mh != 0) v2_pool.stop_xmidi(mh);  // v2_pool — independent from orig
-            }
+            if (v2_ail_booted()) v2_ail_music_mute_stop(s);
+            // not-booted: orig fnAB/fn98 are deaf too — nothing to mirror
         }
     } else {                                                              // music ON path
         // sub_176BD(si=0, ax=0, bx=word_2B34B): play music with sequence from ds:0x2E6B
@@ -6558,10 +6446,7 @@ static void v2_music_fade_178f1_helper(const uint8_t* s) {
         v2_ail_music_fade(const_cast<uint8_t*>(s));
         return;
     }
-    // Target v2_pool only — orig path's fade_music (in seg000 SDL inline) targets
-    // orig_pool. Per-side pools = no double-fade conflict that the old single-pool
-    // design had (when both touched the same audible slot).
-    v2_pool.fade_music(1000);
+    // #79: no SDL fade anymore — the native fnB1 chain above is the only path.
 }
 
 // Music dispatch via off_3285A[ds:[type_byte] & 0xFF] — shared by sub_17749 (reads
@@ -9363,19 +9248,13 @@ static void v2_vm_op_sound1(V2VM& vm) {
     bool stopped_any = false;
     for (int16_t si = 8; si > 0; si -= 2) {
         if (vm.ds_read((uint16_t)(si - 0x66EA)) == param) {
-            uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
-            if (handle != 0xFFFF) {
-                v2_pool.stop_xmidi(handle);
-                stopped_any = true;
-            }
+            // not-booted path (unit world / pre-boot): DS bookkeeping only —
+            // the orig loop's fnAB/fn98 CALLFs are deaf there too (#79).
             vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
             vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
         }
     }
-    // Mirror orig SDL inline (vikings.exe_seg000.cpp:15976): stop_xmidi_external() —
-    // belt-and-suspenders fallback when no slot tracked the handle (e.g. sound played
-    // outside our slot list). dontstop protects music.
-    if (!stopped_any) v2_sfx_stop_all_1782a_v2();
+    (void)stopped_any;
 }
 
 // ============================================================================
@@ -9655,15 +9534,13 @@ static void v2_vm_op_D5(V2VM& vm) {
 // 0xD6 (sub_178f1): Timer delay. 0 bytes consumed.
 // Original: test ds:0x302, if 0: pushf, cli, push args, call sub_1c7bd (delay), popf.
 static void v2_vm_op_D6(V2VM& vm) {
-    // sub_178f1 (eip 0x78F1): TEST word_287E2, 0xFFFFh; JNZ ret. If music enabled,
-    // call AIL sub_1C7BD with duration 0x3E8 (1000ms) — fade music to silence.
-    // SDL replacement: fade_music(1000) — play.cpp's audio_callback ramps volume
-    // and closes player when fade completes.
-    //
-    // ARCHITECTURE: targets v2_pool only (per-side pools). Orig path's audible
-    // music fade is invoked separately by orig SDL inline (targets orig_pool).
+    // sub_178f1 (eip 0x78F1): TEST word_287E2, 0xFFFFh; JNZ ret. If music
+    // enabled: fnB1(drv, [990C], 0, 0x3E8) via CALLF sub_1C7BD — the driver
+    // ramps the sequence volume to 0 over 1000 ms. (#79: this VM channel had
+    // NO native branch and still called the SDL pool fade — divergence fixed.)
     if (vm.ds_read(DS_MUSIC_MUTE) != 0) return;  // music muted/off
-    v2_pool.fade_music(1000);
+    if (v2_ail_booted()) v2_ail_music_fade(vm.shadow);
+    // not-booted (unit world): the orig fnB1 CALLF is deaf — nothing to mirror
 }
 
 // 0xD7 (sub_1787f): Sound sequence check + clear slot. 3 bytes consumed.
@@ -9692,7 +9569,7 @@ static void v2_vm_op_D7(V2VM& vm) {
             if (vm.ds_read((uint16_t)(si - 0x66EA)) == seq) {
                 uint16_t handle = vm.ds_read((uint16_t)(si - 0x66F4));
                 hs[matched++] = handle;
-                if (handle != 0xFFFF) v2_pool.stop_xmidi(handle);
+                // #79: pool stop gone — not-booted path is DS bookkeeping only
                 vm.ds_write((uint16_t)(si - 0x66F4), 0xFFFF);
                 vm.ds_write((uint16_t)(si - 0x66EA), 0xFFFF);
             }
@@ -18412,8 +18289,6 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // INT 21h/49 (free DOS memory), INT 21h/4C (terminate program).
                     // For v2: stop sound + _exit(0) to bypass static destructors
                     // (render thread mid-Mesa would SEGV otherwise).
-                    orig_pool.stop_all_sfx();
-                    v2_pool.stop_all_sfx();
                     fflush(stdout); fflush(stderr);
                     extern bool need_quit; need_quit = true; SDL_Delay(50);
                     _exit(0);
@@ -18454,8 +18329,6 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // JMP loc_10e35 (DOS quit) when the prompt ended with "End
                     // game" (or no input → the [334]|=2 default).
                     if (v2gs(s).frame_flags() & 2) {
-                        orig_pool.stop_all_sfx();
-                        v2_pool.stop_all_sfx();
                         fflush(stdout); fflush(stderr);
                         extern bool need_quit; need_quit = true; SDL_Delay(50);
                         _exit(0);
@@ -18608,42 +18481,15 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // Fix done HERE at FRAME_BEGIN sync point: orig main thread is blocked on
     // v2_signal_phase, no race possible. Both real_ds and shadow_ds updated
     // with same is_handle_active result → byte-identical mirror preserved.
+    // #79: the SDL-pool stale-slot machinery is gone — the native driver owns
+    // slot reuse (fnAE status + fn98 release, the DOS mechanism). Only the
+    // DS-vs-DS symmetry check remains in default mode.
+#ifndef V2_ONLY
     {
-        extern AudioPool orig_pool, v2_pool;  // declared in play.cpp
-        extern void v2_verify_audio_slots(uint8_t* ds, AudioPool* pool, const char* side_tag, int side_idx, int frame);
-        auto clear_stale = [&](uint8_t* ds, AudioPool& pool) {
-            if (!ds) return;
-            for (int i = 0; i < 4; i++) {
-                uint16_t h = *(uint16_t*)(ds + v2_audio_slot_h_off[i]);
-                if (h != 0xFFFF && !pool.is_handle_active(h)) {
-                    *(uint16_t*)(ds + v2_audio_slot_h_off[i]) = 0xFFFF;
-                    *(uint16_t*)(ds + v2_audio_slot_s_off[i]) = 0xFFFF;
-                }
-            }
-        };
-        // B2 verify: detect leaks BEFORE cleanup hides them.
-#ifdef V2_ONLY
-        // #61 native AIL: the driver chain owns the DS slot words — sub_177bb's
-        // own scan reuses finished slots via fnAE status + fn98 release (the
-        // DOS mechanism). The SDL stale-cleanup would clear the DS word while
-        // the driver's slot table entry stays busy → slot leak up to the 8-slot
-        // cap (observed cnt=8 lockout), so it must not run in native mode.
-        if (!(v2_ail_native_on() && v2_ail_booted())) {
-            v2_verify_audio_slots(v2_vm_shadow_ds, &v2_pool, "V2_ONLY shadow", 1, v2_dbg_pre_vm_iter);
-            clear_stale(v2_vm_shadow_ds, v2_pool);
-        }
-#else
         extern void v2_verify_audio_slots_symmetry(uint8_t*, uint8_t*, int);
-        v2_verify_audio_slots(v2_vm_real_ds_ptr, &orig_pool, "default real", 0, v2_dbg_pre_vm_iter);
-        v2_verify_audio_slots(v2_vm_shadow_ds, &orig_pool, "default shadow", 1, v2_dbg_pre_vm_iter);
         v2_verify_audio_slots_symmetry(v2_vm_real_ds_ptr, v2_vm_shadow_ds, v2_dbg_pre_vm_iter);
-        // Default: orig_pool drives real audio. shadow stores same deterministic
-        // handle as real_ds via v2_sfx_play_177bb_v2 (no v2_pool slot in default mode).
-        // Both shadow and real consult orig_pool for stale check → identical clears.
-        clear_stale(v2_vm_shadow_ds, orig_pool);
-        clear_stale(v2_vm_real_ds_ptr, orig_pool);
-#endif
     }
+#endif
 #ifdef V2_RENDER_FROM_SHADOW
     v2_vm_in_frame = true;
 #endif
@@ -19457,8 +19303,6 @@ void v2_phase_post_flip3(uint16_t ds_val) {
             if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
                 // loc_10E35: direct QUIT to DOS (orig: sub_16546 VGA cleanup +
                 // sub_1754c AIL exit + INT 21h/4C). v2: stop sound + _exit(0).
-                orig_pool.stop_all_sfx();
-                v2_pool.stop_all_sfx();
                 fflush(stdout); fflush(stderr);
                 extern bool need_quit; need_quit = true; SDL_Delay(50);
                 _exit(0);
@@ -19491,8 +19335,6 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 // Post-loop: check word_28814 & 2 → loc_10E35 (Y in quit prompt
                 // sets this bit → "Quit to DOS").
                 if (v2gs(s).frame_flags() & 2) {
-                    orig_pool.stop_all_sfx();
-                    v2_pool.stop_all_sfx();
                     fflush(stdout); fflush(stderr);
                     need_quit = true; SDL_Delay(50);
                     _exit(0);

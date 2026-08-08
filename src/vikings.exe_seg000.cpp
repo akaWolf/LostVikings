@@ -21,15 +21,7 @@ extern "C" int v2_ail_orig_enabled();
 #include <atomic>
 #include <map>
 extern "C" void v2_cc_orig_hit(int); // M1 call-parity (#65)
-
-int play_xmidi_external(const void* xmidi, uint32_t len, int seq_num);
-// Sound API uses unique 16-bit handles (mirrors AIL design).
-// 0 = no handle / "play failed". 0xFFFF = "free slot" sentinel in DS slot table.
-// Stale handle in stop_xmidi_external() → slot_for_handle returns -1 → no-op.
-void stop_xmidi_external();              // stop all SFX (preserves music)
-void stop_xmidi_external(uint16_t h);    // stop specific SFX by handle
-void set_dontstop_external(uint16_t h);  // mark handle as music
-extern uint16_t get_music_handle();      // current music handle, 0 if none
+extern "C" int v2_fntest_running;    // unit-world marker (v2_ail.cpp)
 
 extern bool trace_instructions_to_stdout;
 extern bool trace_instructions;
@@ -4069,14 +4061,7 @@ loc_108f5:
 	// 4476
 cs=0x1a2;eip=0x0008f5; 	T(CMP(*(dw*)(raddr(ds,si-0x66F4)), 0x0FFFF));	// 1156 cmp     word ptr [si-66F4h], 0FFFFh ;~ 01A2:08F5
 cs=0x1a2;eip=0x0008fb; 	J(JZ(loc_1092d));	// 1157 jz      short loc_1092D ;~ 01A2:08FB
- // SDL replacement for AIL sub_1C79F + sub_1C769 (mute toggle: stop occupied
- // SFX slot). Slot's [si-0x66F4] holds unique handle from sub_177bb. If that
- // handle is stale (sound already ended naturally), stop_xmidi_external looks
- // up via slot_for_handle, finds nothing, no-ops — same as AIL with stale handle.
- {
-   dw h = *(dw*)(raddr(ds, si - 0x66F4));
-   if (!v2_ail_orig_enabled() && h != 0xFFFF) stop_xmidi_external(h);   // #61: bridged build stops via the live fnAB/fn98 CALLFs below
- }
+ // #79: legacy SDL stop removed - the live fnAB/fn98 CALLFs below are the only path.
  printf("AIL sub_108c8: stop1\n");
 cs=0x1a2;eip=0x0008fd; 	X(PUSH(si));	// 1158 push    si ;~ 01A2:08FD
 cs=0x1a2;eip=0x0008fe; 	X(PUSH(si));	// 1159 push    si ;~ 01A2:08FE
@@ -4126,13 +4111,7 @@ loc_10959:
 	// 4479
 cs=0x1a2;eip=0x000959; 	T(TEST(word_287e2, 0x8000));	// 1195 test    word_287E2, 8000h ;~ 01A2:0959
 cs=0x1a2;eip=0x00095f; 	J(JNZ(locret_1097e));	// 1196 jnz     short locret_1097E ;~ 01A2:095F
- // SDL replacement for AIL sub_1C79F + sub_1C769 (music mute toggle off→on:
- // stop music). Music handle in play.cpp's dontstop_handle (orig stored in
- // ds:0x990C; our SDL sub_176bd doesn't write that slot — use getter).
- {
-   uint16_t h = get_music_handle();
-   if (!v2_ail_orig_enabled() && h != 0) stop_xmidi_external(h);   // #61: bridged build stops via the live fnAB/fn98 CALLFs below
- }
+ // #79: legacy SDL stop removed - the live fnAB/fn98 CALLFs below are the only path.
  printf("AIL sub_108c8: stop2\n");
 cs=0x1a2;eip=0x000961; 	X(PUSH(word_31dec));	// 1197 push    word_31DEC ;~ 01A2:0961
 cs=0x1a2;eip=0x000965; 	X(PUSH(word_31dc6));	// 1198 push    word_31DC6 ;~ 01A2:0965
@@ -16845,7 +16824,6 @@ cs=0x1a2;eip=0x0075b8; 	X(PUSH(*(dw*)(raddr(ds,0x86BC))));	// 17088 push    word
 cs=0x1a2;eip=0x0075bc; 	X(PUSH(*(dw*)(raddr(ds,0x86BA))));	// 17089 push    word ptr ds:86BAh ;~ 01A2:75BC
 cs=0x1a2;eip=0x0075c0; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17090 push    word ptr ds:98E6h ;~ 01A2:75C0
 cs=0x1a2;eip=0x0075c4; 	J(CALLF(sub_1c615,0));	// 17091 call    sub_1C615 ;~ 01A2:75C4
- if (!v2_ail_orig_enabled()) ax = 1;   // #61: bridged fn65 returns the real detect result
 cs=0x1a2;eip=0x0075c9; 	T(ADD(sp, 0x0A));	// 17092 add     sp, 0Ah ;~ 01A2:75C9
 cs=0x1a2;eip=0x0075cc; 	T(OR(ax, ax));	// 17093 or      ax, ax ;~ 01A2:75CC
 cs=0x1a2;eip=0x0075ce; 	J(JNZ(loc_175d3));	// 17094 jnz     short loc_175D3 ;~ 01A2:75CE
@@ -16862,7 +16840,6 @@ cs=0x1a2;eip=0x0075eb; 	J(CALLF(sub_1c61b,0));	// 17105 call    far ptr sub_1C61
 cs=0x1a2;eip=0x0075f0; 	T(ADD(sp, 0x0A));	// 17106 add     sp, 0Ah ;~ 01A2:75F0
 cs=0x1a2;eip=0x0075f3; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17107 push    word ptr ds:98E6h ;~ 01A2:75F3
 cs=0x1a2;eip=0x0075f7; 	J(CALLF(sub_1c76f,0));	// 17108 call    sub_1C76F ;~ 01A2:75F7
- if (!v2_ail_orig_enabled()) ax = 0xe00;   // #61: bridged fn99 returns the real cache size
 cs=0x1a2;eip=0x0075fc; 	T(ADD(sp, 2));	// 17109 add     sp, 2 ;~ 01A2:75FC
 cs=0x1a2;eip=0x0075ff; 	X(MOV(*(dw*)(raddr(ds,0x9942)), ax));	// 17110 mov     ds:9942h, ax ;~ 01A2:75FF
 cs=0x1a2;eip=0x007602; 	X(MOV(*(dw*)(raddr(ds,0x0A39A)), 1));	// 17111 mov     word ptr ds:0A39Ah, 1 ;~ 01A2:7602
@@ -16939,38 +16916,20 @@ locret_176bc:
 cs=0x1a2;eip=0x0076bc; 	J(RETF(0));	// 17183 retf ;~ 01A2:76BC
 sub_176bd:
  printf("AIL sub_176bd: sequence_num: %x FORM_XMID_high: %x state_table_offset: %x\n", ax, bx, si);
+ // Unit-world scaffold (#79): the legacy SDL stub used to intercept here
+ // with an early RETN; in the unit world the seg002 dispatcher is deaf and
+ // the timbre loop (fn9B stub echoes 0x9B != FFFF) never terminates on
+ // synthetic DS. Keep the pre-B1 unit behavior: no-op RETN.
+ if (v2_fntest_running) { J(RETN(0)); }
+
 	// 17188
  printf("AIL %x\n", chunk_sizes[(bx) << 4]);
- // #61 native AIL: with the bridge on, the SDL adlmidi replacement below is
- // SKIPPED entirely and execution falls through into the ORIGINAL chain at
- // eip 0x76BD (fn97 register / fn9B-fn9C timbres / fnAA start via the
- // interpreted driver behind sub_1bec2).
- static uint16_t id_music = 0;
- if (!v2_ail_orig_enabled()) {
- if (id_music != 0)
-   stop_xmidi_external(id_music);
- // Use deterministic music handle so orig (real producer) + v2 (muted reservation)
- // reserve slots with matching handle → ds:0x990C matches between real and shadow.
- {
-   extern int v2_audit_orig_next_music_idx();
-   extern uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx);
-   extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
-                                                       uint16_t handle, bool mute);
-   int play_idx = v2_audit_orig_next_music_idx();
-   uint16_t handle = v2_audit_compute_music_handle(bx, play_idx);
-   id_music = (uint16_t)play_xmidi_external_with_handle_and_mute(
-       raddr(bx,0), chunk_sizes[(bx) << 4], -1, handle, false);
- }
- if (id_music > 0) {
-   set_dontstop_external(id_music);
-   // Mirror orig sub_176bd eip 0x76DA: `mov [si-66F4h], ax`. Music call sites use
-   // si=0 → writes ds:0x990C. Required so sub_17912 properly stops music slot 0
-   // when iterating (when ds:0x25B9 != 1). The early RETN below skipped the orig
-   // assembler that did this — adding back inline to match DOS behavior.
-   *(dw*)(raddr(ds, (uint16_t)(si - 0x66F4))) = id_music;
- }
-cs=0x1a2;eip=0x0076bb; 	J(RETN(0));	// 17177 retn ;~ 01A2:76BB
- } // !v2_ail_orig_enabled() (native falls through into the orig chain)
+ // #79: the legacy SDL music-start stub (deterministic-handle play_xmidi +
+ // early RETN@76BB) is REMOVED — the native interpreted driver behind the
+ // sub_1bec2 bridge is the only sound path; execution falls through into
+ // the ORIGINAL chain at eip 0x76BD (fn97 register / fn9B-9C timbres /
+ // fnAA start). The original RETN@76BB lives on as documentation:
+ //cs=0x1a2;eip=0x0076bb; 	J(RETN(0));	// 17177 retn ;~ 01A2:76BB (dead: stub removed)
 cs=0x1a2;eip=0x0076bd; 	X(PUSHF);	// 17190 pushf ;~ 01A2:76BD
 ret_1a2_76be:
 	// 5852
@@ -17101,6 +17060,12 @@ cs=0x1a2;eip=0x0077b5; 	T(ADD(bx, 2));	// 17321 add     bx, 2 ;~ 01A2:77B5
 cs=0x1a2;eip=0x0077b8; 	T(AND(ax, 0x0FF));	// 17322 and     ax, 0FFh ;~ 01A2:77B8
 sub_177bb:
  printf("AIL sub_177bb: ail_play_sound: sequence num = %x\n", ax);
+ // Unit-world scaffold (#79): the legacy SDL stub used to intercept here
+ // with an early RETN; in the unit world the seg002 dispatcher is deaf and
+ // the timbre loop (fn9B stub echoes 0x9B != FFFF) never terminates on
+ // synthetic DS. Keep the pre-B1 unit behavior: no-op RETN.
+ if (v2_fntest_running) { J(RETN(0)); }
+
  // Task #85: caller backtrace to find what fires this in orig (esp. for seqs missing in v2).
 #ifdef __linux__
  { extern int v2_dbg_pre_vm_iter;
@@ -17116,71 +17081,17 @@ sub_177bb:
 #endif
 	// 17329
  printf("AIL %x\n", chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4]);
- // SDL replacement for AIL sub_1C763/77B/781: play SFX sequence ax. Then
- // store SDL handle + seq in first free slot (si=8/6/4/2, addr ds:[si-0x66F4])
- // so sub_1782a / sub_1787f / sub_108c8 mute toggle can stop selectively
- // by handle. Slot tag 0xFFFF = free.
- // AUDIT INFRA: use deterministic handle so v2's shadow_ds[slot] matches
- // real_ds[slot] without copying. v2_audit_compute_handle hashes (seq, obj,
- // frame, fire_idx); both orig + v2 compute same handle for same logical op.
- // Mute check: orig (eip 0x77BD) does `TEST word_287E4, 0xFFFF; JNZ skip` BEFORE
- // play. Mirror that here so ALT+S mute (which sets low byte of word_287E4 to 1)
- // actually blocks new SFX.
- // #61: bridged build skips the whole SDL stub AND its early RETN below --
- // execution falls through into the ORIGINAL sub_177bb chain at eip 0x77BB
- // (mute test / slot scan / fnAE status / fn98 release / 176bd start via the
- // interpreted driver).
- if (!v2_ail_orig_enabled()) {
- if (*(dw*)(raddr(ds,0x304)) == 0)
- {
-   extern int v2_dbg_pre_vm_iter;
-   extern uint16_t v2_audit_compute_handle(uint16_t seq, uint16_t obj, int frame, int fire_idx);
-   extern int v2_audit_orig_next_fire_idx(uint16_t obj);
-   extern void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj);
-   extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
-                                                        uint16_t handle, bool mute);
-   uint16_t obj = *(dw*)(raddr(ds, 0x42));
-   int fire_idx = v2_audit_orig_next_fire_idx(obj);
-   uint16_t handle = v2_audit_compute_handle((uint16_t)ax, obj, v2_dbg_pre_vm_iter, fire_idx);
-   v2_audit_log_sfx(0 /* orig */, (uint16_t)ax, obj);
-   int sdl_handle = play_xmidi_external_with_handle_and_mute(
-                       raddr(*(dw*)(raddr(ds,0x2E6D)),0),
-                       chunk_sizes[(*(dw*)(raddr(ds,0x2E6D))) << 4],
-                       ax, handle, false /* not muted - orig plays */);
-   if (sdl_handle > 0) {
-     // Try slots si=8,6,4,2 for free slot (matches orig sub_177bb scan order).
-     // Store deterministic handle so v2 mirrors exactly.
-     // Treat slot as free if either:
-     //   - DS handle == 0xFFFF (orig free marker), OR
-     //   - DS handle refers to a sound that already naturally ended (stale).
-     // Without the stale check, the 4-slot DS table fills up forever once 4
-     // ~1.5s SFX have played (they end naturally but DS slot never clears),
-     // then new sub_177bb fails to store, and sub_1782a/1787f stop can't find
-     // the seq → elevator-style SFX never stops audibly.
-     // Only check 0xFFFF (matches orig DOS asm at loc_177ca: CMP
-     // [si-66F4], FFFFh). is_handle_active() check raced with v2 mirror →
-     // DS divergence at f168. Reverted; trade-off documented at
-     // v2_phase_frame_begin TODO.
-     for (int _si = 8; _si > 0; _si -= 2) {
-       uint16_t _cur = *(dw*)(raddr(ds, _si - 0x66F4));
-       if (_cur == 0xFFFF) {
-         *(dw*)(raddr(ds, _si - 0x66F4)) = (dw)sdl_handle;
-         *(dw*)(raddr(ds, _si - 0x66EA)) = ax & 0xFF;
-         break;
-       }
-     }
-   }
- }
-cs=0x1a2;eip=0x0077b1; 	J(RETN(0));	// 17313 retn ;~ 01A2:77B1
- }
+ // #79: the legacy SDL SFX stub (play_xmidi + deterministic-handle slot
+ // store + early RETN@77B1) is REMOVED — the ORIGINAL sub_177bb chain at
+ // eip 0x77BB (mute test / slot scan / fnAE status / fn98 release / 176bd
+ // start) is the only path. The original early RETN as documentation:
+ //cs=0x1a2;eip=0x0077b1; 	J(RETN(0));	// 17313 retn ;~ 01A2:77B1 (dead: stub removed)
 cs=0x1a2;eip=0x0077bb; 	X(PUSH(es));	// 17331 push    es ;~ 01A2:77BB
 cs=0x1a2;eip=0x0077bc; 	X(PUSH(bx));	// 17332 push    bx ;~ 01A2:77BC
 cs=0x1a2;eip=0x0077bd; 	T(TEST(*(dw*)(raddr(ds,0x304)), 0x0FFFF));	// 17333 test    word ptr ds:304h, 0FFFFh ;~ 01A2:77BD
 cs=0x1a2;eip=0x0077c3; 	J(JNZ(loc_17827));	// 17334 jnz     short loc_17827 ;~ 01A2:77C3
- // #61 audit parity: the SDL stub above (with its audit hook) is skipped in
- // bridged mode; log the orig-side SFX fire at the same logical point —
- // right after the live mute test, before the slot scan.
- if (v2_ail_orig_enabled()) {
+ // orig-side SFX audit hook: after the live mute test, before the slot scan.
+ {
    extern void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj);
    v2_audit_log_sfx(0 /* orig */, (uint16_t)ax, *(dw*)(raddr(ds, 0x42)));
  }
@@ -17276,14 +17187,7 @@ loc_1783e:
 	// 5867
 cs=0x1a2;eip=0x00783e; 	T(CMP(*(dw*)(raddr(ds,si-0x66EA)), ax));	// 17411 cmp     [si-66EAh], ax ;~ 01A2:783E
 cs=0x1a2;eip=0x007842; 	J(JNZ(loc_17877));	// 17412 jnz     short loc_17877 ;~ 01A2:7842
- // SDL replacement for AIL sub_1C79F (stop) + sub_1C769 (release): selective
- // stop of SFX matching seq=ax. Slot's [si-0x66F4] holds adlmidi player num
- // stored by sub_177bb. AIL stubs below NOP under SDL build → without this,
- // stop sound by seq doesn't actually stop anything.
- {
-   dw h = *(dw*)(raddr(ds, si - 0x66F4));
-   if (!v2_ail_orig_enabled() && h != 0xFFFF) stop_xmidi_external(h);   // #61: bridged build stops via the live fnAB/fn98 CALLFs below
- }
+ // #79: legacy SDL stop removed - the live fnAB/fn98 CALLFs below are the only path.
 cs=0x1a2;eip=0x007844; 	X(PUSHF);	// 17413 pushf ;~ 01A2:7844
 cs=0x1a2;eip=0x007845; 	T(CLI);	// 17414 cli ;~ 01A2:7845
 cs=0x1a2;eip=0x007846; 	X(PUSH(si));	// 17415 push    si ;~ 01A2:7846
@@ -17336,12 +17240,7 @@ loc_17895:
 	// 5871
 cs=0x1a2;eip=0x007895; 	T(CMP(*(dw*)(raddr(ds,si-0x66EA)), ax));	// 17457 cmp     [si-66EAh], ax ;~ 01A2:7895
 cs=0x1a2;eip=0x007899; 	J(JNZ(loc_178ce));	// 17458 jnz     short loc_178CE ;~ 01A2:7899
- // SDL replacement for AIL sub_1C79F + sub_1C769: selective stop of SFX matching
- // seq=ax. Same pattern as sub_1782a — slot's [si-0x66F4] holds adlmidi player num.
- {
-   dw h = *(dw*)(raddr(ds, si - 0x66F4));
-   if (!v2_ail_orig_enabled() && h != 0xFFFF) stop_xmidi_external(h);   // #61: bridged build stops via the live fnAB/fn98 CALLFs below
- }
+ // #79: legacy SDL stop removed - the live fnAB/fn98 CALLFs below are the only path.
 cs=0x1a2;eip=0x00789b; 	X(PUSHF);	// 17459 pushf ;~ 01A2:789B
 cs=0x1a2;eip=0x00789c; 	T(CLI);	// 17460 cli ;~ 01A2:789C
 cs=0x1a2;eip=0x00789d; 	X(PUSH(si));	// 17461 push    si ;~ 01A2:789D
@@ -17401,7 +17300,6 @@ cs=0x1a2;eip=0x0078f7; 	J(JNZ(locret_17911));	// 17516 jnz     short locret_1791
  // SDL replacement for AIL sub_1C7BD (fnB1 fade): fade music
  // out over 1000ms (matches orig PUSH 3E8h argument). play.cpp's audio_callback
  // applies per-tick volume ramp and closes player when fade reaches 0.
- { extern void fade_music(int); if (!v2_ail_orig_enabled()) fade_music(1000); }   // #61: bridged build fades via the live fnB1 CALLF below
 cs=0x1a2;eip=0x0078f9; 	X(PUSHF);	// 17517 pushf ;~ 01A2:78F9
 cs=0x1a2;eip=0x0078fa; 	T(CLI);	// 17518 cli ;~ 01A2:78FA
 cs=0x1a2;eip=0x0078fb; 	X(PUSH((dw)0x3E8));	// 17519 push    3E8h ;~ 01A2:78FB
@@ -17442,15 +17340,14 @@ cs=0x1a2;eip=0x00793c; 	X(PUSH(*(dw*)(raddr(ds,si-0x66F4))));	// 17558 push    w
 cs=0x1a2;eip=0x007940; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17559 push    word ptr ds:98E6h ;~ 01A2:7940
  // SDL replacement for AIL sub_1C79F (stop_sequence): mark slot need_close.
  // Handle is at ds:[si-0x66F4] (deterministic from v2_audit_compute_handle).
- { if (!v2_ail_orig_enabled()) stop_xmidi_external(*(dw*)(raddr(ds, (uint16_t)(si - 0x66F4)))); }   // #61: bridged build stops via the live fnAB CALLF below
- if (v2_ail_orig_enabled()) { J(CALLF(sub_1c79f,0)); }	// 17560 call    sub_1C79F ;~ 01A2:7944
+cs=0x1a2;eip=0x007944; 	J(CALLF(sub_1c79f,0));	// 17560 call    sub_1C79F ;~ 01A2:7944
 cs=0x1a2;eip=0x007949; 	T(ADD(sp, 4));	// 17561 add     sp, 4 ;~ 01A2:7949
 cs=0x1a2;eip=0x00794c; 	X(POP(si));	// 17562 pop     si ;~ 01A2:794C
 cs=0x1a2;eip=0x00794d; 	X(PUSH(*(dw*)(raddr(ds,si-0x66F4))));	// 17563 push    word ptr [si-66F4h] ;~ 01A2:794D
 cs=0x1a2;eip=0x007951; 	X(PUSH(*(dw*)(raddr(ds,0x98E6))));	// 17564 push    word ptr ds:98E6h ;~ 01A2:7951
  // SDL replacement for AIL sub_1C769 (release_sequence): no-op for adlmidi (our
  // stop already releases the handle). #61: bridged build runs the ORIGINAL call.
- if (v2_ail_orig_enabled()) { J(CALLF(sub_1c769,0)); }	// 17565 call    sub_1C769 ;~ 01A2:7955
+cs=0x1a2;eip=0x007955; 	J(CALLF(sub_1c769,0));	// 17565 call    sub_1C769 ;~ 01A2:7955
 cs=0x1a2;eip=0x00795a; 	T(ADD(sp, 4));	// 17566 add     sp, 4 ;~ 01A2:795A
 cs=0x1a2;eip=0x00795d; 	X(POP(si));	// 17567 pop     si ;~ 01A2:795D
 cs=0x1a2;eip=0x00795e; 	X(POPF);	// 17568 popf ;~ 01A2:795E
