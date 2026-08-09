@@ -7336,6 +7336,97 @@ static void v2_load_level(uint8_t* shadow) {
 // v2_vm_real_ds_ptr declared at line ~131 (before startup functions that use it)
 static bool v2_shadow_initialized = false;
 
+// ============================================================================
+// (direction V step 2) Teleport save/load — the full v2-world state snapshot.
+// Format: "V2S1" + u32 block count, then {char tag[4]; u32 len; bytes}.
+// DS travels THROUGH the phase-D serializer in both directions
+// (deserialize -> serialize), so every save AND load doubles as a live
+// roundtrip check of the typed model; the other blocks are raw shadow
+// arrays. v1 limits: AIL/audio state is NOT captured (sound continues from
+// whatever the driver was doing); input latches reset on load.
+// Save is read-only (safe on any world); load is V2_ONLY-only by call site
+// (loading just the shadow under verify would split the twin worlds).
+// ============================================================================
+struct V2StateBlock { const char* tag; void* ptr; uint32_t len; };
+static bool v2_state_blocks(V2StateBlock* b, int* n, uint8_t* ds_img) {
+    int k = 0;
+    b[k++] = { "DS  ", ds_img,                   0x10000 };
+    b[k++] = { "TMAP", v2_vm_shadow_tilemap,     V2_TILEMAP_SHADOW_SIZE };
+    b[k++] = { "TGFX", v2_vm_shadow_tilegfx,     V2_TILEGFX_SHADOW_SIZE };
+    b[k++] = { "ANIM", v2_vm_shadow_animdata,    V2_ANIMDATA_SHADOW_SIZE };
+    b[k++] = { "GS  ", v2_vm_shadow_gs,          V2_GS_SHADOW_SIZE };
+    b[k++] = { "GTLD", v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE };
+    b[k++] = { "SND ", v2_vm_shadow_sound,       V2_SOUND_SHADOW_SIZE };
+    b[k++] = { "CHNK", v2_vm_shadow_chunk,       V2_CHUNK_SHADOW_SIZE };
+    b[k++] = { "FS  ", v2_vm_shadow_fs,          V2_FS_SHADOW_SIZE };
+    b[k++] = { "SPRT", v2_sprite_shadow,         V2_SPRITE_SHADOW_SIZE };
+    { extern uint8_t v2_vga[65536 * 4];
+      extern uint8_t v2_vga_cov[65536 * 4];
+      b[k++] = { "VGA ", v2_vga,     65536u * 4 };
+      b[k++] = { "VCOV", v2_vga_cov, 65536u * 4 }; }
+    b[k++] = { "DAC ", v2_dac_shadow, 768 };
+    *n = k;
+    return true;
+}
+extern "C" int v2_state_save(const char* path) {
+    static V2GameState st_gs;
+    static uint8_t ds_img[0x10000];
+    v2_gs_deserialize(&st_gs, v2_vm_shadow_ds);
+    v2_gs_serialize(&st_gs, ds_img);
+    V2StateBlock b[20]; int n = 0;
+    v2_state_blocks(b, &n, ds_img);
+    FILE* f = fopen(path, "wb");
+    if (!f) { fprintf(stderr, "V2-STATE: save: cannot open %s\n", path); return 1; }
+    fwrite("V2S1", 1, 4, f);
+    uint32_t nn = (uint32_t)n;
+    fwrite(&nn, 4, 1, f);
+    for (int i = 0; i < n; i++) {
+        fwrite(b[i].tag, 1, 4, f);
+        fwrite(&b[i].len, 4, 1, f);
+        fwrite(b[i].ptr, 1, b[i].len, f);
+    }
+    fclose(f);
+    fprintf(stderr, "V2-STATE: saved %d blocks to %s\n", n, path);
+    return 0;
+}
+extern "C" int v2_state_load(const char* path) {
+    static V2GameState st_gs;
+    static uint8_t ds_img[0x10000];
+    V2StateBlock b[20]; int n = 0;
+    v2_state_blocks(b, &n, ds_img);
+    FILE* f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "V2-STATE: load: cannot open %s\n", path); return 1; }
+    char magic[4]; uint32_t nn = 0;
+    if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "V2S1", 4) != 0 ||
+        fread(&nn, 4, 1, f) != 1 || (int)nn != n) {
+        fprintf(stderr, "V2-STATE: load: bad header in %s\n", path);
+        fclose(f); return 1;
+    }
+    for (int i = 0; i < n; i++) {
+        char tag[4]; uint32_t len = 0;
+        if (fread(tag, 1, 4, f) != 4 || memcmp(tag, b[i].tag, 4) != 0 ||
+            fread(&len, 4, 1, f) != 1 || len != b[i].len ||
+            fread(b[i].ptr, 1, len, f) != len) {
+            fprintf(stderr, "V2-STATE: load: block %d (%.4s) mismatch\n", i, b[i].tag);
+            fclose(f); return 1;
+        }
+    }
+    fclose(f);
+    // DS image -> shadow through the typed model (the save direction already
+    // proved identity; this direction re-proves DEserialization).
+    v2_gs_deserialize(&st_gs, ds_img);
+    v2_gs_serialize(&st_gs, v2_vm_shadow_ds);
+    // Post-load fixups: world bookkeeping that lives outside the DS.
+    v2_vm_acc_base = v2_vm_shadow_ds;
+    v2_shadow_initialized = true;
+    v2_current_level = v2gs(v2_vm_shadow_ds).level();
+    { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
+    { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
+    fprintf(stderr, "V2-STATE: loaded %d blocks from %s (level=%u)\n",
+            n, path, (unsigned)v2_current_level);
+    return 0;
+}
+
 // Load pristine EXE data segment from ds_static.bin into shadow DS.
 // This contains static data only: lookup tables, VGA constants, slope tables, etc.
 // NO runtime data (no segments, no PRNG, no DATA.DAT header).

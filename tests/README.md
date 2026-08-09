@@ -37,7 +37,18 @@ make -j$(nproc)
 GOLDEN=update ./tests/scenarios.sh   # (re)take the catalog from a green run
 ./tests/scenarios.sh                 # normal runs now also check golden
 
-# 4c. Run random fuzz (100 seeds, ~10 min)
+# 4c. Teleport save/load (direction V step 2, phase-D tooling)
+# Any headless run can snapshot the FULL v2 world at its clean exit:
+V2_SAVE_STATE=/tmp/state.bin ./vikings_headless --replay-input=... --max-frames=...
+# A V2_ONLY build loads it before the first frame (game thread parked):
+V2_LOAD_STATE=/tmp/state.bin ./vikings          # play on from that point
+# With BOTH env vars set, V2_ONLY saves back immediately after loading —
+# the file pair must be byte-identical (load/save roundtrip channel; the
+# DS block passes through the phase-D serializer in both directions, so
+# every save AND load re-proves the typed model).
+# v1 limits: AIL/audio state is not captured; input latches reset on load.
+
+# 4d. Run random fuzz (100 seeds, ~10 min)
 ./tests/fuzz_harness.sh 100
 
 # 5. Run coverage-guided fuzz (long-running, finds rare paths)

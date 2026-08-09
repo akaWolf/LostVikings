@@ -66,6 +66,9 @@ bool g_debug_mode = false;
 // HEADLESS hook keeps its own enforcement; this one stops the main loop.
 static int g_v2only_max_frames = 0;
 
+extern "C" int v2_state_save(const char*);   // v2_vm.cpp (direction V step 2)
+extern "C" int v2_state_load(const char*);
+
 int main(int argc, char* argv[]) {
     printf("V2_ONLY: starting standalone v2 build (no m2c)\n");
 
@@ -126,6 +129,17 @@ int main(int argc, char* argv[]) {
     // v2_run_animation_vm above). g_debug_mode parsed from argv at top of main.
 
     v2_game_thread_start();
+
+    // (direction V step 2) teleport: load a full state snapshot before the
+    // first frame (game thread is parked until the first phase signal, so the
+    // fill is single-threaded). With V2_SAVE_STATE also set, save back
+    // immediately — the file pair is a byte-roundtrip channel for tests.
+    { const char* lp = getenv("V2_LOAD_STATE");
+      if (lp) {
+          if (v2_state_load(lp)) { fprintf(stderr, "V2: teleport load FAILED\n"); return 1; }
+          const char* sp = getenv("V2_SAVE_STATE");
+          if (sp) v2_state_save(sp);
+      } }
 
     // Main loop: signal v2 phases sequentially. Each phase blocks until done.
     //

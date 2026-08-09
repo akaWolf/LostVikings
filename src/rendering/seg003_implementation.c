@@ -5,7 +5,10 @@
  * (a duplicate renderer next to the original CALLF path). Inside the unit
  * isolator it would paint extras into the oracle drawBuffer that the v2
  * model legitimately does not have — silence it there. */
-extern int v2_fntest_isolated_active;
+/* weak default: the strong definition lives in v2_fn_test.cpp, which the
+   V2_ONLY build does not link (no fn-test infra there) — the gates below
+   then see a constant 0. */
+int __attribute__((weak)) v2_fntest_isolated_active = 0;
 
 #include <string.h>
 #include <stdio.h>
