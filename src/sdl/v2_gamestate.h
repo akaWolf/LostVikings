@@ -527,6 +527,21 @@
 //                     off_3285a by snd type [25B7]. Mirrored + hashed (the
 //                     98E4..9950 skip window ENDS here). Record stride =
 //                     next-wave GDB read-watchpoint.
+//   Wave-3 quick verdicts (2026-08-12):
+//     error_msg_2bbe: CONFIRMED by content — DOS $-terminated error text
+//       ("*** An Error has occured while running PC Vikings ***", the 564K
+//       memory message...) for the INT21/9 startup failures.
+//     scan_filter_lists@94CC: ALREADY VERIFIED via LUT_SCAN_FILTER — the
+//       FF-terminated type lists walked by VM ops 2C/2D/35 (unit-covered).
+//     coll_partner_tbl@1B25: CONFIRMED by body — sub_16235 (the 15530
+//       collision family) stores/loads the per-object partner index at
+//       [di+1B25h].
+//     level_passwords@85A5: name UNVERIFIED and likely wrong — the zone is
+//       all-zero in the static image AND in every live golden; no reader
+//       found yet. Do not trust the name until a reader confirms it.
+//     pw_level_tbl@687D reader status: NOT exercised by the current replay
+//       corpus (GDB read-watchpoints over pw_00_STRT and synth_pw_enter saw
+//       only the PSNAP memcpy) — future real-gameplay replays may reach it.
 //   cmd_ring@1DA7 (1000B): ALREADY VERIFIED as the sub_1086f command ring
 //                     (entries at [bx+1DA7], write cursor DS_CMD_WRITE@218F,
 //                     read cursor DS_CMD_READ@2B64) — the 1086f unit and the
