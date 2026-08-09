@@ -47,8 +47,26 @@ namespace m2c{
             do
               {
                 tsp = m_ss[m_current - 1].sp;
-                if ((tcount++) > 0)
-                  log_error ("uncontrolled pop meet in past which added %x sp=%x\n", m_ss[m_current - 1].addcounter, tsp);
+                if ((tcount++) > 0) {
+                  // (VI.3 verdict) Frames skipped here fall into two classes.
+                  // DATA frames (itwascall=false) below the popped slot are the
+                  // C calling convention of the AIL library glue: the caller
+                  // removes its pushed ARGUMENTS with ADD sp,N (sub_176bd zone,
+                  // seg000 0x76xx-0x78xx — 1468 hits per attract, sites
+                  // 0x76D9/0x7732/0x76EF/0x77F4...), which never goes through
+                  // the POP macros — the skip is the legal cleanup, not an
+                  // anomaly. A skipped CALL frame however means a return
+                  // address was abandoned — that IS worth shouting about.
+                  if (m_ss[m_current - 1].itwascall)
+                    log_error ("uncontrolled pop SKIPPED A CALL FRAME added %x sp=%x at=%04x:%04x pushed_at=%04x:%04x\n",
+                               m_ss[m_current - 1].addcounter, tsp,
+                               (unsigned)cs, (unsigned)eip,
+                               (unsigned)m_ss[m_current - 1].cs, (unsigned)m_ss[m_current - 1].ip);
+                  else
+                    log_debug ("add-sp cleanup pop (data frame) added %x sp=%x at=%04x:%04x\n",
+                               m_ss[m_current - 1].addcounter, tsp,
+                               (unsigned)cs, (unsigned)eip);
+                }
                 if (tsp <= sp)
                   m_ss[--m_current].remcounter = counter;
                   if (m_ss[m_current].itwascall) ++m_needtoskipcall;
