@@ -424,7 +424,7 @@
   B1(pad_8507,         0x8507)                 \
   BN(viking_spawn_triplets, 0x8508, 54)        \
   BN(pan_luts,         0x853E, 12)             \
-  BN(zone_8560,        0x8560, 69)             \
+  BN(dead_data_8560,   0x8560, 69)             \
   BN(level_passwords,  0x85A5, 148)            \
   BN(scan_filter_lists,0x94CC, 156)
 
@@ -482,11 +482,34 @@
 //   row43_lut @938A:  25 x i*0x2B — tile-row to VGA WORD offset (43 = 86/2
 //                     word pitch, 25 = 200/8 screen tile rows)
 //   error_msg_2bbe:   ASCII error text (immutable image data)
-//   rt_8736 (3x32B slots @8736/8756/8776): first slot holds a far record
-//                     {seg,~,len} on levels (l1: 5D24 = seg_sound_base+4B0,
-//                     inside the sound window; empty: zeros) — the writer
-//                     uses computed addressing (no literal refs anywhere);
-//                     sound-descriptor slots, exact writer TBD
+//   anim_quad_queue (@8736, 120B = 20 records x 3 words): the animated-tile
+//                     redraw queue. Writer sub_13fc2 (VM "place 2x2 animated
+//                     tile quad" helper, eip 0x4035-0x4043): each on-screen
+//                     quad appends {fs_map_offset, world_x(ds:6C),
+//                     world_y(ds:6E)} and bumps the cursor ds:8734 by 3
+//                     (words). Consumer sub_1406d (the anim queue pass,
+//                     CC_1406D) walks it tail-first with visibility
+//                     hysteresis. (The old "sound far record {seg,~,len}"
+//                     guess was a value coincidence — l1's fs offset 5D24
+//                     happened to land inside the sound window. VI.1 verdict
+//                     via GDB watchpoint on real_ds[0x8736]: 4/4 hits at
+//                     seg000 eip 0x4035, caller chain 15473->141e0->13fc2.)
+//   VI.2 role verdicts (2026-08-12), readers verified line-by-line:
+//   slope_ramps_897c: byte LUT [slope_type<<4 | x&0xF] -> height 0..F,
+//                     reader sub_16390 ("slope height diff", dispatch case
+//                     103, eip 0x639B [si-7684h]); static content IS the
+//                     ramp set (asc 0..F, desc F..0, half-slopes...).
+//                     124B = 7 full ramps + 12B stub before LUT_PAGE_ROW
+//                     @89F8 -> legal slope types 0..7. The old "shade_ramps"
+//                     name was a guess - nothing shading-related.
+//   hexdigit_cells@931F: word LUT, reader eip 0xDEF..0xE2x prints AX as hex
+//                     after the DOS INT21/9 banner: per nibble bx=nib*2,
+//                     word [bx-6CE1h] low byte -> byte_2b337..2b339 char
+//                     cells (high byte 0x07 = text attr). CONFIRMED.
+//   dead_data_8560 (69B between pal_chunk_addr_tbl and level_passwords):
+//                     ZERO references in the whole port (direct 856xh
+//                     literals + computed [-0x7AA0] form, seg000/002/003 and
+//                     dispatchers). Leftover EXE data - stays raw BN.
 //   spawn_area:       25F6..2B64 (bounds = neighboring proven fields).
 //                     Content is LEVEL-VARIABLE, two overlapping views:
 //                     (a) 14-byte entries indexed OBJ_ANIM_SUB*14 — word
@@ -539,8 +562,8 @@
   BN(zero_86d2,          0x86d2, 8)           \
   BN(image_86e0,         0x86e0, 6)           \
   BN(subsprite_off_tbl,  0x871c, 24)           \
-  BN(rt_8736,            0x8736, 120)           \
-  BN(shade_ramps_897c,   0x897c, 124)          \
+  BN(anim_quad_queue,    0x8736, 120)           \
+  BN(slope_ramps_897c,   0x897c, 124)          \
   BN(zero_916c,          0x916c, 16)           \
   BN(zero_917d,          0x917d, 4)           \
   BN(zero_9182,          0x9182, 9)           \

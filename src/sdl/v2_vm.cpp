@@ -18636,6 +18636,24 @@ void v2_watch_302(const char* tag) {
 void v2_phase_frame_begin(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     (void)ds_val;
+    // (VI.1) generic HW-watchpoint channel: V2_WP_DS=<hex-offset> arms the
+    // REAL DS byte once (writer hunt: samples log store IP + symbol); the
+    // drain below prints them. One-shot tool, env-gated, zero cost when off.
+    {
+        static int wp_state = -1;   // -1 unparsed, 0 off, 1 armed
+        if (wp_state < 0) {
+            const char* e = getenv("V2_WP_DS");
+            wp_state = 0;
+            if (e && *e && v2_vm_real_ds_ptr) {
+                unsigned off = (unsigned)strtoul(e, nullptr, 16) & 0xFFFF;
+                static char lbl[32];
+                snprintf(lbl, sizeof(lbl), "real_ds[0x%04X]", off);
+                v2_hw_wp_arm(v2_vm_real_ds_ptr + off, lbl);
+                wp_state = 1;
+            }
+        }
+        if (wp_state == 1) v2_hw_wp_drain();
+    }
     // Increment frame counter at FRAME_BEGIN barrier — single sync point both
     // orig and v2 cross together. Counter stays constant for entire outer
     // frame (incl. sub_115d2 internal sub-frames where orig doesn't signal

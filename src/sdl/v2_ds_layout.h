@@ -505,7 +505,10 @@ constexpr uint16_t DS_BYTE_SAVE_1           = 0x8505; // word_309E5: 3-byte save
 constexpr uint16_t DS_BYTE_SAVE_2           = 0x8506; // word_309E6: 3-byte save/restore temp, byte 2 ([di+2] backup)
 constexpr uint16_t DS_INPUT_JOY             = 0x86DC; // word_30BBC: joystick/input value (INT9 async; read gated by DS_JOYSTICK_PRESENT)
 constexpr uint16_t DS_INPUT_ACCUM           = 0x86DE; // word_30BBE: INT9 async input accumulator (atomic OR; input layer, 13 sites)
-constexpr uint16_t DS_COUNTER_8734          = 0x8734; // word_30C14: counter (count/cx_count; cleared 0)
+constexpr uint16_t DS_COUNTER_8734          = 0x8734; // word_30C14: anim-quad queue cursor (WORD index into the
+                                                      // 0x8736 record table, step 3 words/record; writer sub_13fc2
+                                                      // +3 per on-screen 2x2 animated tile quad, consumer sub_1406d
+                                                      // walks it tail-first; cleared 0)
 constexpr uint16_t DS_SCRATCH_28            = 0x0028; // byte_28508: game-state init scratch byte (cleared in sub_12ca3; no orig symbol reader)
 
 #endif // V2_DS_LAYOUT_H
