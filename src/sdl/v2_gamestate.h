@@ -562,11 +562,20 @@
 //     LEVEL chunk straight into ds:25B3.. — so 25B3..2B64 is the per-level
 //     payload (map params, snd type @25B7, map stride @25DC, spawn records
 //     consumed by the 13809 spawn machinery; both ends v2-mirrored).
-//   READER-HUNT QUEUE (live bytes, no direct refs — computed access;
-//   next waves, GDB watchpoints):
-//     rt_0204(136, live 13), rt_0354/0378, rt_25cd/25d0/25e0/25e7,
-//     rt_86b0/86ba, rt_92ef/92f3 (the 92xx CRTC/page block neighbours),
-//     pan_luts@853E (static 12B, name unconfirmed).
+//   Wave-6 watchpoint verdicts (2026-08-12, attract/level1 GDB watches):
+//     rt_0204 / rt_0354: written by the VM op_57 store (MOV [si],ax at
+//       eip 0x46AC) — LEVEL-SCRIPT VARIABLE SLOTS; exact contents are
+//       script data, the mechanism is unit-verified (vmops class B).
+//     rt_0378: the VM priority-object queue ([si+378h]=di, cursor ds:376
+//       INC — the live [372]/[376] re-read pass of v2_vm_pass_14207).
+//     rt_92ef / rt_92f3 (word_317CF/317D3): CRTC display-address fields
+//       written by set_display_memory_addr (sub_16775 family, 95 hits/
+//       attract) — the page-flip mirror owns them.
+//     pan_luts@853E: static LUT bytes (present in ds_static, never
+//       written at runtime — no writer is correct, like image_86e0).
+//     rt_86b0/86ba, rt_25cd/25d0/25e0/25e7 + the live=1 single-byte
+//       tails: not exercised in the current replay windows — micro-queue
+//       for future real-gameplay replays (a few dozen bytes total).
 //   Wave-3 quick verdicts (2026-08-12):
 //     error_msg_2bbe: CONFIRMED by content — DOS $-terminated error text
 //       ("*** An Error has occured while running PC Vikings ***", the 564K
