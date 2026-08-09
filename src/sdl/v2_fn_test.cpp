@@ -14193,17 +14193,17 @@ static long ft_selftest_115d2(uint32_t seed)
         memcpy(v2_vm_get_shadow_tilegfx(), tz, 0x10000);
         for (uint32_t a = 0; a < 0x10000; a++) fz[a] = (uint8_t)rng.next();
         memcpy(v2_fntest_fs_ptr(), fz, 0x10000);
-        // (#83) the 1C8F1 masked-door channel reads its masks from the GS
-        // segment [2E61] — seed that window too (both worlds), or the
-        // mirror legitimately paints nothing while the oracle reads arena
-        // garbage.
+        static uint8_t seed_fz[0x10000];        // (#83 diag) seed snapshot
+        memcpy(seed_fz, fz, 0x10000);
+        // (#83) the 1C8F1 masked-tile draw leg reads its masks from the GS
+        // segment [2E61]. The pre-level snap has [2E61]=0 (the mask segment
+        // is DosMemAlloc'd on level load), so point it at the synthetic
+        // FT_GS_SEG zone and seed BOTH worlds there — the oracle reads
+        // mbase:FT_GS_SEG, v2 resolves [2E61] to the shadow GS.
+        uint8_t* gz = mbase + ((uint32_t)FT_GS_SEG << 4);
+        static uint8_t saved_gz[0x2000];
         {
-            uint16_t gs_seg = (uint16_t)(g_synth_base[0x2E61] | (g_synth_base[0x2E62] << 8));
-            uint8_t* gz = mbase + ((uint32_t)gs_seg << 4);
             extern uint8_t* v2_vm_get_shadow_gs();
-            static uint8_t saved_gz[0x2000];
-            static uint8_t* s_gz; static int s_have = 0;
-            s_gz = gz; s_have = 1; (void)s_have;
             memcpy(saved_gz, gz, sizeof(saved_gz));
             for (uint32_t a = 0; a < sizeof(saved_gz); a++) gz[a] = (uint8_t)rng.next();
             memcpy(v2_vm_get_shadow_gs(), gz, sizeof(saved_gz));
@@ -14211,6 +14211,7 @@ static long ft_selftest_115d2(uint32_t seed)
         memcpy(g_synth_in, g_synth_base, sizeof(g_synth_in));
         ft_wr16(g_synth_in, DS_SEG_TILEGFX, FT_VM_TESTSEG);
         ft_wr16(g_synth_in, DS_SEG_FS, FT_FS_SEG);
+        ft_wr16(g_synth_in, DS_SEG_GS, FT_GS_SEG);            // ds:2E61 (#83)
         ft_wr16(g_synth_in, DS_FS_PAGE_STRIDE, 0x00AC);
         ft_wr16(g_synth_in, 0x2581, 0x0008);
         ft_wr16(g_synth_in, 0x257F, 0x0004);
@@ -14231,6 +14232,13 @@ static long ft_selftest_115d2(uint32_t seed)
         v2_fntest_orig_isolated(v2_fntest_orig_fnptr(FT_SUB_115D2), g_synth_orig, regs);
         v2_fntest_fs_override = 0;
         bool esc = ft_ub_marks() != esc0;
+        // (#83) snapshot the oracle's post-run FS BEFORE the zone restore —
+        // the first FS-PARITY diag read fz AFTER this restore and produced a
+        // bogus "latch zeroes everything" verdict (it compared stale saved
+        // bytes). Correct order: export arrives in fz via the fork
+        // copy-back; capture, THEN restore.
+        static uint8_t orig_fs_post[0x10000];
+        memcpy(orig_fs_post, fz, 0x10000);
         memcpy(a000, saved_a000, 0x10000);
         memcpy(fz, saved_fz, 0x10000);
         if (esc) {
@@ -14253,8 +14261,93 @@ static long ft_selftest_115d2(uint32_t seed)
             vt.join();
         }
         memcpy(tz, saved_tz, 0x10000);
+        memcpy(gz, saved_gz, sizeof(saved_gz));   // (#83) FT_GS_SEG zone restore
         *(uint16_t*)(g_scratch + 0xA39C) = 0;
         *(uint16_t*)(g_synth_orig + 0xA39C) = 0;
+        {   // (#83) honest FS parity: oracle's captured post-run FS vs the
+            // shadow FS after the mirrored run.
+            extern uint8_t v2_vm_shadow_fs[];
+            long fsd = 0; uint32_t first = 0xFFFFFFFF;
+            for (uint32_t a = 0; a < 0x10000; a++)
+                if (orig_fs_post[a] != v2_vm_shadow_fs[a]) {
+                    if (first == 0xFFFFFFFF) first = a; fsd++;
+                }
+            if (fsd)
+                fprintf(stderr, "FS-PARITY2[%s]: diffs=%ld first=%04X orig=%02X v2=%02X\n",
+                        tag, fsd, first, orig_fs_post[first], v2_vm_shadow_fs[first]);
+            // (#83 diag) did EITHER world actually clear scan bits vs the seed?
+            long oseed = 0, vseed = 0;
+            for (uint32_t a = 0; a < 0x10000; a++) {
+                if (orig_fs_post[a] != saved_fz[a]) oseed++;   // NB: saved_fz is pre-seed…
+                if (v2_vm_shadow_fs[a] != saved_fz[a]) vseed++;
+            }
+            (void)oseed; (void)vseed;
+        }
+        {   // (#83 diag) VGA channel anatomy — printed only when the channel
+            // is dirty (or V2_115D2_VERBOSE=1), to keep the full-set output clean.
+            long vga_mm = 0;
+            for (uint32_t a = 0; a < 65536u * 4; a++)
+                if (db[a] != vga[a]) { vga_mm++; if (vga_mm > 1) break; }
+            bool verbose = vga_mm || getenv("V2_115D2_VERBOSE");
+            long n_db = 0, n_vga = 0;
+            uint32_t db_min = 0xFFFFFFFF, db_max = 0, vg_min = 0xFFFFFFFF, vg_max = 0;
+            for (uint32_t a = 0; a < 65536u * 4; a++) {
+                if (db[a] != 0xCC)  { n_db++;  if (a < db_min) db_min = a; if (a > db_max) db_max = a; }
+                if (vga[a] != 0xCC) { n_vga++; if (a < vg_min) vg_min = a; if (a > vg_max) vg_max = a; }
+            }
+            long d_only_v2 = 0, d_only_or = 0, d_both = 0;
+            for (uint32_t a = 0; a < 65536u * 4; a++) {
+                if (db[a] == vga[a]) continue;
+                if (db[a] == 0xCC) d_only_v2++;
+                else if (vga[a] == 0xCC) d_only_or++;
+                else d_both++;
+            }
+            if (verbose) fprintf(stderr,
+                "VGA-ANAT[%s]: db n=%ld range=%06X..%06X | vga n=%ld range=%06X..%06X | "
+                "diff only-v2=%ld only-orig=%ld both=%ld\n",
+                tag, n_db, db_min, db_max, n_vga, vg_min, vg_max,
+                d_only_v2, d_only_or, d_both);
+            // (#83 diag) per-row anatomy: draw candidates in the SEED fs vs
+            // the two worlds' post-run bit0 survivors — where did the
+            // oracle's draws stop?
+            extern uint8_t v2_vm_shadow_fs[];
+            uint16_t row0 = *(uint16_t*)(g_synth_in + 0x2581);
+            uint16_t col0 = *(uint16_t*)(g_synth_in + 0x257F);
+            uint16_t lut0 = *(uint16_t*)(g_synth_in + (uint16_t)(row0 * 2 - 0x7098));
+            uint16_t di0  = (uint16_t)((uint16_t)(lut0 + col0) * 2);
+            uint16_t bp_s = (uint16_t)(*(uint16_t*)(g_synth_in + 0x25DC) * 4 - 0x56);
+            long cand = 0, or_b0 = 0, v2_b0 = 0;
+            char rowmap[0x19 + 1]; rowmap[0x19] = 0;
+            uint16_t mo = di0;
+            for (int r = 0; r < 0x19; r++) {
+                int rc = 0;
+                for (int c = 0; c < 0x2B; c++) {
+                    uint16_t tw = *(uint16_t*)(seed_fz + mo);
+                    uint16_t ow = *(uint16_t*)(orig_fs_post + mo);
+                    uint16_t sw = *(uint16_t*)(v2_vm_shadow_fs + mo);
+                    if ((tw & 1) && (tw & 8)) { cand++; rc++; }
+                    if (ow & 1) or_b0++;
+                    if (sw & 1) v2_b0++;
+                    mo = (uint16_t)(mo + 2);
+                }
+                rowmap[r] = (char)(rc > 9 ? 'X' : '0' + rc);
+                mo = (uint16_t)(mo + bp_s);
+            }
+            if (verbose) fprintf(stderr,
+                "VGA-CAND[%s]: di0=%04X bp=%04X seed-candidates=%ld per-row=[%s] "
+                "post bit0-alive orig=%ld v2=%ld\n",
+                tag, di0, bp_s, cand, rowmap, or_b0, v2_b0);
+            // First 6 diff addresses decoded (plane, byte, page guess by row).
+            int dec = 0;
+            for (uint32_t a = 0; a < 65536u * 4 && dec < 6; a++) {
+                if (db[a] == vga[a]) continue;
+                uint32_t off = a >> 2, pl = a & 3;
+                fprintf(stderr,
+                    "VGA-DEC[%s]: lin=%06X off=%04X plane=%u row(off/0x56)=%u colb=%u db=%02X vga=%02X\n",
+                    tag, a, off, pl, off / 0x56, off % 0x56, db[a], vga[a]);
+                dec++;
+            }
+        }
         long diffs = 0;
         for (uint32_t a = 0; a < 0x10000; a++) {
             if (g_scratch[a] == g_synth_orig[a]) continue;
@@ -14264,19 +14357,20 @@ static long ft_selftest_115d2(uint32_t seed)
                 fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: ds addr=%04X orig=%02X v2=%02X\n",
                         tag, a, g_synth_orig[a], g_scratch[a]);
         }
-        // (#83) The VGA leg only makes sense once the rig models the FS
-        // post-latch state (the oracle's 1DE05 zeroes the seeded window
-        // before 1C8F1 — FS-PARITY verdict). Gated with the mirror env.
-        {   const char* e = getenv("V2_1C8F1_VGA_MIRROR");
-            if (e && *e == '1')
-                for (uint32_t a = 0; a < 65536u * 4; a++) {
-                    if (db[a] == vga[a]) continue;
-                    diffs++;
-                    if (diff_budget-- > 0)
-                        fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: vga lin=%06X orig=%02X v2=%02X\n",
-                                tag, a, db[a], vga[a]);
-                    if (diffs > 40) break;
-                }
+        // (#83 resolved) VGA leg, always on: the oracle fills myDrawInfo's
+        // drawBuffer through the #39 drawPixel inlines on every 1C8F1 engine
+        // write (fork-exported back); v2 fills the shadow VGA through
+        // v2_dirty_tile_scan_1C8F1's masked draw leg. (The old "1DE05
+        // zeroes the seeded FS" verdict was an artifact of reading fz after
+        // the zone restore; the real bug was a duplicate read-only mirror
+        // painting before the per-word bit0 clears.)
+        for (uint32_t a = 0; a < 65536u * 4; a++) {
+            if (db[a] == vga[a]) continue;
+            diffs++;
+            if (diff_budget-- > 0)
+                fprintf(stderr, "FNSELFTEST-DIFF[sub_115d2 %s]: vga lin=%06X orig=%02X v2=%02X\n",
+                        tag, a, db[a], vga[a]);
+            if (diffs > 40) break;
         }
         if (diffs) grid.fail++; else grid.pass++;
     };

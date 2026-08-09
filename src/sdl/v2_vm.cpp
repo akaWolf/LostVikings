@@ -3211,60 +3211,14 @@ static void v2_vga_tile_1689E(uint8_t* s, uint16_t tile_word, uint16_t di_vga) {
 // must run BEFORE the clearing scan — exactly like the orig draw happens
 // inside the same pass that clears. Geometry line-verified against seg003
 // 0E25:00C1-0x14D; pixel math shared with v2_render_tile_masked.
-static void v2_vga_flagged_1C8F1(uint8_t* s) {
-    // (#83 WIP gate) The mirror's geometry is line-derived but the unit
-    // still shows an asymmetric diff (v2 paints where the oracle does not
-    // on seeded FS/GS) — root not yet closed (suspect: pre-1C8F1 FS flag
-    // mutations by the 1DE05/1DD9C chain diverging on synthetic worlds).
-    // Default OFF until the unit closes; V2_1C8F1_VGA_MIRROR=1 enables.
-    {   static int en = -1;
-        if (en < 0) { const char* e = getenv("V2_1C8F1_VGA_MIRROR"); en = (e && *e=='1') ? 1 : 0; }
-        if (!en) return;
-    }
-    extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
-    uint16_t row0 = v2gs(s).scroll_row();          // ds:2581
-    uint16_t col0 = v2gs(s).scroll_col();          // ds:257F
-    uint16_t di_fs = *(uint16_t*)(s + (uint16_t)(row0 * 2 - LUT_ROW_BASE));
-    di_fs = (uint16_t)((uint16_t)(di_fs + col0) * 2);
-    uint16_t bp_step = (uint16_t)(*(uint16_t*)(s + DS_MAP_BP) * 4 - 0x56); // [25DC]*4-0x56
-    uint8_t* tgfx = v2_vm_get_shadow_tilegfx();
-    uint8_t* gsb  = v2_vm_get_shadow_gs();
-    if (!tgfx || !gsb) return;
-    uint16_t page = *(uint16_t*)(s + DS_PAGE_SHOWN);               // ds:92F9
-    for (int r = 0; r < 0x19; r++) {
-        for (int c = 0; c < 0x2B; c++) {
-            uint16_t mo = di_fs;
-            di_fs = (uint16_t)(di_fs + 2);
-            uint16_t tw = (mo < V2_FS_SHADOW_SIZE - 1)
-                        ? *(uint16_t*)(v2_vm_shadow_fs + mo) : 0;
-            if (!(tw & 1) || !(tw & 8)) continue;   // orig: TEST 9/TEST 1 gates + TEST 8 draw
-            // VGA destination: row LUT via the SHOWN page (0E25:0118-0x137)
-            uint16_t lrow = (uint16_t)((uint16_t)(r + row0) * 2 + page);
-            uint16_t di_vga = *(uint16_t*)(s + (uint16_t)(lrow - 0x7608));
-            uint16_t colb = (uint16_t)((((uint16_t)(c + col0) * 2) + 8) & 0xFFFE);
-            di_vga = (uint16_t)(di_vga + colb);
-            uint16_t off = (uint16_t)(tw & 0xFFC0);
-            bool hflip = (tw & 0x10) != 0, vflip = (tw & 0x20) != 0;
-            const uint8_t* tile = tgfx + off;
-            const uint8_t* mask = gsb + (off >> 3);
-            for (int ty = 0; ty < 8; ty++) {
-                int sy = vflip ? 7 - ty : ty;
-                for (int tx = 0; tx < 8; tx++) {
-                    int sx = hflip ? 7 - tx : tx;
-                    int plane = tx & 3, byte_idx = tx >> 2;
-                    int strip = ty >> 2, row = ty & 3;
-                    int mb = plane * 2 + strip;
-                    int mbit = 7 - (row * 2 + byte_idx);
-                    if (!(mask[mb] & (1 << mbit))) continue;
-                    uint8_t color = tile[plane * 16 + strip * 8 + row * 2 + byte_idx];
-                    uint32_t addr = (uint32_t)(uint16_t)(di_vga + sy * 0x56 + (sx >> 2));
-                    v2_vga_glyph_px(addr, (uint32_t)(sx & 3), color);
-                }
-            }
-        }
-        di_fs = (uint16_t)(di_fs + bp_step);
-    }
-}
+// (#83 resolved) A separate v2_vga_flagged_1C8F1 mirror used to live here.
+// It re-derived the whole 1C8F1 draw pass as a read-only sweep over the
+// window BEFORE the bit0 clears — wrong: the orig interleaves AND fs:[di],ax
+// per word inside the ONE scan, so on overlapping windows (unit seed had
+// [25DC]=0 → every "row" rescans the same 43 words) it painted rows the
+// oracle never draws. The exact mirror is v2_dirty_tile_scan_1C8F1 below
+// (scan + per-word clear + v2_masked_tile_1C939 draw leg) — the unit's
+// db-vs-vga channel now verifies THAT path directly.
 
 static void v2_tile_row_16dc1(uint8_t* s, uint16_t bx_fs, uint16_t /*unused*/) {
     // Verified with seg000 lines 14410-14428 (eip 0x6DC1..0x6DD8).
@@ -3661,9 +3615,12 @@ static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
                 if ((fs_val & 9) && (fs_val & 1)) {
                     // line 50: AND fs:[di], ax (clear dirty flag)
                     *(uint16_t*)(v2_vm_shadow_fs + di) &= ax_mask;   // AND fs:[di], ax
-                    // line 51-52: TEST fs:[di], 8; JNZ loc_1C939
-                    if (fs_val & 8) {
-                        v2_masked_tile_1C939(s, fs_val, row, col);  // VGA flagged tile render
+                    // line 51-52: TEST fs:[di], 8; JNZ loc_1C939 — the orig
+                    // TESTs (and later MOV si, fs:[di]) read the word AFTER
+                    // the AND, so the draw leg gets the post-AND value.
+                    uint16_t post = (uint16_t)(fs_val & ax_mask);
+                    if (post & 8) {
+                        v2_masked_tile_1C939(s, post, row, col);  // VGA flagged tile render
                     }
                 }
             }
@@ -6914,8 +6871,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
-    // (#83) plus the shadow-VGA mirror of the orig draw half.
-    v2_vga_flagged_1C8F1(s);
+    // (#83) shadow-VGA of the 1C8F1 draw half lives INSIDE the scan below
+    // (v2_masked_tile_1C939 per word, orig interleaved order).
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6945,8 +6902,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
-    // (#83) plus the shadow-VGA mirror of the orig draw half.
-    v2_vga_flagged_1C8F1(s);
+    // (#83) shadow-VGA of the 1C8F1 draw half lives INSIDE the scan below
+    // (v2_masked_tile_1C939 per word, orig interleaved order).
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -6989,8 +6946,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
-    // (#83) plus the shadow-VGA mirror of the orig draw half.
-    v2_vga_flagged_1C8F1(s);
+    // (#83) shadow-VGA of the 1C8F1 draw half lives INSIDE the scan below
+    // (v2_masked_tile_1C939 per word, orig interleaved order).
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
@@ -7013,8 +6970,8 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // m2c-inline at the orig CALLF site: v2_draw_flagged_tiles BEFORE the
     // scan (the scan clears bit 0 — drawing must read the flags first).
     // (#84 unit sub_115d2 finding: all four SF blocks missed this pair.)
-    // (#83) plus the shadow-VGA mirror of the orig draw half.
-    v2_vga_flagged_1C8F1(s);
+    // (#83) shadow-VGA of the 1C8F1 draw half lives INSIDE the scan below
+    // (v2_masked_tile_1C939 per word, orig interleaved order).
     v2_draw_flagged_tiles(v2_current_ds_val);
     // MOV ax, 0FFFEh; CALLF sub_1C8F1 — flagged tile FS update (clears bit 0)
     v2_dirty_tile_scan_1C8F1(s, 0xFFFE);
