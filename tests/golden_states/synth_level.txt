@@ -303,8 +303,12 @@ obj_sub_anim_ptr       @1AFD [20]: 0000 0000 0000 0000 0000 0000 0000 0000 0000 
 scratch_28             @0028 = 00
 cmd_active             @0308 = 00
 scratch_32e            @032E = 00
-pal_shade              @0342 [6]:
-  0342: 08 08 08 00 00 00
+pal_shade_r            @0342 = 08
+pal_shade_g            @0343 = 08
+pal_shade_b            @0344 = 08
+pal_shade_r2           @0345 = 00
+pal_shade_g2           @0346 = 00
+pal_shade_b2           @0347 = 00
 level_flags            @25CF = 01
 pal_anim_en            @2583 = 3E
 pal_anim_reload        @2584 [8]:
@@ -373,14 +377,17 @@ pal_out                @8202 [768]:
   84A2: 00 00 00 14 36 00 0E 2C 00 0A 22 00 04 18 00 00 0E 00 34 34 34 28 28 28 1C 1C 1C 0E 0E 0E 00 00
   84C2: 00 06 2A 36 00 1A 2C 00 0A 24 00 00 1A 00 00 12 00 00 00 36 22 14 2A 16 08 1E 0E 00 14 06 00 36
   84E2: 36 36 28 28 28 18 18 18 08 08 08 36 36 00 26 26 00 1A 1A 00 00 36 00 00 26 00 00 16 00 00 00 00
-byte_save              @8504 [3]:
-  8504: 00 00 00
+byte_save_0            @8504 = 00
+byte_save_1            @8505 = 00
+byte_save_2            @8506 = 00
 pixel_pan              @92EE = 00
 pan_gate               @92F2 = 00
 vga_page_flag          @92FF = 01
 vga_mode_byte          @9300 = 00
-page_split             @9311 [4]:
-  9311: 00 00 00 00
+page_split_1a          @9311 = 00
+page_split_1b          @9312 = 00
+page_split_2a          @9313 = 00
+page_split_2b          @9314 = 00
 key_q                  @917C = 00
 spec_key_y             @9181 = 00
 spec_key_s             @918B = 00

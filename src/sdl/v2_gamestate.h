@@ -369,7 +369,12 @@
   B1(scratch_28,       DS_SCRATCH_28)          \
   B1(cmd_active,       DS_CMD_ACTIVE)          \
   B1(scratch_32e,      DS_SCRATCH_32E)         \
-  BN(pal_shade,        DS_PAL_SHADE_R, 6)      \
+  B1(pal_shade_r,      DS_PAL_SHADE_R)         \
+  B1(pal_shade_g,      DS_PAL_SHADE_G)         \
+  B1(pal_shade_b,      DS_PAL_SHADE_B)         \
+  B1(pal_shade_r2,     DS_PAL_SHADE_R2)        \
+  B1(pal_shade_g2,     DS_PAL_SHADE_G2)        \
+  B1(pal_shade_b2,     DS_PAL_SHADE_B2)        \
   B1(level_flags,      DS_LEVEL_FLAGS)         \
   B1(pal_anim_en,      DS_PAL_ANIM_EN)         \
   BN(pal_anim_reload,  DS_PAL_ANIM_RELOAD, 8)  \
@@ -386,12 +391,17 @@
   B1(dac_b_save,       DS_DAC_B_SAVE)          \
   BN(pal_src,          DS_PAL_SRC, 768)        \
   BN(pal_out,          DS_PAL_OUT, 768)        \
-  BN(byte_save,        DS_BYTE_SAVE_0, 3)      \
+  B1(byte_save_0,      DS_BYTE_SAVE_0)         \
+  B1(byte_save_1,      DS_BYTE_SAVE_1)         \
+  B1(byte_save_2,      DS_BYTE_SAVE_2)         \
   B1(pixel_pan,        DS_PIXEL_PAN)           \
   B1(pan_gate,         DS_PAN_GATE)            \
   B1(vga_page_flag,    DS_VGA_PAGE_FLAG)       \
   B1(vga_mode_byte,    DS_VGA_MODE_BYTE)       \
-  BN(page_split,       DS_PAGE_SPLIT_1A, 4)    \
+  B1(page_split_1a,    DS_PAGE_SPLIT_1A)       \
+  B1(page_split_1b,    DS_PAGE_SPLIT_1B)       \
+  B1(page_split_2a,    DS_PAGE_SPLIT_2A)       \
+  B1(page_split_2b,    DS_PAGE_SPLIT_2B)       \
   B1(key_q,            DS_KEY_Q)               \
   B1(spec_key_y,       DS_SPEC_KEY_Y)          \
   B1(spec_key_s,       DS_SPEC_KEY_S)          \
@@ -766,6 +776,20 @@ struct V2StateView {
     uint16_t& name##_ref()             { return *(uint16_t*)(ds + (off)); }
     V2_GS_ALIASES(V2_GS_A1)
 #undef V2_GS_A1
+    // Lo-byte aliases for word fields the orig touches with byte MOVs
+    // (phase-9 view translation; the byte IS the word's low half).
+#define V2_GS_LOB(name, off) \
+    uint8_t  name##_lob() const        { return ds[(off)]; } \
+    void     name##_lob(uint8_t v)     { ds[(off)] = v; } \
+    uint8_t& name##_lobref()           { return ds[(off)]; }
+    V2_GS_LOB(sfx_mute,    DS_SFX_MUTE)
+    V2_GS_LOB(music_mute,  DS_MUSIC_MUTE)
+    V2_GS_LOB(input_accum, DS_INPUT_ACCUM)
+    V2_GS_LOB(input_prev,  DS_INPUT_PREV)
+    V2_GS_LOB(vsync_count, DS_VSYNC_COUNT)
+    V2_GS_LOB(pal_req,     DS_PAL_REQ)
+    V2_GS_LOB(render_117d, DS_RENDER_117D)   // word alias exists; byte MOVs hit its low half
+#undef V2_GS_LOB
 };
 
 // Read-only view over a const DS image (same names, getters only) — for

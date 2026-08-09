@@ -1579,13 +1579,13 @@ extern "C" uint16_t v2_shadow_word_288ac() {
 
 extern "C" void v2_shadow_input_or(uint16_t bit) {
     if (!bit) return;
-    __atomic_or_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[DS_INPUT_ACCUM]),
+    __atomic_or_fetch(reinterpret_cast<uint16_t*>(&v2gs(v2_vm_shadow_ds).input_accum_lobref()),
                       bit, __ATOMIC_RELAXED);
     v2_patch_all_snaps_input(bit, true);
 }
 extern "C" void v2_shadow_input_and_not(uint16_t bit) {
     if (!bit) return;
-    __atomic_and_fetch(reinterpret_cast<uint16_t*>(&v2_vm_shadow_ds[DS_INPUT_ACCUM]),
+    __atomic_and_fetch(reinterpret_cast<uint16_t*>(&v2gs(v2_vm_shadow_ds).input_accum_lobref()),
                       (uint16_t)~bit, __ATOMIC_RELAXED);
     v2_patch_all_snaps_input(bit, false);
 }
@@ -1644,8 +1644,8 @@ void v2_dump_write_ring(const char* reason) {
 // Helper macros: instrument byte writes to ds:0x91A4
 #define V2_WRITE_91A4_SHAD(val, src) do { \
     uint8_t _v = (val); \
-    v2_log_write_ring(DS_KEY_ALT, v2_vm_shadow_ds[DS_KEY_ALT], _v, true, src); \
-    v2_vm_shadow_ds[DS_KEY_ALT] = _v; \
+    v2_log_write_ring(DS_KEY_ALT, v2gs(v2_vm_shadow_ds).key_alt_bref(), _v, true, src); \
+    v2gs(v2_vm_shadow_ds).key_alt_bref() = _v; \
 } while(0)
 
 // Mirror orig sub_10350's spec_state OR-ins (seg000.cpp lines 2560-2563) to
@@ -1660,10 +1660,10 @@ extern "C" void v2_spec_ors_mirror_10350() {
     // orig and v2 see identical frame-stable values — no race with render
     // thread KEYUP between reads. sdl_spec_state itself is SDL adapter state
     // (not real DS), so reading it satisfies "v2 from own shadow state" rule.
-    v2_vm_shadow_ds[DS_KEY_F10] = sdl_spec_get(DS_KEY_F10);
+    v2gs(v2_vm_shadow_ds).key_f10_bref() = sdl_spec_get(DS_KEY_F10);
     V2_WRITE_91A4_SHAD(sdl_spec_get(DS_KEY_ALT), "v2:mirror_sub_10350");
-    v2_vm_shadow_ds[DS_KEY_X] = sdl_spec_get(DS_KEY_X);
-    v2_vm_shadow_ds[DS_KEY_Q] = sdl_spec_get(DS_KEY_Q);
+    v2gs(v2_vm_shadow_ds).key_x_bref() = sdl_spec_get(DS_KEY_X);
+    v2gs(v2_vm_shadow_ds).key_q_bref() = sdl_spec_get(DS_KEY_Q);
 }
 
 // Unified input read for inline sub_12352 sites. In V2_ONLY: reads live input_keys
@@ -2378,9 +2378,9 @@ static void v2_pal_anim_10ffc(uint8_t* s) {
 // sub_10f03: palette shading — reads ds:0x7F02 (source palette), writes ds:0x8202 (shaded palette).
 // Subtracts shade bytes (ds:0x342-0x347) from each RGB component, clamps to [0, 0x3F].
 static void v2_pal_shade_10f03(uint8_t* s) {
-    uint8_t r_shade = s[DS_PAL_SHADE_R] | s[DS_PAL_SHADE_R2];
-    uint8_t g_shade = s[DS_PAL_SHADE_G] | s[DS_PAL_SHADE_G2];
-    uint8_t b_shade = s[DS_PAL_SHADE_B] | s[DS_PAL_SHADE_B2];
+    uint8_t r_shade = v2gs(s).pal_shade_r_bref() | v2gs(s).pal_shade_r2_bref();
+    uint8_t g_shade = v2gs(s).pal_shade_g_bref() | v2gs(s).pal_shade_g2_bref();
+    uint8_t b_shade = v2gs(s).pal_shade_b_bref() | v2gs(s).pal_shade_b2_bref();
     uint8_t* src = s + DS_PAL_SRC;
     uint8_t* dst = s + DS_PAL_OUT;
     for (int i = 0; i < 0x100; i++) {
@@ -2398,9 +2398,9 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
     // seg000 eip 0xFA1) — the full fade loop is the original behaviour; v2's
     // single-iteration copy was matching the stale hack (M1 call-parity).
     for (uint16_t bx = 0; bx <= 0x45; bx++) {
-        s[DS_PAL_SHADE_R] = (uint8_t)bx; // byte_28822
-        s[DS_PAL_SHADE_G] = (uint8_t)bx; // byte_28823
-        s[DS_PAL_SHADE_B] = (uint8_t)bx; // byte_28824
+        v2gs(s).pal_shade_r_bref() = (uint8_t)bx; // byte_28822
+        v2gs(s).pal_shade_g_bref() = (uint8_t)bx; // byte_28823
+        v2gs(s).pal_shade_b_bref() = (uint8_t)bx; // byte_28824
         v2_pal_shade_10f03(s);                    // sub_10f03: palette shading → ds:0x8202
         v2gs(s).pal_req(4);       // word_303DE = 4 (request palette write)
         v2gs(s).pal_src_ptr(DS_PAL_OUT);  // word_303E0 = shaded palette pointer
@@ -2408,9 +2408,9 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
         v2_page_flip_16775(s);                     // sub_16775: page flip DS writes
         v2_vsync_wait_10130(s);                     // sub_10130: vsync + palette dispatch (DS: DEC A39C)
     }
-    s[DS_PAL_SHADE_R] = 0;                                                       // MOV byte_28822, 0
-    s[DS_PAL_SHADE_G] = 0;                                                       // MOV byte_28823, 0
-    s[DS_PAL_SHADE_B] = 0;                                                       // MOV byte_28824, 0
+    v2gs(s).pal_shade_r_bref() = 0;                                                       // MOV byte_28822, 0
+    v2gs(s).pal_shade_g_bref() = 0;                                                       // MOV byte_28823, 0
+    v2gs(s).pal_shade_b_bref() = 0;                                                       // MOV byte_28824, 0
     v2gs(s).pal_src_ptr(DS_PAL_OUT);                                  // MOV word_303E0, 8202h
 }
 
@@ -2423,9 +2423,9 @@ static void v2_pal_correct_10e99(uint8_t* s); // forward decl for v2_save_game_1
 // Then JMP sub_10E99 (palette correction).
 static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di) {
     v2_cc_v2_hit(CC_1450B);   // M1 wave-2 (#65)
-    s[DS_PAL_SHADE_R] = (uint8_t)(al << 1);                                  // SHL al, 1; MOV ds:342h, al
-    s[DS_PAL_SHADE_G] = (uint8_t)((uint8_t)si << 1);                        // SHL al, 1; MOV ds:343h, al
-    s[DS_PAL_SHADE_B] = (uint8_t)((uint8_t)di << 1);                        // SHL al, 1; MOV ds:344h, al
+    v2gs(s).pal_shade_r_bref() = (uint8_t)(al << 1);                                  // SHL al, 1; MOV ds:342h, al
+    v2gs(s).pal_shade_g_bref() = (uint8_t)((uint8_t)si << 1);                        // SHL al, 1; MOV ds:343h, al
+    v2gs(s).pal_shade_b_bref() = (uint8_t)((uint8_t)di << 1);                        // SHL al, 1; MOV ds:344h, al
     v2gs(s).pal_flags_bref() |= 1;                                                 // OR byte ptr ds:7EFDh, 1
     v2gs(s).pal_req(4);                                   // MOV word ptr ds:7EFEh, 4
     v2gs(s).pal_src_ptr(DS_PAL_OUT);                              // MOV word ptr ds:7F00h, 8202h
@@ -2577,8 +2577,7 @@ extern "C" void v2_fntest_call_1086f(uint8_t* shadow, int max_iters) {
     // loop it the way the orig loop spins. Empty tail resets both cursors
     // to 0, so "processed the tail" == read==write afterwards.
     for (int i = 0; i < max_iters; i++) {
-        bool was_empty = *(uint16_t*)(shadow + DS_CMD_READ)
-                      == *(uint16_t*)(shadow + DS_CMD_WRITE);
+        bool was_empty = v2gs(shadow).cmd_read() == v2gs(shadow).cmd_write();
         v2_cmd_loop_1086f(shadow);
         if (was_empty) break;
     }
@@ -2622,15 +2621,15 @@ static void v2_pal_rotate_fwd_10255(uint8_t* s, uint16_t si, uint16_t dx) {
     uint8_t cur = s[(uint16_t)(si + DS_PAL_ANIM_END)];                  // AL = [si+259Ch]
     uint8_t endi = s[(uint16_t)(si + DS_PAL_ANIM_START)];                 // AL = [si+2594h]
     uint16_t di = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // ax=cur*3; di=ax+dx
-    s[DS_BYTE_SAVE_0] = s[di];                                         // byte ptr word_309E4   = [di]
-    s[DS_BYTE_SAVE_1] = s[(uint16_t)(di + 1)];                         // byte ptr word_309E4+1 = [di+1]
-    s[DS_BYTE_SAVE_2] = s[(uint16_t)(di + 2)];                         // byte_309E6            = [di+2]
+    v2gs(s).byte_save_0_bref() = s[di];                                         // byte ptr word_309E4   = [di]
+    v2gs(s).byte_save_1_bref() = s[(uint16_t)(di + 1)];                         // byte ptr word_309E4+1 = [di+1]
+    v2gs(s).byte_save_2_bref() = s[(uint16_t)(di + 2)];                         // byte_309E6            = [di+2]
     uint16_t cx = (uint16_t)((uint16_t)((uint16_t)endi * 3 + dx) - di); // cx = end*3+dx - di
     uint16_t src = (uint16_t)(di + 3);                         // si = di+3
     while (cx--) { s[di] = s[src]; di++; src++; }              // REP MOVSB (DF=0)
-    s[di] = s[DS_BYTE_SAVE_0];                                         // [di]   = word_309E4 lo
-    s[(uint16_t)(di + 1)] = s[DS_BYTE_SAVE_1];                         // [di+1] = word_309E4 hi
-    s[(uint16_t)(di + 2)] = s[DS_BYTE_SAVE_2];                         // [di+2] = byte_309E6
+    s[di] = v2gs(s).byte_save_0_bref();                                         // [di]   = word_309E4 lo
+    s[(uint16_t)(di + 1)] = v2gs(s).byte_save_1_bref();                         // [di+1] = word_309E4 hi
+    s[(uint16_t)(di + 2)] = v2gs(s).byte_save_2_bref();                         // [di+2] = byte_309E6
 }
 
 // sub_1020f (seg000 eip 0x020F-0x0254): the inverse rotate — entry at
@@ -2642,16 +2641,16 @@ static void v2_pal_rotate_back_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
     uint8_t cur = s[(uint16_t)(si + DS_PAL_ANIM_END)];                  // movzx ax, [si+259Ch]
     uint8_t endi = s[(uint16_t)(si + DS_PAL_ANIM_START)];                 // movzx ax, [si+2594h]
     uint16_t di0 = (uint16_t)((uint16_t)((uint16_t)cur * 3) + dx); // di=cur*3+dx
-    s[DS_BYTE_SAVE_0] = s[di0];                                        // word_309E4 = [di] (WORD, LE)
-    s[DS_BYTE_SAVE_1] = s[(uint16_t)(di0 + 1)];
-    s[DS_BYTE_SAVE_2] = s[(uint16_t)(di0 + 2)];                        // byte_309E6 = [di+2]
+    v2gs(s).byte_save_0_bref() = s[di0];                                        // word_309E4 = [di] (WORD, LE)
+    v2gs(s).byte_save_1_bref() = s[(uint16_t)(di0 + 1)];
+    v2gs(s).byte_save_2_bref() = s[(uint16_t)(di0 + 2)];                        // byte_309E6 = [di+2]
     uint16_t cx = (uint16_t)((uint16_t)((uint16_t)cur - (uint16_t)endi) * 3); // cx=(cur-end)*3
     uint16_t sp = (uint16_t)(di0 - 1);                         // si = di-1
     uint16_t dp = (uint16_t)(di0 + 2);                         // di = di+2
     while (cx--) { s[dp] = s[sp]; dp--; sp--; }                // STD; REP MOVSB; CLD
-    s[(uint16_t)(dp - 2)] = s[DS_BYTE_SAVE_0];                         // [di-2] = word_309E4 (WORD, LE)
-    s[(uint16_t)(dp - 1)] = s[DS_BYTE_SAVE_1];
-    s[dp] = s[DS_BYTE_SAVE_2];                                         // [di] = byte_309E6
+    s[(uint16_t)(dp - 2)] = v2gs(s).byte_save_0_bref();                         // [di-2] = word_309E4 (WORD, LE)
+    s[(uint16_t)(dp - 1)] = v2gs(s).byte_save_1_bref();
+    s[dp] = v2gs(s).byte_save_2_bref();                                         // [di] = byte_309E6
 }
 
 // sub_101be (seg000): Palette cycling for UI elements.
@@ -2700,8 +2699,8 @@ static void v2_audio_tick_108c8(uint8_t* s) {
     if (v2gs(s).key_alt_b() != 1) return;        // CMP byte_31684, 1; JNZ ret
     if (v2gs(s).spec_key_s_b() == 1) {              // CMP byte_3166B, 1; JNZ skip
         v2gs(s).spec_key_s_b(0);                                                   // MOV byte_3166B, 0
-        s[DS_SFX_MUTE] ^= 1;                                                  // XOR byte ptr word_287E4, 1
-        if (s[DS_SFX_MUTE] != 0) {                                           // JZ skips stop → do stop when nonzero
+        v2gs(s).sfx_mute_lobref() ^= 1;                                                  // XOR byte ptr word_287E4, 1
+        if (v2gs(s).sfx_mute_lobref() != 0) {                                           // JZ skips stop → do stop when nonzero
             // Mute toggled ON: stop SFX channels. Orig eip 0x8F5-0x933: per
             // occupied slot fnAB (1c79f) + fn98 (1c769) + FFFF/FFFF words —
             // the exact v2_ail_seq_stop_slot body in native mode.
@@ -2724,8 +2723,8 @@ static void v2_audio_tick_108c8(uint8_t* s) {
     v2gs(s).spec_key_m_b(sdl_spec_get(0x919E));  // SDL M — exact orig INT9
     if (v2gs(s).spec_key_m_b() != 1) return;        // CMP byte_3167E, 1; JNZ ret
     v2gs(s).spec_key_m_b(0);                                                       // MOV byte_3167E, 0
-    s[DS_MUSIC_MUTE] ^= 1;                                                      // XOR byte ptr word_287E2, 1
-    if (s[DS_MUSIC_MUTE] != 0) {                                                 // JNZ loc_10959 (music STOP path)
+    v2gs(s).music_mute_lobref() ^= 1;                                                      // XOR byte ptr word_287E2, 1
+    if (v2gs(s).music_mute_lobref() != 0) {                                                 // JNZ loc_10959 (music STOP path)
         // loc_10959: music OFF. Skip if bit 15 set.
         if (!(v2gs(s).music_mute() & 0x8000)) {
             // Orig eip 0x961-0x97B: fnAB + fn98 on [990C] WITHOUT clearing
@@ -3548,9 +3547,9 @@ static void v2_masked_tile_1C939_doc(uint8_t* /*s*/, uint16_t /*fs_val*/, uint16
 static void v2_pal_correct_10e99(uint8_t* s) {
     // Exact replica of seg000 sub_10e99 (lines 1961-2034).
     // Color 0: 3 corrected bytes. Colors 1-15: 45 raw bytes. Colors 16-255: 240×3 corrected.
-    uint8_t r_off = s[DS_PAL_SHADE_R] | s[DS_PAL_SHADE_R2];
-    uint8_t g_off = s[DS_PAL_SHADE_G] | s[DS_PAL_SHADE_G2];
-    uint8_t b_off = s[DS_PAL_SHADE_B] | s[DS_PAL_SHADE_B2];
+    uint8_t r_off = v2gs(s).pal_shade_r_bref() | v2gs(s).pal_shade_r2_bref();
+    uint8_t g_off = v2gs(s).pal_shade_g_bref() | v2gs(s).pal_shade_g2_bref();
+    uint8_t b_off = v2gs(s).pal_shade_b_bref() | v2gs(s).pal_shade_b2_bref();
 
     uint8_t* source = s + DS_PAL_SRC;
     uint8_t* destination = s + DS_PAL_OUT;
@@ -4624,12 +4623,12 @@ static void v2_clear_bit_flags_11192(uint8_t* s) {
 
 // sub_111df: clear viking state bytes
 static void v2_clear_viking_state_111df(uint8_t* s) {
-    s[DS_PAL_SHADE_R] = 0; // byte_28822
-    s[DS_PAL_SHADE_G] = 0; // byte_28823
-    s[DS_PAL_SHADE_B] = 0; // byte_28824
-    s[DS_PAL_SHADE_R2] = 0; // byte_28825
-    s[DS_PAL_SHADE_G2] = 0; // byte_28826
-    s[DS_PAL_SHADE_B2] = 0; // byte_28827
+    v2gs(s).pal_shade_r_bref() = 0; // byte_28822
+    v2gs(s).pal_shade_g_bref() = 0; // byte_28823
+    v2gs(s).pal_shade_b_bref() = 0; // byte_28824
+    v2gs(s).pal_shade_r2_bref() = 0; // byte_28825
+    v2gs(s).pal_shade_g2_bref() = 0; // byte_28826
+    v2gs(s).pal_shade_b2_bref() = 0; // byte_28827
     v2gs(s).scratch_348(0); // word_28828
 }
 
@@ -4833,21 +4832,21 @@ static void v2_vga_scroll_col_left_16e75(uint8_t* s) {
     uint16_t bx_r = *(uint16_t*)(s + (uint16_t)(di_r - LUT_ROW_BASE)); // 0x6e83
     uint16_t di_pg1 = di_r + v2gs(s).page_shown();        // 0x6e87 +[92F9]
     uint8_t cl_v = 0x9C;                                             // 0x6e8d
-    s[DS_PAGE_SPLIT_1A] = cl_v - (uint8_t)(di_pg1 % cl_v);           // 0x6e8f DIV/SUB -> 9311
+    v2gs(s).page_split_1a_bref() = cl_v - (uint8_t)(di_pg1 % cl_v);           // 0x6e8f DIV/SUB -> 9311
     v2gs(s).page_copy_dst1(*(uint16_t*)(s + (uint16_t)(di_pg1 - 0x7608)));               // 0x6e97 -> 9317
-    if (s[DS_PAGE_SPLIT_1A] < 0x32) {                                // 0x6e9f JNC
-        s[DS_PAGE_SPLIT_1B] = 0x32 - s[DS_PAGE_SPLIT_1A];            // 0x6ea6 -> 9312
-        s[DS_PAGE_SPLIT_1A] <<= 2; s[DS_PAGE_SPLIT_1B] <<= 2;        // 0x6eb0/0x6eb5
+    if (v2gs(s).page_split_1a_bref() < 0x32) {                                // 0x6e9f JNC
+        v2gs(s).page_split_1b_bref() = 0x32 - v2gs(s).page_split_1a_bref();            // 0x6ea6 -> 9312
+        v2gs(s).page_split_1a_bref() <<= 2; v2gs(s).page_split_1b_bref() <<= 2;        // 0x6eb0/0x6eb5
         v2gs(s).page_copy_src2(*(uint16_t*)(s + LUT_PAGE_ROW)); // 0x6eba -> 9319
-    } else { s[DS_PAGE_SPLIT_1A] = 0xC8; s[DS_PAGE_SPLIT_1B] = 0; }  // loc_16ec4
+    } else { v2gs(s).page_split_1a_bref() = 0xC8; v2gs(s).page_split_1b_bref() = 0; }  // loc_16ec4
     uint16_t di_pg2 = di_r + v2gs(s).page_bg();           // loc_16ece +[92FB]
-    s[DS_PAGE_SPLIT_2A] = cl_v - (uint8_t)(di_pg2 % cl_v);           // 0x6ed5 -> 9313
+    v2gs(s).page_split_2a_bref() = cl_v - (uint8_t)(di_pg2 % cl_v);           // 0x6ed5 -> 9313
     v2gs(s).page_copy_dst2(*(uint16_t*)(s + (uint16_t)(di_pg2 - 0x7608)));               // 0x6edf -> 931B
-    if (s[DS_PAGE_SPLIT_2A] < 0x32) {                                // 0x6ee7
-        s[DS_PAGE_SPLIT_2B] = 0x32 - s[DS_PAGE_SPLIT_2A];            // 0x6eee -> 9314
-        s[DS_PAGE_SPLIT_2A] <<= 2; s[DS_PAGE_SPLIT_2B] <<= 2;        // 0x6ef8/0x6efd
+    if (v2gs(s).page_split_2a_bref() < 0x32) {                                // 0x6ee7
+        v2gs(s).page_split_2b_bref() = 0x32 - v2gs(s).page_split_2a_bref();            // 0x6eee -> 9314
+        v2gs(s).page_split_2a_bref() <<= 2; v2gs(s).page_split_2b_bref() <<= 2;        // 0x6ef8/0x6efd
         v2gs(s).page_copy_src3(*(uint16_t*)(s + LUT_PAGE_ROW)); // 0x6f02 -> 931D
-    } else { s[DS_PAGE_SPLIT_2A] = 0xC8; s[DS_PAGE_SPLIT_2B] = 0; }  // loc_16f0c
+    } else { v2gs(s).page_split_2a_bref() = 0xC8; v2gs(s).page_split_2b_bref() = 0; }  // loc_16f0c
     uint16_t di_pg3 = di_r + v2gs(s).page_draw();         // loc_16f16 +[92F7]
     uint16_t di_vga3 = *(uint16_t*)(s + (uint16_t)(di_pg3 - 0x7608)); // 0x6f1b
     uint16_t ax_col = v2gs(s).scroll_disp_x();            // 0x6f1f ax=[92EF]
@@ -4875,21 +4874,21 @@ static void v2_vga_scroll_col_right_16f5f(uint8_t* s) {
     uint16_t bx_r = *(uint16_t*)(s + (uint16_t)(di_r - LUT_ROW_BASE)); // 0x6f6d
     uint16_t di_pg1 = di_r + v2gs(s).page_shown();        // 0x6f71 +[92F9]
     uint8_t cl_v = 0x9C;                                             // 0x6f77
-    s[DS_PAGE_SPLIT_1A] = cl_v - (uint8_t)(di_pg1 % cl_v);           // 0x6f79 -> 9311
+    v2gs(s).page_split_1a_bref() = cl_v - (uint8_t)(di_pg1 % cl_v);           // 0x6f79 -> 9311
     v2gs(s).page_copy_dst1(*(uint16_t*)(s + (uint16_t)(di_pg1 - 0x7608)));               // 0x6f81 -> 9317
-    if (s[DS_PAGE_SPLIT_1A] < 0x32) {                                // 0x6f89
-        s[DS_PAGE_SPLIT_1B] = 0x32 - s[DS_PAGE_SPLIT_1A];            // 0x6f90 -> 9312
-        s[DS_PAGE_SPLIT_1A] <<= 2; s[DS_PAGE_SPLIT_1B] <<= 2;        // 0x6f9a/0x6f9f
+    if (v2gs(s).page_split_1a_bref() < 0x32) {                                // 0x6f89
+        v2gs(s).page_split_1b_bref() = 0x32 - v2gs(s).page_split_1a_bref();            // 0x6f90 -> 9312
+        v2gs(s).page_split_1a_bref() <<= 2; v2gs(s).page_split_1b_bref() <<= 2;        // 0x6f9a/0x6f9f
         v2gs(s).page_copy_src2(*(uint16_t*)(s + LUT_PAGE_ROW)); // 0x6fa4 -> 9319
-    } else { s[DS_PAGE_SPLIT_1A] = 0xC8; s[DS_PAGE_SPLIT_1B] = 0; }  // loc_16fae
+    } else { v2gs(s).page_split_1a_bref() = 0xC8; v2gs(s).page_split_1b_bref() = 0; }  // loc_16fae
     uint16_t di_pg2 = di_r + v2gs(s).page_bg();           // loc_16fb8 +[92FB]
-    s[DS_PAGE_SPLIT_2A] = cl_v - (uint8_t)(di_pg2 % cl_v);           // 0x6fc1 -> 9313
+    v2gs(s).page_split_2a_bref() = cl_v - (uint8_t)(di_pg2 % cl_v);           // 0x6fc1 -> 9313
     v2gs(s).page_copy_dst2(*(uint16_t*)(s + (uint16_t)(di_pg2 - 0x7608)));               // 0x6fc9 -> 931B
-    if (s[DS_PAGE_SPLIT_2A] < 0x32) {                                // 0x6fd1
-        s[DS_PAGE_SPLIT_2B] = 0x32 - s[DS_PAGE_SPLIT_2A];            // 0x6fd8 -> 9314
-        s[DS_PAGE_SPLIT_2A] <<= 2; s[DS_PAGE_SPLIT_2B] <<= 2;        // 0x6fe2/0x6fe7
+    if (v2gs(s).page_split_2a_bref() < 0x32) {                                // 0x6fd1
+        v2gs(s).page_split_2b_bref() = 0x32 - v2gs(s).page_split_2a_bref();            // 0x6fd8 -> 9314
+        v2gs(s).page_split_2a_bref() <<= 2; v2gs(s).page_split_2b_bref() <<= 2;        // 0x6fe2/0x6fe7
         v2gs(s).page_copy_src3(*(uint16_t*)(s + LUT_PAGE_ROW)); // -> 931D
-    } else { s[DS_PAGE_SPLIT_2A] = 0xC8; s[DS_PAGE_SPLIT_2B] = 0; }
+    } else { v2gs(s).page_split_2a_bref() = 0xC8; v2gs(s).page_split_2b_bref() = 0; }
     uint16_t di_pg3 = di_r + v2gs(s).page_draw();         // +[92F7]
     uint16_t di_vga3 = *(uint16_t*)(s + (uint16_t)(di_pg3 - 0x7608));
     uint16_t ax_col = v2gs(s).scroll_disp_x() + 0x29;     // ax=[92EF]+0x29
@@ -5049,7 +5048,7 @@ static void v2_despawn_bounds_13c0c(uint8_t* s) {
     // branch jumps past the store only) -> ds:0x36 = RAW ax + 0x160.
     uint16_t vpx = v2gs(s).viewport_x();
     uint16_t ax_raw = (uint16_t)(vpx - 0x10);
-    *(uint16_t*)(s + DS_SCRATCH_34) = ((int16_t)vpx >= (int16_t)0x10) ? ax_raw : 0;
+    v2gs(s).scratch_34(((int16_t)vpx >= (int16_t)0x10) ? ax_raw : 0);
     v2gs(s).scratch_36((uint16_t)(ax_raw + 0x160)); // uses ORIGINAL ax
     // Y (orig eips 0x3C25-0x3C36): SUB ax,10h; JNS (= bit15 of the RESULT);
     // MOV ax,0 — here ax IS clamped, so BOTH ds:0x38 and ds:0x3A derive from
@@ -5352,7 +5351,7 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
       uint16_t s_val = *(uint16_t*)(shadow + OBJ_SUB_SLOT);
       uint16_t r_val = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + OBJ_SUB_SLOT) : 0xDEAD;
       printf("V2-DBG-10813: active=%d prev=%d flag=%02X 414D=%02X s[1A85]=%04X r[1A85]=%04X\n",
-        active, prev, flag_9a, shadow[DS_PROBE_414D], s_val, r_val); } }
+        active, prev, flag_9a, shadow[DS_PROBE_414D] /* diag probe INSIDE level_pal_chunks (color #x of pal slot) — raw by intent */, s_val, r_val); } }
 
     // loc_107A2: if active changed, clear previous viking's blink + reset counter
     if (active != prev) {
@@ -5559,8 +5558,11 @@ static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
         *(uint32_t*)(s + addr) &= mask;
     }
     // Copy word_303EB → word_2AA88, byte_303ED → byte_2AA8A
+    // intentional RAW word read: the orig grabs the DAC R+G byte pair as
+    // one word ([7F0B] word view); the fields are byte-typed (dac_r/dac_g),
+    // so a view call would hide the pairing. (phase-9 reviewed, kept raw)
     v2gs(s).dac_r_save_w(*(uint16_t*)(s + DS_DAC_R));
-    v2gs(s).dac_b_save_b(s[DS_DAC_B]);
+    v2gs(s).dac_b_save_b(v2gs(s).pal_src_bytes()[DS_DAC_B - DS_PAL_SRC]);
     // jmp sub_10e99: palette color correction (copies 7F02 → 8202 with shading)
     v2_pal_correct_10e99(s);
     return di + 2;
@@ -6825,18 +6827,18 @@ static void v2_input_clear_12345(uint8_t* s) {
 // behaviour — the seg000-side "bx = 0" debug override has been removed.
 static void v2_pal_fade_in_10f5d(uint8_t* s) {
     for (int16_t bx = 0x46; bx >= 0; bx--) {
-        s[DS_PAL_SHADE_R] = (uint8_t)bx;
-        s[DS_PAL_SHADE_G] = (uint8_t)bx;
-        s[DS_PAL_SHADE_B] = (uint8_t)bx;
+        v2gs(s).pal_shade_r_bref() = (uint8_t)bx;
+        v2gs(s).pal_shade_g_bref() = (uint8_t)bx;
+        v2gs(s).pal_shade_b_bref() = (uint8_t)bx;
         v2_pal_shade_10f03(s);                       // sub_10F03: shade -> ds:0x8202
         v2gs(s).pal_req(4);            // word_303DE = 4 (request)
         v2gs(s).pal_src_ptr(DS_PAL_OUT); // word_303E0 = 0x8202
         v2_page_flip_16775(s);
         v2_vsync_wait_10130(s);
     }
-    s[DS_PAL_SHADE_R] = 0;
-    s[DS_PAL_SHADE_G] = 0;
-    s[DS_PAL_SHADE_B] = 0;
+    v2gs(s).pal_shade_r_bref() = 0;
+    v2gs(s).pal_shade_g_bref() = 0;
+    v2gs(s).pal_shade_b_bref() = 0;
     v2gs(s).pal_src_ptr(DS_PAL_SRC);   // word_303E0 = 0x7F02 (normal)
 }
 
@@ -7198,7 +7200,7 @@ static void v2_load_level_11080(uint8_t* s) {
                 static bool _logged_3ba = false;
                 if (!_logged_3ba) {
                     _logged_3ba = true;
-                    fprintf(stderr, "V2-INPUT-POST-11080: shadow[DS_INPUT_PREV]=0x%04X != real[0x03BA]=0x%04X (orig leaves stale, v2 should match)\n",
+                    fprintf(stderr, "V2-INPUT-POST-11080: v2gs(shadow).input_prev_lobref()=0x%04X != real[0x03BA]=0x%04X (orig leaves stale, v2 should match)\n",
                         s_3BA, r_3BA);
                 }
             }
@@ -7459,7 +7461,7 @@ static bool v2_load_exe_ds() {
         v2gs(v2_vm_shadow_ds).vsync_count(r_a39c);
         v2gs(v2_vm_shadow_ds).pal_req(r_7efe);
         v2_render_cb_enabled.store(true, std::memory_order_release);
-        fprintf(stderr, "V2-INIT-SYNC: shadow[DS_VSYNC_COUNT]=%04X shadow[DS_PAL_REQ]=%04X (from real)\n",
+        fprintf(stderr, "V2-INIT-SYNC: v2gs(shadow).vsync_count_lobref()=%04X v2gs(shadow).pal_req_lobref()=%04X (from real)\n",
                 r_a39c, r_7efe);
     } else {
         v2_render_cb_enabled.store(true, std::memory_order_release);
@@ -7621,7 +7623,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 #ifdef V2_ONLY
     if (v2_pw_gate_1041c(shadow))                     // sub_1041c gates (extracted)
     {
-        bool need_save = !(shadow[DS_PAL_SHADE_R] | shadow[DS_PAL_SHADE_G] | shadow[DS_PAL_SHADE_B]);
+        bool need_save = !(v2gs(shadow).pal_shade_r_bref() | v2gs(shadow).pal_shade_g_bref() | v2gs(shadow).pal_shade_b_bref());
         v2_pw_pre_loop(shadow);
         extern bool need_quit;
         for (int safety = 10000; safety > 0; safety--) {
@@ -7634,7 +7636,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         if (need_save) {
             // sub_14590 (only from loc_10469 path)
             v2_cc_v2_hit(CC_14590);   // M1 wave-2 (#65) — pw-path copy
-            shadow[DS_PAL_SHADE_R] = 0; shadow[DS_PAL_SHADE_G] = 0; shadow[DS_PAL_SHADE_B] = 0;
+            v2gs(shadow).pal_shade_r_bref() = 0; v2gs(shadow).pal_shade_g_bref() = 0; v2gs(shadow).pal_shade_b_bref() = 0;
             v2gs(shadow).pal_flags_bref() &= 0xFE;
             if (v2gs(shadow).pal_flags_b() == 0)
                 v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
@@ -12319,7 +12321,7 @@ extern "C" void v2_fntest_call_hudvga(int which, uint8_t* shadow, uint16_t ax,
 
 // sub_1200a: reset the healthbar prev-state trio [435]/[437]/[439] = 0xFFFF.
 static void v2_hud_reset_1200a(uint8_t* s) {
-    *(uint16_t*)(s + DS_HUD_HEALTH) = 0xFFFF;
+    v2gs(s).hud_health(0, 0xFFFF);
     v2gs(s).vk_state_3(0xFFFF);
     v2gs(s).vk_state_4(0xFFFF);
 }
@@ -12327,10 +12329,10 @@ static void v2_hud_reset_1200a(uint8_t* s) {
 // sub_12034: reset the portrait/sound prev-state six [423..427]/[42F..433]
 // = 0xFFFF, then JMP sub_11B0B (portrait sync tail).
 static void v2_hud_reset_12034(uint8_t* s) {
-    *(uint16_t*)(s + DS_PORTRAIT_PREV) = 0xFFFF;
+    v2gs(s).portrait_prev(0, 0xFFFF);
     v2gs(s).portrait_snd_2(0xFFFF);
     v2gs(s).portrait_snd_3(0xFFFF);
-    *(uint16_t*)(s + DS_PORTRAIT_SND_PREV) = 0xFFFF;
+    v2gs(s).portrait_snd_prev(0, 0xFFFF);
     v2gs(s).vk_state_1(0xFFFF);
     v2gs(s).vk_state_2(0xFFFF);
     v2_portrait_sync_11b0b(s);
@@ -13317,9 +13319,9 @@ static void v2_vm_op_2D(V2VM& vm) {
 // Color offsets: R = ds:0x342 | ds:0x345, G = ds:0x343 | ds:0x346, B = ds:0x344 | ds:0x347.
 // First 3 bytes get color correction, then 45 bytes copied raw, then 240×3 bytes corrected.
 static void v2_vm_pal_correct_10e99(V2VM& vm) {
-    uint8_t r_off = vm.shadow[DS_PAL_SHADE_R] | vm.shadow[DS_PAL_SHADE_R2];
-    uint8_t g_off = vm.shadow[DS_PAL_SHADE_G] | vm.shadow[DS_PAL_SHADE_G2];
-    uint8_t b_off = vm.shadow[DS_PAL_SHADE_B] | vm.shadow[DS_PAL_SHADE_B2];
+    uint8_t r_off = v2gs(vm.shadow).pal_shade_r_bref() | v2gs(vm.shadow).pal_shade_r2_bref();
+    uint8_t g_off = v2gs(vm.shadow).pal_shade_g_bref() | v2gs(vm.shadow).pal_shade_g2_bref();
+    uint8_t b_off = v2gs(vm.shadow).pal_shade_b_bref() | v2gs(vm.shadow).pal_shade_b2_bref();
 
     // Note: original m2c sub_10e99 doesn't correctly update palette buffer
     // (STOSB/es segment issue in m2c translation). v2 implementation is more correct.
@@ -18473,8 +18475,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 v2gs(s).spec_key_s_b(sdl_spec_get(0x918B));  // SDL S — exact orig INT9
                 if (v2gs(s).key_alt_b() == 1 && v2gs(s).spec_key_s_b() == 1) {
                     v2gs(s).spec_key_s_b(0);   // byte_3166B = 0
-                    s[DS_SFX_MUTE] ^= 1;   // word_287E4 ^= 1
-                    if (s[DS_SFX_MUTE] & 1) {
+                    v2gs(s).sfx_mute_lobref() ^= 1;   // word_287E4 ^= 1
+                    if (v2gs(s).sfx_mute_lobref() & 1) {
                         // Toggle set → stop sounds on channel si=2..8
                         for (uint16_t si_s = 2; (int16_t)si_s < 0x0A; si_s += 2) {
                             uint16_t h = (uint16_t)(si_s - 0x66F4);
@@ -18490,8 +18492,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 v2gs(s).spec_key_m_b(sdl_spec_get(0x919E));  // SDL M — exact orig INT9
                 if (v2gs(s).spec_key_m_b() == 1) {
                     v2gs(s).spec_key_m_b(0);   // byte_3167E = 0
-                    s[DS_MUSIC_MUTE] ^= 1;   // word_287E2 ^= 1
-                    if (!(s[DS_MUSIC_MUTE] & 1)) {
+                    v2gs(s).music_mute_lobref() ^= 1;   // word_287E2 ^= 1
+                    if (!(v2gs(s).music_mute_lobref() & 1)) {
                         // sub_176bd(si=0, ax=0, bx=ds:0x2E6B) — AIL play, skipped
                     } else if (!(v2gs(s).music_mute() & 0x8000)) {
                         // Stop channel 0 sounds (si=0 only)
@@ -18541,7 +18543,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // (#73: this branch was an old inline copy with a cap=1
                     // blocking loop, an invented sub_1450b(5,0x10,0xF) call, a
                     // wrong sub_14590 mirror and a direct sub_11080 call).
-                    bool need_save = !(s[DS_PAL_SHADE_R] | s[DS_PAL_SHADE_G] | s[DS_PAL_SHADE_B]);
+                    bool need_save = !(v2gs(s).pal_shade_r_bref() | v2gs(s).pal_shade_g_bref() | v2gs(s).pal_shade_b_bref());
                     v2_pw_pre_loop(s);
                     extern bool need_quit;
                     for (int safety = 100000; safety > 0; safety--) {
@@ -18556,7 +18558,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     if (need_save) {
                         // tail JMP sub_14590 (orig loc_103b7 eip 0x3C6)
                         v2_cc_v2_hit(CC_14590);
-                        s[DS_PAL_SHADE_R] = 0; s[DS_PAL_SHADE_G] = 0; s[DS_PAL_SHADE_B] = 0;
+                        v2gs(s).pal_shade_r_bref() = 0; v2gs(s).pal_shade_g_bref() = 0; v2gs(s).pal_shade_b_bref() = 0;
                         v2gs(s).pal_flags_bref() &= 0xFE;
                         if (v2gs(s).pal_flags_b() == 0)
                             v2gs(s).pal_src_ptr(DS_PAL_SRC);
@@ -18603,7 +18605,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
 // v2_frame_active declared earlier (before v2_game_loop_pre_vm which uses it)
 
 static void v2_check_117D(const char* where, uint8_t* s, uint8_t* r) {
-    uint8_t sv = s[DS_RENDER_117D], rv = r ? r[0x117D] : sv;
+    uint8_t sv = v2gs(s).render_117d_lobref(), rv = r ? r[0x117D] : sv;
     if (sv != rv) fprintf(stderr, "V2-117D[%s]: shadow=%02X real=%02X\n", where, sv, rv);
 }
 // DIAG: polling watch for ds:0x302 divergence. Call from any phase to log
@@ -19602,7 +19604,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 // v2_pw_pre_loop detects F10 path internally via shadow
                 // [0x91B0/A4/99/7C] (line 19178-19180), runs sub_103ca setup
                 // (palette clear, text/glyphs draw, password chars, prelude).
-                bool need_save = !(s[DS_PAL_SHADE_R] | s[DS_PAL_SHADE_G] | s[DS_PAL_SHADE_B]);
+                bool need_save = !(v2gs(s).pal_shade_r_bref() | v2gs(s).pal_shade_g_bref() | v2gs(s).pal_shade_b_bref());
                 v2_pw_pre_loop(s);
                 extern bool need_quit;
                 for (int safety = 10000; safety > 0; safety--) {
@@ -19616,7 +19618,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                     // sub_14590: orig JMP from loc_103b7 eip 0x3C6 (F10 path
                     // where sub_1450b ran). Clear palette transform + restore
                     // default via sub_10e99. Same as ESC path at line 5867.
-                    s[DS_PAL_SHADE_R] = 0; s[DS_PAL_SHADE_G] = 0; s[DS_PAL_SHADE_B] = 0;
+                    v2gs(s).pal_shade_r_bref() = 0; v2gs(s).pal_shade_g_bref() = 0; v2gs(s).pal_shade_b_bref() = 0;
                     v2gs(s).pal_flags_bref() &= 0xFE;
                     if (v2gs(s).pal_flags_b() == 0)
                         v2gs(s).pal_src_ptr(DS_PAL_SRC);
@@ -19917,8 +19919,8 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
       if (v2gs(shadow).pal_anim_en_b() != 0 && _vc <= 300) {
         fprintf(stderr, "V2-101BE-VSW[#%d] 2583=%02X cnt[0..7]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
             _vc, v2gs(shadow).pal_anim_en_b(),
-            shadow[DS_PAL_ANIM_TIMER], shadow[DS_PAL_ANIM_TIMER_1], shadow[DS_PAL_ANIM_TIMER_2], shadow[DS_PAL_ANIM_TIMER_3],
-            shadow[DS_PAL_ANIM_TIMER_4], shadow[DS_PAL_ANIM_TIMER_5], shadow[DS_PAL_ANIM_TIMER_6], shadow[DS_PAL_ANIM_TIMER_7]);
+            v2gs(shadow).pal_anim_timer_bytes()[0], v2gs(shadow).pal_anim_timer_bytes()[1], v2gs(shadow).pal_anim_timer_bytes()[2], v2gs(shadow).pal_anim_timer_bytes()[3],
+            v2gs(shadow).pal_anim_timer_bytes()[4], v2gs(shadow).pal_anim_timer_bytes()[5], v2gs(shadow).pal_anim_timer_bytes()[6], v2gs(shadow).pal_anim_timer_bytes()[7]);
       }
     }
     v2_pal_ui_cycle_101be(shadow);
@@ -19987,11 +19989,11 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         // model while orig's setPalette mirror kept pulsing.
         uint16_t cx = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
         cx <<= 1;
-        uint8_t r = (uint8_t)(cx & 0x3E); s[DS_DAC_R] = r;
+        uint8_t r = (uint8_t)(cx & 0x3E); v2gs(s).pal_src_bytes()[DS_DAC_R - DS_PAL_SRC] = r;
         cx >>= 5;
-        uint8_t g = (uint8_t)(cx & 0x3E); s[DS_DAC_G] = g;
+        uint8_t g = (uint8_t)(cx & 0x3E); v2gs(s).pal_src_bytes()[DS_DAC_G - DS_PAL_SRC] = g;
         cx >>= 5;
-        uint8_t b = (uint8_t)(cx & 0x3E); s[DS_DAC_B] = b;
+        uint8_t b = (uint8_t)(cx & 0x3E); v2gs(s).pal_src_bytes()[DS_DAC_B - DS_PAL_SRC] = b;
         v2_dac_shadow[9] = r; v2_dac_shadow[10] = g; v2_dac_shadow[11] = b; // shadow DAC (task #22)
         bx_read += 4;
     } else if (cmd_type == 8) {
@@ -20349,14 +20351,14 @@ static bool v2_item_place_11f93(uint8_t* s) {
     if (di == 0x18) {
         uint16_t item = v2gs(s).hud_blink_field();
         if (s[(uint16_t)(item + 0x8592)] == 0) {
-            if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 3);
+            if (v2gs(s).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(s, 3);
             return true;                                   // STC
         }
-        if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 4);
+        if (v2gs(s).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(s, 4);
         v2_draw_hud_item(v2_current_ds_val, 0x18, 0x17);
         v2_vga_hud_item_1183d(s, 0x18, 0x17);
     } else {
-        if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 2);
+        if (v2gs(s).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(s, 2);
         uint16_t ax = v2gs(s).hud_blink_field();
         *(uint16_t*)(s + di + (DS_HUD_ITEMS)) = ax;
         uint16_t si = v2gs(s).quit_active();
@@ -20393,7 +20395,7 @@ static void v2_item_pop_121b9(uint8_t* s) {
     v2gs(s).quit_active(di);
     v2gs(s).quit_mode(0);
     v2gs(s).quit_blink(9);
-    if (s[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(s, 2);
+    if (v2gs(s).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(s, 2);
 }
 
 static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out) {
@@ -20420,7 +20422,7 @@ static void v2_pause_switch_viking(uint8_t* shadow, uint16_t viking) {
     (void)v2_hud_selectors_120d1(shadow);                                     // 3850 call sub_120D1
     v2gs(shadow).quit_blink(0x11);                         // 3851
     v2_viking_proximity_11f47(shadow);                                   // 3852 call sub_11F47
-    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);      // 3853-3854
+    if (v2gs(shadow).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(shadow, 1);      // 3853-3854
 }
 
 // sub_11CBB (seg000 3719-3989): pause-menu inventory interaction, one frame.
@@ -20461,7 +20463,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                 }
             }
             // Orig eip 0x1d09: MOV ax, 1; CALL sub_177bb (play SFX 1 — selector move)
-            if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+            if (v2gs(shadow).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(shadow, 1);
         } else if (new_input & 0x100) {
             // Right: find next category via sub_12250 (seg000 3765-3795)
             // Orig: MOV di, word_28923; SHL di, 1; MOV ax, 0; CALL sub_1183d (clear current)
@@ -20478,7 +20480,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
                 }
             }
             // Orig eip 0x1d49: MOV ax, 1; CALL sub_177bb (play SFX 1 — selector move)
-            if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+            if (v2gs(shadow).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(shadow, 1);
         } else if (new_input & 0x8000) {
             // Action (orig 3799-3802, eip 0x1D59): CALL sub_11F93 — place the
             // carried item; the mirror includes SFX 2/3/4, the special-slot
@@ -20544,7 +20546,7 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             uint16_t bx = v2gs(shadow).quit_active() << 1;
             v2gs(shadow).hud_blink_field(*(uint16_t*)(shadow + bx + (DS_HUD_ITEMS)));
             v2gs(shadow).quit_blink(0x11);
-            if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 1);
+            if (v2gs(shadow).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(shadow, 1);
         };
         if (new_input & 0x200) {                                     // Left, 3889-3906
             erase_old_slot();                                        // 3891-3894
@@ -20660,7 +20662,7 @@ static void v2_selector_blink_11c52(uint8_t* s) {
 void v2_run_pause_entry(uint8_t* shadow) {
     // Mirror orig sub_11ba5 eip 0x1bb7-0x1bba: MOV ax, 0; CALL sub_177bb.
     // Plays SFX 0 (pause sound). Allocates handle in shadow's slot 0 (ds:0x990E).
-    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 0);
+    if (v2gs(shadow).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(shadow, 0);
     // Mirror orig sub_11ba5 eips 0x1bbd..0x1c1c (DS-only writes; render skipped).
     v2gs(shadow).quit_blink(0x11);     // word_28925 = 0x11
     v2gs(shadow).quit_mode(1);         // word_28927 = 1 (mode = carrying)
@@ -20849,7 +20851,7 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // 0x396-0x03A3 — both F10 path's sub_10389 AND ESC path's sub_1041c eip
     // 0x448-0x455 do this; ESC path uses word_303eb at ds:0x340B aliasing).
     // Both orig paths also OUT color 3 = (0,0,0) (eip 0x38B / 0x43D).
-    shadow[DS_DAC_R] = 0; shadow[DS_DAC_G] = 0; shadow[DS_DAC_B] = 0;
+    v2gs(shadow).pal_src_bytes()[DS_DAC_R - DS_PAL_SRC] = 0; v2gs(shadow).pal_src_bytes()[DS_DAC_G - DS_PAL_SRC] = 0; v2gs(shadow).pal_src_bytes()[DS_DAC_B - DS_PAL_SRC] = 0;
     v2_dac_shadow[9] = 0; v2_dac_shadow[10] = 0; v2_dac_shadow[11] = 0; // shadow DAC (task #22)
    
     // Conditional sub_1450b: orig loc_10389 eip 0x3A8-0x3B3 (F10 path) and
@@ -20859,12 +20861,12 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // Track the call so post_loop can mirror the matching sub_14590 cleanup
     // (orig's JMP sub_14590 at loc_103b7 eip 0x3C6 / loc_10469 eip 0x478).
     v2_pw_did_save_1450b = false;
-    if (!(shadow[DS_PAL_SHADE_R] | shadow[DS_PAL_SHADE_G] | shadow[DS_PAL_SHADE_B])) {
+    if (!(v2gs(shadow).pal_shade_r_bref() | v2gs(shadow).pal_shade_g_bref() | v2gs(shadow).pal_shade_b_bref())) {
         v2_save_game_1450b(shadow, 4, 4, 4);
         v2_pw_did_save_1450b = true;
     }
     // sub_177bb(0) — pause SFX (both paths)
-    if (shadow[DS_SFX_MUTE] == 0) fx::play_sfx_no_audit(shadow, 0);
+    if (v2gs(shadow).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(shadow, 0);
 
     // First text call: sub_1047c eip 0x489-0x492 (ax=2) OR sub_103ca eip
     // 0x03D7-0x03E0 (ax=3). Both go through loc_124a9 which calls sub_12515,
@@ -20886,10 +20888,10 @@ static void v2_pw_pre_loop(uint8_t* shadow) {
     // eip 0x03EF-0x040A). ESC path doesn't render password chars.
     if (is_quit_path) {
         uint16_t si_pw = 0x12, di_pw = 0x11;
-        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR0), si_pw, di_pw); // word_287F0
-        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR1), si_pw, di_pw); // word_287F2
-        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR2), si_pw, di_pw); // word_287F4
-        v2_glyph_put_1241e(shadow, (uint8_t)*(uint16_t*)(shadow + DS_PW_CHAR3), si_pw, di_pw); // word_287F6
+        v2_glyph_put_1241e(shadow, (uint8_t)v2gs(shadow).pw_chars(0), si_pw, di_pw); // word_287F0
+        v2_glyph_put_1241e(shadow, (uint8_t)v2gs(shadow).pw_chars(1), si_pw, di_pw); // word_287F2
+        v2_glyph_put_1241e(shadow, (uint8_t)v2gs(shadow).pw_chars(2), si_pw, di_pw); // word_287F4
+        v2_glyph_put_1241e(shadow, (uint8_t)v2gs(shadow).pw_chars(3), si_pw, di_pw); // word_287F6
     }
 
     // sub_104a1 prelude: DS writes + first render pair (eip 0x04A1-0x04C0)
@@ -21036,7 +21038,7 @@ static void v2_pw_post_loop(uint8_t* shadow) {
     // sub_10e99 (palette retransform with shade=0). Only mirror if pre_loop
     // entered the path that called sub_1450b.
     if (v2_pw_did_save_1450b) {
-        shadow[DS_PAL_SHADE_R] = 0; shadow[DS_PAL_SHADE_G] = 0; shadow[DS_PAL_SHADE_B] = 0;
+        v2gs(shadow).pal_shade_r_bref() = 0; v2gs(shadow).pal_shade_g_bref() = 0; v2gs(shadow).pal_shade_b_bref() = 0;
         v2gs(shadow).pal_flags_bref() &= 0xFE;
         if (v2gs(shadow).pal_flags_b() == 0)
             v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
@@ -21206,7 +21208,7 @@ static void v2_hang_detector_func() {
             last_warn_ms = now;
             const char* phase_name = (phase >= 0 && phase <= 10) ? phase_names[phase] : "IDLE";
             uint16_t shadow_25AD = v2_vm_shadow_ds ? v2gs(v2_vm_shadow_ds).level() : 0xDEAD;
-            uint16_t shadow_25BA = v2_vm_shadow_ds ? v2_vm_shadow_ds[DS_ACTIVE_VK_SEL] : 0xFF;
+            uint16_t shadow_25BA = v2_vm_shadow_ds ? v2gs(v2_vm_shadow_ds).active_vk_sel_bref() : 0xFF;
             uint16_t shadow_A39C = v2_vm_shadow_ds ? v2gs(v2_vm_shadow_ds).vsync_count() : 0xDEAD;
             uint16_t shadow_218F = v2_vm_shadow_ds ? v2gs(v2_vm_shadow_ds).cmd_write() : 0xDEAD;
             uint16_t shadow_2B64 = v2_vm_shadow_ds ? v2gs(v2_vm_shadow_ds).cmd_read() : 0xDEAD;
