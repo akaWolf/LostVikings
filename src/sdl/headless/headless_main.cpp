@@ -27,6 +27,24 @@ extern "C" void __gcov_dump(void);   // libgcov: flush counters before _exit
 
 extern int v2_dbg_pre_vm_iter;
 extern "C" void v2_fntest_report(void);  // FN-TEST summary (FNTEST env); _exit() skips atexit
+extern uint8_t* v2_vm_get_shadow_ds(void);            // v2_vm.cpp (C++ linkage)
+extern "C" void v2_gs_dump_text(const uint8_t*, const char*);  // v2_gamestate.cpp
+
+// (direction V) golden end-state snapshot: the named-field text dump of the
+// final shadow DS. Called from EVERY clean exit path — the max-frames exit
+// below and the v2 quit-path _exit(0) sites in v2_vm.cpp (F10/ALT+X quit
+// scenarios end there, not here). Idempotent: first call wins, so a quit
+// dump is not overwritten by a later max-frames dump. The per-scenario
+// exit point is deterministic, so this IS the checkpoint the
+// tests/golden_states/ catalog compares against — the phase-D oracle that
+// survives the verify-scaffolding teardown.
+extern "C" void headless_golden_dump(void) {
+    static int done = 0;
+    if (done) return;
+    const char* gp = getenv("V2_GOLDEN_DUMP");
+    uint8_t* shd = v2_vm_get_shadow_ds();
+    if (gp && shd) { v2_gs_dump_text(shd, gp); done = 1; }
+}
 
 // Globals controlling headless behavior (referenced from verify hooks etc.)
 const char* g_headless_replay_input = nullptr;
@@ -97,6 +115,7 @@ int headless_check_exit(void) {
         v2_dump_psnap_summary();
         headless_dump_render_diff_summary();
         { extern void v2_flipring_dump(void); v2_flipring_dump(); }  // #32 probe
+        headless_golden_dump();
 #ifndef V2_ONLY
         v2_fntest_report();   // fn-test infra is not part of the V2_ONLY build
 #endif

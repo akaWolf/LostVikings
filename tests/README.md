@@ -27,7 +27,17 @@ make -j$(nproc)
 ./tests/scenarios.sh
 # → PASS/FAIL per replay file
 
-# 4. Run random fuzz (100 seeds, ~10 min)
+# 4b. Golden end-state channel (direction V, phase-D oracle)
+# Every scenarios.sh run also dumps the FINAL shadow-DS named-field snapshot
+# (V2_GOLDEN_DUMP → v2_gs_dump_text at the max-frames exit) and compares it
+# against tests/golden_states/<name>.txt when that file exists — a mismatch
+# is a FAIL with an inline diff head. The catalog is the state oracle that
+# survives the verify-scaffolding teardown: "replay N to its frame budget →
+# end state == golden".
+GOLDEN=update ./tests/scenarios.sh   # (re)take the catalog from a green run
+./tests/scenarios.sh                 # normal runs now also check golden
+
+# 4c. Run random fuzz (100 seeds, ~10 min)
 ./tests/fuzz_harness.sh 100
 
 # 5. Run coverage-guided fuzz (long-running, finds rare paths)

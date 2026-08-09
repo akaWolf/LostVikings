@@ -30,11 +30,26 @@ run_one() {
     FRAMES=10000
     [ -f "tests/replays/${name}.frames" ] && FRAMES=$(cat "tests/replays/${name}.frames")
 
-    if ./vikings_headless \
+    # (direction V) golden end-state channel: every run dumps the final
+    # shadow-DS named-field snapshot; compared against tests/golden_states/
+    # when a golden exists. GOLDEN=update rewrites the catalog from this run.
+    GOLDEN_REF="tests/golden_states/${name}.txt"
+    if V2_GOLDEN_DUMP="$DUMP_DIR/golden.txt" ./vikings_headless \
         --replay-input="$inp" \
         --max-frames="$FRAMES" \
         --dump-dir="$DUMP_DIR" \
         > "$LOG" 2>&1; then
+        if [ "$GOLDEN" = "update" ] && [ -s "$DUMP_DIR/golden.txt" ]; then
+            cp "$DUMP_DIR/golden.txt" "$GOLDEN_REF"
+        fi
+        if [ -f "$GOLDEN_REF" ] && [ -s "$DUMP_DIR/golden.txt" ] \
+           && ! cmp -s "$DUMP_DIR/golden.txt" "$GOLDEN_REF"; then
+            echo "FAIL: $name (golden end-state mismatch)"
+            diff "$GOLDEN_REF" "$DUMP_DIR/golden.txt" | head -12 | sed 's/^/    /'
+            echo "  dump dir: $DUMP_DIR/"
+            echo "FAIL golden" > "$RESULTS_DIR/$name.status"
+            return
+        fi
         echo "PASS: $name"
         echo "PASS" > "$RESULTS_DIR/$name.status"
         rm -rf "$DUMP_DIR"
@@ -50,6 +65,7 @@ run_one() {
 }
 export -f run_one
 export RESULTS_DIR
+export GOLDEN
 
 shopt -s nullglob
 replays=(tests/replays/*.inp)

@@ -1,4 +1,7 @@
 #include "asm.h"
+#ifdef HEADLESS
+extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits
+#endif
 
 #include <exception>
 #include <string>
@@ -495,6 +498,9 @@ X86_REGREF
 			// the same shutdown order as the headless max-frames path.
 			need_quit = true;
 			v2_game_thread_stop();
+#ifdef HEADLESS
+			headless_golden_dump();  // direction V: DOS terminate is a clean exit
+#endif
 			fflush(stdout); fflush(stderr);
 #ifdef FT_COV_BUILD
 			__gcov_dump();
