@@ -10393,12 +10393,17 @@ int ft_selftest_hudvga(FtId id, uint32_t seed) {
                 g_name[id]);
         return 1;
     }
+    // (VI.6) which=10/11 (FT_SUB_103CA/1047C) removed: those slots were a
+    // planned B4a extension that never got a caller — the LIVE direct units
+    // for sub_103ca/sub_1047c are the pw-runner (ft_selftest_pw, wave 5)
+    // registered under the same env names. Loud trap if an unknown id ever
+    // lands here instead of silently taking a bogus lane.
     int which = (id == FT_SUB_117AD) ? 0 : (id == FT_SUB_117D0) ? 1 :
                 (id == FT_SUB_1183D) ? 2 : (id == FT_SUB_118AD) ? 3 :
                 (id == FT_SUB_11AA4) ? 4 : (id == FT_SUB_1200A) ? 5 :
                 (id == FT_SUB_12034) ? 6 : (id == FT_SUB_16880) ? 7 :
-                (id == FT_SUB_11792) ? 8 : (id == FT_SUB_11F47) ? 9 :
-                (id == FT_SUB_103CA) ? 10 : 11;
+                (id == FT_SUB_11792) ? 8 : (id == FT_SUB_11F47) ? 9 : -1;
+    if (which < 0) { fprintf(stderr, "FNSELFTEST[%s]: hudvga got unexpected id\n", g_name[id]); return 1; }
     FtRng rng(seed);
     uint8_t* db = v2_fntest_drawbuffer_ptr();
     uint8_t* vga = v2_fntest_vga_ptr();
