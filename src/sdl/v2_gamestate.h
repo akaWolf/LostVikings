@@ -557,8 +557,13 @@
 //     044c (boot-era scratch, never revisited), zero_25a9/25b1/25c5,
 //     zero_8502, zero_86c6/86d2, zero_9220/9228/9280/928a/928e/92fd/9301/
 //     920c/91a5/919f/919a/91ad/917d, coll_area_pad@1D95, pad_a37a_none.
+//   spawn_area@25F6: SOLVED (wave 5, GDB watch over level1): the level
+//     loader (eip 0x11D5: MOV di,25B3h; es=ds; JMP read_chunk) streams the
+//     LEVEL chunk straight into ds:25B3.. — so 25B3..2B64 is the per-level
+//     payload (map params, snd type @25B7, map stride @25DC, spawn records
+//     consumed by the 13809 spawn machinery; both ends v2-mirrored).
 //   READER-HUNT QUEUE (live bytes, no direct refs — computed access;
-//   next waves, GDB watchpoints): spawn_area@25F6 (1390B, live 424!),
+//   next waves, GDB watchpoints):
 //     rt_0204(136, live 13), rt_0354/0378, rt_25cd/25d0/25e0/25e7,
 //     rt_86b0/86ba, rt_92ef/92f3 (the 92xx CRTC/page block neighbours),
 //     pan_luts@853E (static 12B, name unconfirmed).
