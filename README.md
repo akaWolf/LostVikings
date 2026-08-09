@@ -102,7 +102,9 @@ make WIN=1 -j$(nproc)
 
 Output: `vikings.exe`. Linux-only debug instrumentation (execinfo
 backtraces, `perf_event_open` watchpoints, `dladdr`) is compiled out under
-`#ifdef __linux__` on Windows — gameplay is unaffected.
+`#ifdef __linux__` on Windows — gameplay is unaffected. The `FNSELFTEST`
+unit oracle is POSIX-only (fork/mmap isolator): Windows builds compile it
+but refuse to run it with an explicit message.
 
 Override the triplet (e.g. for i686) with `make WIN=1 MINGW_TRIPLET=i686-w64-mingw32`.
 
@@ -112,7 +114,7 @@ All flags compose. `make clean` between mode changes.
 
 | Flag | Effect |
 | --- | --- |
-| `RELEASE=1`    | `-O2 -fno-omit-frame-pointer` (default `-O0`) |
+| `RELEASE=1`    | `-O2 -fno-omit-frame-pointer` (default `-O0`). The m2c-decompiled units are pinned at `-O0` even here — the mechanically translated goto-labyrinth is not `-O2`-clean (miscompiles); everything else gets `-O2` |
 | `STATIC=1`     | static-link `libgcc` + `libstdc++` |
 | `SDL_STATIC=1` | static-link `libSDL2.a` via `pkg-config --static` |
 | `WIN=1`        | mingw-w64 cross-compile → `vikings.exe` |
@@ -195,6 +197,13 @@ The three entry points have different surfaces.
 | `--record-input=<file>`  | record SDL input to a frame-based `.inp` log |
 | `--replay-input=<file>`  | replay an `.inp` log instead of live keyboard |
 | `--replay-strict`        | ignore live keyboard even after the replay queue is exhausted |
+| `--max-frames=<N>`       | exit cleanly after N frames (0 = unlimited) |
+
+V2_ONLY also understands two teleport env vars: `V2_LOAD_STATE=<file>`
+loads a full v2-world snapshot before the first frame (play on from that
+point), and `V2_SAVE_STATE=<file>` writes one back (with both set, the
+save happens immediately after the load — the byte-identical file pair
+is the roundtrip self-test).
 
 **`vikings_headless`** (`make HEADLESS=1`):
 
@@ -208,6 +217,13 @@ The three entry points have different surfaces.
 
 Replay files are frame-based and SDL-independent (record actions by
 name) so they reproduce identically across machines and runs.
+
+Headless also honors env vars: `V2_GOLDEN_DUMP=<file>` writes the
+named-field text dump of the final shadow DS at every clean exit path
+(the golden end-state channel), `V2_SAVE_STATE=<file>` writes the full
+teleport snapshot at the same points, and `V2_FAST_VSYNC=1` shrinks the
+historical 4 ms vsync nap to a 200 µs yield (the test scripts set it by
+default; `V2_FAST_VSYNC=0` restores the slow path).
 
 ---
 
@@ -246,10 +262,19 @@ config format is documented inline at the top of that file.
 HEADLESS=1 RELEASE=1 make -j$(nproc)
 
 ./tests/smoke.sh                              # 200-frame baseline (empty.inp)
-./tests/scenarios.sh                          # all replays in tests/replays/
+./tests/scenarios.sh                          # all replays + golden end-state check
+GOLDEN=update ./tests/scenarios.sh            # (re)take tests/golden_states/ from a green run
+./tests/fnselftest_parallel.sh                # ~500 direct per-function units (orig-oracle vs v2)
 ./tests/fuzz_harness.sh 600 5                 # 5×600-frame random fuzz
 ./tests/fuzz_coverage.py --max-frames 1200    # coverage-guided fuzz
 ```
+
+`scenarios.sh` compares every run's final shadow-DS dump against
+`tests/golden_states/<name>.txt` when that file exists — the state
+oracle that outlives the verify scaffolding. The unit set isolates
+~500 original functions one at a time (fork-per-case oracle) and diffs
+the v2 twin byte-for-byte; both suites run green in minutes thanks to
+the fast-vsync default.
 
 Without `DATA.DAT` in cwd the smoke run still verifies that the binary
 boots, SDL dummy drivers work, the replay parser handles `empty.inp`, no
@@ -295,6 +320,8 @@ src/
   _data.cpp               m2c-decompiled DS image
   sdl/v2_main.cpp         entry point for V2_ONLY mode
   sdl/v2_vm.cpp           v2 mirror VM — the reimplementation
+  sdl/v2_hash_hot.cpp     verify hash kernels (per-file -O2 island)
+  sdl/v2_gamestate.{h,cpp} phase-D typed DS model + serializer (golden/teleport)
   sdl/v2_render_funcs.cpp v2 render path (tiles, sprites, HUD, glyphs)
   sdl/v2_keymap.{h,cpp}   runtime keymap loader / saver
   sdl/v2_input_recorder*  frame-based input record/replay
@@ -308,6 +335,7 @@ src/
   rendering/seg003_*.{c,h}  hand-written seg003 helpers
   adlmidi/                git submodule; ONLY chips/nuked/nukedopl3.c is built
 tests/                    HEADLESS test scripts + replays
+tests/golden_states/      per-replay final-state dumps (the golden oracle)
 .github/workflows/build.yml  CI: linux + windows × {default, V2_ONLY}
 ```
 
