@@ -7,6 +7,8 @@
 cd "$(dirname "$0")/.."
 BIN=${FNST_BIN:-./vikings_headless}
 [ -x "$BIN" ] || { echo "FAIL: $BIN not built"; exit 1; }
+# (direction IV) fast verify path by default — see tests/scenarios.sh note.
+export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1}
 
 UNITS=${*:-"sub_15972 sub_161a1 sub_15da8 sub_15d6b sub_13d68 sub_13dd6 sub_13e15 \
 sub_13c0c sub_17496 sub_1746c sub_10704 sub_10753 sub_1064b sub_101be vmops \

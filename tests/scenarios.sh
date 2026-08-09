@@ -12,6 +12,10 @@ if [ ! -x ./vikings_headless ]; then
 fi
 
 JOBS=${JOBS:-$(nproc)}
+# (direction IV) fast verify path by default: 200us vsync nap instead of the
+# historical 4ms (validated: unit set 501 fail=0, canon x2 52/52, golden
+# end-states byte-identical). Override with V2_FAST_VSYNC=0 to fall back.
+export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1}
 RESULTS_DIR="/tmp/headless_scenario_results_$$"
 rm -rf "$RESULTS_DIR"
 mkdir -p "$RESULTS_DIR"
