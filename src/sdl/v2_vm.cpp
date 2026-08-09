@@ -39,6 +39,7 @@ extern "C" int  v2_ail_native_on();
 extern "C" int  v2_fntest_running;    // unit-world marker (v2_ail.cpp)
 extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_gamestate.cpp (phase D)
 extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-field state snapshot
+#include "v2_hash_hot.h"   // (IV) -O2 island for the replay-verify hash kernels
 #ifdef HEADLESS
 extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits
 #endif
@@ -238,16 +239,23 @@ static const VerifySkip v2_ds_skip_ranges[] = {
 // hashes per opcode). The table is static const — build the byte-granular
 // lookup once; every caller (dword-step hash, byte/word-step verify loops)
 // gets bit-identical answers.
-static bool v2_ds_skip_bm[0x10000];
-static bool v2_ds_skip_bm_ready = false;
-static inline bool v2_ds_hash_skip(uint32_t i) {
-    if (!v2_ds_skip_bm_ready) {
-        for (const auto& r : v2_ds_skip_ranges)
-            for (uint32_t a = r.start; a <= r.end && a < 0x10000; a++)
-                v2_ds_skip_bm[a] = true;
-        v2_ds_skip_bm_ready = true;
+// (IV) bitmap + interval walk now live in v2_hash_hot.cpp (-O2 island) —
+// same table, same byte-granular answers. This wrapper keeps the old name
+// for every byte/word-step verify loop in this file.
+static inline void v2_ds_skip_ensure() {
+    static bool built = false;
+    if (built) return;
+    static V2hRange rs[sizeof(v2_ds_skip_ranges) / sizeof(v2_ds_skip_ranges[0])];
+    for (size_t k = 0; k < sizeof(v2_ds_skip_ranges) / sizeof(v2_ds_skip_ranges[0]); k++) {
+        rs[k].start = v2_ds_skip_ranges[k].start;
+        rs[k].end   = v2_ds_skip_ranges[k].end;
     }
-    return i < 0x10000 ? v2_ds_skip_bm[i] : false;
+    v2h_skip_build(rs, (int)(sizeof(rs) / sizeof(rs[0])));
+    built = true;
+}
+static inline bool v2_ds_hash_skip(uint32_t i) {
+    v2_ds_skip_ensure();
+    return v2h_ds_skip(i);
 }
 
 // Push event into ring + bump per-frame counter. Thread-safe (lock).
@@ -21250,12 +21258,8 @@ void v2_vm_verify_init(uint16_t obj_idx, uint16_t orig_es, uint16_t orig_pc, uin
 static inline bool v2_ds_hash_skip(uint32_t i);  // forward decl — body at top
 
 static uint32_t v2_ds_hash(uint8_t* ds) {
-    uint32_t h = 0;
-    for (uint32_t i = 0; i < 0x10000; i += 4) {
-        if (v2_ds_hash_skip(i)) continue;
-        h = h * 131 + *(uint32_t*)(ds + i);
-    }
-    return h;
+    v2_ds_skip_ensure();
+    return v2h_ds_hash(ds);   // (IV) -O2 kernel, bit-identical order/polynomial
 }
 
 struct VMTraceEntry {
@@ -21311,11 +21315,7 @@ static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx) {
     uint32_t size_bytes = (uint32_t)size_para * 16;
     if (size_bytes > 0x10000) size_bytes = 0x10000;
     uint8_t* es_ptr = v2_m2c_base + (uint32_t)es_seg * 16;
-    uint32_t h = 0;
-    for (uint32_t i = 0; i + 4 <= size_bytes; i += 4) {
-        h = h * 131 + *(uint32_t*)(es_ptr + i);
-    }
-    return h;
+    return v2h_mem_hash(es_ptr, size_bytes);   // (IV) -O2 kernel
 }
 
 // FS render-buffer hash — bounded by alloc size. Reads m2c flat memory.
@@ -21329,11 +21329,7 @@ static uint32_t v2_fs_hash(uint8_t* ds) {
     uint32_t size_bytes = (uint32_t)size_para * 16;
     if (size_bytes > 0xC080) size_bytes = 0xC080;
     uint8_t* fs_ptr = v2_m2c_base + (uint32_t)fs_seg * 16;
-    uint32_t h = 0;
-    for (uint32_t i = 0; i + 4 <= size_bytes; i += 4) {
-        h = h * 131 + *(uint32_t*)(fs_ptr + i);
-    }
-    return h;
+    return v2h_mem_hash(fs_ptr, size_bytes);   // (IV) -O2 kernel
 }
 
 // V2 FS shadow buffer hash.
@@ -21346,11 +21342,7 @@ static uint32_t v2_fs_hash_shadow() {
     if (size_para == 0) return 0;
     uint32_t size_bytes = (uint32_t)size_para * 16;
     if (size_bytes > 0xC080) size_bytes = 0xC080;
-    uint32_t h = 0;
-    for (uint32_t i = 0; i + 4 <= size_bytes; i += 4) {
-        h = h * 131 + *(uint32_t*)(v2_vm_shadow_fs + i);
-    }
-    return h;
+    return v2h_mem_hash(v2_vm_shadow_fs, size_bytes);   // (IV) -O2 kernel
 }
 
 static const int VM_TRACE_MAX = 50000;

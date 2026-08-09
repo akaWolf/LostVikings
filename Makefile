@@ -127,6 +127,12 @@ endif
 CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 
+# (direction IV) v2_hash_hot.cpp is a pure-function -O2 island: the replay-
+# verify hash kernels were ~77% of CPU at the project-wide -O0, and RELEASE=1
+# -O2 breaks the m2c shadowstack CALL model — so only this file gets -O2.
+# gcc takes the LAST -O flag, so appending wins over the -O0 in $(DBG).
+$(OBJDIR)/src/sdl/v2_hash_hot.o: CXXFLAGS += -O2
+
 ifdef V2_ONLY
 # V2_ONLY: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.
 # Excluded: vikings.exe*.cpp, _data.cpp, asm.cpp, shadowstack.cpp, memmgr.cpp (all m2c-only).
@@ -141,6 +147,7 @@ CXX_SRCS := \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
   src/sdl/v2_vm.cpp \
+  src/sdl/v2_hash_hot.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_native_opl.cpp \
   src/sdl/v2_ail_interp.cpp \
@@ -167,6 +174,7 @@ CXX_SRCS := \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
   src/sdl/v2_vm.cpp \
+  src/sdl/v2_hash_hot.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_keymap.cpp \
   src/sdl/v2_fn_test.cpp \
