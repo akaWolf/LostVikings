@@ -789,6 +789,8 @@ struct V2StateView {
     V2_GS_LOB(vsync_count, DS_VSYNC_COUNT)
     V2_GS_LOB(pal_req,     DS_PAL_REQ)
     V2_GS_LOB(render_117d, DS_RENDER_117D)   // word alias exists; byte MOVs hit its low half
+    V2_GS_LOB(ail_req_bank,  DS_AIL_REQ_BANK)  // mov al,[993E]-style byte reads
+    V2_GS_LOB(ail_req_patch, DS_AIL_REQ_PATCH)
 #undef V2_GS_LOB
 };
 

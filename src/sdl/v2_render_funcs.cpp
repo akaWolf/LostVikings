@@ -442,7 +442,7 @@ void v2_draw_tiles(uint16_t ds_val) {
             fprintf(stderr,
               "V2-DRAWT-DBG[%d]: ds=%04X fs_seg=%04X tgfx_seg=%04X 25CF=%02X 25AD=%04X 25C9=%04X\n",
               _dt_dbg, ds_val, fs_seg, tgfx_seg,
-              ds_base[DS_LEVEL_FLAGS],
+              v2gs(ds_base).level_flags_b(),
               st.level(),
               st.level_load());
         }
@@ -457,7 +457,7 @@ void v2_draw_tiles(uint16_t ds_val) {
     // V2 single-buffer architecture: restore chunk_bg_backup each frame to erase
     // dynamic content (sprites, cursor) and recover static chunk pixels — semantic
     // equivalent of orig page-flip + dirty-rect tile-redraw mechanism.
-    uint8_t lvl_flags = ds_base[DS_LEVEL_FLAGS];
+    uint8_t lvl_flags = v2gs(ds_base).level_flags_b();
     if (lvl_flags & 0x42) {
         if (v2_chunk_bg_valid) {
             memcpy(v2_render_buf, v2_chunk_bg_backup, 320 * 176);
@@ -744,7 +744,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             // force flag / pending-redraw byte / sub_1cdef render-map scan.
             bool draw_it = false;
             int gate_code = 0;   // 1=force 2=rd 3=scan-hit (trace aid)
-            if (ds_base[DS_SPRITE_FORCE] != 0) { draw_it = true; gate_code = 1; }  // TEST ds:9568h
+            if (v2gs(ds_base).sprite_force_b() != 0) { draw_it = true; gate_code = 1; }  // TEST ds:9568h
             else if (ds_base[obj + OBJ_DIRTY_MODE] != 0) { draw_it = true; gate_code = 2; } // TEST byte [di+114Dh]
             else {
                 // sub_1cdef: clip object's tile bbox to viewport, scan cells
@@ -1159,7 +1159,7 @@ void v2_draw_ui(uint16_t ds_val) {
                 v2_dbg_pre_vm_iter, _frame, st.level(), nz);
             for (int r = 0; r < 22; r++)
                 if (rows_used[r]) fprintf(stderr, "r%d=%d ", r, rows_used[r]);
-            fprintf(stderr, "byte_956B=%02X\n", ds_base[DS_GLYPH_DIRTY]);
+            fprintf(stderr, "byte_956B=%02X\n", v2gs(ds_base).glyph_dirty_b());
             // Dump rows with content as ASCII (glyph 0x10..0x3F = printable chars in font)
             if (nz > 0 && nz < 300) {
                 for (int r = 0; r < 22; r++) {

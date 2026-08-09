@@ -487,6 +487,8 @@ constexpr uint16_t DS_SPEC_KEY_F6           = 0x91AC; // byte_3168C: spec key F6
 constexpr uint16_t DS_SOUND_FIELD_8EA       = 0x98EA; // word_31DCA: sound-init field (set 0xFFFF)
 constexpr uint16_t DS_MUSIC_ID              = 0x990C; // word_31DEC: slot 0 of the 5-word sequence HANDLE table [si-0x66F4] (si=0 music, 2..8 SFX -> 990C..9914); the parallel SEQ table [si-0x66EA] is 9916..991E
 constexpr uint16_t DS_SOUND_DISPATCH_TBL    = 0xA37A; // off_3285A: music dispatch table, 5 CS handler addrs (7791/77B1/78F1/775D/77B1) - sub_17749 reads via type byte
+constexpr uint16_t DS_AIL_REQ_BANK          = 0x993E; // requested timbre bank (lo byte of the word field ail_req_bank)
+constexpr uint16_t DS_AIL_REQ_PATCH         = 0x9940; // requested timbre patch
 constexpr uint16_t DS_SND_DESC_OFF_TBL      = 0xA384; // music track -> chunk-id table (11 words, 1D0..202 step 5): sub_1775d reads [track*2-0x5C7C] (wrap lands here), ADDs ds:86B8 and loads that chunk into seg_sound via sub_10982
 constexpr uint16_t DS_SOUND_INIT_92A        = 0x992A; // word_31E0A: sound-init field (cleared 0)
 constexpr uint16_t DS_SEG_SOUND_BASE        = 0x992C; // word_31E0C: sound resource base segment (snd_base)

@@ -43,6 +43,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include "v2_ds_layout.h"
+#include "v2_gamestate.h"
 
 // ---------------------------------------------------------------------------
 // v2_ail_interp.cpp C API
@@ -346,8 +348,8 @@ static int v2_ail_scan_bank_17512(uint8_t* s, const uint8_t* snd, uint32_t snd_s
     uint16_t bank_seg = rdw(s, DS_2E6F_BANK);
     uint16_t snd_base = rdw(s, DS_992C_SND);
     uint32_t base = (uint32_t)(uint16_t)(bank_seg - snd_base) << 4;
-    uint8_t  al = s[DS_993E_BANK];      // bank   (orig: mov al,[993E])
-    uint8_t  ah = s[DS_9940_PATCH];     // patch  (orig: mov ah,[9940])
+    uint8_t  al = v2gs(s).ail_req_bank_lob();   // bank   (orig: mov al,[993E])
+    uint8_t  ah = v2gs(s).ail_req_patch_lob();  // patch  (orig: mov ah,[9940])
     for (int32_t di = 0; di <= 0x3F82; di += 6) {   // JG loop bound (signed)
         if (base + di + 4 > snd_size) break;
         if (snd[base + di + 1] == al && snd[base + di] == ah) {
