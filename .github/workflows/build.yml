@@ -133,20 +133,22 @@ jobs:
           wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
           tar -xzf "SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
           sudo cp -r "SDL2-${SDL2_VERSION}/x86_64-w64-mingw32/." /usr/x86_64-w64-mingw32/
-          # The official tarball's sdl2.pc hardcodes the libsdl-org build
-          # machine prefix (/tmp/tardir/...): pkg-config then emits -I/-L
-          # into a directory that does not exist and every SDL include
-          # fails. Rewrite the prefix to the actual sysroot.
-          sudo sed -i "s|^prefix=.*|prefix=/usr/x86_64-w64-mingw32|" \
-            /usr/x86_64-w64-mingw32/lib/pkgconfig/sdl2.pc
-          x86_64-w64-mingw32-pkg-config --cflags sdl2
-          x86_64-w64-mingw32-pkg-config --modversion sdl2
+          # NOTE: the official tarball's sdl2.pc hardcodes the libsdl-org
+          # build-machine prefix (/tmp/tardir/...), and Ubuntu's mingw
+          # pkg-config wrapper kept resolving that broken file even after a
+          # prefix rewrite — so the build steps below bypass pkg-config
+          # entirely and pass the SDL flags to make explicitly.
+          ls /usr/x86_64-w64-mingw32/include/SDL2/SDL.h
 
       - name: Build (WIN=1 RELEASE=1 SDL_STATIC=1)
-        run: make WIN=1 RELEASE=1 SDL_STATIC=1 -j$(nproc)
+        run: |
+          SDLP=/usr/x86_64-w64-mingw32
+          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j$(nproc)
 
       - name: Build keymap editor
-        run: make keymap_editor WIN=1 RELEASE=1 SDL_STATIC=1
+        run: |
+          SDLP=/usr/x86_64-w64-mingw32
+          make keymap_editor WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid"
 
       - name: Package
         # SDL2 is fully static here, no SDL2.dll alongside the exe.
@@ -233,20 +235,22 @@ jobs:
           wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
           tar -xzf "SDL2-devel-${SDL2_VERSION}-mingw.tar.gz"
           sudo cp -r "SDL2-${SDL2_VERSION}/x86_64-w64-mingw32/." /usr/x86_64-w64-mingw32/
-          # The official tarball's sdl2.pc hardcodes the libsdl-org build
-          # machine prefix (/tmp/tardir/...): pkg-config then emits -I/-L
-          # into a directory that does not exist and every SDL include
-          # fails. Rewrite the prefix to the actual sysroot.
-          sudo sed -i "s|^prefix=.*|prefix=/usr/x86_64-w64-mingw32|" \
-            /usr/x86_64-w64-mingw32/lib/pkgconfig/sdl2.pc
-          x86_64-w64-mingw32-pkg-config --cflags sdl2
-          x86_64-w64-mingw32-pkg-config --modversion sdl2
+          # NOTE: the official tarball's sdl2.pc hardcodes the libsdl-org
+          # build-machine prefix (/tmp/tardir/...), and Ubuntu's mingw
+          # pkg-config wrapper kept resolving that broken file even after a
+          # prefix rewrite — so the build steps below bypass pkg-config
+          # entirely and pass the SDL flags to make explicitly.
+          ls /usr/x86_64-w64-mingw32/include/SDL2/SDL.h
 
       - name: Build (V2_ONLY=1 WIN=1 RELEASE=1 SDL_STATIC=1)
-        run: V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 -j$(nproc)
+        run: |
+          SDLP=/usr/x86_64-w64-mingw32
+          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j$(nproc)
 
       - name: Build keymap editor
-        run: make keymap_editor WIN=1 RELEASE=1 SDL_STATIC=1
+        run: |
+          SDLP=/usr/x86_64-w64-mingw32
+          make keymap_editor WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid"
 
       - name: Package
         run: |
