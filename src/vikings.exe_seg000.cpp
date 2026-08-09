@@ -3064,6 +3064,17 @@ ret_1a2_135:
  // every other frame → smooth). V2_ONLY keeps original 16ms timing.
 #ifdef V2_ONLY
  std::this_thread::sleep_for(std::chrono::milliseconds(16));
+#elif defined(HEADLESS)
+ // (direction IV) headless has no display: the 4ms nap per vsync call was
+ // ~50% of scenario wall time (3+ calls x 2 spin turns per frame; the v2
+ // twin loop already runs Delay(0) here). The DS evolution is sleep-
+ // independent — the DEC + palette dispatch below is gated by the counter,
+ // not by time. V2_FAST_VSYNC=1 shrinks the nap to a 200us yield;
+ // default keeps the historical 4ms until the fast path earns canon trust.
+ { static int fastv = -1;
+   if (fastv < 0) { const char* e = getenv("V2_FAST_VSYNC"); fastv = (e && *e == '1') ? 1 : 0; }
+   if (fastv) std::this_thread::sleep_for(std::chrono::microseconds(200));
+   else       std::this_thread::sleep_for(std::chrono::milliseconds(4)); }
 #else
  std::this_thread::sleep_for(std::chrono::milliseconds(4));
 #endif
