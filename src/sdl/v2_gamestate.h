@@ -413,7 +413,7 @@
   BN(pw_level_tbl,     0x687D, 5760)          \
   BN(spawn_area,       DS_SPAWN_TABLE, 1390)  \
   BN(ail_seq_states,   0x9950, 2600)           \
-  BN(unused_tail,      0xA3A2, 23646)         \
+  BN(dead_tail_a3a2,      0xA3A2, 23646)         \
   BN(unused_gap_4f9d,  0x4F9D, 224)            \
   BN(unused_8c,        0x008C, 372)            \
   BN(coll_partner_tbl, 0x1B25, 624)            \
@@ -506,6 +506,56 @@
 //                     after the DOS INT21/9 banner: per nibble bx=nib*2,
 //                     word [bx-6CE1h] low byte -> byte_2b337..2b339 char
 //                     cells (high byte 0x07 = text attr). CONFIRMED.
+//   Boot chunk map (from the loader log, sizes hex) closes the whole
+//   497D..687D region:
+//     chunk_d_tbl@497D      = DATA.DAT chunk #D payload (0x620 exactly)
+//     unused_gap_4f9d (224) = the hole between chunks #D and #E, zero in
+//                             static and never referenced (alignment gap)
+//     chunk #E payload      = 507D..687D (0x1800) — ALREADY fully typed:
+//                             hud_item_gfx@507D (4864B, item_id*256 glyphs,
+//                             the sub_1183d hudvga-unit source) +
+//                             hud_sel_gfx@637D (256B) + hud_gfx_tail@647D
+//                             (1024B). So chunk #E is the HUD graphics
+//                             bank. (A naive one-BN merge overlapped at
+//                             507D — the phase-D coverage bitmap caught it
+//                             and failed the run: the guard works.)
+//     pw_level_tbl@687D     = chunk #2 payload (0x1680 exactly)
+//   ail_seq_states@9950 (2600B): XMIDI per-sequence state records, live
+//                     content in every golden; addressed si-relative (the
+//                     [si-66F4h] handle / [si-66E0h] family — the field map
+//                     lives in src/sdl/v2_ail.cpp), si dispatched via
+//                     off_3285a by snd type [25B7]. Mirrored + hashed (the
+//                     98E4..9950 skip window ENDS here). Record stride =
+//                     next-wave GDB read-watchpoint.
+//   cmd_ring@1DA7 (1000B): ALREADY VERIFIED as the sub_1086f command ring
+//                     (entries at [bx+1DA7], write cursor DS_CMD_WRITE@218F,
+//                     read cursor DS_CMD_READ@2B64) — the 1086f unit and the
+//                     battle handler mirror exercise it end-to-end.
+//   transition_buf@2193 (1000B): ALREADY VERIFIED as the transition-chunk
+//                     load region (DS_TRANSITION_CHUNK_BUF, v2_read_chunk
+//                     target — class-D chunk channel ran the whole DATA.DAT
+//                     through it byte-for-byte twice).
+//   pw_level_tbl@687D (5760B): loader-CONFIRMED as the DATA.DAT chunk #2
+//                     payload (boot loader eip 0x2C0C, right after chunk
+//                     #14 -> 0x507D). No direct/computed readers and no
+//                     static pointer holds 0x687D — access goes through a
+//                     computed register base; reader hunt = next phase-D
+//                     wave (GDB read-watchpoint over a pw scenario).
+//   level_pal_chunks@2E7D (6912B = 9 slots x 0x300): CONFIRMED palette
+//                     chunk slots — the boot loader (seg000 eip 0x2B7D..)
+//                     reads DATA.DAT chunks #4..#12 into consecutive 768B
+//                     slots 2E7D/317D/347D/.../467D; pal_chunk_addr_tbl
+//                     @854A holds exactly these 9 addresses (+2 tail ptrs).
+//                     Live golden content is 6-bit DAC triplets.
+//   dead_tail_a3a2 (23646B, 36% of the raw backing): CONFIRMED DEAD by
+//                     three channels (phase-D wave 1, 2026-08-12): all-zero
+//                     in ds_static.bin, all-zero in the LIVE golden end
+//                     states (attract gameplay, level1, pw scenarios), zero
+//                     direct references in seg000 — and the per-opcode
+//                     full-DS hash has compared this zone orig-vs-v2 for
+//                     months without a single diff, so the orig keeps it
+//                     zero too. (The stack is NOT here: ss is a separate
+//                     arena segment.)
 //   dead_data_8560 (69B between pal_chunk_addr_tbl and level_passwords):
 //                     ZERO references in the whole port (direct 856xh
 //                     literals + computed [-0x7AA0] form, seg000/002/003 and
