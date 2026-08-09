@@ -128,10 +128,25 @@ CXXFLAGS := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 
 # (direction IV) v2_hash_hot.cpp is a pure-function -O2 island: the replay-
-# verify hash kernels were ~77% of CPU at the project-wide -O0, and RELEASE=1
-# -O2 breaks the m2c shadowstack CALL model — so only this file gets -O2.
+# verify hash kernels were ~77% of CPU at the project-wide -O0.
 # gcc takes the LAST -O flag, so appending wins over the -O0 in $(DBG).
 $(OBJDIR)/src/sdl/v2_hash_hot.o: CXXFLAGS += -O2
+
+# (#85) The m2c world is NOT -O2-clean: at -O2 the translated goto-labyrinth
+# miscompiles (attract: a stray stack word inside seg002 sub_1c155 shifts the
+# far-ret frame — "Return address wasn't created by native CALL"; inserting
+# opaque no-op probes made it vanish, the classic UB-sensitive-codegen smell).
+# RELEASE=1 therefore pins every m2c translation unit at -O0 and lets the
+# whole v2/sdl/aux layer take -O2. The emulated world was ~6% of CPU in the
+# attract profile — the -O0 pin costs little.
+ifeq ($(RELEASE),1)
+$(OBJDIR)/src/vikings.exe.o: CXXFLAGS += -O0
+$(OBJDIR)/src/vikings.exe_default_seg.o: CXXFLAGS += -O0
+$(OBJDIR)/src/vikings.exe_seg000.o: CXXFLAGS += -O0
+$(OBJDIR)/src/vikings.exe_seg002.o: CXXFLAGS += -O0
+$(OBJDIR)/src/vikings.exe_seg003.o: CXXFLAGS += -O0
+$(OBJDIR)/src/_data.o: CXXFLAGS += -O0
+endif
 
 ifdef V2_ONLY
 # V2_ONLY: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.
