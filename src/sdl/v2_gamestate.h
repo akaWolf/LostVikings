@@ -537,6 +537,31 @@
 //                     off_3285a by snd type [25B7]. Mirrored + hashed (the
 //                     98E4..9950 skip window ENDS here). Record stride =
 //                     next-wave GDB read-watchpoint.
+//   Wave-4 bulk verdicts (2026-08-12, batch classifier: static zeros +
+//   live-golden bytes + exact raddr-form refs over seg000/002/003):
+//   MECHANISM-VERIFIED (role carried by an already-verified channel):
+//     pal_anim_reload/start/end (@2584/2594/259C, 8B each) — the 10ffc
+//       palette-anim mirror fields (DS_PAL_ANIM_* constants);
+//     chunk_hdr@2BB4 — the 8B fread header (class-D chunk channel);
+//     byte_or_lut@93BC / byte_and_lut@93C4 — the subtractive-base bit
+//       LUTs (LUT_BYTE_OR@6C44 family, unit-exercised);
+//     subsprite_off_tbl@871C — the 12fc6/12fcb sub-sprite offset pairs;
+//     viking_spawn_triplets@8508 / image_86e0 — static data blocks
+//       (content present in ds_static, byte-identical in goldens).
+//   DEAD-PADDING (all-zero in static AND in live goldens, zero exact
+//   references — the earlier grep "refs" on small offsets were literal
+//   noise; raddr-form counts are 0): unused_8c(372), zero_028e(116),
+//     zero_9292/91b1/9230/91f0/9262/9212/918c/916c/9182(9xxx input pad),
+//     zero_98ec/98de/9936/9948/9944 (AIL pad), zero_0048/0070/0082/002c/
+//     0309/03bc/0318/0338/033e/03c8/03d2/0306/007e/0029/003c/0333/0420/
+//     044c (boot-era scratch, never revisited), zero_25a9/25b1/25c5,
+//     zero_8502, zero_86c6/86d2, zero_9220/9228/9280/928a/928e/92fd/9301/
+//     920c/91a5/919f/919a/91ad/917d, coll_area_pad@1D95, pad_a37a_none.
+//   READER-HUNT QUEUE (live bytes, no direct refs — computed access;
+//   next waves, GDB watchpoints): spawn_area@25F6 (1390B, live 424!),
+//     rt_0204(136, live 13), rt_0354/0378, rt_25cd/25d0/25e0/25e7,
+//     rt_86b0/86ba, rt_92ef/92f3 (the 92xx CRTC/page block neighbours),
+//     pan_luts@853E (static 12B, name unconfirmed).
 //   Wave-3 quick verdicts (2026-08-12):
 //     error_msg_2bbe: CONFIRMED by content — DOS $-terminated error text
 //       ("*** An Error has occured while running PC Vikings ***", the 564K
