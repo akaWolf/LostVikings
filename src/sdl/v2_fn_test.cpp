@@ -220,6 +220,16 @@ extern "C" uint8_t  v2_vm_shadow_fs[];
 extern "C" void     v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int which);
 extern "C" long     v2_fntest_ret_mismatches(void);
 #include <setjmp.h>
+#ifdef _WIN32
+// (VI.4) POSIX signal-jump shim: fn-test is a POSIX-only dev tool (the fork
+// isolator refuses on Windows before any escape can fire), but the file must
+// COMPILE — plain setjmp is semantically enough for the dead path.
+typedef jmp_buf sigjmp_buf;
+#define sigsetjmp(b, save) setjmp(b)
+#define siglongjmp(b, v) longjmp(b, v)
+#include <direct.h>
+#define mkdir(path, mode) _mkdir(path)
+#endif
 extern "C" sigjmp_buf* v2_fntest_jb(void);
 extern "C" void     v2_fntest_alarm_ms(long ms);
 extern "C" void     v2_fntest_arm_signals(void);

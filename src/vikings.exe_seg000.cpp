@@ -6,9 +6,11 @@
 
                 #include "vikings.exe.h"
  #include <unistd.h>
- #include <sys/wait.h>
- #include <sys/mman.h>
  #include <errno.h>
+#ifndef _WIN32
+ #include <sys/wait.h>   /* fn-test fork isolator (POSIX-only dev tool) */
+ #include <sys/mman.h>
+#endif
 #ifdef __linux__
 #include <execinfo.h>
 // #61 native AIL bridge gate (v2_ail.cpp) - used by the sound-chain SDL
@@ -406,13 +408,24 @@ extern "C" int  v2_fntest_watchdog_enable;   // ditto; =1 only in the selftest p
 // Enabled only when v2_fntest_watchdog_enable (single-threaded selftest).
 #include <setjmp.h>
 #include <signal.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#endif
+#ifdef _WIN32
+// (VI.4) POSIX shim: fn-test never RUNS on Windows (the fork isolator
+// refuses first), but this translation unit must compile. Plain setjmp is
+// enough for the dead path; the alarm plumbing becomes a no-op.
+typedef jmp_buf sigjmp_buf;
+#define sigsetjmp(b, save) setjmp(b)
+#define siglongjmp(b, v) longjmp(b, v)
+#endif
 static sigjmp_buf v2_fntest_hang_jb;
 // One handler for hang (SIGALRM) and hard faults (SIGSEGV/SIGBUS — e.g. a
 // runaway recursive CALL_ chain overflowing the host C++ stack in <500ms,
 // faster than the alarm). Faults outside an isolated call re-raise default
 // (real host bug → normal crash); SIGSEGV on an exhausted stack requires the
 // sigaltstack installed below.
+#ifndef _WIN32
 static void v2_fntest_fault(int sig) {
     extern int v2_fntest_isolated_active;
     if (sig != SIGALRM && !v2_fntest_isolated_active) { signal(sig, SIG_DFL); return; }
@@ -424,6 +437,9 @@ static void v2_fntest_set_alarm_ms(long ms) {
     it.it_value.tv_sec = ms / 1000; it.it_value.tv_usec = (ms % 1000) * 1000;
     setitimer(ITIMER_REAL, &it, nullptr);
 }
+#else
+static void v2_fntest_set_alarm_ms(long) {}   /* no ITIMER on Windows */
+#endif
 
 // Direct escape for in-oracle code that must not continue (INT21 4Ch etc.):
 // jumps straight to the isolated-call recovery point, bypassing the signal
@@ -444,11 +460,13 @@ extern "C" void v2_fntest_escape_jump(void) {
 extern "C" sigjmp_buf* v2_fntest_jb(void) { return &v2_fntest_hang_jb; }
 extern "C" void v2_fntest_alarm_ms(long ms) { v2_fntest_set_alarm_ms(ms); }
 extern "C" void v2_fntest_arm_signals(void) {
+#ifndef _WIN32
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = v2_fntest_fault;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGALRM, &sa, nullptr);
+#endif
 }
 
 // Unit-31 (read_chunk) hooks: ES override for the isolated call (0 = default
@@ -536,6 +554,11 @@ static bool v2_fntest_orig_isolated_body(void* fn, uint8_t* ds_image, uint16_t* 
     m2c::MWORDSIZE sp_ref = sp;
     bool ok;
     if (v2_fntest_watchdog_enable) {
+#ifdef _WIN32
+        // unreachable on Windows (the isolator refuses earlier) - bare call
+        // keeps the unit compiling without the POSIX signal machinery.
+        ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
+#else
         static bool sig_ready = false;
         if (!sig_ready) {
             static uint8_t altstk[262144];   // SIGSEGV on exhausted stack needs an alt stack
@@ -573,6 +596,7 @@ static bool v2_fntest_orig_isolated_body(void* fn, uint8_t* ds_image, uint16_t* 
                     (unsigned)cs, (unsigned)eip, (unsigned)ax, (unsigned)di, (unsigned)si);
             m2c::shadow_stack.reset_for_fntest();
         }
+#endif  /* !_WIN32 */
     } else {
         ok = m2c::CALL_((m2c::m2cf*)fn, _state, (m2c::_offsets)0);
     }
@@ -647,6 +671,13 @@ static void v2_fntest_parent_alarm(int) {}   // just EINTR out of waitpid
 
 extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* io_regs)
 {
+#ifdef _WIN32
+    // The fork/mmap isolator is a POSIX-only dev tool; FNSELFTEST is not
+    // supported in Windows builds. Loud refusal instead of a silent lie.
+    (void)fn; (void)ds_image; (void)io_regs;
+    fprintf(stderr, "FNSELFTEST: not supported on Windows builds\n");
+    return false;
+#else
     static int no_fork = -1;
     if (no_fork < 0) no_fork = getenv("FT_NO_FORK") ? 1 : 0;
     if (no_fork) {
@@ -731,6 +762,7 @@ extern "C" bool v2_fntest_orig_isolated(void* fn, uint8_t* ds_image, uint16_t* i
         }
     }
     return sh->ok != 0;
+#endif  /* !_WIN32 */
 }
 extern "C" void v2_spec_ors_mirror_10350();
 // SDL spec-key state. Replaces orig int 9 ISR's writes to byte_31669..byte_3169F.
@@ -829,10 +861,15 @@ void drawPixel(uint32_t offset, uint8_t color)
     for (int ti = 0; ti < _ntraps; ti++) {
       if ((long)offset == _traps[ti]) {
         extern int v2_dbg_pre_vm_iter;
+#ifdef __linux__
         void* bt[8]; int n = backtrace(bt, 8);
         fprintf(stderr, "DP-TRAP[f%d]: off=%X color=%02X bt:", v2_dbg_pre_vm_iter, offset, color);
         for (int i = 1; i < n; i++) fprintf(stderr, " %p", bt[i]);
         fprintf(stderr, "\n");
+#else
+        fprintf(stderr, "DP-TRAP[f%d]: off=%X color=%02X (no backtrace on this platform)\n",
+                v2_dbg_pre_vm_iter, offset, color);
+#endif
         break;
       }
     }

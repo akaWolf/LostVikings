@@ -1,6 +1,10 @@
 // V2_ONLY entry point — replaces orig m2c main entry.
 // No m2c-decompiled code is linked. v2 phase functions handle game on shadow DS.
 
+// (VI.4) Windows: SDL2 renames main to SDL_main and expects its own WinMain
+// bootstrap; the default-mode entry (asm.cpp) never includes SDL.h before
+// main so it dodges this — V2_ONLY must opt out explicitly.
+#define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <cstdio>
 #include <cstdint>
@@ -105,6 +109,8 @@ int main(int argc, char* argv[]) {
         }
 #endif
     }
+
+    SDL_SetMainReady();   // pairs with SDL_MAIN_HANDLED above
 
     // Load keymap before recorder init (recorder consults v2_keymap).
     v2_keymap_load(keymap_path);
