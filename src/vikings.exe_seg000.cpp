@@ -36,6 +36,7 @@ extern uint16_t input_keys;
 extern "C" void enter_trace_sub12352();
 extern "C" void v2_input_record_drain(void);  // #180: flush recorded key edges at game read-frame
 extern "C" void v2_input_tick_12352(void);    // seq channel: count read + record/inject at the head
+extern "C" void v2_cmdq_log_orig(int cmd, uint16_t wr_before, int step);
 // FN-TEST Mode A hooks (FN_TEST_ANALYSIS.md): entry captures {DS, regs}, each
 // RETN captures the golden DS and runs the v2 rewrite on a scratch copy.
 extern "C" void v2_fntest_pre(int id, const uint8_t* ds_base, uint16_t ax, uint16_t bx,
@@ -6917,6 +6918,7 @@ cs=0x1a2;eip=0x002457; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAB)), di));	// 4760 mov    
 cs=0x1a2;eip=0x00245b; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAD)), ax));	// 4761 mov     [bx+1DADh], ax ;~ 01A2:245B
 cs=0x1a2;eip=0x00245f; 	T(MOV(ax, word_2850a));	// 4762 mov     ax, word_2850A ;~ 01A2:245F
 cs=0x1a2;eip=0x002462; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAF)), ax));	// 4763 mov     [bx+1DAFh], ax ;~ 01A2:2462
+	v2_cmdq_log_orig(10, (uint16_t)word_2a66f, 10);
 cs=0x1a2;eip=0x002466; 	X(ADD(word_2a66f, 0x0A));	// 4764 add     word_2A66F, 0Ah ;~ 01A2:2466
 cs=0x1a2;eip=0x00246b; 	X(POP(bx));	// 4765 pop     bx ;~ 01A2:246B
 cs=0x1a2;eip=0x00246c; 	J(RETN(0));	// 4766 retn ;~ 01A2:246C
@@ -6942,6 +6944,7 @@ cs=0x1a2;eip=0x002493; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAB)), di));	// 4789 mov    
 cs=0x1a2;eip=0x002497; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAD)), ax));	// 4790 mov     [bx+1DADh], ax ;~ 01A2:2497
 cs=0x1a2;eip=0x00249b; 	T(MOV(ax, word_2850a));	// 4791 mov     ax, word_2850A ;~ 01A2:249B
 cs=0x1a2;eip=0x00249e; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAF)), ax));	// 4792 mov     [bx+1DAFh], ax ;~ 01A2:249E
+	v2_cmdq_log_orig(10, (uint16_t)word_2a66f, 10);
 cs=0x1a2;eip=0x0024a2; 	X(ADD(word_2a66f, 0x0A));	// 4793 add     word_2A66F, 0Ah ;~ 01A2:24A2
 cs=0x1a2;eip=0x0024a7; 	X(POP(bx));	// 4794 pop     bx ;~ 01A2:24A7
 cs=0x1a2;eip=0x0024a8; 	J(RETN(0));	// 4795 retn ;~ 01A2:24A8
@@ -7196,6 +7199,7 @@ cs=0x1a2;eip=0x002645; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DA9)), si));	// 5103 mov    
 cs=0x1a2;eip=0x002649; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAB)), di));	// 5104 mov     [bx+1DABh], di ;~ 01A2:2649
 cs=0x1a2;eip=0x00264d; 	T(MOV(ax, word_2850a));	// 5105 mov     ax, word_2850A ;~ 01A2:264D
 cs=0x1a2;eip=0x002650; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DAD)), ax));	// 5106 mov     [bx+1DADh], ax ;~ 01A2:2650
+	v2_cmdq_log_orig(8, (uint16_t)word_2a66f, 8);
 cs=0x1a2;eip=0x002654; 	X(ADD(word_2a66f, 8));	// 5107 add     word_2A66F, 8 ;~ 01A2:2654
 cs=0x1a2;eip=0x002659; 	X(POP(bx));	// 5108 pop     bx ;~ 01A2:2659
 cs=0x1a2;eip=0x00265a; 	J(RETN(0));	// 5109 retn ;~ 01A2:265A
@@ -7218,6 +7222,7 @@ ret_1a2_266a:
 	// 4793
 cs=0x1a2;eip=0x00266a; 	T(MOV(bx, word_2a66f));	// 5137 mov     bx, word_2A66F ;~ 01A2:266A
 cs=0x1a2;eip=0x00266e; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DA7)), 2));	// 5138 mov     word ptr [bx+1DA7h], 2 ;~ 01A2:266E
+	v2_cmdq_log_orig(2, (uint16_t)word_2a66f, 2);
 cs=0x1a2;eip=0x002674; 	X(ADD(word_2a66f, 2));	// 5139 add     word_2A66F, 2 ;~ 01A2:2674
 cs=0x1a2;eip=0x002679; 	X(POP(bx));	// 5140 pop     bx ;~ 01A2:2679
 cs=0x1a2;eip=0x00267a; 	J(RETN(0));	// 5141 retn ;~ 01A2:267A
@@ -7228,6 +7233,7 @@ ret_1a2_267c:
 	// 4794
 cs=0x1a2;eip=0x00267c; 	T(MOV(bx, word_2a66f));	// 5151 mov     bx, word_2A66F ;~ 01A2:267C
 cs=0x1a2;eip=0x002680; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DA7)), 4));	// 5152 mov     word ptr [bx+1DA7h], 4 ;~ 01A2:2680
+	v2_cmdq_log_orig(2, (uint16_t)word_2a66f, 2);
 cs=0x1a2;eip=0x002686; 	X(ADD(word_2a66f, 2));	// 5153 add     word_2A66F, 2 ;~ 01A2:2686
 cs=0x1a2;eip=0x00268b; 	X(POP(bx));	// 5154 pop     bx ;~ 01A2:268B
 cs=0x1a2;eip=0x00268c; 	J(RETN(0));	// 5155 retn ;~ 01A2:268C
@@ -7241,6 +7247,7 @@ cs=0x1a2;eip=0x002693; 	X(PUSH(bx));	// 5166 push    bx ;~ 01A2:2693
 cs=0x1a2;eip=0x002694; 	T(MOV(bx, word_2a66f));	// 5167 mov     bx, word_2A66F ;~ 01A2:2694
 cs=0x1a2;eip=0x002698; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DA7)), 6));	// 5168 mov     word ptr [bx+1DA7h], 6 ;~ 01A2:2698
 cs=0x1a2;eip=0x00269e; 	X(MOV(*(dw*)(raddr(ds,bx+0x1DA9)), ax));	// 5169 mov     [bx+1DA9h], ax ;~ 01A2:269E
+	v2_cmdq_log_orig(4, (uint16_t)word_2a66f, 4);
 cs=0x1a2;eip=0x0026a2; 	X(ADD(word_2a66f, 4));	// 5170 add     word_2A66F, 4 ;~ 01A2:26A2
 cs=0x1a2;eip=0x0026a7; 	X(POP(bx));	// 5171 pop     bx ;~ 01A2:26A7
 cs=0x1a2;eip=0x0026a8; 	J(RETN(0));	// 5172 retn ;~ 01A2:26A8

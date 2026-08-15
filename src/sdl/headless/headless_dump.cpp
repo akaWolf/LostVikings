@@ -233,6 +233,15 @@ void headless_dump_divergence(const char* source, int frame, const char* detail)
     v2_dump_psnap_summary();
     headless_dump_render_diff_summary();
 
+    // HEADLESS_KEEP_GOING=1 (#88 forensics): dump the FIRST divergence but
+    // keep the run alive so later verify channels (per-opcode trace_compare
+    // after RENDER3) still fire and localize the split precisely. Default
+    // behavior (exit 1 on first divergence) is unchanged.
+    if (getenv("HEADLESS_KEEP_GOING")) {
+        fprintf(stderr, "=== Dump complete. HEADLESS_KEEP_GOING=1 — continuing run. ===\n");
+        fflush(stdout); fflush(stderr);
+        return;
+    }
     fprintf(stderr, "=== Dump complete. Exit code 1. ===\n");
     fflush(stdout); fflush(stderr);
     need_quit = true;

@@ -2297,6 +2297,7 @@ void v2_compare_phase_snap(int prev_phase_idx, const char* my_phase_name);
 static bool v2_frame_active = false; // true between frame_begin and frame_end, false when JMP sub_11080 skips rest
 static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val);
 static void v2_game_loop_post_vm(uint8_t* shadow);
+static bool v2_in_115d2_transition_render = false;  // #88: transition-path flag (see note at v2_game_loop_post_vm)
 static void v2_game_loop_post_render(uint8_t* shadow, bool include_anim_queue = true);
 static void v2_page_rotate_165aa(uint8_t* shadow);
 static void v2_vm_execute_object(uint8_t* ds, uint16_t si);
@@ -6906,8 +6907,13 @@ static void v2_level_init_render_115d2(uint8_t* s) {
     // PSNAP compare: at this point v2 has finished SF1 main VM. Should match
     // orig snap[T_SF1_VM_END] taken at orig sub_115d2 eip 0x15D5 (after sub_14207).
     v2_compare_phase_snap(V2_PSNAP_T_SF1_VM_END, "v2_level_init_render_115d2 SF1 post-VM");
-    // sub_1386b..sub_13916: physics, collision, spawn
+    // sub_1386b..sub_13916: physics, collision, spawn.
+    // #88: flag the transition path so the MAIN_AFTER_* snap compares inside
+    // are skipped (they would pair against frame-head snaps of a different
+    // execution point); the T_SF* series around this call keeps the coverage.
+    v2_in_115d2_transition_render = true;
     v2_game_loop_post_vm(s);
+    v2_in_115d2_transition_render = false;
     // sub_12fc6: sub-sprite position delta type 0
     // MUST be called — updates sub-sprite X/Y from world position deltas.
     // Exact same function as in game loop RENDER1 phase.
@@ -8924,34 +8930,56 @@ static void v2_collision_resolve_13916(uint8_t* shadow) {
         }
 }
 
+// #88: v2_game_loop_post_vm is ALSO the SF1 body of the transition render
+// (v2_level_init_render_115d2, mirroring orig sub_115d2). On that path the
+// MAIN_AFTER_* phase snaps must NOT be compared: orig takes those snaps only
+// on the MAIN-loop pass (seg000 eips 0x3C..0x48), so a transition-path
+// compare pairs v2's post-transition state against the frame-head snaps of
+// a DIFFERENT execution point — a structural mispair, not a real divergence
+// (repro: synthetic mid-frame RETURN, op_0F sets [334]|=1, v2 runs the
+// transition chain inside the first PRE_SUB_1086F signal while orig runs
+// its own transition only after dispatching that cmd; both worlds converge
+// the same frame). The transition path keeps its OWN paired T_SF* snap
+// series inside v2_level_init_render_115d2 — coverage is unchanged there.
+// (the flag itself is defined at the forward-decl near the top)
 static void v2_game_loop_post_vm(uint8_t* shadow) {
     // sub_1386b: backup X/Y + apply velocity to positions
     v2_apply_velocity_1386b(shadow);
+    if (!v2_in_115d2_transition_render) {
     v2_postvm_check_hash(shadow, "after-sub_1386b", 0);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1386B, "v2_game_loop_post_vm after-sub_1386b");
+    }
 
     // sub_1625d: ground detection + position snapping for objects with flag 0x2000
     // NOTE: original order is sub_1386b → sub_1625d → sub_15546 (verified seg000 lines 3958-3960)
     // Matches original flow exactly: loc_16260 → loc_162c4/loc_162d3/loc_162e0 → loc_1636d
     v2_ground_snap_1625d(shadow);
+    if (!v2_in_115d2_transition_render) {
     v2_postvm_check_hash(shadow, "after-sub_1625d", 1);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1625D, "v2_game_loop_post_vm after-sub_1625d");
+    }
 
     // sub_15546: clear collision result fields + run collision detection VM (sub_15569)
     // NOTE: runs AFTER sub_1625d (verified seg000 line 3960, eip 0x15DE)
     v2_clear_coll_run_vm_15546(shadow);
+    if (!v2_in_115d2_transition_render) {
     v2_postvm_check_hash(shadow, "after-sub_15546", 2);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_15546, "v2_game_loop_post_vm after-sub_15546");
+    }
 
     // sub_13916: collision resolution — process objects with active collision state
     v2_collision_resolve_13916(shadow);
+    if (!v2_in_115d2_transition_render) {
     v2_postvm_check_hash(shadow, "after-sub_13916", 3);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_13916, "v2_game_loop_post_vm after-sub_13916");
+    }
 
     // sub_1064b: camera follow
     v2_camera_follow_1064b(shadow);
+    if (!v2_in_115d2_transition_render) {
     v2_postvm_check_hash(shadow, "after-sub_1064b", 4);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1064B, "v2_game_loop_post_vm after-sub_1064b");
+    }
 
     // NOTE: original eip order after sub_1064b (0x0048):
     //   [POST_VM signal at line 1959]
@@ -13838,10 +13866,29 @@ static void v2_vm_op_D1(V2VM& vm) {
     vm.pc += 1;
 }
 
+// #88 forensics (V2_CMDQ_LOG=1): every cmd-queue enqueue in BOTH worlds is
+// logged (world tag, cmd type, wr offset before, wr step) — the divergence
+// repro shows one world enqueuing a 0x24-byte batch on the split frame while
+// the other enqueues nothing; this locates the writing op/site exactly.
+static void v2_cmdq_log(const char* world, int cmd, uint16_t wr_before, int step) {
+    static int _cq = -1;
+    if (_cq < 0) _cq = getenv("V2_CMDQ_LOG") ? 1 : 0;
+    if (_cq) {
+        extern int v2_dbg_pre_vm_iter;
+        fprintf(stderr, "CMDQ-%s[f%d]: cmd=%d wr=%04X+=%d\n",
+                world, v2_dbg_pre_vm_iter, cmd, wr_before, step);
+    }
+}
+// orig-side entry (called from the seg000 ADD word_2A66F sites).
+extern "C" void v2_cmdq_log_orig(int cmd, uint16_t wr_before, int step) {
+    v2_cmdq_log("orig", cmd, wr_before, step);
+}
+
 // 0x43 (sub_1267b): Command buffer write type=4. 0 bytes.
 static void v2_vm_op_43(V2VM& vm) {
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 4);
+    v2_cmdq_log("v2", 4, bx_cmd, 2);
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 2);
 }
 
@@ -14056,6 +14103,7 @@ static void v2_vm_op_50(V2VM& vm) {
     vm.ds_write(bx_cmd + DS_CMD_ENTRY_SI, val1);
     vm.ds_write(bx_cmd + DS_CMD_ENTRY_DI, val2);
     vm.ds_write(bx_cmd + DS_CMD_ENTRY_PARAM, val3);
+    v2_cmdq_log("v2", 8, bx_cmd, 8);
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 8);
 }
 
@@ -14674,6 +14722,7 @@ static void v2_vm_op_45(V2VM& vm) {
     vm.ds_write(bx_cmd + DS_CMD_ENTRY_SI, si_val);
     vm.ds_write(bx_cmd + DS_CMD_ENTRY_DI, di_val);
     vm.ds_write(bx_cmd + DS_CMD_ENTRY_PARAM, vm.ds_read(DS_TEXT_IDX));  // word_2850A
+    v2_cmdq_log("v2", 0x0A, bx_cmd, 8);
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 8);
 }
 
@@ -14716,6 +14765,7 @@ static void v2_vm_op_37(V2VM& vm) {
 static void v2_vm_op_42(V2VM& vm) {
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 2);
+    v2_cmdq_log("v2", 2, bx_cmd, 2);
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 2);
 }
 
@@ -15597,6 +15647,7 @@ static void v2_vm_op_46(V2VM& vm) {
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 6);
     vm.ds_write(bx_cmd + DS_CMD_ENTRY_SI, param);
+    v2_cmdq_log("v2", 6, bx_cmd, 4);
     vm.ds_write(DS_CMD_WRITE, bx_cmd + 4);
 }
 
@@ -19340,6 +19391,18 @@ void v2_phase_post_vm(uint16_t ds_val) {
     extern bool v2_in_phase_post_vm; v2_in_phase_post_vm = true;
     // PSNAP compare: v2 shadow should match orig VM_END (both just finished main VM).
     v2_compare_phase_snap(V2_PSNAP_VM_END, "v2_phase_post_vm");
+    // #88 forensics (V2_CMDQ_LOG=1): post-VM cmd-queue pointers of BOTH worlds.
+    {
+        static int _cq = -1;
+        if (_cq < 0) _cq = getenv("V2_CMDQ_LOG") ? 1 : 0;
+        if (_cq && v2_m2c_base && v2_current_ds_val) {
+            uint8_t* rds = v2_m2c_base + ((uint32_t)v2_current_ds_val << 4);
+            fprintf(stderr, "CMDQ-POSTVM[f%d]: orig wr=%04X rd=%04X | v2 wr=%04X rd=%04X\n",
+                    v2_dbg_pre_vm_iter,
+                    *(uint16_t*)(rds + DS_CMD_WRITE), *(uint16_t*)(rds + DS_CMD_READ),
+                    v2gs(v2_vm_shadow_ds).cmd_write(), v2gs(v2_vm_shadow_ds).cmd_read());
+        }
+    }
 #ifndef V2_ONLY
     // Wait for one render-thread tick — render thread runs orig render_callback
     // (clears real[0x7EFE]) + v2_render_callback (clears shadow[0x7EFE]) back-to-back.
@@ -20160,8 +20223,18 @@ void v2_cmd_loop_1086f(uint8_t* s) {
     s[di_v + OBJ_DIRTY_MODE] = 2;
 
     uint16_t cmd_type = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_BUF));
-    fprintf(stderr, "V2-1086f[lv=%04X]: rd=%04X wr=%04X cmd=%d\n",
-            v2gs(s).level(), bx_read, bx_write, cmd_type);
+    // #88: also show the REAL-world queue pointers at this exact moment —
+    // detects real-side clobber/consumption while orig waits on the barrier.
+    {
+        uint16_t rwr = 0xDEAD, rrd = 0xDEAD;
+        if (v2_m2c_base && v2_current_ds_val) {
+            uint8_t* rds = v2_m2c_base + ((uint32_t)v2_current_ds_val << 4);
+            rwr = *(uint16_t*)(rds + DS_CMD_WRITE);
+            rrd = *(uint16_t*)(rds + DS_CMD_READ);
+        }
+        fprintf(stderr, "V2-1086f[lv=%04X]: rd=%04X wr=%04X cmd=%d | real rd=%04X wr=%04X\n",
+                v2gs(s).level(), bx_read, bx_write, cmd_type, rrd, rwr);
+    }
 
     // Dispatch one cmd (handlers verified line-by-line vs orig off_2b086 table)
     if (cmd_type == 0) {
@@ -21439,6 +21512,16 @@ std::atomic<int64_t> v2_dbg_phase_complete{0};
 void v2_signal_phase(V2Phase phase, uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     v2_dbg_signal_phase_calls++;
+    // #88 forensics (V2_PHASE_LOG=1): exact signal order with the frame
+    // counter — resolves which world-phase interleaving produced a split.
+    {
+        static int _pl = -1;
+        if (_pl < 0) _pl = getenv("V2_PHASE_LOG") ? 1 : 0;
+        if (_pl) {
+            extern int v2_dbg_pre_vm_iter;
+            fprintf(stderr, "PHASE[f%d]: %d\n", v2_dbg_pre_vm_iter, (int)phase);
+        }
+    }
     {
         std::unique_lock<std::mutex> lock(v2_barrier_mutex);
         v2_barrier_ds = ds_val;
@@ -21891,6 +21974,15 @@ void v2_vm_trace_compare() {
     // Iterate up to MAX of both lengths so trailing extra entries are caught.
     int len_min = (v2_trace_len < orig_trace_len) ? v2_trace_len : orig_trace_len;
     int len_max = (v2_trace_len > orig_trace_len) ? v2_trace_len : orig_trace_len;
+    // #88 forensics (V2_TRACE_LEN_LOG=1): per-frame trace lengths — a silent
+    // compare with len 0/0 looks identical to a clean compare otherwise.
+    {
+        static int _tl = -1;
+        if (_tl < 0) _tl = getenv("V2_TRACE_LEN_LOG") ? 1 : 0;
+        if (_tl && (orig_trace_len || v2_trace_len))
+            fprintf(stderr, "TRACE-LEN[f%d cmp#%d]: orig=%d v2=%d\n",
+                    v2_dbg_pre_vm_iter, frame, orig_trace_len, v2_trace_len);
+    }
     static int total_err = 0;
     static bool first_mismatch_printed = false;
     // First pass: check opcode/pc/acc/HASH match in shared prefix.
