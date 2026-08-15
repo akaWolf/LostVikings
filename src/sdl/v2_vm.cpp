@@ -2353,8 +2353,13 @@ static void v2_pal_anim_10ffc(uint8_t* s) {
         // bit7=0: OUT(0x3C8, start_color); count=diff8+1 (INC cx, ch=0); REP OUTSB
         //         count*3 bytes from ds:[word_303E0 + start_color*3].
         // bit7=1 (loc_1104d): NEG cl → count=(uint8)(start-end)+1; OUT(0x3C8, end);
-        //         REP OUTSB count*3 bytes from ds:[word_303E0 + count*3] — orig
-        //         quirk: source offset is count*3, NOT end_color*3.
+        //         REP OUTSB count*3 bytes from ds:[word_303E0 + end_color*3]:
+        //         `MOV al,[bx+259C]` overwrites AL while AH is still 0 from
+        //         `MOV ax,cx` (count <= 255), so AX = end color and
+        //         si = ax*3 + [303E0] = the window itself. (An earlier mirror
+        //         read this as count*3 — a misread that froze the level-2 lift
+        //         arrows on constant colors 4..7 instead of the rotating
+        //         75..78 window; #87.)
         // v2 shadow DAC (task #22): mirror both bursts from SHADOW data. Source can
         // be 0x7F02 (word_303E0) — NOT 0x8202 — which is why the old "screen =
         // 0x8202 snapshot" display model diverged (V2-PAL-DIVERGE idx 0x71).
@@ -2369,7 +2374,7 @@ static void v2_pal_anim_10ffc(uint8_t* s) {
             uint16_t count = (uint16_t)(uint8_t)(0 - diff8) + 1;
             for (uint16_t i = 0; i < count * 3; i++)
                 v2_dac_shadow[(end_color * 3 + i) % 768] =
-                    s[(uint16_t)(pal_base + count * 3 + i)];
+                    s[(uint16_t)(pal_base + end_color * 3 + i)];
         }
     }
 }

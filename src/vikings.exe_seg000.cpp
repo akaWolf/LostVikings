@@ -4542,18 +4542,22 @@ cs=0x1a2;eip=0x001065; 	T(ADD(si, word_303e0));	// 2235 add     si, word_303E0 ;
 	// 2236 rep outsb ;~ 01A2:1069
 cs=0x1a2;eip=0x001069; 	T(	REP OUTSB);	// 2236 rep outsb ;~ 01A2:1069
  // SDL: mirror the DAC burst above (negative path — bit7 of the BYTE diff
- // set). DAC index starts at [bx+259C] (the END color) and autoincrements;
- // the SOURCE is ds:[word_303E0 + count*3] (count*3, NOT end*3 — original
- // quirk preserved by the register math above: si = count + count*2).
+ // set). DAC index starts at [bx+259C] (the END color) and autoincrements.
+ // SOURCE is ds:[word_303E0 + end_color*3]: `MOV al,[bx+259C]` OVERWRITES
+ // AL while AH is still 0 from `MOV ax,cx` (count <= 255), so AX = the
+ // end color, and si = ax + ax*2 + [303E0] = end*3 — the window itself.
+ // (An earlier mirror read this as si = count*3 — a misread that froze the
+ // level-2 lift arrows on the constant colors 4..7 instead of the rotating
+ // 75..78 window; #87.)
  // count = (uint8)(start-end)+1 — byte NEG, same 8-bit domain as the gate.
  {
    dw end_color = *(raddr(ds,bx+0x259C));
    dw count = (db)(*(raddr(ds,bx+0x2594)) - *(raddr(ds,bx+0x259C))) + 1;
    for (int i = 0; i < count; i++)
 	 setPalette((uint8_t)(end_color + i),
-				(*(db*)(raddr(ds, word_303e0 + count * 3 + i*3 + 0))) << 2,
-				(*(db*)(raddr(ds, word_303e0 + count * 3 + i*3 + 1))) << 2,
-				(*(db*)(raddr(ds, word_303e0 + count * 3 + i*3 + 2))) << 2);
+				(*(db*)(raddr(ds, word_303e0 + end_color * 3 + i*3 + 0))) << 2,
+				(*(db*)(raddr(ds, word_303e0 + end_color * 3 + i*3 + 1))) << 2,
+				(*(db*)(raddr(ds, word_303e0 + end_color * 3 + i*3 + 2))) << 2);
  }
 loc_1106b:
 	// 4562
