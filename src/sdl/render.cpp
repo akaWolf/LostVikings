@@ -898,8 +898,12 @@ void updateDraw()
 			       if (f - last_shown >= 10 || f < last_shown) {
 			           last_shown = f;
 			           char t[64];
-			           snprintf(t, sizeof(t), "Lost Vikings orig — frame %d", f);
+			           snprintf(t, sizeof(t), "Lost Vikings orig - frame %d", f);
 			           if (myWindow) SDL_SetWindowTitle(myWindow, t);
+			           { static int _tl = -1;
+			             if (_tl < 0) _tl = getenv("V2_TITLE_DBG") ? 1 : 0;
+			             if (_tl) fprintf(stderr, "TITLE-SET f=%d win=%p err=%s\n",
+			                              f, (void*)myWindow, SDL_GetError()); }
 			       }
 			   }
 #endif

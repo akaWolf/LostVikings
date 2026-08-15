@@ -227,7 +227,7 @@ void render_thread_proc_v2(void* _state)
           if (f - last_shown >= 10 || f < last_shown) {
               last_shown = f;
               char t[64];
-              snprintf(t, sizeof(t), "Lost Vikings v2 — frame %d", f);
+              snprintf(t, sizeof(t), "Lost Vikings v2 - frame %d", f);
               if (myWindow_v2) SDL_SetWindowTitle(myWindow_v2, t);
           }
       }
