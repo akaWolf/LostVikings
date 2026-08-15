@@ -13925,6 +13925,9 @@ static void v2_vm_op_D3(V2VM& vm) {
     uint16_t pw1 = vm.ds_read(DS_PW_CHAR1);
     uint16_t pw2 = vm.ds_read(DS_PW_CHAR2);
     uint16_t pw3 = vm.ds_read(DS_PW_CHAR3);
+    if (getenv("V2_PW_TRACE"))
+        fprintf(stderr, "V2-PW: f%d op_D3 verify '%c%c%c%c'\n", v2_dbg_pre_vm_iter,
+            (char)(pw0 & 0x7F), (char)(pw1 & 0x7F), (char)(pw2 & 0x7F), (char)(pw3 & 0x7F));
 
     for (uint16_t si = 0; (int16_t)si < 0x94; si += 4) {
         uint16_t addr_base = (uint16_t)(si - 0x7A5B);
@@ -18675,6 +18678,29 @@ void v2_phase_frame_begin(uint16_t ds_val) {
                 v2_dbg_pre_vm_iter, s_[0x25CF], s_[0x25BA],
                 *(uint16_t*)(s_ + 0x3CC), *(uint16_t*)(s_ + 0x25C9),
                 *(uint16_t*)(s_ + 0x3B8), *(uint16_t*)(s_ + 0x447));
+        }
+    }
+    // V2_PW_TRACE=1: password-screen input forensics (level2 replay saga) —
+    // log every change of the 4 password char words (ds:0x310..0x316) and the
+    // N/P/Q selector word_28923 (ds:0x443) with the frame it landed on.
+    {
+        static int pw_trace = -1;
+        if (pw_trace < 0) { const char* e = getenv("V2_PW_TRACE"); pw_trace = (e && e[0]=='1') ? 1 : 0; }
+        if (pw_trace && v2_vm_shadow_ds) {
+            static uint16_t prev[5] = {0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF};
+            uint8_t* s_ = v2_vm_shadow_ds;
+            uint16_t cur[5] = {
+                *(uint16_t*)(s_ + 0x310), *(uint16_t*)(s_ + 0x312),
+                *(uint16_t*)(s_ + 0x314), *(uint16_t*)(s_ + 0x316),
+                *(uint16_t*)(s_ + 0x443),
+            };
+            for (int i = 0; i < 5; i++) if (cur[i] != prev[i]) {
+                fprintf(stderr, "V2-PW: f%d %s[%d] %04X->%04X ('%c')\n",
+                    v2_dbg_pre_vm_iter, i < 4 ? "char" : "sel", i < 4 ? i : 0,
+                    prev[i], cur[i],
+                    (cur[i] & 0x7F) >= 0x20 ? (char)(cur[i] & 0x7F) : '?');
+                prev[i] = cur[i];
+            }
         }
     }
     v2_audit_reset_fire_counters();

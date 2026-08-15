@@ -23,6 +23,7 @@
 extern uint16_t input_keys, input_keys_v2;
 extern std::atomic<uint8_t> sdl_spec_state[256];
 extern std::atomic<uint8_t> sdl_spec_press_latch[256];
+extern std::atomic<uint16_t> sdl_input_press_edges;  // render.cpp (#81 tap accumulator)
 extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 
 // v2 game frame counter, defined in v2_vm.cpp; bumped in v2_phase_frame_begin.
@@ -170,6 +171,17 @@ int v2_replay_drain_impl(void) {
             // #62: replays must feed the INT9 letter channel too — the
             // password screen consumes [28C], not only key bits.
             sdl_int9_note_keydown(SDL_GetScancodeFromKey(e.key.keysym.sym));
+            // Tap accumulator (#81): BOTH live event loops OR every KEYDOWN
+            // into sdl_input_press_edges so a KEYDOWN+KEYUP pair shorter than
+            // one sub_12352 interval still lands as an edge. The drain skipped
+            // it → any same-frame KD+KU pair in a recording (X11 autorepeat
+            // emits Release+Press pairs with repeat=0, ~30 Hz — a held arrow
+            // key on the password screen produces exactly that) collapsed to
+            // state-no-change on replay and the press was LOST, so recorded
+            // live runs diverged (level2 password typed a different word).
+            // Recorded events are physical presses by construction (the
+            // recorder drops repeat=1), so no !repeat filter is needed here.
+            if (key_val) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
             input_keys |= key_val; input_keys_v2 |= key_val;
         } else {
             input_keys &= (uint16_t)~key_val; input_keys_v2 &= (uint16_t)~key_val;
