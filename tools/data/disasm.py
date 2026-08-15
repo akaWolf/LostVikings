@@ -80,6 +80,15 @@ CUSTOM_BR = {
     0x4A: decode_op49,
 }
 
+# ops whose operand is an ABSOLUTE DS word address (phase-D router map).
+# value = offset of the addr16 operand from the opcode byte.
+ABS_ADDR_OPS = {
+    0x53:1, 0x57:1, 0x5A:1, 0x5D:1, 0x60:1, 0x63:1, 0x66:1, 0x6A:1,
+    0x6F:1, 0x74:1, 0x79:1, 0x7E:1, 0x83:1, 0x88:1, 0x8D:1, 0x91:1,
+    0x94:1, 0x9D:1, 0xA0:1, 0xA3:1, 0xA6:1, 0xAA:2, 0xAF:1, 0xB4:1,
+    0xB9:1, 0xBD:1, 0x99:2,
+}
+
 def load_draft():
     d = json.load(open('tools/data/optable_draft.json'))
     table = {}
@@ -152,11 +161,14 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
             pc = struct.unpack_from('<H', d, off)[0]
             if pc < len(d):
                 entries[pc] = f'tmpl_{t2:02X}'
+                if pc + 3 < len(d):
+                    entries.setdefault(pc + 3, f'tmpl_{t2:02X}+3')
     for pc in extra_entries:
         entries.setdefault(pc, 'dyn')
     seen = {}
     stops = {}
     parent = {}
+    addrs = {}
     q = deque(entries.keys())
     def push(npc, src):
         if npc not in parent:
@@ -168,6 +180,9 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
             continue
         op = d[pc]
         info = table.get(op)
+        if op in ABS_ADDR_OPS and pc + ABS_ADDR_OPS[op] + 2 <= len(d):
+            a = struct.unpack_from('<H', d, pc + ABS_ADDR_OPS[op])[0]
+            addrs.setdefault(a, set()).add(op)
         if op in CUSTOM:
             ln, tmpls = CUSTOM[op](d, pc)
             seen[pc] = (op, ln)
@@ -213,7 +228,63 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
             push(pc + ln, pc)
         else:
             stops.setdefault(op, []).append(pc)
-    return d, entries, seen, stops, parent
+    return d, entries, seen, stops, parent, addrs
+
+def load_layout_names():
+    names = {}
+    import re
+    for line in open('src/sdl/v2_ds_layout.h'):
+        m = re.match(r'constexpr uint16_t (DS|LUT)_([A-Z_0-9]+)\s*=\s*0x([0-9A-Fa-f]+);', line)
+        if m:
+            names[int(m.group(3), 16)] = m.group(2).lower()
+    return names
+
+LAYOUT = None
+
+def mnemonic(op, table):
+    info = table.get(op)
+    h = info[2] if info else '?'
+    name = h.replace('v2_vm_op_', '')
+    return name
+
+def write_listing(cid, d, entries, seen, table, dyn_pcs=()):
+    global LAYOUT
+    if LAYOUT is None:
+        LAYOUT = load_layout_names()
+    dyn = set(dyn_pcs)
+    rev = {}
+    for pc, name in entries.items():
+        rev.setdefault(pc, []).append(name)
+
+    def annot(pc, op, ln):
+        parts = []
+        if op in ABS_ADDR_OPS and pc + ABS_ADDR_OPS[op] + 2 <= len(d):
+            a = struct.unpack_from('<H', d, pc + ABS_ADDR_OPS[op])[0]
+            parts.append('[' + (LAYOUT.get(a) or f'{a:04X}') + ']')
+        sch = OPERAND_SCHEMES.get(op)
+        info = table.get(op)
+        toff = None
+        if sch and sch[1] in ('jmp', 'br'):
+            toff = sch[2]
+        elif info and info[0] == 'scheme' and info[1][1] in ('jmp', 'br'):
+            toff = info[1][2]
+        if toff is not None and pc + toff + 2 <= len(d):
+            t = struct.unpack_from('<H', d, pc + toff)[0]
+            parts.append(f'-> {t:04X}')
+        return ' '.join(parts)
+
+    path = f'assets_raw/disasm/{cid:04X}.lst'
+    with open(path, 'w') as f:
+        f.write(f'; chunk {cid:04X}: {len(seen)} instructions\n')
+        for pc in sorted(seen):
+            op, ln = seen[pc]
+            if pc in rev:
+                names = ','.join(sorted(rev[pc]))
+                f.write(f'\n{pc:04X} <{names}>:\n')
+            b = ' '.join(f'{x:02X}' for x in d[pc:pc+ln])
+            mark = '*' if pc in dyn else ' '
+            f.write(f'{mark}{pc:04X}: {b:<15} {mnemonic(op, table):<22} {annot(pc, op, ln)}\n')
+    return path
 
 def main():
     table = load_draft()
@@ -222,8 +293,9 @@ def main():
     os.makedirs('assets_raw/disasm', exist_ok=True)
     for cid in args:
         tmpls = per_template.get(cid, set())
-        d, entries, seen, stops, parent = walk(cid, tmpls, table)
+        d, entries, seen, stops, parent, addrs = walk(cid, tmpls, table)
         cov = sum(l for _, l in seen.values())
+        write_listing(cid, d, entries, seen, table)
         print(f'0x{cid:X}: templates={len(tmpls)} entries={len(entries)} '
               f'insns={len(seen)} bytes~{cov} stops={{'
               + ', '.join(f'{op:02X}:{len(v)}' for op, v in

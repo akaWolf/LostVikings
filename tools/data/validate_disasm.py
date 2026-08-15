@@ -17,6 +17,7 @@ dz = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(dz)
 
 def main():
+    allad = {}
     dyn = {}   # tmpl -> {pc: op}
     for path in sys.argv[1:]:
         for line in open(path):
@@ -26,7 +27,7 @@ def main():
     pt = dz.spawn_entries()
     for tmpl in sorted(dyn):
         stream = dyn[tmpl]
-        d, entries, seen, stops, parent = dz.walk(tmpl, pt.get(tmpl, set()), table, extra_entries=stream.keys())
+        d, entries, seen, stops, parent, addrs = dz.walk(tmpl, pt.get(tmpl, set()), table, extra_entries=stream.keys())
         missed = [pc for pc in stream if pc not in seen]
         mism = [(pc, stream[pc], seen[pc][0]) for pc in stream
                 if pc in seen and seen[pc][0] != stream[pc]]
@@ -37,6 +38,17 @@ def main():
                   f'bytes={" ".join(f"{x:02X}" for x in d[pc:pc+6])}')
         for pc, dop, sop in sorted(mism)[:6]:
             print(f'  MISMATCH pc={pc:04X} dyn={dop:02X} static={sop:02X}')
+        allad.setdefault(tmpl, addrs)
+
+    merged = {}
+    for t, am in allad.items():
+        for a, ops in am.items():
+            merged.setdefault(a, set()).update(ops)
+    import json
+    json.dump({f'{a:04X}': sorted(f'{o:02X}' for o in ops)
+               for a, ops in sorted(merged.items())},
+              open('assets_raw/operand_addr_map.json', 'w'), indent=1)
+    print(f'operand addr map: {len(merged)} unique DS addresses -> assets_raw/operand_addr_map.json')
 
 if __name__ == '__main__':
     main()

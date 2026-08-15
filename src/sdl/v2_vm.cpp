@@ -14884,8 +14884,39 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
             }
         }
 
+        uint16_t _anim_bx_before = anim_bx;
         bool _ok = v2_vm_exec_anim_cmd(vm, handler, anim_bx, cmd);
-
+        // Stage-1 anim-VM ground truth (V2_ANIM_DUMP=<file>): unique
+        // (template, bx_before, cmd, bx_after) — the anim commands have
+        // runtime-dependent operand lengths (per-sub-sprite loops), so the
+        // live stream IS the length oracle for the anim disassembler.
+        {
+            static int _ad = -1;
+            static const char* _af = nullptr;
+            if (_ad < 0) { _af = getenv("V2_ANIM_DUMP"); _ad = _af ? 1 : 0; }
+            if (_ad) {
+                static std::set<uint64_t> _aseen;
+                static int _adirty = 0;
+                uint16_t tmpl = v2gs(vm.shadow).template_chunk();
+                uint64_t key = ((uint64_t)tmpl << 40) |
+                               ((uint64_t)_anim_bx_before << 24) |
+                               ((uint64_t)cmd << 16) | anim_bx;
+                if (_aseen.insert(key).second) _adirty++;
+                if (_adirty >= 32) {
+                    _adirty = 0;
+                    FILE* f = fopen(_af, "w");
+                    if (f) {
+                        for (uint64_t k : _aseen)
+                            fprintf(f, "%04X %04X %02X %04X\n",
+                                    (unsigned)(k >> 40),
+                                    (unsigned)((k >> 24) & 0xFFFF),
+                                    (unsigned)((k >> 16) & 0xFF),
+                                    (unsigned)(k & 0xFFFF));
+                        fclose(f);
+                    }
+                }
+            }
+        }
 
         if (!_ok) {
             // Record trace entry
@@ -17607,7 +17638,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
                 uint16_t tmpl = v2gs(shadow).template_chunk();
                 uint64_t key = ((uint64_t)tmpl << 32) | ((uint32_t)pc_before << 8) | opcode;
                 if (_seen.insert(key).second) _dirty++;
-                if (_dirty >= 256) {
+                if (_dirty >= 32) {
                     _dirty = 0;
                     FILE* f = fopen(_pf, "w");
                     if (f) {
