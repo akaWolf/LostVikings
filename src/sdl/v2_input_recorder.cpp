@@ -47,10 +47,21 @@ struct ReplayEvent {
     int      frame;  // v2_dbg_pre_vm_iter at record time
     uint8_t  kind;   // 0=KEYDOWN, 1=KEYUP
     SDL_Keycode keycode;
+    long     seq;    // sub_12352 call number that first saw it (-1 = legacy)
 };
 std::vector<ReplayEvent> g_replay_queue;
 size_t g_replay_pos = 0;
 bool g_replay_exhausted_logged = false;
+// Seq channel (level2 saga): the frame tag is too coarse — sub_12352 runs
+// SEVERAL times per frame (sub_1086f audio loop re-enters it), each call
+// re-publishes word_28896/28898, so WHICH call first sees an event decides
+// whether the scene script observes it (an edge published to call #k is
+// overwritten by call #k+1 before the VM pass reads it). Live loses taps
+// that land between the "wrong" calls — replay must lose the SAME ones.
+// Fix: tag every recorded event with the global 12352-call number and
+// inject it right before the same-numbered call on replay. Legacy files
+// (3 columns) keep the old FRAME_BEGIN drain path bit-for-bit.
+bool g_replay_has_seq = false;
 
 // RECORD mode: the render thread captures SDL key edges into this pending queue
 // (action + kind only — NO frame tag). The game thread drains it inside
@@ -80,7 +91,9 @@ void parse_replay_file(const char* path) {
         if (line[0] == '#' || line[0] == '\n' || line[0] == '\0') continue;
         int frame;
         char k[4], action[32];
-        if (sscanf(line, "%d %3s %31s", &frame, k, action) != 3) { skipped++; continue; }
+        long seq = -1;
+        int n = sscanf(line, "%d %3s %31s %ld", &frame, k, action, &seq);
+        if (n < 3) { skipped++; continue; }
         SDL_Keycode kc = action_to_sdl_key(action);
         if (kc == SDLK_UNKNOWN) {
             fprintf(stderr, "v2_input_recorder: unknown action '%s' at f=%d — skipped\n", action, frame);
@@ -90,12 +103,18 @@ void parse_replay_file(const char* path) {
         e.frame = frame;
         e.kind = (strcmp(k, "KD") == 0) ? 0 : 1;
         e.keycode = kc;
+        e.seq = (n == 4) ? seq : -1;
         g_replay_queue.push_back(e);
         parsed++;
     }
     fclose(f);
-    fprintf(stderr, "v2_input_recorder: replay loaded %d events from '%s' (%d skipped)\n",
-            parsed, path, skipped);
+    // seq mode only when EVERY event carries the 4th column — a mixed file
+    // would interleave two delivery disciplines, so it falls back to legacy.
+    g_replay_has_seq = !g_replay_queue.empty();
+    for (const auto& e : g_replay_queue)
+        if (e.seq < 0) { g_replay_has_seq = false; break; }
+    fprintf(stderr, "v2_input_recorder: replay loaded %d events from '%s' (%d skipped, %s delivery)\n",
+            parsed, path, skipped, g_replay_has_seq ? "seq" : "legacy frame");
 }
 
 void log_keyboard_event(const SDL_Event* e) {
@@ -148,8 +167,49 @@ bool dequeue_due_replay(SDL_Event* out) {
 // REPLAY mode the game thread now drains due events itself, right before
 // every sdl_spec_snapshot_take(), applying them synchronously; the poll
 // wrapper no longer hands KD/KU to the render loops (see below).
+void apply_replay_event(const SDL_Event& e, const char* via) {
+    uint16_t key_val = 0, spec_off = 0;
+    v2_keymap_lookup_sdl(e.key.keysym.sym, &key_val, &spec_off);
+    if (getenv("V2_DRAIN_LOG")) {
+        fprintf(stderr, "DRAIN-%s[f%d]: %s sym=%d key=%04X spec=%04X ik=%04X\n",
+                via, v2_dbg_pre_vm_iter, e.type == SDL_KEYDOWN ? "KD" : "KU",
+                (int)e.key.keysym.sym, key_val, spec_off,
+                (uint16_t)input_keys);
+    }
+    if (e.type == SDL_KEYDOWN) {
+        // #62: replays must feed the INT9 letter channel too — the
+        // password screen consumes [28C], not only key bits.
+        sdl_int9_note_keydown(SDL_GetScancodeFromKey(e.key.keysym.sym));
+        // Tap accumulator (#81): BOTH live event loops OR every KEYDOWN
+        // into sdl_input_press_edges so a KEYDOWN+KEYUP pair shorter than
+        // one sub_12352 interval still lands as an edge. The drain skipped
+        // it → any same-frame KD+KU pair in a recording (X11 autorepeat
+        // emits Release+Press pairs with repeat=0, ~30 Hz — a held arrow
+        // key on the password screen produces exactly that) collapsed to
+        // state-no-change on replay and the press was LOST, so recorded
+        // live runs diverged (level2 password typed a different word).
+        // Recorded events are physical presses by construction (the
+        // recorder drops repeat=1), so no !repeat filter is needed here.
+        if (key_val) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
+        input_keys |= key_val; input_keys_v2 |= key_val;
+    } else {
+        input_keys &= (uint16_t)~key_val; input_keys_v2 &= (uint16_t)~key_val;
+    }
+    if (spec_off) {
+        if (e.type == SDL_KEYDOWN) {
+            sdl_spec_state[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+            sdl_spec_press_latch[spec_off & 0xFF].store(1, std::memory_order_relaxed);
+        } else {
+            sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
+        }
+    }
+}
+
 int v2_replay_drain_impl(void) {
     if (g_mode != MODE_REPLAY) return 0;
+    // seq-delivery files are injected at the sub_12352 call sites
+    // (v2_input_tick_12352) — the frame-clock drain must not double-apply.
+    if (g_replay_has_seq) return 0;
     // clock: catch up to the real frame counter when it moves; advance one
     // virtual frame per drain call while it is frozen (blocking loops).
     if ((long)v2_dbg_pre_vm_iter > g_replay_clock)
@@ -159,41 +219,7 @@ int v2_replay_drain_impl(void) {
     int applied = 0;
     SDL_Event e;
     while (dequeue_due_replay(&e)) {
-        uint16_t key_val = 0, spec_off = 0;
-        v2_keymap_lookup_sdl(e.key.keysym.sym, &key_val, &spec_off);
-        if (getenv("V2_DRAIN_LOG")) {
-            fprintf(stderr, "DRAIN[f%d]: %s sym=%d key=%04X spec=%04X ik=%04X\n",
-                    v2_dbg_pre_vm_iter, e.type == SDL_KEYDOWN ? "KD" : "KU",
-                    (int)e.key.keysym.sym, key_val, spec_off,
-                    (uint16_t)input_keys);
-        }
-        if (e.type == SDL_KEYDOWN) {
-            // #62: replays must feed the INT9 letter channel too — the
-            // password screen consumes [28C], not only key bits.
-            sdl_int9_note_keydown(SDL_GetScancodeFromKey(e.key.keysym.sym));
-            // Tap accumulator (#81): BOTH live event loops OR every KEYDOWN
-            // into sdl_input_press_edges so a KEYDOWN+KEYUP pair shorter than
-            // one sub_12352 interval still lands as an edge. The drain skipped
-            // it → any same-frame KD+KU pair in a recording (X11 autorepeat
-            // emits Release+Press pairs with repeat=0, ~30 Hz — a held arrow
-            // key on the password screen produces exactly that) collapsed to
-            // state-no-change on replay and the press was LOST, so recorded
-            // live runs diverged (level2 password typed a different word).
-            // Recorded events are physical presses by construction (the
-            // recorder drops repeat=1), so no !repeat filter is needed here.
-            if (key_val) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
-            input_keys |= key_val; input_keys_v2 |= key_val;
-        } else {
-            input_keys &= (uint16_t)~key_val; input_keys_v2 &= (uint16_t)~key_val;
-        }
-        if (spec_off) {
-            if (e.type == SDL_KEYDOWN) {
-                sdl_spec_state[spec_off & 0xFF].store(1, std::memory_order_relaxed);
-                sdl_spec_press_latch[spec_off & 0xFF].store(1, std::memory_order_relaxed);
-            } else {
-                sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
-            }
-        }
+        apply_replay_event(e, "clk");
         applied++;
     }
     return applied;
@@ -204,6 +230,49 @@ int v2_replay_drain_impl(void) {
 // C-linkage bridge OUTSIDE the anonymous namespace (the anon-ns extern "C"
 // trap: language linkage C but internal storage — the symbol never exports).
 extern "C" int v2_replay_drain_to_state(void) { return v2_replay_drain_impl(); }
+
+// Global sub_12352 call counter — the seq-delivery coordinate. Incremented by
+// v2_input_tick_12352 at the single input-read point of the running world
+// (orig sub_12352 head in default/headless, the v2_read_input_12352_iter
+// V2_ONLY branch in standalone). Diagnostics (V2_12352_LOG) print it too.
+extern "C" long g_sub12352_seq = 0;
+
+// One call = one sub_12352 read. Placed at the TOP of the read, BEFORE the
+// press_edges exchange, so that:
+//  - RECORD: pending events captured so far are exactly the ones THIS call's
+//    exchange/input_keys read will see first → tag them with this seq.
+//  - REPLAY (seq files): inject every event tagged <= this seq right before
+//    the read — each 12352 call then observes bit-for-bit what live saw,
+//    including which call an intra-frame tap lands on (the sub_1086f re-entry
+//    structure that made frame-tagged delivery too coarse).
+extern "C" void v2_input_tick_12352(void) {
+    g_sub12352_seq++;
+    if (g_mode == MODE_RECORD) {
+        v2_input_record_drain();
+        return;
+    }
+    if (g_mode == MODE_REPLAY && g_replay_has_seq) {
+        while (g_replay_pos < g_replay_queue.size() &&
+               g_replay_queue[g_replay_pos].seq <= g_sub12352_seq) {
+            const ReplayEvent& re = g_replay_queue[g_replay_pos];
+            SDL_Event e; SDL_zerop(&e);
+            e.type = (re.kind == 0) ? SDL_KEYDOWN : SDL_KEYUP;
+            e.key.keysym.sym = re.keycode;
+            e.key.keysym.scancode = SDL_GetScancodeFromKey(re.keycode);
+            e.key.repeat = 0;
+            e.key.state = (re.kind == 0) ? SDL_PRESSED : SDL_RELEASED;
+            e.key.timestamp = SDL_GetTicks();
+            apply_replay_event(e, "seq");
+            g_replay_pos++;
+        }
+        if (g_replay_pos >= g_replay_queue.size() && !g_replay_exhausted_logged &&
+            !g_replay_queue.empty()) {
+            g_replay_exhausted_logged = true;
+            fprintf(stderr, "v2_input_recorder: REPLAY queue exhausted at frame=%d seq=%ld\n",
+                    v2_dbg_pre_vm_iter, g_sub12352_seq);
+        }
+    }
+}
 
 extern "C" void v2_input_recorder_init(const char* record_file, const char* replay_file, int strict_replay) {
     g_strict_replay = (strict_replay != 0);
@@ -220,7 +289,10 @@ extern "C" void v2_input_recorder_init(const char* record_file, const char* repl
             return;
         }
         fprintf(g_record_file, "# Lost Vikings v2 input recording — frame-based, action names SDL-independent\n");
-        fprintf(g_record_file, "# Format: <frame> <KD|KU> <ACTION>  (frame = v2_dbg_pre_vm_iter)\n");
+        fprintf(g_record_file, "# Format: <frame> <KD|KU> <ACTION> <seq>  (frame = v2_dbg_pre_vm_iter;\n"
+                               "# seq = global sub_12352 call number: replay injects the event right\n"
+                               "# before the same-numbered input read — intra-frame exact delivery.\n"
+                               "# 3-column files from older builds replay via the legacy frame clock.)\n");
         fflush(g_record_file);
         g_mode = MODE_RECORD;
         fprintf(stderr, "v2_input_recorder: RECORD mode → '%s'\n", record_file);
@@ -264,18 +336,18 @@ extern "C" int v2_input_poll_event(SDL_Event* e) {
     return 1;
 }
 
-// RECORD mode: called from the game thread inside sub_12352 (the point the game
-// reads input). Writes every pending key edge captured by the render thread,
-// tagged with the CURRENT game-loop frame (v2_dbg_pre_vm_iter) — i.e. the frame
-// the game actually observes the input on, so the recording replays without the
-// wait-loop frame-gating deadlock (#180). No-op outside RECORD mode.
+// RECORD mode: called from the game thread at the sub_12352 read head (via
+// v2_input_tick_12352). Writes every pending key edge captured by the render
+// thread, tagged with the frame (v2_dbg_pre_vm_iter, #180 wait-loop gating)
+// AND the 12352 call number (seq column — intra-frame delivery coordinate;
+// see g_sub12352_seq note). No-op outside RECORD mode.
 extern "C" void v2_input_record_drain(void) {
     if (g_mode != MODE_RECORD || !g_record_file) return;
     std::lock_guard<std::mutex> lk(g_pending_mutex);
     if (g_pending_record.empty()) return;
     for (const auto& p : g_pending_record)
-        fprintf(g_record_file, "%d %s %s\n", v2_dbg_pre_vm_iter,
-                p.kind == 0 ? "KD" : "KU", p.action);
+        fprintf(g_record_file, "%d %s %s %ld\n", v2_dbg_pre_vm_iter,
+                p.kind == 0 ? "KD" : "KU", p.action, g_sub12352_seq);
     fflush(g_record_file);
     g_pending_record.clear();
 }

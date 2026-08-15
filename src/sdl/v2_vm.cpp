@@ -2515,6 +2515,7 @@ static void v2_vsync_wait_10130(uint8_t* s) {
 extern "C" void v2_fntest_set_current_ds(uint16_t v) { v2_current_ds_val = v; }
 // (#84) unit sub_12352: the shadow-side mirror is static — export a call
 // wrapper for the fn-test runner (same body the INPUT_UPDATE signal runs).
+extern "C" void v2_input_tick_12352(void);  // seq channel (V2_ONLY mirror site)
 static void v2_read_input_12352_iter(uint8_t* shadow);
 extern "C" void v2_fntest_call_12352_iter(uint8_t* shadow) {
     v2_read_input_12352_iter(shadow);
@@ -19810,6 +19811,14 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
     {
         extern uint16_t g_last_sub12352_new_keydowns;
 #ifdef V2_ONLY
+        // Seq channel: in V2_ONLY this mirror IS the world's only 12352 read —
+        // count it and drain/inject recorder events here, before the exchange
+        // (default mode does this in orig sub_12352; doing it in both would
+        // double-count). Also fixes V2_ONLY recording, which previously had
+        // no drain site at all (pending events flushed only at shutdown).
+        // (file-scope extern "C" decl near v2_replay_drain_to_state — the
+        // block-scope extern mangling trap)
+        v2_input_tick_12352();
         extern std::atomic<uint16_t> sdl_input_press_edges;
         new_kd = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
         g_last_sub12352_new_keydowns = new_kd;

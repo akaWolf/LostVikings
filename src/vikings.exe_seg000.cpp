@@ -35,6 +35,7 @@ static FILE* data_handle = 0;
 extern uint16_t input_keys;
 extern "C" void enter_trace_sub12352();
 extern "C" void v2_input_record_drain(void);  // #180: flush recorded key edges at game read-frame
+extern "C" void v2_input_tick_12352(void);    // seq channel: count read + record/inject at the head
 // FN-TEST Mode A hooks (FN_TEST_ANALYSIS.md): entry captures {DS, regs}, each
 // RETN captures the golden DS and runs the v2 rewrite on a scratch copy.
 extern "C" void v2_fntest_pre(int id, const uint8_t* ds_base, uint16_t ax, uint16_t bx,
@@ -6688,6 +6689,12 @@ sub_12352:
 	// sub_12352 at every wait-loop exit (eip 0x0191 / 0x04F1) and clears
 	// 3B6/3B8 at level load — a press consumed by a dialog loop must NOT
 	// resurrect in the next frame (dialog-skip SPACE jump bug, gone).
+	// Seq channel (level2 saga): count this read + drain the recorder pending
+	// queue / inject due seq-tagged replay events BEFORE the exchange below,
+	// so the tag of every event equals the number of the 12352 call that
+	// first observes it (intra-frame exact record==replay delivery).
+	// (decl is file-scope extern "C" — block-scope extern mangles, the trap)
+	v2_input_tick_12352();
 	{
 		extern std::atomic<uint16_t> sdl_input_press_edges;
 		extern uint16_t g_last_sub12352_new_keydowns;
@@ -6696,6 +6703,19 @@ sub_12352:
 		g_last_sub12352_new_keydowns = new_kd;
 		if (new_kd) {
 			word_2889a = (uint16_t)(word_2889a & ~new_kd);
+		}
+		// V2_12352_LOG=1: per-call input-read forensics (level2 replay saga) —
+		// which sub_12352 call drains which press_edges bits, and what the
+		// final level/edge words are. Env-gated, zero cost when off.
+		{
+			static int _l = -1;
+			if (_l < 0) _l = getenv("V2_12352_LOG") ? 1 : 0;
+			if (_l) {
+				extern int v2_dbg_pre_vm_iter;
+				extern long g_sub12352_seq;
+				fprintf(stderr, "12352#%ld[f%d] kd=%04X ik=%04X\n",
+					g_sub12352_seq, v2_dbg_pre_vm_iter, new_kd, (uint16_t)input_keys);
+			}
 		}
 	}
 	// 4610
@@ -6734,11 +6754,18 @@ cs=0x1a2;eip=0x00237b; 	X(MOV(word_2889a, ax));	// 4626 mov     word_2889A, ax ;
 	// Self-disarms after N calls; also logs whenever any 0x8000 bit is present
 	// in any input/computed register (catches edge propagation across frames).
 	enter_trace_sub12352();
-	// #180: RECORD mode — write any key edges the render thread captured, tagged
-	// with THIS frame (the frame the game reads input on). Keeps recorded frames
-	// == game read-frames so blocking wait-loops replay without the frame-gating
-	// deadlock. No-op outside record mode.
-	v2_input_record_drain();
+	// V2_12352_LOG tail: the computed level/edge words this call published.
+	{
+		static int _l2 = -1;
+		if (_l2 < 0) _l2 = getenv("V2_12352_LOG") ? 1 : 0;
+		if (_l2 && ((uint16_t)word_28896 | (uint16_t)word_28898))
+			fprintf(stderr, "12352=[f?] lvl=%04X edge=%04X\n",
+				(uint16_t)word_28896, (uint16_t)word_28898);
+	}
+	// #180: RECORD-mode drain moved to the head of this function (inside
+	// v2_input_tick_12352, BEFORE the press_edges exchange) so the recorded
+	// tag equals the call that first observes the event. See the seq-channel
+	// note at the top; the frame column semantics (#180) are unchanged.
 	// V2 barrier: signal AFTER orig sub_12352 finished computing word_28896/28898/2889A.
 	// v2 handler runs v2_read_input_12352_iter ONCE per orig call → shadow input state tracks
 	// orig 1:1 across ALL call sites (main loop, sub_1086f recursion, VIKING_SWITCH/
