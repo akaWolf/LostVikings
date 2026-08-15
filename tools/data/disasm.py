@@ -41,11 +41,11 @@ OPERAND_SCHEMES = {
     0x1D: (4, 'br', 2),       # collision probe variant
     0x37: (4, 'br', 2),       # collision probe (155d6)
     0x38: (4, 'br', 2),       # collision probe (156c0)
-    0x2C: (5, 'br', 2),       # obj search fwd: 1B filter + word tgt + no-match INC
+    0x2C: (4, 'srch', 2),     # obj search fwd: 1B filter + word tgt; no-match skips the 2D continuation byte
     0xD0: (4, 'br', 2),       # viking search (no extra INC)
-    0xD1: (5, 'br', 2),       # viking search + no-match INC
+    0xD1: (4, 'srch', 2),     # viking search: same skip-the-continuation shape
     0x2D: (1, 'fall', None),  # search continue (dynamic target = 2C's)
-    0x35: (5, 'br', 2),       # obj search (Y): 1B filter + word tgt + no-match INC
+    0x35: (4, 'srch', 2),     # obj search (Y): same skip-the-continuation shape
     0x36: (1, 'fall', None),  # search continue (dynamic)
     0xBF: (4, 'br', 2),       # search up: 1B filter + word target
     0xC0: (4, 'br', 2),       # search family
@@ -210,12 +210,15 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
         if op in OPERAND_SCHEMES:
             ln, kind, toff = OPERAND_SCHEMES[op]
             seen[pc] = (op, ln)
-            if kind in ('jmp', 'br') and toff is not None and pc + toff + 2 <= len(d):
+            if kind in ('jmp', 'br', 'srch') and toff is not None and pc + toff + 2 <= len(d):
                 tgt = struct.unpack_from('<H', d, pc + toff)[0]
                 if 0 < tgt < len(d):
                     push(tgt, pc)
             if kind in ('fall', 'br'):
                 push(pc + ln, pc)
+            if kind == 'srch':
+                push(pc + ln, pc)       # the 2D/36 continuation instruction
+                push(pc + ln + 1, pc)   # no-match path (skips it)
             continue
         if info and info[0] == 'scheme':
             ln, kind, toff = info[1]
