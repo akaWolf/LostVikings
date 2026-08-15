@@ -218,6 +218,19 @@ void render_thread_proc_v2(void* _state)
       // task #36: headless dummy video — pure presenter blit skipped (the
       // stableBuffer snapshot above still runs: it feeds the A2 extraction).
 #endif
+      // Frame counter in the window title (updated every ~10 frames) — handy
+      // when recording replays: the number matches the .inp frame column.
+      {
+          extern int v2_dbg_pre_vm_iter;
+          static int last_shown = -1;
+          int f = v2_dbg_pre_vm_iter;
+          if (f - last_shown >= 10 || f < last_shown) {
+              last_shown = f;
+              char t[64];
+              snprintf(t, sizeof(t), "Lost Vikings v2 — frame %d", f);
+              if (myWindow_v2) SDL_SetWindowTitle(myWindow_v2, t);
+          }
+      }
       SDL_Delay(15);
 
       loop_counter++;

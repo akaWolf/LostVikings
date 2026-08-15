@@ -888,6 +888,21 @@ void updateDraw()
 			     v2_render_tick.fetch_add(1, std::memory_order_release);
 			     v2_render_tick_cv.notify_all();
 			   }
+#ifndef HEADLESS
+			   // Frame counter in the orig-window title (every ~10 frames) —
+			   // matches the .inp frame column when recording replays.
+			   {
+			       extern int v2_dbg_pre_vm_iter;
+			       static int last_shown = -1;
+			       int f = v2_dbg_pre_vm_iter;
+			       if (f - last_shown >= 10 || f < last_shown) {
+			           last_shown = f;
+			           char t[64];
+			           snprintf(t, sizeof(t), "Lost Vikings orig — frame %d", f);
+			           if (myWindow) SDL_SetWindowTitle(myWindow, t);
+			       }
+			   }
+#endif
 #ifdef HEADLESS
 			   SDL_Delay(0);   // headless: no display → no vsync pacing, run flat out
 #else

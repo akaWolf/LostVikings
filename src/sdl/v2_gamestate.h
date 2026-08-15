@@ -588,9 +588,11 @@
 //     level_passwords@85A5: name UNVERIFIED and likely wrong — the zone is
 //       all-zero in the static image AND in every live golden; no reader
 //       found yet. Do not trust the name until a reader confirms it.
-//     pw_level_tbl@687D reader status: NOT exercised by the current replay
-//       corpus (GDB read-watchpoints over pw_00_STRT and synth_pw_enter saw
-//       only the PSNAP memcpy) — future real-gameplay replays may reach it.
+//     pw_level_tbl@687D reader status: NOT exercised by the replay corpus
+//       (read-watchpoints over pw_00_STRT, synth_pw_enter AND the real
+//       level2 walkthrough saw only the PSNAP memcpy); rt_86b0/86ba and
+//       rt_25cd..25e7 also stayed silent through level2 — the micro-queue
+//       keeps its "awaiting a triggering scenario" status honestly.
 //   cmd_ring@1DA7 (1000B): ALREADY VERIFIED as the sub_1086f command ring
 //                     (entries at [bx+1DA7], write cursor DS_CMD_WRITE@218F,
 //                     read cursor DS_CMD_READ@2B64) — the 1086f unit and the
