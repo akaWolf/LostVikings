@@ -45,6 +45,36 @@ OPERAND_SCHEMES = {
     0xC1: (4, 'br', 2),       # search family
 }
 
+CH_LEN = {0:2, 1:1, 2:2, 3:1, 4:0, 5:0, 6:1, 7:2}
+
+def decode_op14(d, pc):
+    """[14][mode1][ch(m1&7)][ch(m1>>3&7)][mode2][ch..][ch..][anim_type].
+    Returns (length, extra_templates)."""
+    q = pc + 1
+    m1 = d[q]; q += 1
+    q += CH_LEN[m1 & 7]; q += CH_LEN[(m1 >> 3) & 7]
+    m2 = d[q]; q += 1
+    q += CH_LEN[m2 & 7]; q += CH_LEN[(m2 >> 3) & 7]
+    tmpl = d[q]; q += 1
+    return q - pc, [tmpl]
+
+def decode_op49(d, pc):
+    # [op][mode][ch(m&7)][ch(m>>3&7)][anim_idx][word target] -> br
+    q = pc + 1
+    m = d[q]; q += 1
+    q += CH_LEN[m & 7]; q += CH_LEN[(m >> 3) & 7]
+    q += 1              # anim_idx
+    return q + 2 - pc, []
+
+CUSTOM = {
+    0x14: decode_op14,   # spawner: fall + collects template operand
+}
+# probe ops 49/4A: variable channels then conditional word target
+CUSTOM_BR = {
+    0x49: decode_op49,
+    0x4A: decode_op49,
+}
+
 def load_draft():
     d = json.load(open('tools/data/optable_draft.json'))
     table = {}
@@ -95,13 +125,28 @@ def spawn_entries(manifest_dir='assets_raw'):
 def walk(chunk_id, tmpl_indices, table):
     d = open(f'assets_raw/chunks/dec/{chunk_id:04d}.bin', 'rb').read()
     entries = {}
-    for t in sorted(tmpl_indices):
+    # ALL template/anim records are entry points: objects live by switching
+    # animations, each record's +3 PC becomes OBJ_PC (v2_vm.cpp:17559).
+    # Record-table extent is unknown a priori — take every index whose PC
+    # lands beyond the record area and inside the chunk; the walk itself
+    # validates (bad PCs derail into unknown opcodes and are reported).
+    t = 0
+    while (t + 1) * REC <= len(d):
         off = t * REC + 3
-        if off + 2 > len(d):
-            continue
         pc = struct.unpack_from('<H', d, off)[0]
-        if pc < len(d):
-            entries[pc] = f'tmpl_{t:02X}'
+        if pc >= 0x600 and pc < len(d):
+            entries.setdefault(pc, f'rec_{t:02X}')
+        elif t > 0 and pc == 0:
+            break
+        t += 1
+        if t > 0x400:
+            break
+    for t2 in sorted(tmpl_indices):
+        off = t2 * REC + 3
+        if off + 2 <= len(d):
+            pc = struct.unpack_from('<H', d, off)[0]
+            if pc < len(d):
+                entries[pc] = f'tmpl_{t2:02X}'
     seen = {}
     stops = {}
     q = deque(entries.keys())
@@ -111,6 +156,25 @@ def walk(chunk_id, tmpl_indices, table):
             continue
         op = d[pc]
         info = table.get(op)
+        if op in CUSTOM:
+            ln, tmpls = CUSTOM[op](d, pc)
+            seen[pc] = (op, ln)
+            q.append(pc + ln)
+            for t in tmpls:
+                off = t * REC + 3
+                if off + 2 <= len(d):
+                    npc = struct.unpack_from('<H', d, off)[0]
+                    if npc < len(d):
+                        q.append(npc)
+            continue
+        if op in CUSTOM_BR:
+            ln, _ = CUSTOM_BR[op](d, pc)
+            seen[pc] = (op, ln)
+            tgt = struct.unpack_from('<H', d, pc + ln - 2)[0]
+            if tgt < len(d):
+                q.append(tgt)
+            q.append(pc + ln)
+            continue
         if op in OPERAND_SCHEMES:
             ln, kind, toff = OPERAND_SCHEMES[op]
             seen[pc] = (op, ln)
