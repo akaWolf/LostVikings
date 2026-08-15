@@ -6,6 +6,9 @@
   "pc_sets": 0,
   "exits": true,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "01": {
@@ -15,6 +18,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "02": {
@@ -24,6 +30,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "03": {
@@ -33,6 +42,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "04": {
@@ -42,6 +54,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "05": {
@@ -51,6 +66,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "06": {
@@ -60,6 +78,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "07": {
@@ -69,6 +90,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "08": {
@@ -78,6 +102,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "09": {
@@ -87,6 +114,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "0A": {
@@ -96,6 +126,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "0B": {
@@ -105,6 +138,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "0C": {
@@ -114,6 +150,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "0D": {
@@ -123,6 +162,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "0E": {
@@ -132,6 +174,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "0F": {
@@ -141,6 +186,9 @@
   "pc_sets": 0,
   "exits": true,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "10": {
@@ -150,6 +198,9 @@
   "pc_sets": 0,
   "exits": true,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "11": {
@@ -159,6 +210,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "12": {
@@ -168,6 +222,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "13": {
@@ -179,6 +236,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "14": {
@@ -190,6 +250,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "15": {
@@ -199,6 +262,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "16": {
@@ -208,6 +274,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "17": {
@@ -217,6 +286,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "18": {
@@ -226,6 +298,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "19": {
@@ -235,6 +310,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "1A": {
@@ -246,6 +324,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "1B": {
@@ -255,6 +336,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "1C": {
@@ -266,6 +350,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "1D": {
@@ -277,6 +364,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "1E": {
@@ -288,6 +378,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "1F": {
@@ -299,6 +392,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "20": {
@@ -310,6 +406,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "21": {
@@ -321,6 +420,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "22": {
@@ -332,6 +434,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "23": {
@@ -343,6 +448,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "24": {
@@ -354,6 +462,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "25": {
@@ -365,6 +476,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "26": {
@@ -376,6 +490,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "27": {
@@ -387,6 +504,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "28": {
@@ -398,6 +518,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "29": {
@@ -409,6 +532,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "2A": {
@@ -420,6 +546,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "2B": {
@@ -431,6 +560,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "2C": {
@@ -443,6 +575,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "2D": {
@@ -454,6 +589,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "2E": {
@@ -463,6 +601,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "2F": {
@@ -472,6 +613,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "30": {
@@ -483,6 +627,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "31": {
@@ -494,6 +641,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "32": {
@@ -505,6 +655,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "33": {
@@ -516,6 +669,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "34": {
@@ -525,6 +681,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "35": {
@@ -537,6 +696,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "36": {
@@ -548,6 +710,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "37": {
@@ -559,6 +724,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "38": {
@@ -570,6 +738,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "39": {
@@ -579,6 +750,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "3A": {
@@ -588,6 +762,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "3B": {
@@ -597,6 +774,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "3C": {
@@ -608,6 +788,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "3D": {
@@ -617,6 +800,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "3E": {
@@ -626,6 +812,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "3F": {
@@ -635,6 +824,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "40": {
@@ -644,6 +836,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "41": {
@@ -653,6 +848,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "42": {
@@ -662,6 +860,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "43": {
@@ -671,6 +872,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "44": {
@@ -682,6 +886,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "45": {
@@ -691,6 +898,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "46": {
@@ -700,6 +910,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "47": {
@@ -709,6 +922,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "48": {
@@ -720,6 +936,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "49": {
@@ -732,6 +951,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "4A": {
@@ -744,6 +966,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 2,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "4B": {
@@ -753,6 +978,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "4C": {
@@ -762,6 +990,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "4D": {
@@ -771,6 +1002,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "4E": {
@@ -782,6 +1016,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 2,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "4F": {
@@ -793,6 +1030,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "50": {
@@ -804,6 +1044,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 2,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "51": {
@@ -813,6 +1056,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "52": {
@@ -822,6 +1068,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "53": {
@@ -831,6 +1080,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "54": {
@@ -840,6 +1092,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "55": {
@@ -849,6 +1104,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "56": {
@@ -858,6 +1116,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "57": {
@@ -867,6 +1128,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "58": {
@@ -876,6 +1140,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "59": {
@@ -885,6 +1152,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "5A": {
@@ -894,6 +1164,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "5B": {
@@ -903,6 +1176,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "5C": {
@@ -912,6 +1188,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "5D": {
@@ -921,6 +1200,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "5E": {
@@ -930,6 +1212,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "5F": {
@@ -939,6 +1224,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "60": {
@@ -948,6 +1236,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "61": {
@@ -957,6 +1248,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "62": {
@@ -966,6 +1260,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "63": {
@@ -975,6 +1272,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "64": {
@@ -984,6 +1284,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "65": {
@@ -993,6 +1296,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "66": {
@@ -1002,6 +1308,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "67": {
@@ -1011,6 +1320,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "68": {
@@ -1022,6 +1334,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "69": {
@@ -1033,6 +1348,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "6A": {
@@ -1044,6 +1362,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "6B": {
@@ -1055,6 +1376,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "6C": {
@@ -1066,6 +1390,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "6D": {
@@ -1077,6 +1404,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "6E": {
@@ -1088,6 +1418,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "6F": {
@@ -1099,6 +1432,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "70": {
@@ -1110,6 +1446,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "71": {
@@ -1121,6 +1460,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "72": {
@@ -1132,6 +1474,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "73": {
@@ -1143,6 +1488,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "74": {
@@ -1154,6 +1502,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "75": {
@@ -1165,6 +1516,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "76": {
@@ -1176,6 +1530,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "77": {
@@ -1187,6 +1544,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "78": {
@@ -1198,6 +1558,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "79": {
@@ -1209,6 +1572,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "7A": {
@@ -1220,6 +1586,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "7B": {
@@ -1231,6 +1600,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "7C": {
@@ -1242,6 +1614,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "7D": {
@@ -1253,6 +1628,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "7E": {
@@ -1264,6 +1642,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "7F": {
@@ -1275,6 +1656,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "80": {
@@ -1286,6 +1670,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "81": {
@@ -1297,6 +1684,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "82": {
@@ -1308,6 +1698,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "83": {
@@ -1319,6 +1712,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "84": {
@@ -1330,6 +1726,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "85": {
@@ -1341,6 +1740,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "86": {
@@ -1352,6 +1754,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 2,
   "body_found": true
  },
  "87": {
@@ -1363,6 +1768,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 1,
   "body_found": true
  },
  "88": {
@@ -1374,6 +1782,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 2,
   "body_found": true
  },
  "89": {
@@ -1385,6 +1796,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 1,
   "body_found": true
  },
  "8A": {
@@ -1396,6 +1810,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "8B": {
@@ -1407,6 +1824,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 2,
   "body_found": true
  },
  "8C": {
@@ -1418,6 +1838,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 1,
   "body_found": true
  },
  "8D": {
@@ -1429,6 +1852,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 2,
   "body_found": true
  },
  "8E": {
@@ -1440,6 +1866,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 1,
   "body_found": true
  },
  "8F": {
@@ -1451,6 +1880,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "90": {
@@ -1460,6 +1892,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "91": {
@@ -1469,6 +1904,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "92": {
@@ -1478,6 +1916,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "93": {
@@ -1487,6 +1928,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "94": {
@@ -1496,6 +1940,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "95": {
@@ -1505,6 +1952,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "96": {
@@ -1514,6 +1964,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "97": {
@@ -1523,6 +1976,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "98": {
@@ -1532,6 +1988,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "99": {
@@ -1541,6 +2000,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "9A": {
@@ -1550,6 +2012,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "9B": {
@@ -1559,6 +2024,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "9C": {
@@ -1568,6 +2036,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "9D": {
@@ -1577,6 +2048,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "9E": {
@@ -1586,6 +2060,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "9F": {
@@ -1595,6 +2072,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "A0": {
@@ -1604,6 +2084,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "A1": {
@@ -1613,6 +2096,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "A2": {
@@ -1622,6 +2108,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "A3": {
@@ -1631,6 +2120,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "A4": {
@@ -1640,6 +2132,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "A5": {
@@ -1649,6 +2144,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "A6": {
@@ -1658,6 +2156,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "A7": {
@@ -1667,6 +2168,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "A8": {
@@ -1678,6 +2182,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "A9": {
@@ -1689,6 +2196,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "AA": {
@@ -1700,6 +2210,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "AB": {
@@ -1711,6 +2224,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "AC": {
@@ -1722,6 +2238,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "AD": {
@@ -1733,6 +2252,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "AE": {
@@ -1744,6 +2266,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "AF": {
@@ -1755,6 +2280,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "B0": {
@@ -1766,6 +2294,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "B1": {
@@ -1777,6 +2308,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "B2": {
@@ -1788,6 +2322,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "B3": {
@@ -1799,6 +2336,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "B4": {
@@ -1810,6 +2350,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 3,
   "body_found": true
  },
  "B5": {
@@ -1821,6 +2364,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "B6": {
@@ -1832,6 +2378,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "B7": {
@@ -1843,6 +2392,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "B8": {
@@ -1854,6 +2406,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "B9": {
@@ -1865,6 +2420,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 3,
   "body_found": true
  },
  "BA": {
@@ -1876,6 +2434,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "BB": {
@@ -1887,6 +2448,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 1,
+  "op_bytes": 0,
   "body_found": true
  },
  "BC": {
@@ -1896,6 +2460,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "BD": {
@@ -1905,6 +2472,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "BE": {
@@ -1914,6 +2484,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "BF": {
@@ -1925,6 +2498,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C0": {
@@ -1936,6 +2512,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C1": {
@@ -1947,6 +2526,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C2": {
@@ -1958,6 +2540,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 3,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C3": {
@@ -1969,6 +2554,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C4": {
@@ -1980,6 +2568,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C5": {
@@ -1991,6 +2582,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C6": {
@@ -2002,6 +2596,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "C7": {
@@ -2011,6 +2608,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "C8": {
@@ -2020,6 +2620,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "C9": {
@@ -2029,6 +2632,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "CA": {
@@ -2038,6 +2644,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "CB": {
@@ -2047,6 +2656,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "CC": {
@@ -2058,6 +2670,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "CD": {
@@ -2069,6 +2684,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "CE": {
@@ -2080,6 +2698,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "CF": {
@@ -2091,6 +2712,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 1,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "D0": {
@@ -2100,6 +2724,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "D1": {
@@ -2111,6 +2738,9 @@
   "pc_sets": 1,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "D2": {
@@ -2120,6 +2750,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "D3": {
@@ -2129,6 +2762,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "D4": {
@@ -2140,6 +2776,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 1,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 1,
   "body_found": true
  },
  "D5": {
@@ -2151,6 +2790,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "D6": {
@@ -2160,6 +2802,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  },
  "D7": {
@@ -2171,6 +2816,9 @@
   "pc_sets": 0,
   "exits": false,
   "operand_reads": 0,
+  "do_jump": 0,
+  "do_call_jump": 0,
+  "op_bytes": 0,
   "body_found": true
  }
 }

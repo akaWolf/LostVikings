@@ -40,6 +40,12 @@ def main():
             'pc_sets': len(re.findall(r'vm\.pc\s*=\s*[^+=]', b)),
             'exits': ('vm.running = false' in b),
             'operand_reads': len(re.findall(r'vm\.es\s*\+\s*vm\.pc', b)),
+            'do_jump': len(re.findall(r'v2_vm_do_jump\(vm\)', b)),
+            'do_call_jump': len(re.findall(r'v2_vm_do_call_jump\(vm\)', b)),
+            # operand fetches advance pc INSIDE these helpers/methods —
+            # invisible to pc_adds, must be counted separately:
+            'op_bytes': (2*len(re.findall(r'read_u16\(\)|v2_vm_read_literal\(vm\)|v2_vm_read_indirect\(vm\)', b))
+                        +1*len(re.findall(r'read_u8\(\)|v2_vm_read_indexed_field\(vm\)|v2_vm_read_indexed_field_1995\(vm\)', b))),
             'body_found': h in bodies,
         }
     json.dump(out, open('tools/data/optable_draft.json', 'w'), indent=1)
