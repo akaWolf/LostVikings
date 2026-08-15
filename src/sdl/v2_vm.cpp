@@ -3030,7 +3030,7 @@ static uint16_t v2_hud_selectors_120d1(uint8_t* s) {
     v2_cc_v2_hit(4);   // M1 call-parity CC_120D1 (#65)
     uint16_t dsv = v2_current_ds_val;
     // viking 1: word_288fa (0x41A) = word_288f4 (0x414)
-    uint16_t v1 = *(uint16_t*)(s + (DS_HUD_SEL));
+    uint16_t v1 = v2gs(s).hud_sel(0);
     v2gs(s).hud_sel_prev(0, v1);
     v2_draw_hud_selector(dsv, v1 * 2);
     v2_vga_selector_118ad(s, v1 * 2);
@@ -3083,11 +3083,11 @@ static void v2_hud_item_sync_12199(uint8_t* s) {
 // change (117d0).
 static void v2_hud_health_120ff(uint8_t* s) {
     for (int vk = 0; vk < 3; vk++) {
-        uint16_t prev = *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2);
-        *(uint16_t*)(s + (DS_HUD_HEALTH_PREV) + vk * 2) = prev;
+        uint16_t prev = v2gs(s).hud_health(vk);
+        v2gs(s).hud_health_prev(vk, prev);
         int16_t hv = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX + vk * 2);
         uint16_t ax = (hv < 0) ? 2 : (v2gs(s).active_viking() != (uint16_t)(vk * 2)) ? 1 : 0;
-        *(uint16_t*)(s + (DS_HUD_HEALTH) + vk * 2) = ax;
+        v2gs(s).hud_health(vk, ax);
         if (ax != prev) {
             v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
             v2_vga_healthbar_117d0(s, ax, vk, vk);
@@ -5458,18 +5458,18 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
 //   [0x42F+2k] = [0x429+2k]; [0x423+2k] = [0x15AD+2k].
 static void v2_portrait_sync_11b0b(uint8_t* s) {
     for (int vk = 0; vk < 3; vk++) {
-        uint16_t snd  = *(uint16_t*)(s + (DS_PORTRAIT_SND) + vk * 2); // word_28909/0B/0D
-        uint16_t psnd = *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2); // word_2890F/11/13
+        uint16_t snd  = v2gs(s).portrait_snd(vk); // word_28909/0B/0D
+        uint16_t psnd = v2gs(s).portrait_snd_prev(vk); // word_2890F/11/13
         uint16_t por  = *(uint16_t*)(s + VIK_PORTRAIT + vk * 2); // word_29A8D/8F/91
-        uint16_t ppor = *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2); // word_28903/05/07
+        uint16_t ppor = v2gs(s).portrait_prev(vk); // word_28903/05/07
         if (snd == psnd && por == ppor) continue;           // JNZ/JZ skip pair
         uint16_t portrait_si = por;                         // re-read [0x15AD+2k]
         if (snd != 0) portrait_si += 4;                     // CMP word,0; ADD si,4
         // orig v2 hook + CALL sub_11AA4 (VGA portrait render → v2_hud_buf)
         v2_draw_hud_portrait(v2_current_ds_val, vk * 2, portrait_si);
         v2_vga_portrait_11aa4(s, portrait_si, vk * 2);
-        *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV) + vk * 2) = snd;            // sync sound tracking
-        *(uint16_t*)(s + (DS_PORTRAIT_PREV) + vk * 2) = por;            // sync portrait tracking
+        v2gs(s).portrait_snd_prev(vk, snd);            // sync sound tracking
+        v2gs(s).portrait_prev(vk, por);            // sync portrait tracking
     }
 }
 
@@ -5571,7 +5571,7 @@ static void v2_game_mode_init_11446(uint8_t* s) {
         v2_spawn_object_13809(s, 2, 0xFFFF, v2gs(s).spawn_anim());
     }
     // loc_1154A: portrait/sound state → viking rows, mode 6.
-    *(uint16_t*)(s + VIK_PORTRAIT) = *(uint16_t*)(s + (DS_PORTRAIT_PREV)); // word_29A8D = word_28903
+    *(uint16_t*)(s + VIK_PORTRAIT) = v2gs(s).portrait_prev(0); // word_29A8D = word_28903 (dst = viking-row object column)
     v2gs(s).vk_portrait_snd_2(v2gs(s).portrait_snd_2()); // word_29A8F = word_28905
     v2gs(s).vk_portrait_snd_3(v2gs(s).portrait_snd_3()); // word_29A91 = word_28907
     v2gs(s).obj_scan_start(6);    // word_2881C
@@ -5718,15 +5718,15 @@ static void v2_viking_health_init_12ce4(uint8_t* s) {
     v2_cc_v2_hit(CC_12CE4);   // M1 wave-2 (#65)
     { static int _n = 0; if (++_n <= 8)   // capped: selftest calls this thousands of times
         fprintf(stderr, "V2-12CE4: called, 0x423 before=%02X\n", s[(DS_PORTRAIT_PREV)]); }
-    *(uint16_t*)(s + (DS_HUD_SEL)) = 0;
-    *(uint16_t*)(s + (DS_HUD_SEL+2)) = 0;
-    *(uint16_t*)(s + (DS_HUD_SEL+4)) = 0;
+    v2gs(s).hud_sel(0, 0);
+    v2gs(s).hud_sel(1, 0);
+    v2gs(s).hud_sel(2, 0);
     for (uint16_t si = 0; si < 0x18; si += 2)
         *(uint16_t*)(s + si + (DS_HUD_ITEMS)) = 0;
-    *(uint16_t*)(s + (DS_PORTRAIT_PREV)) = 6;
+    v2gs(s).portrait_prev(0, 6);
     v2gs(s).portrait_snd_2(6);
     v2gs(s).portrait_snd_3(6);
-    *(uint16_t*)(s + (DS_PORTRAIT_SND)) = 0;
+    v2gs(s).portrait_snd(0, 0);
     v2gs(s).hud_scratch_42b(0);
     v2gs(s).hud_scratch_42d(0);
 }
@@ -18136,7 +18136,7 @@ static void v2_vm_verify_page_state(uint8_t* shadow) {
 // #7: Tile graphics verify — compare shadow tilegfx with real segment
 static void v2_vm_verify_tilegfx(uint8_t* real_ds) {
     if (!v2_m2c_base) return;
-    uint16_t tgfx_seg = *(uint16_t*)(real_ds + DS_SEG_TILEGFX);
+    uint16_t tgfx_seg = v2gs(real_ds).seg_tilegfx();
     if (tgfx_seg == 0) return;
     uint8_t* real_tg = v2_m2c_base + (uint32_t)tgfx_seg * 16;
     extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
@@ -18177,7 +18177,7 @@ static void v2_vm_verify_sprite_bases(uint8_t* shadow) {
 // #11: Animation data segment verify (0x2E67) — should be read-only
 static void v2_vm_verify_animdata(uint8_t* real_ds) {
     if (!v2_m2c_base || !v2_animdata_shadow_valid) return;
-    uint16_t anim_seg = *(uint16_t*)(real_ds + DS_SEG_ANIM);
+    uint16_t anim_seg = v2gs(real_ds).seg_anim();
     if (anim_seg == 0) return;
     uint8_t* real_ad = v2_m2c_base + (uint32_t)anim_seg * 16;
     extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
@@ -18197,7 +18197,7 @@ static void v2_vm_verify_animdata(uint8_t* real_ds) {
 // #12: GS segment verify (0x2E61) — tile masks, should be read-only
 static void v2_vm_verify_gs(uint8_t* real_ds) {
     if (!v2_m2c_base || !v2_gs_shadow_valid) return;
-    uint16_t gs_seg = *(uint16_t*)(real_ds + DS_SEG_GS);
+    uint16_t gs_seg = v2gs(real_ds).seg_gs();
     if (gs_seg == 0) return;
     uint8_t* real_gs = v2_m2c_base + (uint32_t)gs_seg * 16;
     extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
@@ -18217,7 +18217,7 @@ static void v2_vm_verify_gs(uint8_t* real_ds) {
 // #14: Chunk buffer segment verify (0x2E77)
 static void v2_vm_verify_chunk(uint8_t* real_ds) {
     if (!v2_m2c_base || !v2_chunk_shadow_valid) return;
-    uint16_t chunk_seg = *(uint16_t*)(real_ds + DS_SEG_CHUNK);
+    uint16_t chunk_seg = v2gs(real_ds).seg_chunk();
     if (chunk_seg == 0) return;
     uint8_t* real_ch = v2_m2c_base + (uint32_t)chunk_seg * 16;
     extern uint16_t v2_get_alloc_size_para(uint16_t seg_val);
@@ -18965,15 +18965,15 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     //       both to 0; write grows, read chases).
     if (v2_vm_shadow_ds) {
         uint8_t* s_ = v2_vm_shadow_ds;
-        uint16_t p1 = *(uint16_t*)(s_ + DS_PAGE_DRAW);
-        uint16_t p2 = *(uint16_t*)(s_ + DS_PAGE_SHOWN);
-        uint16_t p3 = *(uint16_t*)(s_ + DS_PAGE_BG);
+        uint16_t p1 = v2gs(s_).page_draw();
+        uint16_t p2 = v2gs(s_).page_shown();
+        uint16_t p3 = v2gs(s_).page_bg();
         uint16_t lo = p1 < p2 ? (p1 < p3 ? p1 : p3) : (p2 < p3 ? p2 : p3);
         uint16_t hi = p1 > p2 ? (p1 > p3 ? p1 : p3) : (p2 > p3 ? p2 : p3);
         uint16_t mid = (uint16_t)(p1 ^ p2 ^ p3 ^ lo ^ hi);
         bool pages_ok = (lo == 0 && mid == 0x34 && hi == 0x68);
-        uint16_t crd = *(uint16_t*)(s_ + DS_CMD_READ);
-        uint16_t cwr = *(uint16_t*)(s_ + DS_CMD_WRITE);
+        uint16_t crd = v2gs(s_).cmd_read();
+        uint16_t cwr = v2gs(s_).cmd_write();
         bool cmd_ok = (crd <= cwr);
         if (!pages_ok || !cmd_ok) {
             fprintf(stderr, "V2-GSINV-DIVERGE[f%d]: pages=%04X/%04X/%04X%s cmd=%04X..%04X%s\n",
@@ -19049,10 +19049,10 @@ static void v2_portrait_sync_11b0b_per_frame(uint8_t* s) {
     // Same gating as orig sub_11792: only run if HUD active and not on level 0x2C.
     if (!(v2gs(s).level_flags_b() & 1) || v2gs(s).level() == 0x2C) return;
     // Viking 1
-    if (*(uint16_t*)(s + (DS_PORTRAIT_SND)) != *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) ||
-        *(uint16_t*)(s + VIK_PORTRAIT) != *(uint16_t*)(s + (DS_PORTRAIT_PREV))) {
-        *(uint16_t*)(s + (DS_PORTRAIT_SND_PREV)) = *(uint16_t*)(s + (DS_PORTRAIT_SND));
-        *(uint16_t*)(s + (DS_PORTRAIT_PREV)) = *(uint16_t*)(s + VIK_PORTRAIT);
+    if (v2gs(s).portrait_snd(0) != v2gs(s).portrait_snd_prev(0) ||
+        *(uint16_t*)(s + VIK_PORTRAIT) != v2gs(s).portrait_prev(0)) {
+        v2gs(s).portrait_snd_prev(0, v2gs(s).portrait_snd(0));
+        v2gs(s).portrait_prev(0, *(uint16_t*)(s + VIK_PORTRAIT));
     }
     // Viking 2
     if (v2gs(s).hud_scratch_42b() != v2gs(s).vk_state_1() ||
@@ -19399,7 +19399,7 @@ void v2_phase_post_vm(uint16_t ds_val) {
             uint8_t* rds = v2_m2c_base + ((uint32_t)v2_current_ds_val << 4);
             fprintf(stderr, "CMDQ-POSTVM[f%d]: orig wr=%04X rd=%04X | v2 wr=%04X rd=%04X\n",
                     v2_dbg_pre_vm_iter,
-                    *(uint16_t*)(rds + DS_CMD_WRITE), *(uint16_t*)(rds + DS_CMD_READ),
+                    v2gs(rds).cmd_write(), v2gs(rds).cmd_read(),
                     v2gs(v2_vm_shadow_ds).cmd_write(), v2gs(v2_vm_shadow_ds).cmd_read());
         }
     }
@@ -20229,8 +20229,8 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint16_t rwr = 0xDEAD, rrd = 0xDEAD;
         if (v2_m2c_base && v2_current_ds_val) {
             uint8_t* rds = v2_m2c_base + ((uint32_t)v2_current_ds_val << 4);
-            rwr = *(uint16_t*)(rds + DS_CMD_WRITE);
-            rrd = *(uint16_t*)(rds + DS_CMD_READ);
+            rwr = v2gs(rds).cmd_write();
+            rrd = v2gs(rds).cmd_read();
         }
         fprintf(stderr, "V2-1086f[lv=%04X]: rd=%04X wr=%04X cmd=%d | real rd=%04X wr=%04X\n",
                 v2gs(s).level(), bx_read, bx_write, cmd_type, rrd, rwr);
@@ -22230,8 +22230,8 @@ void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_pt
         printf("V2-ANIM: obj=%d cmd=%d (0x%04X) BX MISMATCH: orig=0x%04X v2=0x%04X (from 0x%04X)"
                " 7C=0x%04X 80=0x%04X 38C=0x%04X\n",
                obj_idx, cmd, handler, bx_after, v2_anim_bx, bx_before,
-               *(uint16_t*)(anim_replay_shadow + DS_ANIM_SLOT), *(uint16_t*)(anim_replay_shadow + DS_ANIM_SLOT_END),
-               *(uint16_t*)(anim_replay_shadow + DS_ANIM_SUB_MASK));
+               v2gs(anim_replay_shadow).anim_slot(), v2gs(anim_replay_shadow).anim_slot_end(),
+               v2gs(anim_replay_shadow).anim_sub_mask());
         anim_diff_count++;
     }
 

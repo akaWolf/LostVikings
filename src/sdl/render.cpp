@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include "v2_ds_layout.h"
+#include "v2_gamestate.h"
 #include <thread>
 #include <vector>
 #include <cassert>
@@ -98,7 +99,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                     if (const char* e2 = getenv("V2_A2_WP_MOFF")) {
                         extern uint8_t* v2_a2_softwp_fs_ptr;
                         extern uint8_t* v2_m2c_base;
-                        uint16_t fsseg2 = *(const uint16_t*)(dsb + DS_SEG_FS);
+                        uint16_t fsseg2 = v2gs(dsb).seg_fs();
                         uint16_t moff2 = (uint16_t)strtol(e2, 0, 0);
                         if (fsseg2 && v2_m2c_base) {
                             v2_a2_softwp_fs_ptr = v2_m2c_base + (uint32_t)fsseg2 * 16 + moff2;
@@ -123,7 +124,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                     {
                         extern uint8_t* v2_a2_softwp_fs_ptr;
                         extern uint8_t* v2_m2c_base;
-                        uint16_t fsseg = *(const uint16_t*)(dsb + DS_SEG_FS);
+                        uint16_t fsseg = v2gs(dsb).seg_fs();
                         uint16_t row = (uint16_t)(y >> 3);
                         uint16_t rb = *(const uint16_t*)(dsb + (uint16_t)(row * 2 - 0x7098));
                         uint16_t moff = (uint16_t)((rb + (uint16_t)(x >> 3)) * 2u);
