@@ -41,9 +41,11 @@ OPERAND_SCHEMES = {
     0x1D: (4, 'br', 2),       # collision probe variant
     0x37: (4, 'br', 2),       # collision probe (155d6)
     0x38: (4, 'br', 2),       # collision probe (156c0)
-    0x2C: (4, 'br', 2),       # obj search fwd: 1B filter + word target
+    0x2C: (5, 'br', 2),       # obj search fwd: 1B filter + word tgt + no-match INC
+    0xD0: (4, 'br', 2),       # viking search (no extra INC)
+    0xD1: (5, 'br', 2),       # viking search + no-match INC
     0x2D: (1, 'fall', None),  # search continue (dynamic target = 2C's)
-    0x35: (4, 'br', 2),       # obj search (Y): 1B filter + word target
+    0x35: (5, 'br', 2),       # obj search (Y): 1B filter + word tgt + no-match INC
     0x36: (1, 'fall', None),  # search continue (dynamic)
     0xBF: (4, 'br', 2),       # search up: 1B filter + word target
     0xC0: (4, 'br', 2),       # search family
