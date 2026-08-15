@@ -117,11 +117,25 @@ void parse_replay_file(const char* path) {
             parsed, path, skipped, g_replay_has_seq ? "seq" : "legacy frame");
 }
 
+// Stable one-char names for keys outside the action keymap. Letters and
+// digits DO affect the game even unmapped — the INT9 letter channel
+// ([28C] = LUT[scancode]) feeds the password screen from EVERY keydown —
+// so dropping them made recordings of letter-typed passwords unreplayable
+// (the level3 recording lost its T/L/P presses entirely). The replay
+// parser already resolves single-char names via parse_sdl_key.
+static const char* raw_key_name(SDL_Keycode k) {
+    static char names[36][2];
+    if ((k >= 'a' && k <= 'z')) { char* s = names[k - 'a'];      s[0] = (char)k; s[1] = 0; return s; }
+    if ((k >= '0' && k <= '9')) { char* s = names[26 + k - '0']; s[0] = (char)k; s[1] = 0; return s; }
+    return nullptr;
+}
+
 void log_keyboard_event(const SDL_Event* e) {
     if (!g_record_file) return;
     if (e->type == SDL_KEYDOWN && e->key.repeat) return;  // skip typematic
     const char* action = sdl_key_to_action(e->key.keysym.sym);
-    if (!action) return;  // unmapped key — don't record (won't affect game)
+    if (!action) action = raw_key_name(e->key.keysym.sym);
+    if (!action) return;  // truly irrelevant key (no action, no [28C] effect)
     // Don't write here (render thread): only capture the action + edge into the
     // pending queue. The game thread tags it with the read-frame in
     // v2_input_record_drain (called from sub_12352). See g_pending_record note.
