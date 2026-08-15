@@ -171,6 +171,7 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
     stops = {}
     parent = {}
     addrs = {}
+    anim_entries = set()
     q = deque(entries.keys())
     def push(npc, src):
         if npc not in parent:
@@ -185,6 +186,8 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
         if op in ABS_ADDR_OPS and pc + ABS_ADDR_OPS[op] + 2 <= len(d):
             a = struct.unpack_from('<H', d, pc + ABS_ADDR_OPS[op])[0]
             addrs.setdefault(a, set()).add(op)
+        if op == 0x19 and pc + 3 <= len(d):   # set-anim: operand = anim PC
+            anim_entries.add(struct.unpack_from('<H', d, pc + 1)[0])
         if op in CUSTOM:
             ln, tmpls = CUSTOM[op](d, pc)
             seen[pc] = (op, ln)
@@ -230,7 +233,7 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
             push(pc + ln, pc)
         else:
             stops.setdefault(op, []).append(pc)
-    return d, entries, seen, stops, parent, addrs
+    return d, entries, seen, stops, parent, addrs, anim_entries
 
 def load_layout_names():
     names = {}
@@ -243,10 +246,23 @@ def load_layout_names():
 
 LAYOUT = None
 
+MNEM_CACHE = {}
+
 def mnemonic(op, table):
+    if op in MNEM_CACHE:
+        return MNEM_CACHE[op]
     info = table.get(op)
     h = info[2] if info else '?'
     name = h.replace('v2_vm_op_', '')
+    if len(name) <= 2:   # bare hex handler name: derive from the table comment
+        import json
+        d = json.load(open('tools/data/optable_draft.json'))
+        c = d.get(f'{op:02X}', {}).get('comment', '')
+        c = c.split(':', 1)[-1].strip() if ':' in c else c
+        c = c.split('.')[0].split(',')[0].strip()
+        if c:
+            name = c[:26].replace(' ', '_').lower()
+    MNEM_CACHE[op] = name
     return name
 
 def write_listing(cid, d, entries, seen, table, dyn_pcs=()):
@@ -295,7 +311,7 @@ def main():
     os.makedirs('assets_raw/disasm', exist_ok=True)
     for cid in args:
         tmpls = per_template.get(cid, set())
-        d, entries, seen, stops, parent, addrs = walk(cid, tmpls, table)
+        d, entries, seen, stops, parent, addrs, anim_entries = walk(cid, tmpls, table)
         cov = sum(l for _, l in seen.values())
         write_listing(cid, d, entries, seen, table)
         print(f'0x{cid:X}: templates={len(tmpls)} entries={len(entries)} '

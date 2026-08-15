@@ -27,7 +27,7 @@ def main():
     pt = dz.spawn_entries()
     for tmpl in sorted(dyn):
         stream = dyn[tmpl]
-        d, entries, seen, stops, parent, addrs = dz.walk(tmpl, pt.get(tmpl, set()), table, extra_entries=stream.keys())
+        d, entries, seen, stops, parent, addrs, anim_entries = dz.walk(tmpl, pt.get(tmpl, set()), table, extra_entries=stream.keys())
         missed = [pc for pc in stream if pc not in seen]
         mism = [(pc, stream[pc], seen[pc][0]) for pc in stream
                 if pc in seen and seen[pc][0] != stream[pc]]
@@ -39,6 +39,7 @@ def main():
         for pc, dop, sop in sorted(mism)[:6]:
             print(f'  MISMATCH pc={pc:04X} dyn={dop:02X} static={sop:02X}')
         allad.setdefault(tmpl, addrs)
+        dz.write_listing(tmpl, d, entries, seen, table, dyn_pcs=stream.keys())
 
     merged = {}
     for t, am in allad.items():
