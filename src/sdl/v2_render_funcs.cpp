@@ -319,6 +319,8 @@ void v2_chunk_bg_update_from_render() {
 // (V2-PAL-DIVERGE idx 0x71). Values are 6-bit VGA (0..0x3F), <<2 at publish.
 uint8_t v2_dac_shadow[768] = {};
 
+extern "C" void v2_publish_dac_palette(void);  // defined below (#87)
+
 void v2_swap_render_buf() {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -345,21 +347,42 @@ void v2_swap_render_buf() {
     extern uint8_t* v2_vm_get_shadow_ds();
     uint8_t* shad = v2_vm_get_shadow_ds();
     if (shad) {
-        extern SDL_Color v2_display_palette[256];
-        extern bool v2_display_palette_valid;
         // Publish the shadow DAC (task #22) — the exact VGA DAC state as
         // maintained by the v2 mirrors of every orig OUT 3C8/3C9 site.
         // (Replaces the old "ds:0x8202 snapshot + color-3 mirror" model,
         // which missed 10ffc bursts sourced from 0x7F02 under shade —
         // V2-PAL-DIVERGE idx 0x71.)
-        for (int i = 0; i < 256; i++) {
-            v2_display_palette[i].r = v2_dac_shadow[i*3 + 0] << 2;
-            v2_display_palette[i].g = v2_dac_shadow[i*3 + 1] << 2;
-            v2_display_palette[i].b = v2_dac_shadow[i*3 + 2] << 2;
-            v2_display_palette[i].a = 255;
-        }
-        v2_display_palette_valid = true;
+        v2_publish_dac_palette();
     }
+}
+
+// Publish the current shadow DAC to the presenter palette. Called from
+// v2_swap_render_buf (frame image snapshot) AND from every palette dispatch
+// tick in v2_render_callback (#87): the DOS DAC changes mid-frame (the
+// vsync ISR dispatches off_17974[303DE] three times per game frame — e.g.
+// the level-2 lift arrows alternate a full-upload red phase and a slot-0
+// burst yellow phase inside ONE game frame, by game data). A CRT showed
+// those phases within the frame; publishing only at swap time collapsed
+// them to one snap per game frame → hard 35 Hz flicker. Per-tick publish
+// lets the 60 fps presenter show each phase, like the real screen (and
+// like the m2c orig window, whose setPalette writes land immediately).
+extern "C" void v2_publish_dac_palette(void) {
+    extern SDL_Color v2_display_palette[256];
+    extern bool v2_display_palette_valid;
+    // V2_LADDER_TRACE: log each publish with the 0x77 window byte — proves
+    // the per-tick publish carries BOTH intra-frame phases to the presenter.
+    { static int _lp = -1;
+      if (_lp < 0) _lp = getenv("V2_LADDER_TRACE") ? 1 : 0;
+      if (_lp) { extern int v2_dbg_pre_vm_iter;
+        fprintf(stderr, "LADDER[f%d] PUBLISH 77=%02X%02X%02X\n", v2_dbg_pre_vm_iter,
+            v2_dac_shadow[0x77*3], v2_dac_shadow[0x77*3+1], v2_dac_shadow[0x77*3+2]); } }
+    for (int i = 0; i < 256; i++) {
+        v2_display_palette[i].r = v2_dac_shadow[i*3 + 0] << 2;
+        v2_display_palette[i].g = v2_dac_shadow[i*3 + 1] << 2;
+        v2_display_palette[i].b = v2_dac_shadow[i*3 + 2] << 2;
+        v2_display_palette[i].a = 255;
+    }
+    v2_display_palette_valid = true;
 }
 
 // Snapshot buffers — captured atomically at v2_swap_render_buf time.

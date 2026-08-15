@@ -2402,6 +2402,8 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
         v2gs(s).pal_shade_g_bref() = (uint8_t)bx; // byte_28823
         v2gs(s).pal_shade_b_bref() = (uint8_t)bx; // byte_28824
         v2_pal_shade_10f03(s);                    // sub_10f03: palette shading → ds:0x8202
+        { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
+          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site1\n", v2_dbg_pre_vm_iter);} }
         v2gs(s).pal_req(4);       // word_303DE = 4 (request palette write)
         v2gs(s).pal_src_ptr(DS_PAL_OUT);  // word_303E0 = shaded palette pointer
         // Original: CALL sub_16775; CALL sub_10130
@@ -2427,6 +2429,8 @@ static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di)
     v2gs(s).pal_shade_g_bref() = (uint8_t)((uint8_t)si << 1);                        // SHL al, 1; MOV ds:343h, al
     v2gs(s).pal_shade_b_bref() = (uint8_t)((uint8_t)di << 1);                        // SHL al, 1; MOV ds:344h, al
     v2gs(s).pal_flags_bref() |= 1;                                                 // OR byte ptr ds:7EFDh, 1
+    { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
+      if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site2\n", v2_dbg_pre_vm_iter);} }
     v2gs(s).pal_req(4);                                   // MOV word ptr ds:7EFEh, 4
     v2gs(s).pal_src_ptr(DS_PAL_OUT);                              // MOV word ptr ds:7F00h, 8202h
     // JMP sub_10E99: palette correction — writes 768 bytes to ds:0x8202
@@ -2516,6 +2520,7 @@ extern "C" void v2_fntest_set_current_ds(uint16_t v) { v2_current_ds_val = v; }
 // (#84) unit sub_12352: the shadow-side mirror is static — export a call
 // wrapper for the fn-test runner (same body the INPUT_UPDATE signal runs).
 extern "C" void v2_input_tick_12352(void);  // seq channel (V2_ONLY mirror site)
+extern "C" void v2_publish_dac_palette(void);  // #87: per-dispatch DAC publish (render_funcs)
 static void v2_read_input_12352_iter(uint8_t* shadow);
 extern "C" void v2_fntest_call_12352_iter(uint8_t* shadow) {
     v2_read_input_12352_iter(shadow);
@@ -2662,6 +2667,21 @@ static void v2_pal_rotate_back_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
 // block shifts down, saved entry lands at end; sub_1020f for cur>end: the reverse).
 // DS writes: DEC [si+0x258C], word_303DE=2, palette buffer rotations at ds:0x8202+ area.
 static void v2_pal_ui_cycle_101be(uint8_t* s) {
+    // V2_LADDER_TRACE=1 (level2 ladder saga): log every pal_anim enable-mask
+    // change + every slot rotation with frame numbers. Env-gated.
+    static int _lt = -1;
+    if (_lt < 0) _lt = getenv("V2_LADDER_TRACE") ? 1 : 0;
+    if (_lt) {
+        static uint8_t prev_en = 0xFF;
+        uint8_t en = v2gs(s).pal_anim_en_b();
+        if (en != prev_en) {
+            fprintf(stderr, "LADDER[f%d] enable %02X->%02X timers=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                v2_dbg_pre_vm_iter, prev_en, en,
+                s[DS_PAL_ANIM_TIMER], s[1+DS_PAL_ANIM_TIMER], s[2+DS_PAL_ANIM_TIMER], s[3+DS_PAL_ANIM_TIMER],
+                s[4+DS_PAL_ANIM_TIMER], s[5+DS_PAL_ANIM_TIMER], s[6+DS_PAL_ANIM_TIMER], s[7+DS_PAL_ANIM_TIMER]);
+            prev_en = en;
+        }
+    }
     if (v2gs(s).pal_anim_en_b() == 0)                                     // TEST byte_2AA63, 0FFh; JZ loc_1020b
         return;                                                     // early exit — NO word_303DE write
     for (int16_t si = 7; si >= 0; si--) {                           // si=7; DEC si; JNS
@@ -2673,6 +2693,13 @@ static void v2_pal_ui_cycle_101be(uint8_t* s) {
         // Counter reached 0: rotate palette entries
         uint8_t cur_idx = s[si + DS_PAL_ANIM_END];                          // [si+259Ch] = current
         uint8_t end_idx = s[si + DS_PAL_ANIM_START];                          // [si+2594h] = end
+        if (_lt) {
+            static int _rc[8] = {0};
+            if (_rc[si] < 8 || si == 0)
+                fprintf(stderr, "LADDER[f%d] slot%d ROT cur=%02X end=%02X en=%02X lut=%02X (#%d)\n",
+                    v2_dbg_pre_vm_iter, si, cur_idx, end_idx,
+                    v2gs(s).pal_anim_en_b(), s[(uint16_t)(si - LUT_BYTE_OR)], ++_rc[si]);
+        }
         // word_309e4 is at linear 0x309E4 = ds:0x8504 (NOT 0x7944).
         if (cur_idx < end_idx) {
             // orig: mov dx,8202h; call sub_10255; mov dx,7F02h; call sub_10255
@@ -6832,6 +6859,8 @@ static void v2_pal_fade_in_10f5d(uint8_t* s) {
         v2gs(s).pal_shade_g_bref() = (uint8_t)bx;
         v2gs(s).pal_shade_b_bref() = (uint8_t)bx;
         v2_pal_shade_10f03(s);                       // sub_10F03: shade -> ds:0x8202
+        { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
+          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site3\n", v2_dbg_pre_vm_iter);} }
         v2gs(s).pal_req(4);            // word_303DE = 4 (request)
         v2gs(s).pal_src_ptr(DS_PAL_OUT); // word_303E0 = 0x8202
         v2_page_flip_16775(s);
@@ -7507,8 +7536,28 @@ void v2_render_callback() {
     // off_17974[word_303DE]: 0=nullsub_1, 2=sub_10ffc, 4=sub_10fe6.
     // sub_10fe6/sub_10ffc clear shadow[0x7EFE] = 0.
     uint16_t pal_mode = v2gs(s).pal_req();
+    // V2_LADDER_TRACE: which palette path serviced this vsync + the 0x75-0x78
+    // window of BOTH source buffers (7F02 src / 8202 out) at that moment.
+    {
+        static int _lt2 = -1;
+        if (_lt2 < 0) _lt2 = getenv("V2_LADDER_TRACE") ? 1 : 0;
+        if (_lt2 && pal_mode != 0) {
+            const uint8_t* p7 = s + DS_PAL_SRC + 0x75 * 3;
+            const uint8_t* p8 = s + DS_PAL_OUT + 0x75 * 3;
+            fprintf(stderr, "LADDER[f%d] req=%u 7F02:%02X%02X%02X.%02X%02X%02X.%02X%02X%02X.%02X%02X%02X 8202:%02X%02X%02X.%02X%02X%02X.%02X%02X%02X.%02X%02X%02X\n",
+                v2_dbg_pre_vm_iter, pal_mode,
+                p7[0],p7[1],p7[2],p7[3],p7[4],p7[5],p7[6],p7[7],p7[8],p7[9],p7[10],p7[11],
+                p8[0],p8[1],p8[2],p8[3],p8[4],p8[5],p8[6],p8[7],p8[8],p8[9],p8[10],p8[11]);
+        }
+    }
     if (pal_mode == 4) v2_pal_dac_write_10fe6(s);
     else if (pal_mode == 2) v2_pal_anim_10ffc(s);
+    // #87: publish the DAC to the presenter on every dispatch tick — the DOS
+    // DAC legitimately changes mid-frame (red full-upload phase vs slot-0
+    // burst phase on the level-2 lift); one-snap-per-frame publishing turned
+    // that into hard 35 Hz flicker. See v2_publish_dac_palette (decl at
+    // file scope — the block-scope extern "C" trap).
+    if (pal_mode == 2 || pal_mode == 4) v2_publish_dac_palette();
 }
 
 // Legacy API: copy real DS + segments from original emulator.
@@ -7641,6 +7690,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             v2gs(shadow).pal_flags_bref() &= 0xFE;
             if (v2gs(shadow).pal_flags_b() == 0)
                 v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
+            { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
+              if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site4\n", v2_dbg_pre_vm_iter);} }
             v2gs(shadow).pal_req(4);
             v2_pal_correct_10e99(shadow);
         }
@@ -18566,6 +18617,8 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         v2gs(s).pal_flags_bref() &= 0xFE;
                         if (v2gs(s).pal_flags_b() == 0)
                             v2gs(s).pal_src_ptr(DS_PAL_SRC);
+                        { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
+                          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site5\n", v2_dbg_pre_vm_iter);} }
                         v2gs(s).pal_req(4);
                         v2_pal_correct_10e99(s);            // JMP sub_10E99 tail
                     }
@@ -18701,6 +18754,91 @@ void v2_phase_frame_begin(uint16_t ds_val) {
                     prev[i], cur[i],
                     (cur[i] & 0x7F) >= 0x20 ? (char)(cur[i] & 0x7F) : '?');
                 prev[i] = cur[i];
+            }
+        }
+    }
+    // V2_LADDER_SNAP=<frame>: dump the v2 render buffer + DAC as a PPM at
+    // that frame (and frame+1) — visual check which pixels use 0x75-0x78.
+    {
+        static int snapf = -2;
+        if (snapf == -2) { const char* e = getenv("V2_LADDER_SNAP"); snapf = e ? atoi(e) : -1; }
+        if (snapf > 0 && (v2_dbg_pre_vm_iter == snapf || v2_dbg_pre_vm_iter == snapf + 1)) {
+            extern uint8_t v2_dac_shadow[768];
+            extern uint8_t v2_render_buf[320*200];
+            char fn[64]; snprintf(fn, sizeof(fn), "/tmp/ladder_f%d.ppm", v2_dbg_pre_vm_iter);
+            FILE* f = fopen(fn, "wb");
+            if (f) {
+                fprintf(f, "P6\n320 200\n255\n");
+                for (int i = 0; i < 320 * 200; i++) {
+                    uint8_t c = v2_render_buf[i];
+                    fputc(v2_dac_shadow[c*3+0] << 2, f);
+                    fputc(v2_dac_shadow[c*3+1] << 2, f);
+                    fputc(v2_dac_shadow[c*3+2] << 2, f);
+                }
+                fclose(f);
+                // raw index map alongside (visual index forensics)
+                char fn2[64]; snprintf(fn2, sizeof(fn2), "/tmp/ladder_f%d.idx", v2_dbg_pre_vm_iter);
+                FILE* f2 = fopen(fn2, "wb");
+                if (f2) { fwrite(v2_render_buf, 1, 320 * 200, f2); fclose(f2); }
+                // index histogram of the 0x75-0x78 range for the same frame
+                int cnt[4] = {0,0,0,0};
+                for (int i = 0; i < 320 * 200; i++) {
+                    uint8_t c = v2_render_buf[i];
+                    if (c >= 0x75 && c <= 0x78) cnt[c - 0x75]++;
+                }
+                fprintf(stderr, "LADDER-SNAP[f%d] %s px75=%d px76=%d px77=%d px78=%d\n",
+                    v2_dbg_pre_vm_iter, fn, cnt[0], cnt[1], cnt[2], cnt[3]);
+            } else if (f) fclose(f);
+        }
+    }
+    // V2_LADDER_TRACE: watch the slot bit-LUT at ds:0x93BC (8 bytes) — the
+    // per-slot gate byte ANDed with the enable mask; level data loads it and
+    // the switch script is suspected to rewrite slot 0's byte.
+    {
+        static int _lw = -1;
+        if (_lw < 0) _lw = getenv("V2_LADDER_TRACE") ? 1 : 0;
+        if (_lw && v2_vm_shadow_ds) {
+            static uint8_t prev[8]; static int primed = 0;
+            uint8_t* lut = v2_vm_shadow_ds + 0x93BC;
+            if (!primed || memcmp(prev, lut, 8) != 0) {
+                fprintf(stderr, "LADDER[f%d] LUT93BC = %02X %02X %02X %02X %02X %02X %02X %02X%s\n",
+                    v2_dbg_pre_vm_iter, lut[0],lut[1],lut[2],lut[3],lut[4],lut[5],lut[6],lut[7],
+                    primed ? "" : " (first)");
+                memcpy(prev, lut, 8); primed = 1;
+            }
+        }
+    }
+    // V2_LADDER_TRACE: per-frame count of on-screen pixels using indices
+    // 0x75-0x78 — locates the object the slot-0 window actually paints.
+    {
+        static int _pc = -1;
+        if (_pc < 0) _pc = getenv("V2_LADDER_TRACE") ? 1 : 0;
+        if (_pc) {
+            extern uint8_t v2_render_buf[320*200];
+            int n = 0;
+            for (int i = 0; i < 320 * 200; i++)
+                if (v2_render_buf[i] >= 0x75 && v2_render_buf[i] <= 0x78) n++;
+            static int prev_n = -1;
+            if ((n > 50) != (prev_n > 50) || (n > 50 && (v2_dbg_pre_vm_iter % 200) == 0))
+                fprintf(stderr, "LADDER[f%d] px7578=%d\n", v2_dbg_pre_vm_iter, n);
+            prev_n = n;
+        }
+    }
+    // V2_LADDER_TRACE: watch the DAC range 0x75..0x78 (the backward-rotating
+    // slot-0 window suspected to be the level2 ladder) — log on change.
+    {
+        static int _ldt = -1;
+        if (_ldt < 0) _ldt = getenv("V2_LADDER_TRACE") ? 1 : 0;
+        if (_ldt) {
+            extern uint8_t v2_dac_shadow[768];
+            static uint8_t prev[12];
+            static int primed = 0;
+            if (memcmp(prev, v2_dac_shadow + 0x75 * 3, 12) != 0) {
+                const uint8_t* d = v2_dac_shadow + 0x75 * 3;
+                fprintf(stderr, "LADDER[f%d] DAC75-78 = %02X%02X%02X %02X%02X%02X %02X%02X%02X %02X%02X%02X%s\n",
+                    v2_dbg_pre_vm_iter, d[0],d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],
+                    primed ? "" : " (first)");
+                memcpy(prev, d, 12); primed = 1;
             }
         }
     }
@@ -19649,6 +19787,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                     v2gs(s).pal_flags_bref() &= 0xFE;
                     if (v2gs(s).pal_flags_b() == 0)
                         v2gs(s).pal_src_ptr(DS_PAL_SRC);
+                    { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
+                      if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site6\n", v2_dbg_pre_vm_iter);} }
                     v2gs(s).pal_req(4);
                     v2_pal_correct_10e99(s);
                 }
@@ -21077,6 +21217,8 @@ static void v2_pw_post_loop(uint8_t* shadow) {
         v2gs(shadow).pal_flags_bref() &= 0xFE;
         if (v2gs(shadow).pal_flags_b() == 0)
             v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
+        { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
+          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site7\n", v2_dbg_pre_vm_iter);} }
         v2gs(shadow).pal_req(4);
         v2_pal_correct_10e99(shadow);
         v2_pw_did_save_1450b = false;
