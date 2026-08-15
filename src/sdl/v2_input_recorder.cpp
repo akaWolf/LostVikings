@@ -25,6 +25,7 @@ extern std::atomic<uint8_t> sdl_spec_state[256];
 extern std::atomic<uint8_t> sdl_spec_press_latch[256];
 extern std::atomic<uint16_t> sdl_input_press_edges;  // render.cpp (#81 tap accumulator)
 extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
+extern "C" uint8_t sdl_int9_dos_scan(int sdl_scancode);   // render.cpp (#86): 0 = no [28C] effect
 
 // v2 game frame counter, defined in v2_vm.cpp; bumped in v2_phase_frame_begin.
 extern int v2_dbg_pre_vm_iter;
@@ -45,7 +46,7 @@ inline SDL_Keycode action_to_sdl_key(const char* n) { return v2_keymap_action_to
 
 struct ReplayEvent {
     int      frame;  // v2_dbg_pre_vm_iter at record time
-    uint8_t  kind;   // 0=KEYDOWN, 1=KEYUP
+    uint8_t  kind;   // 0=KEYDOWN, 1=KEYUP, 2=typematic repeat (KR, #86)
     SDL_Keycode keycode;
     long     seq;    // sub_12352 call number that first saw it (-1 = legacy)
 };
@@ -75,7 +76,7 @@ bool g_replay_has_seq = false;
 // recorded frame one ahead of where the game reads it, so on replay the
 // frame-gated event never became due while the loop sat on the frozen counter →
 // deadlock (#180). Tagging at the game-thread read makes record == replay.
-struct PendingRec { const char* action; uint8_t kind; }; // kind 0=KD 1=KU
+struct PendingRec { const char* action; uint8_t kind; }; // kind 0=KD 1=KU 2=KR (#86)
 std::vector<PendingRec> g_pending_record;
 std::mutex g_pending_mutex;
 
@@ -99,9 +100,17 @@ void parse_replay_file(const char* path) {
             fprintf(stderr, "v2_input_recorder: unknown action '%s' at f=%d — skipped\n", action, frame);
             skipped++; continue;
         }
+        uint8_t kind;
+        if      (strcmp(k, "KD") == 0) kind = 0;
+        else if (strcmp(k, "KU") == 0) kind = 1;
+        else if (strcmp(k, "KR") == 0) kind = 2;  // typematic repeat (#86)
+        else {
+            fprintf(stderr, "v2_input_recorder: unknown kind '%s' at f=%d — skipped\n", k, frame);
+            skipped++; continue;
+        }
         ReplayEvent e{};
         e.frame = frame;
-        e.kind = (strcmp(k, "KD") == 0) ? 0 : 1;
+        e.kind = kind;
         e.keycode = kc;
         e.seq = (n == 4) ? seq : -1;
         g_replay_queue.push_back(e);
@@ -132,7 +141,19 @@ static const char* raw_key_name(SDL_Keycode k) {
 
 void log_keyboard_event(const SDL_Event* e) {
     if (!g_record_file) return;
-    if (e->type == SDL_KEYDOWN && e->key.repeat) return;  // skip typematic
+    uint8_t kind;
+    if (e->type == SDL_KEYDOWN && e->key.repeat) {
+        // #86: a live typematic repeat's ONLY game effect is the INT9 [28C]
+        // note (press_edges / spec latches / key bits are all !repeat-gated
+        // in both event loops). Record repeats of [28C]-mapped keys as KR so
+        // replays feed the channel the same series; repeats of unmapped
+        // scancodes are live no-ops and stay unrecorded.
+        if (!sdl_int9_dos_scan(SDL_GetScancodeFromKey(e->key.keysym.sym)))
+            return;
+        kind = 2;
+    } else {
+        kind = (uint8_t)(e->type == SDL_KEYDOWN ? 0 : 1);
+    }
     const char* action = sdl_key_to_action(e->key.keysym.sym);
     if (!action) action = raw_key_name(e->key.keysym.sym);
     if (!action) return;  // truly irrelevant key (no action, no [28C] effect)
@@ -140,7 +161,7 @@ void log_keyboard_event(const SDL_Event* e) {
     // pending queue. The game thread tags it with the read-frame in
     // v2_input_record_drain (called from sub_12352). See g_pending_record note.
     std::lock_guard<std::mutex> lk(g_pending_mutex);
-    g_pending_record.push_back({action, (uint8_t)(e->type == SDL_KEYDOWN ? 0 : 1)});
+    g_pending_record.push_back({action, kind});
 }
 
 // Replay clock: equals the frame counter on the normal path, but keeps
@@ -164,11 +185,11 @@ bool dequeue_due_replay(SDL_Event* out) {
     if ((long)e.frame > g_replay_clock)
         return false;  // event gated to a future (virtual) frame — not due yet
     SDL_zerop(out);
-    out->type = (e.kind == 0) ? SDL_KEYDOWN : SDL_KEYUP;
+    out->type = (e.kind == 1) ? SDL_KEYUP : SDL_KEYDOWN;
     out->key.keysym.sym = e.keycode;
     out->key.keysym.scancode = SDL_GetScancodeFromKey(e.keycode);
-    out->key.repeat = 0;
-    out->key.state = (e.kind == 0) ? SDL_PRESSED : SDL_RELEASED;
+    out->key.repeat = (e.kind == 2) ? 1 : 0;   // KR = typematic repeat (#86)
+    out->key.state = (e.kind == 1) ? SDL_RELEASED : SDL_PRESSED;
     out->key.timestamp = SDL_GetTicks();
     g_replay_pos++;
     return true;
@@ -194,6 +215,14 @@ void apply_replay_event(const SDL_Event& e, const char* via) {
         // #62: replays must feed the INT9 letter channel too — the
         // password screen consumes [28C], not only key bits.
         sdl_int9_note_keydown(SDL_GetScancodeFromKey(e.key.keysym.sym));
+        // #86: a KR event mirrors the live typematic path exactly — the
+        // event loops gate press_edges and the spec latches with !repeat,
+        // so a replayed repeat contributes ONLY the [28C] note (and the
+        // no-op key-bit OR below, same as live).
+        if (e.key.repeat) {
+            input_keys |= key_val; input_keys_v2 |= key_val;
+            return;
+        }
         // Tap accumulator (#81): BOTH live event loops OR every KEYDOWN
         // into sdl_input_press_edges so a KEYDOWN+KEYUP pair shorter than
         // one sub_12352 interval still lands as an edge. The drain skipped
@@ -202,8 +231,8 @@ void apply_replay_event(const SDL_Event& e, const char* via) {
         // key on the password screen produces exactly that) collapsed to
         // state-no-change on replay and the press was LOST, so recorded
         // live runs diverged (level2 password typed a different word).
-        // Recorded events are physical presses by construction (the
-        // recorder drops repeat=1), so no !repeat filter is needed here.
+        // Physical presses reach this point (KR returned above), so no
+        // !repeat filter is needed on the OR.
         if (key_val) sdl_input_press_edges.fetch_or(key_val, std::memory_order_relaxed);
         input_keys |= key_val; input_keys_v2 |= key_val;
     } else {
@@ -303,9 +332,10 @@ extern "C" void v2_input_recorder_init(const char* record_file, const char* repl
             return;
         }
         fprintf(g_record_file, "# Lost Vikings v2 input recording — frame-based, action names SDL-independent\n");
-        fprintf(g_record_file, "# Format: <frame> <KD|KU> <ACTION> <seq>  (frame = v2_dbg_pre_vm_iter;\n"
+        fprintf(g_record_file, "# Format: <frame> <KD|KU|KR> <ACTION> <seq>  (frame = v2_dbg_pre_vm_iter;\n"
                                "# seq = global sub_12352 call number: replay injects the event right\n"
                                "# before the same-numbered input read — intra-frame exact delivery.\n"
+                               "# KR = typematic repeat (#86): feeds only the INT9 [28C] channel.\n"
                                "# 3-column files from older builds replay via the legacy frame clock.)\n");
         fflush(g_record_file);
         g_mode = MODE_RECORD;
@@ -361,7 +391,8 @@ extern "C" void v2_input_record_drain(void) {
     if (g_pending_record.empty()) return;
     for (const auto& p : g_pending_record)
         fprintf(g_record_file, "%d %s %s %ld\n", v2_dbg_pre_vm_iter,
-                p.kind == 0 ? "KD" : "KU", p.action, g_sub12352_seq);
+                p.kind == 0 ? "KD" : p.kind == 1 ? "KU" : "KR",
+                p.action, g_sub12352_seq);
     fflush(g_record_file);
     g_pending_record.clear();
 }

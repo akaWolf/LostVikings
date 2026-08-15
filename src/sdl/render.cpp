@@ -300,7 +300,11 @@ std::atomic<uint16_t> sdl_int9_char_pending{0};
 // #62: single writer helper for the INT9 letter channel — used by BOTH
 // window event loops (default render.cpp / V2_ONLY render_v2.cpp) and by
 // the replay drain, so no mode can lose the [28C] character again.
-extern "C" void sdl_int9_note_keydown(int sdl_scancode) {
+// #86: the scancode→DOS-scan lookup is exported separately so the recorder
+// can ask "does a typematic repeat of this key have any game effect at all"
+// (the repeat's ONLY live effect is this channel — everything else is
+// !repeat-gated in both event loops).
+extern "C" uint8_t sdl_int9_dos_scan(int sdl_scancode) {
     static const struct { SDL_Scancode s; uint8_t dos; } k2dos[] = {
       {SDL_SCANCODE_ESCAPE,0x01},{SDL_SCANCODE_1,0x02},{SDL_SCANCODE_2,0x03},
       {SDL_SCANCODE_3,0x04},{SDL_SCANCODE_4,0x05},{SDL_SCANCODE_5,0x06},
@@ -324,10 +328,15 @@ extern "C" void sdl_int9_note_keydown(int sdl_scancode) {
       {SDL_SCANCODE_SPACE,0x39},
     };
     for (const auto& m : k2dos)
-      if (m.s == (SDL_Scancode)sdl_scancode) {
-        sdl_int9_char_pending.store((uint16_t)(0x100 | m.dos), std::memory_order_relaxed); // #37b: drained at frame begin
-        break;
-      }
+      if (m.s == (SDL_Scancode)sdl_scancode)
+        return m.dos;
+    return 0;
+}
+
+extern "C" void sdl_int9_note_keydown(int sdl_scancode) {
+    uint8_t dos = sdl_int9_dos_scan(sdl_scancode);
+    if (dos)
+        sdl_int9_char_pending.store((uint16_t)(0x100 | dos), std::memory_order_relaxed); // #37b: drained at frame begin
 }
 
 // (#81) The cross-frame press_snap latch ("LAYER 2") is GONE. It replayed a
@@ -459,7 +468,18 @@ void sdl_spec_snapshot_take() {
     // written to BOTH real and shadow DS by v2_mirror_int9_char.
     {
         uint16_t pend = sdl_int9_char_pending.exchange(0, std::memory_order_relaxed);
-        if (pend & 0x100) v2_mirror_int9_char((uint8_t)(pend & 0xFF));
+        if (pend & 0x100) {
+            // V2_INT9_LOG=1: per-drain forensics of the [28C] letter channel
+            // (#86 KR verification) — which DOS scan lands at which frame.
+            static int _il = -1;
+            if (_il < 0) _il = getenv("V2_INT9_LOG") ? 1 : 0;
+            if (_il) {
+                extern int v2_dbg_pre_vm_iter;
+                fprintf(stderr, "INT9-DRAIN[f%d]: scan=%02X\n",
+                        v2_dbg_pre_vm_iter, pend & 0xFF);
+            }
+            v2_mirror_int9_char((uint8_t)(pend & 0xFF));
+        }
     }
 }
 

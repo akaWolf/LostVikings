@@ -96,7 +96,7 @@ Frame-based event log. SDL-independent (action names not keycodes).
 
 ```
 # Comments start with #
-# Format: <frame> <KD|KU> <ACTION>
+# Format: <frame> <KD|KU|KR> <ACTION> [seq]
 13 KD SPACE      # press SPACE at frame 13 (v2_dbg_pre_vm_iter == 13)
 15 KU SPACE      # release at frame 15
 21 KD LEFT
@@ -105,6 +105,14 @@ Frame-based event log. SDL-independent (action names not keycodes).
 102 KU F10
 ```
 
+The optional 4th column (`seq`) is the sub_12352 call number — recordings
+made by the current recorder carry it on every event and replay at exact
+intra-frame positions. Legacy 3-column files replay on the frame clock.
+`KR` (#86) is a typematic repeat of a held key: recorded only for keys the
+INT9 [28C] letter channel maps, and replayed as exactly that — the [28C]
+note with no edge/latch side effects (mirrors the live event loops, where
+everything except the [28C] note is `!repeat`-gated).
+
 **Actions** (game-action names; mapped to SDL keycodes by recorder):
 - Movement: `LEFT`, `RIGHT`, `UP`, `DOWN`
 - Action: `SPACE`, `RETURN`, `TAB`, `LCTRL`, `RCTRL`, `LALT`, `RALT`
@@ -112,6 +120,8 @@ Frame-based event log. SDL-independent (action names not keycodes).
 - Function: `F4`, `F5`, `F6`, `F10`, `ESC`, `M`, `X`, `DEL`
 - Numbers: `1`, `2`, `3`
 - Debug: `F12` (PGM dump)
+- Plus raw single letters/digits (`a`-`z`, `0`-`9`) for password typing —
+  the recorder logs any such key even without a keymap entry.
 
 Frame `0` = before any sub_12352 input call has run.
 
