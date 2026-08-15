@@ -1978,7 +1978,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "98": {
@@ -1990,7 +1990,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "99": {
@@ -2002,7 +2002,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "9A": {
@@ -2014,7 +2014,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "9B": {
@@ -2184,7 +2184,7 @@
   "operand_reads": 0,
   "do_jump": 1,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "A9": {
@@ -2198,7 +2198,7 @@
   "operand_reads": 0,
   "do_jump": 1,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "AA": {
@@ -2212,7 +2212,7 @@
   "operand_reads": 0,
   "do_jump": 1,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "AB": {
@@ -2226,7 +2226,7 @@
   "operand_reads": 0,
   "do_jump": 1,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "AC": {
@@ -2254,7 +2254,7 @@
   "operand_reads": 0,
   "do_jump": 1,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "AE": {
@@ -2268,7 +2268,7 @@
   "operand_reads": 0,
   "do_jump": 1,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "AF": {
@@ -2296,7 +2296,7 @@
   "operand_reads": 0,
   "do_jump": 1,
   "do_call_jump": 0,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "B1": {
@@ -2324,7 +2324,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 1,
-  "op_bytes": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "B3": {
@@ -2338,7 +2338,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 1,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "B4": {
@@ -2366,7 +2366,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 1,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "B6": {
@@ -2394,7 +2394,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 1,
-  "op_bytes": 0,
+  "op_bytes": 3,
   "body_found": true
  },
  "B8": {
@@ -2436,7 +2436,7 @@
   "operand_reads": 0,
   "do_jump": 0,
   "do_call_jump": 1,
-  "op_bytes": 0,
+  "op_bytes": 2,
   "body_found": true
  },
  "BB": {

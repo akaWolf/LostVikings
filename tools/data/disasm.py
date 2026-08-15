@@ -36,6 +36,11 @@ OPERAND_SCHEMES = {
     0x06: (1, 'stop', None),  # load_alt_pc: dynamic return (pair of 0x05)
     0x0F: (1, 'stop', None),  # exit VM + [334]|=1
     0x10: (1, 'stop', None),  # despawn + exit VM
+    0x1A: (4, 'br', 2),       # collision probe (155d6, always 1B) + call-jump
+    0x32: (4, 'br', 2),       # collision probe (15788, always 1B) + call-jump
+    0x1D: (4, 'br', 2),       # collision probe variant
+    0x37: (4, 'br', 2),       # collision probe (155d6)
+    0x38: (4, 'br', 2),       # collision probe (156c0)
     0x2C: (4, 'br', 2),       # obj search fwd: 1B filter + word target
     0x2D: (1, 'fall', None),  # search continue (dynamic target = 2C's)
     0x35: (4, 'br', 2),       # obj search (Y): 1B filter + word target
@@ -122,7 +127,7 @@ def spawn_entries(manifest_dir='assets_raw'):
             off += 14
     return per_template
 
-def walk(chunk_id, tmpl_indices, table):
+def walk(chunk_id, tmpl_indices, table, extra_entries=()):
     d = open(f'assets_raw/chunks/dec/{chunk_id:04d}.bin', 'rb').read()
     entries = {}
     # ALL template/anim records are entry points: objects live by switching
@@ -147,9 +152,16 @@ def walk(chunk_id, tmpl_indices, table):
             pc = struct.unpack_from('<H', d, off)[0]
             if pc < len(d):
                 entries[pc] = f'tmpl_{t2:02X}'
+    for pc in extra_entries:
+        entries.setdefault(pc, 'dyn')
     seen = {}
     stops = {}
+    parent = {}
     q = deque(entries.keys())
+    def push(npc, src):
+        if npc not in parent:
+            parent[npc] = src
+        q.append(npc)
     while q:
         pc = q.popleft()
         if pc in seen or pc >= len(d):
@@ -159,49 +171,49 @@ def walk(chunk_id, tmpl_indices, table):
         if op in CUSTOM:
             ln, tmpls = CUSTOM[op](d, pc)
             seen[pc] = (op, ln)
-            q.append(pc + ln)
+            push(pc + ln, pc)
             for t in tmpls:
                 off = t * REC + 3
                 if off + 2 <= len(d):
                     npc = struct.unpack_from('<H', d, off)[0]
                     if npc < len(d):
-                        q.append(npc)
+                        push(npc, pc)
             continue
         if op in CUSTOM_BR:
             ln, _ = CUSTOM_BR[op](d, pc)
             seen[pc] = (op, ln)
             tgt = struct.unpack_from('<H', d, pc + ln - 2)[0]
-            if tgt < len(d):
-                q.append(tgt)
-            q.append(pc + ln)
+            if 0 < tgt < len(d):
+                push(tgt, pc)
+            push(pc + ln, pc)
             continue
         if op in OPERAND_SCHEMES:
             ln, kind, toff = OPERAND_SCHEMES[op]
             seen[pc] = (op, ln)
             if kind in ('jmp', 'br') and toff is not None and pc + toff + 2 <= len(d):
                 tgt = struct.unpack_from('<H', d, pc + toff)[0]
-                if tgt < len(d):
-                    q.append(tgt)
+                if 0 < tgt < len(d):
+                    push(tgt, pc)
             if kind in ('fall', 'br'):
-                q.append(pc + ln)
+                push(pc + ln, pc)
             continue
         if info and info[0] == 'scheme':
             ln, kind, toff = info[1]
             seen[pc] = (op, ln)
             if kind in ('jmp', 'br') and toff is not None and pc + toff + 2 <= len(d):
                 tgt = struct.unpack_from('<H', d, pc + toff)[0]
-                if tgt < len(d):
-                    q.append(tgt)
+                if 0 < tgt < len(d):
+                    push(tgt, pc)
             if kind in ('fall', 'br'):
-                q.append(pc + ln)
+                push(pc + ln, pc)
             continue
         if info and info[0] == 'fixed':
             ln = info[1]
             seen[pc] = (op, ln)
-            q.append(pc + ln)
+            push(pc + ln, pc)
         else:
             stops.setdefault(op, []).append(pc)
-    return d, entries, seen, stops
+    return d, entries, seen, stops, parent
 
 def main():
     table = load_draft()
@@ -210,7 +222,7 @@ def main():
     os.makedirs('assets_raw/disasm', exist_ok=True)
     for cid in args:
         tmpls = per_template.get(cid, set())
-        d, entries, seen, stops = walk(cid, tmpls, table)
+        d, entries, seen, stops, parent = walk(cid, tmpls, table)
         cov = sum(l for _, l in seen.values())
         print(f'0x{cid:X}: templates={len(tmpls)} entries={len(entries)} '
               f'insns={len(seen)} bytes~{cov} stops={{'

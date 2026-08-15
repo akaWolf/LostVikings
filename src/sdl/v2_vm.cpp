@@ -17594,6 +17594,32 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 #endif
         (void)ds_hash_before_snap; (void)obj_hash_before_snap;
         uint8_t opcode = vm.read_u8();
+        // Stage-1 disassembler ground truth (V2_PC_DUMP=<file>): unique
+        // (template_chunk, pc, opcode) triples actually executed — the
+        // static walker is validated against this live stream.
+        {
+            static int _pd = -1;
+            static const char* _pf = nullptr;
+            if (_pd < 0) { _pf = getenv("V2_PC_DUMP"); _pd = _pf ? 1 : 0; }
+            if (_pd) {
+                static std::set<uint64_t> _seen;
+                static int _dirty = 0;
+                uint16_t tmpl = v2gs(shadow).template_chunk();
+                uint64_t key = ((uint64_t)tmpl << 32) | ((uint32_t)pc_before << 8) | opcode;
+                if (_seen.insert(key).second) _dirty++;
+                if (_dirty >= 256) {
+                    _dirty = 0;
+                    FILE* f = fopen(_pf, "w");
+                    if (f) {
+                        for (uint64_t k : _seen)
+                            fprintf(f, "%04X %04X %02X\n",
+                                    (unsigned)(k >> 32), (unsigned)((k >> 8) & 0xFFFF),
+                                    (unsigned)(k & 0xFF));
+                        fclose(f);
+                    }
+                }
+            }
+        }
         // Orig loc_142A6: MOV si,es:[bx]; AND si,0xFF; SHL si,1 — si enters
         // every handler as opcode*2 (task #15 shadow-register model).
         vm.si_track = (uint16_t)(opcode << 1);

@@ -15,6 +15,31 @@ immediately, so the table is self-validating against the real data.
 """
 import re, json, sys
 
+
+# Operand-fetch helpers and how many bytecode bytes each consumes.
+# (They advance pc inside methods/nested helpers, invisible to pc+=N.)
+FETCH_BYTES = {
+    r'read_u16\(\)': 2,
+    r'read_u8\(\)': 1,
+    r'v2_vm_read_literal\(vm\)': 2,
+    r'v2_vm_read_indirect\(vm\)': 2,
+    r'v2_vm_read_indexed_field\(vm\)': 1,
+    r'v2_vm_read_indexed_field_1995\(vm\)': 1,
+    r'v2_vm_read_indexed_field_15403\(vm\)': 2,
+    r'v2_vm_read_indexed_field_15445\(vm\)': 2,
+    r'v2_vm_bittest_153ea\(vm\)': 3,
+    r'v2_vm_bittest_15403\(vm\)': 2,
+    r'v2_vm_bittest_1542a\(vm\)': 3,
+    r'v2_vm_bittest_15445\(vm\)': 2,
+    r'v2_vm_read_random\(vm\)': 0,
+}
+
+def _op_bytes(body):
+    n = 0
+    for pat, w in FETCH_BYTES.items():
+        n += w * len(re.findall(pat, body))
+    return n
+
 def main():
     src = open('src/sdl/v2_vm.cpp').read()
     assigns = {}
@@ -44,8 +69,7 @@ def main():
             'do_call_jump': len(re.findall(r'v2_vm_do_call_jump\(vm\)', b)),
             # operand fetches advance pc INSIDE these helpers/methods —
             # invisible to pc_adds, must be counted separately:
-            'op_bytes': (2*len(re.findall(r'read_u16\(\)|v2_vm_read_literal\(vm\)|v2_vm_read_indirect\(vm\)', b))
-                        +1*len(re.findall(r'read_u8\(\)|v2_vm_read_indexed_field\(vm\)|v2_vm_read_indexed_field_1995\(vm\)', b))),
+            'op_bytes': _op_bytes(b),
             'body_found': h in bodies,
         }
     json.dump(out, open('tools/data/optable_draft.json', 'w'), indent=1)
