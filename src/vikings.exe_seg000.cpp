@@ -3994,6 +3994,20 @@ locret_10812:
 cs=0x1a2;eip=0x000812; 	J(RETN(0));	// 1042 retn ;~ 01A2:0812
 sub_10813:
 	// 1048
+	// #88 forensics (V2_10813_LOG=1): entry state of the ORIG blink gate —
+	// compared against the v2 mirror's line to find the split verdict.
+	{
+		static int _bl = -1;
+		if (_bl < 0) _bl = getenv("V2_10813_LOG") ? 1 : 0;
+		if (_bl) {
+			extern int v2_dbg_pre_vm_iter;
+			fprintf(stderr, "ORIG-10813[f%d]: flag=%02X act=%04X vx=%04X wx=%04X wy=%04X 3B6=%04X 3B8=%04X\n",
+				v2_dbg_pre_vm_iter, (uint8_t)byte_2aa9a, (uint16_t)word_288a2,
+				*(dw*)(raddr(ds, (uint16_t)((uint16_t)word_288a2 + 0x173D))),
+				(uint16_t)word_28524, (uint16_t)word_28526,
+				(uint16_t)word_28896, (uint16_t)word_28898);
+		}
+	}
 cs=0x1a2;eip=0x000813; 	T(TEST(byte_2aa9a, 0x0FF));	// 1052 test    byte_2AA9A, 0FFh ;~ 01A2:0813
 ret_1a2_818:
 	// 4467

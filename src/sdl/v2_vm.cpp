@@ -5348,6 +5348,20 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
     uint16_t prev = v2gs(shadow).prev_viking();   // word_288A4
 
     uint8_t flag_9a = v2gs(shadow).active_vk_sel_b(); // byte_2AA9A
+    // #88 forensics (V2_10813_LOG=1): entry state of the SHADOW blink gate —
+    // pairs with ORIG-10813 in seg000 to find where the verdicts split.
+    {
+        static int _bl = -1;
+        if (_bl < 0) _bl = getenv("V2_10813_LOG") ? 1 : 0;
+        if (_bl) {
+            extern int v2_dbg_pre_vm_iter;
+            fprintf(stderr, "V2-10813[f%d]: flag=%02X act=%04X vx=%04X wx=%04X wy=%04X 3B6=%04X 3B8=%04X\n",
+                    v2_dbg_pre_vm_iter, flag_9a, active,
+                    *(uint16_t*)(shadow + (uint16_t)(active + OBJ_WORLD_X)),
+                    v2gs(shadow).viewport_x(), v2gs(shadow).viewport_y(),
+                    v2gs(shadow).input_keys(), v2gs(shadow).input_edges());
+        }
+    }
     if (flag_9a == 0) return;          // TEST ...,0xFF; JZ locret_1081C
 
     { uint16_t _lv = v2gs(shadow).level(); static int _dm2=0;
