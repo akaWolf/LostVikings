@@ -1,0 +1,2176 @@
+{
+ "00": {
+  "handler": "v2_vm_op_yield",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": true,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "01": {
+  "handler": "v2_vm_op_nop",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "02": {
+  "handler": "v2_vm_op_sound",
+  "comment": "State operations",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "03": {
+  "handler": "v2_vm_op_jump",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "04": {
+  "handler": "v2_vm_op_sound1",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "05": {
+  "handler": "v2_vm_op_save_alt_pc",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "06": {
+  "handler": "v2_vm_op_load_alt_pc",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "07": {
+  "handler": "v2_vm_op_07",
+  "comment": "sub_1368c: hflip if NOT flipped (opposite of 0x08)",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "08": {
+  "handler": "v2_vm_op_08",
+  "comment": "horizontal flip",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "09": {
+  "handler": "v2_vm_op_09",
+  "comment": "sub_13743: vflip if flag 0x80 NOT set, 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "0A": {
+  "handler": "v2_vm_op_0A",
+  "comment": "sub_13733: vflip if flag 0x80 set, 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "0B": {
+  "handler": "v2_vm_op_0B",
+  "comment": "sub_1369c: unconditional hflip",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "0C": {
+  "handler": "v2_vm_op_0C",
+  "comment": "vertical flip \u2014 full logic",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "0D": {
+  "handler": "v2_vm_op_0D",
+  "comment": "clear bit \u2014 full logic",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "0E": {
+  "handler": "v2_vm_op_0E",
+  "comment": "set bit \u2014 full logic",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "0F": {
+  "handler": "v2_vm_op_exit_with_flag",
+  "comment": "exit VM + flag",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": true,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "10": {
+  "handler": "v2_vm_op_10",
+  "comment": "sub_14327: full sub_13c93 logic",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": true,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "11": {
+  "handler": "v2_vm_op_11",
+  "comment": "sub_14334: sub_15505(self, linked), 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "12": {
+  "handler": "v2_vm_op_12",
+  "comment": "release animation",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "13": {
+  "handler": "v2_vm_op_13",
+  "comment": "sub_1434c: level/palette cmd, 3 bytes, full logic",
+  "pc_adds": [
+   3
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "14": {
+  "handler": "v2_vm_op_14",
+  "comment": "object search/creation",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "15": {
+  "handler": "v2_vm_op_15",
+  "comment": "sub_150fc: relative pos to viking \u2192 2x sub_154bf, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "16": {
+  "handler": "v2_vm_op_16",
+  "comment": "sub_15106: position delta + dual sub_154bf dispatch",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "17": {
+  "handler": "v2_vm_op_17",
+  "comment": "sub_143f2: set 141D=0 + read 2 velocity bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "18": {
+  "handler": "v2_vm_op_18",
+  "comment": "set velocity, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "19": {
+  "handler": "v2_vm_op_19",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "1A": {
+  "handler": "v2_vm_op_1A",
+  "comment": "sub_155d6 (1B) + skip/call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "1B": {
+  "handler": "v2_vm_op_1B",
+  "comment": "sub_143fe: obj0 collision + 2 vel bytes, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "1C": {
+  "handler": "v2_vm_op_1C",
+  "comment": "sub_1443d: [obj+0x1A35] != 0 ? skip : jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "1D": {
+  "handler": "v2_vm_op_1D",
+  "comment": "sub_156c0 (2B) + skip/call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "1E": {
+  "handler": "v2_vm_op_1E",
+  "comment": "sub_1444f: anim load + off_30C8E[0] (sub_158c8 variant)",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "1F": {
+  "handler": "v2_vm_op_1F",
+  "comment": "anim load + off_30C8E[0] (sub_158d7 variant)",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "20": {
+  "handler": "v2_vm_op_20",
+  "comment": "sub_144a9: anim load + off_30C8E[0] (flip-aware sub_158aa/158b9)",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "21": {
+  "handler": "v2_vm_op_21",
+  "comment": "sub_14483: anim load + off_30C8E[0]",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "22": {
+  "handler": "v2_vm_op_22",
+  "comment": "sub_14453: anim load (sub_158c8) + off_30C8E[2]",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "23": {
+  "handler": "v2_vm_op_23",
+  "comment": "anim load + off_30C8E[2] (sub_158d7)",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "24": {
+  "handler": "v2_vm_op_24",
+  "comment": "sub_144ad: flip-aware anim load + off_30C8E[2], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "25": {
+  "handler": "v2_vm_op_25",
+  "comment": "anim load + off_30C8E[2] dispatch",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "26": {
+  "handler": "v2_vm_op_26",
+  "comment": "sub_14edd: 2 mode bytes + 4 dispatches",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "27": {
+  "handler": "v2_vm_op_27",
+  "comment": "sub_14f09: tile lookup + position write, 2 mode bytes",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "28": {
+  "handler": "v2_vm_op_28",
+  "comment": "sub_14f27: tile-aligned position write, 2 modes + dispatches",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "29": {
+  "handler": "v2_vm_op_29",
+  "comment": "sub_15017: tile write + mark dirty, 2 modes + 3 dispatches",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "2A": {
+  "handler": "v2_vm_op_2A",
+  "comment": "sub_15078: set lower tile bits + mark dirty",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "2B": {
+  "handler": "v2_vm_op_2B",
+  "comment": "sub_15039: set upper tile flags, no dirty mark",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "2C": {
+  "handler": "v2_vm_op_2C",
+  "comment": "sub_15f2c: collision search + jump, 3 bytes",
+  "pc_adds": [
+   1,
+   2
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "2D": {
+  "handler": "v2_vm_op_2D",
+  "comment": "sub_15f25: continue collision search, 0 bytes",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "2E": {
+  "handler": "v2_vm_op_2E",
+  "comment": "sub_1522c: collision search params, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "2F": {
+  "handler": "v2_vm_op_2F",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "30": {
+  "handler": "v2_vm_op_30",
+  "comment": "sub_144cf: sub_158e6 flip search + off_30C8E[0], 3 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "31": {
+  "handler": "v2_vm_op_31",
+  "comment": "sub_144d3: sub_158e6 flip-point search + off_30C8E[2]",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "32": {
+  "handler": "v2_vm_op_32",
+  "comment": "sub_15788 (1B) + skip/call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "33": {
+  "handler": "v2_vm_op_33",
+  "comment": "sub_157eb (1B) + skip/call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "34": {
+  "handler": "v2_vm_op_34",
+  "comment": "sub_150b5: find nearest player + position delta",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "35": {
+  "handler": "v2_vm_op_35",
+  "comment": "sub_15e91: collision search ALL objects, 3+1 bytes",
+  "pc_adds": [
+   1,
+   2
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "36": {
+  "handler": "v2_vm_op_36",
+  "comment": "sub_15e8a: search objects + conditional jump",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "37": {
+  "handler": "v2_vm_op_37",
+  "comment": "collision check sub_155d6",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "38": {
+  "handler": "v2_vm_op_38",
+  "comment": "sub_156c0 (2B) + skip/call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "39": {
+  "handler": "v2_vm_op_39",
+  "comment": "sub_145da: skip 3 bytes (byte+word, not stored)",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "3A": {
+  "handler": "v2_vm_op_3A",
+  "comment": "sub_14340: sub_15505(linked, self), 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "3B": {
+  "handler": "v2_vm_op_3B",
+  "comment": "sub_1524a: set sprite params, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "3C": {
+  "handler": "v2_vm_op_3C",
+  "comment": "sub_15838: sub_1584e + ds:0x38E += 2",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "3D": {
+  "handler": "v2_vm_op_3D",
+  "comment": "sub_14532: palette set, 3 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "3E": {
+  "handler": "v2_vm_op_3E",
+  "comment": "sub_14590: clear palette, 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "3F": {
+  "handler": "v2_vm_op_3F",
+  "comment": "sub_145e5: OR 0x4000 on all sub-sprites",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "40": {
+  "handler": "v2_vm_op_40",
+  "comment": "sub_14604: AND 0x9FFF on all sub-sprites",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "41": {
+  "handler": "v2_vm_op_41",
+  "comment": "sub_1242e: text display, full bytecode consumption",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "42": {
+  "handler": "v2_vm_op_42",
+  "comment": "cmd buffer type 2",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "43": {
+  "handler": "v2_vm_op_43",
+  "comment": "sub_1267b: cmd buffer write type=4, 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "44": {
+  "handler": "v2_vm_op_44",
+  "comment": "sub_1246d: text display variant (sub_125fa instead of sub_125a3)",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "45": {
+  "handler": "v2_vm_op_45",
+  "comment": "sub_12634: text display variant (sub_1250b + sub_125fa)",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "46": {
+  "handler": "v2_vm_op_46",
+  "comment": "",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "47": {
+  "handler": "v2_vm_op_nop",
+  "comment": "nullsub_4: NOP, 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "48": {
+  "handler": "v2_vm_op_48",
+  "comment": "sub_14fec: position delta from dispatched coords, 1B+dispatch",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "49": {
+  "handler": "v2_vm_op_49",
+  "comment": "sub_14fc4: X/Y dispatch + anim load + off_30C8E[0]",
+  "pc_adds": [
+   1,
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "4A": {
+  "handler": "v2_vm_op_4A",
+  "comment": "sub_14fc8: same as 0x49 but off_30C8E[2]",
+  "pc_adds": [
+   1,
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "4B": {
+  "handler": "v2_vm_op_4B",
+  "comment": "OR 0x2000 flag \u2014 full logic",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "4C": {
+  "handler": "v2_vm_op_4C",
+  "comment": "sub_14561: set color shading, 3 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "4D": {
+  "handler": "v2_vm_op_4D",
+  "comment": "sub_145b5: clear color shading, 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "4E": {
+  "handler": "v2_vm_op_4E",
+  "comment": "sub_144fd: sub_163ac (tile check) + off_30C8E[0]",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "4F": {
+  "handler": "v2_vm_op_4F",
+  "comment": "sub_14501: sub_163ac tile check + off_30C8E[2], 2 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "50": {
+  "handler": "v2_vm_op_50",
+  "comment": "sub_126a9: text position cmd, 2 mode bytes + dispatches",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 2,
+  "body_found": true
+ },
+ "51": {
+  "handler": "v2_vm_op_load_acc_literal",
+  "comment": "sub_14624",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "52": {
+  "handler": "v2_vm_op_load_acc_indexed",
+  "comment": "sub_1462e",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "53": {
+  "handler": "v2_vm_op_load_acc_indirect",
+  "comment": "sub_14646",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "54": {
+  "handler": "v2_vm_op_load_acc_indexed_1995",
+  "comment": "load acc, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "55": {
+  "handler": "v2_vm_op_55",
+  "comment": "sub_1466e: acc = random (LCG from shadow DS seed), 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "56": {
+  "handler": "v2_vm_op_56",
+  "comment": "store acc to field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "57": {
+  "handler": "v2_vm_op_57",
+  "comment": "store acc to addr, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "58": {
+  "handler": "v2_vm_op_58",
+  "comment": "store acc to indexed+1995, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "59": {
+  "handler": "v2_vm_op_59",
+  "comment": "sub_146de: add acc to indexed field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "5A": {
+  "handler": "v2_vm_op_5A",
+  "comment": "add acc to addr, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "5B": {
+  "handler": "v2_vm_op_5B",
+  "comment": "sub_14721: ADD acc to indexed+1995 field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "5C": {
+  "handler": "v2_vm_op_5C",
+  "comment": "sub_1474b: field -= acc, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "5D": {
+  "handler": "v2_vm_op_5D",
+  "comment": "subtract acc from addr",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "5E": {
+  "handler": "v2_vm_op_5E",
+  "comment": "sub_1478b: SUB acc from indexed+1995 field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "5F": {
+  "handler": "v2_vm_op_5F",
+  "comment": "sub_147a7: AND acc with indexed field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "60": {
+  "handler": "v2_vm_op_60",
+  "comment": "AND acc with addr, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "61": {
+  "handler": "v2_vm_op_61",
+  "comment": "sub_147cb: AND acc with indexed+1995 field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "62": {
+  "handler": "v2_vm_op_62",
+  "comment": "OR field with acc, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "63": {
+  "handler": "v2_vm_op_63",
+  "comment": "sub_147ff: OR acc with ds:[addr], 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "64": {
+  "handler": "v2_vm_op_64",
+  "comment": "sub_1480b: OR acc into indexed+1995 field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "65": {
+  "handler": "v2_vm_op_65",
+  "comment": "sub_14827: XOR acc with indexed field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "66": {
+  "handler": "v2_vm_op_66",
+  "comment": "sub_1483f: XOR acc with ds:[addr], 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "67": {
+  "handler": "v2_vm_op_67",
+  "comment": "AND field with acc, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "68": {
+  "handler": "v2_vm_op_68",
+  "comment": "sub_14867: literal unsigned acc>=val\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "69": {
+  "handler": "v2_vm_op_69",
+  "comment": "sub_14879: indexed (1B), unsigned acc>=val \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "6A": {
+  "handler": "v2_vm_op_6A",
+  "comment": "sub_1488b: unsigned >= indirect, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "6B": {
+  "handler": "v2_vm_op_6B",
+  "comment": "sub_1489d: unsigned >= indexed+1995, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "6C": {
+  "handler": "v2_vm_op_6C",
+  "comment": "sub_148af: unsigned >= random, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "6D": {
+  "handler": "v2_vm_op_6D",
+  "comment": "sub_148c1: literal (2B), unsigned acc<val \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "6E": {
+  "handler": "v2_vm_op_6E",
+  "comment": "sub_148d3: indexed (1B), unsigned acc<val \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "6F": {
+  "handler": "v2_vm_op_6F",
+  "comment": "sub_148e5: unsigned < indirect, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "70": {
+  "handler": "v2_vm_op_70",
+  "comment": "sub_148f7: indexed+1995 (1B), unsigned acc<val \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "71": {
+  "handler": "v2_vm_op_71",
+  "comment": "sub_14909: unsigned < random, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "72": {
+  "handler": "v2_vm_op_72",
+  "comment": "sub_14a0b: literal eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "73": {
+  "handler": "v2_vm_op_73",
+  "comment": "sub_14a1b: indexed eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "74": {
+  "handler": "v2_vm_op_74",
+  "comment": "sub_14a2b: indirect eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "75": {
+  "handler": "v2_vm_op_75",
+  "comment": "sub_14a3b: indexed+1995 (1B), ne \u2192 skip, eq \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "76": {
+  "handler": "v2_vm_op_76",
+  "comment": "sub_14a4b: eq random, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "77": {
+  "handler": "v2_vm_op_77",
+  "comment": "sub_14a5b: literal ne\u2192skip eq\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "78": {
+  "handler": "v2_vm_op_78",
+  "comment": "sub_14a6b: indexed ne\u2192skip eq\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "79": {
+  "handler": "v2_vm_op_79",
+  "comment": "sub_14a7b: indirect eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "7A": {
+  "handler": "v2_vm_op_7A",
+  "comment": "sub_14a8b: indexed+1995 (1B), eq \u2192 skip, ne \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "7B": {
+  "handler": "v2_vm_op_7B",
+  "comment": "sub_14a9b: ne random, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "7C": {
+  "handler": "v2_vm_op_7C",
+  "comment": "signed comparison >= (literal, jump)",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "7D": {
+  "handler": "v2_vm_op_7D",
+  "comment": "sub_14933: signed >= indexed, jump, 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "7E": {
+  "handler": "v2_vm_op_7E",
+  "comment": "sub_1494b: signed >= indirect, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "7F": {
+  "handler": "v2_vm_op_7F",
+  "comment": "sub_14963: indexed+1995 (1B), signed acc>=val \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "80": {
+  "handler": "v2_vm_op_80",
+  "comment": "sub_1497b: random (0B), signed acc>=val \u2192 jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "81": {
+  "handler": "v2_vm_op_81",
+  "comment": "signed >= literal: acc>=val \u2192 skip, acc<val \u2192 jump (opposite of 0x7C)",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "82": {
+  "handler": "v2_vm_op_82",
+  "comment": "signed >= indexed, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "83": {
+  "handler": "v2_vm_op_83",
+  "comment": "sub_149c3: signed < indirect, jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "84": {
+  "handler": "v2_vm_op_84",
+  "comment": "sub_149db: indexed+1995 (1B), signed acc>=val \u2192 skip",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "85": {
+  "handler": "v2_vm_op_85",
+  "comment": "sub_149f3: random (0B), signed acc>=val \u2192 skip",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "86": {
+  "handler": "v2_vm_op_86",
+  "comment": "sub_14aab: literal ne\u2192skip eq\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "87": {
+  "handler": "v2_vm_op_87",
+  "comment": "sub_14abb: indexed field, ne\u2192skip eq\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "88": {
+  "handler": "v2_vm_op_88",
+  "comment": "sub_14acb: indirect ne\u2192skip eq\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "89": {
+  "handler": "v2_vm_op_89",
+  "comment": "ne\u2192skip eq\u2192call-jump indexed+1995",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "8A": {
+  "handler": "v2_vm_op_8A",
+  "comment": "ne\u2192skip eq\u2192call-jump random",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "8B": {
+  "handler": "v2_vm_op_8B",
+  "comment": "sub_14afb: literal eq\u2192skip ne\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "8C": {
+  "handler": "v2_vm_op_8C",
+  "comment": "sub_14b0b: indexed eq\u2192skip ne\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "8D": {
+  "handler": "v2_vm_op_8D",
+  "comment": "eq\u2192skip ne\u2192call-jump indirect",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "8E": {
+  "handler": "v2_vm_op_8E",
+  "comment": "eq\u2192skip ne\u2192call-jump indexed+1995",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "8F": {
+  "handler": "v2_vm_op_8F",
+  "comment": "eq\u2192skip ne\u2192call-jump random",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "90": {
+  "handler": "v2_vm_op_90",
+  "comment": "sub_146d0: conditional ADD/SUB (bit 0x40), 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "91": {
+  "handler": "v2_vm_op_91",
+  "comment": "sub_146f6: hflip \u2192 add/sub acc to addr, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "92": {
+  "handler": "v2_vm_op_92",
+  "comment": "sub_14713: hflip ADD/SUB indexed+1995, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "93": {
+  "handler": "v2_vm_op_93",
+  "comment": "sub_1473d: conditional SUB/ADD (bit 0x40), 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "94": {
+  "handler": "v2_vm_op_94",
+  "comment": "sub_14763: hflip \u2192 sub/add acc to addr (opposite of 0x91)",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "95": {
+  "handler": "v2_vm_op_95",
+  "comment": "sub_1477d: hflip SUB/ADD indexed+1995, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "96": {
+  "handler": "v2_vm_op_96",
+  "comment": "store acc to 0x1995",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "97": {
+  "handler": "v2_vm_op_bit_test",
+  "comment": "sub_14b4b\u2192sub_153ea: bytecode literal bit test",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "98": {
+  "handler": "v2_vm_op_98",
+  "comment": "sub_14b52: load acc from indexed+1995 bit test, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "99": {
+  "handler": "v2_vm_op_bit_test_addr",
+  "comment": "sub_14b59\u2192sub_1542a: ds:[addr] bit test",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "9A": {
+  "handler": "v2_vm_op_bit_test_indexed",
+  "comment": "bit test, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "9B": {
+  "handler": "v2_vm_op_9B",
+  "comment": "sub_14b67: acc = random & 1, 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "9C": {
+  "handler": "v2_vm_op_9C",
+  "comment": "cond acc load + AND/OR field \u2014 full logic",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "9D": {
+  "handler": "v2_vm_op_9D",
+  "comment": "sub_14ba7: conditional mask load, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "9E": {
+  "handler": "v2_vm_op_9E",
+  "comment": "sub_14bcf: conditional mask load, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "9F": {
+  "handler": "v2_vm_op_9F",
+  "comment": "sub_14c09: cond_mask + AND indexed, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A0": {
+  "handler": "v2_vm_op_A0",
+  "comment": "sub_14c37: cond_mask + AND direct addr, 3 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A1": {
+  "handler": "v2_vm_op_A1",
+  "comment": "sub_14c59: cond_mask + ADD indexed+1995, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A2": {
+  "handler": "v2_vm_op_A2",
+  "comment": "sub_14d0f: cond_mask + OR indexed, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A3": {
+  "handler": "v2_vm_op_A3",
+  "comment": "sub_14d3d: conditional OR mask to DS address, 3 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A4": {
+  "handler": "v2_vm_op_A4",
+  "comment": "sub_14d5f: cond_mask + OR indexed+1995, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A5": {
+  "handler": "v2_vm_op_A5",
+  "comment": "sub_14c8d: cond_mask + XOR indexed, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A6": {
+  "handler": "v2_vm_op_A6",
+  "comment": "sub_14cbb: cond_mask + XOR direct addr, 3 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A7": {
+  "handler": "v2_vm_op_A7",
+  "comment": "sub_14cdd: cond_mask + XOR indexed+1995, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A8": {
+  "handler": "v2_vm_op_A8",
+  "comment": "sub_14d91: sub_153ea bit test, ne\u2192skip eq\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "A9": {
+  "handler": "v2_vm_op_A9",
+  "comment": "indexed, ne skip else jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "AA": {
+  "handler": "v2_vm_op_AA",
+  "comment": "sub_14da1: indexed+1995 bit test, ne\u2192skip eq\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "AB": {
+  "handler": "v2_vm_op_AB",
+  "comment": "sub_14dc1: indexed+1995 ne\u2192skip eq\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "AC": {
+  "handler": "v2_vm_op_AC",
+  "comment": "sub_14dd1: random&1 eq\u2192jump, 0+2 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "AD": {
+  "handler": "v2_vm_op_AD",
+  "comment": "sub_14de4: sub_153ea bit test, eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "AE": {
+  "handler": "v2_vm_op_AE",
+  "comment": "sub_14df4: indexed+1995 bit test, eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "AF": {
+  "handler": "v2_vm_op_AF",
+  "comment": "sub_14e04: sub_1542a bit test, eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B0": {
+  "handler": "v2_vm_op_B0",
+  "comment": "sub_14e14: sub_15445 (2B), eq\u2192skip ne\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B1": {
+  "handler": "v2_vm_op_B1",
+  "comment": "sub_14e24: random&1 ne\u2192jump, 0+2 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B2": {
+  "handler": "v2_vm_op_B2",
+  "comment": "sub_14e37: sub_153ea (3B) + cmp acc",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B3": {
+  "handler": "v2_vm_op_B3",
+  "comment": "sub_14e47: sub_15403 bit test, ne\u2192skip eq\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B4": {
+  "handler": "v2_vm_op_B4",
+  "comment": "sub_14e57: addr bit eq\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B5": {
+  "handler": "v2_vm_op_B5",
+  "comment": "sub_14e67: indexed+1995 bit test, ne\u2192skip eq\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B6": {
+  "handler": "v2_vm_op_B6",
+  "comment": "sub_14e77: sub_12312 PRNG + conditional call, 2 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B7": {
+  "handler": "v2_vm_op_B7",
+  "comment": "sub_14e8a: literal bit ne\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B8": {
+  "handler": "v2_vm_op_B8",
+  "comment": "sub_14e9a: sub_15403 indexed bit test + conditional call, 4 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "B9": {
+  "handler": "v2_vm_op_B9",
+  "comment": "sub_14eaa: addr bit ne\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "BA": {
+  "handler": "v2_vm_op_BA",
+  "comment": "sub_14eba: indexed+1995 bit ne\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "BB": {
+  "handler": "v2_vm_op_BB",
+  "comment": "sub_14eca: random&1 ne\u2192call-jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "BC": {
+  "handler": "v2_vm_op_BC",
+  "comment": "sub_14681: SHL8 + store to indexed field, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "BD": {
+  "handler": "v2_vm_op_BD",
+  "comment": "SHL8+store, 2 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "BE": {
+  "handler": "v2_vm_op_BE",
+  "comment": "sub_146af: SHL8+store indexed+1995, 1 byte",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "BF": {
+  "handler": "v2_vm_op_BF",
+  "comment": "sub_1515c: vikings sub_15fb1 + off_30C8E[0], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "C0": {
+  "handler": "v2_vm_op_C0",
+  "comment": "sub_1518a: vikings sub_15fbe + off_30C8E[0], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "C1": {
+  "handler": "v2_vm_op_C1",
+  "comment": "sub_151f2: vikings flip-aware obj + off_30C8E[0], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "C2": {
+  "handler": "v2_vm_op_C2",
+  "comment": "sub_151b8: player-search + off_30C8E[0], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "C3": {
+  "handler": "v2_vm_op_C3",
+  "comment": "sub_15160: vikings sub_15fb1 + off_30C8E[2], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "C4": {
+  "handler": "v2_vm_op_C4",
+  "comment": "sub_1518e: vikings sub_15fbe + off_30C8E[2], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "C5": {
+  "handler": "v2_vm_op_C5",
+  "comment": "sub_151f6: vikings flip-inv obj + off_30C8E[2], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "C6": {
+  "handler": "v2_vm_op_C6",
+  "comment": "sub_151bc: vikings flip obj + off_30C8E[2], 1 byte",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "C7": {
+  "handler": "v2_vm_op_C7",
+  "comment": "sub_15268: write acc to state[idx*14+0], 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "C8": {
+  "handler": "v2_vm_op_C8",
+  "comment": "sub_1527b: write acc to state[idx*14+2], 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "C9": {
+  "handler": "v2_vm_op_C9",
+  "comment": "sub_1529a: AND acc 0xCDFF + state[idx*14+0xA], 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "CA": {
+  "handler": "v2_vm_op_CA",
+  "comment": "sub_152b3: write acc to state[idx*14+0xC], 0 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "CB": {
+  "handler": "v2_vm_op_43",
+  "comment": "sub_1267b: same as 0x43",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "CC": {
+  "handler": "v2_vm_op_CC",
+  "comment": "sub_152de: viewport check (self), within\u2192jump outside\u2192skip2, 2 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "CD": {
+  "handler": "v2_vm_op_CD",
+  "comment": "sub_152ca: viewport check (linked obj), within\u2192jump outside\u2192skip2, 2 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "CE": {
+  "handler": "v2_vm_op_CE",
+  "comment": "sub_152d6: viewport visibility \u2192 skip/jump, 2 bytes",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "CF": {
+  "handler": "v2_vm_op_CF",
+  "comment": "sub_152c6: viewport bounds check, within\u2192skip outside\u2192jump",
+  "pc_adds": [
+   2
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "D0": {
+  "handler": "v2_vm_op_D0",
+  "comment": "sub_15e7c: collision search setup + search, 3 bytes",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "D1": {
+  "handler": "v2_vm_op_D1",
+  "comment": "sub_15f17: collision search setup + search, 3 bytes",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 1,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "D2": {
+  "handler": "v2_vm_op_D2",
+  "comment": "password system",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "D3": {
+  "handler": "v2_vm_op_D3",
+  "comment": "sub_12829: password verify, 0 bytes, full logic",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "D4": {
+  "handler": "v2_vm_op_D4",
+  "comment": "sub_1531c: velocity from position delta, 2+ bytes (mode+threshold+dispatch)",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 1,
+  "body_found": true
+ },
+ "D5": {
+  "handler": "v2_vm_op_D5",
+  "comment": "sub_178d6: sound play, 1 byte consumed (sound skipped for v2)",
+  "pc_adds": [
+   1
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "D6": {
+  "handler": "v2_vm_op_D6",
+  "comment": "sub_178f1: timer delay, 0 bytes (NOP for v2)",
+  "pc_adds": [],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ },
+ "D7": {
+  "handler": "v2_vm_op_D7",
+  "comment": "sub_1787f: sound sequence, 3 bytes consumed (sound skipped)",
+  "pc_adds": [
+   3
+  ],
+  "pc_sets": 0,
+  "exits": false,
+  "operand_reads": 0,
+  "body_found": true
+ }
+}
