@@ -191,7 +191,20 @@ def emit_structured(cid):
         t += 1
         if t > 0x400:
             break
-    for h in sorted(states):
+    # group states by owning template (single-owner), then by the exact
+    # owner set for shared code, then dyn-only strands.
+    own = ls.owners_of_states(cid)
+    groups = {}
+    for h in states:
+        os_ = frozenset(own.get(h, set()))
+        if len(os_) == 1:
+            key = ('t', min(os_), None)
+        elif os_:
+            key = ('shared', min(os_), os_)
+        else:
+            key = ('orphan', 0, None)
+        groups.setdefault(key, []).append(h)
+    def emit_state(h):
         body, guards, end = states[h]
         ek = end[0] if end else 'runoff'
         ent = ('  ; entry ' + ','.join(entry_of[h])) if h in entry_of else ''
@@ -199,6 +212,25 @@ def emit_structured(cid):
         for pc in body:
             out.append(op_line(pc))
         out.append('}')
+    order = {'t': 0, 'shared': 1, 'orphan': 2}
+    for key in sorted(groups, key=lambda k: (order[k[0]], k[1])):
+        heads = sorted(groups[key])
+        if key[0] == 't':
+            t = key[1]
+            o = t * dz.REC
+            spr = struct.unpack_from('<H', d, o)[0]
+            sub = d[o + 2] & 0x7F
+            out.append(f'; ==== template t{t:02X} (sprite={spr:04X} '
+                       f'subsprites={sub}) — {len(heads)} states ====')
+        elif key[0] == 'shared':
+            names = ','.join(f't{t:02X}' for t in sorted(key[2]))
+            if len(names) > 60:
+                names = names[:57] + '...'
+            out.append(f'; ==== shared by {names} — {len(heads)} states ====')
+        else:
+            out.append(f'; ==== dyn-only / unowned states — {len(heads)} ====')
+        for h in heads:
+            emit_state(h)
     # stray decoded ops outside any state body
     for pc in sorted(seen):
         if pc not in in_state:

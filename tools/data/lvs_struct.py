@@ -150,6 +150,59 @@ def lift_states(cid):
         states[h] = (body, guards, end)
     return len(info), states, len(covered)
 
+def owners_of_states(cid):
+    """Propagate template ownership over the object-code graph.
+    Returns {state_head: frozenset(owner_record_indexes)} for lift_states
+    heads, using record P/P+3 roots (the STRICT entry model)."""
+    from collections import deque, defaultdict
+    d, seen, table, entries = lf.full_walk(cid, with_entries=True)
+    info = {}
+    for pc in seen:
+        op = seen[pc][0]
+        info[pc] = dc.decode_info(d, pc, op, table)
+    import struct as st
+    # STRICT owner set: spawn-table/header/viking templates + op_14 operands
+    # (same sources as the walker entries — no blanket grid scan).
+    pt = dz.spawn_entries()
+    tset = set(pt.get(cid, set()))
+    for pc in seen:
+        if seen[pc][0] == 0x14:
+            try:
+                _, tmpls = dz.CUSTOM[0x14](d, pc)
+                tset.update(tmpls)
+            except (KeyError, IndexError):
+                pass
+    own = defaultdict(set)
+    work = deque()
+    for t in sorted(tset):
+        if (t + 1) * dz.REC > len(d):
+            continue
+        P = st.unpack_from('<H', d, t * dz.REC + 3)[0]
+        if 0x600 <= P < len(d):
+            for e in (P, P + 3):
+                if e in seen and t not in own[e]:
+                    own[e].add(t)
+                    work.append((e, t))
+    def succs(pc):
+        ln, kind, tgt = info[pc]
+        out = []
+        if kind in ('fall', 'br') and pc + ln in seen:
+            out.append(pc + ln)
+        if kind == 'srch':
+            for n2 in (pc + ln, pc + ln + 1):
+                if n2 in seen:
+                    out.append(n2)
+        if tgt is not None and tgt in seen:
+            out.append(tgt)
+        return out
+    while work:
+        pc, t = work.popleft()
+        for n2 in succs(pc):
+            if t not in own[n2]:
+                own[n2].add(t)
+                work.append((n2, t))
+    return own
+
 def main():
     if sys.argv[1] == 'states':
         args = [int(a, 16) for a in sys.argv[2:]] or list(range(0x1C1, 0x1C7))
