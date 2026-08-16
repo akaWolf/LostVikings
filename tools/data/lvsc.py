@@ -186,10 +186,31 @@ def cmd_pack(replacements, out_path):
     print(f'packed {out_path}: {len(out)} bytes ({len(replacements)} replaced)')
     return 0
 
+def cmd_locate(path, addr):
+    text = open(path).read()
+    lm = []
+    lf.compile_free(text, line_map=lm)
+    lines = text.splitlines()
+    best = None
+    for lineno, a in lm:
+        if a <= addr and (best is None or a > best[1]):
+            best = (lineno, a)
+    if best is None:
+        print(f'no code line at or before 0x{addr:04X}')
+        return 1
+    lineno, a = best
+    print(f'0x{addr:04X} -> line {lineno} (code starts @0x{a:04X}):')
+    for i in range(max(0, lineno - 2), min(len(lines), lineno + 1)):
+        mark = '>' if i == lineno - 1 else ' '
+        print(f'{mark} {i+1}: {lines[i]}')
+    return 0
+
 def main():
     if sys.argv[1] == 'build':
         cmd_build(sys.argv[2], int(sys.argv[3], 16))
         return 0
+    if sys.argv[1] == 'locate':
+        return cmd_locate(sys.argv[2], int(sys.argv[3], 16))
     if sys.argv[1] == 'pack':
         reps = {}
         out = 'DATA_NEW.DAT'

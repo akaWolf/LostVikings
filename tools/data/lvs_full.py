@@ -489,19 +489,21 @@ def emit_free(cid):
                  for a in sorted(pal_lbls)]
     return '\n'.join(out[:1] + alias_lines + pal_lines + out[1:])
 
-def compile_free(text):
-    """Two-pass sequential assembler for emit_free output."""
+def compile_free(text, line_map=None):
+    """Two-pass sequential assembler for emit_free output.
+    line_map (optional list) receives (source_line_no, addr) pairs for
+    every code line — the lvsc `locate` helper."""
     # pass 1: layout — walk lines in order, assign addresses
     lines = []
-    for line in text.splitlines():
+    for lineno, line in enumerate(text.splitlines(), 1):
         raw = line.split(';', 1)[0].strip()
         if raw:
-            lines.append(raw)
+            lines.append((lineno, raw))
     size = 0
     labels = {}
     cursor = 0
     parsed = []   # (kind, data, length)
-    for raw in lines:
+    for lineno, raw in lines:
         p = raw.split()
         if p[0] == 'chunk':
             size = int(p[3])
@@ -524,7 +526,7 @@ def compile_free(text):
             cursor = max(cursor, addr + len(b))
             parsed.append(('blob', (addr, b), len(b)))
         elif p[0] in ('o', 'a'):
-            parsed.append((p[0], p[1:], 0))
+            parsed.append((p[0], (lineno, p[1:]), 0))
         else:
             raise ValueError(f'free-form: unknown line {raw!r}')
     # sequential address assignment: records occupy the table; code and
@@ -555,7 +557,7 @@ def compile_free(text):
             enc_items.append(('bytes', addr, b))
             continue
         # code line: length = 1 + operands (symbolic/raw word = 2)
-        toks = data
+        lineno, toks = data
         opb = int(toks[0], 16)
         ln = 1
         parts = []
@@ -574,6 +576,8 @@ def compile_free(text):
         for L in pend_labels:
             labels[L] = addr
         pend_labels = []
+        if line_map is not None:
+            line_map.append((lineno, addr))
         enc_items.append(('code', addr, (opb, parts)))
         cursor += ln
     for name, base, off in alias_defs:
