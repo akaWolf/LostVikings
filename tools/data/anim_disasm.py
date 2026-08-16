@@ -39,9 +39,9 @@ ANIM_SCHEME = {
     0x10: ('fixed', 0),   # XOR flags 0x200 (family)
     0x11: ('fixed', 0),   # XOR flags 0x400
     0x12: ('fixed', 0),   # XOR flags 0x600
-    0x13: ('var',),       # set sub-sprite mask
+    0x13: ('var',),       # set sub-sprite mask: unmasked N bytes, masked = hits
     0x14: ('fixed', 1),   # sprite decompression
-    0x15: ('var',),       # sprite type/data setup
+    0x15: ('fixed', 1),   # sprite type/data setup — exactly 1 byte (32DF body)
     0x16: ('fixed', 1),   # skip (dup of 4)
     0x17: ('fixed', 2),   # sprite resource lookup
     0x18: ('fixed', 0),   # 339F (live: always 0 operand bytes)
@@ -50,13 +50,16 @@ ANIM_SCHEME = {
 }
 
 def load_dyn(paths):
+    """V2_ANIM_DUMP rows are (tmpl, bx_before, cmd, bx_after) where
+    bx_before is taken AFTER the dispatcher consumed the cmd byte —
+    the command pc is bx_before-1. Keys below are command pcs."""
     lens = collections.defaultdict(lambda: collections.defaultdict(set))
     pcs = collections.defaultdict(set)
     for path in paths:
         for line in open(path):
             t, b0, cmd, b1 = (int(x, 16) for x in line.split())
-            pcs[t].add(b0)
-            lens[t][b0].add(b1)
+            pcs[t].add(b0 - 1)
+            lens[t][b0 - 1].add(b1)
     return lens, pcs
 
 def walk_anim(cid, entries, dynlens):
