@@ -433,6 +433,7 @@ def emit_free(cid):
     items = kept
     out = []
     alias_lines = []
+    pal_lbls = set()
     base_kind = {a: k for a, k, _ in items}
     for pref, addr, base in aliases:
         bpref = 'S' if base_kind.get(base) == 'op' else 'A'
@@ -459,6 +460,15 @@ def emit_free(cid):
             if op == 0x19:
                 a = struct.unpack_from('<H', body, 0)[0]
                 toks.append(f'A_{a:04X}' if a in an_nodes else f'={a:04X}')
+            elif op == 0x13 and len(body) == 3 and body[0] == 0xD9:
+                # D9 sub-command: symbolic pointer to the 48-byte palette
+                ptr = struct.unpack_from('<H', body, 1)[0]
+                if ptr + 48 <= len(d):
+                    toks.append('d9')
+                    toks.append(f'P_{ptr:04X}')
+                    pal_lbls.add(ptr)
+                else:
+                    toks.append(body.hex())
             elif body:
                 toks.append(body.hex())
             if tgt is not None:
@@ -475,7 +485,9 @@ def emit_free(cid):
             elif body:
                 toks.append(body.hex())
             out.append(' '.join(toks))
-    return '\n'.join(out[:1] + alias_lines + out[1:])
+    pal_lines = [f'P_{a:04X} = @{a:04X}  ; 48-byte palette block'
+                 for a in sorted(pal_lbls)]
+    return '\n'.join(out[:1] + alias_lines + pal_lines + out[1:])
 
 def compile_free(text):
     """Two-pass sequential assembler for emit_free output."""
@@ -501,6 +513,8 @@ def compile_free(text):
         elif raw.endswith(':') and len(p) == 1:
             labels[p[0][:-1]] = None   # resolved when next code line lands
             parsed.append(('label', p[0][:-1], 0))
+        elif len(p) == 3 and p[1] == '=' and p[2].startswith('@'):
+            labels[p[0]] = int(p[2][1:], 16)   # absolute label (data anchor)
         elif len(p) == 3 and p[1] == '=' and '+' in p[2]:
             base, off = p[2].split('+')
             parsed.append(('alias', (p[0], base, int(off)), 0))
@@ -546,7 +560,7 @@ def compile_free(text):
         ln = 1
         parts = []
         for tok in toks[1:]:
-            if tok.startswith(('S_', 'A_')):
+            if tok.startswith(('S_', 'A_', 'P_')):
                 ln += 2
                 parts.append(tok)
             elif tok.startswith('='):
