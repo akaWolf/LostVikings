@@ -81,6 +81,55 @@ def emit(cid):
         i = j
     return '\n'.join(out)
 
+ANIM_MN = {
+    0x00: 'frame+', 0x01: 'frame_set(masked)', 0x02: 'sfx', 0x03: 'jump',
+    0x04: 'skip1', 0x05: 'loop_start', 0x06: 'loop_back', 0x07: 'dx',
+    0x08: 'x_abs[]', 0x09: 'dy', 0x0A: 'y_abs[]', 0x0B: 'int3',
+    0x0C: 'layer_bits', 0x0D: 'mask', 0x0E: 'end_frame', 0x0F: 'delay_exit',
+    0x10: 'xor200', 0x11: 'xor400', 0x12: 'xor600', 0x13: 'submask_set',
+    0x14: 'sprite_load', 0x15: 'sprite_setup', 0x16: 'skip1b', 0x17: 'res_lookup',
+    0x18: 'f339F', 0x19: 'f33DE', 0x1A: 'end_anim',
+}
+
+def anim_layer(cid):
+    """Anim-VM instructions with resolved lengths.
+    Returns {pc: (cmd, length, kind, tgt)}; unresolved VARs are absent."""
+    import importlib.util as iu
+    sp = iu.spec_from_file_location('ad', 'tools/data/anim_disasm.py')
+    ad = iu.module_from_spec(sp)
+    sp.loader.exec_module(ad)
+    import glob as g
+    dynlens, dynpcs = ad.load_dyn(g.glob('/tmp/animdump/*.txt'))
+    table = dz.load_draft()
+    pt = dz.spawn_entries()
+    _, _, _, _, _, _, anim_entries = dz.walk(cid, pt.get(cid, set()), table)
+    entries = set(anim_entries) | dynpcs.get(cid, set())
+    d, seen, stops = ad.walk_anim(cid, entries, dynlens.get(cid, {}))
+    out = {}
+    lens = dynlens.get(cid, {})
+    for pc, cmd in seen.items():
+        sch = ad.ANIM_SCHEME.get(cmd)
+        if sch is None:
+            continue
+        kind = sch[0]
+        if kind == 'fixed':
+            out[pc] = (cmd, 1 + sch[1], 'fall', None)
+        elif kind in ('jump', 'loopstart'):
+            tgt = struct.unpack_from('<H', d, pc + 1)[0] if pc + 3 <= len(d) else None
+            out[pc] = (cmd, 3, kind, tgt)
+        elif kind == 'loopback':
+            out[pc] = (cmd, 1, 'loopback', None)
+        elif kind == 'stop':
+            out[pc] = (cmd, 1 + sch[1], 'stop', None)
+        elif kind == 'var':
+            nxts = lens.get(pc)
+            if nxts and len(nxts) == 1:
+                ln = next(iter(nxts)) - pc
+                if 0 < ln <= 64:
+                    out[pc] = (cmd, ln, 'fall', None)
+            # ambiguous / unmeasured VAR lengths stay as blob bytes
+    return out
+
 def emit_structured(cid):
     import importlib.util as iu
     sp = iu.spec_from_file_location('ls', 'tools/data/lvs_struct.py')
@@ -136,6 +185,21 @@ def emit_structured(cid):
     for pc in sorted(seen):
         if pc not in in_state:
             out.append(op_line(pc, indent=''))
+    # anim-VM layer: instructions whose bytes are not already claimed by
+    # object code (overlap impossible in practice; guard anyway)
+    anims = anim_layer(cid)
+    an_lines = []
+    for pc in sorted(anims):
+        cmd, ln, kind, tgt = anims[pc]
+        if any((pc + i) in covered for i in range(ln)):
+            continue
+        for i in range(pc, pc + ln):
+            covered.add(i)
+        raw = d[pc+1:pc+ln].hex()
+        mn = ANIM_MN.get(cmd, f'a{cmd:02X}')
+        t = f'  ; {mn} -> A_{tgt:04X}' if tgt is not None else f'  ; {mn}'
+        an_lines.append(f'an @{pc:04X} {cmd:02X} {raw}{t}')
+    out.extend(an_lines)
     i = rec_end
     while i < len(d):
         if i in covered:
@@ -175,7 +239,7 @@ def compile_lvs(text):
             struct.pack_into('<HB', img, o, spr, fl)
             struct.pack_into('<H', img, o + 3, code)
             img[o+5:o+5+len(rest)] = rest
-        elif p[0] == 'op':
+        elif p[0] == 'op' or p[0] == 'an':
             pc = int(p[1][1:], 16)
             op = int(p[2], 16)
             body = b''
