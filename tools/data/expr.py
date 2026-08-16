@@ -87,6 +87,35 @@ EXPR = {
     0xA9: ('bit_fld', 'when acc == bit(self.{1} & {0})'),
     0xAB: ('bit_pfld_br', 'when acc == bit(partner.{1} & {0})'),
     0xAD: ('bit_lit', 'when acc == bit({1} & {0})'),
+    # wave 2 — every body read from v2_vm.cpp before entry:
+    0x08: ('none', 'hflip if self.flags&0x40'),       # sub_1367c
+    0x0B: ('none', 'hflip'),                          # sub_1369c unconditional
+    0x1C: ('none', 'when self.anim_timer == 0'),      # sub_1443d (br, 0 operand)
+    0x2F: ('none', 'anim_step'),                      # interp_1303a + tail_135cf
+    0x46: ('imm16', 'cmdq_push(6, {0})'),             # v2_vm_op_46
+    0x4B: ('none', 'self.flags |= 0x2000'),
+    0x54: ('pfld', 'acc = partner.{0}'),
+    0x5F: ('fld', 'self.{0} &= acc'),
+    0x60: ('mem16', '[{0}] &= acc'),
+    0x62: ('fld', 'self.{0} |= acc'),
+    0x66: ('mem16', '[{0}] ^= acc'),
+    0x6D: ('imm16', 'when acc <u {0}'),               # unsigned <
+    0x7C: ('imm16s', 'when acc >=s {0}'),             # signed >= jumps
+    0x81: ('imm16s', 'when acc <s {0}'),              # signed >= skips
+    0x82: ('fld', 'when acc <s self.{0}'),
+    0x8B: ('imm16', 'call when acc != {0}'),
+    0x96: ('none', 'self.partner = acc'),
+    0x98: ('bit_fld_ld', 'acc = bit(self.{1} & {0})'),  # bittest_15403 load
+    0xA8: ('bit_lit', 'when acc == bit({1} & {0})'),
+    0xB2: ('bit_lit', 'call when acc == bit({1} & {0})'),
+    # collision family: 1 filter byte, always bit_idx += 2, hit -> call-jump
+    0x1A: ('imm8', 'call when coll_155d6_vik(f={0})'),
+    0x1D: ('imm8', 'call when coll_156c0_vik(f={0})'),
+    0x32: ('imm8', 'call when coll_15788(f={0})'),
+    0x33: ('imm8', 'call when coll_up_157eb(f={0})'),
+    0x37: ('imm8', 'call when coll_155d6(f={0})'),
+    0x38: ('imm8', 'call when coll_156c0(f={0})'),
+    0x3C: ('imm8', 'call when coll_down_1584e(f={0})'),
 }
 
 def render(op, body, lay):
@@ -98,8 +127,13 @@ def render(op, body, lay):
     def imm(v):
         return str(v) if v <= 9 else f'0x{v:X}'
     try:
+        if kind == 'none':
+            return tpl
         if kind == 'imm16':
             return tpl.format(imm(struct.unpack_from('<H', body, 0)[0]))
+        if kind == 'imm16s':
+            v = struct.unpack_from('<H', body, 0)[0]
+            return tpl.format(v - 0x10000 if v >= 0x8000 else v)
         if kind == 'imm8':
             return tpl.format(imm(body[0]))
         if kind in ('fld', 'pfld'):
@@ -116,7 +150,7 @@ def render(op, body, lay):
         if kind == 'bit_mem':
             return tpl.format(f'0x{bit_mask(body[0]):X}',
                               mem_name(struct.unpack_from('<H', body, 1)[0], lay))
-        if kind in ('bit_fld', 'bit_pfld', 'bit_pfld_br'):
+        if kind in ('bit_fld', 'bit_pfld', 'bit_pfld_br', 'bit_fld_ld'):
             return tpl.format(f'0x{bit_mask(body[0]):X}', field_name(body[1]))
         if kind == 'maskfld':
             return tpl.format(f'0x{bit_mask(body[0]):X}',
