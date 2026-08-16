@@ -81,12 +81,78 @@ def emit(cid):
         i = j
     return '\n'.join(out)
 
+def emit_structured(cid):
+    import importlib.util as iu
+    sp = iu.spec_from_file_location('ls', 'tools/data/lvs_struct.py')
+    ls = iu.module_from_spec(sp)
+    sp.loader.exec_module(ls)
+    d, seen, table = full_walk(cid)
+    n, states, cov = ls.lift_states(cid)
+    out = [f'chunk {cid:04X} size {len(d)}']
+    first_code = min(seen) if seen else len(d)
+    nrec = first_code // dz.REC
+    for t in range(nrec):
+        o = t * dz.REC
+        spr, fl = struct.unpack_from('<HB', d, o)
+        code = struct.unpack_from('<H', d, o + 3)[0]
+        rest = d[o+5:o+dz.REC].hex()
+        out.append(f'record {t:02X} sprite={spr:04X} flags={fl:02X} '
+                   f'code={code:04X} rest={rest}')
+    rec_end = nrec * dz.REC
+    covered = set()
+    for pc in seen:
+        for i in range(pc, pc + seen[pc][1]):
+            covered.add(i)
+    in_state = set()
+    for h, (body, guards, end) in states.items():
+        for pc in body:
+            in_state.add(pc)
+    def op_line(pc, indent='  '):
+        op = seen[pc][0]
+        ln, kind, tgt = dc.decode_info(d, pc, op, table)
+        ob_end = pc + ln - (2 if (kind in ('br', 'jmp', 'srch') and tgt is not None) else 0)
+        raw = d[pc+1:ob_end].hex()
+        mn = dz.mnemonic(op, table)
+        if kind in ('br', 'srch') and tgt is not None:
+            return f'{indent}op @{pc:04X} {op:02X} {raw} T{tgt:04X}  ; when {mn} -> S_{tgt:04X}'
+        if kind == 'jmp' and tgt is not None:
+            return f'{indent}op @{pc:04X} {op:02X} {raw} T{tgt:04X}  ; -> S_{tgt:04X}'
+        return f'{indent}op @{pc:04X} {op:02X} {raw}  ; {mn}'
+    for h in sorted(states):
+        body, guards, end = states[h]
+        ek = end[0] if end else 'runoff'
+        out.append(f'state S_{h:04X} {{  ; end={ek}')
+        for pc in body:
+            out.append(op_line(pc))
+        out.append('}')
+    # stray decoded ops outside any state body
+    for pc in sorted(seen):
+        if pc not in in_state:
+            out.append(op_line(pc, indent=''))
+    i = rec_end
+    while i < len(d):
+        if i in covered:
+            i += 1
+            continue
+        j = i
+        while j < len(d) and j not in covered:
+            j += 1
+        out.append(f'blob @{i:04X} {d[i:j].hex()}')
+        i = j
+    return '\n'.join(out)
+
 def compile_lvs(text):
     img = None
     size = 0
     for line in text.splitlines():
         line = line.strip()
         if not line:
+            continue
+        if line.startswith(';'):
+            continue
+        if ';' in line:
+            line = line.split(';', 1)[0].strip()
+        if line.startswith('state ') or line == '}' or not line:
             continue
         p = line.split()
         if p[0] == 'chunk':
@@ -126,6 +192,18 @@ def main():
     mode = sys.argv[1]
     if mode == 'emit':
         print(emit(int(sys.argv[2], 16)))
+    elif mode == 'emit2':
+        print(emit_structured(int(sys.argv[2], 16)))
+    elif mode == 'roundtrip2':
+        cid = int(sys.argv[2], 16)
+        text = emit_structured(cid)
+        img = compile_lvs(text)
+        orig = open(f'assets_raw/chunks/dec/{cid:04d}.bin', 'rb').read()
+        ok = img == orig
+        ndiff = sum(1 for a, b in zip(img, orig) if a != b)
+        print(f'0x{cid:X}: structured_roundtrip={ok} diff_bytes={ndiff} '
+              f'lines={len(text.splitlines())}')
+        return 0 if ok else 1
     elif mode == 'roundtrip':
         cid = int(sys.argv[2], 16)
         text = emit(cid)
