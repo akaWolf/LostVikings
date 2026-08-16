@@ -74,3 +74,60 @@ Modes 6/7 are write-back escapes — kept as explicit low-level nodes
 byte-for-byte (same record table, same code layout — layout hints are
 carried as `@0x13DB`-style anchors emitted by the decompiler until the
 byte-identity stage is retired in favor of behavioral golden).
+
+## Implemented format — .lvs v1 (anchored, states + expressions)
+
+What `tools/data/lvs_full.py emit2` produces today and `compile_lvs`
+compiles back byte-identically (proof: `roundtrip2` on all six chunks,
+`diff_bytes=0`). Everything after `;` is comment — the compiler uses
+only the anchored tokens, so the whole readability layer is free.
+
+```
+chunk 01C1 size 48972
+record 00 sprite=FFFE flags=01 code=3850 rest=<hex>   ; 0x15-byte record
+state S_3853 {  ; end=yield  ; entry t00.spawn
+  op @3853 51 0000  ; acc = 0
+  op @3856 73 16 T3863  ; when acc == self.spawn_pool -> S_3863
+  op @385A 00   ; yield
+}
+an @2618 14 00  ; sprite 0
+an @261A 0F 02  ; delay 2; end_frame
+blob @0607 <hex>              ; data tables / dead code / unmeasured VARs
+```
+
+Line grammar (compiler side):
+- `chunk HEX size N` — allocates the image.
+- `record T sprite=W flags=B code=W rest=<hex>` — one template record.
+- `op @PC OP [operand-hex] [Ttgt]` — object-code instruction; `Ttgt`
+  re-encodes as the trailing LE word (branch/jump target).
+- `an @PC CMD [operand-hex]` — anim-VM instruction; jump targets live
+  inside the operand bytes (no T token).
+- `blob @ADDR <hex>` — raw span (byte identity for everything the
+  walkers don't claim).
+- `state NAME {` / `}` — structural grouping, stripped by the compiler.
+
+Readability layers (comment-only, sourced from verified models):
+- Object operands render via `tools/data/expr.py`: 100% of the walked
+  corpus (54.9k instructions) — acc forms, `when` conditions, bit
+  tests with masks resolved from the static-DS LUTs (fields
+  `0x9346+idx`, masks `0x93CC`, clears `0x93EC`), channel operands
+  (`spawn(t, x, y, pool, fl)`, `probe_at`, tile/text/aim forms).
+- Field names come from `LUT16[(idx-0x6CBA)&0xFFFF]+0x14E5` mapped
+  through the `OBJ_*` constants of `src/sdl/v2_ds_layout.h`; global
+  addresses through the phase-D layout names.
+- State heads = record entries (P/P+3) + every control-flow target;
+  ends are `yield` (next tick state), `exit`, `goto`, `fallinto`
+  (shared tails), `edge` (dead tail past dyn coverage).
+- Anim lengths: fixed from the handler bodies; VAR commands
+  (01/08/0A/0C/13) take uniquely-measured lengths from the
+  V2_ANIM_DUMP corpus (`bx_before-1` is the command pc). Unmeasured or
+  ambiguous VAR sites stay inside blobs — lengths are never guessed
+  (the 08/0A `2*max(1,subcnt)` ownership model validates 251/252
+  against dyn but over-approximates owners, so it is not applied).
+
+Known non-goals of v1 (roadmap for v2):
+- Free-form layout (no `@` anchors) — needs a relocating assembler for
+  code and the record table.
+- Semantic state names (`S_walk` instead of `S_3853`).
+- Data-table decoding of the remaining blobs (14-byte records with
+  `db13` markers, palette blocks).
