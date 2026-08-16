@@ -258,7 +258,10 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
         off = t2 * REC + 3
         if off + 2 <= len(d):
             pc = struct.unpack_from('<H', d, off)[0]
-            if pc < len(d):
+            # same >=0x600 gate as the record scan: smaller P values point
+            # into the record table itself (non-code templates) and would
+            # seed phantom strands over record bytes.
+            if 0x600 <= pc < len(d):
                 entries[pc] = f'tmpl_{t2:02X}'
                 if pc + 3 < len(d):
                     entries.setdefault(pc + 3, f'tmpl_{t2:02X}+3')
@@ -304,7 +307,7 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
             ln, _ = CUSTOM_BR[op](d, pc)
             seen[pc] = (op, ln)
             tgt = struct.unpack_from('<H', d, pc + ln - 2)[0]
-            if 0 < tgt < len(d):
+            if 0x600 <= tgt < len(d):  # code never lives in the record zone
                 push(tgt, pc)
             push(pc + ln, pc)
             continue
@@ -313,7 +316,7 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
             seen[pc] = (op, ln)
             if kind in ('jmp', 'br', 'srch') and toff is not None and pc + toff + 2 <= len(d):
                 tgt = struct.unpack_from('<H', d, pc + toff)[0]
-                if 0 < tgt < len(d):
+                if 0x600 <= tgt < len(d):  # code never lives in the record zone
                     push(tgt, pc)
             if kind in ('fall', 'br'):
                 push(pc + ln, pc)
@@ -326,7 +329,7 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
             seen[pc] = (op, ln)
             if kind in ('jmp', 'br') and toff is not None and pc + toff + 2 <= len(d):
                 tgt = struct.unpack_from('<H', d, pc + toff)[0]
-                if 0 < tgt < len(d):
+                if 0x600 <= tgt < len(d):  # code never lives in the record zone
                     push(tgt, pc)
             if kind in ('fall', 'br'):
                 push(pc + ln, pc)

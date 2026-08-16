@@ -268,6 +268,290 @@ def emit_structured(cid):
         i = j
     return '\n'.join(out)
 
+def emit_free(cid):
+    """v2 free-form: NO @ anchors on code. Every byte of the chunk is
+    emitted in address order (records, op/an lines, blobs); branch and
+    jump targets are symbolic (S_xxxx / A_xxxx); op 19 anim operands
+    are symbolic too. compile_free lays elements out sequentially and
+    resolves labels in a second pass — an unedited emit_free text must
+    rebuild the chunk byte-identically."""
+    text = emit_structured(cid)
+    d, seen, table = full_walk(cid)
+    # collect label sets: object targets (S_) and anim targets (A_)
+    obj_lbl = set()
+    an_lbl = set()
+    items = []   # (addr, kind, payload)
+    for line in text.splitlines():
+        raw = line.split(';', 1)[0].strip()
+        if not raw:
+            continue
+        p = raw.split()
+        if p[0] == 'chunk':
+            items.append((0, 'chunk', raw))
+        elif p[0] == 'record':
+            items.append((int(p[1], 16) * dz.REC, 'record', raw))
+        elif p[0] == 'op':
+            pc = int(p[1][1:], 16)
+            op = int(p[2], 16)
+            body = b''
+            tgt = None
+            for tok in p[3:]:
+                if tok.startswith('T'):
+                    tgt = int(tok[1:], 16)
+                else:
+                    body = bytes.fromhex(tok)
+            if tgt is not None:
+                obj_lbl.add(tgt)
+            if op == 0x19:
+                an_lbl.add(struct.unpack_from('<H', body, 0)[0])
+            items.append((pc, 'op', (pc, op, body, tgt)))
+        elif p[0] == 'an':
+            pc = int(p[1][1:], 16)
+            cmd = int(p[2], 16)
+            body = bytes.fromhex(p[3]) if len(p) > 3 else b''
+            if cmd in (0x03, 0x05) and len(body) == 2:
+                an_lbl.add(struct.unpack_from('<H', body, 0)[0])
+            items.append((pc, 'an', (pc, cmd, body)))
+        elif p[0] == 'blob':
+            items.append((int(p[1][1:], 16), 'blob', raw))
+    an_nodes = {addr for addr, kind, _ in items if kind == 'an'}
+    # record code= targets are labels too
+    recs = [it for it in items if it[1] == 'record']
+    for _, _, raw in recs:
+        code = int(raw.split()[4].split('=')[1], 16)
+        if code in seen:
+            obj_lbl.add(code)
+    items.sort(key=lambda x: x[0])
+    # overlap resolution: keep the first frame per byte; overlapped
+    # secondary frames are not emitted (their bytes are already owned) —
+    # referenced ones become alias labels into the owning line.
+    owner = {}       # byte addr -> (owner_addr, owner_kind)
+    kept = []
+    aliases = []     # (label_prefix, addr, owner_addr)
+    def span_of(addr, kind, payload):
+        if kind == 'op':
+            pc, op, body, tgt = payload
+            return 1 + len(body) + (2 if tgt is not None else 0)
+        if kind == 'an':
+            pc, cmd, body = payload
+            return 1 + len(body)
+        return 0
+    dropped_tail = set()   # bytes of dropped frames beyond their owner
+    for addr, kind, payload in items:
+        if kind in ('op', 'an'):
+            ln = span_of(addr, kind, payload)
+            if any((addr + i) in owner for i in range(ln)):
+                lblset = obj_lbl if kind == 'op' else an_lbl
+                if addr in lblset:
+                    aliases.append(('S' if kind == 'op' else 'A',
+                                    addr, owner[addr]))
+                for i in range(ln):   # tail bytes the owner chain misses
+                    if (addr + i) not in owner:
+                        dropped_tail.add(addr + i)
+                continue
+            for i in range(ln):
+                owner[addr + i] = addr
+                dropped_tail.discard(addr + i)
+        kept.append((addr, kind, payload))
+    # re-emit still-uncovered dropped-tail bytes as anchored mini-blobs
+    for a in sorted(dropped_tail):
+        if a in owner:
+            continue
+        b = a
+        while b + 1 in dropped_tail and b + 1 not in owner:
+            b += 1
+        span = bytes(d[a:b+1])
+        kept.append((a, 'blob', f'blob @{a:04X} {span.hex()}'))
+        for i in range(a, b + 1):
+            owner[i] = a
+    kept.sort(key=lambda x: x[0])
+    items = kept
+    out = []
+    alias_lines = []
+    base_kind = {a: k for a, k, _ in items}
+    for pref, addr, base in aliases:
+        bpref = 'S' if base_kind.get(base) == 'op' else 'A'
+        alias_lines.append(f'{pref}_{addr:04X} = {bpref}_{base:04X}+{addr-base}')
+        if base_kind.get(base) == 'op':
+            obj_lbl.add(base)
+        else:
+            an_lbl.add(base)
+    for addr, kind, payload in items:
+        if kind == 'chunk':
+            out.append(payload)
+        elif kind == 'record':
+            p = payload.split()
+            code = int(p[4].split('=')[1], 16)
+            p[4] = f'code=S_{code:04X}' if code in seen else f'code=={code:04X}'
+            out.append(' '.join(p))
+        elif kind == 'blob':
+            out.append(payload)
+        elif kind == 'op':
+            pc, op, body, tgt = payload
+            if pc in obj_lbl:
+                out.append(f'S_{pc:04X}:')
+            toks = [f'o {op:02X}']
+            if op == 0x19:
+                a = struct.unpack_from('<H', body, 0)[0]
+                toks.append(f'A_{a:04X}' if a in an_nodes else f'={a:04X}')
+            elif body:
+                toks.append(body.hex())
+            if tgt is not None:
+                toks.append(f'S_{tgt:04X}' if tgt in seen else f'={tgt:04X}')
+            out.append(' '.join(toks))
+        elif kind == 'an':
+            pc, cmd, body = payload
+            if pc in an_lbl:
+                out.append(f'A_{pc:04X}:')
+            toks = [f'a {cmd:02X}']
+            if cmd in (0x03, 0x05) and len(body) == 2:
+                a = struct.unpack_from('<H', body, 0)[0]
+                toks.append(f'A_{a:04X}' if a in an_nodes else f'={a:04X}')
+            elif body:
+                toks.append(body.hex())
+            out.append(' '.join(toks))
+    return '\n'.join(out[:1] + alias_lines + out[1:])
+
+def compile_free(text):
+    """Two-pass sequential assembler for emit_free output."""
+    # pass 1: layout — walk lines in order, assign addresses
+    lines = []
+    for line in text.splitlines():
+        raw = line.split(';', 1)[0].strip()
+        if raw:
+            lines.append(raw)
+    size = 0
+    labels = {}
+    cursor = 0
+    parsed = []   # (kind, data, length)
+    for raw in lines:
+        p = raw.split()
+        if p[0] == 'chunk':
+            size = int(p[3])
+            parsed.append(('chunk', None, 0))
+        elif p[0] == 'record':
+            t = int(p[1], 16)
+            cursor = max(cursor, (t + 1) * dz.REC)
+            parsed.append(('record', p, 0))
+        elif raw.endswith(':') and len(p) == 1:
+            labels[p[0][:-1]] = None   # resolved when next code line lands
+            parsed.append(('label', p[0][:-1], 0))
+        elif len(p) == 3 and p[1] == '=' and '+' in p[2]:
+            base, off = p[2].split('+')
+            parsed.append(('alias', (p[0], base, int(off)), 0))
+        elif p[0] == 'blob':
+            addr = int(p[1][1:], 16)
+            b = bytes.fromhex(p[2]) if len(p) > 2 else b''
+            cursor = max(cursor, addr + len(b))
+            parsed.append(('blob', (addr, b), len(b)))
+        elif p[0] in ('o', 'a'):
+            parsed.append((p[0], p[1:], 0))
+        else:
+            raise ValueError(f'free-form: unknown line {raw!r}')
+    # sequential address assignment: records occupy the table; code and
+    # blobs advance a cursor in file order. blobs are anchored (data),
+    # so the cursor jumps to their addr; code fills the gaps in between.
+    img = bytearray(size)
+    cursor = 0
+    pend_labels = []
+    enc_items = []
+    alias_defs = []
+    for kind, data, _ in parsed:
+        if kind == 'chunk':
+            continue
+        if kind == 'alias':
+            alias_defs.append(data)
+            continue
+        if kind == 'record':
+            t = int(data[1], 16)
+            cursor = max(cursor, (t + 1) * dz.REC)
+            enc_items.append(('record', data, None))
+            continue
+        if kind == 'label':
+            pend_labels.append(data)
+            continue
+        if kind == 'blob':
+            addr, b = data
+            cursor = max(cursor, addr + len(b))
+            enc_items.append(('bytes', addr, b))
+            continue
+        # code line: length = 1 + operands (symbolic/raw word = 2)
+        toks = data
+        opb = int(toks[0], 16)
+        ln = 1
+        parts = []
+        for tok in toks[1:]:
+            if tok.startswith(('S_', 'A_')):
+                ln += 2
+                parts.append(tok)
+            elif tok.startswith('='):
+                ln += 2
+                parts.append(struct.pack('<H', int(tok[1:], 16)))
+            else:
+                b = bytes.fromhex(tok)
+                ln += len(b)
+                parts.append(b)
+        addr = cursor
+        for L in pend_labels:
+            labels[L] = addr
+        pend_labels = []
+        enc_items.append(('code', addr, (opb, parts)))
+        cursor += ln
+    for name, base, off in alias_defs:
+        labels[name] = labels[base] + off
+    # collision check: sequential code must never run into an anchored
+    # element (records/blobs) — that means an edit overflowed a gap.
+    taken = bytearray(size)
+    for item in enc_items:
+        if item[0] == 'record':
+            t = int(item[1][1], 16)
+            a, ln = t * dz.REC, dz.REC
+        elif item[0] == 'bytes':
+            a, ln = item[1], len(item[2])
+        else:
+            a = item[1]
+            opb, parts = item[2]
+            ln = 1 + sum(2 if isinstance(p, str) else len(p) for p in parts)
+        for i in range(a, a + ln):
+            if i >= size:
+                raise ValueError(f'element @{a:04X}+{ln} beyond chunk size')
+            if taken[i]:
+                raise ValueError(f'layout collision at 0x{i:04X} '
+                                 f'(code overflowed into an anchored element?)')
+            taken[i] = 1
+    # pass 2: encode
+    for item in enc_items:
+        if item[0] == 'record':
+            p = item[1]
+            t = int(p[1], 16)
+            o = t * dz.REC
+            spr = int(p[2].split('=')[1], 16)
+            fl = int(p[3].split('=')[1], 16)
+            cs = p[4].split('=', 1)[1]
+            if cs.startswith('S_'):
+                code = labels[cs]
+            elif cs.startswith('='):
+                code = int(cs[1:], 16)
+            else:
+                code = int(cs, 16)
+            rest = bytes.fromhex(p[5].split('=')[1])
+            struct.pack_into('<HB', img, o, spr, fl)
+            struct.pack_into('<H', img, o + 3, code)
+            img[o+5:o+5+len(rest)] = rest
+        elif item[0] == 'bytes':
+            _, addr, b = item
+            img[addr:addr+len(b)] = b
+        else:
+            _, addr, (opb, parts) = item
+            enc = bytes([opb])
+            for prt in parts:
+                if isinstance(prt, bytes):
+                    enc += prt
+                else:
+                    enc += struct.pack('<H', labels[prt])
+            img[addr:addr+len(enc)] = enc
+    return bytes(img)
+
 def compile_lvs(text):
     img = None
     size = 0
@@ -321,6 +605,18 @@ def main():
         print(emit(int(sys.argv[2], 16)))
     elif mode == 'emit2':
         print(emit_structured(int(sys.argv[2], 16)))
+    elif mode == 'emit3':
+        print(emit_free(int(sys.argv[2], 16)))
+    elif mode == 'roundtrip3':
+        cid = int(sys.argv[2], 16)
+        text = emit_free(cid)
+        img = compile_free(text)
+        orig = open(f'assets_raw/chunks/dec/{cid:04d}.bin', 'rb').read()
+        ok = img == orig
+        ndiff = sum(1 for a, b in zip(img, orig) if a != b)
+        print(f'0x{cid:X}: free_roundtrip={ok} diff_bytes={ndiff} '
+              f'lines={len(text.splitlines())}')
+        return 0 if ok else 1
     elif mode == 'roundtrip2':
         cid = int(sys.argv[2], 16)
         text = emit_structured(cid)
