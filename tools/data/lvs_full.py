@@ -86,8 +86,12 @@ def emit_structured(cid):
     sp = iu.spec_from_file_location('ls', 'tools/data/lvs_struct.py')
     ls = iu.module_from_spec(sp)
     sp.loader.exec_module(ls)
+    sp2 = iu.spec_from_file_location('ex', 'tools/data/expr.py')
+    ex = iu.module_from_spec(sp2)
+    sp2.loader.exec_module(ex)
     d, seen, table = full_walk(cid)
     n, states, cov = ls.lift_states(cid)
+    LAY = dz.load_layout_names()
     out = [f'chunk {cid:04X} size {len(d)}']
     first_code = min(seen) if seen else len(d)
     nrec = first_code // dz.REC
@@ -111,10 +115,13 @@ def emit_structured(cid):
         op = seen[pc][0]
         ln, kind, tgt = dc.decode_info(d, pc, op, table)
         ob_end = pc + ln - (2 if (kind in ('br', 'jmp', 'srch') and tgt is not None) else 0)
-        raw = d[pc+1:ob_end].hex()
-        mn = dz.mnemonic(op, table)
+        body = d[pc+1:ob_end]
+        raw = body.hex()
+        e = ex.render(op, body, LAY)
+        mn = e if e is not None else dz.mnemonic(op, table)
         if kind in ('br', 'srch') and tgt is not None:
-            return f'{indent}op @{pc:04X} {op:02X} {raw} T{tgt:04X}  ; when {mn} -> S_{tgt:04X}'
+            pre = mn if e is not None else f'when {mn}'
+            return f'{indent}op @{pc:04X} {op:02X} {raw} T{tgt:04X}  ; {pre} -> S_{tgt:04X}'
         if kind == 'jmp' and tgt is not None:
             return f'{indent}op @{pc:04X} {op:02X} {raw} T{tgt:04X}  ; -> S_{tgt:04X}'
         return f'{indent}op @{pc:04X} {op:02X} {raw}  ; {mn}'
