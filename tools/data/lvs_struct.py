@@ -122,7 +122,7 @@ def lift_states(cid):
         pc = h
         steps = 0
         end = None
-        while pc in info and steps < 512:
+        while pc in info and steps < 4096:
             if pc in covered and pc != h:
                 end = ('fallinto', pc)
                 break
@@ -142,6 +142,9 @@ def lift_states(cid):
             if kind in ('br', 'srch') and tgt is not None:
                 guards.append((pc, tgt))
             pc += ln
+        if end is None:
+            # strand ran into undecoded bytes (dead tail past dyn coverage)
+            end = ('edge', pc)
         states[h] = (body, guards, end)
     return len(info), states, len(covered)
 
