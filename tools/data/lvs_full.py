@@ -205,6 +205,46 @@ def emit_structured(cid):
             out.append(op_line(pc, indent=''))
     # anim-VM layer: instructions whose bytes are not already claimed by
     # object code (overlap impossible in practice; guard anyway)
+    def an_expr(cmd, body, tgt):
+        if cmd == 0x00 and body:
+            return f'frame += {body[0]}'
+        if cmd == 0x02 and len(body) == 2:
+            return f'sfx {struct.unpack_from("<H", body)[0] & 0xFF}'
+        if cmd == 0x03:
+            return f'-> A_{tgt:04X}'
+        if cmd == 0x05:
+            return f'loop {{ -> A_{tgt:04X}'
+        if cmd == 0x06:
+            return '} loop_back'
+        if cmd in (0x04, 0x16) and body:
+            return f'skip({body[0]:02X})'
+        if cmd == 0x07 and body:
+            v = body[0] - 256 if body[0] >= 128 else body[0]
+            return f'dx {v:+d}'
+        if cmd == 0x09 and body:
+            v = body[0] - 256 if body[0] >= 128 else body[0]
+            return f'dy {v:+d}'
+        if cmd in (0x08, 0x0A) and len(body) % 2 == 0 and body:
+            vals = struct.unpack_from(f'<{len(body)//2}h', body)
+            ax = 'x' if cmd == 0x08 else 'y'
+            return f'{ax}_abs {list(vals)}'
+        if cmd == 0x0D and body:
+            return f'mask = 0x{body[0]:X}'
+        if cmd == 0x0F and body:
+            return f'delay {body[0]}; end_frame'
+        if cmd == 0x14 and body:
+            return f'sprite {body[0]}'
+        if cmd == 0x15 and body:
+            return f'subtype {body[0]}'
+        if cmd == 0x17 and len(body) == 2:
+            return f'res_lookup {struct.unpack_from("<H", body)[0]:04X}'
+        if cmd == 0x01 and body:
+            return f'frame_set(masked) [{",".join(str(b) for b in body)}]'
+        if cmd == 0x13 and body:
+            return f'submask_set [{",".join(f"0x{b:X}" for b in body)}]'
+        if cmd == 0x0C and body:
+            return f'layer_bits [{",".join(str(b) for b in body)}]'
+        return ANIM_MN.get(cmd, f'a{cmd:02X}')
     anims = anim_layer(cid)
     an_lines = []
     for pc in sorted(anims):
@@ -213,10 +253,8 @@ def emit_structured(cid):
             continue
         for i in range(pc, pc + ln):
             covered.add(i)
-        raw = d[pc+1:pc+ln].hex()
-        mn = ANIM_MN.get(cmd, f'a{cmd:02X}')
-        t = f'  ; {mn} -> A_{tgt:04X}' if tgt is not None else f'  ; {mn}'
-        an_lines.append(f'an @{pc:04X} {cmd:02X} {raw}{t}')
+        body = d[pc+1:pc+ln]
+        an_lines.append(f'an @{pc:04X} {cmd:02X} {body.hex()}  ; {an_expr(cmd, body, tgt)}')
     out.extend(an_lines)
     i = rec_end
     while i < len(d):
