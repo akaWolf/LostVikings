@@ -8181,7 +8181,7 @@ static const uint16_t v2_psnap_watch[] = {
     OBJ_HALF_W,  // half_width
     OBJ_HALF_H,  // half_height
     OBJ_ANIM_SUB,  // Y_top
-    OBJ_ANIM_IDX,  // health
+    OBJ_ANIM_IDX,  // anim record idx (bit15 set = dead/none; HUD reads the sign only)
     OBJ_SPAWN_POOL,  // anim flags (sub_13e52 init source)
     0x18AD,  // animation pc (current bytecode position)
     0x18D5,  // animation seg

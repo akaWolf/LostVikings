@@ -109,7 +109,7 @@ constexpr uint16_t OBJ_ALT_PC        = 0x137D; // saved call-jump return PC
 constexpr uint16_t OBJ_COLL_BITS     = 0x13F5; // collision result bits (per bit-index)
 constexpr uint16_t OBJ_X_PREV        = 0x13A5; // previous-frame world X (backup before velocity apply)
 constexpr uint16_t OBJ_Y_PREV        = 0x13CD; // previous-frame world Y
-constexpr uint16_t OBJ_ANIM_TABLE    = 0x141D; // anim state table selector
+constexpr uint16_t OBJ_ANIM_TABLE    = 0x141D; // collision-lock/owner word: 0xFFFF free; op_17 writes 0, sub_137xx 0x100, op_1B obj0=self, op_18 =partner; 155xx scans skip non-FFFF
 constexpr uint16_t OBJ_WIDTH         = 0x1445; // sprite width (anim header byte 9)
 constexpr uint16_t OBJ_HEIGHT        = 0x146D; // sprite height (anim header byte 0xA)
 constexpr uint16_t OBJ_HALF_H        = 0x1495; // half-height (despawn bounds check y±hh)
