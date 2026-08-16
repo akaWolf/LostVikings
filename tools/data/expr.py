@@ -149,7 +149,45 @@ EXPR = {
     0x84: ('pfld', 'when acc <s partner.{0}'),
     0x91: ('mem16', '[{0}] ±= acc by hflip'),
     0x9D: ('maskmem', '[{2}] = [{2}] & {1} | (acc? {0} : 0)'),
+    # wave 5:
+    0x0C: ('none', 'vflip'),                          # sub_13757
+    0x1E: ('imm8', 'when probe_up0({0})'),            # 158c8 + 30C8E[0]
+    0x43: ('none', 'cmdq_push(4)'),
+    0xCB: ('none', 'cmdq_push(4)'),                   # sub_1267b = op_43
+    0x5E: ('pfld', 'partner.{0} -= acc'),
+    0x69: ('fld', 'when acc >=u self.{0}'),
+    0x70: ('pfld', 'when acc <u partner.{0}'),
+    0x75: ('pfld', 'when acc == partner.{0}'),
+    0x7A: ('pfld', 'when acc != partner.{0}'),
+    0x83: ('mem16', 'when acc <s [{0}]'),
+    0xAE: ('bit_fld', 'when acc != bit(self.{1} & {0})'),
+    0xB8: ('bit_fld', 'call when acc != bit(self.{1} & {0})'),
+    0xC2: ('imm8', 'when scan_side_vik({0})'),        # 15dfd ±bbox_x, vik-only
+    0x9E: ('maskpfld', 'partner.{2} = partner.{2} & {1} | (acc? {0} : 0)'),
+    # wave 6:
+    0x09: ('none', 'vflip if !(self.flags&0x80)'),
+    0x17: ('vel', 'anim_tbl=0; vel {0},{1}'),
+    0x24: ('imm8', 'when probe_l/r_fix({0})'),        # like 20 but fixed carry
+    0x28: None,                                       # channel+setter — custom
+    0x3B: ('imm16', 'shake_y({0})'),
+    0x3F: ('none', 'subsprites: fl|=0x4000, dirty|=0x200'),
+    0x40: ('none', 'subsprites: fl&=0x9FFF, dirty=2'),
+    0x4E: ('imm8', 'when !platform0(f={0})'),         # 163ac + 30C8E[0]
+    0x67: ('pfld', 'partner.{0} ^= acc'),
+    0x6E: ('fld', 'when acc <u self.{0}'),
+    0x7F: ('pfld', 'when acc >=s partner.{0}'),
+    0x87: ('fld', 'call when acc == self.{0}'),
+    0x89: ('pfld', 'call when acc == partner.{0}'),
+    0x90: ('fld', 'self.{0} ±= acc by hflip'),        # !flip add / flip sub
+    0x93: ('fld', 'self.{0} ∓= acc by hflip'),        # !flip sub / flip add
+    0xB0: ('bit_pfld_br', 'when acc != bit(partner.{1} & {0})'),
+    0xBC: ('fld', 'acc <<= 8; self.{0} = acc'),
+    0xC7: ('none', 'spawn_rec[+0] = acc'),
+    0xC8: ('none', 'spawn_rec[+2] = acc'),
+    0xC9: ('none', 'spawn_rec[+A] = acc &= 0xCDFF'),
+    0xCA: ('none', 'spawn_rec[+C] = acc'),
 }
+EXPR = {k: v for k, v in EXPR.items() if v is not None}
 
 # ---- channel-operand ops (30C98 getter pairs) --------------------------
 CH_LEN = {0: 2, 1: 1, 2: 2, 3: 1, 4: 0, 5: 0, 6: 1, 7: 2}
@@ -189,9 +227,111 @@ def ch_pair(body, o, lay):
         return None, None, None
     return a, b, o + lb
 
+SET_LEN = {1: 1, 2: 2, 3: 1, 5: 0}
+
+def set_render(chan, body, o, lay):
+    """Setter channel (154bf): lhs text. Returns (text, bytes) or (None, None)."""
+    if chan == 1:
+        return f'self.{field_name(body[o])}', 1
+    if chan == 2:
+        return f'[{mem_name(struct.unpack_from("<H", body, o)[0], lay)}]', 2
+    if chan == 3:
+        return f'partner.{field_name(body[o])}', 1
+    if chan == 5:
+        return 'drop', 0
+    return None, None
+
+def set_pair(body, o, lay):
+    """setter mode byte at o, then setters (m&7), (m>>3)&7."""
+    m = body[o]
+    o += 1
+    a, la = set_render(m & 7, body, o, lay)
+    if a is None:
+        return None, None, None
+    o += la
+    b, lb = set_render((m >> 3) & 7, body, o, lay)
+    if b is None:
+        return None, None, None
+    return a, b, o + lb
+
+DELTA_SRC = {0x15: 'active_vik', 0x16: 'partner', 0x34: 'nearest_vik'}
+
 def render_channels(op, body, lay):
     """op 14 (spawn) / 49,4A (probe at pos): channel-pair operands."""
     try:
+        if op in DELTA_SRC:
+            a, b, o = set_pair(body, 0, lay)
+            if a is None or o != len(body): return None
+            return f'{a}, {b} = delta({DELTA_SRC[op]})'
+        if op in (0x29, 0x2A, 0x2B, 0x50):
+            x, y, o = ch_pair(body, 0, lay)
+            if x is None: return None
+            m2 = body[o]
+            o += 1
+            v, lv = ch_render(m2 & 7, body, o, lay)
+            if v is None or o + lv != len(body): return None
+            if op == 0x29:
+                return f'tile[{x},{y}] = {v}'
+            if op == 0x2A:
+                return f'tile[{x},{y}] = hi10 | {v}'
+            if op == 0x2B:
+                return f'tile[{x},{y}] = lo | (swap({v})<<2)&0xFC00'
+            return f'cmdq_push(8, x={x}, y={y}, p={v})'
+        if op == 0xD4:
+            x, y, o = ch_pair(body, 0, lay)
+            if x is None or o + 1 != len(body): return None
+            return f'aim(x={x}, y={y}, thr={body[o]})'
+        if op in (0x41, 0x44):
+            w0 = body[0]
+            o = 1
+            a, la = ch_render(w0 & 7, body, o, lay)
+            if a is None: return None
+            o += la
+            b, lb = ch_render((w0 >> 3) & 7, body, o, lay)
+            if b is None: return None
+            o += lb
+            x, y, o = ch_pair(body, o, lay)
+            if x is None or o != len(body): return None
+            what = 'text' if op == 0x41 else 'text_menu'
+            return f'{what}(id={a}, edge={b}, x={x}, y={y})'
+        if op == 0x45:
+            w0 = body[0]
+            o = 1
+            a, la = ch_render(w0 & 7, body, o, lay)
+            if a is None: return None
+            o += la
+            x, y, o = ch_pair(body, o, lay)
+            if x is None or o != len(body): return None
+            return f'cmdq_push(0xA, id={a}, x={x}, y={y})'
+        if op == 0x61:
+            return f'partner.{field_name(body[0])} &= acc'
+        if op == 0x65:
+            return f'self.{field_name(body[0])} ^= acc'
+        if op == 0x48:
+            x, y, o = ch_pair(body, 0, lay)
+            if x is None or o != len(body): return None
+            return f'vel_to(x={x}, y={y})'
+        if op in (0x26, 0x28):
+            a, b, o = ch_pair(body, 0, lay)
+            if a is None: return None
+            m2 = body[o]
+            o += 1
+            l1, u1 = set_render(m2 & 7, body, o, lay)
+            if l1 is None: return None
+            o += u1
+            l2, u2 = set_render((m2 >> 3) & 7, body, o, lay)
+            if l2 is None or o + u2 != len(body): return None
+            if op == 0x26:
+                return f'{l1} = {a}>>4; {l2} = {b}>>4'
+            return f'{l1} = ({a}&~0xF)|8; {l2} = ({b}&~0xF)|8'
+        if op == 0x27:
+            a, b, o = ch_pair(body, 0, lay)
+            if a is None: return None
+            m2 = body[o]
+            o += 1
+            l1, u1 = set_render(m2 & 7, body, o, lay)
+            if l1 is None or o + u1 != len(body): return None
+            return f'{l1} = tile_type({a}, {b})'
         if op == 0x14:
             x, y, o = ch_pair(body, 0, lay)
             if x is None: return None
@@ -211,7 +351,8 @@ def render_channels(op, body, lay):
 
 def render(op, body, lay):
     """body = raw operand bytes (target word excluded). Returns str or None."""
-    if op in (0x14, 0x49, 0x4A):
+    if op in (0x14, 0x49, 0x4A, 0x48, 0x26, 0x27, 0x28, 0x15, 0x16, 0x34,
+              0x29, 0x2A, 0x2B, 0x50, 0x41, 0x44, 0x45, 0x61, 0x65, 0xD4):
         return render_channels(op, body, lay)
     e = EXPR.get(op)
     if e is None:
@@ -254,6 +395,9 @@ def render(op, body, lay):
             return tpl.format(f'0x{bit_mask(body[0]):X}',
                               f'0x{bit_clear(body[0]):X}',
                               mem_name(struct.unpack_from('<H', body, 1)[0], lay))
+        if kind == 'maskpfld':
+            return tpl.format(f'0x{bit_mask(body[0]):X}',
+                              f'0x{bit_clear(body[0]):X}', field_name(body[1]))
     except (struct.error, IndexError):
         return None
     return None
