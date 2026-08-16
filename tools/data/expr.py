@@ -110,11 +110,11 @@ EXPR = {
     0xB2: ('bit_lit', 'call when acc == bit({1} & {0})'),
     # collision family: 1 filter byte, always bit_idx += 2, hit -> call-jump
     0x1A: ('imm8', 'call when coll_155d6_vik(f={0})'),
-    0x1D: ('imm8', 'call when coll_156c0_vik(f={0})'),
+    0x1D: ('imm16', 'call when coll_156c0_vik(class={0})'),
     0x32: ('imm8', 'call when coll_15788(f={0})'),
     0x33: ('imm8', 'call when coll_up_157eb(f={0})'),
     0x37: ('imm8', 'call when coll_155d6(f={0})'),
-    0x38: ('imm8', 'call when coll_156c0(f={0})'),
+    0x38: ('imm16', 'call when coll_156c0(class={0})'),
     0x3C: ('imm8', 'call when coll_down_1584e(f={0})'),
     # wave 3:
     0x0E: ('none', 'bits[0x356+sub>>3] |= 1<<(sub&7)'),  # OBJ_ANIM_SUB mark
@@ -139,7 +139,7 @@ EXPR = {
     0x2E: ('imm16', 'shake_x({0})'),                  # src/gate split of the word
     0x30: ('imm8', 'when probe_front(f={0})'),        # 158e6, carry -> jump
     0x3A: ('none', 'res_deduct(partner)'),            # same body as 12
-    0x4F: ('imm8', 'when !platform(f={0})'),          # 163ac, no-carry -> jump
+    0x4F: ('none', 'when !platform'),                 # 163ac, no-carry -> jump
     0x55: ('none', 'acc = random()'),
     0x63: ('mem16', '[{0}] |= acc'),
     0x64: ('pfld', 'partner.{0} |= acc'),
@@ -172,7 +172,7 @@ EXPR = {
     0x3B: ('imm16', 'shake_y({0})'),
     0x3F: ('none', 'subsprites: fl|=0x4000, dirty|=0x200'),
     0x40: ('none', 'subsprites: fl&=0x9FFF, dirty=2'),
-    0x4E: ('imm8', 'when !platform0(f={0})'),         # 163ac + 30C8E[0]
+    0x4E: ('none', 'when !platform0'),                # 163ac (0 operand bytes)
     0x67: ('pfld', 'partner.{0} ^= acc'),
     0x6E: ('fld', 'when acc <u self.{0}'),
     0x7F: ('pfld', 'when acc >=s partner.{0}'),

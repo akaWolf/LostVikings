@@ -38,13 +38,13 @@ OPERAND_SCHEMES = {
     0x10: (1, 'stop', None),  # despawn + exit VM
     0x1A: (4, 'br', 2),       # collision probe (155d6, always 1B) + call-jump
     0x32: (4, 'br', 2),       # collision probe (15788, always 1B) + call-jump
-    0x1D: (4, 'br', 2),       # collision probe variant
+    0x1D: (5, 'br', 3),       # collision probe (156c0 vik-limit: 2-BYTE class filter, all phases)
     0x33: (4, 'br', 2),       # collision probe UP (157eb, 1B inside helper)
     0x37: (4, 'br', 2),       # collision probe (155d6)
-    0x38: (4, 'br', 2),       # collision probe (156c0)
+    0x38: (5, 'br', 3),       # collision probe (156c0: 2-BYTE class filter word, all phases)
     0x3C: (4, 'br', 2),       # collision probe DOWN (1584e, 1B inside helper)
-    0x4E: (4, 'br', 2),       # platform check (163ac, 1B inside) + 30C8E[0]
-    0x4F: (4, 'br', 2),       # platform check (163ac, 1B inside), fixed carry
+    0x4E: (3, 'br', 1),       # platform check (163ac reads NO bytes) + 30C8E[0]
+    0x4F: (3, 'br', 1),       # platform check (163ac reads NO bytes), fixed carry
     0x2C: (4, 'srch', 2),     # obj search fwd: 1B filter + word tgt; no-match skips the 2D continuation byte
     0xD0: (4, 'br', 2),       # viking search (no extra INC)
     0xD1: (4, 'srch', 2),     # viking search: same skip-the-continuation shape
