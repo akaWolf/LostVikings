@@ -278,16 +278,37 @@ def emit_structured(cid):
             return f'layer_bits [{",".join(str(b) for b in body)}]'
         return ANIM_MN.get(cmd, f'a{cmd:02X}')
     anims = anim_layer(cid)
-    an_lines = []
+    aown = ls.anim_owners(cid, anims)
+    agroups = {}
     for pc in sorted(anims):
         cmd, ln, kind, tgt = anims[pc]
         if any((pc + i) in covered for i in range(ln)):
             continue
         for i in range(pc, pc + ln):
             covered.add(i)
+        os_ = frozenset(aown.get(pc, set()))
+        if len(os_) == 1:
+            key = ('t', min(os_), None)
+        elif os_:
+            key = ('shared', min(os_), os_)
+        else:
+            key = ('orphan', 0, None)
         body = d[pc+1:pc+ln]
-        an_lines.append(f'an @{pc:04X} {cmd:02X} {body.hex()}  ; {an_expr(cmd, body, tgt)}')
-    out.extend(an_lines)
+        agroups.setdefault(key, []).append(
+            (pc, f'an @{pc:04X} {cmd:02X} {body.hex()}  ; {an_expr(cmd, body, tgt)}'))
+    aorder = {'t': 0, 'shared': 1, 'orphan': 2}
+    for key in sorted(agroups, key=lambda k: (aorder[k[0]], k[1])):
+        rows = sorted(agroups[key])
+        if key[0] == 't':
+            out.append(f'; ==== anim of t{key[1]:02X} — {len(rows)} cmds ====')
+        elif key[0] == 'shared':
+            names = ','.join(f't{t:02X}' for t in sorted(key[2]))
+            if len(names) > 60:
+                names = names[:57] + '...'
+            out.append(f'; ==== anim shared by {names} — {len(rows)} cmds ====')
+        else:
+            out.append(f'; ==== anim dyn-only/unowned — {len(rows)} cmds ====')
+        out.extend(r for _, r in rows)
     # data annotations: op 13 sub D9 points at a 48-byte palette block
     pal_at = {}
     for pc in seen:

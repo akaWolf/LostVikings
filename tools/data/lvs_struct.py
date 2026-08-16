@@ -203,6 +203,45 @@ def owners_of_states(cid):
                 work.append((n2, t))
     return own
 
+def anim_owners(cid, anims):
+    """Owner sets for anim pcs: op_19 sites donate their owners to their
+    operand pc; propagation over the anim graph via the resolved lengths
+    in `anims` ({pc: (cmd, len, kind, tgt)})."""
+    from collections import deque, defaultdict
+    import struct as st
+    d, seen, table, entries = lf.full_walk(cid, with_entries=True)
+    own = owners_of_states(cid)
+    aown = defaultdict(set)
+    work = deque()
+    for pc in seen:
+        if seen[pc][0] == 0x19 and pc + 3 <= len(d):
+            a = st.unpack_from('<H', d, pc + 1)[0]
+            for t in own.get(pc, set()):
+                if t not in aown[a]:
+                    aown[a].add(t)
+                    work.append((a, t))
+    def asuccs(pc):
+        e = anims.get(pc)
+        if e is None:
+            return []
+        cmd, ln, kind, tgt = e
+        out = []
+        if kind == 'fall':
+            out.append(pc + ln)
+        elif kind in ('jump', 'loopstart'):
+            if tgt is not None:
+                out.append(tgt)
+            if kind == 'loopstart':
+                out.append(pc + 3)
+        return [x for x in out if x in anims]
+    while work:
+        pc, t = work.popleft()
+        for n2 in asuccs(pc):
+            if t not in aown[n2]:
+                aown[n2].add(t)
+                work.append((n2, t))
+    return aown
+
 def main():
     if sys.argv[1] == 'states':
         args = [int(a, 16) for a in sys.argv[2:]] or list(range(0x1C1, 0x1C7))
