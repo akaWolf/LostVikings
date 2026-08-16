@@ -186,6 +186,63 @@ EXPR = {
     0xC8: ('none', 'spawn_rec[+2] = acc'),
     0xC9: ('none', 'spawn_rec[+A] = acc &= 0xCDFF'),
     0xCA: ('none', 'spawn_rec[+C] = acc'),
+    # waves 7-8:
+    0x0A: ('none', 'vflip if self.flags&0x80'),
+    0x1B: ('vel', 'obj0.anim_tbl=self; obj0.vel {0},{1}'),
+    0x25: ('imm8', 'when probe_r/l2({0})'),           # like 21 but 30C8E[2]
+    0x31: ('imm8', 'when probe_front2({0})'),         # 158e6 + 30C8E[2]
+    0x3E: ('none', 'pal_shade_off'),
+    0x4C: ('rgb', 'pal_shade2({0},{1},{2})'),
+    0x4D: ('none', 'pal_shade2_off'),
+    0x6B: ('pfld', 'when acc >=u partner.{0}'),
+    0x6C: ('none', 'when acc >=u random()'),
+    0x6F: ('mem16', 'when acc <u [{0}]'),
+    0x76: ('none', 'when acc == random()'),
+    0x7E: ('mem16', 'when acc >=s [{0}]'),
+    0x80: ('none', 'when acc >=s random()'),
+    0x8D: ('mem16', 'call when acc != [{0}]'),
+    0x92: ('pfld', 'partner.{0} ±= acc by hflip'),    # 5B/5E dispatch
+    0x95: ('pfld', 'partner.{0} ∓= acc by hflip'),    # flip? 5B : 5E
+    0x94: ('mem16', '[{0}] ∓= acc by hflip'),         # inverse of 91
+    0x9B: ('none', 'acc = random()&1'),
+    0xA5: ('maskfld2', 'self.{1} ^= (acc? {0} : 0)'),
+    0xAF: ('bit_mem', 'when acc != bit([{1}] & {0})'),
+    0xB4: ('bit_mem', 'call when acc == bit([{1}] & {0})'),
+    0xB5: ('bit_pfld_br', 'call when acc != bit(partner.{1} & {0})'),
+    0xBD: ('mem16', 'acc <<= 8; [{0}] = acc'),
+    0xBE: ('pfld', 'acc <<= 8; partner.{0} = acc'),
+    0xBF: ('imm8', 'when scan_up_vik(f={0})'),
+    0xC1: ('imm8', 'when scan_x_vik(flip?right:left, f={0})'),
+    0xC5: ('imm8', 'when !scan_x_vik(flip?right:left, f={0})'),
+    0xCD: ('none', 'when in_viewport(partner)'),
+    0xCE: ('none', 'when !in_viewport(self)'),
+    0xD2: ('none', 'pw_chars = password[level]'),
+    # final wave — corpus renders 100%:
+    0x11: ('none', 'res_deduct(partner)'),            # same body as 12/3A
+    0x39: ('none', '(discard 3 bytes)'),              # reads b+w, no effect
+    0x47: ('none', 'nop47'),                          # nullsub_4
+    0x7B: ('none', 'when acc != random()'),
+    0x71: ('none', 'when acc <u random()'),
+    0x85: ('none', 'when acc <s random()'),
+    0x86: ('imm16', 'call when acc == {0}'),
+    0x8E: ('pfld', 'call when acc != partner.{0}'),
+    0x8F: ('none', 'call when acc != random()'),
+    0xA0: ('maskmem2', '[{1}] &= (acc? {0} : 0)'),
+    0xA3: ('maskmem2', '[{1}] |= (acc? {0} : 0)'),
+    0xA4: ('maskpfld2', 'partner.{1} |= (acc? {0} : 0)'),
+    0xA7: ('maskpfld2', 'partner.{1} ^= (acc? {0} : 0)'),
+    0xAC: ('none', 'when acc == random()&1'),
+    0xB6: ('none', 'when acc == rng17()&1'),
+    0xB9: ('bit_mem', 'call when acc != bit([{1}] & {0})'),
+    0xBB: ('none', 'call when acc != random()&1'),
+    0xC3: ('imm8', 'when !scan_up_vik(f={0})'),       # carry -> skip
+    0xC4: ('imm8', 'when !scan_down_vik(f={0})'),
+    0xC6: ('imm8', 'when !scan_x_vik(flip?left:right, f={0})'),
+    0xCF: ('none', 'when !in_viewport(partner)'),
+    0xD3: ('none', 'level_load = find_password(pw); cmd_active = !found'),
+    0xD5: ('none', 'music_start (1B pad)'),
+    0xD7: ('imm8', 'sfx_stop_slots({0}) (2B pad)'),
+    0x13: ('op13', None),
 }
 EXPR = {k: v for k, v in EXPR.items() if v is not None}
 
@@ -361,6 +418,12 @@ def render(op, body, lay):
     def imm(v):
         return str(v) if v <= 9 else f'0x{v:X}'
     try:
+        if kind == 'op13':
+            sub = body[0]
+            names = {0xD9: 'pal_src = es[ptr]', 0x11: 'menu_bg_reset',
+                     0x01: 'quit_game'}
+            n = names.get(sub, f'op13 sub={sub:02X}')
+            return f'{n} ({body.hex()})'
         if kind == 'none':
             return tpl
         if kind == 'imm16':
@@ -398,6 +461,13 @@ def render(op, body, lay):
         if kind == 'maskpfld':
             return tpl.format(f'0x{bit_mask(body[0]):X}',
                               f'0x{bit_clear(body[0]):X}', field_name(body[1]))
+        if kind == 'maskfld2':
+            return tpl.format(f'0x{bit_mask(body[0]):X}', field_name(body[1]))
+        if kind == 'maskmem2':
+            return tpl.format(f'0x{bit_mask(body[0]):X}',
+                              mem_name(struct.unpack_from('<H', body, 1)[0], lay))
+        if kind == 'maskpfld2':
+            return tpl.format(f'0x{bit_mask(body[0]):X}', field_name(body[1]))
     except (struct.error, IndexError):
         return None
     return None

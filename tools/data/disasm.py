@@ -39,8 +39,12 @@ OPERAND_SCHEMES = {
     0x1A: (4, 'br', 2),       # collision probe (155d6, always 1B) + call-jump
     0x32: (4, 'br', 2),       # collision probe (15788, always 1B) + call-jump
     0x1D: (4, 'br', 2),       # collision probe variant
+    0x33: (4, 'br', 2),       # collision probe UP (157eb, 1B inside helper)
     0x37: (4, 'br', 2),       # collision probe (155d6)
     0x38: (4, 'br', 2),       # collision probe (156c0)
+    0x3C: (4, 'br', 2),       # collision probe DOWN (1584e, 1B inside helper)
+    0x4E: (4, 'br', 2),       # platform check (163ac, 1B inside) + 30C8E[0]
+    0x4F: (4, 'br', 2),       # platform check (163ac, 1B inside), fixed carry
     0x2C: (4, 'srch', 2),     # obj search fwd: 1B filter + word tgt; no-match skips the 2D continuation byte
     0xD0: (4, 'br', 2),       # viking search (no extra INC)
     0xD1: (4, 'srch', 2),     # viking search: same skip-the-continuation shape
@@ -53,6 +57,16 @@ OPERAND_SCHEMES = {
     0x13: (4, 'fall', None),  # sub-cmd byte + 2 param bytes; body always pc+=3
     0x61: (2, 'fall', None),  # partner.field &= acc (v2_field_addr_A: 1 idx byte)
     0x65: (2, 'fall', None),  # self.field ^= acc (v2_field_addr_B: 1 idx byte)
+    0x5B: (2, 'fall', None),  # partner.field += acc (indexed_1995_target: 1B)
+    0x5E: (2, 'fall', None),  # partner.field -= acc (indexed_1995_target: 1B)
+    0x64: (2, 'fall', None),  # partner.field |= acc (indexed_1995_target: 1B)
+    0xBE: (2, 'fall', None),  # acc<<=8; partner.field = acc (1995_target: 1B)
+    0x9E: (3, 'fall', None),  # [mask_idx][field_idx] mask-merge on partner
+    0x90: (2, 'fall', None),  # self.field +/- acc by hflip (146de/1474b: 1B)
+    0x93: (2, 'fall', None),  # self.field -/+ acc by hflip (1B in helper)
+    0x92: (2, 'fall', None),  # partner.field +/- acc by hflip (op_5B/5E: 1B)
+    0x95: (2, 'fall', None),  # partner.field -/+... (flip? op_5B : op_5E, 1B)
+    0x17: (3, 'fall', None),  # anim_tbl=0 + two signed vel bytes (es[pc]++ x2)
 }
 
 CH_LEN = {0:2, 1:1, 2:2, 3:1, 4:0, 5:0, 6:1, 7:2}
