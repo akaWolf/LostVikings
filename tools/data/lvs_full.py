@@ -256,6 +256,13 @@ def emit_structured(cid):
         body = d[pc+1:pc+ln]
         an_lines.append(f'an @{pc:04X} {cmd:02X} {body.hex()}  ; {an_expr(cmd, body, tgt)}')
     out.extend(an_lines)
+    # data annotations: op 13 sub D9 points at a 48-byte palette block
+    pal_at = {}
+    for pc in seen:
+        if seen[pc][0] == 0x13 and pc + 4 <= len(d) and d[pc+1] == 0xD9:
+            ptr = struct.unpack_from('<H', d, pc + 2)[0]
+            if ptr + 48 <= len(d):
+                pal_at[ptr] = pc
     i = rec_end
     while i < len(d):
         if i in covered:
@@ -264,7 +271,12 @@ def emit_structured(cid):
         j = i
         while j < len(d) and j not in covered:
             j += 1
-        out.append(f'blob @{i:04X} {d[i:j].hex()}')
+        ann = ''
+        pals = [a for a in pal_at if i <= a and a + 48 <= j]
+        if pals:
+            ann = '  ; ' + ', '.join(
+                f'palette48 @{a:04X} (op13@{pal_at[a]:04X})' for a in sorted(pals))
+        out.append(f'blob @{i:04X} {d[i:j].hex()}{ann}')
         i = j
     return '\n'.join(out)
 
