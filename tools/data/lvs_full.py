@@ -174,10 +174,18 @@ def emit_structured(cid):
         if kind == 'jmp' and tgt is not None:
             return f'{indent}op @{pc:04X} {op:02X} {raw} T{tgt:04X}  ; -> S_{tgt:04X}'
         return f'{indent}op @{pc:04X} {op:02X} {raw}  ; {mn}'
+    # entry annotations: record P -> anim redirect, P+3 -> spawn entry
+    entry_of = {}
+    for t in range(nrec):
+        pcode = struct.unpack_from('<H', d, t * dz.REC + 3)[0]
+        if 0x600 <= pcode < len(d):
+            entry_of.setdefault(pcode, []).append(f't{t:02X}.anim')
+            entry_of.setdefault(pcode + 3, []).append(f't{t:02X}.spawn')
     for h in sorted(states):
         body, guards, end = states[h]
         ek = end[0] if end else 'runoff'
-        out.append(f'state S_{h:04X} {{  ; end={ek}')
+        ent = ('  ; entry ' + ','.join(entry_of[h])) if h in entry_of else ''
+        out.append(f'state S_{h:04X} {{  ; end={ek}{ent}')
         for pc in body:
             out.append(op_line(pc))
         out.append('}')
