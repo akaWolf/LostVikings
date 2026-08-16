@@ -96,13 +96,15 @@ def lift_states(cid):
     edges (br -> state), and ends at yield (-> implicit next state = the
     following pc), exit ops, or an unconditional jump (-> tail state).
     Returns (states dict, coverage)."""
-    d, seen, table = lf.full_walk(cid)
+    d, seen, table, entries = lf.full_walk(cid, with_entries=True)
     info = {}
     for pc in seen:
         op = seen[pc][0]
         info[pc] = (op,) + tuple(dc.decode_info(d, pc, op, table)[0:3])
-    # state heads: every target of any control edge + entries after yields
-    heads = set()
+    # state heads: record entry points (P/P+3 — NOT bare dyn resync pcs,
+    # those are walker aids, not semantic boundaries) + every target of
+    # any control edge + entries after yields
+    heads = {pc for pc, src in entries.items() if pc in info and src != 'dyn'}
     for pc, (op, ln, kind, tgt) in info.items():
         if tgt is not None and tgt in info:
             heads.add(tgt)

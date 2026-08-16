@@ -24,7 +24,7 @@ spec2 = importlib.util.spec_from_file_location('dc', 'tools/data/decompile.py')
 dc = importlib.util.module_from_spec(spec2)
 spec2.loader.exec_module(dc)
 
-def full_walk(cid):
+def full_walk(cid, with_entries=False):
     table = dz.load_draft()
     pt = dz.spawn_entries()
     dyn = set()
@@ -35,6 +35,8 @@ def full_walk(cid):
                 dyn.add(pc)
     d, entries, seen, stops, parent, addrs, anim_e = dz.walk(
         cid, pt.get(cid, set()), table, extra_entries=dyn)
+    if with_entries:
+        return d, seen, table, entries
     return d, seen, table
 
 def emit(cid):
@@ -174,13 +176,21 @@ def emit_structured(cid):
         if kind == 'jmp' and tgt is not None:
             return f'{indent}op @{pc:04X} {op:02X} {raw} T{tgt:04X}  ; -> S_{tgt:04X}'
         return f'{indent}op @{pc:04X} {op:02X} {raw}  ; {mn}'
-    # entry annotations: record P -> anim redirect, P+3 -> spawn entry
+    # entry annotations: record P -> anim redirect, P+3 -> spawn entry.
+    # Scan the whole potential record table (same filters as the walker),
+    # not just the nrec prefix in front of the first decoded instruction.
     entry_of = {}
-    for t in range(nrec):
+    t = 0
+    while (t + 1) * dz.REC <= len(d):
         pcode = struct.unpack_from('<H', d, t * dz.REC + 3)[0]
         if 0x600 <= pcode < len(d):
             entry_of.setdefault(pcode, []).append(f't{t:02X}.anim')
             entry_of.setdefault(pcode + 3, []).append(f't{t:02X}.spawn')
+        elif t > 0 and pcode == 0:
+            break
+        t += 1
+        if t > 0x400:
+            break
     for h in sorted(states):
         body, guards, end = states[h]
         ek = end[0] if end else 'runoff'
