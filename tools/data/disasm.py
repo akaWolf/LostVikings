@@ -225,6 +225,13 @@ def spawn_entries(manifest_dir='assets_raw'):
             d = open(f'{manifest_dir}/chunks/dec/{cid:04d}.bin', 'rb').read()
         except FileNotFoundError:
             continue
+        # viking records 0/1/2: sub_13809 record idx is its SECOND arg;
+        # sub_11569/11446 spawn the trio with constants 1/0/2.
+        per_template.setdefault(tid, set()).update((0, 1, 2))
+        # level-header single-spawn record: word_2AA9F (ds:0x25BF) is
+        # loaded from level_chunk+0x0C (chunk base maps to ds:0x25B3).
+        code = struct.unpack_from('<H', d, 0x25BF - 0x25B3)[0]
+        per_template[tid].add(code)
         off = 0x25F6 - 0x25B3   # spawn table offset inside the level chunk
         while off + 14 <= len(d):
             x = struct.unpack_from('<H', d, off)[0]
@@ -235,7 +242,15 @@ def spawn_entries(manifest_dir='assets_raw'):
             off += 14
     return per_template
 
-def walk(chunk_id, tmpl_indices, table, extra_entries=()):
+def walk(chunk_id, tmpl_indices, table, extra_entries=(), rec_scan=False):
+    # rec_scan=True (legacy) seeds an entry from EVERY grid slot whose +3
+    # word lands in [0x600,len) — but the record table has no terminator in
+    # the format; deep grid slots overlay CODE bytes and made phantom
+    # entries (e.g. 1C6 'code' at 0x602). The engine only ever indexes
+    # records via level spawn tables, the level-header single-spawn code,
+    # the viking constants 0/1/2 and op_14 operands — all covered by
+    # spawn_entries() + the walker's op_14 collection (STRICT model,
+    # dyn-validated 0/0 on all six chunks).
     d = open(f'assets_raw/chunks/dec/{chunk_id:04d}.bin', 'rb').read()
     entries = {}
     # ALL template/anim records are entry points: objects live by switching
@@ -244,7 +259,7 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
     # lands beyond the record area and inside the chunk; the walk itself
     # validates (bad PCs derail into unknown opcodes and are reported).
     t = 0
-    while (t + 1) * REC <= len(d):
+    while rec_scan and (t + 1) * REC <= len(d):
         off = t * REC + 3
         pc = struct.unpack_from('<H', d, off)[0]
         if pc >= 0x600 and pc < len(d):
