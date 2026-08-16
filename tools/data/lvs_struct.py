@@ -90,7 +90,73 @@ def analyze(cid):
             lifted += 1
     return len(info), total_br, if_then, if_else
 
+def lift_states(cid):
+    """v2: yield-cut state machine. A 'state' starts at any entry or any
+    branch/jump target; it runs linearly through fall ops, records guard
+    edges (br -> state), and ends at yield (-> implicit next state = the
+    following pc), exit ops, or an unconditional jump (-> tail state).
+    Returns (states dict, coverage)."""
+    d, seen, table = lf.full_walk(cid)
+    info = {}
+    for pc in seen:
+        op = seen[pc][0]
+        info[pc] = (op,) + tuple(dc.decode_info(d, pc, op, table)[0:3])
+    # state heads: every target of any control edge + entries after yields
+    heads = set()
+    for pc, (op, ln, kind, tgt) in info.items():
+        if tgt is not None and tgt in info:
+            heads.add(tgt)
+        if kind in ('stop',) or op == 0x00:
+            nxt = pc + ln
+            if nxt in info:
+                heads.add(nxt)
+        if kind == 'srch':
+            for n in (pc + ln, pc + ln + 1):
+                if n in info:
+                    heads.add(n)
+    states = {}
+    covered = set()
+    for h in sorted(heads):
+        body = []
+        guards = []
+        pc = h
+        steps = 0
+        end = None
+        while pc in info and steps < 512:
+            if pc in covered and pc != h:
+                end = ('fallinto', pc)
+                break
+            covered.add(pc)
+            op, ln, kind, tgt = info[pc]
+            body.append(pc)
+            steps += 1
+            if op == 0x00:
+                end = ('yield', pc + ln if (pc + ln) in info else None)
+                break
+            if kind == 'stop':
+                end = ('exit', None)
+                break
+            if kind == 'jmp':
+                end = ('goto', tgt)
+                break
+            if kind in ('br', 'srch') and tgt is not None:
+                guards.append((pc, tgt))
+            pc += ln
+        states[h] = (body, guards, end)
+    return len(info), states, len(covered)
+
 def main():
+    if sys.argv[1] == 'states':
+        args = [int(a, 16) for a in sys.argv[2:]] or list(range(0x1C1, 0x1C7))
+        for cid in args:
+            n, states, cov = lift_states(cid)
+            ends = {}
+            for _, (_, _, e) in states.items():
+                k = e[0] if e else 'runoff'
+                ends[k] = ends.get(k, 0) + 1
+            print(f'0x{cid:X}: insns={n} states={len(states)} '
+                  f'covered={cov} ({100.0*cov/max(n,1):.1f}%) ends={ends}')
+        return 0
     if sys.argv[1] == 'stats':
         args = [int(a, 16) for a in sys.argv[2:]] or list(range(0x1C1, 0x1C7))
         for cid in args:
