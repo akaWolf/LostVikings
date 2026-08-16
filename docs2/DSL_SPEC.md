@@ -154,6 +154,22 @@ S_1500 = S_14FF+1   ; alias: secondary decode frame inside another line
   when inserted code overflows its gap into an anchored element —
   moving data blobs (gap management) is the v2 roadmap item.
 
+## Authoring pipeline — `tools/data/lvsc.py`
+
+```
+lvsc build FILE.lvsf CHUNK_HEX          # compile + verify vs extracted chunk
+lvsc pack 1C1=mod.lvsf -o DATA_NEW.DAT  # rebuild DATA.DAT with replacements
+```
+
+Replaced chunks are packed with a greedy LZSS equivalent to the
+engine decompressor (sub_10982). Engine constraints honored: the u16
+size field is `len-1` (the decoder emits field+1 bytes), compressed
+blocks must stay `< 0xB080` (the original aborts otherwise). `pack`
+with no replacements reproduces DATA.DAT byte-identically. Proof: a
+full level1 canon replay on a repacked (recompressed-1C1) DATA.DAT
+ends in a state identical to the golden except the ds:2BB4 mirror of
+the file offsets themselves.
+
 Known non-goals of v1.5 (roadmap for v2):
 - Gap management / movable data blobs (today an insertion that
   outgrows its gap is a hard error, not a relayout).
