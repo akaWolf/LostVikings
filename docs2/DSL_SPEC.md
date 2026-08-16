@@ -125,9 +125,38 @@ Readability layers (comment-only, sourced from verified models):
   (the 08/0A `2*max(1,subcnt)` ownership model validates 251/252
   against dyn but over-approximates owners, so it is not applied).
 
-Known non-goals of v1 (roadmap for v2):
-- Free-form layout (no `@` anchors) — needs a relocating assembler for
-  code and the record table.
+## Free-form — .lvs v1.5 (`emit3` / `compile_free`, .lvsf)
+
+Code lines lose their anchors; layout is computed:
+
+```
+S_37DD:
+o 2F            ; anim_step
+o 00            ; yield
+o 38 08 S_0C00  ; collision -> label
+o 38 38 =0004   ; dead branch: raw word (target below 0x600)
+A_2618:
+a 14 00         ; sprite 0
+record 00 sprite=FFFE flags=01 code=S_3850 rest=<hex>
+S_1500 = S_14FF+1   ; alias: secondary decode frame inside another line
+```
+
+- Two-pass assembly: pass 1 lays out sequentially (records at their
+  table slots, blobs at their anchors, code filling the gaps in file
+  order) and binds labels; pass 2 encodes with resolved words.
+- `=HEX` = raw target word (dead branches into the record zone,
+  out-of-range values). `S_x = S_y+n` = alias into an owning line for
+  overlapping decode frames (real dead-branch frames that share bytes).
+- op 19 renders its anim operand as `A_xxxx`; anim jump/loop targets
+  are symbolic the same way.
+- Invariant: an unedited `emit3` text compiles byte-identically (all
+  six chunks). Edits recompute every reference; a collision map raises
+  when inserted code overflows its gap into an anchored element —
+  moving data blobs (gap management) is the v2 roadmap item.
+
+Known non-goals of v1.5 (roadmap for v2):
+- Gap management / movable data blobs (today an insertion that
+  outgrows its gap is a hard error, not a relayout).
 - Semantic state names (`S_walk` instead of `S_3853`).
 - Data-table decoding of the remaining blobs (14-byte records with
   `db13` markers, palette blocks).
