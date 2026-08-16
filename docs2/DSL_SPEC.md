@@ -170,6 +170,11 @@ full level1 canon replay on a repacked (recompressed-1C1) DATA.DAT
 ends in a state identical to the golden except the ds:2BB4 mirror of
 the file offsets themselves.
 
+Edit proof: changing `acc = 0x2E; self.type_id = acc` to 0x2F in the
+1C1 .lvsf and repacking shifts exactly `obj_type_id[8]` in the level1
+end-state golden — a source-text edit reaches live gameplay state
+through compile, LZSS pack, and the engine loader.
+
 Known non-goals of v1.5 (roadmap for v2):
 - Gap management / movable data blobs (today an insertion that
   outgrows its gap is a hard error, not a relayout).
