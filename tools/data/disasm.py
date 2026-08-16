@@ -50,9 +50,16 @@ OPERAND_SCHEMES = {
     0xBF: (4, 'br', 2),       # search up: 1B filter + word target
     0xC0: (4, 'br', 2),       # search family
     0xC1: (4, 'br', 2),       # search family
+    0x13: (4, 'fall', None),  # sub-cmd byte + 2 param bytes; body always pc+=3
+    0x61: (2, 'fall', None),  # partner.field &= acc (v2_field_addr_A: 1 idx byte)
+    0x65: (2, 'fall', None),  # self.field ^= acc (v2_field_addr_B: 1 idx byte)
 }
 
 CH_LEN = {0:2, 1:1, 2:2, 3:1, 4:0, 5:0, 6:1, 7:2}
+# setter channels (sub_154bf via off_30CA2): 1=self.field 2=[addr]
+# 3=partner.field 5=drop(0B); 0/4/6/7 are orig-UB escape setters that the
+# v2 guard aborts on — no byte model, treat as strand stop if ever seen.
+SET_LEN = {1:1, 2:2, 3:1, 5:0}
 
 def decode_op14(d, pc):
     """[14][mode1][ch(m1&7)][ch(m1>>3&7)][mode2][ch..][ch..][anim_type].
@@ -73,8 +80,84 @@ def decode_op49(d, pc):
     q += 1              # anim_idx
     return q + 2 - pc, []
 
+def _chpair(d, q):
+    m = d[q]; q += 1
+    return q + CH_LEN[m & 7] + CH_LEN[(m >> 3) & 7]
+
+def _setpair(d, q, second=True):
+    m = d[q]; q += 1
+    a = SET_LEN.get(m & 7)
+    if a is None:
+        raise KeyError(f'UB setter ch{m & 7}')
+    q += a
+    if second:
+        b = SET_LEN.get((m >> 3) & 7)
+        if b is None:
+            raise KeyError(f'UB setter ch{(m >> 3) & 7}')
+        q += b
+    return q
+
+def decode_setpair_only(d, pc):
+    # 15/16/34 (sub_150xx delta writers): [op][m][set(m&7)][set(m>>3&7)]
+    return _setpair(d, pc + 1) - pc, []
+
+def decode_ch2_set2(d, pc):
+    # 26/28: [op][m1][ch][ch][m2][set][set]
+    q = _chpair(d, pc + 1)
+    return _setpair(d, q) - pc, []
+
+def decode_ch2_set1(d, pc):
+    # 27: [op][m1][ch][ch][m2][set(m2&7)] — single setter
+    q = _chpair(d, pc + 1)
+    return _setpair(d, q, second=False) - pc, []
+
+def decode_ch2_ch1(d, pc):
+    # 29/2A/2B/50: [op][m1][ch][ch][m2][ch(m2&7)]
+    q = _chpair(d, pc + 1)
+    m2 = d[q]; q += 1
+    return q + CH_LEN[m2 & 7] - pc, []
+
+def decode_ch2(d, pc):
+    # 48: [op][m][ch][ch]
+    return _chpair(d, pc + 1) - pc, []
+
+def decode_ch2_thr(d, pc):
+    # D4: [op][m][ch][ch][threshold_byte]
+    return _chpair(d, pc + 1) + 1 - pc, []
+
+def decode_op41_44(d, pc):
+    # 41/44: [op][w0][ch(w0&7)] + 12543-channel ch(w0>>3&7) NO extra mode
+    # byte + [w1][ch(w1&7)][ch(w1>>3&7)]  (41 tail glyph_clamp eats 0)
+    q = pc + 1
+    w0 = d[q]; q += 1
+    q += CH_LEN[w0 & 7]
+    q += CH_LEN[(w0 >> 3) & 7]      # sub_12543 re-reads DS_MODE_WORD>>3
+    return _chpair(d, q) - pc, []
+
+def decode_op45(d, pc):
+    # 45: [op][w0][ch(w0&7)] + 125fa: [w1][ch][ch]   (no 12543 channel)
+    q = pc + 1
+    w0 = d[q]; q += 1
+    q += CH_LEN[w0 & 7]
+    return _chpair(d, q) - pc, []
+
 CUSTOM = {
     0x14: decode_op14,   # spawner: fall + collects template operand
+    0x15: decode_setpair_only,
+    0x16: decode_setpair_only,
+    0x34: decode_setpair_only,
+    0x26: decode_ch2_set2,
+    0x28: decode_ch2_set2,
+    0x27: decode_ch2_set1,
+    0x29: decode_ch2_ch1,
+    0x2A: decode_ch2_ch1,
+    0x2B: decode_ch2_ch1,
+    0x50: decode_ch2_ch1,
+    0x48: decode_ch2,
+    0xD4: decode_ch2_thr,
+    0x41: decode_op41_44,
+    0x44: decode_op41_44,
+    0x45: decode_op45,
 }
 # probe ops 49/4A: variable channels then conditional word target
 CUSTOM_BR = {
@@ -189,7 +272,11 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=()):
         if op == 0x19 and pc + 3 <= len(d):   # set-anim: operand = anim PC
             anim_entries.add(struct.unpack_from('<H', d, pc + 1)[0])
         if op in CUSTOM:
-            ln, tmpls = CUSTOM[op](d, pc)
+            try:
+                ln, tmpls = CUSTOM[op](d, pc)
+            except (KeyError, IndexError) as e:
+                stops.setdefault(pc, (op, str(e)))
+                continue
             seen[pc] = (op, ln)
             push(pc + ln, pc)
             for t in tmpls:

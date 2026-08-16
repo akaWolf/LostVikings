@@ -20,7 +20,10 @@ spec.loader.exec_module(dz)
 def decode_info(d, pc, op, table):
     """(len, kind, target|None) for a decoded instruction."""
     if op in dz.CUSTOM:
-        ln, _ = dz.CUSTOM[op](d, pc)
+        try:
+            ln, _ = dz.CUSTOM[op](d, pc)
+        except (KeyError, IndexError):
+            return 1, 'stop', None
         return ln, 'fall', None
     if op in dz.CUSTOM_BR:
         ln, _ = dz.CUSTOM_BR[op](d, pc)
