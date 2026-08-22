@@ -71,6 +71,7 @@ bool g_debug_mode = false;
 static int g_v2only_max_frames = 0;
 
 extern "C" int v2_state_save(const char*);   // v2_vm.cpp (direction V step 2)
+extern "C" void headless_golden_dump(void);  // v2_gamestate.cpp (all builds)
 extern "C" int v2_state_load(const char*);
 
 int main(int argc, char* argv[]) {
@@ -252,5 +253,8 @@ int main(int argc, char* argv[]) {
 
     printf("V2_ONLY: quitting\n");
     v2_game_thread_stop();
+    // Golden end-state channel at the max-frames/window-close exit — same
+    // idempotent dump the quit sites call (V2_GOLDEN_DUMP / V2_SAVE_STATE).
+    headless_golden_dump();
     return 0;
 }

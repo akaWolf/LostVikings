@@ -149,3 +149,23 @@ extern "C" int v2_gs_roundtrip_check(const uint8_t* ds, const char* tag) {
         fprintf(stderr, "V2-GS-ROUNDTRIP[%s]: %d byte diffs\n", tag ? tag : "?", diffs);
     return diffs;
 }
+
+// ============================================================================
+// Golden end-state channel — common to ALL builds (headless verify, V2_ONLY,
+// windowed). Historically lived in headless_main.cpp (hence the name, kept
+// so every existing call site and doc stays valid); moved here so V2_ONLY
+// gencode/soak binaries emit the same catalog snapshots at clean exits.
+// Idempotent: first call wins (a quit dump is not overwritten by a later
+// max-frames dump).
+// ============================================================================
+extern uint8_t* v2_vm_get_shadow_ds();       // C++ linkage (v2_vm.cpp)
+extern "C" int v2_state_save(const char*);
+extern "C" void headless_golden_dump(void) {
+    static int done = 0;
+    if (done) return;
+    const char* gp = getenv("V2_GOLDEN_DUMP");
+    uint8_t* shd = v2_vm_get_shadow_ds();
+    if (gp && shd) { v2_gs_dump_text(shd, gp); done = 1; }
+    const char* sp = getenv("V2_SAVE_STATE");
+    if (sp && shd) { v2_state_save(sp); done = 1; }
+}

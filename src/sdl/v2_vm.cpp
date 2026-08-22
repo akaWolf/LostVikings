@@ -40,9 +40,7 @@ extern "C" int  v2_fntest_running;    // unit-world marker (v2_ail.cpp)
 extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_gamestate.cpp (phase D)
 extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-field state snapshot
 #include "v2_hash_hot.h"   // (IV) -O2 island for the replay-verify hash kernels
-#ifdef HEADLESS
-extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits
-#endif
+extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits (all builds; v2_gamestate.cpp)
 extern uint8_t* v2_m2c_base;
 
 // SDL spec-key state (defined in sdl/render.cpp). Game logic ORs this in
@@ -14019,9 +14017,7 @@ static void v2_vm_op_13(V2VM& vm) {
         extern int v2_fntest_vm_soft;
         if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 3; return; }
         // V2: trigger graceful exit similar to orig behavior.
-#ifdef HEADLESS
-        headless_golden_dump();   // direction V: menu-quit is a clean exit
-#endif
+        headless_golden_dump();   // direction V: menu-quit is a clean exit (all builds)
         extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(0);
     }
 
@@ -18849,9 +18845,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // INT 21h/49 (free DOS memory), INT 21h/4C (terminate program).
                     // For v2: stop sound + _exit(0) to bypass static destructors
                     // (render thread mid-Mesa would SEGV otherwise).
-#ifdef HEADLESS
-                    headless_golden_dump();   // direction V: DOS-quit is a clean exit
-#endif
+                    headless_golden_dump();   // direction V: DOS-quit is a clean exit (all builds)
                     fflush(stdout); fflush(stderr);
                     extern bool need_quit; need_quit = true; SDL_Delay(50);
                     _exit(0);
@@ -18894,9 +18888,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // JMP loc_10e35 (DOS quit) when the prompt ended with "End
                     // game" (or no input → the [334]|=2 default).
                     if (v2gs(s).frame_flags() & 2) {
-#ifdef HEADLESS
-                        headless_golden_dump();   // direction V: prompt-quit is a clean exit
-#endif
+                        headless_golden_dump();   // direction V: prompt-quit is a clean exit (all builds)
                         fflush(stdout); fflush(stderr);
                         extern bool need_quit; need_quit = true; SDL_Delay(50);
                         _exit(0);

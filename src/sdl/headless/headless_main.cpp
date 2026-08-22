@@ -39,18 +39,9 @@ extern "C" int v2_state_save(const char*);            // v2_vm.cpp (direction V 
 // exit point is deterministic, so this IS the checkpoint the
 // tests/golden_states/ catalog compares against — the phase-D oracle that
 // survives the verify-scaffolding teardown.
-extern "C" void headless_golden_dump(void) {
-    static int done = 0;
-    if (done) return;
-    const char* gp = getenv("V2_GOLDEN_DUMP");
-    uint8_t* shd = v2_vm_get_shadow_ds();
-    if (gp && shd) { v2_gs_dump_text(shd, gp); done = 1; }
-    // (direction V step 2) full teleport snapshot at the same clean-exit
-    // point — read-only on the shadow world, so safe under verify. The
-    // snapshot is the LOAD input for a V2_ONLY teleport session.
-    const char* sp = getenv("V2_SAVE_STATE");
-    if (sp && shd) { v2_state_save(sp); done = 1; }
-}
+// headless_golden_dump moved to v2_gamestate.cpp — common to all builds
+// (V2_ONLY gencode/soak binaries need the same clean-exit snapshots).
+extern "C" void headless_golden_dump(void);
 
 // Globals controlling headless behavior (referenced from verify hooks etc.)
 const char* g_headless_replay_input = nullptr;
