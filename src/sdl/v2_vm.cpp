@@ -5944,7 +5944,7 @@ static int32_t v2_spawn_slot_13d52(uint8_t* s) {
 static bool v2_sprite_res_lookup_12f82(uint8_t* s, uint16_t chunk_id, uint16_t* base_out) {
     if (chunk_id == 0xFFFF) { *base_out = 0; return false; }           // 0x2f85 -> loc_12fa5
     if (chunk_id == 0xFFFE) {                                          // 0x2f8a -> loc_12faa
-        v2gs(s).spawn_pool_sel_ref() += 1;                      // INC ds:374
+        v2gs(s).spawn_pool_sel((uint16_t)(v2gs(s).spawn_pool_sel() + 1)); // INC ds:374
         *base_out = 0;
         return false;                                                  // CLC
     }
@@ -5980,7 +5980,7 @@ static bool v2_obj_template_init_13e52(uint8_t* s, uint16_t si, uint16_t bx) {
     // 0x3e85: orig reads WORD es:[bx+2]; TEST ax,80h and AND ax,7Fh only see
     // the low byte, so a byte read is bit-identical.
     uint8_t ss_byte = aes[(uint16_t)(bx + 2)];
-    if (ss_byte & 0x80) v2gs(s).spawn_pool_sel_ref() += 2;      // 0x3e8e ds:374 += 2
+    if (ss_byte & 0x80) v2gs(s).spawn_pool_sel((uint16_t)(v2gs(s).spawn_pool_sel() + 2)); // 0x3e8e ds:374 += 2
     obj.w16(OBJ_SUB_COUNT, (uint16_t)(ss_byte & 0x7F));                // loc_13e93 [si+1AD5]
     obj.w16(OBJ_PC, (uint16_t)(*(uint16_t*)(aes + (uint16_t)(bx + 3)) + 3)); // 0x3e9a [si+132D]
     obj.w16(OBJ_CODE_SEG, v2gs(s).seg_anim());              // 0x3ea5 [si+1355] = ds:2E67

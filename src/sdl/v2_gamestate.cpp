@@ -166,6 +166,14 @@ extern "C" void headless_golden_dump(void) {
     if (done) return;
     const char* gp = getenv("V2_GOLDEN_DUMP");
     uint8_t* shd = v2_vm_get_shadow_ds();
+    // stage 4 II.c: the dump reads through the view (members for evacuated
+    // fields) — validate the mirror right before snapshotting.
+    if (shd) {
+        extern long v2_gs_evac_check_calls;
+        fprintf(stderr, "V2-GS-EVAC: %ld frame checks before dump\n",
+                v2_gs_evac_check_calls);
+        v2_gs_evac_check(shd);
+    }
     if (gp && shd) { v2_gs_dump_text(shd, gp); done = 1; }
     const char* sp = getenv("V2_SAVE_STATE");
     if (sp && shd) { v2_state_save(sp); done = 1; }
@@ -216,8 +224,10 @@ extern "C" void v2_gs_evac_set_canonical(const uint8_t* ds) {
 
 // Members vs image bytes. A diff means something wrote the image behind the
 // accessors (a bulk writer not yet routed through the view) — hard bug.
+extern "C" long v2_gs_evac_check_calls = 0;
 extern "C" int v2_gs_evac_check(const uint8_t* ds) {
     if (!v2_gs_evac_on(ds)) return 0;
+    v2_gs_evac_check_calls++;
     int diffs = 0;
 #define V2_GS_EV_CHK(name, off, idx_expr, img_expr) \
     do { uint16_t _img = (img_expr); \
@@ -253,4 +263,16 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
         v2_gs_evac_refresh(ds);
     }
     return diffs;
+}
+
+// stage-4 diag: first desyncs seen AT READ TIME, with backtrace.
+#include <execinfo.h>
+extern "C" void v2_gs_evac_read_desync(const char* fld, uint32_t off, uint16_t mem, uint16_t img) {
+    static int n = 0;
+    if (n >= 4) return;
+    n++;
+    fprintf(stderr, "V2-EVAC-READ-DESYNC[%d]: %s @%04X member=%04X image=%04X\n",
+            n, fld, off, mem, img);
+    void* bt[8]; int bn = backtrace(bt, 8);
+    backtrace_symbols_fd(bt, bn, 2);
 }

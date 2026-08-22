@@ -40,8 +40,36 @@
 // CORE (it is appended in V2_GS_FIELDS_W below).
 #define V2_GS_FIELDS_EVAC(F1, FN) \
   FN(script_vars,        0x0204, 68)            \
-  F1(script_var_28e,     0x028E)
-
+  F1(script_var_28e,     0x028E) \
+  F1(scratch_34,         DS_SCRATCH_34)         \
+  F1(scratch_36,         DS_SCRATCH_36)         \
+  F1(scratch_38,         DS_SCRATCH_38)         \
+  F1(scratch_3a,         DS_SCRATCH_3A)         \
+  F1(mode_word,          DS_MODE_WORD)          \
+  F1(text_col,           DS_TEXT_COL)           \
+  F1(text_row,           DS_TEXT_ROW)           \
+  F1(text_idx,           DS_TEXT_IDX)           \
+  F1(aim_sign_x,         DS_AIM_SIGN_X)         \
+  F1(aim_sign_y,         DS_AIM_SIGN_Y)         \
+  F1(search_filter,      DS_SEARCH_FILTER)      \
+  F1(search_jump,        DS_SEARCH_JUMP)        \
+  F1(search_y,           DS_SEARCH_Y)           \
+  F1(search_si,          DS_SEARCH_SI)          \
+  F1(search_res_type,    DS_SEARCH_RES_TYPE)    \
+  F1(search_res_slot,    DS_SEARCH_RES_SLOT)    \
+  F1(search_best,        DS_SEARCH_BEST)        \
+  F1(coll_bit_idx,       DS_COLL_BIT_IDX)       \
+  F1(coll_phase,         DS_COLL_PHASE)         \
+  F1(coll_state_392,     DS_COLL_STATE_392)     \
+  F1(coll_state_398,     DS_COLL_STATE_398)     \
+  F1(prio_count,         DS_PRIO_COUNT)         \
+  F1(anim_timer,         DS_ANIM_TIMER)         \
+  F1(anim_cont,          DS_ANIM_CONT)          \
+  F1(anim_slot,          DS_ANIM_SLOT)          \
+  F1(anim_slot_end,      DS_ANIM_SLOT_END)      \
+  F1(anim_sub_mask,      DS_ANIM_SUB_MASK)      \
+  F1(spawn_pool_sel,     DS_SPAWN_POOL_SEL)     \
+  F1(spawn_tbl_lo,       DS_SPAWN_TBL_LO) \
 // level_var_25c5/25c7 sit inside the level-header stripe the chunk loader
 // bulk-copies on level switch — the evac check caught the desync on the
 // level-3→4 transition. They evacuate only after that copy goes through
@@ -54,20 +82,6 @@
   F1(level_var_25c7,     0x25C7)                \
   F1(viewport_x,         DS_VIEWPORT_X)         \
   F1(viewport_y,         DS_VIEWPORT_Y)         \
-  F1(text_idx,           DS_TEXT_IDX)           \
-  F1(mode_word,          DS_MODE_WORD)          \
-  F1(scratch_34,         DS_SCRATCH_34)         \
-  F1(scratch_36,         DS_SCRATCH_36)         \
-  F1(scratch_38,         DS_SCRATCH_38)         \
-  F1(scratch_3a,         DS_SCRATCH_3A)         \
-  F1(aim_sign_x,         DS_AIM_SIGN_X)         \
-  F1(aim_sign_y,         DS_AIM_SIGN_Y)         \
-  F1(text_col,           DS_TEXT_COL)           \
-  F1(text_row,           DS_TEXT_ROW)           \
-  F1(anim_timer,         DS_ANIM_TIMER)         \
-  F1(anim_cont,          DS_ANIM_CONT)          \
-  F1(anim_slot,          DS_ANIM_SLOT)          \
-  F1(anim_slot_end,      DS_ANIM_SLOT_END)      \
   F1(accumulator,        DS_ACCUMULATOR)        \
   F1(flag_202,           DS_FLAG_202)           \
   F1(word_200,           0x0200)                \
@@ -90,15 +104,8 @@
   F1(rng_seed_lo,        DS_RNG_SEED)           \
   FN(pal_chunk_addr_tbl, 0x854A, 11)            \
   F1(obj_count,          DS_OBJ_COUNT)          \
-  F1(spawn_pool_sel,     DS_SPAWN_POOL_SEL)     \
-  F1(prio_count,         DS_PRIO_COUNT)         \
-  F1(anim_sub_mask,      DS_ANIM_SUB_MASK)      \
-  F1(coll_bit_idx,       DS_COLL_BIT_IDX)       \
-  F1(coll_phase,         DS_COLL_PHASE)         \
-  F1(coll_state_392,     DS_COLL_STATE_392)     \
   F1(scroll_lock_x,      DS_SCROLL_LOCK_X)      \
   F1(scroll_lock_y,      DS_SCROLL_LOCK_Y)      \
-  F1(coll_state_398,     DS_COLL_STATE_398)     \
   F1(shake_src_x,        DS_SHAKE_SRC_X)        \
   F1(shake_src_y,        DS_SHAKE_SRC_Y)        \
   F1(shake_x,            DS_SHAKE_X)            \
@@ -107,19 +114,12 @@
   F1(shake_gate_y,       DS_SHAKE_GATE_Y)       \
   F1(pan_x,              DS_PAN_X)              \
   F1(pan_y,              DS_PAN_Y)              \
-  F1(search_filter,      DS_SEARCH_FILTER)      \
-  F1(search_jump,        DS_SEARCH_JUMP)        \
-  F1(search_y,           DS_SEARCH_Y)           \
-  F1(search_si,          DS_SEARCH_SI)          \
-  F1(search_res_type,    DS_SEARCH_RES_TYPE)    \
-  F1(search_res_slot,    DS_SEARCH_RES_SLOT)    \
   F1(input_keys,         DS_INPUT_KEYS)         \
   F1(input_edges,        DS_INPUT_EDGES)        \
   F1(input_prev,         DS_INPUT_PREV)         \
   F1(active_viking,      DS_ACTIVE_VIKING)      \
   F1(prev_viking,        DS_PREV_VIKING)        \
   F1(blink_counter,      DS_BLINK_COUNTER)      \
-  F1(search_best,        DS_SEARCH_BEST)        \
   F1(game_mode_ac,       DS_GAME_MODE_AC)       \
   F1(scratch_3ce,        DS_SCRATCH_3CE)        \
   F1(scratch_3d0,        DS_SCRATCH_3D0)        \
@@ -129,7 +129,6 @@
   F1(scroll_amt_right,   DS_SCROLL_AMT_RIGHT)   \
   F1(scroll_amt_down,    DS_SCROLL_AMT_DOWN)    \
   F1(scroll_amt_up,      DS_SCROLL_AMT_UP)      \
-  F1(spawn_tbl_lo,       DS_SPAWN_TBL_LO)       \
   F1(spawn_tbl_hi,       DS_SPAWN_TBL_HI)
 
 // HUD / vikings / quit prompt
@@ -829,6 +828,7 @@ extern const uint8_t* v2_gs_evac_canonical;   // the live shadow DS (or null)
 void v2_gs_evac_set_canonical(const uint8_t* ds);   // also refreshes members
 void v2_gs_evac_refresh(const uint8_t* ds);   // members <- image bytes
 int  v2_gs_evac_check(const uint8_t* ds);     // 0 ok; diffs logged + FATAL
+void v2_gs_evac_read_desync(const char* fld, uint32_t off, uint16_t mem, uint16_t img);
 }
 static inline bool v2_gs_evac_on(const uint8_t* ds) {
     return ds == v2_gs_evac_canonical && ds != nullptr;
@@ -889,7 +889,10 @@ struct V2StateView {
 // bypass map stayed empty across the full corpus before this flip; the
 // per-frame check still guards the mirror.
 #define V2_GS_AE1(name, off) \
-    uint16_t name() const              { if (v2_gs_evac_on(ds)) return g_gs_evac.name; return *(const uint16_t*)(ds + (off)); } \
+    uint16_t name() const              { if (v2_gs_evac_on(ds)) { \
+        uint16_t _img = *(const uint16_t*)(ds + (off)); \
+        if (g_gs_evac.name != _img) v2_gs_evac_read_desync(#name, (off), g_gs_evac.name, _img); \
+        return g_gs_evac.name; } return *(const uint16_t*)(ds + (off)); } \
     void     name(uint16_t v)          { if (v2_gs_evac_on(ds)) g_gs_evac.name = v; *(uint16_t*)(ds + (off)) = v; }
 #define V2_GS_AEN(name, off, n) \
     uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) return g_gs_evac.name[i]; return *(const uint16_t*)(ds + (off) + 2u * i); } \
@@ -915,7 +918,9 @@ struct V2StateView {
     // freedom (partner=0xFFFF-class reads are LEGAL flat behavior).
 #define V2_GS_ATW_IMPL(name, off, len) \
     uint16_t name##_at(uint16_t o) const { V2_GS_BCHK(off, len, o) return *(const uint16_t*)(ds + (uint16_t)((off) + o)); } \
-    void     name##_at(uint16_t o, uint16_t v) { V2_GS_BCHK(off, len, o) *(uint16_t*)(ds + (uint16_t)((off) + o)) = v; }
+    void     name##_at(uint16_t o, uint16_t v) { V2_GS_BCHK(off, len, o) \
+        v2_gs_evac_mirror_w(ds, (uint16_t)((off) + o), v); /* stage-4: computed writes mirror too */ \
+        *(uint16_t*)(ds + (uint16_t)((off) + o)) = v; }
 #define V2_GS_ATW1(name, off)    V2_GS_ATW_IMPL(name, off, 2u)
 #define V2_GS_ATWN(name, off, n) V2_GS_ATW_IMPL(name, off, 2u*(n))
     V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN)
