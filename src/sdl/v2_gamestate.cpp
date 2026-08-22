@@ -169,3 +169,24 @@ extern "C" void headless_golden_dump(void) {
     const char* sp = getenv("V2_SAVE_STATE");
     if (sp && shd) { v2_state_save(sp); done = 1; }
 }
+
+// ============================================================================
+// Stage 4 II.b: bounds sanitizer sink. Dedup by (base, off) pair; every new
+// pair prints immediately (headless exits via _exit, atexit never runs).
+// The map of survivors = the wrap classes the carrier swap must preserve.
+// ============================================================================
+#ifdef V2_GS_BOUNDS
+extern "C" void v2_gs_bounds_note(uint32_t base, uint32_t len, uint32_t off) {
+    static uint64_t seen[256];
+    static int n_seen = 0;
+    static uint64_t total = 0;
+    total++;
+    uint64_t key = ((uint64_t)base << 32) | off;
+    for (int i = 0; i < n_seen; i++)
+        if (seen[i] == key) return;
+    if (n_seen < 256) seen[n_seen++] = key;
+    fprintf(stderr, "V2-GS-BOUNDS[#%d]: field@%04X len=%u off=%u (addr=%04X) total=%llu\n",
+            n_seen, base, len, off, (uint16_t)(base + off),
+            (unsigned long long)total);
+}
+#endif

@@ -11420,10 +11420,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_state_idx_at((uint16_t)(_pp));
           vm.pc = (_v != v2_vm_accumulator) ? 0x144C : 0x1431;
         }
         G_POST(0x142D, 0x7A);
@@ -11631,10 +11632,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x1463, 0x5B);
         // inlined v2_vm_op_5B: partner.state_18cd += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           // partner.state_18cd (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x1465;
         G_POST(0x1463, 0x5B);
@@ -11660,10 +11662,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x1468, 0x5B);
         // inlined v2_vm_op_5B: partner.state_18cd += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           // partner.state_18cd (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x146A;
         G_POST(0x1468, 0x5B);
@@ -12397,10 +12400,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x153F : 0x1536;
         }
@@ -13490,10 +13494,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x16A5 : 0x16DA;
         }
@@ -13575,10 +13580,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x16A9 : 0x16F5;
         }
@@ -15934,10 +15940,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x19DB, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_x += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0460);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0460);
           // partner.vel_x (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1945);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x19DD;
         G_POST(0x19DB, 0x5B);
@@ -15957,10 +15964,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x19DF, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x19E1;
         G_POST(0x19DF, 0x5B);
@@ -16007,10 +16015,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_state_idx_at((uint16_t)(_pp));
           vm.pc = (_v != v2_vm_accumulator) ? 0x1A25 : 0x19EF;
         }
         G_POST(0x19EB, 0x7A);
@@ -16050,10 +16059,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x19F8, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x19FA;
         G_POST(0x19F8, 0x5B);
@@ -16142,10 +16152,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x1A13, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x1A15;
         G_POST(0x1A13, 0x5E);
@@ -16203,10 +16214,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x1A23, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x1A25;
         G_POST(0x1A23, 0x5E);
@@ -16253,10 +16265,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_state_idx_at((uint16_t)(_pp));
           vm.pc = (_v != v2_vm_accumulator) ? 0x1A5E : 0x1A33;
         }
         G_POST(0x1A2F, 0x7A);
@@ -16365,10 +16378,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x1A53, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x1A55;
         G_POST(0x1A53, 0x5E);
@@ -16388,10 +16402,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x1A57, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x1A59;
         G_POST(0x1A57, 0x5E);
@@ -19512,10 +19527,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.world_x
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0258);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0258);
           // partner.world_x
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_world_x_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x1F0B : 0x1EE1;
         }
         G_POST(0x1EDD, 0x84);
@@ -19606,10 +19622,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x1EFB, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x1EFD;
         G_POST(0x1EFB, 0x5B);
@@ -22488,10 +22505,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x22C3, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x22C5;
         G_POST(0x22C3, 0x5B);
@@ -22535,10 +22553,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x22D0, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x22D2;
         G_POST(0x22D0, 0x5E);
@@ -22593,10 +22612,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x22DF, 0x5E);
         // inlined v2_vm_op_5E: partner.anim_dy -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0190);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0190);
           // partner.anim_dy (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1675);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x22E1;
         G_POST(0x22DF, 0x5E);
@@ -22751,10 +22771,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x230D, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x230F;
         G_POST(0x230D, 0x5E);
@@ -23408,9 +23429,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x23E5;
@@ -23563,9 +23585,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x2418;
@@ -23596,9 +23619,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x2422;
@@ -27121,10 +27145,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x28C6 : 0x28C5;
         }
@@ -27261,9 +27286,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x28EA;
@@ -27567,9 +27593,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x295C;
@@ -28903,10 +28930,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x2AFD, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x2AFF;
         G_POST(0x2AFD, 0x5B);
@@ -28930,10 +28958,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x2B03, 0x5E);
         // inlined v2_vm_op_5E: partner.anim_dy -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0190);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0190);
           // partner.anim_dy (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1675);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) - v2_vm_accumulator)); }
         vm.pc = 0x2B05;
         G_POST(0x2B03, 0x5E);
@@ -31313,10 +31342,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x2F32 : 0x2E9F;
         }
@@ -31339,10 +31369,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x800)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0016;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) == v2_vm_accumulator) ? 0x2F32 : 0x2EA8;
         }
@@ -31386,10 +31417,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.world_x
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0258);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0258);
           // partner.world_x
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_world_x_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x2EDE : 0x2EB4;
         }
         G_POST(0x2EB0, 0x7F);
@@ -31443,10 +31475,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.world_y
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0280);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0280);
           // partner.world_y
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_world_y_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x2F4F : 0x2EC6;
         }
         G_POST(0x2EC2, 0x7F);
@@ -31474,10 +31507,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_bit_test_indexed: acc = bit(partner.flags & 0x8000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x001E;  // 15445 tail: POP si = first byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -31569,10 +31603,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x2F32 : 0x2EEC;
         }
@@ -31616,10 +31651,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.world_x
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0258);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0258);
           // partner.world_x
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_world_x_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x2F32 : 0x2EF8;
         }
         G_POST(0x2EF4, 0x7F);
@@ -31746,10 +31782,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x2F1D, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x2F1F;
         G_POST(0x2F1D, 0x5B);
@@ -31902,10 +31939,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x2F4C, 0x64);
         // inlined v2_vm_op_64: partner.flags |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1585);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0x2F4E;
         G_POST(0x2F4C, 0x64);
@@ -31947,10 +31985,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.world_y
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0280);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0280);
           // partner.world_y
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_world_y_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x2EDE : 0x2F5C;
         }
         G_POST(0x2F58, 0x7F);
@@ -31985,10 +32024,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x2F64, 0x61);
         // inlined v2_vm_op_61: partner.flags &= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags (field_addr_A)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1585);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) & v2_vm_accumulator)); }
         vm.pc = 0x2F66;
         G_POST(0x2F64, 0x61);
@@ -32106,10 +32146,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.class_bits & 0x800)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0140);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0140);
           // partner.class_bits
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_class_bits_at((uint16_t)(_pp));
           vm.si_track = 0x0016;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) != v2_vm_accumulator) ? 0x3035 : 0x2F8B;
         }
@@ -32132,10 +32173,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x8000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x001E;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x2FC7 : 0x2F94;
         }
@@ -32179,10 +32221,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.bbox_x1
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0078);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0078);
           // partner.bbox_x1
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x3035 : 0x2FA0;
         }
         G_POST(0x2F9C, 0x7F);
@@ -32203,10 +32246,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.bbox_y1
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0028);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0028);
           // partner.bbox_y1
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x3035 : 0x2FA6;
         }
         G_POST(0x2FA2, 0x7F);
@@ -32227,10 +32271,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.bbox_y0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0000);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0000);
           // partner.bbox_y0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x303E : 0x2FAC;
         }
         G_POST(0x2FA8, 0x7F);
@@ -32241,10 +32286,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_bit_test_indexed: acc = bit(partner.flags & 0x8000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x001E;  // 15445 tail: POP si = first byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -32336,10 +32382,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.bbox_y1
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0028);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0028);
           // partner.bbox_y1
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x3035 : 0x2FCD;
         }
         G_POST(0x2FC9, 0x7F);
@@ -32437,10 +32484,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.bbox_x1
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0078);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0078);
           // partner.bbox_x1
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x302B : 0x2FEB;
         }
         G_POST(0x2FE7, 0x7F);
@@ -32567,10 +32615,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x3010, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x3012;
         G_POST(0x3010, 0x5B);
@@ -32670,10 +32719,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x302E, 0x61);
         // inlined v2_vm_op_61: partner.state_18f5 &= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5 (field_addr_A)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18F5);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) & v2_vm_accumulator)); }
         vm.pc = 0x3030;
         G_POST(0x302E, 0x61);
@@ -32691,10 +32741,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x3033, 0x64);
         // inlined v2_vm_op_64: partner.flags |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1585);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0x3035;
         G_POST(0x3033, 0x64);
@@ -32777,10 +32828,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.bbox_y0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0000);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0000);
           // partner.bbox_y0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x3035 : 0x3050;
         }
         G_POST(0x304C, 0x7F);
@@ -32799,10 +32851,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.fld_41E6
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x2D01);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x2D01);
           // partner.fld_41E6
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).level_pal_chunks_at((uint16_t)((_pp) + 0x1369));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x8000 : 0x3056;
         }
         G_POST(0x3052, 0x7F);
@@ -32820,10 +32873,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x3056, 0x64);
         // inlined v2_vm_op_64: partner.state_18f5 |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5 (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18F5);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0x3058;
         G_POST(0x3056, 0x64);
@@ -32841,10 +32895,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x305B, 0x61);
         // inlined v2_vm_op_61: partner.flags &= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags (field_addr_A)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1585);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) & v2_vm_accumulator)); }
         vm.pc = 0x305D;
         G_POST(0x305B, 0x61);
@@ -32944,10 +32999,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.class_bits & 0x800)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0140);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0140);
           // partner.class_bits
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_class_bits_at((uint16_t)(_pp));
           vm.si_track = 0x0016;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) != v2_vm_accumulator) ? 0x30A8 : 0x307D;
         }
@@ -32970,10 +33026,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x8000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x001E;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x30A8 : 0x3086;
         }
@@ -32995,10 +33052,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.bbox_y1
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0028);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0028);
           // partner.bbox_y1
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x30A8 : 0x308C;
         }
         G_POST(0x3088, 0x7F);
@@ -33071,10 +33129,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x30A1, 0x61);
         // inlined v2_vm_op_61: partner.state_18f5 &= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5 (field_addr_A)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18F5);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) & v2_vm_accumulator)); }
         vm.pc = 0x30A3;
         G_POST(0x30A1, 0x61);
@@ -33092,10 +33151,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x30A6, 0x64);
         // inlined v2_vm_op_64: partner.flags |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1585);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0x30A8;
         G_POST(0x30A6, 0x64);
@@ -35075,10 +35135,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x1423 : 0x3374;
         }
@@ -36885,10 +36946,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x35F4, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_x += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0460);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0460);
           // partner.vel_x (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1945);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x35F6;
         G_POST(0x35F4, 0x5B);
@@ -36908,10 +36970,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x35F8, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x35FA;
         G_POST(0x35F8, 0x5B);
@@ -36931,10 +36994,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x35FC, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x35FE;
         G_POST(0x35FC, 0x5B);
@@ -36954,10 +37018,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x3600, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_x += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0460);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0460);
           // partner.vel_x (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1945);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x3602;
         G_POST(0x3600, 0x5B);
@@ -40218,9 +40283,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x3B29;
@@ -40232,16 +40298,22 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_14: spawn(t=0C, x=partner.world_x, y=partner.world_y, pool=0, fl=1&0x801)
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
+          uint16_t _x_c3;  // partner.world_x
           { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
-            _t3 = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3)) + 0x0258);
-            vm.si_track = _o3; vm.di_track = _t3; }
-          const uint16_t _x = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_t3));
+            uint16_t _p3 = v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3));
+            _t3 = (uint16_t)(_p3 + 0x0258);
+            vm.si_track = _o3; vm.di_track = _t3;
+            _x_c3 = v2gs(vm.shadow).obj_world_x_at((uint16_t)(_p3)); }
+          const uint16_t _x = _x_c3;
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
+          uint16_t _y_c3;  // partner.world_y
           { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
-            _t3 = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3)) + 0x0280);
-            vm.si_track = _o3; vm.di_track = _t3; }
-          const uint16_t _y = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_t3));
+            uint16_t _p3 = v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3));
+            _t3 = (uint16_t)(_p3 + 0x0280);
+            vm.si_track = _o3; vm.di_track = _t3;
+            _y_c3 = v2gs(vm.shadow).obj_world_y_at((uint16_t)(_p3)); }
+          const uint16_t _y = _y_c3;
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -41280,10 +41352,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x3CCE, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x196D);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) + v2_vm_accumulator)); }
         vm.pc = 0x3CD0;
         G_POST(0x3CCE, 0x5B);
@@ -43230,10 +43303,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_6B: when acc >=u partner.frac_y
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0500);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0500);
           // partner.frac_y
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_frac_y_at((uint16_t)(_pp));
           vm.pc = (v2_vm_accumulator >= _v) ? 0x4E51 : 0x4004;
         }
         G_POST(0x4000, 0x6B);
@@ -46156,10 +46230,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.fld_16E6
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0201);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0201);
           // partner.fld_16E6
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_anim_sub_at((uint16_t)((_pp) + 0x21));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x1944 : 0x4471;
         }
         G_POST(0x446D, 0x7F);
@@ -46180,10 +46255,13 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ds_write(DS_MODE_WORD, 0x034B);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
+          uint16_t _r0_c3;  // partner.fld_64E5
           { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
-            _t3 = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3)) + 0x5000);
-            vm.si_track = _o3; vm.di_track = _t3; }
-          const uint16_t _r0 = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_t3));
+            uint16_t _p3 = v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3));
+            _t3 = (uint16_t)(_p3 + 0x5000);
+            vm.si_track = _o3; vm.di_track = _t3;
+            _r0_c3 = v2gs(vm.shadow).hud_gfx_tail_at((uint16_t)((_p3) + 0x68)); }
+          const uint16_t _r0 = _r0_c3;
           { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
@@ -46206,10 +46284,13 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_38, _w38);
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
+          uint16_t _px_c3;  // partner.fld_1CE6
           { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
-            _t3 = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3)) + 0x0801);
-            vm.si_track = _o3; vm.di_track = _t3; }
-          const uint16_t _px = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_t3));
+            uint16_t _p3 = v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3));
+            _t3 = (uint16_t)(_p3 + 0x0801);
+            vm.si_track = _o3; vm.di_track = _t3;
+            _px_c3 = v2gs(vm.shadow).coll_partner_tbl_at((uint16_t)((_p3) + 0x1C1)); }
+          const uint16_t _px = _px_c3;
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -52789,9 +52870,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x4F28;
@@ -52811,10 +52893,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.anim_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0208);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0208);
           // partner.anim_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_anim_idx_at((uint16_t)(_pp));
           vm.pc = (_v != v2_vm_accumulator) ? 0x4F40 : 0x4F2F;
         }
         G_POST(0x4F2B, 0x7A);
@@ -55629,10 +55712,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x52C7, 0x64);
         // inlined v2_vm_op_64: partner.fld_1AE7 |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0602);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0602);
           // partner.fld_1AE7 (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1AE7);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0x52C9;
         G_POST(0x52C7, 0x64);
@@ -55666,10 +55750,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_70: when acc <u partner.fld_3CE5
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x2800);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x2800);
           // partner.fld_3CE5
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).level_pal_chunks_at((uint16_t)((_pp) + 0xE68));
           vm.pc = (v2_vm_accumulator < _v) ? 0x3052 : 0x52D0;
         }
         G_POST(0x52CC, 0x70);
@@ -66121,10 +66206,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x800)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0016;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) == v2_vm_accumulator) ? 0x65C1 : 0x659B;
         }
@@ -66170,10 +66256,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x65C4 : 0x65AC;
         }
@@ -66196,10 +66283,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B5: call when acc != bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           if (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x65B5);
@@ -66225,10 +66313,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B5: call when acc != bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(_pp));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           if (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x65BE);
@@ -66386,10 +66475,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_89: call when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_res_handle_at((uint16_t)(_pp));
           if (_v == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x65F8);  // do_call_jump: return pc
               vm.pc = 0x660F;
@@ -66427,10 +66517,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_89: call when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_res_handle_at((uint16_t)(_pp));
           if (_v == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6603);  // do_call_jump: return pc
               vm.pc = 0x660F;
@@ -66468,10 +66559,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_89: call when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_res_handle_at((uint16_t)(_pp));
           if (_v == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x660E);  // do_call_jump: return pc
               vm.pc = 0x660F;
@@ -69927,10 +70019,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_bit_test_indexed: acc = bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -70212,10 +70305,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.spawn_pool
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x01B8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x01B8);
           // partner.spawn_pool
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x6A83 : 0x6A73;
         }
         G_POST(0x6A6F, 0x75);
@@ -70234,10 +70328,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.spawn_pool
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x01B8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x01B8);
           // partner.spawn_pool
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x6A8C : 0x6A7A;
         }
         G_POST(0x6A76, 0x75);
@@ -70489,10 +70584,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.spawn_pool
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x01B8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x01B8);
           // partner.spawn_pool
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x6AF3 : 0x6AE3;
         }
         G_POST(0x6ADF, 0x75);
@@ -70511,10 +70607,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.spawn_pool
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x01B8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x01B8);
           // partner.spawn_pool
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x6AFC : 0x6AEA;
         }
         G_POST(0x6AE6, 0x75);
@@ -70632,10 +70729,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.spawn_pool
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x01B8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x01B8);
           // partner.spawn_pool
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x6B28 : 0x6B16;
         }
         G_POST(0x6B12, 0x75);
@@ -70654,10 +70752,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.spawn_pool
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x01B8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x01B8);
           // partner.spawn_pool
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x6B33 : 0x6B1D;
         }
         G_POST(0x6B19, 0x75);
@@ -77514,10 +77613,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.class_bits & 0x20)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0140);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x0140);
           // partner.class_bits
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_class_bits_at((uint16_t)(_pp));
           vm.si_track = 0x000A;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0020) ? 1 : 0) != v2_vm_accumulator) ? 0x7403 : 0x73F0;
         }
@@ -77789,10 +77889,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.anim_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0208);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0208);
           // partner.anim_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_anim_idx_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x79D3 : 0x79A0;
         }
         G_POST(0x799C, 0x75);
@@ -77811,10 +77912,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.anim_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0208);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0208);
           // partner.anim_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_anim_idx_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x7A0A : 0x79A7;
         }
         G_POST(0x79A3, 0x75);
@@ -77875,9 +77977,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x79B7;
@@ -77996,10 +78099,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x79A7 : 0x79DB;
         }
@@ -78067,9 +78171,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x79EE;
@@ -78406,9 +78511,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x7A4E;
@@ -78678,9 +78784,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x7AF9;
@@ -78837,9 +78944,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x7B25;
@@ -81286,10 +81394,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_187d
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0398);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0398);
           // partner.state_187d
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_state_187d_at((uint16_t)(_pp));
           vm.pc = (_v != v2_vm_accumulator) ? 0x734F : 0x7E51;
         }
         G_POST(0x7E4D, 0x7A);
@@ -89560,10 +89669,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_y0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0000);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0000);
           // partner.bbox_y0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8A34 : 0x8A25;
         }
         G_POST(0x8A21, 0x84);
@@ -89606,10 +89716,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_x0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0050);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0050);
           // partner.bbox_x0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8A34 : 0x8A31;
         }
         G_POST(0x8A2D, 0x84);
@@ -89674,10 +89785,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_y0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0000);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0000);
           // partner.bbox_y0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8A53 : 0x8A44;
         }
         G_POST(0x8A40, 0x84);
@@ -89720,10 +89832,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_x0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0050);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0050);
           // partner.bbox_x0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8A53 : 0x8A50;
         }
         G_POST(0x8A4C, 0x84);
@@ -91431,9 +91544,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0800;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0140);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0140);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1625);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0xF7FF) | v2_vm_accumulator));
         }
         vm.pc = 0x8CF4;
@@ -92143,10 +92257,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x8E2F, 0x64);
         // inlined v2_vm_op_64: partner.flags |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1585);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0x8E31;
         G_POST(0x8E2F, 0x64);
@@ -92662,10 +92777,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_state_idx_at((uint16_t)(_pp));
           vm.pc = (_v != v2_vm_accumulator) ? 0x8EF9 : 0x8ED0;
         }
         G_POST(0x8ECC, 0x7A);
@@ -93605,9 +93721,10 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x8FFC;
@@ -93671,10 +93788,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_state_idx_at((uint16_t)(_pp));
           vm.pc = (_v != v2_vm_accumulator) ? 0x9013 : 0x900E;
         }
         G_POST(0x900A, 0x7A);
@@ -93692,10 +93810,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0x9011, 0x61);
         // inlined v2_vm_op_61: partner.flags &= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags (field_addr_A)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x1585);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) & v2_vm_accumulator)); }
         vm.pc = 0x9013;
         G_POST(0x9011, 0x61);
@@ -94056,10 +94175,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_state_idx_at((uint16_t)(_pp));
           vm.pc = (_v == v2_vm_accumulator) ? 0x909A : 0x9099;
         }
         G_POST(0x9095, 0x75);
@@ -115969,10 +116089,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj));
+          uint16_t _di = (uint16_t)(_pp + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(_pp));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0xA501 : 0xA4FB;
         }
@@ -121404,10 +121525,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0xACBA, 0x64);
         // inlined v2_vm_op_64: partner.state_18cd |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           // partner.state_18cd (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0xACBC;
         G_POST(0xACBA, 0x64);
@@ -121634,10 +121756,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0xAD09, 0x64);
         // inlined v2_vm_op_64: partner.state_18cd |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           // partner.state_18cd (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0xAD0B;
         G_POST(0xAD09, 0x64);
@@ -121864,10 +121987,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         G_PRE(0xAD58, 0x64);
         // inlined v2_vm_op_64: partner.state_18cd |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x03E8);
           // partner.state_18cd (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
-          uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
+          uint16_t _a = (uint16_t)(_pp + 0x18CD);
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) | v2_vm_accumulator)); }
         vm.pc = 0xAD5A;
         G_POST(0xAD58, 0x64);
@@ -121967,10 +122091,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.world_x
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0258);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0258);
           // partner.world_x
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_world_x_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0xAE88 : 0xAD76;
         }
         G_POST(0xAD72, 0x7F);
@@ -122013,10 +122138,11 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7F: when acc >=s partner.world_y
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0280);
+          uint16_t _pp = v2gs(vm.shadow).obj_partner_at((uint16_t)(_si));
+          uint16_t _di = (uint16_t)(_pp + 0x0280);
           // partner.world_y
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
+          const uint16_t _v = v2gs(vm.shadow).obj_world_y_at((uint16_t)(_pp));
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0xAE88 : 0xAD82;
         }
         G_POST(0xAD7E, 0x7F);

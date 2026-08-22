@@ -789,6 +789,18 @@ int  v2_gs_roundtrip_check(const uint8_t* ds, const char* tag);
   A1(music_id,           DS_MUSIC_ID)           \
   A1(dac_r_save_w,       DS_DAC_R_SAVE)
 
+// Stage 4 II.b: bounds sanitizer. Reports (dedup) every runtime-indexed
+// access that leaves its field's span — building the wrap map that decides
+// which fields may leave the flat layout in the carrier swap.
+#ifdef V2_GS_BOUNDS
+extern "C" void v2_gs_bounds_note(uint32_t base, uint32_t len, uint32_t off);
+#define V2_GS_BCHK(off, len, o) \
+    do { if ((uint32_t)(o) + 2u > (uint32_t)(len)) \
+             v2_gs_bounds_note((uint32_t)(off), (uint32_t)(len), (uint32_t)(o)); } while (0);
+#else
+#define V2_GS_BCHK(off, len, o)
+#endif
+
 struct V2StateView {
     uint8_t* ds;
     explicit V2StateView(uint8_t* ds_) : ds(ds_) {}
@@ -798,8 +810,8 @@ struct V2StateView {
     void     name(uint16_t v)          { *(uint16_t*)(ds + (off)) = v; } \
     uint16_t& name##_ref()             { return *(uint16_t*)(ds + (off)); }
 #define V2_GS_AN(name, off, n) \
-    uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); } \
-    void     name(uint32_t i, uint16_t v) { *(uint16_t*)(ds + (off) + 2u * i) = v; }
+    uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) return *(const uint16_t*)(ds + (off) + 2u * i); } \
+    void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) *(uint16_t*)(ds + (off) + 2u * i) = v; }
     V2_GS_FIELDS_W(V2_GS_A1, V2_GS_AN)
 #undef V2_GS_A1
 #undef V2_GS_AN
@@ -814,15 +826,24 @@ struct V2StateView {
     V2_GS_FIELDS_GAPFILL(V2_GS_AB1, V2_GS_ABN)
     // Stage 4 II.a: word access at a runtime byte offset from a field base.
     // EXACT flat semantics incl. 8086 wrap: addr = (uint16_t)((off) + o).
-#define V2_GS_ATW1(name, off) \
-    uint16_t name##_at(uint16_t o) const { return *(const uint16_t*)(ds + (uint16_t)((off) + o)); } \
-    void     name##_at(uint16_t o, uint16_t v) { *(uint16_t*)(ds + (uint16_t)((off) + o)) = v; }
-#define V2_GS_ATWN(name, off, n) V2_GS_ATW1(name, off)
+    // II.b: with -DV2_GS_BOUNDS every access outside [off, off+len) is
+    // reported (dedup) — the wrap map that gates the carrier's layout
+    // freedom (partner=0xFFFF-class reads are LEGAL flat behavior).
+#define V2_GS_ATW_IMPL(name, off, len) \
+    uint16_t name##_at(uint16_t o) const { V2_GS_BCHK(off, len, o) return *(const uint16_t*)(ds + (uint16_t)((off) + o)); } \
+    void     name##_at(uint16_t o, uint16_t v) { V2_GS_BCHK(off, len, o) *(uint16_t*)(ds + (uint16_t)((off) + o)) = v; }
+#define V2_GS_ATW1(name, off)    V2_GS_ATW_IMPL(name, off, 2u)
+#define V2_GS_ATWN(name, off, n) V2_GS_ATW_IMPL(name, off, 2u*(n))
     V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN)
+#undef V2_GS_ATW1
+#undef V2_GS_ATWN
+#define V2_GS_ATW1(name, off)    V2_GS_ATW_IMPL(name, off, 1u)
+#define V2_GS_ATWN(name, off, n) V2_GS_ATW_IMPL(name, off, (uint32_t)(n))
     V2_GS_FIELDS_B(V2_GS_ATW1, V2_GS_ATWN)
     V2_GS_FIELDS_GAPFILL(V2_GS_ATW1, V2_GS_ATWN)
 #undef V2_GS_ATW1
 #undef V2_GS_ATWN
+#undef V2_GS_ATW_IMPL
 
 #undef V2_GS_AB1
 #undef V2_GS_ABN

@@ -125,6 +125,15 @@ else
 V2_DEFINES += -DV2_GENCODE
 endif
 
+# V2_GS_BOUNDS=1: stage-4 II.b bounds sanitizer — view accessors report
+# (dedup) every runtime-indexed access that leaves its field span. Separate
+# objdir/binary so the instrumented build never mixes with the canon one.
+ifdef V2_GS_BOUNDS
+V2_DEFINES += -DV2_GS_BOUNDS
+EXE_NAME := $(EXE_NAME)_bounds
+OBJDIR := $(OBJDIR)-bounds
+endif
+
 # COV_SEG000=1: instrument ONLY the m2c oracle (vikings.exe_seg000.cpp) with
 # gcov, for the fn-test coverage report (task #47). Everything else compiles
 # as usual; the link adds --coverage for the gcov runtime. Use with HEADLESS:

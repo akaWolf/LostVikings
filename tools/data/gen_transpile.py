@@ -334,17 +334,19 @@ def inline_wave1(op, body, nxt):
     elif op in (0x5B, 0x5E, 0x64):       # partner.F op= acc via 1995_target:
         oper = {0x5B: '+', 0x5E: '-', 0x64: '|'}[op]   # si_track=cur, di_track=slot
         L.append(f'{{ uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
+        L.append('  uint16_t _pp = vm.ds_read((uint16_t)(_si + OBJ_PARTNER));')
+        L.append(f'  uint16_t _di = (uint16_t)(_pp + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[0])} (indexed_1995_target)')
         L.append('  vm.si_track = _si; vm.di_track = _di;')
-        L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+        L.append(f'  uint16_t _a = (uint16_t)(_pp + 0x{_fcol(body[0]):04X});')
         L.append(f'  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) {oper} v2_vm_accumulator)); }}')
     elif op == 0x61:                     # field_addr_A: PARTNER, both tracks
         L.append(f'{{ uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
+        L.append('  uint16_t _pp = vm.ds_read((uint16_t)(_si + OBJ_PARTNER));')
+        L.append(f'  uint16_t _di = (uint16_t)(_pp + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[0])} (field_addr_A)')
         L.append('  vm.si_track = _si; vm.di_track = _di;')
-        L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+        L.append(f'  uint16_t _a = (uint16_t)(_pp + 0x{_fcol(body[0]):04X});')
         L.append('  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) & v2_vm_accumulator)); }')
     elif op == 0x67:                     # partner.F ^= acc, di_track only
         L.append(f'{{ uint16_t _a = {_partner_addr(body[0])};')
@@ -427,10 +429,11 @@ def inline_wave2(op, body, tgt, nxt):
     elif fetch == 'partner':
         # read_indexed_field_1995: si_track = cur obj, di_track = slot
         L.append('  uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
+        L.append('  uint16_t _pp = vm.ds_read((uint16_t)(_si + OBJ_PARTNER));')
+        L.append(f'  uint16_t _di = (uint16_t)(_pp + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[0])}')
         L.append('  vm.si_track = _si; vm.di_track = _di;')
-        L.append('  const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));')
+        L.append(f'  const uint16_t _v = vm.ds_read((uint16_t)(_pp + 0x{_fcol(body[0]):04X}));')
     elif fetch == 'rand':
         L.append('  const uint16_t _v = v2_vm_read_random(vm);')
     if kind == 'j':
@@ -483,10 +486,11 @@ def _bt_fetch(kind, body):
         return L, f'((_fv & 0x{_mask(idx1):04X}) ? 1 : 0)'
     if kind == '15445':
         L.append('  uint16_t _obj = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
+        L.append('  uint16_t _pp = vm.ds_read((uint16_t)(_obj + OBJ_PARTNER));')
+        L.append(f'  uint16_t _di = (uint16_t)(_pp + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[1])}')
         L.append('  vm.di_track = _di;')
-        L.append('  uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));')
+        L.append(f'  uint16_t _fv = vm.ds_read((uint16_t)(_pp + 0x{_fcol(body[1]):04X}));')
         L.append(f'  vm.si_track = 0x{idx1:04X};  // 15445 tail: POP si = first byte')
         return L, f'((_fv & 0x{_mask(idx1):04X}) ? 1 : 0)'
     raise KeyError(kind)
@@ -651,9 +655,10 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
             L.append(f'  vm.ds_write(0x{a:04X}, (uint16_t)((vm.ds_read(0x{a:04X}) & 0x{c:04X}) | v2_vm_accumulator));')
         elif op == 0x9E:    # partner.F via 1995_target (si/di tracks!)
             L.append('  uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
+            L.append('  uint16_t _pp = vm.ds_read((uint16_t)(_si + OBJ_PARTNER));')
+            L.append(f'  uint16_t _di = (uint16_t)(_pp + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
             L.append('  vm.si_track = _si; vm.di_track = _di;')
-            L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+            L.append(f'  uint16_t _a = (uint16_t)(_pp + 0x{_fcol(body[1]):04X});')
             L.append(f'  vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x{c:04X}) | v2_vm_accumulator));')
         elif op == 0xA0:    # [addr] &= acc  (no clear)
             a = int.from_bytes(body[1:3], 'little')
@@ -668,9 +673,10 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
         elif op in (0xA4, 0xA7):   # partner.F |=/^= acc (BOTH tracks per body)
             oper = '|' if op == 0xA4 else '^'
             L.append('  uint16_t _obj = vm.global_r(DS_CUR_OBJ);')
-            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
+            L.append('  uint16_t _pp = vm.ds_read((uint16_t)(_obj + OBJ_PARTNER));')
+            L.append(f'  uint16_t _di = (uint16_t)(_pp + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
             L.append('  vm.si_track = _obj; vm.di_track = _di;')
-            L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+            L.append(f'  uint16_t _a = (uint16_t)(_pp + 0x{_fcol(body[1]):04X});')
             L.append(f'  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) {oper} v2_vm_accumulator));')
         L.append('}')
         L.append(f'vm.pc = 0x{nxt:04X};')
@@ -688,9 +694,10 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
     if op == 0xBE:   # via 1995_target (si/di tracks)
         return ['v2_vm_accumulator <<= 8;',
                 '{ uint16_t _si = vm.global_r(DS_CUR_OBJ);',
-                f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});',
+                '  uint16_t _pp = vm.ds_read((uint16_t)(_si + OBJ_PARTNER));',
+                f'  uint16_t _di = (uint16_t)(_pp + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});',
                 '  vm.si_track = _si; vm.di_track = _di;',
-                '  vm.ds_write((uint16_t)(_di + OBJ_FIELD_BASE), v2_vm_accumulator); }',
+                f'  vm.ds_write((uint16_t)(_pp + 0x{_fcol(body[0]):04X}), v2_vm_accumulator); }}',
                 f'vm.pc = 0x{nxt:04X};']
     return None
 
@@ -861,10 +868,14 @@ def _ch_get(L, var, chan, body, o):
         L.append(f'  const uint16_t {var} = vm.ds_read(0x{a:04X});')
         return 2
     if chan == 3:
+        C = _fcol(body[o])
+        L.append(f'  uint16_t {var}_c3;  // partner.{ex.field_name(body[o])}')
         L.append('  { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'    _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x{(_fcol(body[o]) - 0x14E5) & 0xFFFF:04X});')
-        L.append('    vm.si_track = _o3; vm.di_track = _t3; }')
-        L.append(f'  const uint16_t {var} = vm.ds_read((uint16_t)(_t3 + OBJ_FIELD_BASE));')
+        L.append('    uint16_t _p3 = vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER));')
+        L.append(f'    _t3 = (uint16_t)(_p3 + 0x{(C - 0x14E5) & 0xFFFF:04X});')
+        L.append('    vm.si_track = _o3; vm.di_track = _t3;')
+        L.append(f'    {var}_c3 = vm.ds_read((uint16_t)(_p3 + 0x{C:04X})); }}')
+        L.append(f'  const uint16_t {var} = {var}_c3;')
         return 1
     if chan == 4:
         L.append(f'  const uint16_t {var} = v2_vm_read_random(vm);')
@@ -888,10 +899,13 @@ def _ch_set(L, chan, body, o, val_expr):
         L.append(f'  vm.ds_write(0x{a:04X}, {val_expr});')
         return 2
     if chan == 3:
+        C = _fcol(body[o])
         L.append('  { uint16_t _so = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'    uint16_t _sd = (uint16_t)(vm.ds_read((uint16_t)(_so + OBJ_PARTNER)) + 0x{(_fcol(body[o]) - 0x14E5) & 0xFFFF:04X});')
+        L.append('    uint16_t _sp = vm.ds_read((uint16_t)(_so + OBJ_PARTNER));')
+        L.append(f'    uint16_t _sd = (uint16_t)(_sp + 0x{(C - 0x14E5) & 0xFFFF:04X});')
         L.append('    vm.si_track = _so; vm.di_track = _sd;')
-        L.append(f'    vm.ds_write((uint16_t)(_sd + OBJ_FIELD_BASE), {val_expr}); }}')
+        L.append(f'    vm.ds_write((uint16_t)(_sp + 0x{C:04X}), {val_expr}); }}'
+                 f'  // partner.{ex.field_name(body[o])}')
         return 1
     if chan == 5:
         # setter ch5 stores the CURRENT anim pc — depends on live vm.pc,
