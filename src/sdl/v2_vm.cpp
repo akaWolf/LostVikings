@@ -16908,24 +16908,28 @@ static void v2_vm_op_3D(V2VM& vm) {
 // Consumes same bytes as 0x16: 1 mode byte + N + M.
 static void v2_vm_op_34(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ); // current object
-    uint16_t best_dist = 0xFFFF;
-    uint16_t best_si = 0;
-
-    for (uint16_t si = 0; si < 6; si += 2) {
-        if (vm.ds_read(si + VIK_PORTRAIT) == 0) continue;
-        // Manhattan distance: |di.X - si.X| + |di.Y - si.Y|
+    // Exact replica of orig sub_150b5 (task #94, mk_16 f950 divergence):
+    //   50C1: candidate filter is CMP [si+15ADh],0 (OBJ_RES_HANDLE) — NOT
+    //         the portrait row the previous mirror used;
+    //   50EA: ds:3CA is written INSIDE the loop only on improvement — a
+    //         scan where nobody qualifies leaves the PREVIOUS search's
+    //         value in place (no unconditional post-loop store);
+    //   50F6: the delta target si is re-read from ds:3CA afterwards.
+    uint16_t best_dist = 0xFFFF;                         // 50B5 mov ax,FFFF / 50B8 dx=ax
+    for (uint16_t si = 0; si < 6; si += 2) {             // 50BE..50F4
+        if (ObjRef{vm, si}.u16(OBJ_RES_HANDLE) == 0)     // 50C1 cmp [si+15AD],0
+            continue;                                    // 50C6 jz
         int16_t dx_val = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_X) - ObjRef{vm, si}.u16(OBJ_WORLD_X));
-        if (dx_val < 0) dx_val = -dx_val;
+        if (dx_val < 0) dx_val = -dx_val;                // 50D0/50D2 jns/neg
         int16_t dy_val = (int16_t)(ObjRef{vm, di}.u16(OBJ_WORLD_Y) - ObjRef{vm, si}.u16(OBJ_WORLD_Y));
-        if (dy_val < 0) dy_val = -dy_val;
-        uint16_t dist = (uint16_t)(dx_val + dy_val);
-        if (dist < best_dist) {
-            best_dist = dist;
-            best_si = si;
+        if (dy_val < 0) dy_val = -dy_val;                // 50DE/50E0
+        uint16_t dist = (uint16_t)((uint16_t)dx_val + (uint16_t)dy_val); // 50E2 add ax,cx
+        if (dist < best_dist) {                          // 50E4/50E6 cmp/jnb (unsigned)
+            best_dist = dist;                            // 50E8 mov dx,ax
+            vm.ds_write(DS_SEARCH_BEST, si);             // 50EA mov ds:3CA,si
         }
     }
-    vm.ds_write(DS_SEARCH_BEST, best_si);
-    uint16_t si_sub = best_si; // nearest player is the "sub-object" for delta computation
+    uint16_t si_sub = vm.ds_read(DS_SEARCH_BEST);        // 50F6 mov si,ds:3CA
 
     // loc_1510E: same as 0x16
     int16_t x_delta;
