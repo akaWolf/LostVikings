@@ -1,4 +1,4 @@
-// AUTO-GENERATED anim executor for chunk 0x1C6 (991 commands).
+// AUTO-GENERATED anim executor for chunk 0x1C6 (1061 commands).
 static bool v2_gen_anim_1c6(V2VM& vm, uint16_t& anim_bx, int& max) {
     while (max > 0) {
         switch (anim_bx) {
@@ -33,6 +33,13 @@ static bool v2_gen_anim_1c6(V2VM& vm, uint16_t& anim_bx, int& max) {
         case 0x1980: goto A_1980;
         case 0x1982: goto A_1982;
         case 0x1984: goto A_1984;
+        case 0x1D7F: goto A_1D7F;
+        case 0x1D81: goto A_1D81;
+        case 0x1D92: goto A_1D92;
+        case 0x1D94: goto A_1D94;
+        case 0x1DB1: goto A_1DB1;
+        case 0x1DB3: goto A_1DB3;
+        case 0x1DB5: goto A_1DB5;
         case 0x207E: goto A_207E;
         case 0x2081: goto A_2081;
         case 0x2084: goto A_2084;
@@ -76,6 +83,68 @@ static bool v2_gen_anim_1c6(V2VM& vm, uint16_t& anim_bx, int& max) {
         case 0x2154: goto A_2154;
         case 0x2155: goto A_2155;
         case 0x2158: goto A_2158;
+        case 0x2476: goto A_2476;
+        case 0x2480: goto A_2480;
+        case 0x2482: goto A_2482;
+        case 0x249B: goto A_249B;
+        case 0x249D: goto A_249D;
+        case 0x24BA: goto A_24BA;
+        case 0x24BC: goto A_24BC;
+        case 0x26D9: goto A_26D9;
+        case 0x26DB: goto A_26DB;
+        case 0x2704: goto A_2704;
+        case 0x2706: goto A_2706;
+        case 0x2709: goto A_2709;
+        case 0x270B: goto A_270B;
+        case 0x2723: goto A_2723;
+        case 0x2A1C: goto A_2A1C;
+        case 0x2A26: goto A_2A26;
+        case 0x2A28: goto A_2A28;
+        case 0x2A39: goto A_2A39;
+        case 0x2A3B: goto A_2A3B;
+        case 0x2A6C: goto A_2A6C;
+        case 0x2A6E: goto A_2A6E;
+        case 0x2A71: goto A_2A71;
+        case 0x2A73: goto A_2A73;
+        case 0x2D07: goto A_2D07;
+        case 0x2D09: goto A_2D09;
+        case 0x2D2E: goto A_2D2E;
+        case 0x2D30: goto A_2D30;
+        case 0x2D55: goto A_2D55;
+        case 0x2D57: goto A_2D57;
+        case 0x2D5C: goto A_2D5C;
+        case 0x2D5E: goto A_2D5E;
+        case 0x2D63: goto A_2D63;
+        case 0x2D65: goto A_2D65;
+        case 0x2D68: goto A_2D68;
+        case 0x30BE: goto A_30BE;
+        case 0x30C1: goto A_30C1;
+        case 0x30C3: goto A_30C3;
+        case 0x30D4: goto A_30D4;
+        case 0x30D7: goto A_30D7;
+        case 0x30D9: goto A_30D9;
+        case 0x3313: goto A_3313;
+        case 0x3315: goto A_3315;
+        case 0x332E: goto A_332E;
+        case 0x3330: goto A_3330;
+        case 0x334E: goto A_334E;
+        case 0x3350: goto A_3350;
+        case 0x3353: goto A_3353;
+        case 0x36D1: goto A_36D1;
+        case 0x36D3: goto A_36D3;
+        case 0x36E2: goto A_36E2;
+        case 0x36E4: goto A_36E4;
+        case 0x36ED: goto A_36ED;
+        case 0x36EF: goto A_36EF;
+        case 0x36F8: goto A_36F8;
+        case 0x36FA: goto A_36FA;
+        case 0x3715: goto A_3715;
+        case 0x3717: goto A_3717;
+        case 0x3720: goto A_3720;
+        case 0x3722: goto A_3722;
+        case 0x3925: goto A_3925;
+        case 0x3927: goto A_3927;
+        case 0x3930: goto A_3930;
         case 0x4A5C: goto A_4A5C;
         case 0x4A5E: goto A_4A5E;
         case 0x4A61: goto A_4A61;
@@ -709,6 +778,7 @@ static bool v2_gen_anim_1c6(V2VM& vm, uint16_t& anim_bx, int& max) {
         case 0x7C4E: goto A_7C4E;
         case 0x7C50: goto A_7C50;
         case 0x7C96: goto A_7C96;
+        case 0x7CF9: goto A_7CF9;
         case 0x8A0E: goto A_8A0E;
         case 0x8A10: goto A_8A10;
         case 0x8A13: goto A_8A13;
@@ -1491,6 +1561,118 @@ static bool v2_gen_anim_1c6(V2VM& vm, uint16_t& anim_bx, int& max) {
         if (!_ok) return true;
         }
         continue;
+    A_1D7F:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x1D7F;
+        anim_bx = 0x1D80;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x1D80, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_1D81:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x1D81;
+        anim_bx = 0x1D82;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x1D82, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_1D92:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x1D92;
+        anim_bx = 0x1D93;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x1D93, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_1D94:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x1D94;
+        anim_bx = 0x1D95;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x1D95, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_1DB1:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x1DB1;
+        anim_bx = 0x1DB2;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x1DB2, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_1DB3:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x1DB3;
+        anim_bx = 0x1DB4;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x1DB4, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_1DB5:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x1DB5;
+        anim_bx = 0x1DB6;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x1DB6, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
     A_207E:
         max--;
         {
@@ -2175,6 +2357,998 @@ static bool v2_gen_anim_1c6(V2VM& vm, uint16_t& anim_bx, int& max) {
         v2_animdump_note(vm.shadow, 0x2159, 0x0E, anim_bx);
         AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
         _t.cmd = 0x0E; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2476:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x17]++;
+        const uint16_t _bxb = 0x2476;
+        anim_bx = 0x2477;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x17 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x17);
+        v2_animdump_note(vm.shadow, 0x2477, 0x17, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x17; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2480:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2480;
+        anim_bx = 0x2481;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2481, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2482:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x2482;
+        anim_bx = 0x2483;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x2483, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_249B:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x249B;
+        anim_bx = 0x249C;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x249C, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_249D:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x249D;
+        anim_bx = 0x249E;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x249E, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_24BA:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x24BA;
+        anim_bx = 0x24BB;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x24BB, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_24BC:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x24BC;
+        anim_bx = 0x24BD;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x24BD, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_26D9:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x26D9;
+        anim_bx = 0x26DA;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x26DA, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_26DB:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x26DB;
+        anim_bx = 0x26DC;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x26DC, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2704:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2704;
+        anim_bx = 0x2705;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2705, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2706:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x03]++;
+        const uint16_t _bxb = 0x2706;
+        anim_bx = 0x2707;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x03 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x03);
+        v2_animdump_note(vm.shadow, 0x2707, 0x03, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x03; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2709:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2709;
+        anim_bx = 0x270A;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x270A, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_270B:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x270B;
+        anim_bx = 0x270C;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x270C, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2723:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0E]++;
+        const uint16_t _bxb = 0x2723;
+        anim_bx = 0x2724;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0E * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0E);
+        v2_animdump_note(vm.shadow, 0x2724, 0x0E, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0E; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A1C:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x17]++;
+        const uint16_t _bxb = 0x2A1C;
+        anim_bx = 0x2A1D;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x17 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x17);
+        v2_animdump_note(vm.shadow, 0x2A1D, 0x17, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x17; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A26:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2A26;
+        anim_bx = 0x2A27;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2A27, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A28:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x2A28;
+        anim_bx = 0x2A29;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x2A29, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A39:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2A39;
+        anim_bx = 0x2A3A;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2A3A, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A3B:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x2A3B;
+        anim_bx = 0x2A3C;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x2A3C, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A6C:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2A6C;
+        anim_bx = 0x2A6D;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2A6D, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A6E:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x03]++;
+        const uint16_t _bxb = 0x2A6E;
+        anim_bx = 0x2A6F;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x03 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x03);
+        v2_animdump_note(vm.shadow, 0x2A6F, 0x03, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x03; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A71:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2A71;
+        anim_bx = 0x2A72;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2A72, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2A73:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0E]++;
+        const uint16_t _bxb = 0x2A73;
+        anim_bx = 0x2A74;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0E * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0E);
+        v2_animdump_note(vm.shadow, 0x2A74, 0x0E, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0E; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D07:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2D07;
+        anim_bx = 0x2D08;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2D08, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D09:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x2D09;
+        anim_bx = 0x2D0A;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x2D0A, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D2E:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2D2E;
+        anim_bx = 0x2D2F;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2D2F, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D30:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x2D30;
+        anim_bx = 0x2D31;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x2D31, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D55:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2D55;
+        anim_bx = 0x2D56;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2D56, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D57:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x2D57;
+        anim_bx = 0x2D58;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x2D58, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D5C:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2D5C;
+        anim_bx = 0x2D5D;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2D5D, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D5E:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x2D5E;
+        anim_bx = 0x2D5F;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x2D5F, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D63:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x2D63;
+        anim_bx = 0x2D64;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x2D64, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D65:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x03]++;
+        const uint16_t _bxb = 0x2D65;
+        anim_bx = 0x2D66;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x03 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x03);
+        v2_animdump_note(vm.shadow, 0x2D66, 0x03, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x03; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_2D68:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0E]++;
+        const uint16_t _bxb = 0x2D68;
+        anim_bx = 0x2D69;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0E * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0E);
+        v2_animdump_note(vm.shadow, 0x2D69, 0x0E, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0E; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_30BE:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x02]++;
+        const uint16_t _bxb = 0x30BE;
+        anim_bx = 0x30BF;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x02 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x02);
+        v2_animdump_note(vm.shadow, 0x30BF, 0x02, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x02; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_30C1:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x30C1;
+        anim_bx = 0x30C2;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x30C2, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_30C3:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x30C3;
+        anim_bx = 0x30C4;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x30C4, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_30D4:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x02]++;
+        const uint16_t _bxb = 0x30D4;
+        anim_bx = 0x30D5;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x02 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x02);
+        v2_animdump_note(vm.shadow, 0x30D5, 0x02, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x02; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_30D7:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x30D7;
+        anim_bx = 0x30D8;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x30D8, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_30D9:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x30D9;
+        anim_bx = 0x30DA;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x30DA, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3313:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x3313;
+        anim_bx = 0x3314;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x3314, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3315:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x3315;
+        anim_bx = 0x3316;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x3316, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_332E:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x332E;
+        anim_bx = 0x332F;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x332F, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3330:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x3330;
+        anim_bx = 0x3331;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x3331, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_334E:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x334E;
+        anim_bx = 0x334F;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x334F, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3350:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x03]++;
+        const uint16_t _bxb = 0x3350;
+        anim_bx = 0x3351;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x03 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x03);
+        v2_animdump_note(vm.shadow, 0x3351, 0x03, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x03; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3353:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0E]++;
+        const uint16_t _bxb = 0x3353;
+        anim_bx = 0x3354;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0E * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0E);
+        v2_animdump_note(vm.shadow, 0x3354, 0x0E, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0E; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36D1:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x36D1;
+        anim_bx = 0x36D2;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x36D2, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36D3:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x36D3;
+        anim_bx = 0x36D4;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x36D4, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36E2:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x36E2;
+        anim_bx = 0x36E3;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x36E3, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36E4:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x36E4;
+        anim_bx = 0x36E5;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x36E5, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36ED:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x36ED;
+        anim_bx = 0x36EE;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x36EE, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36EF:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x36EF;
+        anim_bx = 0x36F0;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x36F0, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36F8:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x36F8;
+        anim_bx = 0x36F9;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x36F9, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_36FA:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x36FA;
+        anim_bx = 0x36FB;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x36FB, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3715:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x3715;
+        anim_bx = 0x3716;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x3716, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3717:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x3717;
+        anim_bx = 0x3718;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x3718, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3720:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x3720;
+        anim_bx = 0x3721;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x3721, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3722:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x3722;
+        anim_bx = 0x3723;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x3723, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3925:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x14]++;
+        const uint16_t _bxb = 0x3925;
+        anim_bx = 0x3926;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x14 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x14);
+        v2_animdump_note(vm.shadow, 0x3926, 0x14, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x14; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3927:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x3927;
+        anim_bx = 0x3928;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x3928, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_3930:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x0F]++;
+        const uint16_t _bxb = 0x3930;
+        anim_bx = 0x3931;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x0F * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x0F);
+        v2_animdump_note(vm.shadow, 0x3931, 0x0F, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x0F; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
         v2_anim_trace_idx++;
         if (!_ok) return true;
         }
@@ -12303,6 +13477,22 @@ static bool v2_gen_anim_1c6(V2VM& vm, uint16_t& anim_bx, int& max) {
         v2_animdump_note(vm.shadow, 0x7C97, 0x0E, anim_bx);
         AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
         _t.cmd = 0x0E; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
+        v2_anim_trace_idx++;
+        if (!_ok) return true;
+        }
+        continue;
+    A_7CF9:
+        max--;
+        {
+        v2_v2_anim_cmd_count++;
+        v2_op_anim_count[0x15]++;
+        const uint16_t _bxb = 0x7CF9;
+        anim_bx = 0x7CFA;
+        const uint16_t _h = *(uint16_t*)(vm.shadow + DS_CMD_HANDLER_TBL + 0x15 * 2);
+        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x15);
+        v2_animdump_note(vm.shadow, 0x7CFA, 0x15, anim_bx);
+        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];
+        _t.cmd = 0x15; _t.handler = _h; _t.bx_before = _bxb; _t.bx_after = anim_bx;
         v2_anim_trace_idx++;
         if (!_ok) return true;
         }

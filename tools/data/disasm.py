@@ -315,8 +315,17 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=(), rec_scan=False):
                 off = t * REC + 3
                 if off + 2 <= len(d):
                     npc = struct.unpack_from('<H', d, off)[0]
-                    if npc < len(d):
+                    # BOTH template entries, exactly like the record scan:
+                    # P (anim redirect, also the flags&0x200 re-entry) AND
+                    # P+3 (the spawn entry sub_13e52 stores as OBJ_PC).
+                    # Task #95: only P was pushed here, so op_14-spawned
+                    # templates never contributed their spawn strand — the
+                    # live 1C3:745C zone (record t06, spawned by op_14 at
+                    # 433C/4393) sat outside the static model.
+                    if 0x600 <= npc < len(d):
                         push(npc, pc)
+                        if npc + 3 < len(d):
+                            push(npc + 3, pc)
             continue
         if op in CUSTOM_BR:
             ln, _ = CUSTOM_BR[op](d, pc)
