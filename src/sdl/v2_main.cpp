@@ -241,11 +241,16 @@ int main(int argc, char* argv[]) {
                 need_quit = true;
             }
         }
+        // V2_NOVSYNC=1 (diagnostics): drop the real-time frame pacing so a
+        // replay runs at CPU speed — the benchmarking channel for the
+        // gencode-vs-interpreter comparison. Default behavior unchanged.
+        static int novsync = -1;
+        if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
         frame_target_ms += FRAME_PERIOD_MS;
         uint32_t now = SDL_GetTicks();
-        if ((int32_t)(frame_target_ms - now) > 0) {
+        if (!novsync && (int32_t)(frame_target_ms - now) > 0) {
             SDL_Delay(frame_target_ms - now);
-        } else {
+        } else if ((int32_t)(frame_target_ms - now) <= 0) {
             // Fell behind — reset target to avoid catch-up burst.
             frame_target_ms = now;
         }
