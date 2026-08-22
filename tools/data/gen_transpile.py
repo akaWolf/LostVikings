@@ -40,6 +40,132 @@ dc = lf.dc
 ex = load('ex', 'tools/data/expr.py')
 
 # ============================================================================
+# Stage 4 phase I: named-accessor emission. Every numeric vm.ds_read(0xA) /
+# vm.ds_write(0xA, V) the emitters produce is rewritten to the v2gs() view
+# accessor covering that byte (same bytes today; the carrier swap later only
+# changes the accessor backend). The field map is parsed from the SAME
+# X-macro lists that generate the struct, the view and the coverage map.
+# ============================================================================
+def _build_gs_map():
+    lay = {}
+    for m in re.finditer(r'constexpr uint16_t (\w+)\s*=\s*0x([0-9A-Fa-f]+);',
+                         open('src/sdl/v2_ds_layout.h').read()):
+        lay[m.group(1)] = int(m.group(2), 16)
+    h = open('src/sdl/v2_gamestate.h').read()
+    cov = {}
+    def val(tok):
+        tok = tok.strip()
+        if tok.startswith('0x') or tok.isdigit():
+            return int(tok, 0)
+        return lay.get(tok)
+    for m in re.finditer(r'\b(F1|FN|B1|BN)\(\s*(\w+)\s*,\s*([\w+x0-9]+)\s*(?:,\s*(\d+))?\)', h):
+        kind, name, off_t, cnt = m.groups()
+        off = val(off_t)
+        if off is None:
+            continue
+        n = int(cnt) if cnt else 1
+        w = 2 if kind in ('F1', 'FN') else 1
+        for b in range(off, off + n * w):
+            cov.setdefault(b, (name, kind, off, n))
+    return cov
+
+_GS_COV = _build_gs_map()
+_GS_STATS = {'named': 0, 'byte_pair': 0, 'fallback': 0}
+
+def _gs_byte_r(a):
+    """C++ expr for ONE byte read at address a via the view, or None."""
+    c = _GS_COV.get(a)
+    if c is None:
+        return None
+    name, kind, base, n = c
+    if kind == 'B1':
+        return f'v2gs(vm.shadow).{name}_b()'
+    if kind == 'BN':
+        return f'v2gs(vm.shadow).{name}_bytes()[{a - base}]'
+    idx = (a - base) // 2
+    half = '& 0xFF' if (a - base) % 2 == 0 else '>> 8'
+    fld = f'v2gs(vm.shadow).{name}()' if kind == 'F1' else f'v2gs(vm.shadow).{name}({idx})'
+    return f'(uint8_t)({fld} {half})'
+
+def gs_read_expr(a):
+    c = _GS_COV.get(a)
+    if c is not None:
+        name, kind, base, n = c
+        if kind in ('F1', 'FN') and (a - base) % 2 == 0:
+            _GS_STATS['named'] += 1
+            return (f'v2gs(vm.shadow).{name}()' if kind == 'F1'
+                    else f'v2gs(vm.shadow).{name}({(a - base) // 2})')
+    lo, hi = _gs_byte_r(a), _gs_byte_r((a + 1) & 0xFFFF)
+    if lo and hi:
+        _GS_STATS['byte_pair'] += 1
+        return f'(uint16_t)({lo} | ((uint16_t){hi} << 8))'
+    _GS_STATS['fallback'] += 1
+    return f'vm.ds_read(0x{a:04X})'
+
+def _gs_byte_w(a, vexpr):
+    c = _GS_COV.get(a)
+    if c is None:
+        return None
+    name, kind, base, n = c
+    if kind == 'B1':
+        return f'v2gs(vm.shadow).{name}_b((uint8_t)({vexpr}));'
+    if kind == 'BN':
+        return f'v2gs(vm.shadow).{name}_bytes()[{a - base}] = (uint8_t)({vexpr});'
+    return None   # word fields never take single-byte writes on this path
+
+def gs_write_stmt(a, vexpr):
+    c = _GS_COV.get(a)
+    if c is not None:
+        name, kind, base, n = c
+        if kind in ('F1', 'FN') and (a - base) % 2 == 0:
+            _GS_STATS['named'] += 1
+            return (f'v2gs(vm.shadow).{name}({vexpr});' if kind == 'F1'
+                    else f'v2gs(vm.shadow).{name}({(a - base) // 2}, {vexpr});')
+    lo = _gs_byte_w(a, '_gswv & 0xFF')
+    hi = _gs_byte_w((a + 1) & 0xFFFF, '_gswv >> 8')
+    if lo and hi:
+        _GS_STATS['byte_pair'] += 1
+        return f'{{ uint16_t _gswv = (uint16_t)({vexpr}); {lo} {hi} }}'
+    _GS_STATS['fallback'] += 1
+    return f'vm.ds_write(0x{a:04X}, {vexpr});'
+
+_RD_RE = re.compile(r'vm\.ds_read\((?:\(uint16_t\))?0x([0-9A-Fa-f]{1,4})\)')
+
+def apply_gs_names(text):
+    """Rewrite numeric ds_read/ds_write to named view accessors."""
+    text = _RD_RE.sub(lambda m: gs_read_expr(int(m.group(1), 16)), text)
+    out = []
+    i = 0
+    W = 'vm.ds_write('
+    while True:
+        j = text.find(W, i)
+        if j < 0:
+            out.append(text[i:])
+            break
+        k = j + len(W)
+        m = re.match(r'(?:\(uint16_t\))?0x([0-9A-Fa-f]{1,4}),\s*', text[k:])
+        if not m:
+            out.append(text[i:k])
+            i = k
+            continue
+        a = int(m.group(1), 16)
+        p = k + m.end()
+        depth = 1
+        while depth > 0:
+            ch = text[p]
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            p += 1
+        vexpr = text[k + m.end():p - 1]
+        assert text[p] == ';', text[j:p + 2]
+        out.append(text[i:j])
+        out.append(gs_write_stmt(a, vexpr))
+        i = p + 1
+    return ''.join(out)
+
+# ============================================================================
 # Stage B wave 1: inline emitters for the acc family. Each template is a
 # line-by-line copy of its verified handler body with the stream operands
 # folded to constants (field LUT resolved via the static DS, exactly what
@@ -1329,8 +1455,10 @@ def transpile(cid, outdir='src/sdl/gen'):
     w('}')
     os.makedirs(outdir, exist_ok=True)
     path = f'{outdir}/chunk_{cid:04x}.gen.inc'
-    open(path, 'w').write('\n'.join(lines) + '\n')
-    print(f'{path}: {len(lines)} lines, {len(seen)} instructions')
+    text = apply_gs_names('\n'.join(lines) + '\n')   # stage 4 phase I
+    open(path, 'w').write(text)
+    print(f'{path}: {len(lines)} lines, {len(seen)} instructions, '
+          f'gs-named {_GS_STATS}')
     return path
 
 def transpile_anim(cid, outdir='src/sdl/gen'):

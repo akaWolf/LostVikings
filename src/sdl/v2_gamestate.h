@@ -34,6 +34,10 @@
 // Core globals + input + scroll + collision scratch
 #define V2_GS_FIELDS_CORE(F1, FN) \
   F1(cur_obj,            DS_CUR_OBJ)            \
+  FN(script_vars,        0x0204, 68)            \
+  F1(script_var_28e,     0x028E)                \
+  F1(level_var_25c5,     0x25C5)                \
+  F1(level_var_25c7,     0x25C7)                \
   F1(viewport_x,         DS_VIEWPORT_X)         \
   F1(viewport_y,         DS_VIEWPORT_Y)         \
   F1(text_idx,           DS_TEXT_IDX)           \
@@ -648,8 +652,7 @@
   BN(zero_0070,          0x0070, 8)           \
   BN(zero_007e,          0x007e, 2)           \
   BN(zero_0082,          0x0082, 8)           \
-  BN(rt_0204,            0x0204, 136)           \
-  BN(zero_028e,          0x028e, 116)           \
+  BN(zero_0290,          0x0290, 114)           \
   BN(zero_0306,          0x0306, 2)           \
   BN(zero_0309,          0x0309, 7)           \
   BN(zero_0318,          0x0318, 22)           \
@@ -665,7 +668,6 @@
   BN(zero_044c,          0x044c, 1)           \
   BN(zero_25a9,          0x25a9, 1)           \
   BN(zero_25b1,          0x25b1, 2)           \
-  BN(zero_25c5,          0x25c5, 4)           \
   BN(rt_25cd,            0x25cd, 2)           \
   BN(rt_25d0,            0x25d0, 12)           \
   BN(rt_25e0,            0x25e0, 1)           \
@@ -809,6 +811,7 @@ struct V2StateView {
     uint8_t* name##_bytes()            { return ds + (off); } \
     const uint8_t* name##_bytes() const { return ds + (off); }
     V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_AB1, V2_GS_ABN)
 #undef V2_GS_AB1
 #undef V2_GS_ABN
 #define V2_GS_A1(name, off) \
@@ -852,6 +855,7 @@ struct V2StateViewC {
 #define V2_GS_ABN(name, off, n) \
     const uint8_t* name##_bytes() const { return ds + (off); }
     V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_AB1, V2_GS_ABN)
 #undef V2_GS_AB1
 #undef V2_GS_ABN
 #define V2_GS_A1(name, off) \

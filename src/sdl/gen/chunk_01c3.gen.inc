@@ -10234,7 +10234,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x13E9, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [active_viking]
         vm.si_track = 0x03C2;
-        v2_vm_accumulator = vm.ds_read(0x03C2);
+        v2_vm_accumulator = v2gs(vm.shadow).active_viking();
         vm.pc = 0x13EC;
         G_POST(0x13E9, 0x53);
         continue;
@@ -10480,7 +10480,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1433;
         G_PRE(0x1433, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x1436;
         G_POST(0x1433, 0x57);
         continue;
@@ -10496,7 +10496,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1439;
         G_PRE(0x1439, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x143C;
         G_POST(0x1439, 0x5D);
         continue;
@@ -10516,7 +10516,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x144C : 0x1443;
         }
         G_POST(0x143E, 0x83);
@@ -10570,7 +10570,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x144D, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_res_slot]
         vm.si_track = 0x03B4;
-        v2_vm_accumulator = vm.ds_read(0x03B4);
+        v2_vm_accumulator = v2gs(vm.shadow).search_res_slot();
         vm.pc = 0x1450;
         G_POST(0x144D, 0x53);
         continue;
@@ -11052,7 +11052,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0284]
         {
           vm.si_track = 0x0284;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0284);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(64);
           vm.pc = (_v == v2_vm_accumulator) ? 0x1509 : 0x14F7;
         }
         G_POST(0x14F2, 0x74);
@@ -11077,7 +11077,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x14FD;
         G_PRE(0x14FD, 0x57);
         // inlined v2_vm_op_57: [0284] = acc
-        vm.ds_write(0x0284, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(64, v2_vm_accumulator);
         vm.pc = 0x1500;
         G_POST(0x14FD, 0x57);
         continue;
@@ -11115,7 +11115,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x5700;
-          const uint16_t _y = vm.ds_read(0x5700);
+          const uint16_t _y = (uint16_t)(v2gs(vm.shadow).hud_item_gfx_bytes()[1667] | ((uint16_t)v2gs(vm.shadow).hud_item_gfx_bytes()[1668] << 8));
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x84);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -11144,7 +11144,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1506;
         G_PRE(0x1506, 0x57);
         // inlined v2_vm_op_57: [0284] = acc
-        vm.ds_write(0x0284, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(64, v2_vm_accumulator);
         vm.pc = 0x1509;
         G_POST(0x1506, 0x57);
         continue;
@@ -11303,9 +11303,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x152E;
@@ -11343,7 +11343,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1536, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1539;
         G_POST(0x1536, 0x53);
         continue;
@@ -11377,7 +11377,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1540, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [viewport_x]
         vm.si_track = 0x0044;
-        v2_vm_accumulator = vm.ds_read(0x0044);
+        v2_vm_accumulator = v2gs(vm.shadow).viewport_x();
         vm.pc = 0x1543;
         G_POST(0x1540, 0x53);
         continue;
@@ -11385,7 +11385,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1543;
         G_PRE(0x1543, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x1546;
         G_POST(0x1543, 0x57);
         continue;
@@ -11471,7 +11471,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1565;
         G_PRE(0x1565, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x1568;
         G_POST(0x1565, 0x5D);
         continue;
@@ -11491,7 +11491,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7E: when acc >=s [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = ((int16_t)v2_vm_accumulator >= (int16_t)_v) ? 0x15B7 : 0x156F;
         }
         G_POST(0x156A, 0x7E);
@@ -11523,7 +11523,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1574;
         G_PRE(0x1574, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x1577;
         G_POST(0x1574, 0x5A);
         continue;
@@ -11543,7 +11543,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x15B7 : 0x157E;
         }
         G_POST(0x1579, 0x83);
@@ -11683,9 +11683,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, (uint16_t)_rx);
+          v2gs(vm.shadow).script_vars(1, (uint16_t)_rx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, (uint16_t)_ry);
+          v2gs(vm.shadow).script_vars(2, (uint16_t)_ry);
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x15D1;
@@ -11696,7 +11696,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x15D1, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x15D4;
         G_POST(0x15D1, 0x53);
         continue;
@@ -11724,7 +11724,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0208]
         {
           vm.si_track = 0x0208;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0208);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(2);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x15EF : 0x15E1;
         }
         G_POST(0x15DC, 0x83);
@@ -11743,7 +11743,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x15EF : 0x15E9;
         }
         G_POST(0x15E4, 0x83);
@@ -11791,7 +11791,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x15F3;
         G_PRE(0x15F3, 0x57);
         // inlined v2_vm_op_57: [020A] = acc
-        vm.ds_write(0x020A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(3, v2_vm_accumulator);
         vm.pc = 0x15F6;
         G_POST(0x15F3, 0x57);
         continue;
@@ -12049,9 +12049,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x163E;
@@ -12062,7 +12062,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x163E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1641;
         G_POST(0x163E, 0x53);
         continue;
@@ -12081,7 +12081,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1646, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1649;
         G_POST(0x1646, 0x53);
         continue;
@@ -12107,7 +12107,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1651;
         G_PRE(0x1651, 0x57);
         // inlined v2_vm_op_57: [020A] = acc
-        vm.ds_write(0x020A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(3, v2_vm_accumulator);
         vm.pc = 0x1654;
         G_POST(0x1651, 0x57);
         continue;
@@ -12153,7 +12153,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
-          vm.ds_write(0x0206, (uint16_t)((vm.ds_read(0x0206) & 0x7FFF) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(1, (uint16_t)((v2gs(vm.shadow).script_vars(1) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x1662;
         G_POST(0x165E, 0x9D);
@@ -12260,7 +12260,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x167D, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([0206] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x0206);
+          uint16_t _fv = v2gs(vm.shadow).script_vars(1);
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -12311,7 +12311,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x168E, 0xAF);
         // inlined v2_vm_op_AF: when acc != bit([0206] & 0x8000)
         {
-          uint16_t _r = (vm.ds_read(0x0206) & 0x8000) ? 1 : 0;
+          uint16_t _r = (v2gs(vm.shadow).script_vars(1) & 0x8000) ? 1 : 0;
           vm.pc = (_r != v2_vm_accumulator) ? 0x169C : 0x1694;
         }
         G_POST(0x168E, 0xAF);
@@ -12992,7 +12992,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x175E;
         G_PRE(0x175E, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x1761;
         G_POST(0x175E, 0x57);
         continue;
@@ -13001,7 +13001,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1761, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1764;
         G_POST(0x1761, 0x53);
         continue;
@@ -13020,7 +13020,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1769, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x176C;
         G_POST(0x1769, 0x53);
         continue;
@@ -13301,9 +13301,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, (uint16_t)_rx);
+          v2gs(vm.shadow).script_vars(1, (uint16_t)_rx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, (uint16_t)_ry);
+          v2gs(vm.shadow).script_vars(2, (uint16_t)_ry);
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x17B7;
@@ -13314,7 +13314,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x17B7, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x17BA;
         G_POST(0x17B7, 0x53);
         continue;
@@ -13333,7 +13333,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x17BF, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x17C2;
         G_POST(0x17BF, 0x53);
         continue;
@@ -13515,7 +13515,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x17F8;
         G_PRE(0x17F8, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x17FB;
         G_POST(0x17F8, 0x57);
         continue;
@@ -13524,7 +13524,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x17FB, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x17FE;
         G_POST(0x17FB, 0x53);
         continue;
@@ -13543,7 +13543,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1803, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1806;
         G_POST(0x1803, 0x53);
         continue;
@@ -13824,9 +13824,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, (uint16_t)_rx);
+          v2gs(vm.shadow).script_vars(1, (uint16_t)_rx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, (uint16_t)_ry);
+          v2gs(vm.shadow).script_vars(2, (uint16_t)_ry);
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x1851;
@@ -13837,7 +13837,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1851, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1854;
         G_POST(0x1851, 0x53);
         continue;
@@ -13856,7 +13856,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1859, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x185C;
         G_POST(0x1859, 0x53);
         continue;
@@ -14247,9 +14247,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, (uint16_t)_rx);
+          v2gs(vm.shadow).script_vars(1, (uint16_t)_rx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, (uint16_t)_ry);
+          v2gs(vm.shadow).script_vars(2, (uint16_t)_ry);
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x18C9;
@@ -14269,7 +14269,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x18D2 : 0x18D1;
         }
         G_POST(0x18CC, 0x83);
@@ -14474,7 +14474,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1908;
         G_PRE(0x1908, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x190B;
         G_POST(0x1908, 0x57);
         continue;
@@ -14506,7 +14506,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1913;
         G_PRE(0x1913, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x1916;
         G_POST(0x1913, 0x57);
         continue;
@@ -14522,7 +14522,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1919;
         G_PRE(0x1919, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x191C;
         G_POST(0x1919, 0x5D);
         continue;
@@ -14533,11 +14533,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0001;
@@ -15832,9 +15832,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x1AFF;
@@ -15845,7 +15845,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1AFF, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1B02;
         G_POST(0x1AFF, 0x53);
         continue;
@@ -15864,7 +15864,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1B07, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1B0A;
         G_POST(0x1B07, 0x53);
         continue;
@@ -15905,7 +15905,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = (_v == v2_vm_accumulator) ? 0x1AC9 : 0x1B1D;
         }
         G_POST(0x1B18, 0x74);
@@ -15915,7 +15915,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1B1D, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1B20;
         G_POST(0x1B1D, 0x53);
         continue;
@@ -16054,9 +16054,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x1B47;
@@ -16067,7 +16067,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1B47, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1B4A;
         G_POST(0x1B47, 0x53);
         continue;
@@ -16086,7 +16086,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1B4F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1B52;
         G_POST(0x1B4F, 0x53);
         continue;
@@ -16127,7 +16127,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = (_v == v2_vm_accumulator) ? 0x1B84 : 0x1B65;
         }
         G_POST(0x1B60, 0x74);
@@ -16137,7 +16137,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1B65, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1B68;
         G_POST(0x1B65, 0x53);
         continue;
@@ -16363,7 +16363,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1BA8;
         G_PRE(0x1BA8, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x1BAB;
         G_POST(0x1BA8, 0x57);
         continue;
@@ -16381,7 +16381,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1BAD;
         G_PRE(0x1BAD, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x1BB0;
         G_POST(0x1BAD, 0x57);
         continue;
@@ -16411,7 +16411,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1BB9;
         G_PRE(0x1BB9, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x1BBC;
         G_POST(0x1BB9, 0x5D);
         continue;
@@ -16422,11 +16422,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -17299,7 +17299,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1D1F;
         G_PRE(0x1D1F, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x1D22;
         G_POST(0x1D1F, 0x57);
         continue;
@@ -17308,7 +17308,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1D22, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1D25;
         G_POST(0x1D22, 0x53);
         continue;
@@ -17327,7 +17327,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1D2A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1D2D;
         G_POST(0x1D2A, 0x53);
         continue;
@@ -17688,9 +17688,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x1D94;
@@ -17701,7 +17701,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1D94, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1D97;
         G_POST(0x1D94, 0x53);
         continue;
@@ -17720,7 +17720,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1D9C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1D9F;
         G_POST(0x1D9C, 0x53);
         continue;
@@ -17761,7 +17761,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = (_v != v2_vm_accumulator) ? 0x1DB5 : 0x1DB2;
         }
         G_POST(0x1DAD, 0x79);
@@ -17777,7 +17777,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1DB5, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1DB8;
         G_POST(0x1DB5, 0x53);
         continue;
@@ -18006,9 +18006,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x1DF8;
@@ -18019,7 +18019,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1DF8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1DFB;
         G_POST(0x1DF8, 0x53);
         continue;
@@ -18038,7 +18038,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1E00, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x1E03;
         G_POST(0x1E00, 0x53);
         continue;
@@ -18079,7 +18079,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = (_v == v2_vm_accumulator) ? 0x1E2C : 0x1E16;
         }
         G_POST(0x1E11, 0x74);
@@ -18089,7 +18089,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1E16, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1E19;
         G_POST(0x1E16, 0x53);
         continue;
@@ -18365,7 +18365,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E67;
         G_PRE(0x1E67, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x1E6A;
         G_POST(0x1E67, 0x57);
         continue;
@@ -18383,7 +18383,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E6C;
         G_PRE(0x1E6C, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x1E6F;
         G_POST(0x1E6C, 0x57);
         continue;
@@ -18413,7 +18413,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E78;
         G_PRE(0x1E78, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x1E7B;
         G_POST(0x1E78, 0x5D);
         continue;
@@ -18424,11 +18424,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -18562,7 +18562,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1EA3;
         G_PRE(0x1EA3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x1EA6;
         G_POST(0x1EA3, 0x57);
         continue;
@@ -18571,7 +18571,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1EA6, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1EA9;
         G_POST(0x1EA6, 0x53);
         continue;
@@ -19017,9 +19017,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x1F32;
@@ -19030,7 +19030,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1F32, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x1F35;
         G_POST(0x1F32, 0x53);
         continue;
@@ -19950,9 +19950,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, (uint16_t)_rx);
+          v2gs(vm.shadow).script_vars(1, (uint16_t)_rx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, (uint16_t)_ry);
+          v2gs(vm.shadow).script_vars(2, (uint16_t)_ry);
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x209A;
@@ -19972,7 +19972,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x20A3 : 0x20A2;
         }
         G_POST(0x209D, 0x83);
@@ -20055,9 +20055,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x20B9;
@@ -20068,7 +20068,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x20B9, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x20BC;
         G_POST(0x20B9, 0x53);
         continue;
@@ -20124,7 +20124,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x20C9;
         G_PRE(0x20C9, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x20CC;
         G_POST(0x20C9, 0x57);
         continue;
@@ -20142,7 +20142,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x20CE;
         G_PRE(0x20CE, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x20D1;
         G_POST(0x20CE, 0x57);
         continue;
@@ -20180,7 +20180,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x20DC;
         G_PRE(0x20DC, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x20DF;
         G_POST(0x20DC, 0x57);
         continue;
@@ -20198,7 +20198,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x20E1;
         G_PRE(0x20E1, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x20E4;
         G_POST(0x20E1, 0x57);
         continue;
@@ -20310,7 +20310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2107;
         G_PRE(0x2107, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x210A;
         G_POST(0x2107, 0x5D);
         continue;
@@ -20321,11 +20321,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -20372,7 +20372,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2119;
         G_PRE(0x2119, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x211C;
         G_POST(0x2119, 0x57);
         continue;
@@ -20404,7 +20404,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2124;
         G_PRE(0x2124, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x2127;
         G_POST(0x2124, 0x57);
         continue;
@@ -20420,7 +20420,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x212A;
         G_PRE(0x212A, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x212D;
         G_POST(0x212A, 0x5D);
         continue;
@@ -20431,11 +20431,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -21359,7 +21359,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x22A7;
         G_PRE(0x22A7, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x22AA;
         G_POST(0x22A7, 0x57);
         continue;
@@ -21368,7 +21368,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x22AA, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x22AD;
         G_POST(0x22AA, 0x53);
         continue;
@@ -21376,7 +21376,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x22AD;
         G_PRE(0x22AD, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x22B0;
         G_POST(0x22AD, 0x60);
         continue;
@@ -21396,7 +21396,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x2396 : 0x22B7;
         }
         G_POST(0x22B2, 0x74);
@@ -21594,7 +21594,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x22E9;
         G_PRE(0x22E9, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x22EC;
         G_POST(0x22E9, 0x57);
         continue;
@@ -21603,7 +21603,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x22EC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x22EF;
         G_POST(0x22EC, 0x53);
         continue;
@@ -21611,7 +21611,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x22EF;
         G_PRE(0x22EF, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x22F2;
         G_POST(0x22EF, 0x60);
         continue;
@@ -21631,7 +21631,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x2305 : 0x22F9;
         }
         G_POST(0x22F4, 0x74);
@@ -21835,7 +21835,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2331;
         G_PRE(0x2331, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x2334;
         G_POST(0x2331, 0x57);
         continue;
@@ -21844,7 +21844,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2334, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x2337;
         G_POST(0x2334, 0x53);
         continue;
@@ -21852,7 +21852,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2337;
         G_PRE(0x2337, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x233A;
         G_POST(0x2337, 0x60);
         continue;
@@ -21872,7 +21872,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x24C0 : 0x2341;
         }
         G_POST(0x233C, 0x79);
@@ -22057,7 +22057,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2370;
         G_PRE(0x2370, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x2373;
         G_POST(0x2370, 0x57);
         continue;
@@ -22066,7 +22066,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2373, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x2376;
         G_POST(0x2373, 0x53);
         continue;
@@ -22074,7 +22074,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2376;
         G_PRE(0x2376, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x2379;
         G_POST(0x2376, 0x60);
         continue;
@@ -22094,7 +22094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x24C0 : 0x2380;
         }
         G_POST(0x237B, 0x79);
@@ -22356,7 +22356,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x23D6;
         G_PRE(0x23D6, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x23D9;
         G_POST(0x23D6, 0x57);
         continue;
@@ -22365,7 +22365,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x23D9, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x23DC;
         G_POST(0x23D9, 0x53);
         continue;
@@ -22373,7 +22373,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x23DC;
         G_PRE(0x23DC, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x23DF;
         G_POST(0x23DC, 0x60);
         continue;
@@ -22393,7 +22393,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x24C0 : 0x23E6;
         }
         G_POST(0x23E1, 0x79);
@@ -22484,7 +22484,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x23FA;
         G_PRE(0x23FA, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x23FD;
         G_POST(0x23FA, 0x57);
         continue;
@@ -22493,7 +22493,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x23FD, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x2400;
         G_POST(0x23FD, 0x53);
         continue;
@@ -22501,7 +22501,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2400;
         G_PRE(0x2400, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x2403;
         G_POST(0x2400, 0x60);
         continue;
@@ -22521,7 +22521,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x24C0 : 0x240A;
         }
         G_POST(0x2405, 0x79);
@@ -22612,7 +22612,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x241E;
         G_PRE(0x241E, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x2421;
         G_POST(0x241E, 0x57);
         continue;
@@ -22621,7 +22621,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2421, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x2424;
         G_POST(0x2421, 0x53);
         continue;
@@ -22629,7 +22629,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2424;
         G_PRE(0x2424, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x2427;
         G_POST(0x2424, 0x60);
         continue;
@@ -22649,7 +22649,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x24C0 : 0x242E;
         }
         G_POST(0x2429, 0x79);
@@ -22755,7 +22755,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2447;
         G_PRE(0x2447, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x244A;
         G_POST(0x2447, 0x57);
         continue;
@@ -22764,7 +22764,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x244A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x244D;
         G_POST(0x244A, 0x53);
         continue;
@@ -22772,7 +22772,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x244D;
         G_PRE(0x244D, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x2450;
         G_POST(0x244D, 0x60);
         continue;
@@ -22792,7 +22792,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x24C0 : 0x2457;
         }
         G_POST(0x2452, 0x79);
@@ -22950,7 +22950,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2488;
         G_PRE(0x2488, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x248B;
         G_POST(0x2488, 0x57);
         continue;
@@ -22959,7 +22959,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x248B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x248E;
         G_POST(0x248B, 0x53);
         continue;
@@ -22967,7 +22967,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x248E;
         G_PRE(0x248E, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x2491;
         G_POST(0x248E, 0x60);
         continue;
@@ -22987,7 +22987,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x24C0 : 0x2498;
         }
         G_POST(0x2493, 0x79);
@@ -23156,7 +23156,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x24D3;
         G_PRE(0x24D3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x24D6;
         G_POST(0x24D3, 0x57);
         continue;
@@ -23172,7 +23172,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x24D9;
         G_PRE(0x24D9, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x24DC;
         G_POST(0x24D9, 0x5A);
         continue;
@@ -23181,7 +23181,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x24DC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x24DF;
         G_POST(0x24DC, 0x53);
         continue;
@@ -23350,7 +23350,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2506;
         G_PRE(0x2506, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x2509;
         G_POST(0x2506, 0x57);
         continue;
@@ -23368,7 +23368,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x250B;
         G_PRE(0x250B, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x250E;
         G_POST(0x250B, 0x5D);
         continue;
@@ -23384,7 +23384,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2511;
         G_PRE(0x2511, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x2514;
         G_POST(0x2511, 0x5A);
         continue;
@@ -23393,7 +23393,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2514, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x2517;
         G_POST(0x2514, 0x53);
         continue;
@@ -23402,7 +23402,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2517, 0xBD);
         // inlined v2_vm_op_BD: acc <<= 8; [0208] = acc
         v2_vm_accumulator <<= 8;
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x251A;
         G_POST(0x2517, 0xBD);
         continue;
@@ -23411,7 +23411,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x251A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x251D;
         G_POST(0x251A, 0x53);
         continue;
@@ -23573,7 +23573,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2546;
         G_PRE(0x2546, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x2549;
         G_POST(0x2546, 0x57);
         continue;
@@ -23591,7 +23591,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x254B;
         G_PRE(0x254B, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x254E;
         G_POST(0x254B, 0x5D);
         continue;
@@ -23607,7 +23607,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2551;
         G_PRE(0x2551, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x2554;
         G_POST(0x2551, 0x5A);
         continue;
@@ -23616,7 +23616,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2554, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x2557;
         G_POST(0x2554, 0x53);
         continue;
@@ -23625,7 +23625,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2557, 0xBD);
         // inlined v2_vm_op_BD: acc <<= 8; [0208] = acc
         v2_vm_accumulator <<= 8;
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x255A;
         G_POST(0x2557, 0xBD);
         continue;
@@ -23634,7 +23634,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x255A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x255D;
         G_POST(0x255A, 0x53);
         continue;
@@ -25623,7 +25623,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x287D;
         G_PRE(0x287D, 0x57);
         // inlined v2_vm_op_57: [0284] = acc
-        vm.ds_write(0x0284, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(64, v2_vm_accumulator);
         vm.pc = 0x2880;
         G_POST(0x287D, 0x57);
         continue;
@@ -26374,9 +26374,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x29B2;
@@ -26444,9 +26444,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x29C6;
@@ -26514,9 +26514,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x29DA;
@@ -26540,7 +26540,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x29E0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x29E3;
         G_POST(0x29E0, 0x53);
         continue;
@@ -26559,7 +26559,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x29E8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x29EB;
         G_POST(0x29E8, 0x53);
         continue;
@@ -26578,7 +26578,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x29F0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x29F3;
         G_POST(0x29F0, 0x53);
         continue;
@@ -26597,7 +26597,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x29F8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x29FB;
         G_POST(0x29F8, 0x53);
         continue;
@@ -30954,7 +30954,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FA5;
         G_PRE(0x2FA5, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x2FA8;
         G_POST(0x2FA5, 0x57);
         continue;
@@ -30972,7 +30972,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FAA;
         G_PRE(0x2FAA, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x2FAD;
         G_POST(0x2FAA, 0x57);
         continue;
@@ -30988,7 +30988,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FB0;
         G_PRE(0x2FB0, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x2FB3;
         G_POST(0x2FB0, 0x5D);
         continue;
@@ -31004,7 +31004,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FB6;
         G_PRE(0x2FB6, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x2FB9;
         G_POST(0x2FB6, 0x5D);
         continue;
@@ -31015,16 +31015,16 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _b = vm.ds_read(0x0208);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x2FC4;
         G_POST(0x2FB9, 0x26);
@@ -31036,10 +31036,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0401;
           { uint16_t _si = _x, _di = _y;
@@ -31062,7 +31062,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FD0;
         G_PRE(0x2FD0, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x2FD3;
         G_POST(0x2FD0, 0x5A);
         continue;
@@ -31073,10 +31073,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0402;
           { uint16_t _si = _x, _di = _y;
@@ -31099,7 +31099,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FDF;
         G_PRE(0x2FDF, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x2FE2;
         G_POST(0x2FDF, 0x5A);
         continue;
@@ -31110,10 +31110,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0405;
           { uint16_t _si = _x, _di = _y;
@@ -31136,7 +31136,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FEE;
         G_PRE(0x2FEE, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x2FF1;
         G_POST(0x2FEE, 0x5D);
         continue;
@@ -31147,10 +31147,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0404;
           { uint16_t _si = _x, _di = _y;
@@ -31429,7 +31429,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [020C]
         {
           vm.si_track = 0x020C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020C);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(4);
           vm.pc = (_v != v2_vm_accumulator) ? 0x30BF : 0x3058;
         }
         G_POST(0x3053, 0x79);
@@ -31477,7 +31477,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3060;
         G_PRE(0x3060, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x3063;
         G_POST(0x3060, 0x57);
         continue;
@@ -31486,7 +31486,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3063, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x3066;
         G_POST(0x3063, 0x53);
         continue;
@@ -31494,7 +31494,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3066;
         G_PRE(0x3066, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x3069;
         G_POST(0x3066, 0x60);
         continue;
@@ -31503,7 +31503,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3069, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x306C;
         G_POST(0x3069, 0x53);
         continue;
@@ -31554,7 +31554,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x307B;
         G_PRE(0x307B, 0x57);
         // inlined v2_vm_op_57: [020C] = acc
-        vm.ds_write(0x020C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(4, v2_vm_accumulator);
         vm.pc = 0x307E;
         G_POST(0x307B, 0x57);
         continue;
@@ -31716,7 +31716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x30AA;
         G_PRE(0x30AA, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x30AD;
         G_POST(0x30AA, 0x57);
         continue;
@@ -31732,7 +31732,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x30B0;
         G_PRE(0x30B0, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x30B3;
         G_POST(0x30B0, 0x5A);
         continue;
@@ -31741,7 +31741,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x30B3, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x30B6;
         G_POST(0x30B3, 0x53);
         continue;
@@ -31864,7 +31864,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x30D0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_res_slot]
         vm.si_track = 0x03B4;
-        v2_vm_accumulator = vm.ds_read(0x03B4);
+        v2_vm_accumulator = v2gs(vm.shadow).search_res_slot();
         vm.pc = 0x30D3;
         G_POST(0x30D0, 0x53);
         continue;
@@ -32315,7 +32315,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3179;
         G_PRE(0x3179, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x317C;
         G_POST(0x3179, 0x57);
         continue;
@@ -32331,7 +32331,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x317F;
         G_PRE(0x317F, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x3182;
         G_POST(0x317F, 0x5A);
         continue;
@@ -32340,7 +32340,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3182, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x3185;
         G_POST(0x3182, 0x53);
         continue;
@@ -32421,7 +32421,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3193;
         G_PRE(0x3193, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x3196;
         G_POST(0x3193, 0x57);
         continue;
@@ -32430,7 +32430,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3196, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x3199;
         G_POST(0x3196, 0x53);
         continue;
@@ -32438,7 +32438,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3199;
         G_PRE(0x3199, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x319C;
         G_POST(0x3199, 0x60);
         continue;
@@ -32447,7 +32447,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x319C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x319F;
         G_POST(0x319C, 0x53);
         continue;
@@ -32757,7 +32757,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x31F4;
         G_PRE(0x31F4, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x31F7;
         G_POST(0x31F4, 0x57);
         continue;
@@ -32775,7 +32775,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x31F9;
         G_PRE(0x31F9, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x31FC;
         G_POST(0x31F9, 0x57);
         continue;
@@ -32791,7 +32791,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x31FF;
         G_PRE(0x31FF, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x3202;
         G_POST(0x31FF, 0x5D);
         continue;
@@ -32807,7 +32807,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3205;
         G_PRE(0x3205, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x3208;
         G_POST(0x3205, 0x5D);
         continue;
@@ -32818,16 +32818,16 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _b = vm.ds_read(0x0208);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x3213;
         G_POST(0x3208, 0x26);
@@ -32839,10 +32839,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0401;
           { uint16_t _si = _x, _di = _y;
@@ -32865,7 +32865,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x321F;
         G_PRE(0x321F, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x3222;
         G_POST(0x321F, 0x5A);
         continue;
@@ -32876,10 +32876,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0402;
           { uint16_t _si = _x, _di = _y;
@@ -32902,7 +32902,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x322E;
         G_PRE(0x322E, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x3231;
         G_POST(0x322E, 0x5A);
         continue;
@@ -32913,10 +32913,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0405;
           { uint16_t _si = _x, _di = _y;
@@ -32939,7 +32939,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x323D;
         G_PRE(0x323D, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x3240;
         G_POST(0x323D, 0x5D);
         continue;
@@ -32950,10 +32950,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0404;
           { uint16_t _si = _x, _di = _y;
@@ -33056,7 +33056,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3267;
         G_PRE(0x3267, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x326A;
         G_POST(0x3267, 0x57);
         continue;
@@ -33065,7 +33065,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x326A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x326D;
         G_POST(0x326A, 0x53);
         continue;
@@ -33073,7 +33073,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x326D;
         G_PRE(0x326D, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x3270;
         G_POST(0x326D, 0x60);
         continue;
@@ -33093,7 +33093,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x327E : 0x3277;
         }
         G_POST(0x3272, 0x74);
@@ -33356,7 +33356,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32BC;
         G_PRE(0x32BC, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x32BF;
         G_POST(0x32BC, 0x57);
         continue;
@@ -33372,7 +33372,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32C2;
         G_PRE(0x32C2, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x32C5;
         G_POST(0x32C2, 0x5D);
         continue;
@@ -33381,7 +33381,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x32C5, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x32C8;
         G_POST(0x32C5, 0x53);
         continue;
@@ -33749,7 +33749,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x33C1;
         G_PRE(0x33C1, 0x57);
         // inlined v2_vm_op_57: [0284] = acc
-        vm.ds_write(0x0284, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(64, v2_vm_accumulator);
         vm.pc = 0x33C4;
         G_POST(0x33C1, 0x57);
         continue;
@@ -33966,7 +33966,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3403;
         G_PRE(0x3403, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x3406;
         G_POST(0x3403, 0x57);
         continue;
@@ -33984,7 +33984,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3408;
         G_PRE(0x3408, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x340B;
         G_POST(0x3408, 0x57);
         continue;
@@ -34000,7 +34000,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x340E;
         G_PRE(0x340E, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x3411;
         G_POST(0x340E, 0x5D);
         continue;
@@ -34016,7 +34016,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3414;
         G_PRE(0x3414, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x3417;
         G_POST(0x3414, 0x5D);
         continue;
@@ -34027,16 +34027,16 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _b = vm.ds_read(0x0208);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x3422;
         G_POST(0x3417, 0x26);
@@ -34048,10 +34048,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0401;
           { uint16_t _si = _x, _di = _y;
@@ -34074,7 +34074,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x342E;
         G_PRE(0x342E, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x3431;
         G_POST(0x342E, 0x5A);
         continue;
@@ -34085,10 +34085,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0402;
           { uint16_t _si = _x, _di = _y;
@@ -34111,7 +34111,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x343D;
         G_PRE(0x343D, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x3440;
         G_POST(0x343D, 0x5A);
         continue;
@@ -34122,10 +34122,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0405;
           { uint16_t _si = _x, _di = _y;
@@ -34148,7 +34148,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x344C;
         G_PRE(0x344C, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x344F;
         G_POST(0x344C, 0x5D);
         continue;
@@ -34159,10 +34159,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0404;
           { uint16_t _si = _x, _di = _y;
@@ -34248,7 +34248,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3477;
         G_PRE(0x3477, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x347A;
         G_POST(0x3477, 0x57);
         continue;
@@ -34266,7 +34266,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x347C;
         G_PRE(0x347C, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x347F;
         G_POST(0x347C, 0x57);
         continue;
@@ -34282,7 +34282,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3482;
         G_PRE(0x3482, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x3485;
         G_POST(0x3482, 0x5D);
         continue;
@@ -34298,7 +34298,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3488;
         G_PRE(0x3488, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x348B;
         G_POST(0x3488, 0x5A);
         continue;
@@ -34309,16 +34309,16 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _b = vm.ds_read(0x0208);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x3496;
         G_POST(0x348B, 0x26);
@@ -34330,11 +34330,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -34362,7 +34362,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x34A2;
         G_PRE(0x34A2, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x34A5;
         G_POST(0x34A2, 0x5A);
         continue;
@@ -34373,11 +34373,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -34969,7 +34969,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3569, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x356C;
         G_POST(0x3569, 0x53);
         continue;
@@ -34977,7 +34977,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x356C;
         G_PRE(0x356C, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x356F;
         G_POST(0x356C, 0x57);
         continue;
@@ -34995,7 +34995,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3571;
         G_PRE(0x3571, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x3574;
         G_POST(0x3571, 0x60);
         continue;
@@ -35004,7 +35004,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3574, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x3577;
         G_POST(0x3574, 0x53);
         continue;
@@ -35039,7 +35039,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3581;
         G_PRE(0x3581, 0x57);
         // inlined v2_vm_op_57: [020A] = acc
-        vm.ds_write(0x020A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(3, v2_vm_accumulator);
         vm.pc = 0x3584;
         G_POST(0x3581, 0x57);
         continue;
@@ -35098,7 +35098,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = (_v != v2_vm_accumulator) ? 0x3566 : 0x359B;
         }
         G_POST(0x3596, 0x79);
@@ -35198,7 +35198,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x35B7;
         G_PRE(0x35B7, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x35BA;
         G_POST(0x35B7, 0x57);
         continue;
@@ -35214,7 +35214,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x35BD;
         G_PRE(0x35BD, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x35C0;
         G_POST(0x35BD, 0x5A);
         continue;
@@ -35223,7 +35223,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x35C0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x35C3;
         G_POST(0x35C0, 0x53);
         continue;
@@ -35251,7 +35251,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x35CA;
         G_PRE(0x35CA, 0x57);
         // inlined v2_vm_op_57: [020A] = acc
-        vm.ds_write(0x020A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(3, v2_vm_accumulator);
         vm.pc = 0x35CD;
         G_POST(0x35CA, 0x57);
         continue;
@@ -35294,7 +35294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v == v2_vm_accumulator) ? 0x35E0 : 0x35D8;
         }
         G_POST(0x35D3, 0x74);
@@ -35315,7 +35315,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v == v2_vm_accumulator) ? 0x35F5 : 0x35DF;
         }
         G_POST(0x35DA, 0x74);
@@ -35331,7 +35331,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x35E0, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -35353,7 +35353,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x35EA, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -35381,7 +35381,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x35F5, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -35403,7 +35403,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x35FF, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -37433,7 +37433,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3894;
         G_PRE(0x3894, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x3897;
         G_POST(0x3894, 0x57);
         continue;
@@ -37451,7 +37451,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3899;
         G_PRE(0x3899, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x389C;
         G_POST(0x3899, 0x57);
         continue;
@@ -37467,7 +37467,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x389F;
         G_PRE(0x389F, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x38A2;
         G_POST(0x389F, 0x5D);
         continue;
@@ -37483,7 +37483,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x38A5;
         G_PRE(0x38A5, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x38A8;
         G_POST(0x38A5, 0x5A);
         continue;
@@ -37494,16 +37494,16 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _b = vm.ds_read(0x0208);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x38B3;
         G_POST(0x38A8, 0x26);
@@ -37515,11 +37515,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0001;
@@ -37547,7 +37547,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x38BF;
         G_PRE(0x38BF, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x38C2;
         G_POST(0x38BF, 0x5A);
         continue;
@@ -37558,11 +37558,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0001;
@@ -37682,7 +37682,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x38E9;
         G_PRE(0x38E9, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x38EC;
         G_POST(0x38E9, 0x57);
         continue;
@@ -37704,7 +37704,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x38F2;
         G_PRE(0x38F2, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x38F5;
         G_POST(0x38F2, 0x57);
         continue;
@@ -37726,7 +37726,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x38FB;
         G_PRE(0x38FB, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x38FE;
         G_POST(0x38FB, 0x57);
         continue;
@@ -37735,7 +37735,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x38FE, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x3901;
         G_POST(0x38FE, 0x53);
         continue;
@@ -37871,7 +37871,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x393C;
         G_PRE(0x393C, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x393F;
         G_POST(0x393C, 0x57);
         continue;
@@ -37880,7 +37880,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x393F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x3942;
         G_POST(0x393F, 0x53);
         continue;
@@ -37888,7 +37888,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3942;
         G_PRE(0x3942, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x3945;
         G_POST(0x3942, 0x60);
         continue;
@@ -37897,7 +37897,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3945, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x3948;
         G_POST(0x3945, 0x53);
         continue;
@@ -37963,7 +37963,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3954;
         G_PRE(0x3954, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x3957;
         G_POST(0x3954, 0x57);
         continue;
@@ -37979,7 +37979,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x395A;
         G_PRE(0x395A, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x395D;
         G_POST(0x395A, 0x5A);
         continue;
@@ -37990,7 +37990,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -37998,9 +37998,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _b = vm.ds_read(_b_a);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x3967;
         G_POST(0x395D, 0x26);
@@ -38012,11 +38012,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -38044,7 +38044,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3973;
         G_PRE(0x3973, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x3976;
         G_POST(0x3973, 0x5A);
         continue;
@@ -38055,11 +38055,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -38087,7 +38087,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3982;
         G_PRE(0x3982, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x3985;
         G_POST(0x3982, 0x5A);
         continue;
@@ -38098,11 +38098,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -38130,7 +38130,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3991;
         G_PRE(0x3991, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x3994;
         G_POST(0x3991, 0x5A);
         continue;
@@ -38141,11 +38141,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -38173,7 +38173,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x39A0;
         G_PRE(0x39A0, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x39A3;
         G_POST(0x39A0, 0x5A);
         continue;
@@ -38184,11 +38184,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -38216,7 +38216,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x39AF;
         G_PRE(0x39AF, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x39B2;
         G_POST(0x39AF, 0x5A);
         continue;
@@ -38227,11 +38227,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0000;
@@ -38342,7 +38342,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_snd_2]
         {
           vm.si_track = 0x0425;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0425);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3A0E : 0x3A04;
         }
         G_POST(0x39FF, 0x74);
@@ -38443,7 +38443,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [portrait_snd_2]
         {
           vm.si_track = 0x0425;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0425);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x3A04 : 0x3A19;
         }
         G_POST(0x3A14, 0x79);
@@ -38474,7 +38474,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_prev]
         {
           vm.si_track = 0x0423;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0423);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3A56 : 0x3A4C;
         }
         G_POST(0x3A47, 0x74);
@@ -38575,7 +38575,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [portrait_prev]
         {
           vm.si_track = 0x0423;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0423);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(0);
           vm.pc = (_v != v2_vm_accumulator) ? 0x3A4C : 0x3A61;
         }
         G_POST(0x3A5C, 0x79);
@@ -38606,7 +38606,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_snd_3]
         {
           vm.si_track = 0x0427;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0427);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3A9E : 0x3A94;
         }
         G_POST(0x3A8F, 0x74);
@@ -38707,7 +38707,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [portrait_snd_3]
         {
           vm.si_track = 0x0427;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0427);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(2);
           vm.pc = (_v != v2_vm_accumulator) ? 0x3A94 : 0x3AA9;
         }
         G_POST(0x3AA4, 0x79);
@@ -38738,7 +38738,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_snd_2]
         {
           vm.si_track = 0x0425;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0425);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3AED : 0x3ADC;
         }
         G_POST(0x3AD7, 0x74);
@@ -38757,7 +38757,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_prev]
         {
           vm.si_track = 0x0423;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0423);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3AED : 0x3AE4;
         }
         G_POST(0x3ADF, 0x74);
@@ -38776,7 +38776,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_snd_3]
         {
           vm.si_track = 0x0427;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0427);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3AED : 0x3AEC;
         }
         G_POST(0x3AE7, 0x74);
@@ -39067,7 +39067,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
-          vm.ds_write(0x0236, (uint16_t)((vm.ds_read(0x0236) & 0x7FFF) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(25, (uint16_t)((v2gs(vm.shadow).script_vars(25) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x3B76;
         G_POST(0x3B72, 0x9D);
@@ -39101,7 +39101,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3B7E;
         G_PRE(0x3B7E, 0x57);
         // inlined v2_vm_op_57: [active_viking] = acc
-        vm.ds_write(0x03C2, v2_vm_accumulator);
+        v2gs(vm.shadow).active_viking(v2_vm_accumulator);
         vm.pc = 0x3B81;
         G_POST(0x3B7E, 0x57);
         continue;
@@ -39150,7 +39150,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3B8C, 0xAA);
         // inlined v2_vm_op_AA: when acc == bit([input_edges] & 0x1000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x0018;  // 1542a tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x3D11 : 0x3B92;
         }
@@ -39161,7 +39161,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3B92, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -39183,7 +39183,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3B9C, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -39205,7 +39205,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3BA6, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -39227,7 +39227,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3BB0, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -39416,7 +39416,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3BF0, 0xAA);
         // inlined v2_vm_op_AA: when acc == bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           vm.pc = (((_fv & 0x0200) ? 1 : 0) == v2_vm_accumulator) ? 0x3D01 : 0x3BF6;
         }
@@ -39438,7 +39438,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3BFA, 0xAA);
         // inlined v2_vm_op_AA: when acc == bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           vm.pc = (((_fv & 0x0100) ? 1 : 0) == v2_vm_accumulator) ? 0x3D09 : 0x3C00;
         }
@@ -39460,7 +39460,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C04, 0xAA);
         // inlined v2_vm_op_AA: when acc == bit([input_keys] & 0x1000)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0018;  // 1542a tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x3C9D : 0x3C0A;
         }
@@ -39482,7 +39482,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C0E, 0xAA);
         // inlined v2_vm_op_AA: when acc == bit([input_keys] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x3C9D : 0x3C14;
         }
@@ -39502,7 +39502,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [last_char]
         {
           vm.si_track = 0x028C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x028C);
+          const uint16_t _v = v2gs(vm.shadow).last_char();
           vm.pc = (_v == v2_vm_accumulator) ? 0x3C9D : 0x3C1C;
         }
         G_POST(0x3C17, 0x74);
@@ -39521,7 +39521,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [last_char]
         {
           vm.si_track = 0x028C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x028C);
+          const uint16_t _v = v2gs(vm.shadow).last_char();
           vm.pc = (_v == v2_vm_accumulator) ? 0x3C9D : 0x3C24;
         }
         G_POST(0x3C1F, 0x74);
@@ -39531,7 +39531,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C24, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -39553,7 +39553,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C2E, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -39575,7 +39575,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C38, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -39736,7 +39736,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C6E, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -39758,7 +39758,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C78, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -39780,7 +39780,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C82, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -39802,7 +39802,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C8C, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -39893,7 +39893,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [last_char]
         {
           vm.si_track = 0x028C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x028C);
+          const uint16_t _v = v2gs(vm.shadow).last_char();
           vm.pc = (_v == v2_vm_accumulator) ? 0x3D11 : 0x3CA8;
         }
         G_POST(0x3CA3, 0x74);
@@ -39912,7 +39912,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [last_char]
         {
           vm.si_track = 0x028C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x028C);
+          const uint16_t _v = v2gs(vm.shadow).last_char();
           vm.pc = (_v == v2_vm_accumulator) ? 0x3DDC : 0x3CB0;
         }
         G_POST(0x3CAB, 0x74);
@@ -40224,7 +40224,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_snd_2]
         {
           vm.si_track = 0x0425;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0425);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3D30 : 0x3D19;
         }
         G_POST(0x3D14, 0x74);
@@ -40243,7 +40243,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_prev]
         {
           vm.si_track = 0x0423;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0423);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3D51 : 0x3D21;
         }
         G_POST(0x3D1C, 0x74);
@@ -40262,7 +40262,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [portrait_snd_3]
         {
           vm.si_track = 0x0427;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0427);
+          const uint16_t _v = v2gs(vm.shadow).portrait_prev(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3D72 : 0x3D29;
         }
         G_POST(0x3D24, 0x74);
@@ -40352,7 +40352,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3D3F;
         G_PRE(0x3D3F, 0x57);
         // inlined v2_vm_op_57: [portrait_snd_2] = acc
-        vm.ds_write(0x0425, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_prev(1, v2_vm_accumulator);
         vm.pc = 0x3D42;
         G_POST(0x3D3F, 0x57);
         continue;
@@ -40464,7 +40464,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3D60;
         G_PRE(0x3D60, 0x57);
         // inlined v2_vm_op_57: [portrait_prev] = acc
-        vm.ds_write(0x0423, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_prev(0, v2_vm_accumulator);
         vm.pc = 0x3D63;
         G_POST(0x3D60, 0x57);
         continue;
@@ -40576,7 +40576,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3D81;
         G_PRE(0x3D81, 0x57);
         // inlined v2_vm_op_57: [portrait_snd_3] = acc
-        vm.ds_write(0x0427, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_prev(2, v2_vm_accumulator);
         vm.pc = 0x3D84;
         G_POST(0x3D81, 0x57);
         continue;
@@ -40766,7 +40766,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0310;
-          const uint16_t _x = vm.ds_read(0x0310);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(0);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0012;
@@ -40792,7 +40792,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0312;
-          const uint16_t _x = vm.ds_read(0x0312);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(1);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0013;
@@ -40818,7 +40818,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0314;
-          const uint16_t _x = vm.ds_read(0x0314);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(2);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0014;
@@ -40844,7 +40844,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0316;
-          const uint16_t _x = vm.ds_read(0x0316);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(3);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0015;
@@ -40887,7 +40887,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
-          vm.ds_write(0x0236, (uint16_t)((vm.ds_read(0x0236) & 0x7FFF) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(25, (uint16_t)((v2gs(vm.shadow).script_vars(25) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x3DE4;
         G_POST(0x3DE0, 0x9D);
@@ -40957,7 +40957,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3DF6, 0xAA);
         // inlined v2_vm_op_AA: when acc == bit([input_edges] & 0x1000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x0018;  // 1542a tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x3E09 : 0x3DFC;
         }
@@ -40968,7 +40968,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3DFC, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -41003,7 +41003,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3E0C;
         G_PRE(0x3E0C, 0x57);
         // inlined v2_vm_op_57: [level_load] = acc
-        vm.ds_write(0x25C9, v2_vm_accumulator);
+        v2gs(vm.shadow).level_load(v2_vm_accumulator);
         vm.pc = 0x3E0F;
         G_POST(0x3E0C, 0x57);
         continue;
@@ -41026,7 +41026,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E12, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0252]
         vm.si_track = 0x0252;
-        v2_vm_accumulator = vm.ds_read(0x0252);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(39);
         vm.pc = 0x3E15;
         G_POST(0x3E12, 0x53);
         continue;
@@ -41043,7 +41043,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E18, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0254]
         vm.si_track = 0x0254;
-        v2_vm_accumulator = vm.ds_read(0x0254);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(40);
         vm.pc = 0x3E1B;
         G_POST(0x3E18, 0x53);
         continue;
@@ -41060,7 +41060,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E1E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0256]
         vm.si_track = 0x0256;
-        v2_vm_accumulator = vm.ds_read(0x0256);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(41);
         vm.pc = 0x3E21;
         G_POST(0x3E1E, 0x53);
         continue;
@@ -41077,7 +41077,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E24, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0258]
         vm.si_track = 0x0258;
-        v2_vm_accumulator = vm.ds_read(0x0258);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(42);
         vm.pc = 0x3E27;
         G_POST(0x3E24, 0x53);
         continue;
@@ -41094,7 +41094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E2A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [024A]
         vm.si_track = 0x024A;
-        v2_vm_accumulator = vm.ds_read(0x024A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(35);
         vm.pc = 0x3E2D;
         G_POST(0x3E2A, 0x53);
         continue;
@@ -41111,7 +41111,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E30, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [024C]
         vm.si_track = 0x024C;
-        v2_vm_accumulator = vm.ds_read(0x024C);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(36);
         vm.pc = 0x3E33;
         G_POST(0x3E30, 0x53);
         continue;
@@ -41128,7 +41128,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E36, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [024E]
         vm.si_track = 0x024E;
-        v2_vm_accumulator = vm.ds_read(0x024E);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(37);
         vm.pc = 0x3E39;
         G_POST(0x3E36, 0x53);
         continue;
@@ -41145,7 +41145,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E3C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0250]
         vm.si_track = 0x0250;
-        v2_vm_accumulator = vm.ds_read(0x0250);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(38);
         vm.pc = 0x3E3F;
         G_POST(0x3E3C, 0x53);
         continue;
@@ -41162,7 +41162,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E42, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [025A]
         vm.si_track = 0x025A;
-        v2_vm_accumulator = vm.ds_read(0x025A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(43);
         vm.pc = 0x3E45;
         G_POST(0x3E42, 0x53);
         continue;
@@ -41179,7 +41179,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E48, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [025C]
         vm.si_track = 0x025C;
-        v2_vm_accumulator = vm.ds_read(0x025C);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(44);
         vm.pc = 0x3E4B;
         G_POST(0x3E48, 0x53);
         continue;
@@ -41196,7 +41196,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E4E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [025E]
         vm.si_track = 0x025E;
-        v2_vm_accumulator = vm.ds_read(0x025E);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(45);
         vm.pc = 0x3E51;
         G_POST(0x3E4E, 0x53);
         continue;
@@ -41213,7 +41213,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3E54, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0260]
         vm.si_track = 0x0260;
-        v2_vm_accumulator = vm.ds_read(0x0260);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(46);
         vm.pc = 0x3E57;
         G_POST(0x3E54, 0x53);
         continue;
@@ -41439,7 +41439,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3F2A, 0xAA);
         // inlined v2_vm_op_AA: when acc == bit([0236] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x0236);
+          uint16_t _fv = v2gs(vm.shadow).script_vars(25);
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x3F33 : 0x3F30;
         }
@@ -41747,7 +41747,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x13DB : 0x3FB7;
         }
         G_POST(0x3FB2, 0x74);
@@ -41779,7 +41779,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0276]
         {
           vm.si_track = 0x0276;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0276);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(57);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3FCC : 0x3FC1;
         }
         G_POST(0x3FBC, 0x74);
@@ -41930,7 +41930,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3FE3, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x3FE6;
         G_POST(0x3FE3, 0x53);
         continue;
@@ -41940,7 +41940,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x40ED : 0x3FEB;
         }
         G_POST(0x3FE6, 0x79);
@@ -41950,7 +41950,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3FEB, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [input_keys]
         vm.si_track = 0x03B6;
-        v2_vm_accumulator = vm.ds_read(0x03B6);
+        v2_vm_accumulator = v2gs(vm.shadow).input_keys();
         vm.pc = 0x3FEE;
         G_POST(0x3FEB, 0x53);
         continue;
@@ -41958,7 +41958,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3FEE;
         G_PRE(0x3FEE, 0x57);
         // inlined v2_vm_op_57: [021C] = acc
-        vm.ds_write(0x021C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(12, v2_vm_accumulator);
         vm.pc = 0x3FF1;
         G_POST(0x3FEE, 0x57);
         continue;
@@ -41974,7 +41974,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3FF4;
         G_PRE(0x3FF4, 0x60);
         // inlined v2_vm_op_60: [021C] &= acc
-        vm.ds_write(0x021C, (uint16_t)(vm.ds_read(0x021C) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(12, (uint16_t)(v2gs(vm.shadow).script_vars(12) & v2_vm_accumulator));
         vm.pc = 0x3FF7;
         G_POST(0x3FF4, 0x60);
         continue;
@@ -41992,7 +41992,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [021C]
         {
           vm.si_track = 0x021C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x021C);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(12);
           vm.pc = (_v == v2_vm_accumulator) ? 0x403F : 0x3FFF;
         }
         G_POST(0x3FFA, 0x74);
@@ -42002,7 +42002,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3FFF, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -42029,7 +42029,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x400A;
         G_PRE(0x400A, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x400D;
         G_POST(0x400A, 0x57);
         continue;
@@ -42038,7 +42038,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x400D, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x4010;
         G_POST(0x400D, 0x53);
         continue;
@@ -42063,7 +42063,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x401B, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -42088,7 +42088,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4025, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -42117,7 +42117,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4032, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -42145,7 +42145,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x403F, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -42225,7 +42225,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4057, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -42278,7 +42278,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4067;
         G_PRE(0x4067, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x406A;
         G_POST(0x4067, 0x57);
         continue;
@@ -42294,7 +42294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x406D;
         G_PRE(0x406D, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x4070;
         G_POST(0x406D, 0x5A);
         continue;
@@ -42310,7 +42310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x3A);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -42338,7 +42338,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x407B, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -42403,7 +42403,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4091;
         G_PRE(0x4091, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4094;
         G_POST(0x4091, 0x57);
         continue;
@@ -42419,7 +42419,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4097;
         G_PRE(0x4097, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x409A;
         G_POST(0x4097, 0x5D);
         continue;
@@ -42430,7 +42430,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -42508,7 +42508,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x40B4, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -42573,7 +42573,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x40CA;
         G_PRE(0x40CA, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x40CD;
         G_POST(0x40CA, 0x57);
         continue;
@@ -42589,7 +42589,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x40D0;
         G_PRE(0x40D0, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x40D3;
         G_POST(0x40D0, 0x5A);
         continue;
@@ -42600,7 +42600,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -42764,7 +42764,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x410B;
         G_PRE(0x410B, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x410E;
         G_POST(0x410B, 0x57);
         continue;
@@ -42773,7 +42773,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x410E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x4111;
         G_POST(0x410E, 0x53);
         continue;
@@ -43267,7 +43267,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x41B5, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x41B8;
         G_POST(0x41B5, 0x53);
         continue;
@@ -43277,7 +43277,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x421D : 0x41BD;
         }
         G_POST(0x41B8, 0x79);
@@ -43287,7 +43287,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x41BD, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -43312,7 +43312,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x41C7, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -43341,7 +43341,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x41D4, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -43415,7 +43415,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x41E9, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -43484,7 +43484,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4203, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -44166,7 +44166,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x42C6, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -44197,7 +44197,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x42D2;
         G_PRE(0x42D2, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x42D5;
         G_POST(0x42D2, 0x57);
         continue;
@@ -44213,7 +44213,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x42D8;
         G_PRE(0x42D8, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x42DB;
         G_POST(0x42D8, 0x5D);
         continue;
@@ -44268,7 +44268,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -44321,7 +44321,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -44513,7 +44513,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4333;
         G_PRE(0x4333, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4336;
         G_POST(0x4333, 0x57);
         continue;
@@ -44538,7 +44538,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -44821,7 +44821,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x438A;
         G_PRE(0x438A, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x438D;
         G_POST(0x438A, 0x57);
         continue;
@@ -44846,7 +44846,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -45163,7 +45163,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x43E9;
         G_PRE(0x43E9, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x43EC;
         G_POST(0x43E9, 0x57);
         continue;
@@ -45179,7 +45179,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x43EF;
         G_PRE(0x43EF, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x43F2;
         G_POST(0x43EF, 0x5D);
         continue;
@@ -45195,12 +45195,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x43FC;
         G_POST(0x43F2, 0x26);
@@ -45217,7 +45217,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x43FF;
         G_PRE(0x43FF, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x4402;
         G_POST(0x43FF, 0x5A);
         continue;
@@ -45229,15 +45229,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x440B;
         }
@@ -45248,7 +45248,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x440B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x440E;
         G_POST(0x440B, 0x53);
         continue;
@@ -45267,7 +45267,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4413, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x4416;
         G_POST(0x4413, 0x53);
         continue;
@@ -45286,7 +45286,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x441B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x441E;
         G_POST(0x441B, 0x53);
         continue;
@@ -45421,7 +45421,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x444A;
         G_PRE(0x444A, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x444D;
         G_POST(0x444A, 0x57);
         continue;
@@ -45437,7 +45437,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4450;
         G_PRE(0x4450, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x4453;
         G_POST(0x4450, 0x5A);
         continue;
@@ -45453,12 +45453,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x445D;
         G_POST(0x4453, 0x26);
@@ -45475,7 +45475,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4460;
         G_PRE(0x4460, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x4463;
         G_POST(0x4460, 0x5A);
         continue;
@@ -45487,15 +45487,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x446C;
         }
@@ -45522,7 +45522,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x446C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x446F;
         G_POST(0x446C, 0x53);
         continue;
@@ -45649,7 +45649,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4495, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x4498;
         G_POST(0x4495, 0x53);
         continue;
@@ -45659,7 +45659,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x4483 : 0x449D;
         }
         G_POST(0x4498, 0x79);
@@ -45669,7 +45669,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x449D, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -45712,7 +45712,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x44B0, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -45734,7 +45734,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x44BA, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -45756,7 +45756,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x44C4, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -45778,7 +45778,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x44CE, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -45861,7 +45861,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x44EE;
         G_PRE(0x44EE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x44F1;
         G_POST(0x44EE, 0x57);
         continue;
@@ -45877,7 +45877,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x44F4;
         G_PRE(0x44F4, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x44F7;
         G_POST(0x44F4, 0x5A);
         continue;
@@ -45893,12 +45893,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x4501;
         G_POST(0x44F7, 0x26);
@@ -45911,15 +45911,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x450A;
         }
@@ -45930,7 +45930,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x450A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x450D;
         G_POST(0x450A, 0x53);
         continue;
@@ -45958,7 +45958,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4514;
         G_PRE(0x4514, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4517;
         G_POST(0x4514, 0x57);
         continue;
@@ -45974,7 +45974,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x451A;
         G_PRE(0x451A, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x451D;
         G_POST(0x451A, 0x5A);
         continue;
@@ -45990,7 +45990,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x44);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -46021,7 +46021,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4527;
         G_PRE(0x4527, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x452A;
         G_POST(0x4527, 0x57);
         continue;
@@ -46037,7 +46037,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -46068,7 +46068,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4534;
         G_PRE(0x4534, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4537;
         G_POST(0x4534, 0x57);
         continue;
@@ -46084,7 +46084,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x453A;
         G_PRE(0x453A, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x453D;
         G_POST(0x453A, 0x5A);
         continue;
@@ -46100,7 +46100,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -46333,7 +46333,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4594;
         G_PRE(0x4594, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4597;
         G_POST(0x4594, 0x57);
         continue;
@@ -46349,12 +46349,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x45A1;
         G_POST(0x4597, 0x26);
@@ -46367,15 +46367,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x45AA;
         }
@@ -46395,7 +46395,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x45F0 : 0x45B2;
         }
         G_POST(0x45AD, 0x74);
@@ -46865,7 +46865,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0278]
         {
           vm.si_track = 0x0278;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0278);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(58);
           vm.pc = (_v != v2_vm_accumulator) ? 0x46AC : 0x4659;
         }
         G_POST(0x4654, 0x79);
@@ -47110,7 +47110,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0002;
-          vm.ds_write(0x0278, (uint16_t)((vm.ds_read(0x0278) & 0xFFFD) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(58, (uint16_t)((v2gs(vm.shadow).script_vars(58) & 0xFFFD) | v2_vm_accumulator));
         }
         vm.pc = 0x46B4;
         G_POST(0x46B0, 0x9D);
@@ -47169,7 +47169,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0278]
         {
           vm.si_track = 0x0278;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0278);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(58);
           vm.pc = (_v == v2_vm_accumulator) ? 0x3FCC : 0x46C3;
         }
         G_POST(0x46BE, 0x74);
@@ -47680,7 +47680,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4772, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x4775;
         G_POST(0x4772, 0x53);
         continue;
@@ -47690,7 +47690,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v == v2_vm_accumulator) ? 0x3FCC : 0x477A;
         }
         G_POST(0x4775, 0x74);
@@ -47811,7 +47811,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x13DB : 0x49D0;
         }
         G_POST(0x49CB, 0x74);
@@ -47843,7 +47843,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0276]
         {
           vm.si_track = 0x0276;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0276);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(57);
           vm.pc = (_v == v2_vm_accumulator) ? 0x49E8 : 0x49DA;
         }
         G_POST(0x49D5, 0x74);
@@ -48002,7 +48002,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x49FF, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [active_viking]
         vm.si_track = 0x03C2;
-        v2_vm_accumulator = vm.ds_read(0x03C2);
+        v2_vm_accumulator = v2gs(vm.shadow).active_viking();
         vm.pc = 0x4A02;
         G_POST(0x49FF, 0x53);
         continue;
@@ -48012,7 +48012,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [cur_obj]
         {
           vm.si_track = 0x0042;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0042);
+          const uint16_t _v = v2gs(vm.shadow).cur_obj();
           vm.pc = (_v != v2_vm_accumulator) ? 0x4B24 : 0x4A07;
         }
         G_POST(0x4A02, 0x79);
@@ -48022,7 +48022,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4A07, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [input_keys]
         vm.si_track = 0x03B6;
-        v2_vm_accumulator = vm.ds_read(0x03B6);
+        v2_vm_accumulator = v2gs(vm.shadow).input_keys();
         vm.pc = 0x4A0A;
         G_POST(0x4A07, 0x53);
         continue;
@@ -48030,7 +48030,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4A0A;
         G_PRE(0x4A0A, 0x57);
         // inlined v2_vm_op_57: [021C] = acc
-        vm.ds_write(0x021C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(12, v2_vm_accumulator);
         vm.pc = 0x4A0D;
         G_POST(0x4A0A, 0x57);
         continue;
@@ -48046,7 +48046,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4A10;
         G_PRE(0x4A10, 0x60);
         // inlined v2_vm_op_60: [021C] &= acc
-        vm.ds_write(0x021C, (uint16_t)(vm.ds_read(0x021C) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(12, (uint16_t)(v2gs(vm.shadow).script_vars(12) & v2_vm_accumulator));
         vm.pc = 0x4A13;
         G_POST(0x4A10, 0x60);
         continue;
@@ -48064,7 +48064,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [021C]
         {
           vm.si_track = 0x021C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x021C);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(12);
           vm.pc = (_v == v2_vm_accumulator) ? 0x4A76 : 0x4A1B;
         }
         G_POST(0x4A16, 0x74);
@@ -48074,7 +48074,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4A1B, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -48214,7 +48214,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4A4E, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -48256,7 +48256,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4A5F, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -48281,7 +48281,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4A69, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -48310,7 +48310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4A76, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -48390,7 +48390,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4A8E, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -48443,7 +48443,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4A9E;
         G_PRE(0x4A9E, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4AA1;
         G_POST(0x4A9E, 0x57);
         continue;
@@ -48459,7 +48459,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4AA4;
         G_PRE(0x4AA4, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x4AA7;
         G_POST(0x4AA4, 0x5A);
         continue;
@@ -48475,7 +48475,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x3A);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -48503,7 +48503,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4AB2, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -48568,7 +48568,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4AC8;
         G_PRE(0x4AC8, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4ACB;
         G_POST(0x4AC8, 0x57);
         continue;
@@ -48584,7 +48584,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4ACE;
         G_PRE(0x4ACE, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x4AD1;
         G_POST(0x4ACE, 0x5D);
         continue;
@@ -48595,7 +48595,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -48673,7 +48673,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4AEB, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -48738,7 +48738,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4B01;
         G_PRE(0x4B01, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4B04;
         G_POST(0x4B01, 0x57);
         continue;
@@ -48754,7 +48754,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4B07;
         G_PRE(0x4B07, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x4B0A;
         G_POST(0x4B07, 0x5A);
         continue;
@@ -48765,7 +48765,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -49148,7 +49148,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4B81, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -49173,7 +49173,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4B8B, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -49232,7 +49232,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4BA4, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -49260,7 +49260,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4BB1, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -49429,7 +49429,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4BE8;
         G_PRE(0x4BE8, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4BEB;
         G_POST(0x4BE8, 0x57);
         continue;
@@ -49454,7 +49454,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -49506,7 +49506,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4C01;
         G_PRE(0x4C01, 0x57);
         // inlined v2_vm_op_57: [020A] = acc
-        vm.ds_write(0x020A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(3, v2_vm_accumulator);
         vm.pc = 0x4C04;
         G_POST(0x4C01, 0x57);
         continue;
@@ -49531,7 +49531,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _a = vm.ds_read(0x020A);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(3);
           vm.ch4_mul_clobber = false;
           uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
           vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
@@ -49539,9 +49539,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           uint16_t _cx = (uint16_t)((_a & 0xFFF0) | 8);
           uint16_t _dx = (uint16_t)((_b & 0xFFF0) | 8);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _cx);
+          v2gs(vm.shadow).script_vars(1, _cx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, _dx);
+          v2gs(vm.shadow).script_vars(2, _dx);
         }
         vm.pc = 0x4C14;
         G_POST(0x4C0A, 0x28);
@@ -49553,11 +49553,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -49735,7 +49735,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4C48, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -49760,7 +49760,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4C52, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -50025,7 +50025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4CA5, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -50050,7 +50050,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4CAF, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -50163,7 +50163,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4CD4, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -50188,7 +50188,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4CDE, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -50449,7 +50449,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4D30, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -50474,7 +50474,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4D3A, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -50587,7 +50587,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4D5F, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -50612,7 +50612,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4D69, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -50848,7 +50848,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4DAF, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -50873,7 +50873,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4DB9, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -51051,7 +51051,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4DEE, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -51076,7 +51076,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4DF8, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -51806,7 +51806,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4EEF, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x4EF2;
         G_POST(0x4EEF, 0x53);
         continue;
@@ -51816,7 +51816,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x4F57 : 0x4EF7;
         }
         G_POST(0x4EF2, 0x79);
@@ -51826,7 +51826,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4EF7, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -51851,7 +51851,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4F01, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -51880,7 +51880,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4F0E, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -51954,7 +51954,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4F23, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -52023,7 +52023,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4F3D, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -52222,7 +52222,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4F7B, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -52559,7 +52559,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FE3;
         G_PRE(0x4FE3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x4FE6;
         G_POST(0x4FE3, 0x57);
         continue;
@@ -52575,7 +52575,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FE9;
         G_PRE(0x4FE9, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x4FEC;
         G_POST(0x4FE9, 0x5D);
         continue;
@@ -52591,12 +52591,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x4FF6;
         G_POST(0x4FEC, 0x26);
@@ -52613,7 +52613,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FF9;
         G_PRE(0x4FF9, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x4FFC;
         G_POST(0x4FF9, 0x5A);
         continue;
@@ -52625,15 +52625,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x5005;
         }
@@ -52644,7 +52644,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5005, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5008;
         G_POST(0x5005, 0x53);
         continue;
@@ -52663,7 +52663,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x500D, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5010;
         G_POST(0x500D, 0x53);
         continue;
@@ -52682,7 +52682,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5015, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5018;
         G_POST(0x5015, 0x53);
         continue;
@@ -52817,7 +52817,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5044;
         G_PRE(0x5044, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5047;
         G_POST(0x5044, 0x57);
         continue;
@@ -52833,7 +52833,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x504A;
         G_PRE(0x504A, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x504D;
         G_POST(0x504A, 0x5A);
         continue;
@@ -52849,12 +52849,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x5057;
         G_POST(0x504D, 0x26);
@@ -52871,7 +52871,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x505A;
         G_PRE(0x505A, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x505D;
         G_POST(0x505A, 0x5A);
         continue;
@@ -52883,15 +52883,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x5066;
         }
@@ -52902,7 +52902,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5066, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5069;
         G_POST(0x5066, 0x53);
         continue;
@@ -53029,7 +53029,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x508F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x5092;
         G_POST(0x508F, 0x53);
         continue;
@@ -53039,7 +53039,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x507D : 0x5097;
         }
         G_POST(0x5092, 0x79);
@@ -53049,7 +53049,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5097, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -53092,7 +53092,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x50AA, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -53114,7 +53114,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x50B4, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -53136,7 +53136,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x50BE, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -53158,7 +53158,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x50C8, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -53180,7 +53180,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x50D2, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -53263,7 +53263,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x50F2;
         G_PRE(0x50F2, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x50F5;
         G_POST(0x50F2, 0x57);
         continue;
@@ -53279,7 +53279,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x50F8;
         G_PRE(0x50F8, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x50FB;
         G_POST(0x50F8, 0x5A);
         continue;
@@ -53295,12 +53295,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x5105;
         G_POST(0x50FB, 0x26);
@@ -53313,15 +53313,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x510E;
         }
@@ -53332,7 +53332,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x510E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5111;
         G_POST(0x510E, 0x53);
         continue;
@@ -53360,7 +53360,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5118;
         G_PRE(0x5118, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x511B;
         G_POST(0x5118, 0x57);
         continue;
@@ -53376,7 +53376,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x511E;
         G_PRE(0x511E, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x5121;
         G_POST(0x511E, 0x5A);
         continue;
@@ -53392,7 +53392,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x44);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -53423,7 +53423,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x512B;
         G_PRE(0x512B, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x512E;
         G_POST(0x512B, 0x57);
         continue;
@@ -53439,7 +53439,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -53470,7 +53470,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5138;
         G_PRE(0x5138, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x513B;
         G_POST(0x5138, 0x57);
         continue;
@@ -53486,7 +53486,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x513E;
         G_PRE(0x513E, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x5141;
         G_POST(0x513E, 0x5A);
         continue;
@@ -53502,7 +53502,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -53735,7 +53735,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5198;
         G_PRE(0x5198, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x519B;
         G_POST(0x5198, 0x57);
         continue;
@@ -53751,12 +53751,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x51A5;
         G_POST(0x519B, 0x26);
@@ -53769,15 +53769,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x51AE;
         }
@@ -53797,7 +53797,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x51F4 : 0x51B6;
         }
         G_POST(0x51B1, 0x74);
@@ -54267,7 +54267,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0278]
         {
           vm.si_track = 0x0278;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0278);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(58);
           vm.pc = (_v != v2_vm_accumulator) ? 0x5304 : 0x525D;
         }
         G_POST(0x5258, 0x79);
@@ -54877,7 +54877,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0001;
-          vm.ds_write(0x0278, (uint16_t)((vm.ds_read(0x0278) & 0xFFFE) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(58, (uint16_t)((v2gs(vm.shadow).script_vars(58) & 0xFFFE) | v2_vm_accumulator));
         }
         vm.pc = 0x530C;
         G_POST(0x5308, 0x9D);
@@ -54936,7 +54936,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0278]
         {
           vm.si_track = 0x0278;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0278);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(58);
           vm.pc = (_v == v2_vm_accumulator) ? 0x49E8 : 0x531B;
         }
         G_POST(0x5316, 0x74);
@@ -55462,7 +55462,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x13DB : 0x5611;
         }
         G_POST(0x560C, 0x74);
@@ -55617,7 +55617,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0276]
         {
           vm.si_track = 0x0276;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0276);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(57);
           vm.pc = (_v == v2_vm_accumulator) ? 0x5655 : 0x563B;
         }
         G_POST(0x5636, 0x74);
@@ -55805,7 +55805,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x566C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x566F;
         G_POST(0x566C, 0x53);
         continue;
@@ -55815,7 +55815,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x5790 : 0x5674;
         }
         G_POST(0x566F, 0x79);
@@ -55825,7 +55825,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5674, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [input_keys]
         vm.si_track = 0x03B6;
-        v2_vm_accumulator = vm.ds_read(0x03B6);
+        v2_vm_accumulator = v2gs(vm.shadow).input_keys();
         vm.pc = 0x5677;
         G_POST(0x5674, 0x53);
         continue;
@@ -55833,7 +55833,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5677;
         G_PRE(0x5677, 0x57);
         // inlined v2_vm_op_57: [021C] = acc
-        vm.ds_write(0x021C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(12, v2_vm_accumulator);
         vm.pc = 0x567A;
         G_POST(0x5677, 0x57);
         continue;
@@ -55849,7 +55849,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x567D;
         G_PRE(0x567D, 0x60);
         // inlined v2_vm_op_60: [021C] &= acc
-        vm.ds_write(0x021C, (uint16_t)(vm.ds_read(0x021C) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(12, (uint16_t)(v2gs(vm.shadow).script_vars(12) & v2_vm_accumulator));
         vm.pc = 0x5680;
         G_POST(0x567D, 0x60);
         continue;
@@ -55867,7 +55867,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [021C]
         {
           vm.si_track = 0x021C;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x021C);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(12);
           vm.pc = (_v == v2_vm_accumulator) ? 0x56B6 : 0x5688;
         }
         G_POST(0x5683, 0x74);
@@ -55877,7 +55877,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5688, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -55899,7 +55899,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5692, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -55927,7 +55927,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x569F, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -55952,7 +55952,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x56A9, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -55981,7 +55981,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x56B6, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -56061,7 +56061,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x56CE, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -56114,7 +56114,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x56DE;
         G_PRE(0x56DE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x56E1;
         G_POST(0x56DE, 0x57);
         continue;
@@ -56130,7 +56130,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x56E4;
         G_PRE(0x56E4, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x56E7;
         G_POST(0x56E4, 0x5A);
         continue;
@@ -56146,7 +56146,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x3A);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -56174,7 +56174,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x56F2, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -56239,7 +56239,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5708;
         G_PRE(0x5708, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x570B;
         G_POST(0x5708, 0x57);
         continue;
@@ -56255,7 +56255,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x570E;
         G_PRE(0x570E, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x5711;
         G_POST(0x570E, 0x5D);
         continue;
@@ -56266,7 +56266,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -56405,7 +56405,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5741, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -56470,7 +56470,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5757;
         G_PRE(0x5757, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x575A;
         G_POST(0x5757, 0x57);
         continue;
@@ -56486,7 +56486,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x575D;
         G_PRE(0x575D, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x5760;
         G_POST(0x575D, 0x5A);
         continue;
@@ -56497,7 +56497,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -57943,7 +57943,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x595C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x595F;
         G_POST(0x595C, 0x53);
         continue;
@@ -57953,7 +57953,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x5A13 : 0x5964;
         }
         G_POST(0x595F, 0x79);
@@ -57963,7 +57963,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5964, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -57985,7 +57985,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x596E, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -58184,7 +58184,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x59B3, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -58209,7 +58209,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x59BD, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -58238,7 +58238,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x59CA, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -58312,7 +58312,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x59DF, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -58381,7 +58381,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x59F9, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -59211,7 +59211,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B0A;
         G_PRE(0x5B0A, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5B0D;
         G_POST(0x5B0A, 0x57);
         continue;
@@ -59227,7 +59227,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B10;
         G_PRE(0x5B10, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x5B13;
         G_POST(0x5B10, 0x5D);
         continue;
@@ -59243,12 +59243,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x5B1D;
         G_POST(0x5B13, 0x26);
@@ -59265,7 +59265,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B20;
         G_PRE(0x5B20, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x5B23;
         G_POST(0x5B20, 0x5A);
         continue;
@@ -59277,15 +59277,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x5B2C;
         }
@@ -59296,7 +59296,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5B2C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5B2F;
         G_POST(0x5B2C, 0x53);
         continue;
@@ -59315,7 +59315,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5B34, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5B37;
         G_POST(0x5B34, 0x53);
         continue;
@@ -59334,7 +59334,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5B3C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5B3F;
         G_POST(0x5B3C, 0x53);
         continue;
@@ -59493,7 +59493,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B72;
         G_PRE(0x5B72, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5B75;
         G_POST(0x5B72, 0x57);
         continue;
@@ -59509,7 +59509,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B78;
         G_PRE(0x5B78, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x5B7B;
         G_POST(0x5B78, 0x5A);
         continue;
@@ -59525,12 +59525,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x5B85;
         G_POST(0x5B7B, 0x26);
@@ -59547,7 +59547,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B88;
         G_PRE(0x5B88, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x5B8B;
         G_POST(0x5B88, 0x5A);
         continue;
@@ -59559,15 +59559,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x5B94;
         }
@@ -59578,7 +59578,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5B94, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5B97;
         G_POST(0x5B94, 0x53);
         continue;
@@ -59742,7 +59742,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5BCC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x5BCF;
         G_POST(0x5BCC, 0x53);
         continue;
@@ -59752,7 +59752,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x5BBA : 0x5BD4;
         }
         G_POST(0x5BCF, 0x79);
@@ -59762,7 +59762,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5BD4, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -59805,7 +59805,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5BE7, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x800)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0016;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -59827,7 +59827,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5BF1, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x400)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0014;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -59849,7 +59849,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5BFB, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -59871,7 +59871,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5C05, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -59954,7 +59954,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5C25;
         G_PRE(0x5C25, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5C28;
         G_POST(0x5C25, 0x57);
         continue;
@@ -59970,7 +59970,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5C2B;
         G_PRE(0x5C2B, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x5C2E;
         G_POST(0x5C2B, 0x5A);
         continue;
@@ -59986,12 +59986,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x5C38;
         G_POST(0x5C2E, 0x26);
@@ -60004,15 +60004,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x5C41;
         }
@@ -60023,7 +60023,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5C41, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x5C44;
         G_POST(0x5C41, 0x53);
         continue;
@@ -60051,7 +60051,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5C4B;
         G_PRE(0x5C4B, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5C4E;
         G_POST(0x5C4B, 0x57);
         continue;
@@ -60067,7 +60067,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5C51;
         G_PRE(0x5C51, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x5C54;
         G_POST(0x5C51, 0x5A);
         continue;
@@ -60083,7 +60083,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x44);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -60114,7 +60114,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5C5E;
         G_PRE(0x5C5E, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5C61;
         G_POST(0x5C5E, 0x57);
         continue;
@@ -60130,7 +60130,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -60161,7 +60161,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5C6B;
         G_PRE(0x5C6B, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5C6E;
         G_POST(0x5C6B, 0x57);
         continue;
@@ -60177,7 +60177,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5C71;
         G_PRE(0x5C71, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x5C74;
         G_POST(0x5C71, 0x5A);
         continue;
@@ -60193,7 +60193,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -60463,7 +60463,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5CDA;
         G_PRE(0x5CDA, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x5CDD;
         G_POST(0x5CDA, 0x57);
         continue;
@@ -60479,12 +60479,12 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _b = vm.ds_read(0x0206);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(3, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x5CE7;
         G_POST(0x5CDD, 0x26);
@@ -60497,15 +60497,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _a = vm.ds_read(0x0208);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x020A;
-          const uint16_t _b = vm.ds_read(0x020A);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(3);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x5CF0;
         }
@@ -60525,7 +60525,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x5D36 : 0x5CF8;
         }
         G_POST(0x5CF3, 0x74);
@@ -61095,7 +61095,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5DBF, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x5DC2;
         G_POST(0x5DBF, 0x53);
         continue;
@@ -61105,7 +61105,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v != v2_vm_accumulator) ? 0x5DB2 : 0x5DC7;
         }
         G_POST(0x5DC2, 0x79);
@@ -61115,7 +61115,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5DC7, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x8000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -61137,7 +61137,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5DD1, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x4000)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x001C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -61181,7 +61181,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5DE3, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -61210,7 +61210,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5DF0, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x200)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0012;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0200) ? 1 : 0);
         }
@@ -61247,7 +61247,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5DFE, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_keys] & 0x100)
         {
-          uint16_t _fv = vm.ds_read(0x03B6);
+          uint16_t _fv = v2gs(vm.shadow).input_keys();
           vm.si_track = 0x0010;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0100) ? 1 : 0);
         }
@@ -61461,7 +61461,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0278]
         {
           vm.si_track = 0x0278;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0278);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(58);
           vm.pc = (_v != v2_vm_accumulator) ? 0x5EA4 : 0x5E4A;
         }
         G_POST(0x5E45, 0x79);
@@ -61726,7 +61726,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0004;
-          vm.ds_write(0x0278, (uint16_t)((vm.ds_read(0x0278) & 0xFFFB) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(58, (uint16_t)((v2gs(vm.shadow).script_vars(58) & 0xFFFB) | v2_vm_accumulator));
         }
         vm.pc = 0x5EAC;
         G_POST(0x5EA8, 0x9D);
@@ -61785,7 +61785,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0278]
         {
           vm.si_track = 0x0278;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0278);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(58);
           vm.pc = (_v == v2_vm_accumulator) ? 0x5655 : 0x5EBB;
         }
         G_POST(0x5EB6, 0x74);
@@ -62536,7 +62536,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5FB5, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x5FB8;
         G_POST(0x5FB5, 0x53);
         continue;
@@ -62546,7 +62546,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [active_viking]
         {
           vm.si_track = 0x03C2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03C2);
+          const uint16_t _v = v2gs(vm.shadow).active_viking();
           vm.pc = (_v == v2_vm_accumulator) ? 0x5655 : 0x5FBD;
         }
         G_POST(0x5FB8, 0x74);
@@ -62700,7 +62700,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [flag_202]
         {
           vm.si_track = 0x0202;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0202);
+          const uint16_t _v = v2gs(vm.shadow).flag_202();
           vm.pc = (_v == v2_vm_accumulator) ? 0x6238 : 0x6228;
         }
         G_POST(0x6223, 0x74);
@@ -62710,7 +62710,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6228, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [input_keys]
         vm.si_track = 0x03B6;
-        v2_vm_accumulator = vm.ds_read(0x03B6);
+        v2_vm_accumulator = v2gs(vm.shadow).input_keys();
         vm.pc = 0x622B;
         G_POST(0x6228, 0x53);
         continue;
@@ -62729,7 +62729,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6230, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [input_keys]
         vm.si_track = 0x03B6;
-        v2_vm_accumulator = vm.ds_read(0x03B6);
+        v2_vm_accumulator = v2gs(vm.shadow).input_keys();
         vm.pc = 0x6233;
         G_POST(0x6230, 0x53);
         continue;
@@ -62932,7 +62932,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x6238 : 0x627C;
         }
         G_POST(0x6277, 0x74);
@@ -62942,7 +62942,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x627C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x627F;
         G_POST(0x627C, 0x53);
         continue;
@@ -62950,7 +62950,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x627F;
         G_PRE(0x627F, 0x57);
         // inlined v2_vm_op_57: [level_load] = acc
-        vm.ds_write(0x25C9, v2_vm_accumulator);
+        v2gs(vm.shadow).level_load(v2_vm_accumulator);
         vm.pc = 0x6282;
         G_POST(0x627F, 0x57);
         continue;
@@ -62966,7 +62966,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6285;
         G_PRE(0x6285, 0x5D);
         // inlined v2_vm_op_5D: [level_load] -= acc
-        vm.ds_write(0x25C9, (uint16_t)(vm.ds_read(0x25C9) - v2_vm_accumulator));
+        v2gs(vm.shadow).level_load((uint16_t)(v2gs(vm.shadow).level_load() - v2_vm_accumulator));
         vm.pc = 0x6288;
         G_POST(0x6285, 0x5D);
         continue;
@@ -62990,7 +62990,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x6238 : 0x6293;
         }
         G_POST(0x628E, 0x74);
@@ -63900,7 +63900,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [flag_202]
         {
           vm.si_track = 0x0202;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0202);
+          const uint16_t _v = v2gs(vm.shadow).flag_202();
           vm.pc = (_v == v2_vm_accumulator) ? 0x63D4 : 0x638D;
         }
         G_POST(0x6388, 0x74);
@@ -63930,7 +63930,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6392, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [input_keys]
         vm.si_track = 0x03B6;
-        v2_vm_accumulator = vm.ds_read(0x03B6);
+        v2_vm_accumulator = v2gs(vm.shadow).input_keys();
         vm.pc = 0x6395;
         G_POST(0x6392, 0x53);
         continue;
@@ -63949,7 +63949,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x639A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [input_keys]
         vm.si_track = 0x03B6;
-        v2_vm_accumulator = vm.ds_read(0x03B6);
+        v2_vm_accumulator = v2gs(vm.shadow).input_keys();
         vm.pc = 0x639D;
         G_POST(0x639A, 0x53);
         continue;
@@ -64073,7 +64073,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x63D7;
         G_PRE(0x63D7, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x63DA;
         G_POST(0x63D7, 0x57);
         continue;
@@ -64098,7 +64098,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x63DF, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x63E2;
         G_POST(0x63DF, 0x53);
         continue;
@@ -64602,7 +64602,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6477;
         G_PRE(0x6477, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x647A;
         G_POST(0x6477, 0x57);
         continue;
@@ -64618,7 +64618,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x647D;
         G_PRE(0x647D, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x6480;
         G_POST(0x647D, 0x60);
         continue;
@@ -64634,7 +64634,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6483;
         G_PRE(0x6483, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x6486;
         G_POST(0x6483, 0x5A);
         continue;
@@ -64652,7 +64652,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6488;
         G_PRE(0x6488, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x648B;
         G_POST(0x6488, 0x5D);
         continue;
@@ -64661,7 +64661,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x648B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x648E;
         G_POST(0x648B, 0x53);
         continue;
@@ -64688,7 +64688,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6492;
         G_PRE(0x6492, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x6495;
         G_POST(0x6492, 0x57);
         continue;
@@ -64704,7 +64704,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6498;
         G_PRE(0x6498, 0x63);
         // inlined v2_vm_op_63: [0206] |= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) | v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) | v2_vm_accumulator));
         vm.pc = 0x649B;
         G_POST(0x6498, 0x63);
         continue;
@@ -64722,7 +64722,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x649D;
         G_PRE(0x649D, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x64A0;
         G_POST(0x649D, 0x5D);
         continue;
@@ -64731,7 +64731,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x64A0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x64A3;
         G_POST(0x64A0, 0x53);
         continue;
@@ -64795,7 +64795,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x64AE;
         G_PRE(0x64AE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x64B1;
         G_POST(0x64AE, 0x57);
         continue;
@@ -64811,7 +64811,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x64B4;
         G_PRE(0x64B4, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x64B7;
         G_POST(0x64B4, 0x60);
         continue;
@@ -64829,7 +64829,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x64B9;
         G_PRE(0x64B9, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x64BC;
         G_POST(0x64B9, 0x5D);
         continue;
@@ -64838,7 +64838,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x64BC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x64BF;
         G_POST(0x64BC, 0x53);
         continue;
@@ -64865,7 +64865,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x64C3;
         G_PRE(0x64C3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x64C6;
         G_POST(0x64C3, 0x57);
         continue;
@@ -64881,7 +64881,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x64C9;
         G_PRE(0x64C9, 0x63);
         // inlined v2_vm_op_63: [0206] |= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) | v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) | v2_vm_accumulator));
         vm.pc = 0x64CC;
         G_POST(0x64C9, 0x63);
         continue;
@@ -64899,7 +64899,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x64CE;
         G_PRE(0x64CE, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x64D1;
         G_POST(0x64CE, 0x5D);
         continue;
@@ -64908,7 +64908,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x64D1, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x64D4;
         G_POST(0x64D1, 0x53);
         continue;
@@ -65405,7 +65405,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x654E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [cur_obj]
         vm.si_track = 0x0042;
-        v2_vm_accumulator = vm.ds_read(0x0042);
+        v2_vm_accumulator = v2gs(vm.shadow).cur_obj();
         vm.pc = 0x6551;
         G_POST(0x654E, 0x53);
         continue;
@@ -65873,7 +65873,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x65DF, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -65898,7 +65898,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x65E9, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -66035,7 +66035,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6616, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -66060,7 +66060,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6620, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -66420,7 +66420,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0276]
         {
           vm.si_track = 0x0276;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0276);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(57);
           vm.pc = (_v != v2_vm_accumulator) ? 0x67DB : 0x669E;
         }
         G_POST(0x6699, 0x79);
@@ -66657,7 +66657,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x66E2, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -66682,7 +66682,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x66EC, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -66872,7 +66872,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6728, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -66897,7 +66897,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6732, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -67031,7 +67031,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x675F, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x80)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000E;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0080) ? 1 : 0);
         }
@@ -67056,7 +67056,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6769, 0x99);
         // inlined v2_vm_op_bit_test_addr: acc = bit([input_edges] & 0x40)
         {
-          uint16_t _fv = vm.ds_read(0x03B8);
+          uint16_t _fv = v2gs(vm.shadow).input_edges();
           vm.si_track = 0x000C;  // 1542a tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -67444,7 +67444,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0001;
-          vm.ds_write(0x0276, (uint16_t)((vm.ds_read(0x0276) & 0xFFFE) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(57, (uint16_t)((v2gs(vm.shadow).script_vars(57) & 0xFFFE) | v2_vm_accumulator));
         }
         vm.pc = 0x67F1;
         G_POST(0x67ED, 0x9D);
@@ -67473,7 +67473,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0002;
-          vm.ds_write(0x0276, (uint16_t)((vm.ds_read(0x0276) & 0xFFFD) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(57, (uint16_t)((v2gs(vm.shadow).script_vars(57) & 0xFFFD) | v2_vm_accumulator));
         }
         vm.pc = 0x67FC;
         G_POST(0x67F8, 0x9D);
@@ -67502,7 +67502,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0004;
-          vm.ds_write(0x0276, (uint16_t)((vm.ds_read(0x0276) & 0xFFFB) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(57, (uint16_t)((v2gs(vm.shadow).script_vars(57) & 0xFFFB) | v2_vm_accumulator));
         }
         vm.pc = 0x6807;
         G_POST(0x6803, 0x9D);
@@ -69318,7 +69318,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A46;
         G_PRE(0x6A46, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x6A49;
         G_POST(0x6A46, 0x57);
         continue;
@@ -69340,7 +69340,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
-          vm.ds_write(0x0206, (uint16_t)((vm.ds_read(0x0206) & 0x7FFF) | v2_vm_accumulator));
+          v2gs(vm.shadow).script_vars(1, (uint16_t)((v2gs(vm.shadow).script_vars(1) & 0x7FFF) | v2_vm_accumulator));
         }
         vm.pc = 0x6A51;
         G_POST(0x6A4D, 0x9D);
@@ -69350,7 +69350,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6A51, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x6A54;
         G_POST(0x6A51, 0x53);
         continue;
@@ -69408,7 +69408,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6A64, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x6A67;
         G_POST(0x6A64, 0x53);
         continue;
@@ -69416,7 +69416,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A67;
         G_PRE(0x6A67, 0x5D);
         // inlined v2_vm_op_5D: [hud_scratch_42d] -= acc
-        vm.ds_write(0x042D, (uint16_t)(vm.ds_read(0x042D) - v2_vm_accumulator));
+        v2gs(vm.shadow).portrait_snd(2, (uint16_t)(v2gs(vm.shadow).portrait_snd(2) - v2_vm_accumulator));
         vm.pc = 0x6A6A;
         G_POST(0x6A67, 0x5D);
         continue;
@@ -69425,7 +69425,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6A6A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42d]
         vm.si_track = 0x042D;
-        v2_vm_accumulator = vm.ds_read(0x042D);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(2);
         vm.pc = 0x6A6D;
         G_POST(0x6A6A, 0x53);
         continue;
@@ -69451,7 +69451,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A75;
         G_PRE(0x6A75, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42d] = acc
-        vm.ds_write(0x042D, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(2, v2_vm_accumulator);
         vm.pc = 0x6A78;
         G_POST(0x6A75, 0x57);
         continue;
@@ -69466,7 +69466,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6A7B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x6A7E;
         G_POST(0x6A7B, 0x53);
         continue;
@@ -69474,7 +69474,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A7E;
         G_PRE(0x6A7E, 0x5D);
         // inlined v2_vm_op_5D: [hud_scratch_42b] -= acc
-        vm.ds_write(0x042B, (uint16_t)(vm.ds_read(0x042B) - v2_vm_accumulator));
+        v2gs(vm.shadow).portrait_snd(1, (uint16_t)(v2gs(vm.shadow).portrait_snd(1) - v2_vm_accumulator));
         vm.pc = 0x6A81;
         G_POST(0x6A7E, 0x5D);
         continue;
@@ -69483,7 +69483,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6A81, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42b]
         vm.si_track = 0x042B;
-        v2_vm_accumulator = vm.ds_read(0x042B);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(1);
         vm.pc = 0x6A84;
         G_POST(0x6A81, 0x53);
         continue;
@@ -69509,7 +69509,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A8C;
         G_PRE(0x6A8C, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42b] = acc
-        vm.ds_write(0x042B, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(1, v2_vm_accumulator);
         vm.pc = 0x6A8F;
         G_POST(0x6A8C, 0x57);
         continue;
@@ -69524,7 +69524,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6A92, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x6A95;
         G_POST(0x6A92, 0x53);
         continue;
@@ -69532,7 +69532,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A95;
         G_PRE(0x6A95, 0x5D);
         // inlined v2_vm_op_5D: [portrait_snd] -= acc
-        vm.ds_write(0x0429, (uint16_t)(vm.ds_read(0x0429) - v2_vm_accumulator));
+        v2gs(vm.shadow).portrait_snd(0, (uint16_t)(v2gs(vm.shadow).portrait_snd(0) - v2_vm_accumulator));
         vm.pc = 0x6A98;
         G_POST(0x6A95, 0x5D);
         continue;
@@ -69541,7 +69541,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6A98, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [portrait_snd]
         vm.si_track = 0x0429;
-        v2_vm_accumulator = vm.ds_read(0x0429);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(0);
         vm.pc = 0x6A9B;
         G_POST(0x6A98, 0x53);
         continue;
@@ -69567,7 +69567,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6AA3;
         G_PRE(0x6AA3, 0x57);
         // inlined v2_vm_op_57: [portrait_snd] = acc
-        vm.ds_write(0x0429, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(0, v2_vm_accumulator);
         vm.pc = 0x6AA6;
         G_POST(0x6AA3, 0x57);
         continue;
@@ -70879,7 +70879,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C49;
         G_PRE(0x6C49, 0x57);
         // inlined v2_vm_op_57: [portrait_snd] = acc
-        vm.ds_write(0x0429, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(0, v2_vm_accumulator);
         vm.pc = 0x6C4C;
         G_POST(0x6C49, 0x57);
         continue;
@@ -70901,7 +70901,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C50;
         G_PRE(0x6C50, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42b] = acc
-        vm.ds_write(0x042B, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(1, v2_vm_accumulator);
         vm.pc = 0x6C53;
         G_POST(0x6C50, 0x57);
         continue;
@@ -70923,7 +70923,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C57;
         G_PRE(0x6C57, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42d] = acc
-        vm.ds_write(0x042D, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(2, v2_vm_accumulator);
         vm.pc = 0x6C5A;
         G_POST(0x6C57, 0x57);
         continue;
@@ -71041,7 +71041,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C7D;
         G_PRE(0x6C7D, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42d] = acc
-        vm.ds_write(0x042D, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(2, v2_vm_accumulator);
         vm.pc = 0x6C80;
         G_POST(0x6C7D, 0x57);
         continue;
@@ -71057,7 +71057,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C83;
         G_PRE(0x6C83, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x6C86;
         G_POST(0x6C83, 0x57);
         continue;
@@ -71159,7 +71159,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6CA7;
         G_PRE(0x6CA7, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42b] = acc
-        vm.ds_write(0x042B, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(1, v2_vm_accumulator);
         vm.pc = 0x6CAA;
         G_POST(0x6CA7, 0x57);
         continue;
@@ -71175,7 +71175,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6CAD;
         G_PRE(0x6CAD, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x6CB0;
         G_POST(0x6CAD, 0x57);
         continue;
@@ -71277,7 +71277,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6CD1;
         G_PRE(0x6CD1, 0x57);
         // inlined v2_vm_op_57: [portrait_snd] = acc
-        vm.ds_write(0x0429, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(0, v2_vm_accumulator);
         vm.pc = 0x6CD4;
         G_POST(0x6CD1, 0x57);
         continue;
@@ -71293,7 +71293,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6CD7;
         G_PRE(0x6CD7, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x6CDA;
         G_POST(0x6CD7, 0x57);
         continue;
@@ -72198,7 +72198,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6DF6, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_res_slot]
         vm.si_track = 0x03B4;
-        v2_vm_accumulator = vm.ds_read(0x03B4);
+        v2_vm_accumulator = v2gs(vm.shadow).search_res_slot();
         vm.pc = 0x6DF9;
         G_POST(0x6DF6, 0x53);
         continue;
@@ -72217,7 +72217,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6DFE, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_res_slot]
         vm.si_track = 0x03B4;
-        v2_vm_accumulator = vm.ds_read(0x03B4);
+        v2_vm_accumulator = v2gs(vm.shadow).search_res_slot();
         vm.pc = 0x6E01;
         G_POST(0x6DFE, 0x53);
         continue;
@@ -72260,7 +72260,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6E0B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_res_slot]
         vm.si_track = 0x03B4;
-        v2_vm_accumulator = vm.ds_read(0x03B4);
+        v2_vm_accumulator = v2gs(vm.shadow).search_res_slot();
         vm.pc = 0x6E0E;
         G_POST(0x6E0B, 0x53);
         continue;
@@ -72629,7 +72629,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x734C;
         G_PRE(0x734C, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x734F;
         G_POST(0x734C, 0x57);
         continue;
@@ -72647,7 +72647,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7351;
         G_PRE(0x7351, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7354;
         G_POST(0x7351, 0x57);
         continue;
@@ -72672,7 +72672,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -72821,7 +72821,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7383;
         G_PRE(0x7383, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7386;
         G_POST(0x7383, 0x57);
         continue;
@@ -72839,7 +72839,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7388;
         G_PRE(0x7388, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x738B;
         G_POST(0x7388, 0x57);
         continue;
@@ -72864,7 +72864,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -73160,7 +73160,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x73E3;
         G_PRE(0x73E3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x73E6;
         G_POST(0x73E3, 0x57);
         continue;
@@ -73178,7 +73178,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x73E8;
         G_PRE(0x73E8, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x73EB;
         G_POST(0x73E8, 0x57);
         continue;
@@ -73203,7 +73203,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -73432,7 +73432,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x748E;
         G_PRE(0x748E, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7491;
         G_POST(0x748E, 0x57);
         continue;
@@ -73450,7 +73450,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7493;
         G_PRE(0x7493, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7496;
         G_POST(0x7493, 0x57);
         continue;
@@ -73475,7 +73475,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -73628,7 +73628,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74C8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel]
         vm.si_track = 0x0414;
-        v2_vm_accumulator = vm.ds_read(0x0414);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(0);
         vm.pc = 0x74CB;
         G_POST(0x74C8, 0x53);
         continue;
@@ -73647,7 +73647,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74D0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel]
         vm.si_track = 0x0414;
-        v2_vm_accumulator = vm.ds_read(0x0414);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(0);
         vm.pc = 0x74D3;
         G_POST(0x74D0, 0x53);
         continue;
@@ -73666,7 +73666,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74D8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel]
         vm.si_track = 0x0414;
-        v2_vm_accumulator = vm.ds_read(0x0414);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(0);
         vm.pc = 0x74DB;
         G_POST(0x74D8, 0x53);
         continue;
@@ -73685,7 +73685,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74E0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_items]
         vm.si_track = 0x03E4;
-        v2_vm_accumulator = vm.ds_read(0x03E4);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(0);
         vm.pc = 0x74E3;
         G_POST(0x74E0, 0x53);
         continue;
@@ -73693,7 +73693,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x74E3;
         G_PRE(0x74E3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x74E6;
         G_POST(0x74E3, 0x57);
         continue;
@@ -73708,7 +73708,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74E9, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03E6]
         vm.si_track = 0x03E6;
-        v2_vm_accumulator = vm.ds_read(0x03E6);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(1);
         vm.pc = 0x74EC;
         G_POST(0x74E9, 0x53);
         continue;
@@ -73716,7 +73716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x74EC;
         G_PRE(0x74EC, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x74EF;
         G_POST(0x74EC, 0x57);
         continue;
@@ -73731,7 +73731,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74F2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03E8]
         vm.si_track = 0x03E8;
-        v2_vm_accumulator = vm.ds_read(0x03E8);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(2);
         vm.pc = 0x74F5;
         G_POST(0x74F2, 0x53);
         continue;
@@ -73739,7 +73739,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x74F5;
         G_PRE(0x74F5, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x74F8;
         G_POST(0x74F5, 0x57);
         continue;
@@ -73754,7 +73754,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74FB, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03EA]
         vm.si_track = 0x03EA;
-        v2_vm_accumulator = vm.ds_read(0x03EA);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(3);
         vm.pc = 0x74FE;
         G_POST(0x74FB, 0x53);
         continue;
@@ -73762,7 +73762,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x74FE;
         G_PRE(0x74FE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7501;
         G_POST(0x74FE, 0x57);
         continue;
@@ -73777,7 +73777,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7504, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_2]
         vm.si_track = 0x0416;
-        v2_vm_accumulator = vm.ds_read(0x0416);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(1);
         vm.pc = 0x7507;
         G_POST(0x7504, 0x53);
         continue;
@@ -73796,7 +73796,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x750C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_2]
         vm.si_track = 0x0416;
-        v2_vm_accumulator = vm.ds_read(0x0416);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(1);
         vm.pc = 0x750F;
         G_POST(0x750C, 0x53);
         continue;
@@ -73815,7 +73815,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7514, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_2]
         vm.si_track = 0x0416;
-        v2_vm_accumulator = vm.ds_read(0x0416);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(1);
         vm.pc = 0x7517;
         G_POST(0x7514, 0x53);
         continue;
@@ -73834,7 +73834,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x751C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03EC]
         vm.si_track = 0x03EC;
-        v2_vm_accumulator = vm.ds_read(0x03EC);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(4);
         vm.pc = 0x751F;
         G_POST(0x751C, 0x53);
         continue;
@@ -73842,7 +73842,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x751F;
         G_PRE(0x751F, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7522;
         G_POST(0x751F, 0x57);
         continue;
@@ -73857,7 +73857,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7525, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03EE]
         vm.si_track = 0x03EE;
-        v2_vm_accumulator = vm.ds_read(0x03EE);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(5);
         vm.pc = 0x7528;
         G_POST(0x7525, 0x53);
         continue;
@@ -73865,7 +73865,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7528;
         G_PRE(0x7528, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x752B;
         G_POST(0x7528, 0x57);
         continue;
@@ -73880,7 +73880,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x752E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F0]
         vm.si_track = 0x03F0;
-        v2_vm_accumulator = vm.ds_read(0x03F0);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(6);
         vm.pc = 0x7531;
         G_POST(0x752E, 0x53);
         continue;
@@ -73888,7 +73888,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7531;
         G_PRE(0x7531, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7534;
         G_POST(0x7531, 0x57);
         continue;
@@ -73903,7 +73903,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7537, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F2]
         vm.si_track = 0x03F2;
-        v2_vm_accumulator = vm.ds_read(0x03F2);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(7);
         vm.pc = 0x753A;
         G_POST(0x7537, 0x53);
         continue;
@@ -73911,7 +73911,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x753A;
         G_PRE(0x753A, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x753D;
         G_POST(0x753A, 0x57);
         continue;
@@ -73920,7 +73920,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x753D, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x7540;
         G_POST(0x753D, 0x53);
         continue;
@@ -73945,7 +73945,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7548, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_3]
         vm.si_track = 0x0418;
-        v2_vm_accumulator = vm.ds_read(0x0418);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(2);
         vm.pc = 0x754B;
         G_POST(0x7548, 0x53);
         continue;
@@ -73964,7 +73964,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7550, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_3]
         vm.si_track = 0x0418;
-        v2_vm_accumulator = vm.ds_read(0x0418);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(2);
         vm.pc = 0x7553;
         G_POST(0x7550, 0x53);
         continue;
@@ -73983,7 +73983,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7558, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_3]
         vm.si_track = 0x0418;
-        v2_vm_accumulator = vm.ds_read(0x0418);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(2);
         vm.pc = 0x755B;
         G_POST(0x7558, 0x53);
         continue;
@@ -74002,7 +74002,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7560, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F4]
         vm.si_track = 0x03F4;
-        v2_vm_accumulator = vm.ds_read(0x03F4);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(8);
         vm.pc = 0x7563;
         G_POST(0x7560, 0x53);
         continue;
@@ -74010,7 +74010,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7563;
         G_PRE(0x7563, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7566;
         G_POST(0x7563, 0x57);
         continue;
@@ -74025,7 +74025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7569, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F6]
         vm.si_track = 0x03F6;
-        v2_vm_accumulator = vm.ds_read(0x03F6);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(9);
         vm.pc = 0x756C;
         G_POST(0x7569, 0x53);
         continue;
@@ -74033,7 +74033,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x756C;
         G_PRE(0x756C, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x756F;
         G_POST(0x756C, 0x57);
         continue;
@@ -74048,7 +74048,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7572, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F8]
         vm.si_track = 0x03F8;
-        v2_vm_accumulator = vm.ds_read(0x03F8);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(10);
         vm.pc = 0x7575;
         G_POST(0x7572, 0x53);
         continue;
@@ -74056,7 +74056,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7575;
         G_PRE(0x7575, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7578;
         G_POST(0x7575, 0x57);
         continue;
@@ -74071,7 +74071,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x757B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03FA]
         vm.si_track = 0x03FA;
-        v2_vm_accumulator = vm.ds_read(0x03FA);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(11);
         vm.pc = 0x757E;
         G_POST(0x757B, 0x53);
         continue;
@@ -74079,7 +74079,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x757E;
         G_PRE(0x757E, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7581;
         G_POST(0x757E, 0x57);
         continue;
@@ -74094,7 +74094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7584, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x7587;
         G_POST(0x7584, 0x53);
         continue;
@@ -74113,7 +74113,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x758C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x758F;
         G_POST(0x758C, 0x53);
         continue;
@@ -74132,7 +74132,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7594, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x7597;
         G_POST(0x7594, 0x53);
         continue;
@@ -74151,7 +74151,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x759C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x759F;
         G_POST(0x759C, 0x53);
         continue;
@@ -74170,7 +74170,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75A4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75A7;
         G_POST(0x75A4, 0x53);
         continue;
@@ -74189,7 +74189,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75AC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75AF;
         G_POST(0x75AC, 0x53);
         continue;
@@ -74208,7 +74208,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75B4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75B7;
         G_POST(0x75B4, 0x53);
         continue;
@@ -74227,7 +74227,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75BC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75BF;
         G_POST(0x75BC, 0x53);
         continue;
@@ -74246,7 +74246,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75C4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75C7;
         G_POST(0x75C4, 0x53);
         continue;
@@ -74265,7 +74265,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75CC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75CF;
         G_POST(0x75CC, 0x53);
         continue;
@@ -74284,7 +74284,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75D4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75D7;
         G_POST(0x75D4, 0x53);
         continue;
@@ -74303,7 +74303,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75DC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75DF;
         G_POST(0x75DC, 0x53);
         continue;
@@ -74322,7 +74322,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75E4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75E7;
         G_POST(0x75E4, 0x53);
         continue;
@@ -74341,7 +74341,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75EC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75EF;
         G_POST(0x75EC, 0x53);
         continue;
@@ -74360,7 +74360,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75F4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75F7;
         G_POST(0x75F4, 0x53);
         continue;
@@ -74379,7 +74379,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x75FC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x75FF;
         G_POST(0x75FC, 0x53);
         continue;
@@ -74398,7 +74398,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7604, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x7607;
         G_POST(0x7604, 0x53);
         continue;
@@ -74474,7 +74474,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x7838 : 0x7622;
         }
         G_POST(0x761D, 0x83);
@@ -74484,7 +74484,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7622, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [020A]
         vm.si_track = 0x020A;
-        v2_vm_accumulator = vm.ds_read(0x020A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(3);
         vm.pc = 0x7625;
         G_POST(0x7622, 0x53);
         continue;
@@ -74550,7 +74550,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x7838 : 0x763C;
         }
         G_POST(0x7637, 0x83);
@@ -74560,7 +74560,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x763C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [020A]
         vm.si_track = 0x020A;
-        v2_vm_accumulator = vm.ds_read(0x020A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(3);
         vm.pc = 0x763F;
         G_POST(0x763C, 0x53);
         continue;
@@ -75496,7 +75496,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7733, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42d]
         vm.si_track = 0x042D;
-        v2_vm_accumulator = vm.ds_read(0x042D);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(2);
         vm.pc = 0x7736;
         G_POST(0x7733, 0x53);
         continue;
@@ -75515,7 +75515,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x773B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42d]
         vm.si_track = 0x042D;
-        v2_vm_accumulator = vm.ds_read(0x042D);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(2);
         vm.pc = 0x773E;
         G_POST(0x773B, 0x53);
         continue;
@@ -75540,7 +75540,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7743;
         G_PRE(0x7743, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42d] = acc
-        vm.ds_write(0x042D, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(2, v2_vm_accumulator);
         vm.pc = 0x7746;
         G_POST(0x7743, 0x57);
         continue;
@@ -75580,7 +75580,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7751, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42b]
         vm.si_track = 0x042B;
-        v2_vm_accumulator = vm.ds_read(0x042B);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(1);
         vm.pc = 0x7754;
         G_POST(0x7751, 0x53);
         continue;
@@ -75599,7 +75599,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7759, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42b]
         vm.si_track = 0x042B;
-        v2_vm_accumulator = vm.ds_read(0x042B);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(1);
         vm.pc = 0x775C;
         G_POST(0x7759, 0x53);
         continue;
@@ -75624,7 +75624,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7761;
         G_PRE(0x7761, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42b] = acc
-        vm.ds_write(0x042B, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(1, v2_vm_accumulator);
         vm.pc = 0x7764;
         G_POST(0x7761, 0x57);
         continue;
@@ -75664,7 +75664,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x776F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [portrait_snd]
         vm.si_track = 0x0429;
-        v2_vm_accumulator = vm.ds_read(0x0429);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(0);
         vm.pc = 0x7772;
         G_POST(0x776F, 0x53);
         continue;
@@ -75683,7 +75683,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7777, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [portrait_snd]
         vm.si_track = 0x0429;
-        v2_vm_accumulator = vm.ds_read(0x0429);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(0);
         vm.pc = 0x777A;
         G_POST(0x7777, 0x53);
         continue;
@@ -75708,7 +75708,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x777F;
         G_PRE(0x777F, 0x57);
         // inlined v2_vm_op_57: [portrait_snd] = acc
-        vm.ds_write(0x0429, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(0, v2_vm_accumulator);
         vm.pc = 0x7782;
         G_POST(0x777F, 0x57);
         continue;
@@ -76008,7 +76008,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x77DD, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x77E0;
         G_POST(0x77DD, 0x53);
         continue;
@@ -76102,7 +76102,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x77FD;
         G_PRE(0x77FD, 0x57);
         // inlined v2_vm_op_57: [020A] = acc
-        vm.ds_write(0x020A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(3, v2_vm_accumulator);
         vm.pc = 0x7800;
         G_POST(0x77FD, 0x57);
         continue;
@@ -76151,7 +76151,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x780E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42d]
         vm.si_track = 0x042D;
-        v2_vm_accumulator = vm.ds_read(0x042D);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(2);
         vm.pc = 0x7811;
         G_POST(0x780E, 0x53);
         continue;
@@ -76159,7 +76159,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7811;
         G_PRE(0x7811, 0x5A);
         // inlined v2_vm_op_5A: [020A] += acc
-        vm.ds_write(0x020A, (uint16_t)(vm.ds_read(0x020A) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(3, (uint16_t)(v2gs(vm.shadow).script_vars(3) + v2_vm_accumulator));
         vm.pc = 0x7814;
         G_POST(0x7811, 0x5A);
         continue;
@@ -76174,7 +76174,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7817, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_scratch_42b]
         vm.si_track = 0x042B;
-        v2_vm_accumulator = vm.ds_read(0x042B);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(1);
         vm.pc = 0x781A;
         G_POST(0x7817, 0x53);
         continue;
@@ -76182,7 +76182,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x781A;
         G_PRE(0x781A, 0x5A);
         // inlined v2_vm_op_5A: [020A] += acc
-        vm.ds_write(0x020A, (uint16_t)(vm.ds_read(0x020A) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(3, (uint16_t)(v2gs(vm.shadow).script_vars(3) + v2_vm_accumulator));
         vm.pc = 0x781D;
         G_POST(0x781A, 0x5A);
         continue;
@@ -76197,7 +76197,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7820, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [portrait_snd]
         vm.si_track = 0x0429;
-        v2_vm_accumulator = vm.ds_read(0x0429);
+        v2_vm_accumulator = v2gs(vm.shadow).portrait_snd(0);
         vm.pc = 0x7823;
         G_POST(0x7820, 0x53);
         continue;
@@ -76205,7 +76205,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7823;
         G_PRE(0x7823, 0x5A);
         // inlined v2_vm_op_5A: [020A] += acc
-        vm.ds_write(0x020A, (uint16_t)(vm.ds_read(0x020A) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(3, (uint16_t)(v2gs(vm.shadow).script_vars(3) + v2_vm_accumulator));
         vm.pc = 0x7826;
         G_POST(0x7823, 0x5A);
         continue;
@@ -76225,7 +76225,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_6A: when acc >=u [020A]
         {
           vm.si_track = 0x020A;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x020A);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(3);
           vm.pc = (v2_vm_accumulator >= _v) ? 0x782E : 0x782D;
         }
         G_POST(0x7828, 0x6A);
@@ -76318,7 +76318,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7867 : 0x784E;
         }
         G_POST(0x7849, 0x74);
@@ -76337,7 +76337,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7870 : 0x7856;
         }
         G_POST(0x7851, 0x74);
@@ -76356,7 +76356,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7879 : 0x785E;
         }
         G_POST(0x7859, 0x74);
@@ -76463,7 +76463,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x78A3 : 0x788A;
         }
         G_POST(0x7885, 0x74);
@@ -76482,7 +76482,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x78AC : 0x7892;
         }
         G_POST(0x788D, 0x74);
@@ -76501,7 +76501,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x78B5 : 0x789A;
         }
         G_POST(0x7895, 0x74);
@@ -76608,7 +76608,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x78DF : 0x78C6;
         }
         G_POST(0x78C1, 0x74);
@@ -76627,7 +76627,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x78E8 : 0x78CE;
         }
         G_POST(0x78C9, 0x74);
@@ -76646,7 +76646,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x78F1 : 0x78D6;
         }
         G_POST(0x78D1, 0x74);
@@ -76744,7 +76744,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x78FA, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_3]
         vm.si_track = 0x0418;
-        v2_vm_accumulator = vm.ds_read(0x0418);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(2);
         vm.pc = 0x78FD;
         G_POST(0x78FA, 0x53);
         continue;
@@ -76752,7 +76752,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x78FD;
         G_PRE(0x78FD, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7900;
         G_POST(0x78FD, 0x57);
         continue;
@@ -76761,7 +76761,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7900, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7903;
         G_POST(0x7900, 0x53);
         continue;
@@ -76780,7 +76780,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7908, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x790B;
         G_POST(0x7908, 0x53);
         continue;
@@ -76799,7 +76799,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7910, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7913;
         G_POST(0x7910, 0x53);
         continue;
@@ -76818,7 +76818,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7918, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x791B;
         G_POST(0x7918, 0x53);
         continue;
@@ -76846,7 +76846,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03F4]
         {
           vm.si_track = 0x03F4;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F4);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(8);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7964 : 0x7928;
         }
         G_POST(0x7923, 0x74);
@@ -76863,7 +76863,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x792B;
         G_PRE(0x792B, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x792E;
         G_POST(0x792B, 0x57);
         continue;
@@ -76887,7 +76887,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03F6]
         {
           vm.si_track = 0x03F6;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F6);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(9);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7964 : 0x7939;
         }
         G_POST(0x7934, 0x74);
@@ -76904,7 +76904,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x793C;
         G_PRE(0x793C, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x793F;
         G_POST(0x793C, 0x57);
         continue;
@@ -76928,7 +76928,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03F8]
         {
           vm.si_track = 0x03F8;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F8);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(10);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7964 : 0x794A;
         }
         G_POST(0x7945, 0x74);
@@ -76945,7 +76945,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x794D;
         G_PRE(0x794D, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x7950;
         G_POST(0x794D, 0x57);
         continue;
@@ -76969,7 +76969,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03FA]
         {
           vm.si_track = 0x03FA;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03FA);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(11);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7964 : 0x795B;
         }
         G_POST(0x7956, 0x74);
@@ -76986,7 +76986,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x795E;
         G_PRE(0x795E, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x7961;
         G_POST(0x795E, 0x57);
         continue;
@@ -77008,7 +77008,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7967;
         G_PRE(0x7967, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x796A;
         G_POST(0x7967, 0x5A);
         continue;
@@ -77026,7 +77026,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0208]
         {
           vm.si_track = 0x0208;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0208);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(2);
           vm.pc = (_v != v2_vm_accumulator) ? 0x7978 : 0x7972;
         }
         G_POST(0x796D, 0x79);
@@ -77043,7 +77043,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7975;
         G_PRE(0x7975, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7978;
         G_POST(0x7975, 0x57);
         continue;
@@ -77052,7 +77052,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7978, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x797B;
         G_POST(0x7978, 0x53);
         continue;
@@ -77062,7 +77062,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x5E60 : 0x7980;
         }
         G_POST(0x797B, 0x74);
@@ -77078,7 +77078,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7983, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel_2]
         vm.si_track = 0x0416;
-        v2_vm_accumulator = vm.ds_read(0x0416);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(1);
         vm.pc = 0x7986;
         G_POST(0x7983, 0x53);
         continue;
@@ -77086,7 +77086,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7986;
         G_PRE(0x7986, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7989;
         G_POST(0x7986, 0x57);
         continue;
@@ -77095,7 +77095,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7989, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x798C;
         G_POST(0x7989, 0x53);
         continue;
@@ -77114,7 +77114,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7991, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7994;
         G_POST(0x7991, 0x53);
         continue;
@@ -77133,7 +77133,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7999, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x799C;
         G_POST(0x7999, 0x53);
         continue;
@@ -77152,7 +77152,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x79A1, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x79A4;
         G_POST(0x79A1, 0x53);
         continue;
@@ -77180,7 +77180,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03EC]
         {
           vm.si_track = 0x03EC;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EC);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(4);
           vm.pc = (_v == v2_vm_accumulator) ? 0x79ED : 0x79B1;
         }
         G_POST(0x79AC, 0x74);
@@ -77197,7 +77197,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x79B4;
         G_PRE(0x79B4, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x79B7;
         G_POST(0x79B4, 0x57);
         continue;
@@ -77221,7 +77221,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03EE]
         {
           vm.si_track = 0x03EE;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EE);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(5);
           vm.pc = (_v == v2_vm_accumulator) ? 0x79ED : 0x79C2;
         }
         G_POST(0x79BD, 0x74);
@@ -77238,7 +77238,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x79C5;
         G_PRE(0x79C5, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x79C8;
         G_POST(0x79C5, 0x57);
         continue;
@@ -77262,7 +77262,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03F0]
         {
           vm.si_track = 0x03F0;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F0);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(6);
           vm.pc = (_v == v2_vm_accumulator) ? 0x79ED : 0x79D3;
         }
         G_POST(0x79CE, 0x74);
@@ -77279,7 +77279,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x79D6;
         G_PRE(0x79D6, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x79D9;
         G_POST(0x79D6, 0x57);
         continue;
@@ -77303,7 +77303,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03F2]
         {
           vm.si_track = 0x03F2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F2);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(7);
           vm.pc = (_v == v2_vm_accumulator) ? 0x79ED : 0x79E4;
         }
         G_POST(0x79DF, 0x74);
@@ -77320,7 +77320,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x79E7;
         G_PRE(0x79E7, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x79EA;
         G_POST(0x79E7, 0x57);
         continue;
@@ -77342,7 +77342,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x79F0;
         G_PRE(0x79F0, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x79F3;
         G_POST(0x79F0, 0x5A);
         continue;
@@ -77360,7 +77360,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0208]
         {
           vm.si_track = 0x0208;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0208);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(2);
           vm.pc = (_v != v2_vm_accumulator) ? 0x7A01 : 0x79FB;
         }
         G_POST(0x79F6, 0x79);
@@ -77377,7 +77377,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x79FE;
         G_PRE(0x79FE, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7A01;
         G_POST(0x79FE, 0x57);
         continue;
@@ -77386,7 +77386,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7A01, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7A04;
         G_POST(0x7A01, 0x53);
         continue;
@@ -77396,7 +77396,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x466F : 0x7A09;
         }
         G_POST(0x7A04, 0x74);
@@ -77412,7 +77412,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7A0C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_sel]
         vm.si_track = 0x0414;
-        v2_vm_accumulator = vm.ds_read(0x0414);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_sel(0);
         vm.pc = 0x7A0F;
         G_POST(0x7A0C, 0x53);
         continue;
@@ -77420,7 +77420,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7A0F;
         G_PRE(0x7A0F, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7A12;
         G_POST(0x7A0F, 0x57);
         continue;
@@ -77429,7 +77429,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7A12, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7A15;
         G_POST(0x7A12, 0x53);
         continue;
@@ -77448,7 +77448,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7A1A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7A1D;
         G_POST(0x7A1A, 0x53);
         continue;
@@ -77467,7 +77467,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7A22, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7A25;
         G_POST(0x7A22, 0x53);
         continue;
@@ -77486,7 +77486,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7A2A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7A2D;
         G_POST(0x7A2A, 0x53);
         continue;
@@ -77514,7 +77514,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_items]
         {
           vm.si_track = 0x03E4;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E4);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7A76 : 0x7A3A;
         }
         G_POST(0x7A35, 0x74);
@@ -77531,7 +77531,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7A3D;
         G_PRE(0x7A3D, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x7A40;
         G_POST(0x7A3D, 0x57);
         continue;
@@ -77555,7 +77555,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03E6]
         {
           vm.si_track = 0x03E6;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E6);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7A76 : 0x7A4B;
         }
         G_POST(0x7A46, 0x74);
@@ -77572,7 +77572,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7A4E;
         G_PRE(0x7A4E, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x7A51;
         G_POST(0x7A4E, 0x57);
         continue;
@@ -77596,7 +77596,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03E8]
         {
           vm.si_track = 0x03E8;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E8);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7A76 : 0x7A5C;
         }
         G_POST(0x7A57, 0x74);
@@ -77613,7 +77613,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7A5F;
         G_PRE(0x7A5F, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x7A62;
         G_POST(0x7A5F, 0x57);
         continue;
@@ -77637,7 +77637,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [03EA]
         {
           vm.si_track = 0x03EA;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EA);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(3);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7A76 : 0x7A6D;
         }
         G_POST(0x7A68, 0x74);
@@ -77654,7 +77654,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7A70;
         G_PRE(0x7A70, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x7A73;
         G_POST(0x7A70, 0x57);
         continue;
@@ -77676,7 +77676,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7A79;
         G_PRE(0x7A79, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x7A7C;
         G_POST(0x7A79, 0x5A);
         continue;
@@ -77694,7 +77694,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0208]
         {
           vm.si_track = 0x0208;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0208);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(2);
           vm.pc = (_v != v2_vm_accumulator) ? 0x7A8A : 0x7A84;
         }
         G_POST(0x7A7F, 0x79);
@@ -77711,7 +77711,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7A87;
         G_PRE(0x7A87, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x7A8A;
         G_POST(0x7A87, 0x57);
         continue;
@@ -77720,7 +77720,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7A8A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x7A8D;
         G_POST(0x7A8A, 0x53);
         continue;
@@ -77730,7 +77730,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x529D : 0x7A92;
         }
         G_POST(0x7A8D, 0x74);
@@ -77795,7 +77795,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7AC2 : 0x7AAB;
         }
         G_POST(0x7AA6, 0x74);
@@ -77814,7 +77814,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7AC9 : 0x7AB3;
         }
         G_POST(0x7AAE, 0x74);
@@ -77833,7 +77833,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7AD0 : 0x7ABB;
         }
         G_POST(0x7AB6, 0x74);
@@ -77843,7 +77843,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7ABB, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F4]
         vm.si_track = 0x03F4;
-        v2_vm_accumulator = vm.ds_read(0x03F4);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(8);
         vm.pc = 0x7ABE;
         G_POST(0x7ABB, 0x53);
         continue;
@@ -77851,7 +77851,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7ABE;
         G_PRE(0x7ABE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7AC1;
         G_POST(0x7ABE, 0x57);
         continue;
@@ -77866,7 +77866,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7AC2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F6]
         vm.si_track = 0x03F6;
-        v2_vm_accumulator = vm.ds_read(0x03F6);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(9);
         vm.pc = 0x7AC5;
         G_POST(0x7AC2, 0x53);
         continue;
@@ -77874,7 +77874,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7AC5;
         G_PRE(0x7AC5, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7AC8;
         G_POST(0x7AC5, 0x57);
         continue;
@@ -77889,7 +77889,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7AC9, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F8]
         vm.si_track = 0x03F8;
-        v2_vm_accumulator = vm.ds_read(0x03F8);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(10);
         vm.pc = 0x7ACC;
         G_POST(0x7AC9, 0x53);
         continue;
@@ -77897,7 +77897,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7ACC;
         G_PRE(0x7ACC, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7ACF;
         G_POST(0x7ACC, 0x57);
         continue;
@@ -77912,7 +77912,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7AD0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03FA]
         vm.si_track = 0x03FA;
-        v2_vm_accumulator = vm.ds_read(0x03FA);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(11);
         vm.pc = 0x7AD3;
         G_POST(0x7AD0, 0x53);
         continue;
@@ -77920,7 +77920,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7AD3;
         G_PRE(0x7AD3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7AD6;
         G_POST(0x7AD3, 0x57);
         continue;
@@ -77944,7 +77944,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7AF6 : 0x7ADF;
         }
         G_POST(0x7ADA, 0x74);
@@ -77963,7 +77963,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7AFD : 0x7AE7;
         }
         G_POST(0x7AE2, 0x74);
@@ -77982,7 +77982,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7B04 : 0x7AEF;
         }
         G_POST(0x7AEA, 0x74);
@@ -77992,7 +77992,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7AEF, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03EC]
         vm.si_track = 0x03EC;
-        v2_vm_accumulator = vm.ds_read(0x03EC);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(4);
         vm.pc = 0x7AF2;
         G_POST(0x7AEF, 0x53);
         continue;
@@ -78000,7 +78000,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7AF2;
         G_PRE(0x7AF2, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7AF5;
         G_POST(0x7AF2, 0x57);
         continue;
@@ -78015,7 +78015,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7AF6, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03EE]
         vm.si_track = 0x03EE;
-        v2_vm_accumulator = vm.ds_read(0x03EE);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(5);
         vm.pc = 0x7AF9;
         G_POST(0x7AF6, 0x53);
         continue;
@@ -78023,7 +78023,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7AF9;
         G_PRE(0x7AF9, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7AFC;
         G_POST(0x7AF9, 0x57);
         continue;
@@ -78038,7 +78038,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7AFD, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F0]
         vm.si_track = 0x03F0;
-        v2_vm_accumulator = vm.ds_read(0x03F0);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(6);
         vm.pc = 0x7B00;
         G_POST(0x7AFD, 0x53);
         continue;
@@ -78046,7 +78046,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B00;
         G_PRE(0x7B00, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7B03;
         G_POST(0x7B00, 0x57);
         continue;
@@ -78061,7 +78061,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7B04, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03F2]
         vm.si_track = 0x03F2;
-        v2_vm_accumulator = vm.ds_read(0x03F2);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(7);
         vm.pc = 0x7B07;
         G_POST(0x7B04, 0x53);
         continue;
@@ -78069,7 +78069,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B07;
         G_PRE(0x7B07, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7B0A;
         G_POST(0x7B07, 0x57);
         continue;
@@ -78093,7 +78093,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7B2A : 0x7B13;
         }
         G_POST(0x7B0E, 0x74);
@@ -78112,7 +78112,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7B31 : 0x7B1B;
         }
         G_POST(0x7B16, 0x74);
@@ -78131,7 +78131,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7B38 : 0x7B23;
         }
         G_POST(0x7B1E, 0x74);
@@ -78141,7 +78141,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7B23, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [hud_items]
         vm.si_track = 0x03E4;
-        v2_vm_accumulator = vm.ds_read(0x03E4);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(0);
         vm.pc = 0x7B26;
         G_POST(0x7B23, 0x53);
         continue;
@@ -78149,7 +78149,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B26;
         G_PRE(0x7B26, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7B29;
         G_POST(0x7B26, 0x57);
         continue;
@@ -78164,7 +78164,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7B2A, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03E6]
         vm.si_track = 0x03E6;
-        v2_vm_accumulator = vm.ds_read(0x03E6);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(1);
         vm.pc = 0x7B2D;
         G_POST(0x7B2A, 0x53);
         continue;
@@ -78172,7 +78172,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B2D;
         G_PRE(0x7B2D, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7B30;
         G_POST(0x7B2D, 0x57);
         continue;
@@ -78187,7 +78187,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7B31, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03E8]
         vm.si_track = 0x03E8;
-        v2_vm_accumulator = vm.ds_read(0x03E8);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(2);
         vm.pc = 0x7B34;
         G_POST(0x7B31, 0x53);
         continue;
@@ -78195,7 +78195,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B34;
         G_PRE(0x7B34, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7B37;
         G_POST(0x7B34, 0x57);
         continue;
@@ -78210,7 +78210,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7B38, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [03EA]
         vm.si_track = 0x03EA;
-        v2_vm_accumulator = vm.ds_read(0x03EA);
+        v2_vm_accumulator = v2gs(vm.shadow).hud_items(3);
         vm.pc = 0x7B3B;
         G_POST(0x7B38, 0x53);
         continue;
@@ -78218,7 +78218,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B3B;
         G_PRE(0x7B3B, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7B3E;
         G_POST(0x7B3B, 0x57);
         continue;
@@ -78350,7 +78350,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B88;
         G_PRE(0x7B88, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7B8B;
         G_POST(0x7B88, 0x57);
         continue;
@@ -78366,7 +78366,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B8E;
         G_PRE(0x7B8E, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x7B91;
         G_POST(0x7B8E, 0x5A);
         continue;
@@ -78382,7 +78382,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x24);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
@@ -78411,7 +78411,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x24);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
@@ -78970,7 +78970,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7CC8;
         G_PRE(0x7CC8, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x7CCB;
         G_POST(0x7CC8, 0x66);
         continue;
@@ -78994,7 +78994,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7CCE;
         G_PRE(0x7CCE, 0x66);
         // inlined v2_vm_op_66: [25C7] ^= acc
-        vm.ds_write(0x25C7, (uint16_t)(vm.ds_read(0x25C7) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c7((uint16_t)(v2gs(vm.shadow).level_var_25c7() ^ v2_vm_accumulator));
         vm.pc = 0x7CD1;
         G_POST(0x7CCE, 0x66);
         continue;
@@ -79308,7 +79308,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D65;
         G_PRE(0x7D65, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x7D68;
         G_POST(0x7D65, 0x66);
         continue;
@@ -79357,7 +79357,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D70;
         G_PRE(0x7D70, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x7D73;
         G_POST(0x7D70, 0x66);
         continue;
@@ -79434,7 +79434,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D87;
         G_PRE(0x7D87, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x7D8A;
         G_POST(0x7D87, 0x66);
         continue;
@@ -79519,7 +79519,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D9E;
         G_PRE(0x7D9E, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x7DA1;
         G_POST(0x7D9E, 0x66);
         continue;
@@ -79695,7 +79695,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7DD0;
         G_PRE(0x7DD0, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x7DD3;
         G_POST(0x7DD0, 0x66);
         continue;
@@ -80072,7 +80072,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7E58;
         G_PRE(0x7E58, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x7E5B;
         G_POST(0x7E58, 0x66);
         continue;
@@ -80302,7 +80302,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x022E;
-          const uint16_t _v = vm.ds_read(0x022E);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(21);
           { uint16_t _si = _x, _di = _y;
             if (vm.ch4_mul_clobber) _di = vm.ch4_mul_dx;
             v2_vm_tile_write_141e0(vm, _si, _di, _v);
@@ -81027,7 +81027,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7FA9;
         G_PRE(0x7FA9, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x7FAC;
         G_POST(0x7FA9, 0x57);
         continue;
@@ -81036,7 +81036,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7FAC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x7FAF;
         G_POST(0x7FAC, 0x53);
         continue;
@@ -81044,7 +81044,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7FAF;
         G_PRE(0x7FAF, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x7FB2;
         G_POST(0x7FAF, 0x60);
         continue;
@@ -81064,7 +81064,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x7FBC : 0x7FB9;
         }
         G_POST(0x7FB4, 0x74);
@@ -81115,7 +81115,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x022E;
-          const uint16_t _v = vm.ds_read(0x022E);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(21);
           { uint16_t _si = _x, _di = _y;
             if (vm.ch4_mul_clobber) _di = vm.ch4_mul_dx;
             v2_vm_tile_write_141e0(vm, _si, _di, _v);
@@ -81178,7 +81178,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x7FD8;
         }
@@ -81189,7 +81189,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7FD8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x7FDB;
         G_POST(0x7FD8, 0x53);
         continue;
@@ -81251,7 +81251,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x7FF0;
         }
@@ -81262,7 +81262,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7FF0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x7FF3;
         G_POST(0x7FF0, 0x53);
         continue;
@@ -81327,7 +81327,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x8008;
         }
@@ -81338,7 +81338,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8008, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x800B;
         G_POST(0x8008, 0x53);
         continue;
@@ -81406,7 +81406,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x8020;
         }
@@ -81417,7 +81417,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8020, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x8023;
         G_POST(0x8020, 0x53);
         continue;
@@ -81543,7 +81543,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8046, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x8049;
         G_POST(0x8046, 0x53);
         continue;
@@ -81699,7 +81699,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8078;
         G_PRE(0x8078, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x807B;
         G_POST(0x8078, 0x57);
         continue;
@@ -81708,7 +81708,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x807B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x807E;
         G_POST(0x807B, 0x53);
         continue;
@@ -81716,7 +81716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x807E;
         G_PRE(0x807E, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x8081;
         G_POST(0x807E, 0x60);
         continue;
@@ -81736,7 +81736,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x808B : 0x8088;
         }
         G_POST(0x8083, 0x74);
@@ -81795,7 +81795,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0230;
-          const uint16_t _v = vm.ds_read(0x0230);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(22);
           { uint16_t _si = _x, _di = _y;
             if (vm.ch4_mul_clobber) _di = vm.ch4_mul_dx;
             v2_vm_tile_write_141e0(vm, _si, _di, _v);
@@ -81858,7 +81858,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x80AA;
         }
@@ -81869,7 +81869,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x80AA, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x80AD;
         G_POST(0x80AA, 0x53);
         continue;
@@ -81931,7 +81931,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x80C2;
         }
@@ -81942,7 +81942,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x80C2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x80C5;
         G_POST(0x80C2, 0x53);
         continue;
@@ -82007,7 +82007,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x80DA;
         }
@@ -82018,7 +82018,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x80DA, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x80DD;
         G_POST(0x80DA, 0x53);
         continue;
@@ -82086,7 +82086,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _tt);
+          v2gs(vm.shadow).script_vars(1, _tt);
         }
         vm.pc = 0x80F2;
         }
@@ -82097,7 +82097,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x80F2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x80F5;
         G_POST(0x80F2, 0x53);
         continue;
@@ -82223,7 +82223,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8118, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x811B;
         G_POST(0x8118, 0x53);
         continue;
@@ -82870,7 +82870,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x81F4;
         G_PRE(0x81F4, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x81F7;
         G_POST(0x81F4, 0x57);
         continue;
@@ -82886,7 +82886,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x81FA;
         G_PRE(0x81FA, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x81FD;
         G_POST(0x81FA, 0x5D);
         continue;
@@ -82897,7 +82897,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -82995,7 +82995,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x821A;
         G_PRE(0x821A, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x821D;
         G_POST(0x821A, 0x57);
         continue;
@@ -83011,7 +83011,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8220;
         G_PRE(0x8220, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x8223;
         G_POST(0x8220, 0x5A);
         continue;
@@ -83022,7 +83022,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -83178,7 +83178,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x824F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8252;
         G_POST(0x824F, 0x53);
         continue;
@@ -83186,7 +83186,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8252;
         G_PRE(0x8252, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8255;
         G_POST(0x8252, 0x57);
         continue;
@@ -83204,7 +83204,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8257;
         G_PRE(0x8257, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x825A;
         G_POST(0x8257, 0x60);
         continue;
@@ -83224,7 +83224,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x8264 : 0x8261;
         }
         G_POST(0x825C, 0x74);
@@ -83240,7 +83240,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8264, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8267;
         G_POST(0x8264, 0x53);
         continue;
@@ -83248,7 +83248,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8267;
         G_PRE(0x8267, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x826A;
         G_POST(0x8267, 0x57);
         continue;
@@ -83266,7 +83266,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x826C;
         G_PRE(0x826C, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x826F;
         G_POST(0x826C, 0x60);
         continue;
@@ -83286,7 +83286,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x824C : 0x8276;
         }
         G_POST(0x8271, 0x74);
@@ -83305,7 +83305,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8278;
         G_PRE(0x8278, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x827B;
         G_POST(0x8278, 0x57);
         continue;
@@ -83321,7 +83321,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x827E;
         G_PRE(0x827E, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x8281;
         G_POST(0x827E, 0x5A);
         continue;
@@ -83337,7 +83337,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _y = vm.ds_read(0x0206);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -84538,7 +84538,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [hud_items]
         {
           vm.si_track = 0x03E4;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E4);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(0);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8426 : 0x8419;
         }
         G_POST(0x8414, 0x79);
@@ -84597,7 +84597,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03E6]
         {
           vm.si_track = 0x03E6;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E6);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x843B : 0x842E;
         }
         G_POST(0x8429, 0x79);
@@ -84656,7 +84656,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03E8]
         {
           vm.si_track = 0x03E8;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E8);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(2);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8450 : 0x8443;
         }
         G_POST(0x843E, 0x79);
@@ -84715,7 +84715,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03EA]
         {
           vm.si_track = 0x03EA;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EA);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(3);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8517 : 0x8458;
         }
         G_POST(0x8453, 0x79);
@@ -84790,7 +84790,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03EC]
         {
           vm.si_track = 0x03EC;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EC);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(4);
           vm.pc = (_v != v2_vm_accumulator) ? 0x847F : 0x8472;
         }
         G_POST(0x846D, 0x79);
@@ -84849,7 +84849,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03EE]
         {
           vm.si_track = 0x03EE;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EE);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(5);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8494 : 0x8487;
         }
         G_POST(0x8482, 0x79);
@@ -84908,7 +84908,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F0]
         {
           vm.si_track = 0x03F0;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F0);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(6);
           vm.pc = (_v != v2_vm_accumulator) ? 0x84A9 : 0x849C;
         }
         G_POST(0x8497, 0x79);
@@ -84967,7 +84967,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F2]
         {
           vm.si_track = 0x03F2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F2);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(7);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8536 : 0x84B1;
         }
         G_POST(0x84AC, 0x79);
@@ -85042,7 +85042,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F4]
         {
           vm.si_track = 0x03F4;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F4);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(8);
           vm.pc = (_v != v2_vm_accumulator) ? 0x84D8 : 0x84CB;
         }
         G_POST(0x84C6, 0x79);
@@ -85101,7 +85101,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F6]
         {
           vm.si_track = 0x03F6;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F6);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(9);
           vm.pc = (_v != v2_vm_accumulator) ? 0x84ED : 0x84E0;
         }
         G_POST(0x84DB, 0x79);
@@ -85160,7 +85160,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F8]
         {
           vm.si_track = 0x03F8;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F8);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(10);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8502 : 0x84F5;
         }
         G_POST(0x84F0, 0x79);
@@ -85219,7 +85219,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03FA]
         {
           vm.si_track = 0x03FA;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03FA);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(11);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8555 : 0x850A;
         }
         G_POST(0x8505, 0x79);
@@ -85573,7 +85573,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x8591 : 0x8571;
         }
         G_POST(0x856C, 0x74);
@@ -85592,7 +85592,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x85A1 : 0x8579;
         }
         G_POST(0x8574, 0x74);
@@ -85611,7 +85611,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_3]
         {
           vm.si_track = 0x0418;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0418);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(2);
           vm.pc = (_v == v2_vm_accumulator) ? 0x85B1 : 0x8581;
         }
         G_POST(0x857C, 0x74);
@@ -85630,7 +85630,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03FA]
         {
           vm.si_track = 0x03FA;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03FA);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(11);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8589;
         }
         G_POST(0x8584, 0x79);
@@ -85649,7 +85649,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x858B;
         G_PRE(0x858B, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x858E;
         G_POST(0x858B, 0x57);
         continue;
@@ -85673,7 +85673,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F4]
         {
           vm.si_track = 0x03F4;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F4);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(8);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8599;
         }
         G_POST(0x8594, 0x79);
@@ -85692,7 +85692,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x859B;
         G_PRE(0x859B, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x859E;
         G_POST(0x859B, 0x57);
         continue;
@@ -85716,7 +85716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F6]
         {
           vm.si_track = 0x03F6;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F6);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(9);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x85A9;
         }
         G_POST(0x85A4, 0x79);
@@ -85735,7 +85735,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x85AB;
         G_PRE(0x85AB, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x85AE;
         G_POST(0x85AB, 0x57);
         continue;
@@ -85759,7 +85759,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F8]
         {
           vm.si_track = 0x03F8;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F8);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(10);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x85B9;
         }
         G_POST(0x85B4, 0x79);
@@ -85778,7 +85778,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x85BB;
         G_PRE(0x85BB, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x85BE;
         G_POST(0x85BB, 0x57);
         continue;
@@ -85802,7 +85802,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x85E9 : 0x85C9;
         }
         G_POST(0x85C4, 0x74);
@@ -85821,7 +85821,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x85F9 : 0x85D1;
         }
         G_POST(0x85CC, 0x74);
@@ -85840,7 +85840,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel_2]
         {
           vm.si_track = 0x0416;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0416);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x8609 : 0x85D9;
         }
         G_POST(0x85D4, 0x74);
@@ -85859,7 +85859,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F2]
         {
           vm.si_track = 0x03F2;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F2);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(7);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x85E1;
         }
         G_POST(0x85DC, 0x79);
@@ -85878,7 +85878,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x85E3;
         G_PRE(0x85E3, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x85E6;
         G_POST(0x85E3, 0x57);
         continue;
@@ -85902,7 +85902,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03EC]
         {
           vm.si_track = 0x03EC;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EC);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(4);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x85F1;
         }
         G_POST(0x85EC, 0x79);
@@ -85921,7 +85921,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x85F3;
         G_PRE(0x85F3, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x85F6;
         G_POST(0x85F3, 0x57);
         continue;
@@ -85945,7 +85945,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03EE]
         {
           vm.si_track = 0x03EE;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EE);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(5);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8601;
         }
         G_POST(0x85FC, 0x79);
@@ -85964,7 +85964,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8603;
         G_PRE(0x8603, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x8606;
         G_POST(0x8603, 0x57);
         continue;
@@ -85988,7 +85988,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03F0]
         {
           vm.si_track = 0x03F0;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03F0);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(6);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8611;
         }
         G_POST(0x860C, 0x79);
@@ -86007,7 +86007,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8613;
         G_PRE(0x8613, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x8616;
         G_POST(0x8613, 0x57);
         continue;
@@ -86031,7 +86031,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x8641 : 0x8621;
         }
         G_POST(0x861C, 0x74);
@@ -86050,7 +86050,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x8651 : 0x8629;
         }
         G_POST(0x8624, 0x74);
@@ -86069,7 +86069,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [hud_sel]
         {
           vm.si_track = 0x0414;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0414);
+          const uint16_t _v = v2gs(vm.shadow).hud_sel(0);
           vm.pc = (_v == v2_vm_accumulator) ? 0x8661 : 0x8631;
         }
         G_POST(0x862C, 0x74);
@@ -86088,7 +86088,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03EA]
         {
           vm.si_track = 0x03EA;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03EA);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(3);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8639;
         }
         G_POST(0x8634, 0x79);
@@ -86107,7 +86107,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x863B;
         G_PRE(0x863B, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x863E;
         G_POST(0x863B, 0x57);
         continue;
@@ -86131,7 +86131,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [hud_items]
         {
           vm.si_track = 0x03E4;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E4);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(0);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8649;
         }
         G_POST(0x8644, 0x79);
@@ -86150,7 +86150,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x864B;
         G_PRE(0x864B, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x864E;
         G_POST(0x864B, 0x57);
         continue;
@@ -86174,7 +86174,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03E6]
         {
           vm.si_track = 0x03E6;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E6);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8659;
         }
         G_POST(0x8654, 0x79);
@@ -86193,7 +86193,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x865B;
         G_PRE(0x865B, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x865E;
         G_POST(0x865B, 0x57);
         continue;
@@ -86217,7 +86217,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [03E8]
         {
           vm.si_track = 0x03E8;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03E8);
+          const uint16_t _v = v2gs(vm.shadow).hud_items(2);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8671 : 0x8669;
         }
         G_POST(0x8664, 0x79);
@@ -86236,7 +86236,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x866B;
         G_PRE(0x866B, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x866E;
         G_POST(0x866B, 0x57);
         continue;
@@ -86328,7 +86328,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x86F0;
         G_PRE(0x86F0, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x86F3;
         G_POST(0x86F0, 0x57);
         continue;
@@ -86337,7 +86337,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x86F3, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x86F6;
         G_POST(0x86F3, 0x53);
         continue;
@@ -86345,7 +86345,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x86F6;
         G_PRE(0x86F6, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x86F9;
         G_POST(0x86F6, 0x60);
         continue;
@@ -86365,7 +86365,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x86EC : 0x8700;
         }
         G_POST(0x86FB, 0x79);
@@ -86458,9 +86458,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _b = vm.ds_read(_b_a);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x871F;
         G_POST(0x8716, 0x26);
@@ -86473,15 +86473,15 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _b = vm.ds_read(0x0208);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(2);
           { uint16_t _sx = _a, _dy = _b;
             if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
             _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
           vm.si_track = 0x020A;
-          vm.ds_write(0x020A, _tt);
+          v2gs(vm.shadow).script_vars(3, _tt);
         }
         vm.pc = 0x8728;
         }
@@ -86492,7 +86492,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8728, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [020A]
         vm.si_track = 0x020A;
-        v2_vm_accumulator = vm.ds_read(0x020A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(3);
         vm.pc = 0x872B;
         G_POST(0x8728, 0x53);
         continue;
@@ -86520,7 +86520,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8732;
         G_PRE(0x8732, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8735;
         G_POST(0x8732, 0x57);
         continue;
@@ -86529,7 +86529,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8735, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8738;
         G_POST(0x8735, 0x53);
         continue;
@@ -86537,7 +86537,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8738;
         G_PRE(0x8738, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x873B;
         G_POST(0x8738, 0x60);
         continue;
@@ -86557,7 +86557,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8714 : 0x8742;
         }
         G_POST(0x873D, 0x79);
@@ -86605,7 +86605,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x874E;
         G_PRE(0x874E, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8751;
         G_POST(0x874E, 0x57);
         continue;
@@ -86630,7 +86630,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
@@ -86749,7 +86749,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8779;
         G_PRE(0x8779, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x877C;
         G_POST(0x8779, 0x57);
         continue;
@@ -86758,7 +86758,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x877C, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x877F;
         G_POST(0x877C, 0x53);
         continue;
@@ -86766,7 +86766,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x877F;
         G_PRE(0x877F, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x8782;
         G_POST(0x877F, 0x60);
         continue;
@@ -86786,7 +86786,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x86EC : 0x8789;
         }
         G_POST(0x8784, 0x79);
@@ -88451,7 +88451,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89E6;
         G_PRE(0x89E6, 0x63);
         // inlined v2_vm_op_63: [25C5] |= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) | v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() | v2_vm_accumulator));
         vm.pc = 0x89E9;
         G_POST(0x89E6, 0x63);
         continue;
@@ -88475,7 +88475,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89EE;
         G_PRE(0x89EE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x89F1;
         G_POST(0x89EE, 0x57);
         continue;
@@ -88491,7 +88491,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89F4;
         G_PRE(0x89F4, 0x66);
         // inlined v2_vm_op_66: [0206] ^= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) ^ v2_vm_accumulator));
         vm.pc = 0x89F7;
         G_POST(0x89F4, 0x66);
         continue;
@@ -88500,7 +88500,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x89F7, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x89FA;
         G_POST(0x89F7, 0x53);
         continue;
@@ -88508,7 +88508,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89FA;
         G_PRE(0x89FA, 0x60);
         // inlined v2_vm_op_60: [25C5] &= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) & v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() & v2_vm_accumulator));
         vm.pc = 0x89FD;
         G_POST(0x89FA, 0x60);
         continue;
@@ -88745,7 +88745,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A57, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [020C]
         vm.si_track = 0x020C;
-        v2_vm_accumulator = vm.ds_read(0x020C);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(4);
         vm.pc = 0x8A5A;
         G_POST(0x8A57, 0x53);
         continue;
@@ -88768,7 +88768,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A5D, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [020E]
         vm.si_track = 0x020E;
-        v2_vm_accumulator = vm.ds_read(0x020E);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(5);
         vm.pc = 0x8A60;
         G_POST(0x8A5D, 0x53);
         continue;
@@ -88791,7 +88791,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A63, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0210]
         vm.si_track = 0x0210;
-        v2_vm_accumulator = vm.ds_read(0x0210);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(6);
         vm.pc = 0x8A66;
         G_POST(0x8A63, 0x53);
         continue;
@@ -88814,7 +88814,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A69, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0212]
         vm.si_track = 0x0212;
-        v2_vm_accumulator = vm.ds_read(0x0212);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(7);
         vm.pc = 0x8A6C;
         G_POST(0x8A69, 0x53);
         continue;
@@ -88837,7 +88837,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A6F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0214]
         vm.si_track = 0x0214;
-        v2_vm_accumulator = vm.ds_read(0x0214);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(8);
         vm.pc = 0x8A72;
         G_POST(0x8A6F, 0x53);
         continue;
@@ -88860,7 +88860,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A75, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0216]
         vm.si_track = 0x0216;
-        v2_vm_accumulator = vm.ds_read(0x0216);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(9);
         vm.pc = 0x8A78;
         G_POST(0x8A75, 0x53);
         continue;
@@ -88883,7 +88883,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A7B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0218]
         vm.si_track = 0x0218;
-        v2_vm_accumulator = vm.ds_read(0x0218);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(10);
         vm.pc = 0x8A7E;
         G_POST(0x8A7B, 0x53);
         continue;
@@ -88906,7 +88906,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A81, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [021A]
         vm.si_track = 0x021A;
-        v2_vm_accumulator = vm.ds_read(0x021A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(11);
         vm.pc = 0x8A84;
         G_POST(0x8A81, 0x53);
         continue;
@@ -89114,7 +89114,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8AD1;
         G_PRE(0x8AD1, 0x57);
         // inlined v2_vm_op_57: [020C] = acc
-        vm.ds_write(0x020C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(4, v2_vm_accumulator);
         vm.pc = 0x8AD4;
         G_POST(0x8AD1, 0x57);
         continue;
@@ -89138,7 +89138,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8AD7;
         G_PRE(0x8AD7, 0x57);
         // inlined v2_vm_op_57: [020E] = acc
-        vm.ds_write(0x020E, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(5, v2_vm_accumulator);
         vm.pc = 0x8ADA;
         G_POST(0x8AD7, 0x57);
         continue;
@@ -89162,7 +89162,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8ADD;
         G_PRE(0x8ADD, 0x57);
         // inlined v2_vm_op_57: [0210] = acc
-        vm.ds_write(0x0210, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(6, v2_vm_accumulator);
         vm.pc = 0x8AE0;
         G_POST(0x8ADD, 0x57);
         continue;
@@ -89186,7 +89186,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8AE3;
         G_PRE(0x8AE3, 0x57);
         // inlined v2_vm_op_57: [0212] = acc
-        vm.ds_write(0x0212, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(7, v2_vm_accumulator);
         vm.pc = 0x8AE6;
         G_POST(0x8AE3, 0x57);
         continue;
@@ -89210,7 +89210,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8AE9;
         G_PRE(0x8AE9, 0x57);
         // inlined v2_vm_op_57: [0214] = acc
-        vm.ds_write(0x0214, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(8, v2_vm_accumulator);
         vm.pc = 0x8AEC;
         G_POST(0x8AE9, 0x57);
         continue;
@@ -89234,7 +89234,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8AEF;
         G_PRE(0x8AEF, 0x57);
         // inlined v2_vm_op_57: [0216] = acc
-        vm.ds_write(0x0216, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(9, v2_vm_accumulator);
         vm.pc = 0x8AF2;
         G_POST(0x8AEF, 0x57);
         continue;
@@ -89258,7 +89258,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8AF5;
         G_PRE(0x8AF5, 0x57);
         // inlined v2_vm_op_57: [0218] = acc
-        vm.ds_write(0x0218, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(10, v2_vm_accumulator);
         vm.pc = 0x8AF8;
         G_POST(0x8AF5, 0x57);
         continue;
@@ -89282,7 +89282,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8AFB;
         G_PRE(0x8AFB, 0x57);
         // inlined v2_vm_op_57: [021A] = acc
-        vm.ds_write(0x021A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(11, v2_vm_accumulator);
         vm.pc = 0x8AFE;
         G_POST(0x8AFB, 0x57);
         continue;
@@ -89823,9 +89823,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _b = vm.ds_read(_b_a);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x8BDF;
         G_POST(0x8BD6, 0x26);
@@ -89845,10 +89845,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0407;
           { uint16_t _si = _x, _di = _y;
@@ -91074,7 +91074,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8DA8;
         G_PRE(0x8DA8, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8DAB;
         G_POST(0x8DA8, 0x57);
         continue;
@@ -91083,7 +91083,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8DAB, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8DAE;
         G_POST(0x8DAB, 0x53);
         continue;
@@ -91091,7 +91091,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8DAE;
         G_PRE(0x8DAE, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x8DB1;
         G_POST(0x8DAE, 0x60);
         continue;
@@ -91100,7 +91100,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8DB1, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x8DB4;
         G_POST(0x8DB1, 0x53);
         continue;
@@ -91188,9 +91188,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _b = vm.ds_read(_b_a);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x8DD4;
         G_POST(0x8DCB, 0x26);
@@ -91202,11 +91202,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x000A;
@@ -91258,7 +91258,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8DE2;
         G_PRE(0x8DE2, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8DE5;
         G_POST(0x8DE2, 0x57);
         continue;
@@ -91267,7 +91267,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8DE5, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8DE8;
         G_POST(0x8DE5, 0x53);
         continue;
@@ -91275,7 +91275,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8DE8;
         G_PRE(0x8DE8, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x8DEB;
         G_POST(0x8DE8, 0x60);
         continue;
@@ -91284,7 +91284,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8DEB, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x8DEE;
         G_POST(0x8DEB, 0x53);
         continue;
@@ -91347,9 +91347,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _b = vm.ds_read(_b_a);
           vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
         }
         vm.pc = 0x8E11;
         G_POST(0x8E08, 0x26);
@@ -91361,11 +91361,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _v = 0x0001;
@@ -91417,7 +91417,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8E1F;
         G_PRE(0x8E1F, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8E22;
         G_POST(0x8E1F, 0x57);
         continue;
@@ -91426,7 +91426,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8E22, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8E25;
         G_POST(0x8E22, 0x53);
         continue;
@@ -91434,7 +91434,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8E25;
         G_PRE(0x8E25, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x8E28;
         G_POST(0x8E25, 0x60);
         continue;
@@ -91443,7 +91443,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8E28, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x8E2B;
         G_POST(0x8E28, 0x53);
         continue;
@@ -91970,7 +91970,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8EFB, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8EFE;
         G_POST(0x8EFB, 0x53);
         continue;
@@ -91978,7 +91978,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8EFE;
         G_PRE(0x8EFE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8F01;
         G_POST(0x8EFE, 0x57);
         continue;
@@ -91996,7 +91996,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F03;
         G_PRE(0x8F03, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x8F06;
         G_POST(0x8F03, 0x60);
         continue;
@@ -92016,7 +92016,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8EF6 : 0x8F0D;
         }
         G_POST(0x8F08, 0x79);
@@ -92074,7 +92074,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8F19, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_res_slot]
         vm.si_track = 0x03B4;
-        v2_vm_accumulator = vm.ds_read(0x03B4);
+        v2_vm_accumulator = v2gs(vm.shadow).search_res_slot();
         vm.pc = 0x8F1C;
         G_POST(0x8F19, 0x53);
         continue;
@@ -92120,7 +92120,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F26;
         G_PRE(0x8F26, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8F29;
         G_POST(0x8F26, 0x57);
         continue;
@@ -92136,7 +92136,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F2C;
         G_PRE(0x8F2C, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x8F2F;
         G_POST(0x8F2C, 0x5A);
         continue;
@@ -92156,7 +92156,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x8F0D : 0x8F36;
         }
         G_POST(0x8F31, 0x79);
@@ -92271,7 +92271,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F53;
         G_PRE(0x8F53, 0x66);
         // inlined v2_vm_op_66: [25C5] ^= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) ^ v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() ^ v2_vm_accumulator));
         vm.pc = 0x8F56;
         G_POST(0x8F53, 0x66);
         continue;
@@ -92419,7 +92419,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F92;
         G_PRE(0x8F92, 0x63);
         // inlined v2_vm_op_63: [25C5] |= acc
-        vm.ds_write(0x25C5, (uint16_t)(vm.ds_read(0x25C5) | v2_vm_accumulator));
+        v2gs(vm.shadow).level_var_25c5((uint16_t)(v2gs(vm.shadow).level_var_25c5() | v2_vm_accumulator));
         vm.pc = 0x8F95;
         G_POST(0x8F92, 0x63);
         continue;
@@ -92541,7 +92541,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8FAF;
         G_PRE(0x8FAF, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x8FB2;
         G_POST(0x8FAF, 0x57);
         continue;
@@ -92550,7 +92550,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8FB2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [25C5]
         vm.si_track = 0x25C5;
-        v2_vm_accumulator = vm.ds_read(0x25C5);
+        v2_vm_accumulator = v2gs(vm.shadow).level_var_25c5();
         vm.pc = 0x8FB5;
         G_POST(0x8FB2, 0x53);
         continue;
@@ -92558,7 +92558,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8FB5;
         G_PRE(0x8FB5, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x8FB8;
         G_POST(0x8FB5, 0x60);
         continue;
@@ -92578,7 +92578,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x8FC2 : 0x8FBF;
         }
         G_POST(0x8FBA, 0x74);
@@ -93267,7 +93267,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x90E5;
         G_PRE(0x90E5, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x90E8;
         G_POST(0x90E5, 0x57);
         continue;
@@ -93438,9 +93438,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x911F;
@@ -93451,7 +93451,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x911F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9122;
         G_POST(0x911F, 0x53);
         continue;
@@ -93479,7 +93479,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x9142 : 0x912F;
         }
         G_POST(0x912A, 0x83);
@@ -93489,7 +93489,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x912F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x9132;
         G_POST(0x912F, 0x53);
         continue;
@@ -93517,7 +93517,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [0208]
         {
           vm.si_track = 0x0208;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0208);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(2);
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x9142 : 0x913F;
         }
         G_POST(0x913A, 0x83);
@@ -93548,7 +93548,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9145;
         G_PRE(0x9145, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x9148;
         G_POST(0x9145, 0x57);
         continue;
@@ -93566,7 +93566,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x914A;
         G_PRE(0x914A, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x914D;
         G_POST(0x914A, 0x57);
         continue;
@@ -93577,11 +93577,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93612,7 +93612,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9158;
         G_PRE(0x9158, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x915B;
         G_POST(0x9158, 0x57);
         continue;
@@ -93623,11 +93623,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93658,7 +93658,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9166;
         G_PRE(0x9166, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x9169;
         G_POST(0x9166, 0x57);
         continue;
@@ -93669,11 +93669,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93704,7 +93704,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9174;
         G_PRE(0x9174, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x9177;
         G_POST(0x9174, 0x57);
         continue;
@@ -93720,7 +93720,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x917A;
         G_PRE(0x917A, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x917D;
         G_POST(0x917A, 0x5D);
         continue;
@@ -93738,7 +93738,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x917F;
         G_PRE(0x917F, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x9182;
         G_POST(0x917F, 0x57);
         continue;
@@ -93749,11 +93749,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93784,7 +93784,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x918D;
         G_PRE(0x918D, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x9190;
         G_POST(0x918D, 0x57);
         continue;
@@ -93795,11 +93795,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93830,7 +93830,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x919B;
         G_PRE(0x919B, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x919E;
         G_POST(0x919B, 0x57);
         continue;
@@ -93841,11 +93841,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93874,7 +93874,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91AA;
         G_PRE(0x91AA, 0x5A);
         // inlined v2_vm_op_5A: [0206] += acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) + v2_vm_accumulator));
         vm.pc = 0x91AD;
         G_POST(0x91AA, 0x5A);
         continue;
@@ -93892,7 +93892,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91AF;
         G_PRE(0x91AF, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x91B2;
         G_POST(0x91AF, 0x57);
         continue;
@@ -93903,11 +93903,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93938,7 +93938,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91BD;
         G_PRE(0x91BD, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x91C0;
         G_POST(0x91BD, 0x57);
         continue;
@@ -93949,11 +93949,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -93984,7 +93984,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91CB;
         G_PRE(0x91CB, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x91CE;
         G_POST(0x91CB, 0x57);
         continue;
@@ -93995,11 +93995,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -94030,7 +94030,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91D9;
         G_PRE(0x91D9, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x91DC;
         G_POST(0x91D9, 0x57);
         continue;
@@ -94048,7 +94048,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91DE;
         G_PRE(0x91DE, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x91E1;
         G_POST(0x91DE, 0x57);
         continue;
@@ -94059,11 +94059,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -94094,7 +94094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91EC;
         G_PRE(0x91EC, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x91EF;
         G_POST(0x91EC, 0x57);
         continue;
@@ -94105,11 +94105,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -94140,7 +94140,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x91FA;
         G_PRE(0x91FA, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x91FD;
         G_POST(0x91FA, 0x57);
         continue;
@@ -94151,11 +94151,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -94192,7 +94192,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [search_res_slot]
         {
           vm.si_track = 0x03B4;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x03B4);
+          const uint16_t _v = v2gs(vm.shadow).search_res_slot();
           vm.pc = (_v != v2_vm_accumulator) ? 0x9228 : 0x9211;
         }
         G_POST(0x920C, 0x79);
@@ -94204,16 +94204,16 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _a = vm.ds_read(0x0206);
+          const uint16_t _a = v2gs(vm.shadow).script_vars(1);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _b = vm.ds_read(0x0208);
+          const uint16_t _b = v2gs(vm.shadow).script_vars(2);
           uint16_t _cx = (uint16_t)((_a & 0xFFF0) | 8);
           uint16_t _dx = (uint16_t)((_b & 0xFFF0) | 8);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, _cx);
+          v2gs(vm.shadow).script_vars(1, _cx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, _dx);
+          v2gs(vm.shadow).script_vars(2, _dx);
         }
         vm.pc = 0x921C;
         G_POST(0x9211, 0x28);
@@ -94225,11 +94225,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _x = vm.ds_read(0x0206);
+          const uint16_t _x = v2gs(vm.shadow).script_vars(1);
           vm.ds_write(DS_TEXT_COL, _x);
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _y = vm.ds_read(0x0208);
+          const uint16_t _y = v2gs(vm.shadow).script_vars(2);
           vm.ds_write(DS_TEXT_ROW, _y);
           vm.ch4_mul_clobber = false;
           const uint16_t _pool = 0x0000;
@@ -94512,7 +94512,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9292;
         G_PRE(0x9292, 0x60);
         // inlined v2_vm_op_60: [scratch_348] &= acc
-        vm.ds_write(0x0348, (uint16_t)(vm.ds_read(0x0348) & v2_vm_accumulator));
+        v2gs(vm.shadow).scratch_348((uint16_t)(v2gs(vm.shadow).scratch_348() & v2_vm_accumulator));
         vm.pc = 0x9295;
         G_POST(0x9292, 0x60);
         continue;
@@ -94906,7 +94906,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x92F6;
         G_PRE(0x92F6, 0x63);
         // inlined v2_vm_op_63: [scratch_348] |= acc
-        vm.ds_write(0x0348, (uint16_t)(vm.ds_read(0x0348) | v2_vm_accumulator));
+        v2gs(vm.shadow).scratch_348((uint16_t)(v2gs(vm.shadow).scratch_348() | v2_vm_accumulator));
         vm.pc = 0x92F9;
         G_POST(0x92F6, 0x63);
         continue;
@@ -95091,9 +95091,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x932F;
@@ -95104,7 +95104,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x932F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x9332;
         G_POST(0x932F, 0x53);
         continue;
@@ -95123,7 +95123,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9337, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x933A;
         G_POST(0x9337, 0x53);
         continue;
@@ -95142,7 +95142,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x933F, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9342;
         G_POST(0x933F, 0x53);
         continue;
@@ -95161,7 +95161,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9347, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x934A;
         G_POST(0x9347, 0x53);
         continue;
@@ -95228,7 +95228,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x935D, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x9360;
         G_POST(0x935D, 0x53);
         continue;
@@ -95298,9 +95298,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9378;
@@ -95318,7 +95318,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x937B;
         G_PRE(0x937B, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x937E;
         G_POST(0x937B, 0x5D);
         continue;
@@ -95363,7 +95363,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -95377,7 +95377,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -95461,9 +95461,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9398;
@@ -95481,7 +95481,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x939B;
         G_PRE(0x939B, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x939E;
         G_POST(0x939B, 0x5D);
         continue;
@@ -95526,7 +95526,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -95540,7 +95540,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -95618,7 +95618,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -95632,7 +95632,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -95716,9 +95716,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x93C5;
@@ -95736,7 +95736,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x93C8;
         G_PRE(0x93C8, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x93CB;
         G_POST(0x93C8, 0x5A);
         continue;
@@ -95781,7 +95781,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -95795,7 +95795,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -95894,7 +95894,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93E8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x93EB;
         G_POST(0x93E8, 0x53);
         continue;
@@ -95902,7 +95902,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x93EB;
         G_PRE(0x93EB, 0x57);
         // inlined v2_vm_op_57: [level_load] = acc
-        vm.ds_write(0x25C9, v2_vm_accumulator);
+        v2gs(vm.shadow).level_load(v2_vm_accumulator);
         vm.pc = 0x93EE;
         G_POST(0x93EB, 0x57);
         continue;
@@ -96132,7 +96132,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x944B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [active_viking]
         vm.si_track = 0x03C2;
-        v2_vm_accumulator = vm.ds_read(0x03C2);
+        v2_vm_accumulator = v2gs(vm.shadow).active_viking();
         vm.pc = 0x944E;
         G_POST(0x944B, 0x53);
         continue;
@@ -96153,7 +96153,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9452, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [active_viking]
         vm.si_track = 0x03C2;
-        v2_vm_accumulator = vm.ds_read(0x03C2);
+        v2_vm_accumulator = v2gs(vm.shadow).active_viking();
         vm.pc = 0x9455;
         G_POST(0x9452, 0x53);
         continue;
@@ -96174,7 +96174,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9459, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [scroll_delta_x]
         vm.si_track = 0x034E;
-        v2_vm_accumulator = vm.ds_read(0x034E);
+        v2_vm_accumulator = v2gs(vm.shadow).scroll_delta_x();
         vm.pc = 0x945C;
         G_POST(0x9459, 0x53);
         continue;
@@ -96193,7 +96193,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9461, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [scroll_delta_y]
         vm.si_track = 0x0350;
-        v2_vm_accumulator = vm.ds_read(0x0350);
+        v2_vm_accumulator = v2gs(vm.shadow).scroll_delta_y();
         vm.pc = 0x9464;
         G_POST(0x9461, 0x53);
         continue;
@@ -96226,7 +96226,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x946F;
         G_PRE(0x946F, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x9472;
         G_POST(0x946F, 0x57);
         continue;
@@ -96248,7 +96248,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9476;
         G_PRE(0x9476, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x9479;
         G_POST(0x9476, 0x57);
         continue;
@@ -96391,9 +96391,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x94A4;
@@ -96404,7 +96404,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94A4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x94A7;
         G_POST(0x94A4, 0x53);
         continue;
@@ -96423,7 +96423,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94AC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x94AF;
         G_POST(0x94AC, 0x53);
         continue;
@@ -96442,7 +96442,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94B4, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x94B7;
         G_POST(0x94B4, 0x53);
         continue;
@@ -96461,7 +96461,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94BC, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x94BF;
         G_POST(0x94BC, 0x53);
         continue;
@@ -96528,7 +96528,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94D2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x94D5;
         G_POST(0x94D2, 0x53);
         continue;
@@ -96547,7 +96547,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94DA, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x94DD;
         G_POST(0x94DA, 0x53);
         continue;
@@ -96566,7 +96566,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94E2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x94E5;
         G_POST(0x94E2, 0x53);
         continue;
@@ -96585,7 +96585,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94EA, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x94ED;
         G_POST(0x94EA, 0x53);
         continue;
@@ -96604,7 +96604,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x94F2, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x94F5;
         G_POST(0x94F2, 0x53);
         continue;
@@ -96674,9 +96674,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x950D;
@@ -96694,7 +96694,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9510;
         G_PRE(0x9510, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9513;
         G_POST(0x9510, 0x5D);
         continue;
@@ -96739,7 +96739,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -96753,7 +96753,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -96837,9 +96837,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x952D;
@@ -96857,7 +96857,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9530;
         G_PRE(0x9530, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9533;
         G_POST(0x9530, 0x5D);
         continue;
@@ -96902,7 +96902,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -96916,7 +96916,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -97000,9 +97000,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x954D;
@@ -97020,7 +97020,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9550;
         G_PRE(0x9550, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9553;
         G_POST(0x9550, 0x5D);
         continue;
@@ -97065,7 +97065,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -97079,7 +97079,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -97163,9 +97163,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x956D;
@@ -97183,7 +97183,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9570;
         G_PRE(0x9570, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9573;
         G_POST(0x9570, 0x5D);
         continue;
@@ -97228,7 +97228,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -97242,7 +97242,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -97347,9 +97347,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9596;
@@ -97367,7 +97367,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9599;
         G_PRE(0x9599, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x959C;
         G_POST(0x9599, 0x5D);
         continue;
@@ -97412,7 +97412,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -97426,7 +97426,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -97510,9 +97510,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x95B6;
@@ -97530,7 +97530,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x95B9;
         G_PRE(0x95B9, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x95BC;
         G_POST(0x95B9, 0x5A);
         continue;
@@ -97575,7 +97575,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -97589,7 +97589,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -97673,9 +97673,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x95D6;
@@ -97693,7 +97693,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x95D9;
         G_PRE(0x95D9, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x95DC;
         G_POST(0x95D9, 0x5D);
         continue;
@@ -97738,7 +97738,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -97752,7 +97752,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -97857,9 +97857,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x95FF;
@@ -97877,7 +97877,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9602;
         G_PRE(0x9602, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x9605;
         G_POST(0x9602, 0x5A);
         continue;
@@ -97922,7 +97922,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -97936,7 +97936,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -98020,9 +98020,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x961F;
@@ -98040,7 +98040,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9622;
         G_PRE(0x9622, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9625;
         G_POST(0x9622, 0x5D);
         continue;
@@ -98085,7 +98085,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -98099,7 +98099,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -98183,9 +98183,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x963F;
@@ -98203,7 +98203,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9642;
         G_PRE(0x9642, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9645;
         G_POST(0x9642, 0x5D);
         continue;
@@ -98248,7 +98248,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -98262,7 +98262,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -98346,9 +98346,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x965F;
@@ -98366,7 +98366,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9662;
         G_PRE(0x9662, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9665;
         G_POST(0x9662, 0x5D);
         continue;
@@ -98411,7 +98411,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -98425,7 +98425,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -98530,9 +98530,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9688;
@@ -98550,7 +98550,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x968B;
         G_PRE(0x968B, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x968E;
         G_POST(0x968B, 0x5D);
         continue;
@@ -98595,7 +98595,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -98609,7 +98609,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -98693,9 +98693,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x96A8;
@@ -98713,7 +98713,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x96AB;
         G_PRE(0x96AB, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x96AE;
         G_POST(0x96AB, 0x5D);
         continue;
@@ -98758,7 +98758,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -98772,7 +98772,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -98856,9 +98856,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x96C8;
@@ -98876,7 +98876,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x96CB;
         G_PRE(0x96CB, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x96CE;
         G_POST(0x96CB, 0x5D);
         continue;
@@ -98921,7 +98921,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -98935,7 +98935,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -99040,9 +99040,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x96F1;
@@ -99060,7 +99060,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x96F4;
         G_PRE(0x96F4, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x96F7;
         G_POST(0x96F4, 0x5D);
         continue;
@@ -99105,7 +99105,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -99119,7 +99119,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -99203,9 +99203,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9711;
@@ -99223,7 +99223,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9714;
         G_PRE(0x9714, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9717;
         G_POST(0x9714, 0x5D);
         continue;
@@ -99268,7 +99268,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -99282,7 +99282,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -99366,9 +99366,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9731;
@@ -99386,7 +99386,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9734;
         G_PRE(0x9734, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9737;
         G_POST(0x9734, 0x5D);
         continue;
@@ -99431,7 +99431,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -99445,7 +99445,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -99551,7 +99551,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9757;
         G_PRE(0x9757, 0x57);
         // inlined v2_vm_op_57: [level_load] = acc
-        vm.ds_write(0x25C9, v2_vm_accumulator);
+        v2gs(vm.shadow).level_load(v2_vm_accumulator);
         vm.pc = 0x975A;
         G_POST(0x9757, 0x57);
         continue;
@@ -99628,7 +99628,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x976B;
         G_PRE(0x976B, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x976E;
         G_POST(0x976B, 0x57);
         continue;
@@ -99637,7 +99637,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x976E, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [021E]
         vm.si_track = 0x021E;
-        v2_vm_accumulator = vm.ds_read(0x021E);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(13);
         vm.pc = 0x9771;
         G_POST(0x976E, 0x53);
         continue;
@@ -99645,7 +99645,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9771;
         G_PRE(0x9771, 0x60);
         // inlined v2_vm_op_60: [0206] &= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) & v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) & v2_vm_accumulator));
         vm.pc = 0x9774;
         G_POST(0x9771, 0x60);
         continue;
@@ -99665,7 +99665,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v == v2_vm_accumulator) ? 0x9881 : 0x977B;
         }
         G_POST(0x9776, 0x74);
@@ -99699,9 +99699,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, (uint16_t)_rx);
+          v2gs(vm.shadow).script_vars(1, (uint16_t)_rx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, (uint16_t)_ry);
+          v2gs(vm.shadow).script_vars(2, (uint16_t)_ry);
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9781;
@@ -99712,7 +99712,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9781, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9784;
         G_POST(0x9781, 0x53);
         continue;
@@ -99731,7 +99731,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9789, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x978C;
         G_POST(0x9789, 0x53);
         continue;
@@ -99750,7 +99750,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9791, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x9794;
         G_POST(0x9791, 0x53);
         continue;
@@ -99769,7 +99769,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9799, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0208]
         vm.si_track = 0x0208;
-        v2_vm_accumulator = vm.ds_read(0x0208);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(2);
         vm.pc = 0x979C;
         G_POST(0x9799, 0x53);
         continue;
@@ -99788,7 +99788,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x97A1, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_best]
         vm.si_track = 0x03CA;
-        v2_vm_accumulator = vm.ds_read(0x03CA);
+        v2_vm_accumulator = v2gs(vm.shadow).search_best();
         vm.pc = 0x97A4;
         G_POST(0x97A1, 0x53);
         continue;
@@ -99847,7 +99847,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0206]
         {
           vm.si_track = 0x0206;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0206);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(1);
           vm.pc = (_v != v2_vm_accumulator) ? 0x9766 : 0x97B9;
         }
         G_POST(0x97B4, 0x79);
@@ -99873,7 +99873,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x97BE;
         G_PRE(0x97BE, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x97C1;
         G_POST(0x97BE, 0x57);
         continue;
@@ -99891,7 +99891,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x97C3;
         G_PRE(0x97C3, 0x5D);
         // inlined v2_vm_op_5D: [0206] -= acc
-        vm.ds_write(0x0206, (uint16_t)(vm.ds_read(0x0206) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(1, (uint16_t)(v2gs(vm.shadow).script_vars(1) - v2_vm_accumulator));
         vm.pc = 0x97C6;
         G_POST(0x97C3, 0x5D);
         continue;
@@ -99907,7 +99907,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x97C9;
         G_PRE(0x97C9, 0x57);
         // inlined v2_vm_op_57: [0208] = acc
-        vm.ds_write(0x0208, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(2, v2_vm_accumulator);
         vm.pc = 0x97CC;
         G_POST(0x97C9, 0x57);
         continue;
@@ -100067,7 +100067,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -100081,7 +100081,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -100288,7 +100288,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -100302,7 +100302,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -100733,7 +100733,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -100747,7 +100747,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -100932,7 +100932,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9873;
         G_PRE(0x9873, 0x63);
         // inlined v2_vm_op_63: [021E] |= acc
-        vm.ds_write(0x021E, (uint16_t)(vm.ds_read(0x021E) | v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(13, (uint16_t)(v2gs(vm.shadow).script_vars(13) | v2_vm_accumulator));
         vm.pc = 0x9876;
         G_POST(0x9873, 0x63);
         continue;
@@ -101093,7 +101093,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98C5;
         G_PRE(0x98C5, 0x57);
         // inlined v2_vm_op_57: [020C] = acc
-        vm.ds_write(0x020C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(4, v2_vm_accumulator);
         vm.pc = 0x98C8;
         G_POST(0x98C5, 0x57);
         continue;
@@ -101109,7 +101109,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98CB;
         G_PRE(0x98CB, 0x57);
         // inlined v2_vm_op_57: [020E] = acc
-        vm.ds_write(0x020E, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(5, v2_vm_accumulator);
         vm.pc = 0x98CE;
         G_POST(0x98CB, 0x57);
         continue;
@@ -101125,7 +101125,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98D1;
         G_PRE(0x98D1, 0x57);
         // inlined v2_vm_op_57: [0210] = acc
-        vm.ds_write(0x0210, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(6, v2_vm_accumulator);
         vm.pc = 0x98D4;
         G_POST(0x98D1, 0x57);
         continue;
@@ -101141,7 +101141,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98D7;
         G_PRE(0x98D7, 0x57);
         // inlined v2_vm_op_57: [0212] = acc
-        vm.ds_write(0x0212, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(7, v2_vm_accumulator);
         vm.pc = 0x98DA;
         G_POST(0x98D7, 0x57);
         continue;
@@ -101157,7 +101157,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98DD;
         G_PRE(0x98DD, 0x57);
         // inlined v2_vm_op_57: [0214] = acc
-        vm.ds_write(0x0214, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(8, v2_vm_accumulator);
         vm.pc = 0x98E0;
         G_POST(0x98DD, 0x57);
         continue;
@@ -101173,7 +101173,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98E3;
         G_PRE(0x98E3, 0x57);
         // inlined v2_vm_op_57: [0216] = acc
-        vm.ds_write(0x0216, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(9, v2_vm_accumulator);
         vm.pc = 0x98E6;
         G_POST(0x98E3, 0x57);
         continue;
@@ -101189,7 +101189,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98E9;
         G_PRE(0x98E9, 0x57);
         // inlined v2_vm_op_57: [0218] = acc
-        vm.ds_write(0x0218, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(10, v2_vm_accumulator);
         vm.pc = 0x98EC;
         G_POST(0x98E9, 0x57);
         continue;
@@ -101205,7 +101205,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98EF;
         G_PRE(0x98EF, 0x57);
         // inlined v2_vm_op_57: [021A] = acc
-        vm.ds_write(0x021A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(11, v2_vm_accumulator);
         vm.pc = 0x98F2;
         G_POST(0x98EF, 0x57);
         continue;
@@ -101221,7 +101221,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98F5;
         G_PRE(0x98F5, 0x57);
         // inlined v2_vm_op_57: [021E] = acc
-        vm.ds_write(0x021E, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(13, v2_vm_accumulator);
         vm.pc = 0x98F8;
         G_POST(0x98F5, 0x57);
         continue;
@@ -101237,7 +101237,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x98FB;
         G_PRE(0x98FB, 0x57);
         // inlined v2_vm_op_57: [023A] = acc
-        vm.ds_write(0x023A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(27, v2_vm_accumulator);
         vm.pc = 0x98FE;
         G_POST(0x98FB, 0x57);
         continue;
@@ -101253,7 +101253,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9901;
         G_PRE(0x9901, 0x57);
         // inlined v2_vm_op_57: [023C] = acc
-        vm.ds_write(0x023C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(28, v2_vm_accumulator);
         vm.pc = 0x9904;
         G_POST(0x9901, 0x57);
         continue;
@@ -101269,7 +101269,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9907;
         G_PRE(0x9907, 0x57);
         // inlined v2_vm_op_57: [023E] = acc
-        vm.ds_write(0x023E, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(29, v2_vm_accumulator);
         vm.pc = 0x990A;
         G_POST(0x9907, 0x57);
         continue;
@@ -101285,7 +101285,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x990D;
         G_PRE(0x990D, 0x57);
         // inlined v2_vm_op_57: [0240] = acc
-        vm.ds_write(0x0240, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(30, v2_vm_accumulator);
         vm.pc = 0x9910;
         G_POST(0x990D, 0x57);
         continue;
@@ -101301,7 +101301,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9913;
         G_PRE(0x9913, 0x57);
         // inlined v2_vm_op_57: [0248] = acc
-        vm.ds_write(0x0248, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(34, v2_vm_accumulator);
         vm.pc = 0x9916;
         G_POST(0x9913, 0x57);
         continue;
@@ -101317,7 +101317,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9919;
         G_PRE(0x9919, 0x57);
         // inlined v2_vm_op_57: [0278] = acc
-        vm.ds_write(0x0278, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(58, v2_vm_accumulator);
         vm.pc = 0x991C;
         G_POST(0x9919, 0x57);
         continue;
@@ -101333,7 +101333,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x991F;
         G_PRE(0x991F, 0x57);
         // inlined v2_vm_op_57: [0286] = acc
-        vm.ds_write(0x0286, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(65, v2_vm_accumulator);
         vm.pc = 0x9922;
         G_POST(0x991F, 0x57);
         continue;
@@ -101349,7 +101349,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9925;
         G_PRE(0x9925, 0x57);
         // inlined v2_vm_op_57: [0288] = acc
-        vm.ds_write(0x0288, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(66, v2_vm_accumulator);
         vm.pc = 0x9928;
         G_POST(0x9925, 0x57);
         continue;
@@ -101365,7 +101365,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x992B;
         G_PRE(0x992B, 0x57);
         // inlined v2_vm_op_57: [0284] = acc
-        vm.ds_write(0x0284, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(64, v2_vm_accumulator);
         vm.pc = 0x992E;
         G_POST(0x992B, 0x57);
         continue;
@@ -101381,7 +101381,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9931;
         G_PRE(0x9931, 0x57);
         // inlined v2_vm_op_57: [028A] = acc
-        vm.ds_write(0x028A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(67, v2_vm_accumulator);
         vm.pc = 0x9934;
         G_POST(0x9931, 0x57);
         continue;
@@ -101399,7 +101399,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x9945 : 0x993C;
         }
         G_POST(0x9937, 0x74);
@@ -101416,7 +101416,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x993F;
         G_PRE(0x993F, 0x57);
         // inlined v2_vm_op_57: [0276] = acc
-        vm.ds_write(0x0276, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(57, v2_vm_accumulator);
         vm.pc = 0x9942;
         G_POST(0x993F, 0x57);
         continue;
@@ -101438,7 +101438,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9948;
         G_PRE(0x9948, 0x57);
         // inlined v2_vm_op_57: [0276] = acc
-        vm.ds_write(0x0276, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(57, v2_vm_accumulator);
         vm.pc = 0x994B;
         G_POST(0x9948, 0x57);
         continue;
@@ -101454,7 +101454,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x994E;
         G_PRE(0x994E, 0x57);
         // inlined v2_vm_op_57: [022E] = acc
-        vm.ds_write(0x022E, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(21, v2_vm_accumulator);
         vm.pc = 0x9951;
         G_POST(0x994E, 0x57);
         continue;
@@ -101470,7 +101470,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9954;
         G_PRE(0x9954, 0x57);
         // inlined v2_vm_op_57: [0230] = acc
-        vm.ds_write(0x0230, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(22, v2_vm_accumulator);
         vm.pc = 0x9957;
         G_POST(0x9954, 0x57);
         continue;
@@ -101488,7 +101488,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v != v2_vm_accumulator) ? 0x997A : 0x995F;
         }
         G_POST(0x995A, 0x79);
@@ -101505,7 +101505,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9962;
         G_PRE(0x9962, 0x57);
         // inlined v2_vm_op_57: [020C] = acc
-        vm.ds_write(0x020C, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(4, v2_vm_accumulator);
         vm.pc = 0x9965;
         G_POST(0x9962, 0x57);
         continue;
@@ -101521,7 +101521,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9968;
         G_PRE(0x9968, 0x57);
         // inlined v2_vm_op_57: [020E] = acc
-        vm.ds_write(0x020E, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(5, v2_vm_accumulator);
         vm.pc = 0x996B;
         G_POST(0x9968, 0x57);
         continue;
@@ -101537,7 +101537,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x996E;
         G_PRE(0x996E, 0x57);
         // inlined v2_vm_op_57: [0210] = acc
-        vm.ds_write(0x0210, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(6, v2_vm_accumulator);
         vm.pc = 0x9971;
         G_POST(0x996E, 0x57);
         continue;
@@ -101553,7 +101553,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9974;
         G_PRE(0x9974, 0x57);
         // inlined v2_vm_op_57: [0212] = acc
-        vm.ds_write(0x0212, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(7, v2_vm_accumulator);
         vm.pc = 0x9977;
         G_POST(0x9974, 0x57);
         continue;
@@ -101677,7 +101677,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9998;
         G_PRE(0x9998, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42b] = acc
-        vm.ds_write(0x042B, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(1, v2_vm_accumulator);
         vm.pc = 0x999B;
         G_POST(0x9998, 0x57);
         continue;
@@ -101693,7 +101693,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x999E;
         G_PRE(0x999E, 0x57);
         // inlined v2_vm_op_57: [portrait_snd] = acc
-        vm.ds_write(0x0429, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(0, v2_vm_accumulator);
         vm.pc = 0x99A1;
         G_POST(0x999E, 0x57);
         continue;
@@ -101709,7 +101709,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x99A4;
         G_PRE(0x99A4, 0x57);
         // inlined v2_vm_op_57: [hud_scratch_42d] = acc
-        vm.ds_write(0x042D, v2_vm_accumulator);
+        v2gs(vm.shadow).portrait_snd(2, v2_vm_accumulator);
         vm.pc = 0x99A7;
         G_POST(0x99A4, 0x57);
         continue;
@@ -101917,7 +101917,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x99F2;
         G_PRE(0x99F2, 0x57);
         // inlined v2_vm_op_57: [hud_sel_2] = acc
-        vm.ds_write(0x0416, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(1, v2_vm_accumulator);
         vm.pc = 0x99F5;
         G_POST(0x99F2, 0x57);
         continue;
@@ -101933,7 +101933,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x99F8;
         G_PRE(0x99F8, 0x57);
         // inlined v2_vm_op_57: [hud_sel] = acc
-        vm.ds_write(0x0414, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(0, v2_vm_accumulator);
         vm.pc = 0x99FB;
         G_POST(0x99F8, 0x57);
         continue;
@@ -101949,7 +101949,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x99FE;
         G_PRE(0x99FE, 0x57);
         // inlined v2_vm_op_57: [hud_sel_3] = acc
-        vm.ds_write(0x0418, v2_vm_accumulator);
+        v2gs(vm.shadow).hud_sel(2, v2_vm_accumulator);
         vm.pc = 0x9A01;
         G_POST(0x99FE, 0x57);
         continue;
@@ -101967,7 +101967,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [level_prev]
         {
           vm.si_track = 0x25AB;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AB);
+          const uint16_t _v = v2gs(vm.shadow).level_prev();
           vm.pc = (_v != v2_vm_accumulator) ? 0x9A22 : 0x9A09;
         }
         G_POST(0x9A04, 0x79);
@@ -101984,7 +101984,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9A0C;
         G_PRE(0x9A0C, 0x5A);
         // inlined v2_vm_op_5A: [027A] += acc
-        vm.ds_write(0x027A, (uint16_t)(vm.ds_read(0x027A) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(59, (uint16_t)(v2gs(vm.shadow).script_vars(59) + v2_vm_accumulator));
         vm.pc = 0x9A0F;
         G_POST(0x9A0C, 0x5A);
         continue;
@@ -102002,7 +102002,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x9B64 : 0x9A17;
         }
         G_POST(0x9A12, 0x74);
@@ -102021,7 +102021,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x9B64 : 0x9A1F;
         }
         G_POST(0x9A1A, 0x74);
@@ -102044,7 +102044,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9A25;
         G_PRE(0x9A25, 0x57);
         // inlined v2_vm_op_57: [027A] = acc
-        vm.ds_write(0x027A, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(59, v2_vm_accumulator);
         vm.pc = 0x9A28;
         G_POST(0x9A25, 0x57);
         continue;
@@ -102053,7 +102053,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9A28, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [game_mode_ac]
         vm.si_track = 0x03CC;
-        v2_vm_accumulator = vm.ds_read(0x03CC);
+        v2_vm_accumulator = v2gs(vm.shadow).game_mode_ac();
         vm.pc = 0x9A2B;
         G_POST(0x9A28, 0x53);
         continue;
@@ -102088,7 +102088,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = (_v == v2_vm_accumulator) ? 0x9A78 : 0x9A39;
         }
         G_POST(0x9A34, 0x74);
@@ -102107,7 +102107,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_83: when acc <s [level]
         {
           vm.si_track = 0x25AD;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x25AD);
+          const uint16_t _v = v2gs(vm.shadow).level();
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x9B64 : 0x9A41;
         }
         G_POST(0x9A3C, 0x83);
@@ -102168,7 +102168,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0310;
-          const uint16_t _x = vm.ds_read(0x0310);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(0);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0012;
@@ -102194,7 +102194,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0312;
-          const uint16_t _x = vm.ds_read(0x0312);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(1);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0013;
@@ -102220,7 +102220,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0314;
-          const uint16_t _x = vm.ds_read(0x0314);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(2);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0014;
@@ -102246,7 +102246,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         { uint16_t _t3 = 0; (void)_t3;
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0316;
-          const uint16_t _x = vm.ds_read(0x0316);
+          const uint16_t _x = v2gs(vm.shadow).pw_chars(3);
           vm.ds_write(DS_SCRATCH_34, _x);
           vm.ch4_mul_clobber = false;
           const uint16_t _y = 0x0015;
@@ -102270,7 +102270,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9A73, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [active_viking]
         vm.si_track = 0x03C2;
-        v2_vm_accumulator = vm.ds_read(0x03C2);
+        v2_vm_accumulator = v2gs(vm.shadow).active_viking();
         vm.pc = 0x9A76;
         G_POST(0x9A73, 0x53);
         continue;
@@ -102317,7 +102317,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_74: when acc == [0276]
         {
           vm.si_track = 0x0276;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0276);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(57);
           vm.pc = (_v == v2_vm_accumulator) ? 0x9A96 : 0x9A83;
         }
         G_POST(0x9A7E, 0x74);
@@ -102334,7 +102334,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9A86;
         G_PRE(0x9A86, 0x57);
         // inlined v2_vm_op_57: [0278] = acc
-        vm.ds_write(0x0278, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(58, v2_vm_accumulator);
         vm.pc = 0x9A89;
         G_POST(0x9A86, 0x57);
         continue;
@@ -102365,7 +102365,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_79: when acc != [0278]
         {
           vm.si_track = 0x0278;  // ch2: address in SI
-          const uint16_t _v = vm.ds_read(0x0278);
+          const uint16_t _v = v2gs(vm.shadow).script_vars(58);
           vm.pc = (_v != v2_vm_accumulator) ? 0x9A89 : 0x9A93;
         }
         G_POST(0x9A8E, 0x79);
@@ -102394,7 +102394,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9A98, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [027A]
         vm.si_track = 0x027A;
-        v2_vm_accumulator = vm.ds_read(0x027A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(59);
         vm.pc = 0x9A9B;
         G_POST(0x9A98, 0x53);
         continue;
@@ -102413,7 +102413,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AA0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [027A]
         vm.si_track = 0x027A;
-        v2_vm_accumulator = vm.ds_read(0x027A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(59);
         vm.pc = 0x9AA3;
         G_POST(0x9AA0, 0x53);
         continue;
@@ -102432,7 +102432,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AA8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [027A]
         vm.si_track = 0x027A;
-        v2_vm_accumulator = vm.ds_read(0x027A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(59);
         vm.pc = 0x9AAB;
         G_POST(0x9AA8, 0x53);
         continue;
@@ -102451,7 +102451,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AB0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [027A]
         vm.si_track = 0x027A;
-        v2_vm_accumulator = vm.ds_read(0x027A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(59);
         vm.pc = 0x9AB3;
         G_POST(0x9AB0, 0x53);
         continue;
@@ -102470,7 +102470,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AB8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [027A]
         vm.si_track = 0x027A;
-        v2_vm_accumulator = vm.ds_read(0x027A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(59);
         vm.pc = 0x9ABB;
         G_POST(0x9AB8, 0x53);
         continue;
@@ -102489,7 +102489,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AC0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [027A]
         vm.si_track = 0x027A;
-        v2_vm_accumulator = vm.ds_read(0x027A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(59);
         vm.pc = 0x9AC3;
         G_POST(0x9AC0, 0x53);
         continue;
@@ -102508,7 +102508,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AC8, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [027A]
         vm.si_track = 0x027A;
-        v2_vm_accumulator = vm.ds_read(0x027A);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(59);
         vm.pc = 0x9ACB;
         G_POST(0x9AC8, 0x53);
         continue;
@@ -102527,7 +102527,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AD0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [level]
         vm.si_track = 0x25AD;
-        v2_vm_accumulator = vm.ds_read(0x25AD);
+        v2_vm_accumulator = v2gs(vm.shadow).level();
         vm.pc = 0x9AD3;
         G_POST(0x9AD0, 0x53);
         continue;
@@ -102597,9 +102597,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9AEB;
@@ -102617,7 +102617,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9AEE;
         G_PRE(0x9AEE, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9AF1;
         G_POST(0x9AEE, 0x5D);
         continue;
@@ -102657,7 +102657,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -102671,7 +102671,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -102755,9 +102755,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9B0B;
@@ -102775,7 +102775,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9B0E;
         G_PRE(0x9B0E, 0x5A);
         // inlined v2_vm_op_5A: [0208] += acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) + v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) + v2_vm_accumulator));
         vm.pc = 0x9B11;
         G_POST(0x9B0E, 0x5A);
         continue;
@@ -102815,7 +102815,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -102829,7 +102829,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -102913,9 +102913,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9B2B;
@@ -102933,7 +102933,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9B2E;
         G_PRE(0x9B2E, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9B31;
         G_POST(0x9B2E, 0x5D);
         continue;
@@ -102973,7 +102973,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -102987,7 +102987,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -103071,9 +103071,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9B4B;
@@ -103091,7 +103091,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9B4E;
         G_PRE(0x9B4E, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9B51;
         G_POST(0x9B4E, 0x5D);
         continue;
@@ -103131,7 +103131,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -103145,7 +103145,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -103250,7 +103250,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9B6D;
         G_PRE(0x9B6D, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x9B70;
         G_POST(0x9B6D, 0x57);
         continue;
@@ -103259,7 +103259,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B70, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9B73;
         G_POST(0x9B70, 0x53);
         continue;
@@ -103278,7 +103278,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B78, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9B7B;
         G_POST(0x9B78, 0x53);
         continue;
@@ -103297,7 +103297,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B80, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9B83;
         G_POST(0x9B80, 0x53);
         continue;
@@ -103316,7 +103316,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B88, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9B8B;
         G_POST(0x9B88, 0x53);
         continue;
@@ -103335,7 +103335,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B90, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9B93;
         G_POST(0x9B90, 0x53);
         continue;
@@ -103354,7 +103354,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B98, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9B9B;
         G_POST(0x9B98, 0x53);
         continue;
@@ -103373,7 +103373,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BA0, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9BA3;
         G_POST(0x9BA0, 0x53);
         continue;
@@ -103422,9 +103422,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9BB2;
@@ -103442,7 +103442,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9BB5;
         G_PRE(0x9BB5, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9BB8;
         G_POST(0x9BB5, 0x5D);
         continue;
@@ -103487,7 +103487,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -103501,7 +103501,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -103585,9 +103585,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9BD2;
@@ -103605,7 +103605,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9BD5;
         G_PRE(0x9BD5, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9BD8;
         G_POST(0x9BD5, 0x5D);
         continue;
@@ -103652,7 +103652,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -103666,7 +103666,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -103746,7 +103746,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -103760,7 +103760,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -103844,9 +103844,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9BFD;
@@ -103864,7 +103864,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9C00;
         G_PRE(0x9C00, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9C03;
         G_POST(0x9C00, 0x5D);
         continue;
@@ -103911,7 +103911,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -103925,7 +103925,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -104015,9 +104015,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9C1F;
@@ -104035,7 +104035,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9C22;
         G_PRE(0x9C22, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9C25;
         G_POST(0x9C22, 0x5D);
         continue;
@@ -104080,7 +104080,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -104094,7 +104094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -104178,9 +104178,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9C3F;
@@ -104198,7 +104198,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9C42;
         G_PRE(0x9C42, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9C45;
         G_POST(0x9C42, 0x5D);
         continue;
@@ -104245,7 +104245,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -104259,7 +104259,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -104343,9 +104343,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9C5E;
@@ -104363,7 +104363,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9C61;
         G_PRE(0x9C61, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9C64;
         G_POST(0x9C61, 0x5D);
         continue;
@@ -104410,7 +104410,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -104424,7 +104424,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -104514,9 +104514,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9C80;
@@ -104534,7 +104534,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9C83;
         G_PRE(0x9C83, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9C86;
         G_POST(0x9C83, 0x5D);
         continue;
@@ -104581,7 +104581,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -104595,7 +104595,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -104679,9 +104679,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9C9F;
@@ -104699,7 +104699,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9CA2;
         G_PRE(0x9CA2, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9CA5;
         G_POST(0x9CA2, 0x5D);
         continue;
@@ -104746,7 +104746,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -104760,7 +104760,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -104844,9 +104844,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9CBE;
@@ -104864,7 +104864,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9CC1;
         G_PRE(0x9CC1, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9CC4;
         G_POST(0x9CC1, 0x5D);
         continue;
@@ -104909,7 +104909,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -104923,7 +104923,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -105007,9 +105007,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9CDE;
@@ -105027,7 +105027,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9CE1;
         G_PRE(0x9CE1, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9CE4;
         G_POST(0x9CE1, 0x5D);
         continue;
@@ -105074,7 +105074,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -105088,7 +105088,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -105178,9 +105178,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9D00;
@@ -105198,7 +105198,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9D03;
         G_PRE(0x9D03, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9D06;
         G_POST(0x9D03, 0x5D);
         continue;
@@ -105243,7 +105243,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -105257,7 +105257,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -105341,9 +105341,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9D20;
@@ -105361,7 +105361,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9D23;
         G_PRE(0x9D23, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9D26;
         G_POST(0x9D23, 0x5D);
         continue;
@@ -105408,7 +105408,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -105422,7 +105422,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -105506,9 +105506,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9D3F;
@@ -105526,7 +105526,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9D42;
         G_PRE(0x9D42, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9D45;
         G_POST(0x9D42, 0x5D);
         continue;
@@ -105573,7 +105573,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -105587,7 +105587,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -105671,9 +105671,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9D5E;
@@ -105691,7 +105691,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9D61;
         G_PRE(0x9D61, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9D64;
         G_POST(0x9D61, 0x5D);
         continue;
@@ -105736,7 +105736,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -105750,7 +105750,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -105840,9 +105840,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9D81;
@@ -105860,7 +105860,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9D84;
         G_PRE(0x9D84, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9D87;
         G_POST(0x9D84, 0x5D);
         continue;
@@ -105907,7 +105907,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -105921,7 +105921,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -106005,9 +106005,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9DA0;
@@ -106025,7 +106025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9DA3;
         G_PRE(0x9DA3, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9DA6;
         G_POST(0x9DA3, 0x5D);
         continue;
@@ -106070,7 +106070,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -106084,7 +106084,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -106168,9 +106168,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9DC0;
@@ -106188,7 +106188,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9DC3;
         G_PRE(0x9DC3, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9DC6;
         G_POST(0x9DC3, 0x5D);
         continue;
@@ -106235,7 +106235,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -106249,7 +106249,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -106339,9 +106339,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9DE2;
@@ -106359,7 +106359,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9DE5;
         G_PRE(0x9DE5, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9DE8;
         G_POST(0x9DE5, 0x5D);
         continue;
@@ -106406,7 +106406,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -106420,7 +106420,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -106504,9 +106504,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9E01;
@@ -106524,7 +106524,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9E04;
         G_PRE(0x9E04, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9E07;
         G_POST(0x9E04, 0x5D);
         continue;
@@ -106569,7 +106569,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -106583,7 +106583,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -106667,9 +106667,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9E21;
@@ -106687,7 +106687,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9E24;
         G_PRE(0x9E24, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9E27;
         G_POST(0x9E24, 0x5D);
         continue;
@@ -106734,7 +106734,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -106748,7 +106748,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -106838,9 +106838,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9E43;
@@ -106858,7 +106858,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9E46;
         G_PRE(0x9E46, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9E49;
         G_POST(0x9E46, 0x5D);
         continue;
@@ -106903,7 +106903,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -106917,7 +106917,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -107001,9 +107001,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9E63;
@@ -107021,7 +107021,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9E66;
         G_PRE(0x9E66, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9E69;
         G_POST(0x9E66, 0x5D);
         continue;
@@ -107068,7 +107068,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -107082,7 +107082,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -107172,9 +107172,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9E85;
@@ -107192,7 +107192,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9E88;
         G_PRE(0x9E88, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9E8B;
         G_POST(0x9E88, 0x5D);
         continue;
@@ -107237,7 +107237,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -107251,7 +107251,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -107335,9 +107335,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9EA5;
@@ -107355,7 +107355,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9EA8;
         G_PRE(0x9EA8, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9EAB;
         G_POST(0x9EA8, 0x5D);
         continue;
@@ -107402,7 +107402,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -107416,7 +107416,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -107500,9 +107500,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9EC4;
@@ -107520,7 +107520,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9EC7;
         G_PRE(0x9EC7, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9ECA;
         G_POST(0x9EC7, 0x5D);
         continue;
@@ -107567,7 +107567,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -107581,7 +107581,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -107661,7 +107661,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9EE3;
         G_PRE(0x9EE3, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0x9EE6;
         G_POST(0x9EE3, 0x57);
         continue;
@@ -107670,7 +107670,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9EE6, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9EE9;
         G_POST(0x9EE6, 0x53);
         continue;
@@ -107689,7 +107689,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9EEE, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0x9EF1;
         G_POST(0x9EEE, 0x53);
         continue;
@@ -107738,9 +107738,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9F00;
@@ -107758,7 +107758,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9F03;
         G_PRE(0x9F03, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9F06;
         G_POST(0x9F03, 0x5D);
         continue;
@@ -107803,7 +107803,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -107817,7 +107817,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -107901,9 +107901,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9F20;
@@ -107921,7 +107921,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9F23;
         G_PRE(0x9F23, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9F26;
         G_POST(0x9F23, 0x5D);
         continue;
@@ -107968,7 +107968,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -107982,7 +107982,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -108066,9 +108066,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9F3F;
@@ -108086,7 +108086,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9F42;
         G_PRE(0x9F42, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9F45;
         G_POST(0x9F42, 0x5D);
         continue;
@@ -108133,7 +108133,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -108147,7 +108147,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -108237,9 +108237,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9F61;
@@ -108257,7 +108257,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9F64;
         G_PRE(0x9F64, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9F67;
         G_POST(0x9F64, 0x5D);
         continue;
@@ -108302,7 +108302,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -108316,7 +108316,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -108400,9 +108400,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9F81;
@@ -108420,7 +108420,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9F84;
         G_PRE(0x9F84, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9F87;
         G_POST(0x9F84, 0x5D);
         continue;
@@ -108467,7 +108467,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -108481,7 +108481,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -108565,9 +108565,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9FA0;
@@ -108585,7 +108585,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9FA3;
         G_PRE(0x9FA3, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9FA6;
         G_POST(0x9FA3, 0x5D);
         continue;
@@ -108630,7 +108630,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -108644,7 +108644,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -108728,9 +108728,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9FC0;
@@ -108748,7 +108748,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9FC3;
         G_PRE(0x9FC3, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9FC6;
         G_POST(0x9FC3, 0x5D);
         continue;
@@ -108795,7 +108795,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -108809,7 +108809,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -108893,9 +108893,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0x9FDF;
@@ -108913,7 +108913,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9FE2;
         G_PRE(0x9FE2, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0x9FE5;
         G_POST(0x9FE2, 0x5D);
         continue;
@@ -108958,7 +108958,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -108972,7 +108972,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -109062,9 +109062,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA002;
@@ -109082,7 +109082,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA005;
         G_PRE(0xA005, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA008;
         G_POST(0xA005, 0x5D);
         continue;
@@ -109129,7 +109129,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -109143,7 +109143,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -109227,9 +109227,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA021;
@@ -109247,7 +109247,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA024;
         G_PRE(0xA024, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA027;
         G_POST(0xA024, 0x5D);
         continue;
@@ -109294,7 +109294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -109308,7 +109308,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -109392,9 +109392,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA040;
@@ -109412,7 +109412,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA043;
         G_PRE(0xA043, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA046;
         G_POST(0xA043, 0x5D);
         continue;
@@ -109457,7 +109457,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -109471,7 +109471,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -109555,9 +109555,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA060;
@@ -109575,7 +109575,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA063;
         G_PRE(0xA063, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA066;
         G_POST(0xA063, 0x5D);
         continue;
@@ -109622,7 +109622,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -109636,7 +109636,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -109716,7 +109716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA07F;
         G_PRE(0xA07F, 0x57);
         // inlined v2_vm_op_57: [0206] = acc
-        vm.ds_write(0x0206, v2_vm_accumulator);
+        v2gs(vm.shadow).script_vars(1, v2_vm_accumulator);
         vm.pc = 0xA082;
         G_POST(0xA07F, 0x57);
         continue;
@@ -109725,7 +109725,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA082, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0xA085;
         G_POST(0xA082, 0x53);
         continue;
@@ -109774,9 +109774,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA094;
@@ -109794,7 +109794,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA097;
         G_PRE(0xA097, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA09A;
         G_POST(0xA097, 0x5D);
         continue;
@@ -109841,7 +109841,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -109855,7 +109855,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -109939,9 +109939,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA0B3;
@@ -109959,7 +109959,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA0B6;
         G_PRE(0xA0B6, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA0B9;
         G_POST(0xA0B6, 0x5D);
         continue;
@@ -110006,7 +110006,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -110020,7 +110020,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -110104,9 +110104,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA0D2;
@@ -110124,7 +110124,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA0D5;
         G_PRE(0xA0D5, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA0D8;
         G_POST(0xA0D5, 0x5D);
         continue;
@@ -110169,7 +110169,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -110183,7 +110183,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -110261,7 +110261,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -110275,7 +110275,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -110359,9 +110359,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA0FF;
@@ -110379,7 +110379,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA102;
         G_PRE(0xA102, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA105;
         G_POST(0xA102, 0x5D);
         continue;
@@ -110426,7 +110426,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -110440,7 +110440,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -110530,9 +110530,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA121;
@@ -110550,7 +110550,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA124;
         G_PRE(0xA124, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA127;
         G_POST(0xA124, 0x5D);
         continue;
@@ -110597,7 +110597,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -110611,7 +110611,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -110695,9 +110695,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA140;
@@ -110715,7 +110715,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA143;
         G_PRE(0xA143, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA146;
         G_POST(0xA143, 0x5D);
         continue;
@@ -110760,7 +110760,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -110774,7 +110774,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -110858,9 +110858,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA160;
@@ -110878,7 +110878,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA163;
         G_PRE(0xA163, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA166;
         G_POST(0xA163, 0x5D);
         continue;
@@ -110925,7 +110925,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -110939,7 +110939,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -111023,9 +111023,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA17F;
@@ -111043,7 +111043,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA182;
         G_PRE(0xA182, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA185;
         G_POST(0xA182, 0x5D);
         continue;
@@ -111088,7 +111088,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -111102,7 +111102,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -111337,9 +111337,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA1C5;
@@ -111357,7 +111357,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA1C8;
         G_PRE(0xA1C8, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA1CB;
         G_POST(0xA1C8, 0x5D);
         continue;
@@ -111402,7 +111402,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -111416,7 +111416,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -111500,9 +111500,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA1E5;
@@ -111520,7 +111520,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA1E8;
         G_PRE(0xA1E8, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA1EB;
         G_POST(0xA1E8, 0x5D);
         continue;
@@ -111567,7 +111567,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -111581,7 +111581,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -111736,9 +111736,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA214;
@@ -111756,7 +111756,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA217;
         G_PRE(0xA217, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA21A;
         G_POST(0xA217, 0x5D);
         continue;
@@ -111801,7 +111801,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -111815,7 +111815,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -111970,9 +111970,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA244;
@@ -111990,7 +111990,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA247;
         G_PRE(0xA247, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA24A;
         G_POST(0xA247, 0x5D);
         continue;
@@ -112037,7 +112037,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -112051,7 +112051,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -112227,9 +112227,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA27C;
@@ -112247,7 +112247,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA27F;
         G_PRE(0xA27F, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA282;
         G_POST(0xA27F, 0x5D);
         continue;
@@ -112294,7 +112294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -112308,7 +112308,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -112392,9 +112392,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA29B;
@@ -112412,7 +112412,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA29E;
         G_PRE(0xA29E, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA2A1;
         G_POST(0xA29E, 0x5D);
         continue;
@@ -112459,7 +112459,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -112473,7 +112473,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -112553,7 +112553,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -112567,7 +112567,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -112651,9 +112651,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA2C6;
@@ -112671,7 +112671,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA2C9;
         G_PRE(0xA2C9, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA2CC;
         G_POST(0xA2C9, 0x5D);
         continue;
@@ -112716,7 +112716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -112730,7 +112730,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -112808,7 +112808,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -112822,7 +112822,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -112906,9 +112906,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA2F3;
@@ -112926,7 +112926,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA2F6;
         G_PRE(0xA2F6, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA2F9;
         G_POST(0xA2F6, 0x5D);
         continue;
@@ -112973,7 +112973,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -112987,7 +112987,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -113071,9 +113071,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA312;
@@ -113091,7 +113091,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA315;
         G_PRE(0xA315, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA318;
         G_POST(0xA315, 0x5D);
         continue;
@@ -113136,7 +113136,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -113150,7 +113150,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -113255,9 +113255,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA33B;
@@ -113275,7 +113275,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA33E;
         G_PRE(0xA33E, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA341;
         G_POST(0xA33E, 0x5D);
         continue;
@@ -113320,7 +113320,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -113334,7 +113334,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -113418,9 +113418,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA35B;
@@ -113438,7 +113438,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA35E;
         G_PRE(0xA35E, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA361;
         G_POST(0xA35E, 0x5D);
         continue;
@@ -113485,7 +113485,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -113499,7 +113499,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -113583,9 +113583,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA37A;
@@ -113603,7 +113603,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA37D;
         G_PRE(0xA37D, 0x5D);
         // inlined v2_vm_op_5D: [0208] -= acc
-        vm.ds_write(0x0208, (uint16_t)(vm.ds_read(0x0208) - v2_vm_accumulator));
+        v2gs(vm.shadow).script_vars(2, (uint16_t)(v2gs(vm.shadow).script_vars(2) - v2_vm_accumulator));
         vm.pc = 0xA380;
         G_POST(0xA37D, 0x5D);
         continue;
@@ -113650,7 +113650,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_SCRATCH_3A, _w3A); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
-          const uint16_t _px = vm.ds_read(0x0206);
+          const uint16_t _px = v2gs(vm.shadow).script_vars(1);
           uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
           vm.si_track = _sobj;                 // orig 0x25AB
           { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
@@ -113664,7 +113664,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
             vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0208;
-          const uint16_t _py = vm.ds_read(0x0208);
+          const uint16_t _py = v2gs(vm.shadow).script_vars(2);
           vm.si_track = _sobj;                 // orig 0x25D4
           uint16_t _dp;
           { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
@@ -114129,9 +114129,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          v2gs(vm.shadow).script_vars(1, vm.ds_read(DS_TEXT_COL));
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          v2gs(vm.shadow).script_vars(2, vm.ds_read(DS_TEXT_ROW));
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA50B;
@@ -114142,7 +114142,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA50B, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [0206]
         vm.si_track = 0x0206;
-        v2_vm_accumulator = vm.ds_read(0x0206);
+        v2_vm_accumulator = v2gs(vm.shadow).script_vars(1);
         vm.pc = 0xA50E;
         G_POST(0xA50B, 0x53);
         continue;
@@ -114310,9 +114310,9 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
           vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
           vm.si_track = 0x0206;
-          vm.ds_write(0x0206, (uint16_t)_rx);
+          v2gs(vm.shadow).script_vars(1, (uint16_t)_rx);
           vm.si_track = 0x0208;
-          vm.ds_write(0x0208, (uint16_t)_ry);
+          v2gs(vm.shadow).script_vars(2, (uint16_t)_ry);
           vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
         }
         vm.pc = 0xA538;
@@ -114323,7 +114323,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA538, 0x53);
         // inlined v2_vm_op_load_acc_indirect: acc = [search_best]
         vm.si_track = 0x03CA;
-        v2_vm_accumulator = vm.ds_read(0x03CA);
+        v2_vm_accumulator = v2gs(vm.shadow).search_best();
         vm.pc = 0xA53B;
         G_POST(0xA538, 0x53);
         continue;
