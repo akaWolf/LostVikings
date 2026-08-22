@@ -429,6 +429,32 @@ void v2_audit_dump_final() {
     fprintf(stderr, "============================================\n");
 }
 
+// #96: the interpreter loops survive ONLY for fn-test units (bytecode in a
+// test segment outside the gen's domain). The unit runner raises this flag;
+// battle builds keep it 0 and FATAL on any loop entry / gen miss.
+extern "C" int v2_fntest_loop_allowed = 0;
+static int v2_gencode_enabled();   // defined with the gencode includes below
+
+// #96 probe: count every op/cmd the INTERPRETER loops still execute when the
+// gencode dispatch is on. Expectation on canon/monkey runs: 0/0 — the loop is
+// then provably dead in battle builds. First 8 entry points are printed
+// immediately (which pc/bx escaped the static model); totals go via atexit.
+static uint64_t v2_interp_fb_ops = 0, v2_interp_fb_anim = 0;
+static void v2_interp_fb_report() {
+    fprintf(stderr, "V2-INTERP-FALLBACK: world_ops=%llu anim_cmds=%llu\n",
+            (unsigned long long)v2_interp_fb_ops,
+            (unsigned long long)v2_interp_fb_anim);
+}
+static void v2_interp_fallback_note(int which, uint16_t where) {
+    static bool armed = false;
+    if (!armed) { armed = true; atexit(v2_interp_fb_report); }
+    uint64_t& c = which ? v2_interp_fb_anim : v2_interp_fb_ops;
+    if (c < 8)
+        fprintf(stderr, "V2-INTERP-FALLBACK[%s#%llu]: at 0x%04X\n",
+                which ? "anim" : "world", (unsigned long long)c, where);
+    c++;
+}
+
 // Periodic match — called from frame-end check, every 60 frames.
 static int v2_audit_periodic_counter = 0;
 void v2_audit_periodic() {
@@ -1399,7 +1425,7 @@ static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     // orig sub_177bb entry eip 0x77BD: TEST ds:304h, 0FFFFh; JNZ drop — the
     // WHOLE body (audit hook, play, slot bookkeeping) sits behind the SFX-mute
     // gate. Mirror it first so muted fires neither log nor touch DS slots.
-    if (*(const uint16_t*)(s + 0x304) != 0) return -1;
+    if (v2gs(s).sfx_mute() != 0) return -1;
     uint16_t bx_seg = v2gs(s).seg_sound2();
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -3091,7 +3117,7 @@ static void v2_hud_health_120ff(uint8_t* s) {
     for (int vk = 0; vk < 3; vk++) {
         uint16_t prev = v2gs(s).hud_health(vk);
         v2gs(s).hud_health_prev(vk, prev);
-        int16_t hv = (int16_t)*(uint16_t*)(s + OBJ_ANIM_IDX + vk * 2);
+        int16_t hv = ObjMem{s, (uint16_t)(vk * 2)}.i16(OBJ_ANIM_IDX);
         uint16_t ax = (hv < 0) ? 2 : (v2gs(s).active_viking() != (uint16_t)(vk * 2)) ? 1 : 0;
         v2gs(s).hud_health(vk, ax);
         if (ax != prev) {
@@ -3374,12 +3400,12 @@ static void v2_page_copy_row_1712b(uint8_t* s) {
     uint16_t si = v2gs(s).page_copy_src1();
     uint16_t di = v2gs(s).page_copy_dst1();
     uint16_t bx = 0;
-    uint16_t cl = s[0x9311];
+    uint16_t cl = v2gs(s).page_split_1a_b();
     for (uint16_t r = 0; r <= cl; r++) {          // port-quirk: <=
         v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
         if (r < cl) bx += 0x56;                    // bx after loop = cl*0x56 (orig LOOP semantics)
     }
-    cl = s[0x9312];
+    cl = v2gs(s).page_split_1b_b();
     if (cl) {
         si = (uint16_t)(si + bx);
         di = v2gs(s).page_copy_src2();
@@ -3392,12 +3418,12 @@ static void v2_page_copy_row_1712b(uint8_t* s) {
     si = v2gs(s).page_copy_src1();
     di = v2gs(s).page_copy_dst2();
     bx = 0;
-    cl = s[0x9313];
+    cl = v2gs(s).page_split_2a_b();
     for (uint16_t r = 0; r <= cl; r++) {          // port-quirk: <=
         v2_vga_copy_span((uint16_t)(di + bx), (uint16_t)(si + bx), 2);
         if (r < cl) bx += 0x56;
     }
-    cl = s[0x9314];
+    cl = v2gs(s).page_split_2b_b();
     if (cl) {
         si = (uint16_t)(si + bx);
         di = v2gs(s).page_copy_src3();
@@ -5402,7 +5428,7 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
     }
 
     { static int _dbg = 0; if (_dbg < 5) { _dbg++;
-      uint16_t s_val = *(uint16_t*)(shadow + OBJ_SUB_SLOT);
+      uint16_t s_val = ObjMem{shadow, 0}.u16(OBJ_SUB_SLOT);
       uint16_t r_val = v2_vm_real_ds_ptr ? *(uint16_t*)(v2_vm_real_ds_ptr + OBJ_SUB_SLOT) : 0xDEAD;
       printf("V2-DBG-10813: active=%d prev=%d flag=%02X 414D=%02X s[1A85]=%04X r[1A85]=%04X\n",
         active, prev, flag_9a, shadow[DS_PROBE_414D] /* diag probe INSIDE level_pal_chunks (color #x of pal slot) — raw by intent */, s_val, r_val); } }
@@ -6814,8 +6840,8 @@ static void v2_clear_velocities_15517(uint8_t* ds) {
 
 static void v2_vm_pass_14207_init(uint8_t* ds) {
     v2_clear_velocities_15517(ds);
-    *(uint16_t*)(ds + 0x376) = 0;  // word_28856 = 0 (priority count)
-    *(uint16_t*)(ds + 0x390) = 0;  // word_28870 = 0 (collision flag)
+    v2gs(ds).prio_count(0);        // word_28856 = 0
+    v2gs(ds).coll_phase(0);        // word_28870 = 0
 }
 
 // sub_14207 (eip 0x4207..0x424B): sub_15517 + the full per-object VM sweep
@@ -8014,13 +8040,13 @@ static void v2_camera_follow_1064b(uint8_t* s) {
 // Returns true (carry set) if matching object found.
 static bool v2_gameloop_obj_search_down_15fbe(uint8_t* ds, uint16_t filter_si, uint16_t obj_di) {
     uint16_t y_check = *(uint16_t*)(ds + obj_di + OBJ_BBOX_Y1) + 1;
-    *(uint16_t*)(ds + 0x34) = filter_si;
-    *(uint16_t*)(ds + 0x36) = y_check;
+    v2gs(ds).scratch_34(filter_si);
+    v2gs(ds).scratch_36(y_check);
     uint16_t table_end = v2gs(ds).obj_count();
     for (uint16_t si = 0; si == 0 || (int16_t)si < (int16_t)table_end; si += 2) {   // orig do-while: first slot unconditional (ADD si,2; CMP si,[372]; JL)
         if (*(uint16_t*)(ds + si + OBJ_CODE_SEG) == 0) continue;
         if (si == v2gs(ds).cur_obj()) continue;
-        *(uint16_t*)(ds + 0x3A) = si;
+        v2gs(ds).scratch_3a(si);
         uint8_t obj_type = (uint8_t)*(uint16_t*)(ds + si + OBJ_TYPE_ID);
         uint16_t flt = filter_si;
         bool match = false;
@@ -8037,8 +8063,8 @@ static bool v2_gameloop_obj_search_down_15fbe(uint8_t* ds, uint16_t filter_si, u
         if ((int16_t)*(uint16_t*)(ds + si + OBJ_BBOX_X1) < (int16_t)*(uint16_t*)(ds + obj_di + OBJ_BBOX_X0)) continue;
         // orig eip 0x601C re-reads [si+0x17DD] as full WORD for ds:0x3B2 (NOT the
         // byte-truncated obj_type used for filter scan). High byte preserved.
-        *(uint16_t*)(ds + 0x3B2) = *(uint16_t*)(ds + si + OBJ_TYPE_ID);
-        *(uint16_t*)(ds + 0x3B4) = si;
+        v2gs(ds).search_res_type(ObjMem{ds, si}.u16(OBJ_TYPE_ID));
+        v2gs(ds).search_res_slot(si);
         return true;
     }
     return false;
@@ -9214,6 +9240,7 @@ static void v2_vm_frame_update(uint8_t* ds) {
     // No sync copies needed — v2 runs in separate thread with barrier synchronization.
     // Each phase runs at the same time as the original → no timing artifacts.
     v2_vm_acc_base = v2_vm_shadow_ds;
+
 
     // word_3287C (DS:0xA39C): NOT reset here anymore. Render thread (under
     // shared mutex with orig render_callback) DECs shadow[0xA39C] atomically
@@ -12085,11 +12112,11 @@ extern "C" int v2_fntest_call_sub_163ac(uint8_t* test_shadow) {
 }
 // Units 102-103: sub_16235 (partner stash) / sub_16243 (partner fetch).
 extern "C" void v2_fntest_call_sub_16235(uint8_t* test_shadow, uint16_t si, uint16_t di) {
-    uint16_t addr = (uint16_t)((uint16_t)(di << 4) + *(uint16_t*)(test_shadow + 0x38E) + 0x1B25);
+    uint16_t addr = (uint16_t)((uint16_t)(di << 4) + v2gs(test_shadow).coll_bit_idx() + 0x1B25);
     *(uint16_t*)(test_shadow + addr) = si;
 }
 extern "C" uint16_t v2_fntest_call_sub_16243(uint8_t* test_shadow, uint16_t di) {
-    uint16_t addr = (uint16_t)((uint16_t)(di << 4) + *(uint16_t*)(test_shadow + 0x38E) + 0x1B25);
+    uint16_t addr = (uint16_t)((uint16_t)(di << 4) + v2gs(test_shadow).coll_bit_idx() + 0x1B25);
     return *(uint16_t*)(test_shadow + addr);
 }
 static bool v2_vm_collision_check_1584e(V2VM& vm);
@@ -12544,8 +12571,8 @@ extern "C" uint16_t v2_fntest_call_rng_12312(uint8_t* test_shadow) {
 }
 // sub_12345 mirror: clear the input accumulator pair (ds:0x3B6 / ds:0x3B8).
 extern "C" void v2_fntest_call_clear_12345(uint8_t* test_shadow) {
-    *(uint16_t*)(test_shadow + 0x3B6) = 0;
-    *(uint16_t*)(test_shadow + 0x3B8) = 0;
+    v2gs(test_shadow).input_keys(0);
+    v2gs(test_shadow).input_edges(0);
 }
 
 // Anim-search family (sub_158aa..sub_158e6 mirrors). A minimal V2VM over the
@@ -14931,13 +14958,21 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
     // Stage 3A anim: transpiled cmd dispatch; unknown bx falls back to
     // the interpreter loop below (shared max budget).
     if (v2_gen_anim_dispatch(vm, anim_bx, max)) return;
+    // #96: unknown anim bx — the generated model is total on live data;
+    // the loop below survives only for the fn-test units.
+    if (v2_gencode_enabled() && !v2_fntest_loop_allowed) {
+        fprintf(stderr, "FATAL: #96 anim bx 0x%04X outside the generated model "
+                "(obj=%d) — interpreter loop is retired\n", anim_bx, vm.obj);
+        extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
+    }
 #endif
     while (max-- > 0) {
+        v2_interp_fallback_note(1, anim_bx);   // #96 probe: anim cmds by the loop
         v2_v2_anim_cmd_count++;
         uint16_t bx_before = anim_bx;
         uint8_t cmd = vm.es[anim_bx++];
         if (cmd <= 0x1A) v2_op_anim_count[cmd]++;  // B5 coverage
-        uint16_t handler = *(uint16_t*)(vm.shadow +DS_CMD_HANDLER_TBL + cmd * 2);
+        uint16_t handler = v2gs(vm.shadow).cmd_handler_tbl(cmd);
         // Debug: catch invalid anim commands
         if (cmd > 0x1A) {
             static bool dbg = false;
@@ -17277,7 +17312,7 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
                                     // the 8086 register carries through (task #15)
 
     int max_ops = 5000;
-    uint16_t y_in = (obj_si == 0) ? *(uint16_t*)(shadow + OBJ_WORLD_Y) : 0;
+    uint16_t y_in = (obj_si == 0) ? ObjMem{shadow, 0}.u16(OBJ_WORLD_Y) : 0;
     static int _coll0_trace = 0;
     bool trace_this = (obj_si == 0) && (_coll0_trace < 30);
     extern int v2_orig_post_vm_frame;
@@ -17305,7 +17340,7 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
             extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
         }
         v2_op_main_count[opcode]++;  // B5 coverage
-        uint16_t y_pre = (obj_si == 0) ? *(uint16_t*)(shadow + OBJ_WORLD_Y) : 0;
+        uint16_t y_pre = (obj_si == 0) ? ObjMem{shadow, 0}.u16(OBJ_WORLD_Y) : 0;
         uint16_t pre_w[v2_coll_watch_count];
         for (int wi = 0; wi < v2_coll_watch_count; wi++)
             pre_w[wi] = *(uint16_t*)(shadow + v2_coll_watch_addrs[wi]);
@@ -17326,7 +17361,7 @@ static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
             }
         }
         if (obj_si == 0) {
-            uint16_t y_post = *(uint16_t*)(shadow + OBJ_WORLD_Y);
+            uint16_t y_post = ObjMem{shadow, 0}.u16(OBJ_WORLD_Y);
             if (y_post != y_pre && _coll0_trace < 30) {
                 _coll0_trace++;
                 fprintf(stderr, "V2-COLL-VM-Y[%d]: obj0 op=%02X pc=%04X Y %04X->%04X\n",
@@ -17841,22 +17876,45 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 
     int max_ops = 10000; // safety limit
 #ifdef V2_GENCODE
-    // Stage 3A: transpiled dispatch for the world template chunk. Returns
-    // false on a pc outside the static model — the interpreter loop below
-    // resumes seamlessly (vm state stays coherent, max_ops is shared).
-    if (v2_gencode_enabled() && es_seg == v2gs(shadow).seg_anim()) {
+    // Stage 3A / #96: transpiled dispatch for the world template chunk.
+    // The generated model is TOTAL (rec_scan entries + anim continuations;
+    // fallback counter 0/0 across canon 58 + monkey 37) — a false return
+    // (pc outside the model) is a hard bug, not a fallback case.
+    if (v2_gencode_enabled() && es_seg != 0 && es_seg == v2gs(shadow).seg_anim()) {
+        bool g_ok = false, g_known = true;
         switch (v2gs(shadow).template_chunk()) {
-        case 0x1C1: v2_gen_exec_1c1(vm, max_ops); break;
-        case 0x1C2: v2_gen_exec_1c2(vm, max_ops); break;
-        case 0x1C3: v2_gen_exec_1c3(vm, max_ops); break;
-        case 0x1C4: v2_gen_exec_1c4(vm, max_ops); break;
-        case 0x1C5: v2_gen_exec_1c5(vm, max_ops); break;
-        case 0x1C6: v2_gen_exec_1c6(vm, max_ops); break;
-        default: break;
+        case 0x1C1: g_ok = v2_gen_exec_1c1(vm, max_ops); break;
+        case 0x1C2: g_ok = v2_gen_exec_1c2(vm, max_ops); break;
+        case 0x1C3: g_ok = v2_gen_exec_1c3(vm, max_ops); break;
+        case 0x1C4: g_ok = v2_gen_exec_1c4(vm, max_ops); break;
+        case 0x1C5: g_ok = v2_gen_exec_1c5(vm, max_ops); break;
+        case 0x1C6: g_ok = v2_gen_exec_1c6(vm, max_ops); break;
+        default: g_known = false; break;   // synthetic fn-test worlds
         }
+        if (g_known) {
+            if (!g_ok && !v2_fntest_loop_allowed) {
+                fprintf(stderr, "FATAL: #96 pc 0x%04X outside the generated model "
+                        "(obj=%d tmpl=0x%04X) — interpreter loop is retired\n",
+                        vm.pc, obj_idx, v2gs(shadow).template_chunk());
+                extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
+            }
+            if (g_ok) return;   // gen path is complete
+            // fn-test: fall through to the loop below (unit worlds may stitch
+            // template pcs the model doesn't claim).
+        }
+        // unknown chunk: synthetic world — loop below (guarded).
+    }
+    // #96: the interpreter loop survives ONLY for the fn-test units (their
+    // bytecode lives in a test segment the gen cannot claim). Battle builds
+    // never reach it — guard against silent regressions.
+    if (v2_gencode_enabled() && !v2_fntest_loop_allowed) {
+        fprintf(stderr, "FATAL: #96 interpreter loop entered outside fn-test "
+                "(obj=%d es=%04X pc=%04X)\n", obj_idx, es_seg, init_pc);
+        extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
     }
 #endif
     while (vm.running && max_ops-- > 0) {
+        v2_interp_fallback_note(0, vm.pc);   // #96 probe: ops executed by the loop
         if (vm.pc > 0xFFFF) {
             printf("V2-VM: PC out of bounds 0x%x obj=%d\n", vm.pc, obj_idx);
             break;
@@ -18081,8 +18139,8 @@ void v2_vm_verify_after_init(uint16_t ds_val) {
             printf("  FS diffs: total=%d range=[0x%04X..0x%04X] real_nonzero=%d shadow_nonzero=%d\n",
                    total, (uint16_t)first_diff, (uint16_t)last_diff, real_nonzero, shadow_nonzero);
             // Check: cols and rows
-            uint16_t fs_cols = *(uint16_t*)(real + 0x25DC);
-            uint16_t fs_rows = *(uint16_t*)(real + 0x25DE);
+            uint16_t fs_cols = v2gs(real).map_bp();
+            uint16_t fs_rows = v2gs(real).map_height();
             uint16_t stride = v2gs(real).fs_page_stride();
             printf("  FS layout: cols=%d rows=%d used=%d stride=0x%04X\n",
                    fs_cols, fs_rows, fs_rows*fs_cols*8, stride);
@@ -18131,7 +18189,7 @@ void v2_vm_verify_game_loop(uint16_t ds_val) {
     if (!v2_frame_active) {
         printf("V2-GAMELOOP[%d]: SKIPPED (transition frame, v2_frame_active=false) real_level=0x%04X shadow_level=0x%04X real_0334=0x%04X shadow_0334=0x%04X\n",
                gl_frame, v2gs(real).level(), v2gs(shadow).level(),
-               *(uint16_t*)(real + 0x0334), v2gs(shadow).frame_flags());
+               v2gs(real).frame_flags(), v2gs(shadow).frame_flags());
         return;
     }
     for (uint32_t i = 0; i < 0x10000 && gl_err < 200; i += 2) {
@@ -19080,8 +19138,8 @@ void v2_phase_frame_begin(uint16_t ds_val) {
             fprintf(stderr,
                 "V2-PHASE: frame=%d 25CF=%02X 25BA=%02X 3CC=%04X 25C9=%04X 3B8=%04X 447=%04X\n",
                 v2_dbg_pre_vm_iter, s_[0x25CF], s_[0x25BA],
-                *(uint16_t*)(s_ + 0x3CC), *(uint16_t*)(s_ + 0x25C9),
-                *(uint16_t*)(s_ + 0x3B8), *(uint16_t*)(s_ + 0x447));
+                v2gs(s_).game_mode_ac(), v2gs(s_).level_load(),
+                v2gs(s_).input_edges(), v2gs(s_).quit_mode());
         }
     }
     // V2_PW_TRACE=1: password-screen input forensics (level2 replay saga) —
@@ -19094,9 +19152,9 @@ void v2_phase_frame_begin(uint16_t ds_val) {
             static uint16_t prev[5] = {0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF};
             uint8_t* s_ = v2_vm_shadow_ds;
             uint16_t cur[5] = {
-                *(uint16_t*)(s_ + 0x310), *(uint16_t*)(s_ + 0x312),
-                *(uint16_t*)(s_ + 0x314), *(uint16_t*)(s_ + 0x316),
-                *(uint16_t*)(s_ + 0x443),
+                v2gs(s_).pw_chars(0), v2gs(s_).pw_chars(1),
+                v2gs(s_).pw_chars(2), v2gs(s_).pw_chars(3),
+                v2gs(s_).quit_active(),
             };
             for (int i = 0; i < 5; i++) if (cur[i] != prev[i]) {
                 fprintf(stderr, "V2-PW: f%d %s[%d] %04X->%04X ('%c')\n",
@@ -19406,10 +19464,10 @@ void v2_phase_pre_vm(uint16_t ds_val) {
         {
             int item_diffs = 0;
             for (int i = 0; i < 0x18; i += 2) {
-                uint16_t r3e4 = *(uint16_t*)(real + 0x3E4 + i);
-                uint16_t s3e4 = *(uint16_t*)(shad + 0x3E4 + i);
-                uint16_t r3fc = *(uint16_t*)(real + 0x3FC + i);
-                uint16_t s3fc = *(uint16_t*)(shad + 0x3FC + i);
+                uint16_t r3e4 = v2gs(real).hud_items(i / 2);
+                uint16_t s3e4 = v2gs(shad).hud_items(i / 2);
+                uint16_t r3fc = v2gs(real).hud_items_prev(i / 2);
+                uint16_t s3fc = v2gs(shad).hud_items_prev(i / 2);
                 if (r3e4 != s3e4 || r3fc != s3fc) {
                     if (item_diffs == 0)
                         fprintf(stderr, "ITEM-TRAP[f%d]: HUD slot diffs:\n", pre_vm_frame);
@@ -19607,7 +19665,7 @@ static void v2_frame_end_verify() {
 
     // ---- 3) Global accumulator (ds:0x8A) divergence ----
     {
-        uint16_t sv = v2gs(s).accumulator(), rv = *(uint16_t*)(r + 0x8A);
+        uint16_t sv = v2gs(s).accumulator(), rv = v2gs(r).accumulator();
         static bool logged = false;
         if (sv != rv && !logged) {
             logged = true;
@@ -22169,10 +22227,10 @@ void v2_vm_trace_record_v2_ext(uint16_t obj, uint16_t step, uint8_t opcode,
         e.flags = *(uint16_t*)(hash_src + obj + OBJ_FLAGS);
         e.x = *(uint16_t*)(hash_src + obj + OBJ_WORLD_X);
         e.y = *(uint16_t*)(hash_src + obj + OBJ_WORLD_Y);
-        e.ds_42 = *(uint16_t*)(hash_src + 0x42);
-        e.ds_8A = *(uint16_t*)(hash_src + 0x8A);
-        e.ds_6C = *(uint16_t*)(hash_src + 0x6C);
-        e.ds_334 = *(uint16_t*)(hash_src + 0x334);
+        e.ds_42 = v2gs(hash_src).cur_obj();
+        e.ds_8A = v2gs(hash_src).accumulator();
+        e.ds_6C = v2gs(hash_src).text_col();
+        e.ds_334 = v2gs(hash_src).frame_flags();
         e.ds_hash_before = ds_hash_before;
         e.obj_hash_before = obj_hash_before;
         e.ds_hash = v2_ds_hash(hash_src);
@@ -22221,10 +22279,10 @@ void v2_vm_replay_verify(uint8_t* ds_before, uint8_t* ds_after,
         e.flags = *(uint16_t*)(hash_src + obj_idx + OBJ_FLAGS);
         e.x = *(uint16_t*)(hash_src + obj_idx + OBJ_WORLD_X);
         e.y = *(uint16_t*)(hash_src + obj_idx + OBJ_WORLD_Y);
-        e.ds_42 = *(uint16_t*)(hash_src + 0x42);
-        e.ds_8A = *(uint16_t*)(hash_src + 0x8A);
-        e.ds_6C = *(uint16_t*)(hash_src + 0x6C);
-        e.ds_334 = *(uint16_t*)(hash_src + 0x334);
+        e.ds_42 = v2gs(hash_src).cur_obj();
+        e.ds_8A = v2gs(hash_src).accumulator();
+        e.ds_6C = v2gs(hash_src).text_col();
+        e.ds_334 = v2gs(hash_src).frame_flags();
         // ds_before may be nullptr from in-handler call sites (FE marker / op_0x00 /
         // op_0x0F / op_0x10 — recorded after the handler ran, no pre-snapshot).
         // For these the orig dispatcher does writes between opcodes (ds:0x42 obj index,
@@ -22482,7 +22540,7 @@ void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_pt
     // Switch accumulator to anim replay shadow
     uint8_t* saved_acc_base = v2_vm_acc_base;
     v2_vm_acc_base = anim_replay_shadow;
-    v2_vm_accumulator = *(uint16_t*)(ds_before + 0x8A);
+    v2_vm_accumulator = v2gs(ds_before).accumulator();
 
     // Run v2's anim cmd handler on snapshot of ds_before
     // The v2 handler reads the cmd byte from anim_bx-1, but we already have the cmd.

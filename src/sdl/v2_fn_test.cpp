@@ -14729,6 +14729,8 @@ extern "C" int v2_fntest_selftest_env(void) {
     v2_fntest_running = 1;   // AIL native gate must stay closed in the unit
                              // world: synthetic DS has garbage segment words,
                              // the bridge would boot the interpreter on them.
+    { extern int v2_fntest_loop_allowed;   // #96: units keep the interpreter
+      v2_fntest_loop_allowed = 1; }        // loops (test-segment bytecode)
 
     uint32_t ds_lin = v2_fntest_game_ds_linear();
     if (ds_lin & 0xF) {
