@@ -127,6 +127,95 @@ def inline_wave1(op, body, nxt):
     L.append(f'vm.pc = 0x{nxt:04X};')
     return L
 
+# Wave 2: the whole compare-branch family. Fetch (with its exact
+# si/di_track effects) + comparison + pc=TGT/NEXT, verbatim per handler.
+# do_call_jump forms store OBJ_ALT_PC = NEXT (orig: vm.pc+2 at the
+# T-word position) on the CURRENT object before jumping.
+_CMPBR = {
+    # op: (fetch, cond)  — cond is a C expression over acc and _v;
+    # fetch in {'lit','self','mem','partner','rand'};
+    # kind 'j' = do_jump on cond else skip; 'c' = do_call_jump on cond.
+    0x68: ('lit',     'j', 'v2_vm_accumulator >= _v'),
+    0x69: ('self',    'j', 'v2_vm_accumulator >= _v'),
+    0x6A: ('mem',     'j', 'v2_vm_accumulator >= _v'),
+    0x6B: ('partner', 'j', 'v2_vm_accumulator >= _v'),
+    0x6C: ('rand',    'j', 'v2_vm_accumulator >= _v'),
+    0x6D: ('lit',     'j', 'v2_vm_accumulator < _v'),
+    0x6E: ('self',    'j', 'v2_vm_accumulator < _v'),
+    0x6F: ('mem',     'j', 'v2_vm_accumulator < _v'),
+    0x70: ('partner', 'j', 'v2_vm_accumulator < _v'),
+    0x71: ('rand',    'j', 'v2_vm_accumulator < _v'),
+    0x72: ('lit',     'j', '_v == v2_vm_accumulator'),
+    0x73: ('self',    'j', '_v == v2_vm_accumulator'),
+    0x74: ('mem',     'j', '_v == v2_vm_accumulator'),
+    0x75: ('partner', 'j', '_v == v2_vm_accumulator'),
+    0x76: ('rand',    'j', '_v == v2_vm_accumulator'),
+    0x77: ('lit',     'j', '_v != v2_vm_accumulator'),
+    0x78: ('self',    'j', '_v != v2_vm_accumulator'),
+    0x79: ('mem',     'j', '_v != v2_vm_accumulator'),
+    0x7A: ('partner', 'j', '_v != v2_vm_accumulator'),
+    0x7B: ('rand',    'j', '_v != v2_vm_accumulator'),
+    0x7C: ('lit',     'j', '(int16_t)v2_vm_accumulator >= (int16_t)_v'),
+    0x7D: ('self',    'j', '(int16_t)v2_vm_accumulator >= (int16_t)_v'),
+    0x7E: ('mem',     'j', '(int16_t)v2_vm_accumulator >= (int16_t)_v'),
+    0x7F: ('partner', 'j', '(int16_t)v2_vm_accumulator >= (int16_t)_v'),
+    0x80: ('rand',    'j', '(int16_t)v2_vm_accumulator >= (int16_t)_v'),
+    0x81: ('lit',     'j', '(int16_t)v2_vm_accumulator < (int16_t)_v'),
+    0x82: ('self',    'j', '(int16_t)v2_vm_accumulator < (int16_t)_v'),
+    0x83: ('mem',     'j', '(int16_t)v2_vm_accumulator < (int16_t)_v'),
+    0x84: ('partner', 'j', '(int16_t)v2_vm_accumulator < (int16_t)_v'),
+    0x85: ('rand',    'j', '(int16_t)v2_vm_accumulator < (int16_t)_v'),
+    0x86: ('lit',     'c', '_v == v2_vm_accumulator'),
+    0x87: ('self',    'c', '_v == v2_vm_accumulator'),
+    0x88: ('mem',     'c', '_v == v2_vm_accumulator'),
+    0x89: ('partner', 'c', '_v == v2_vm_accumulator'),
+    0x8B: ('lit',     'c', '_v != v2_vm_accumulator'),
+    0x8C: ('self',    'c', '_v != v2_vm_accumulator'),
+    0x8D: ('mem',     'c', '_v != v2_vm_accumulator'),
+    0x8E: ('partner', 'c', '_v != v2_vm_accumulator'),
+    0x8F: ('rand',    'c', '_v != v2_vm_accumulator'),
+}
+
+def inline_wave2(op, body, tgt, nxt):
+    if op == 0x1C:   # sub_1443d: [cur+OBJ_ANIM_TIMER] != 0 ? skip : jump
+        return ['{ uint16_t _t = vm.field_r(OBJ_ANIM_TIMER);',
+                f'  vm.pc = (_t != 0) ? 0x{nxt:04X} : 0x{tgt:04X}; }}']
+    e = _CMPBR.get(op)
+    if e is None:
+        return None
+    fetch, kind, cond = e
+    L = ['{']
+    if fetch == 'lit':
+        L.append(f'  const uint16_t _v = 0x{_imm16(body):04X};')
+    elif fetch == 'self':
+        a = _self_addr(body[0])
+        L.append(f'  uint16_t _a = {a};')
+        L.append('  vm.si_track = (uint16_t)(_a - OBJ_FIELD_BASE);  // ch1: slot base in SI')
+        L.append('  const uint16_t _v = vm.ds_read(_a);')
+    elif fetch == 'mem':
+        a = _imm16(body)
+        L.append(f'  vm.si_track = 0x{a:04X};  // ch2: address in SI')
+        L.append(f'  const uint16_t _v = vm.ds_read(0x{a:04X});')
+    elif fetch == 'partner':
+        # read_indexed_field_1995: si_track = cur obj, di_track = slot
+        L.append('  uint16_t _si = vm.global_r(DS_CUR_OBJ);')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});')
+        L.append(f'  // partner.{ex.field_name(body[0])}')
+        L.append('  vm.si_track = _si; vm.di_track = _di;')
+        L.append('  const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));')
+    elif fetch == 'rand':
+        L.append('  const uint16_t _v = v2_vm_read_random(vm);')
+    if kind == 'j':
+        L.append(f'  vm.pc = ({cond}) ? 0x{tgt:04X} : 0x{nxt:04X};')
+    else:
+        L.append(f'  if ({cond}) {{')
+        L.append('      ObjRef{vm, vm.global_r(DS_CUR_OBJ)}'
+                 f'.w16(OBJ_ALT_PC, 0x{nxt:04X});  // do_call_jump: return pc')
+        L.append(f'      vm.pc = 0x{tgt:04X};')
+        L.append(f'  }} else vm.pc = 0x{nxt:04X};')
+    L.append('}')
+    return L
+
 def handler_map():
     src = open('src/sdl/v2_vm.cpp').read()
     tbl = {}
@@ -178,6 +267,11 @@ def transpile(cid, outdir='src/sdl/gen'):
         if kind == 'fall':
             try:
                 inl = inline_wave1(op, body, pc + ln)
+            except Exception:
+                inl = None
+        elif kind == 'br' and tgt is not None:
+            try:
+                inl = inline_wave2(op, body, tgt, pc + ln)
             except Exception:
                 inl = None
         if inl is not None:
