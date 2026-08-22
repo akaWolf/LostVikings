@@ -264,6 +264,10 @@ def walk(chunk_id, tmpl_indices, table, extra_entries=(), rec_scan=False):
         pc = struct.unpack_from('<H', d, off)[0]
         if pc >= 0x600 and pc < len(d):
             entries.setdefault(pc, f'rec_{t:02X}')
+            # #96: the spawn path (sub_13e52) enters at P+3 — OBJ_PC is set
+            # to record[+3]+3; both strands are live (see the #95 op_14 note).
+            if pc + 3 < len(d):
+                entries.setdefault(pc + 3, f'rec_{t:02X}+3')
         elif t > 0 and pc == 0:
             break
         t += 1

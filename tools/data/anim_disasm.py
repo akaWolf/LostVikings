@@ -92,6 +92,11 @@ def walk_anim(cid, entries, dynlens):
             seen[pc] = cmd   # dynamic target (loop head) — reached via loopstart
         elif kind == 'stop':
             seen[pc] = cmd
+            # #96: 0x0E/0x0F end the FRAME, not the stream — OBJ_ANIM_PC saves
+            # pc+1+operands and the next frame resumes there. Only 0x1A
+            # (end_anim, bx=FFFF) truly terminates.
+            if cmd != 0x1A:
+                q.append(pc + 1 + sch[1])
         elif kind == 'var':
             nxts = dynlens.get(pc)
             seen[pc] = cmd
@@ -99,8 +104,20 @@ def walk_anim(cid, entries, dynlens):
                 for b1 in nxts:
                     if 0 < b1 < len(d):
                         q.append(b1)
-            else:
-                stops[cmd] += 1   # unmeasured VAR — needs corpus coverage
+            # #96: static superset of possible payload lengths — consumption
+            # depends on the object's sub-sprite window (do-while over
+            # [ANIM_SLOT..ANIM_SLOT_END), masked paths may eat 0). A pushed
+            # pc only survives if it decodes as a valid command (<= 0x1A);
+            # runtime never lands on the dead extras, and the gen's semantics
+            # on ANY bx equal the loop's (both call exec_anim_cmd).
+            if cmd in (0x08, 0x0A):
+                ks = range(2, 41, 2)      # 2 bytes per sub-sprite, 1..20 slots
+            else:                          # 0x01 / 0x0C / 0x13: byte per slot
+                ks = range(0, 25)          # masked may eat 0; live max 24
+            for k in ks:
+                npc = pc + 1 + k
+                if npc < len(d) and d[npc] <= 0x1A:
+                    q.append(npc)
     return d, seen, stops
 
 def main():

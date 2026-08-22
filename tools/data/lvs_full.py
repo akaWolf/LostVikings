@@ -24,7 +24,13 @@ spec2 = importlib.util.spec_from_file_location('dc', 'tools/data/decompile.py')
 dc = importlib.util.module_from_spec(spec2)
 spec2.loader.exec_module(dc)
 
-def full_walk(cid, with_entries=False):
+def full_walk(cid, with_entries=False, rec_scan=False):
+    """rec_scan=True (the GEN model, #96): seed entries from EVERY record
+    slot — spawn codes are runtime-retargeted data (e.g. BBLS writes
+    0xD1/0xD2/0xD8 into ds:0x25BF), so any valid record can become an
+    entry. Phantom entries from code-overlay slots are harmless in the
+    generated executor (its semantics on ANY pc equal the interpreter's);
+    the .lvs disassembly keeps the STRICT model (rec_scan=False)."""
     table = dz.load_draft()
     pt = dz.spawn_entries()
     dyn = set()
@@ -34,7 +40,7 @@ def full_walk(cid, with_entries=False):
             if t == cid:
                 dyn.add(pc)
     d, entries, seen, stops, parent, addrs, anim_e = dz.walk(
-        cid, pt.get(cid, set()), table, extra_entries=dyn)
+        cid, pt.get(cid, set()), table, extra_entries=dyn, rec_scan=rec_scan)
     if with_entries:
         return d, seen, table, entries
     return d, seen, table
@@ -104,7 +110,10 @@ def anim_layer(cid):
     dynlens, dynpcs = ad.load_dyn(g.glob('/tmp/animdump/*.txt'))
     table = dz.load_draft()
     pt = dz.spawn_entries()
-    _, _, _, _, _, _, anim_entries = dz.walk(cid, pt.get(cid, set()), table)
+    # #96: rec_scan — op_19 operands inside record-seeded strands feed the
+    # anim entry set too (the gen model covers every record's code).
+    _, _, _, _, _, _, anim_entries = dz.walk(cid, pt.get(cid, set()), table,
+                                             rec_scan=True)
     entries = set(anim_entries) | dynpcs.get(cid, set())
     d, seen, stops = ad.walk_anim(cid, entries, dynlens.get(cid, {}))
     out = {}
@@ -129,7 +138,12 @@ def anim_layer(cid):
                 ln = next(iter(nxts)) - pc
                 if 0 < ln <= 64:
                     out[pc] = (cmd, ln, 'fall', None)
-            # ambiguous / unmeasured VAR lengths stay as blob bytes
+                    continue
+            # #96: unmeasured/ambiguous VAR — include anyway. The anim gen
+            # only needs the cmd byte (exec_anim_cmd consumes operands and
+            # advances anim_bx itself); the walker already pushed the static
+            # superset of continuations.
+            out[pc] = (cmd, None, 'var', None)
     return out
 
 def emit_structured(cid):

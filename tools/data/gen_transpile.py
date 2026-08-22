@@ -106,14 +106,14 @@ def inline_wave1(op, body, nxt):
     elif op in (0x5B, 0x5E, 0x64):       # partner.F op= acc via 1995_target:
         oper = {0x5B: '+', 0x5E: '-', 0x64: '|'}[op]   # si_track=cur, di_track=slot
         L.append(f'{{ uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[0])} (indexed_1995_target)')
         L.append('  vm.si_track = _si; vm.di_track = _di;')
         L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
         L.append(f'  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) {oper} v2_vm_accumulator)); }}')
     elif op == 0x61:                     # field_addr_A: PARTNER, both tracks
         L.append(f'{{ uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[0])} (field_addr_A)')
         L.append('  vm.si_track = _si; vm.di_track = _di;')
         L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
@@ -199,7 +199,7 @@ def inline_wave2(op, body, tgt, nxt):
     elif fetch == 'partner':
         # read_indexed_field_1995: si_track = cur obj, di_track = slot
         L.append('  uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[0])}')
         L.append('  vm.si_track = _si; vm.di_track = _di;')
         L.append('  const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));')
@@ -255,7 +255,7 @@ def _bt_fetch(kind, body):
         return L, f'((_fv & 0x{_mask(idx1):04X}) ? 1 : 0)'
     if kind == '15445':
         L.append('  uint16_t _obj = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{_fcol(body[1]) - 0x14E5:04X});')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
         L.append(f'  // partner.{ex.field_name(body[1])}')
         L.append('  vm.di_track = _di;')
         L.append('  uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));')
@@ -423,7 +423,7 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
             L.append(f'  vm.ds_write(0x{a:04X}, (uint16_t)((vm.ds_read(0x{a:04X}) & 0x{c:04X}) | v2_vm_accumulator));')
         elif op == 0x9E:    # partner.F via 1995_target (si/di tracks!)
             L.append('  uint16_t _si = vm.global_r(DS_CUR_OBJ);')
-            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[1]) - 0x14E5:04X});')
+            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
             L.append('  vm.si_track = _si; vm.di_track = _di;')
             L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
             L.append(f'  vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x{c:04X}) | v2_vm_accumulator));')
@@ -440,7 +440,7 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
         elif op in (0xA4, 0xA7):   # partner.F |=/^= acc (BOTH tracks per body)
             oper = '|' if op == 0xA4 else '^'
             L.append('  uint16_t _obj = vm.global_r(DS_CUR_OBJ);')
-            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{_fcol(body[1]) - 0x14E5:04X});')
+            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{(_fcol(body[1]) - 0x14E5) & 0xFFFF:04X});')
             L.append('  vm.si_track = _obj; vm.di_track = _di;')
             L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
             L.append(f'  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) {oper} v2_vm_accumulator));')
@@ -460,7 +460,7 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
     if op == 0xBE:   # via 1995_target (si/di tracks)
         return ['v2_vm_accumulator <<= 8;',
                 '{ uint16_t _si = vm.global_r(DS_CUR_OBJ);',
-                f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});',
+                f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{(_fcol(body[0]) - 0x14E5) & 0xFFFF:04X});',
                 '  vm.si_track = _si; vm.di_track = _di;',
                 '  vm.ds_write((uint16_t)(_di + OBJ_FIELD_BASE), v2_vm_accumulator); }',
                 f'vm.pc = 0x{nxt:04X};']
@@ -634,7 +634,7 @@ def _ch_get(L, var, chan, body, o):
         return 2
     if chan == 3:
         L.append('  { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'    _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x{_fcol(body[o]) - 0x14E5:04X});')
+        L.append(f'    _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x{(_fcol(body[o]) - 0x14E5) & 0xFFFF:04X});')
         L.append('    vm.si_track = _o3; vm.di_track = _t3; }')
         L.append(f'  const uint16_t {var} = vm.ds_read((uint16_t)(_t3 + OBJ_FIELD_BASE));')
         return 1
@@ -661,7 +661,7 @@ def _ch_set(L, chan, body, o, val_expr):
         return 2
     if chan == 3:
         L.append('  { uint16_t _so = vm.global_r(DS_CUR_OBJ);')
-        L.append(f'    uint16_t _sd = (uint16_t)(vm.ds_read((uint16_t)(_so + OBJ_PARTNER)) + 0x{_fcol(body[o]) - 0x14E5:04X});')
+        L.append(f'    uint16_t _sd = (uint16_t)(vm.ds_read((uint16_t)(_so + OBJ_PARTNER)) + 0x{(_fcol(body[o]) - 0x14E5) & 0xFFFF:04X});')
         L.append('    vm.si_track = _so; vm.di_track = _sd;')
         L.append(f'    vm.ds_write((uint16_t)(_sd + OBJ_FIELD_BASE), {val_expr}); }}')
         return 1
@@ -1246,7 +1246,7 @@ def handler_map():
     return tbl
 
 def transpile(cid, outdir='src/sdl/gen'):
-    d, seen, table = lf.full_walk(cid)
+    d, seen, table = lf.full_walk(cid, rec_scan=True)   # #96: all records are entries
     tbl = handler_map()
     LAY = dz.load_layout_names()
     lines = []
