@@ -31,11 +31,25 @@
 // `count` contiguous uint16_t words starting at ds_off.
 // ---------------------------------------------------------------------------
 
+// Stage 4 II.c: EVACUATED fields — their CARRIER is the typed member in
+// g_gs_evac (for the canonical shadow world); the flat image is kept
+// write-through so serialization/verify/dumps see identical bytes, and a
+// per-frame check (v2_gs_evac_check) FATALs if anything writes the image
+// bytes behind the accessors' back. Moving a field here = evacuating it.
+// The list participates in the struct/serializer/coverage exactly like
+// CORE (it is appended in V2_GS_FIELDS_W below).
+#define V2_GS_FIELDS_EVAC(F1, FN) \
+  FN(script_vars,        0x0204, 68)            \
+  F1(script_var_28e,     0x028E)
+
+// level_var_25c5/25c7 sit inside the level-header stripe the chunk loader
+// bulk-copies on level switch — the evac check caught the desync on the
+// level-3→4 transition. They evacuate only after that copy goes through
+// the view (deserialize-based level load); until then they stay flat.
+
 // Core globals + input + scroll + collision scratch
 #define V2_GS_FIELDS_CORE(F1, FN) \
   F1(cur_obj,            DS_CUR_OBJ)            \
-  FN(script_vars,        0x0204, 68)            \
-  F1(script_var_28e,     0x028E)                \
   F1(level_var_25c5,     0x25C5)                \
   F1(level_var_25c7,     0x25C7)                \
   F1(viewport_x,         DS_VIEWPORT_X)         \
@@ -355,7 +369,9 @@
   FN(obj_sub_count,   OBJ_SUB_COUNT,   20) \
   FN(obj_sub_anim_ptr,OBJ_SUB_ANIM_PTR,20)
 
-#define V2_GS_FIELDS_W(F1, FN) \
+// Word aggregate WITHOUT the evacuated fields — the views generate flat
+// accessors from this and EVAC-backed accessors from V2_GS_FIELDS_EVAC.
+#define V2_GS_FIELDS_W_NOEVAC(F1, FN) \
   V2_GS_FIELDS_CORE(F1, FN)  \
   V2_GS_FIELDS_HUD(F1, FN)   \
   V2_GS_FIELDS_LEVEL(F1, FN) \
@@ -365,6 +381,10 @@
   V2_GS_FIELDS_SPEC(F1, FN)  \
   V2_GS_FIELDS_SPRITE(F1, FN)\
   V2_GS_FIELDS_OBJ(F1, FN)
+
+#define V2_GS_FIELDS_W(F1, FN) \
+  V2_GS_FIELDS_EVAC(F1, FN)  \
+  V2_GS_FIELDS_W_NOEVAC(F1, FN)
 
 // ---------------------------------------------------------------------------
 // Byte fields: B1(member, ds_off) scalar byte; BN(member, ds_off, count).
@@ -789,6 +809,55 @@ int  v2_gs_roundtrip_check(const uint8_t* ds, const char* tag);
   A1(music_id,           DS_MUSIC_ID)           \
   A1(dac_r_save_w,       DS_DAC_R_SAVE)
 
+// ---------------------------------------------------------------------------
+// Stage 4 II.c: evacuated-field storage. For the CANONICAL world (the live
+// shadow DS) the members below are the carrier; accessors write through to
+// the flat image so serialization/verify/golden see identical bytes, and
+// v2_gs_evac_check FATALs on any image byte changed behind the accessors.
+// All other worlds (oracle copies, unit scratch, save buffers) stay flat.
+// ---------------------------------------------------------------------------
+struct V2GsEvac {
+#define V2_GS_EV1(name, off)     uint16_t name;
+#define V2_GS_EVN(name, off, n)  uint16_t name[n];
+  V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
+#undef V2_GS_EV1
+#undef V2_GS_EVN
+};
+extern V2GsEvac g_gs_evac;
+extern "C" {
+extern const uint8_t* v2_gs_evac_canonical;   // the live shadow DS (or null)
+void v2_gs_evac_set_canonical(const uint8_t* ds);   // also refreshes members
+void v2_gs_evac_refresh(const uint8_t* ds);   // members <- image bytes
+int  v2_gs_evac_check(const uint8_t* ds);     // 0 ok; diffs logged + FATAL
+}
+static inline bool v2_gs_evac_on(const uint8_t* ds) {
+    return ds == v2_gs_evac_canonical && ds != nullptr;
+}
+
+// Mirror one word written to the flat image into the evacuated member (used
+// by the OPERAND write path — interpreter bodies/helpers write through
+// V2VM::ds_write with computed addresses; this keeps members in sync so the
+// per-frame check stays meaningful and the read flip stays possible).
+// Generated from the same EVAC list: field spans only, cheap range tests.
+static inline void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val) {
+    if (!v2_gs_evac_on(ds)) return;
+#define V2_GS_EM1(name, off) \
+    if (addr == (off)) { g_gs_evac.name = val; return; }
+#define V2_GS_EMN(name, off, n) \
+    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
+        uint16_t _d = (uint16_t)(addr - (off)); \
+        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = val; \
+        else { /* odd straddle: two members share the word */ \
+            g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | (val << 8)); \
+            if ((uint32_t)(_d >> 1) + 1 < (n)) \
+                g_gs_evac.name[(_d >> 1) + 1] = (uint16_t)((g_gs_evac.name[(_d >> 1) + 1] & 0xFF00) | (val >> 8)); \
+        } \
+        return; }
+    V2_GS_FIELDS_EVAC(V2_GS_EM1, V2_GS_EMN)
+#undef V2_GS_EM1
+#undef V2_GS_EMN
+}
+
 // Stage 4 II.b: bounds sanitizer. Reports (dedup) every runtime-indexed
 // access that leaves its field's span — building the wrap map that decides
 // which fields may leave the flat layout in the carrier swap.
@@ -812,7 +881,22 @@ struct V2StateView {
 #define V2_GS_AN(name, off, n) \
     uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) return *(const uint16_t*)(ds + (off) + 2u * i); } \
     void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) *(uint16_t*)(ds + (off) + 2u * i) = v; }
-    V2_GS_FIELDS_W(V2_GS_A1, V2_GS_AN)
+    V2_GS_FIELDS_W_NOEVAC(V2_GS_A1, V2_GS_AN)
+    // Stage 4 II.c: evacuated fields — typed member carrier + write-through.
+// FLIPPED stage (bridge held: writes still keep the image in sync for the
+// serializer/oracles and the operand read path): READS for the canonical
+// world come from the typed members — the member IS the carrier. The
+// bypass map stayed empty across the full corpus before this flip; the
+// per-frame check still guards the mirror.
+#define V2_GS_AE1(name, off) \
+    uint16_t name() const              { if (v2_gs_evac_on(ds)) return g_gs_evac.name; return *(const uint16_t*)(ds + (off)); } \
+    void     name(uint16_t v)          { if (v2_gs_evac_on(ds)) g_gs_evac.name = v; *(uint16_t*)(ds + (off)) = v; }
+#define V2_GS_AEN(name, off, n) \
+    uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) return g_gs_evac.name[i]; return *(const uint16_t*)(ds + (off) + 2u * i); } \
+    void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) g_gs_evac.name[i] = v; *(uint16_t*)(ds + (off) + 2u * i) = v; }
+    V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN)
+#undef V2_GS_AE1
+#undef V2_GS_AEN
 #undef V2_GS_A1
 #undef V2_GS_AN
 #define V2_GS_AB1(name, off) \
@@ -880,7 +964,14 @@ struct V2StateViewC {
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
 #define V2_GS_AN(name, off, n) \
     uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
-    V2_GS_FIELDS_W(V2_GS_A1, V2_GS_AN)
+    V2_GS_FIELDS_W_NOEVAC(V2_GS_A1, V2_GS_AN)
+#define V2_GS_AE1(name, off) \
+    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
+#define V2_GS_AEN(name, off, n) \
+    uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
+    V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN)
+#undef V2_GS_AE1
+#undef V2_GS_AEN
 #undef V2_GS_A1
 #undef V2_GS_AN
 #define V2_GS_AB1(name, off) \

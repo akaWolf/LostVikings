@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <unistd.h>   // _exit — a barrier-parked peer thread deadlocks exit()
 
 static uint8_t g_cov[0x10000];      // 0 = raw, 1 = field-owned
 static bool    g_cov_built = false;
@@ -190,3 +191,66 @@ extern "C" void v2_gs_bounds_note(uint32_t base, uint32_t len, uint32_t off) {
             (unsigned long long)total);
 }
 #endif
+
+// ============================================================================
+// Stage 4 II.c: evacuated-field storage + integrity check.
+// ============================================================================
+V2GsEvac g_gs_evac;
+extern "C" const uint8_t* v2_gs_evac_canonical = nullptr;
+
+extern "C" void v2_gs_evac_refresh(const uint8_t* ds) {
+#define V2_GS_EV1(name, off) \
+    g_gs_evac.name = *(const uint16_t*)(ds + (off));
+#define V2_GS_EVN(name, off, n) \
+    for (uint32_t i = 0; i < (n); i++) \
+        g_gs_evac.name[i] = *(const uint16_t*)(ds + (off) + 2u * i);
+    V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
+#undef V2_GS_EV1
+#undef V2_GS_EVN
+}
+
+extern "C" void v2_gs_evac_set_canonical(const uint8_t* ds) {
+    v2_gs_evac_canonical = ds;
+    if (ds) v2_gs_evac_refresh(ds);
+}
+
+// Members vs image bytes. A diff means something wrote the image behind the
+// accessors (a bulk writer not yet routed through the view) — hard bug.
+extern "C" int v2_gs_evac_check(const uint8_t* ds) {
+    if (!v2_gs_evac_on(ds)) return 0;
+    int diffs = 0;
+#define V2_GS_EV_CHK(name, off, idx_expr, img_expr) \
+    do { uint16_t _img = (img_expr); \
+         if ((idx_expr) != _img) { \
+             if (diffs < 8) \
+                 fprintf(stderr, "V2-GS-EVAC-DIFF: %s @%04X member=%04X image=%04X\n", \
+                         #name, (unsigned)(off), (idx_expr), _img); \
+             diffs++; } } while (0)
+#define V2_GS_EV1(name, off) \
+    V2_GS_EV_CHK(name, (off), g_gs_evac.name, *(const uint16_t*)(ds + (off)));
+#define V2_GS_EVN(name, off, n) \
+    for (uint32_t i = 0; i < (n); i++) \
+        V2_GS_EV_CHK(name, (off) + 2u * i, g_gs_evac.name[i], \
+                     *(const uint16_t*)(ds + (off) + 2u * i));
+    V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
+#undef V2_GS_EV1
+#undef V2_GS_EVN
+#undef V2_GS_EV_CHK
+    if (diffs) {
+        // Bridge stage: reads still come from the image, so a desync is a
+        // MAP entry (who bypasses the view), not a behavior change. After
+        // the bypass writers are routed, V2_GS_EVAC_STRICT=1 turns this
+        // into the hard gate and the read flip closes stage 4.
+        static int strict = -1;
+        if (strict < 0) strict = getenv("V2_GS_EVAC_STRICT") ? 1 : 0;
+        if (strict) {
+            fprintf(stderr, "FATAL: stage-4 evac desync — %d words changed "
+                    "behind the view accessors\n", diffs);
+            fflush(stderr);
+            _exit(1);
+        }
+        // report-only: resync so each bypass site logs once per change
+        v2_gs_evac_refresh(ds);
+    }
+    return diffs;
+}

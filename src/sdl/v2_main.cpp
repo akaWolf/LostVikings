@@ -12,6 +12,7 @@
 #include <cstring>
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
+#include "v2_gamestate.h"   // stage 4 II.c: evac refresh after teleport load
 #include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
 
@@ -144,6 +145,10 @@ int main(int argc, char* argv[]) {
     { const char* lp = getenv("V2_LOAD_STATE");
       if (lp) {
           if (v2_state_load(lp)) { fprintf(stderr, "V2: teleport load FAILED\n"); return 1; }
+          // Stage 4 II.c: the load rewrote the image wholesale — refresh
+          // the evacuated members before the first frame runs.
+          { extern uint8_t* v2_vm_get_shadow_ds();
+            v2_gs_evac_refresh(v2_vm_get_shadow_ds()); }
           const char* sp = getenv("V2_SAVE_STATE");
           if (sp) v2_state_save(sp);
       } }

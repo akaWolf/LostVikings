@@ -23,7 +23,8 @@
 #include <atomic>
 #include <chrono>
 #ifndef _WIN32
-#include <unistd.h>   // _exit, close, syscall — some libcs pull these in
+#include <unistd.h>
+#include <execinfo.h>  // stage-4 evac trap backtrace   // _exit, close, syscall — some libcs pull these in
                       // transitively, Ubuntu's does not.
 #endif
 #include <algorithm>
@@ -6574,6 +6575,11 @@ static void v2_startup(uint8_t* s) {
     }
     // s pointer must be refreshed after load (it IS v2_vm_shadow_ds)
 
+    // Stage 4 II.c: the live shadow becomes the canonical evac world —
+    // evacuated fields are carried by g_gs_evac members from here on
+    // (write-through keeps the image identical; per-frame check guards).
+    v2_gs_evac_set_canonical(s);
+
     printf("V2-STARTUP: running one-time init (sub_12948..sub_108b8)\n");
     v2_dos_init_12948(s);   // PRNG seed
     v2_open_data_dat_12989(s);   // DATA.DAT open + header
@@ -9241,6 +9247,10 @@ static void v2_vm_frame_update(uint8_t* ds) {
     // Each phase runs at the same time as the original → no timing artifacts.
     v2_vm_acc_base = v2_vm_shadow_ds;
 
+    // Stage 4 II.c: evacuated members must equal their image bytes on every
+    // frame boundary — any divergence means a writer bypassed the view.
+    v2_gs_evac_check(v2_vm_shadow_ds);
+
 
     // word_3287C (DS:0xA39C): NOT reset here anymore. Render thread (under
     // shared mutex with orig render_callback) DECs shadow[0xA39C] atomically
@@ -9314,6 +9324,9 @@ struct V2VM {
     // DS write: write to shadow if within range (never write to real DS)
     void ds_write(uint16_t addr, uint16_t val) {
         if (addr < V2_VM_SHADOW_SIZE - 1) {
+            // stage-4 II.c: the operand write path mirrors evacuated fields
+            // (interpreter bodies/helpers reach them with computed addresses).
+            v2_gs_evac_mirror_w(shadow, addr, val);
             *(uint16_t*)(shadow + addr) = val;
         }
     }
