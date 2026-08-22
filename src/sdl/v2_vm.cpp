@@ -5654,18 +5654,18 @@ static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
 // (POST_FLIP1 + the sub_115d2 pass block).
 static void v2_flash_timers_12d2c(uint8_t* s) {
     if (v2gs(s).shake_gate_x() != 0) {
-        v2gs(s).shake_gate_x_ref() -= 1;
+        v2gs(s).shake_gate_x((uint16_t)(v2gs(s).shake_gate_x() - 1));
         if (v2gs(s).shake_src_x() != 0)
-            v2gs(s).shake_x_ref() ^= v2gs(s).shake_src_x();
+            v2gs(s).shake_x((uint16_t)(v2gs(s).shake_x() ^ v2gs(s).shake_src_x()));
         else
             v2gs(s).shake_x(0);
     } else {
         v2gs(s).shake_x(0);
     }
     if (v2gs(s).shake_gate_y() != 0) {
-        v2gs(s).shake_gate_y_ref() -= 1;
+        v2gs(s).shake_gate_y((uint16_t)(v2gs(s).shake_gate_y() - 1));
         if (v2gs(s).shake_src_y() != 0)
-            v2gs(s).shake_y_ref() ^= v2gs(s).shake_src_y();
+            v2gs(s).shake_y((uint16_t)(v2gs(s).shake_y() ^ v2gs(s).shake_src_y()));
         else
             v2gs(s).shake_y(0);
     } else {
@@ -7693,7 +7693,7 @@ static void v2_run_transition_chain(uint8_t* shadow) {
     // 2. sub_1774f: level-exit music dispatch via off_3285A[ds:0x25B9 & 0xFF]
     v2_music_dispatch(shadow, 0x25B9);
     // 3. INC word_2880F (ds:0x032F)
-    v2gs(shadow).transition_ref() += 1;
+    v2gs(shadow).transition((uint16_t)(v2gs(shadow).transition() + 1));
     // 4. sub_14207: full VM pass (with priority object loop)
     v2_vm_pass_14207(shadow);   // extracted exact sweep (live [372]/[376] re-reads)
     // 5. JMP sub_11080: level loader. Loads new level, clears state, runs sub_12345.
@@ -7795,7 +7795,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // instead of ds:0x25B7. Typically case 2 (fade) here; sub_11080 will reload
             // the new level's track via sub_17749 with new ds:0x25B7.
             v2_music_dispatch(shadow, 0x25B9);
-            v2gs(shadow).transition_ref() += 1; // INC word_2880F
+            v2gs(shadow).transition((uint16_t)(v2gs(shadow).transition() + 1)); // INC word_2880F
             // sub_14207: full VM pass (with priority object loop)
             // TRANSITION VERIFY: compare sub-sprite Y before VM, after VM, after sub_11080
             {   // Wider verify: check ALL sub-sprite Y range (0x74D..0x84D) + page copies
@@ -14512,7 +14512,7 @@ static void v2_vm_op_55(V2VM& vm) {
         v2gs(vm.shadow).rng_timer(ax);             // word_28832 = ax
         // RCL ax,3 — 17-bit rotate (CF=0 from dispatch SHL)
         { uint32_t v17 = (uint32_t)ax; v17 = ((v17 << 3) | (v17 >> 14)) & 0x1FFFF; ax = (uint16_t)(v17 & 0xFFFF); }
-        v2gs(vm.shadow).rng_timer_ref() ^= ax;            // XOR word_28832, ax
+        v2gs(vm.shadow).rng_timer((uint16_t)(v2gs(vm.shadow).rng_timer() ^ ax));            // XOR word_28832, ax
         v2_vm_accumulator = ax; // Original returns ax (rotated), NOT the XOR'd memory
     } else {
         // LCG: orig: eax=dword_30b19; edx=0x15A4E35; mul edx; add eax,1;
@@ -20840,7 +20840,7 @@ static void v2_demo_input_12d72(uint8_t* s) {
             v2gs(s).scratch_3d0(0xFFFF);
         }
         if (v2gs(s).scratch_3ce() != 0) {
-            v2gs(s).scratch_3ce_ref() -= 1;
+            v2gs(s).scratch_3ce((uint16_t)(v2gs(s).scratch_3ce() - 1));
             v2gs(s).input_accum_ref() |= v2gs(s).scratch_3d0();
         } else {
             // loc_12dfa: pop (keys,count) pair from the ds:0x2191 queue
@@ -20861,7 +20861,7 @@ static void v2_demo_input_12d72(uint8_t* s) {
             uint16_t cur = v2gs(s).input_keys();
             uint16_t prev = v2gs(s).scratch_3d0();
             if (cur == prev) {
-                v2gs(s).scratch_3ce_ref() += 1;
+                v2gs(s).scratch_3ce((uint16_t)(v2gs(s).scratch_3ce() + 1));
             } else {
                 // loc_12d9b: flush — bx loaded ONCE; the head+=2 changes the
                 // MEMORY word, not bx, so both stores land on bx+0x2191 and
@@ -21367,7 +21367,7 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
                 v2gs(shadow).scratch_3d0(0xFFFF);
             }
             if (v2gs(shadow).scratch_3ce() != 0) {
-                v2gs(shadow).scratch_3ce_ref() -= 1;
+                v2gs(shadow).scratch_3ce((uint16_t)(v2gs(shadow).scratch_3ce() - 1));
                 v2gs(shadow).input_accum_ref() |= v2gs(shadow).scratch_3d0();
             } else {
                 uint16_t bx = v2gs(shadow).obj_queue_head();
