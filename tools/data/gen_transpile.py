@@ -39,6 +39,94 @@ dz = lf.dz
 dc = lf.dc
 ex = load('ex', 'tools/data/expr.py')
 
+# ============================================================================
+# Stage B wave 1: inline emitters for the acc family. Each template is a
+# line-by-line copy of its verified handler body with the stream operands
+# folded to constants (field LUT resolved via the static DS, exactly what
+# the handler computed at runtime). si_track/di_track shadow-register
+# effects (task #15) are reproduced verbatim; DS access stays on the
+# vm.ds_read/ds_write methods so every verify ring keeps firing.
+# Returns list of C++ lines or None (-> keep the handler call).
+# ============================================================================
+def _fcol(idx):
+    """LUT16[(idx-0x6CBA)&0xFFFF] + OBJ_FIELD_BASE — the folded field column."""
+    import struct as st
+    lut = st.unpack_from('<H', ex.ds_static(), (idx - 0x6CBA) & 0xFFFF)[0]
+    return (lut + 0x14E5) & 0xFFFF
+
+def _self_addr(idx):
+    return (f'(uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x{_fcol(idx):04X})'
+            f' /* self.{ex.field_name(idx)} */')
+
+def _partner_addr(idx):
+    # 58/67/5B/5E/64 pattern: di = LUT[idx]; di += [cur+OBJ_PARTNER]; addr=di+14E5
+    return (f'(uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER))'
+            f' + 0x{_fcol(idx):04X}) /* partner.{ex.field_name(idx)} */')
+
+def _imm16(body):
+    import struct as st
+    return st.unpack_from('<H', body, 0)[0]
+
+def inline_wave1(op, body, nxt):
+    L = []
+    if op == 0x51:                       # v2_vm_op_load_acc_literal
+        L.append(f'v2_vm_accumulator = 0x{_imm16(body):04X};')
+    elif op == 0x52:                     # read_indexed_field: si_track = field addr
+        a = _self_addr(body[0])
+        L.append(f'{{ uint16_t _a = {a};')
+        L.append('  vm.si_track = (uint16_t)(_a - OBJ_FIELD_BASE);  // orig ch1: slot base in SI')
+        L.append('  v2_vm_accumulator = vm.ds_read(_a); }')
+    elif op == 0x53:                     # read_indirect: si_track = addr
+        a = _imm16(body)
+        L.append(f'vm.si_track = 0x{a:04X};')
+        L.append(f'v2_vm_accumulator = vm.ds_read(0x{a:04X});')
+    elif op == 0x54:                     # load_acc_indexed_1995: di_track only
+        L.append(f'{{ uint16_t _di = {_partner_addr(body[0])};')
+        L.append('  v2_vm_accumulator = vm.ds_read(_di);')
+        L.append('  vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }')
+    elif op == 0x56:                     # self.F = acc (no tracks)
+        L.append(f'vm.ds_write({_self_addr(body[0])}, v2_vm_accumulator);')
+    elif op == 0x57:                     # [addr] = acc (+ trap logging, folded)
+        a = _imm16(body)
+        if 0x3E4 <= a <= 0x413 or a in (0x302, 0x304):
+            return None                  # keep the handler: trap diagnostics
+        L.append(f'vm.ds_write(0x{a:04X}, v2_vm_accumulator);')
+    elif op == 0x58:                     # partner.F = acc, di_track
+        L.append(f'{{ uint16_t _a = {_partner_addr(body[0])};')
+        L.append('  vm.ds_write(_a, v2_vm_accumulator);')
+        L.append('  vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }')
+    elif op in (0x59, 0x5C, 0x5F, 0x62, 0x65):   # self.F op= acc (no tracks)
+        oper = {0x59: '+', 0x5C: '-', 0x5F: '&', 0x62: '|', 0x65: '^'}[op]
+        L.append(f'{{ uint16_t _a = {_self_addr(body[0])};')
+        L.append(f'  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) {oper} v2_vm_accumulator)); }}')
+    elif op in (0x5A, 0x5D, 0x60, 0x63, 0x66):   # [addr] op= acc
+        oper = {0x5A: '+', 0x5D: '-', 0x60: '&', 0x63: '|', 0x66: '^'}[op]
+        a = _imm16(body)
+        L.append(f'vm.ds_write(0x{a:04X}, (uint16_t)(vm.ds_read(0x{a:04X}) {oper} v2_vm_accumulator));')
+    elif op in (0x5B, 0x5E, 0x64):       # partner.F op= acc via 1995_target:
+        oper = {0x5B: '+', 0x5E: '-', 0x64: '|'}[op]   # si_track=cur, di_track=slot
+        L.append(f'{{ uint16_t _si = vm.global_r(DS_CUR_OBJ);')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});')
+        L.append(f'  // partner.{ex.field_name(body[0])} (indexed_1995_target)')
+        L.append('  vm.si_track = _si; vm.di_track = _di;')
+        L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+        L.append(f'  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) {oper} v2_vm_accumulator)); }}')
+    elif op == 0x61:                     # field_addr_A: PARTNER, both tracks
+        L.append(f'{{ uint16_t _si = vm.global_r(DS_CUR_OBJ);')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});')
+        L.append(f'  // partner.{ex.field_name(body[0])} (field_addr_A)')
+        L.append('  vm.si_track = _si; vm.di_track = _di;')
+        L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+        L.append('  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) & v2_vm_accumulator)); }')
+    elif op == 0x67:                     # partner.F ^= acc, di_track only
+        L.append(f'{{ uint16_t _a = {_partner_addr(body[0])};')
+        L.append('  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) ^ v2_vm_accumulator));')
+        L.append('  vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }')
+    else:
+        return None
+    L.append(f'vm.pc = 0x{nxt:04X};')
+    return L
+
 def handler_map():
     src = open('src/sdl/v2_vm.cpp').read()
     tbl = {}
@@ -86,7 +174,19 @@ def transpile(cid, outdir='src/sdl/gen'):
         w(f'    L_{pc:04X}:')
         w(f'        g_last_pc = 0x{pc:04X};')
         w(f'        G_PRE(0x{pc:04X}, 0x{op:02X});')
-        w(f'        {h}(vm);{cmt}')
+        inl = None
+        if kind == 'fall':
+            try:
+                inl = inline_wave1(op, body, pc + ln)
+            except Exception:
+                inl = None
+        if inl is not None:
+            if e:
+                w(f'        // inlined {h}: {e}')
+            for line in inl:
+                w(f'        {line}')
+        else:
+            w(f'        {h}(vm);{cmt}')
         w(f'        G_POST(0x{pc:04X}, 0x{op:02X});')
         w('        continue;')
     w('    }')
