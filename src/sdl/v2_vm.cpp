@@ -14845,6 +14845,39 @@ struct AnimCmdTrace {
 static AnimCmdTrace v2_anim_trace[16];
 static int v2_anim_trace_idx = 0;
 
+// Stage-1 anim-VM ground truth (V2_ANIM_DUMP=<file>): unique
+// (template, bx_before, cmd, bx_after) rows — bx_before is the position
+// AFTER the command byte. The anim commands have runtime-dependent
+// operand lengths (per-sub-sprite loops), so the live stream IS the
+// length oracle for the anim disassembler. Called from BOTH executors.
+static void v2_animdump_note(uint8_t* shadow, uint16_t bx_before,
+                             uint8_t cmd, uint16_t bx_after) {
+    static int _ad = -1;
+    static const char* _af = nullptr;
+    if (_ad < 0) { _af = getenv("V2_ANIM_DUMP"); _ad = _af ? 1 : 0; }
+    if (!_ad) return;
+    static std::set<uint64_t> _aseen;
+    static int _adirty = 0;
+    uint16_t tmpl = v2gs(shadow).template_chunk();
+    uint64_t key = ((uint64_t)tmpl << 40) |
+                   ((uint64_t)bx_before << 24) |
+                   ((uint64_t)cmd << 16) | bx_after;
+    if (_aseen.insert(key).second) _adirty++;
+    if (_adirty >= 32) {
+        _adirty = 0;
+        FILE* f = fopen(_af, "w");
+        if (f) {
+            for (uint64_t k : _aseen)
+                fprintf(f, "%04X %04X %02X %04X\n",
+                        (unsigned)(k >> 40),
+                        (unsigned)((k >> 24) & 0xFFFF),
+                        (unsigned)((k >> 16) & 0xFF),
+                        (unsigned)(k & 0xFFFF));
+            fclose(f);
+        }
+    }
+}
+
 #ifdef V2_GENCODE
 static bool v2_gen_anim_dispatch(V2VM& vm, uint16_t& anim_bx, int& max);
 #endif
@@ -14898,37 +14931,9 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
 
         uint16_t _anim_bx_before = anim_bx;
         bool _ok = v2_vm_exec_anim_cmd(vm, handler, anim_bx, cmd);
-        // Stage-1 anim-VM ground truth (V2_ANIM_DUMP=<file>): unique
-        // (template, bx_before, cmd, bx_after) — the anim commands have
-        // runtime-dependent operand lengths (per-sub-sprite loops), so the
-        // live stream IS the length oracle for the anim disassembler.
-        {
-            static int _ad = -1;
-            static const char* _af = nullptr;
-            if (_ad < 0) { _af = getenv("V2_ANIM_DUMP"); _ad = _af ? 1 : 0; }
-            if (_ad) {
-                static std::set<uint64_t> _aseen;
-                static int _adirty = 0;
-                uint16_t tmpl = v2gs(vm.shadow).template_chunk();
-                uint64_t key = ((uint64_t)tmpl << 40) |
-                               ((uint64_t)_anim_bx_before << 24) |
-                               ((uint64_t)cmd << 16) | anim_bx;
-                if (_aseen.insert(key).second) _adirty++;
-                if (_adirty >= 32) {
-                    _adirty = 0;
-                    FILE* f = fopen(_af, "w");
-                    if (f) {
-                        for (uint64_t k : _aseen)
-                            fprintf(f, "%04X %04X %02X %04X\n",
-                                    (unsigned)(k >> 40),
-                                    (unsigned)((k >> 24) & 0xFFFF),
-                                    (unsigned)((k >> 16) & 0xFF),
-                                    (unsigned)(k & 0xFFFF));
-                        fclose(f);
-                    }
-                }
-            }
-        }
+        // Stage-1 anim-VM ground truth (V2_ANIM_DUMP): shared helper —
+        // the gencode anim executors record the same stream.
+        v2_animdump_note(vm.shadow, _anim_bx_before, cmd, anim_bx);
 
         if (!_ok) {
             // Record trace entry
@@ -17523,6 +17528,33 @@ static void v2_vm_init_table() {
 // ============================================================================
 // Execute VM for one animation object
 // ============================================================================
+// Stage-1 disassembler ground truth (V2_PC_DUMP=<file>): unique
+// (template_chunk, pc, opcode) triples actually executed — the static
+// walker is validated against this live stream. Called from BOTH
+// executors (interpreter loop and the gencode G_PRE macro).
+static void v2_pcdump_note(uint8_t* shadow, uint16_t pc_before, uint8_t opcode) {
+    static int _pd = -1;
+    static const char* _pf = nullptr;
+    if (_pd < 0) { _pf = getenv("V2_PC_DUMP"); _pd = _pf ? 1 : 0; }
+    if (!_pd) return;
+    static std::set<uint64_t> _seen;
+    static int _dirty = 0;
+    uint16_t tmpl = v2gs(shadow).template_chunk();
+    uint64_t key = ((uint64_t)tmpl << 32) | ((uint32_t)pc_before << 8) | opcode;
+    if (_seen.insert(key).second) _dirty++;
+    if (_dirty >= 32) {
+        _dirty = 0;
+        FILE* f = fopen(_pf, "w");
+        if (f) {
+            for (uint64_t k : _seen)
+                fprintf(f, "%04X %04X %02X\n",
+                        (unsigned)(k >> 32), (unsigned)((k >> 8) & 0xFFFF),
+                        (unsigned)(k & 0xFF));
+            fclose(f);
+        }
+    }
+}
+
 // ============================================================================
 // Stage 3A gencode: transpiled object code (fetch-decode loop unrolled into
 // direct handler calls with static control flow). The generated functions
@@ -17584,6 +17616,7 @@ static int v2_gencode_enabled() {
         { const uint16_t _pcb = (PC); \
           const uint16_t _accb = v2_vm_accumulator; \
           V2_GEN_HASHSNAP \
+          v2_pcdump_note(vm.shadow, (PC), (OP)); \
           vm.pc = (uint16_t)((PC) + 1); \
           vm.si_track = (uint16_t)((OP) << 1);
 #define G_POST(PC, OP) \
@@ -17762,32 +17795,9 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 #endif
         (void)ds_hash_before_snap; (void)obj_hash_before_snap;
         uint8_t opcode = vm.read_u8();
-        // Stage-1 disassembler ground truth (V2_PC_DUMP=<file>): unique
-        // (template_chunk, pc, opcode) triples actually executed — the
-        // static walker is validated against this live stream.
-        {
-            static int _pd = -1;
-            static const char* _pf = nullptr;
-            if (_pd < 0) { _pf = getenv("V2_PC_DUMP"); _pd = _pf ? 1 : 0; }
-            if (_pd) {
-                static std::set<uint64_t> _seen;
-                static int _dirty = 0;
-                uint16_t tmpl = v2gs(shadow).template_chunk();
-                uint64_t key = ((uint64_t)tmpl << 32) | ((uint32_t)pc_before << 8) | opcode;
-                if (_seen.insert(key).second) _dirty++;
-                if (_dirty >= 32) {
-                    _dirty = 0;
-                    FILE* f = fopen(_pf, "w");
-                    if (f) {
-                        for (uint64_t k : _seen)
-                            fprintf(f, "%04X %04X %02X\n",
-                                    (unsigned)(k >> 32), (unsigned)((k >> 8) & 0xFFFF),
-                                    (unsigned)(k & 0xFF));
-                        fclose(f);
-                    }
-                }
-            }
-        }
+        // Stage-1 disassembler ground truth (V2_PC_DUMP): shared helper —
+        // the gencode path records the same stream from G_PRE.
+        v2_pcdump_note(shadow, pc_before, opcode);
         // Orig loc_142A6: MOV si,es:[bx]; AND si,0xFF; SHL si,1 — si enters
         // every handler as opcode*2 (task #15 shadow-register model).
         vm.si_track = (uint16_t)(opcode << 1);

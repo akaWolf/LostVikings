@@ -129,6 +129,7 @@ def transpile_anim(cid, outdir='src/sdl/gen'):
         w(f'        const uint16_t _h = *(uint16_t*)(vm.shadow + '
           f'DS_CMD_HANDLER_TBL + 0x{cmd:02X} * 2);')
         w(f'        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x{cmd:02X});')
+        w(f'        v2_animdump_note(vm.shadow, 0x{pc + 1:04X}, 0x{cmd:02X}, anim_bx);')
         w('        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];')
         w(f'        _t.cmd = 0x{cmd:02X}; _t.handler = _h; '
           f'_t.bx_before = _bxb; _t.bx_after = anim_bx;')
