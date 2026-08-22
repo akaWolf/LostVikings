@@ -12659,7 +12659,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_4F: when !platform
         {
           vm.carry = v2_vm_platform_check_163ac(vm);
-          vm.pc = (!vm.carry) ? 0x17CA : 0x1791;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1791 : 0x17CA;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1791 : 0x17CA;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x17CA;
+          } else {
+              vm.pc = 0x178F;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
         }
         G_POST(0x178E, 0x4F);
         continue;
@@ -13172,7 +13182,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_4F: when !platform
         {
           vm.carry = v2_vm_platform_check_163ac(vm);
-          vm.pc = (!vm.carry) ? 0x1864 : 0x182B;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x182B : 0x1864;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x182B : 0x1864;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1864;
+          } else {
+              vm.pc = 0x1829;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
         }
         G_POST(0x1828, 0x4F);
         continue;
@@ -15230,7 +15250,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_4F: when !platform
         {
           vm.carry = v2_vm_platform_check_163ac(vm);
-          vm.pc = (!vm.carry) ? 0x1AEC : 0x1AE6;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1AE6 : 0x1AEC;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1AE6 : 0x1AEC;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1AEC;
+          } else {
+              vm.pc = 0x1AE4;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
         }
         G_POST(0x1AE3, 0x4F);
         continue;
@@ -17019,7 +17049,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_4F: when !platform
         {
           vm.carry = v2_vm_platform_check_163ac(vm);
-          vm.pc = (!vm.carry) ? 0x1D6E : 0x1D68;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1D68 : 0x1D6E;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1D68 : 0x1D6E;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1D6E;
+          } else {
+              vm.pc = 0x1D66;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
         }
         G_POST(0x1D65, 0x4F);
         continue;
@@ -40058,7 +40098,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x3A);
-          vm.pc = vm.carry ? 0x407B : 0x4078;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4078 : 0x407B;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4078 : 0x407B;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x407B;
+          } else {
+              vm.pc = 0x4076;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x4070, 0x49);
         continue;
@@ -40173,7 +40223,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x09);
-          vm.pc = vm.carry ? 0x4615 : 0x40A2;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x40A2 : 0x4615;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x40A2 : 0x4615;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4615;
+          } else {
+              vm.pc = 0x40A0;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x409A, 0x49);
         continue;
@@ -40333,7 +40393,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x09);
-          vm.pc = vm.carry ? 0x4615 : 0x40DB;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x40DB : 0x4615;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x40DB : 0x4615;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4615;
+          } else {
+              vm.pc = 0x40D9;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x40D3, 0x49);
         continue;
@@ -41111,7 +41181,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x43D1 : 0x41E9;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x41E9 : 0x43D1;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x41E9 : 0x43D1;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x43D1;
+          } else {
+              vm.pc = 0x41E7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x41E2, 0x49);
         continue;
@@ -43682,7 +43762,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x44);
-          vm.pc = vm.carry ? 0x425D : 0x4525;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4525 : 0x425D;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4525 : 0x425D;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x425D;
+          } else {
+              vm.pc = 0x4523;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x451D, 0x49);
         continue;
@@ -43719,7 +43809,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x4548 : 0x4532;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4532 : 0x4548;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4532 : 0x4548;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4548;
+          } else {
+              vm.pc = 0x4530;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x452A, 0x49);
         continue;
@@ -43772,7 +43872,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x4548 : 0x4545;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4545 : 0x4548;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4545 : 0x4548;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4548;
+          } else {
+              vm.pc = 0x4543;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x453D, 0x49);
         continue;
@@ -46137,7 +46247,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x3A);
-          vm.pc = vm.carry ? 0x4AB2 : 0x4AAF;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4AAF : 0x4AB2;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4AAF : 0x4AB2;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4AB2;
+          } else {
+              vm.pc = 0x4AAD;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x4AA7, 0x49);
         continue;
@@ -46252,7 +46372,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x09);
-          vm.pc = vm.carry ? 0x5219 : 0x4AD9;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4AD9 : 0x5219;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4AD9 : 0x5219;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5219;
+          } else {
+              vm.pc = 0x4AD7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x4AD1, 0x49);
         continue;
@@ -46412,7 +46542,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x09);
-          vm.pc = vm.carry ? 0x5219 : 0x4B12;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4B12 : 0x5219;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4B12 : 0x5219;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5219;
+          } else {
+              vm.pc = 0x4B10;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x4B0A, 0x49);
         continue;
@@ -49564,7 +49704,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x4FCB : 0x4F23;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4F23 : 0x4FCB;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4F23 : 0x4FCB;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4FCB;
+          } else {
+              vm.pc = 0x4F21;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x4F1C, 0x49);
         continue;
@@ -51014,7 +51164,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x44);
-          vm.pc = vm.carry ? 0x4FA5 : 0x5129;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5129 : 0x4FA5;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5129 : 0x4FA5;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4FA5;
+          } else {
+              vm.pc = 0x5127;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x5121, 0x49);
         continue;
@@ -51051,7 +51211,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x514C : 0x5136;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5136 : 0x514C;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5136 : 0x514C;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x514C;
+          } else {
+              vm.pc = 0x5134;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x512E, 0x49);
         continue;
@@ -51104,7 +51274,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x514C : 0x5149;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5149 : 0x514C;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5149 : 0x514C;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x514C;
+          } else {
+              vm.pc = 0x5147;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x5141, 0x49);
         continue;
@@ -53613,7 +53793,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x3A);
-          vm.pc = vm.carry ? 0x56F2 : 0x56EF;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x56EF : 0x56F2;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x56EF : 0x56F2;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x56F2;
+          } else {
+              vm.pc = 0x56ED;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x56E7, 0x49);
         continue;
@@ -53728,7 +53918,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x09);
-          vm.pc = vm.carry ? 0x5D88 : 0x5719;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5719 : 0x5D88;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5719 : 0x5D88;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5D88;
+          } else {
+              vm.pc = 0x5717;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x5711, 0x49);
         continue;
@@ -53949,7 +54149,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x09);
-          vm.pc = vm.carry ? 0x5D88 : 0x5768;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5768 : 0x5D88;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5768 : 0x5D88;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5D88;
+          } else {
+              vm.pc = 0x5766;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x5760, 0x49);
         continue;
@@ -55727,7 +55937,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x5AF9 : 0x59DF;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x59DF : 0x5AF9;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x59DF : 0x5AF9;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5AF9;
+          } else {
+              vm.pc = 0x59DD;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x59D8, 0x49);
         continue;
@@ -57510,7 +57730,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x44);
-          vm.pc = vm.carry ? 0x5AD3 : 0x5C5C;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5C5C : 0x5AD3;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5C5C : 0x5AD3;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5AD3;
+          } else {
+              vm.pc = 0x5C5A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x5C54, 0x49);
         continue;
@@ -57547,7 +57777,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x5C7F : 0x5C69;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5C69 : 0x5C7F;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5C69 : 0x5C7F;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5C7F;
+          } else {
+              vm.pc = 0x5C67;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x5C61, 0x49);
         continue;
@@ -57600,7 +57840,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0206);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x29);
-          vm.pc = vm.carry ? 0x5C7F : 0x5C7C;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5C7C : 0x5C7F;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5C7C : 0x5C7F;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5C7F;
+          } else {
+              vm.pc = 0x5C7A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x5C74, 0x49);
         continue;
@@ -62452,7 +62702,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x75);
-          vm.pc = vm.carry ? 0x64FB : 0x64F3;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x64F3 : 0x64FB;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x64F3 : 0x64FB;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x64FB;
+          } else {
+              vm.pc = 0x64F1;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x64EC, 0x49);
         continue;
@@ -62472,7 +62732,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x75);
-          vm.pc = vm.carry ? 0x64FB : 0x64FA;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x64FA : 0x64FB;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x64FA : 0x64FB;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x64FB;
+          } else {
+              vm.pc = 0x64F8;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x64F3, 0x49);
         continue;
@@ -65534,7 +65804,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
           if (!_flip) v2_vm_probe_left_158aa(vm, 0x09, _di);
           else        v2_vm_probe_right_158b9(vm, 0x09, _di);
-          vm.pc = vm.carry ? 0x68EA : 0x693D;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x68EA : 0x693D;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x68EA : 0x693D;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x693D;
+          } else {
+              vm.pc = 0x68E8;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
         }
         G_POST(0x68E6, 0x24);
         continue;
@@ -65576,7 +65856,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
           if (!_flip) v2_vm_probe_left_158aa(vm, 0x09, _di);
           else        v2_vm_probe_right_158b9(vm, 0x09, _di);
-          vm.pc = vm.carry ? 0x68FA : 0x693D;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x68FA : 0x693D;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x68FA : 0x693D;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x693D;
+          } else {
+              vm.pc = 0x68F8;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
         }
         G_POST(0x68F6, 0x24);
         continue;
@@ -71994,7 +72284,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x85);
-          vm.pc = vm.carry ? 0x765D : 0x7653;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x7653 : 0x765D;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x7653 : 0x765D;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x765D;
+          } else {
+              vm.pc = 0x7651;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x764C, 0x49);
         continue;
@@ -72014,7 +72314,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x85);
-          vm.pc = vm.carry ? 0x765D : 0x765A;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x765A : 0x765D;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x765A : 0x765D;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x765D;
+          } else {
+              vm.pc = 0x7658;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x7653, 0x49);
         continue;
@@ -72265,7 +72575,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x85);
-          vm.pc = vm.carry ? 0x76A8 : 0x769E;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x769E : 0x76A8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x769E : 0x76A8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x76A8;
+          } else {
+              vm.pc = 0x769C;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x7697, 0x49);
         continue;
@@ -72285,7 +72605,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x85);
-          vm.pc = vm.carry ? 0x76A8 : 0x76A5;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x76A5 : 0x76A8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x76A5 : 0x76A8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x76A8;
+          } else {
+              vm.pc = 0x76A3;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x769E, 0x49);
         continue;
@@ -72536,7 +72866,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x85);
-          vm.pc = vm.carry ? 0x76F3 : 0x76E9;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x76E9 : 0x76F3;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x76E9 : 0x76F3;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x76F3;
+          } else {
+              vm.pc = 0x76E7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x76E2, 0x49);
         continue;
@@ -72556,7 +72896,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x85);
-          vm.pc = vm.carry ? 0x76F3 : 0x76F0;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x76F0 : 0x76F3;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x76F0 : 0x76F3;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x76F3;
+          } else {
+              vm.pc = 0x76EE;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x76E9, 0x49);
         continue;
@@ -81722,7 +82072,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(_y_a);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x44);
-          vm.pc = vm.carry ? 0x8555 : 0x83F4;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x83F4 : 0x8555;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x83F4 : 0x8555;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x8555;
+          } else {
+              vm.pc = 0x83F2;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x83ED, 0x49);
         continue;
@@ -90218,7 +90578,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x9156;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x9156 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x9156 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x9154;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x914D, 0x49);
         continue;
@@ -90254,7 +90624,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x9164;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x9164 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x9164 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x9162;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x915B, 0x49);
         continue;
@@ -90290,7 +90670,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x9172;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x9172 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x9172 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x9170;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x9169, 0x49);
         continue;
@@ -90360,7 +90750,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x918B;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x918B : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x918B : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x9189;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x9182, 0x49);
         continue;
@@ -90396,7 +90796,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x9199;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x9199 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x9199 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x9197;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x9190, 0x49);
         continue;
@@ -90432,7 +90842,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x91A7;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x91A7 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x91A7 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x91A5;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x919E, 0x49);
         continue;
@@ -90484,7 +90904,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x91BB;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x91BB : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x91BB : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x91B9;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x91B2, 0x49);
         continue;
@@ -90520,7 +90950,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x91C9;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x91C9 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x91C9 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x91C7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x91C0, 0x49);
         continue;
@@ -90556,7 +90996,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x91D7;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x91D7 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x91D7 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x91D5;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x91CE, 0x49);
         continue;
@@ -90610,7 +91060,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x91EA;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x91EA : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x91EA : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x91E8;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x91E1, 0x49);
         continue;
@@ -90646,7 +91106,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x91F8;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x91F8 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x91F8 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x91F6;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x91EF, 0x49);
         continue;
@@ -90682,7 +91152,17 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _y = vm.ds_read(0x0208);
           vm.ds_write(DS_TEXT_ROW, _y);
           v2_vm_probe_at_pos_1589b(vm, 0x04);
-          vm.pc = vm.carry ? 0x9209 : 0x9206;
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x9206 : 0x9209;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x9206 : 0x9209;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x9209;
+          } else {
+              vm.pc = 0x9204;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
         }
         G_POST(0x91FD, 0x49);
         continue;

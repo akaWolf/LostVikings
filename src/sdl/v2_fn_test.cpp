@@ -8887,6 +8887,18 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         A(c, 5, O, "grid");                          // plain (flags w/o 0x40)
         FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
         A(c, 5, o2, "grid");                         // hflip pairing
+        // #97: scrambled off_30C8E — orig JMP off_30C8E[si] with si a BYTE
+        // offset (PUSH 0 → word[0] for 1E/1F/20/21, PUSH 2 → word[1] for
+        // 22/23/24/25). Exercise the 42CF (unconditional jump) and the
+        // crossed conditional entry against the oracle.
+        {
+            bool tbl1 = (op == 0x22 || op == 0x23 || op == 0x24 || op == 0x25);
+            uint16_t cell = tbl1 ? (uint16_t)0x87B0 : (uint16_t)0x87AE;
+            FtWr wjmp[] = { { cell, 0x42CF }, { 0x87B2, 0x44E9 } };
+            A(c, 5, O, "grid", wjmp, 2);
+            FtWr wxc[] = { { cell, (uint16_t)(tbl1 ? 0x44E9 : 0x44F3) } };
+            A(c, 5, O, "grid", wxc, 1);
+        }
         fuzz_op = op; fuzz_alen = 3; break;
     }
     // ---- wave 3 ----
@@ -8897,6 +8909,14 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         A(c, 5, O, "grid");
         FtVmObj o2 = O; o2.flags = (uint16_t)(O.flags | 0x40);
         A(c, 5, o2, "grid");
+        // #97: scrambled off_30C8E (30 = PUSH 0 → word[0], 31 = PUSH 2 → word[1])
+        {
+            uint16_t cell = (op == 0x31) ? (uint16_t)0x87B0 : (uint16_t)0x87AE;
+            FtWr wjmp[] = { { cell, 0x42CF }, { 0x87B2, 0x44E9 } };
+            A(c, 5, O, "grid", wjmp, 2);
+            FtWr wxc[] = { { cell, (uint16_t)(op == 0x31 ? 0x44E9 : 0x44F3) } };
+            A(c, 5, O, "grid", wxc, 1);
+        }
         fuzz_op = op; fuzz_alen = 3; break;
     }
     case FT_SUB_144FD: case FT_SUB_14501: {     // ops 4E/4F: 163ac 3-level probe
@@ -8904,6 +8924,14 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         uint16_t t = FT_VM_PC + 0x40;
         uint8_t c[] = {op, (uint8_t)t, (uint8_t)(t >> 8), 0x00};
         A(c, 4, O, "grid");
+        // #97: scrambled off_30C8E (4E = PUSH 0 → word[0], 4F = PUSH 2 → word[1])
+        {
+            uint16_t cell = (op == 0x4F) ? (uint16_t)0x87B0 : (uint16_t)0x87AE;
+            FtWr wjmp[] = { { cell, 0x42CF }, { 0x87B2, 0x44E9 } };
+            A(c, 4, O, "grid", wjmp, 2);
+            FtWr wxc[] = { { cell, (uint16_t)(op == 0x4F ? 0x44E9 : 0x44F3) } };
+            A(c, 4, O, "grid", wxc, 1);
+        }
         fuzz_op = op; fuzz_alen = 2; fuzz_target_arg = true; break;
     }
     case FT_SUB_14532: {                // op 3D: fade-in RGB (342-344, 7EFD|=1, 10e99)
@@ -9371,6 +9399,29 @@ int ft_selftest_op_unit(FtId id, uint32_t seed) {
         if (id == FT_SUB_15268 || id == FT_SUB_1529A || id == FT_SUB_152B3) {
             static const FtWr winact[] = { {0x16CB, 0x8000} };
             A(c, 5, O, "grid", winact, 1);
+        }
+        // #97: scrambled off_30C8E for the table-dispatching members here:
+        // 49 (sub_14fc4, PUSH 0 → word[0]), 4A (sub_14fc8, PUSH 2 → word[1]),
+        // C2 (sub_151b8, PUSH 0 → word[0]). C2's stream is op+filter+target
+        // (c[] already valid); 49/4A need an explicit stream with the jump
+        // word in place — mode=0 makes both channels literal (2 bytes each):
+        // op | 00 | x16 | y16 | anim | target16 | yield.
+        if (id == FT_SUB_151B8) {
+            FtWr wjmp[] = { { 0x87AE, 0x42CF } };
+            A(c, 5, O, "grid", wjmp, 1);
+            FtWr wxc[] = { { 0x87AE, 0x44F3 } };
+            A(c, 5, O, "grid", wxc, 1);
+        }
+        if (id == FT_SUB_14FC4 || id == FT_SUB_14FC8) {
+            bool tbl1 = (id == FT_SUB_14FC8);
+            uint16_t cell = tbl1 ? (uint16_t)0x87B0 : (uint16_t)0x87AE;
+            uint8_t c97[] = {op, 0x00, 0x12, 0x00, 0x34, 0x00, 0x03,
+                             (uint8_t)t, (uint8_t)(t >> 8), 0x00};
+            A(c97, 10, O, "grid");   // stream-shape control (stock table)
+            FtWr wjmp[] = { { cell, 0x42CF }, { 0x87B2, 0x44E9 } };
+            A(c97, 10, O, "grid", wjmp, 2);
+            FtWr wxc[] = { { cell, (uint16_t)(tbl1 ? 0x44E9 : 0x44F3) } };
+            A(c97, 10, O, "grid", wxc, 1);
         }
         // Coverage-directed (#47): the state-0 collision-bit escape of the
         // vel-scan family (155d6/156c0 and the 15788/157eb/1584e wrappers):

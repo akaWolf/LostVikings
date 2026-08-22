@@ -10211,8 +10211,18 @@ static void v2_vm_op_24(V2VM& vm) {
     } else {
         v2_vm_probe_left_158aa(vm, anim_idx, di);
     }
-    // off_30C8E[2] = loc_144f3: JC → carry = skip 2, no carry = jump (simple, no save)
-    if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    // orig sub_144ad: PUSH 2 → JMP off_30C8E[si] — honest table dispatch (#97).
+    // Stock table word[1] = 0x44F3: JC → carry = skip 2, no carry = jump.
+    uint16_t cs_addr = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+    if (cs_addr == 0x44F3) {
+        if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x44E9) {
+        if (!vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x42CF) {
+        v2_vm_do_jump(vm);
+    } else {
+        v2_vm_runtime_dispatch(vm, 0x87AE, 1);   // si=2 byte offset = word[1]
+    }
 }
 
 // 0x1B (sub_143fe): Set obj0's collision to self + read 2 signed velocity bytes → obj0. 2 bytes.
@@ -11048,7 +11058,7 @@ static void v2_vm_op_22(V2VM& vm) {
     } else if (cs_addr == 0x42CF) {
         v2_vm_do_jump(vm);
     } else {
-        v2_vm_runtime_dispatch(vm, 0x87AE, 2);
+        v2_vm_runtime_dispatch(vm, 0x87AE, 1);   // orig: JMP off_30C8E[si], si=2 BYTE offset = word[1] (#97)
     }
 }
 
@@ -11071,7 +11081,7 @@ static void v2_vm_op_31(V2VM& vm) {
     } else if (cs_addr == 0x42CF) {
         v2_vm_do_jump(vm);
     } else {
-        v2_vm_runtime_dispatch(vm, 0x87AE, 2);
+        v2_vm_runtime_dispatch(vm, 0x87AE, 1);   // orig: JMP off_30C8E[si], si=2 BYTE offset = word[1] (#97)
     }
 }
 
@@ -11089,7 +11099,7 @@ static void v2_vm_op_23(V2VM& vm) {
     } else if (cs_addr == 0x42CF) {
         v2_vm_do_jump(vm);
     } else {
-        v2_vm_runtime_dispatch(vm, 0x87AE, 2);
+        v2_vm_runtime_dispatch(vm, 0x87AE, 1);   // orig: JMP off_30C8E[si], si=2 BYTE offset = word[1] (#97)
     }
 }
 
@@ -14842,7 +14852,7 @@ static void v2_vm_op_25(V2VM& vm) {
     } else if (cs_addr == 0x42CF) {
         v2_vm_do_jump(vm);
     } else {
-        v2_vm_runtime_dispatch(vm, 0x87AE, 2);
+        v2_vm_runtime_dispatch(vm, 0x87AE, 1);   // orig: JMP off_30C8E[si], si=2 BYTE offset = word[1] (#97)
     }
 }
 
@@ -16893,11 +16903,18 @@ static void v2_vm_op_49(V2VM& vm) {
     // sub_1589B: tile search at (6C,6E) + object search at (6C,6E)
     v2_vm_probe_at_pos_1589b(vm, anim_idx);
 
-    // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
-    if (vm.carry)
+    // orig sub_14fc4: PUSH 0 → JMP off_30C8E[si] — honest table dispatch (#97).
+    // Stock table word[0] = 0x44E9: no carry → skip 2, carry → jump.
+    uint16_t cs_addr = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+    if (cs_addr == 0x44E9) {
+        if (!vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x44F3) {
+        if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x42CF) {
         v2_vm_do_jump(vm);
-    else
-        vm.pc += 2;
+    } else {
+        v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+    }
 }
 
 // 0x4A (sub_14fc8): Same as 0x49 but PUSH 2 → off_30C8E[2] dispatch.
@@ -16921,7 +16938,7 @@ static void v2_vm_op_4A(V2VM& vm) {
     } else if (cs_addr == 0x44E9) {
         if (!vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
     } else {
-        v2_vm_runtime_dispatch(vm, 0x87AE, 2);
+        v2_vm_runtime_dispatch(vm, 0x87AE, 1);   // orig: JMP off_30C8E[si], si=2 BYTE offset = word[1] (#97)
     }
 }
 
@@ -17064,8 +17081,18 @@ static void v2_vm_op_30(V2VM& vm) {
     uint8_t filter = vm.read_u8();
     uint16_t obj_di = vm.global_r(DS_CUR_OBJ);
     v2_vm_probe_front_158e6(vm, filter, obj_di);
-    // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
-    if (vm.carry) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
+    // orig sub_144cf: PUSH 0 → JMP off_30C8E[si] — honest table dispatch (#97).
+    // Stock table word[0] = 0x44E9: no carry → skip 2, carry → jump.
+    uint16_t cs_addr = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+    if (cs_addr == 0x44E9) {
+        if (!vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x44F3) {
+        if (vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x42CF) {
+        v2_vm_do_jump(vm);
+    } else {
+        v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+    }
 }
 
 // 0x39 (sub_145da): skip 3 bytes. Reads byte (discarded) + word (into ax, NOT acc).
@@ -17079,9 +17106,19 @@ static void v2_vm_op_39(V2VM& vm) {
 // 0 byte params + 2 byte jump target. Same as 0x4E but dispatch index 2.
 static void v2_vm_op_4F(V2VM& vm) {
     vm.carry = v2_vm_platform_check_163ac(vm);
-    // off_30C8E[2] = loc_144f3: JC → carry = skip 2, no carry = jump
+    // orig sub_14501: PUSH 2 → JMP off_30C8E[si] — honest table dispatch (#97).
+    // Stock table word[1] = 0x44F3: JC → carry = skip 2, no carry = jump
     // (opposite of off_30C8E[0] which is JNC → no carry = skip, carry = jump)
-    if (!vm.carry) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
+    uint16_t cs_addr = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+    if (cs_addr == 0x44F3) {
+        if (!vm.carry) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
+    } else if (cs_addr == 0x44E9) {
+        if (!vm.carry) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
+    } else if (cs_addr == 0x42CF) {
+        v2_vm_do_jump(vm);
+    } else {
+        v2_vm_runtime_dispatch(vm, 0x87AE, 1);   // si=2 byte offset = word[1]
+    }
 }
 
 // 0xB6 (sub_14e77): sub_12312 (PRNG/timer, 0 bytes consumed) → AND ax,1.

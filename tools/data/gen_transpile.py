@@ -529,10 +529,9 @@ def inline_wave4(op, body, kind, tgt, nxt, pc):
     if op in (0x4E, 0x4F) and tgt is not None:
         L.append('{')
         L.append('  vm.carry = v2_vm_platform_check_163ac(vm);')
-        if op == 0x4F:   # fixed: no-carry -> jump, carry -> skip
-            L.append(f'  vm.pc = (!vm.carry) ? 0x{tgt:04X} : 0x{nxt:04X};')
-        else:            # 4E: 30C8E[0] dispatch
-            _dispatch_c8e(L, 0, tgt, nxt)
+        # orig: 4E = PUSH 0 (word[0]), 4F = PUSH 2 (byte offset 2 = word[1]).
+        # #97: both dispatch honestly through the table.
+        _dispatch_c8e(L, 0 if op == 0x4E else 1, tgt, nxt)
         L.append('}')
         return L
     if op in _SCAN and tgt is not None:
@@ -599,15 +598,12 @@ def inline_wave4(op, body, kind, tgt, nxt, pc):
             L.append(f'  v2_vm_probe_up_158c8(vm, 0x{f:02X}, _di);')
         elif op in (0x30, 0x31):
             L.append(f'  v2_vm_probe_front_158e6(vm, 0x{f:02X}, _di);')
-        if op in (0x24, 0x30):   # fixed carry branch
-            L.append(f'  vm.pc = vm.carry ? 0x{nxt:04X} : 0x{tgt:04X};'
-                     if op == 0x24 else
-                     f'  vm.pc = vm.carry ? 0x{tgt:04X} : 0x{nxt:04X};')
-        else:
-            # table index per body: 1E/1F/20/21 use off_30C8E[0],
-            # 22/23/25/31 use off_30C8E[2] (byte offset -> index 1)
-            tbl = 0 if op in (0x1E, 0x1F, 0x20, 0x21) else 1
-            _dispatch_c8e(L, tbl, tgt, nxt)
+        # table index per body (orig: PUSH 0/2 -> JMP off_30C8E[si], si is a
+        # BYTE offset): 1E/1F/20/21/30 use off_30C8E[0] (word[0]),
+        # 22/23/24/25/31 use off_30C8E[2] (byte offset -> word index 1). #97:
+        # 24/30 dispatch honestly like the rest (no fixed branch).
+        tbl = 0 if op in (0x1E, 0x1F, 0x20, 0x21, 0x30) else 1
+        _dispatch_c8e(L, tbl, tgt, nxt)
         L.append('}')
         return L
     return None
@@ -917,10 +913,9 @@ def inline_wave6(op, body, kind, tgt, nxt, pc):
         L.append('  vm.ds_write(DS_TEXT_ROW, _y);')
         anim = body[o]
         L.append(f'  v2_vm_probe_at_pos_1589b(vm, 0x{anim:02X});')
-        if op == 0x49:   # off_30C8E[0] documented-fixed branch in the body
-            L.append(f'  vm.pc = vm.carry ? 0x{tgt:04X} : 0x{nxt:04X};')
-        else:            # 4A: same but off_30C8E[2]
-            _dispatch_c8e(L, 1, tgt, nxt)
+        # orig: 49 = PUSH 0 (word[0]), 4A = PUSH 2 (byte offset 2 = word[1]).
+        # #97: both dispatch honestly through the table.
+        _dispatch_c8e(L, 0 if op == 0x49 else 1, tgt, nxt)
         L.append('}')
         return L
     if op == 0xD4:
