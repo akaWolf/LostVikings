@@ -216,6 +216,249 @@ def inline_wave2(op, body, tgt, nxt):
     L.append('}')
     return L
 
+# Wave 3: control flow (yield/jmp/call/ret), bittest family with the
+# mask/clear LUTs folded (proven immutable: no operand address reaches
+# the 0x93xx zone — map max 0x7804 — and the per-opcode parity of waves
+# 1-2 already validated the field-LUT folding the same way), flips,
+# vel setters, spawn-record stores and the small fixed-effect ops.
+def _mask(idx):
+    return ex.bit_mask(idx)
+
+def _clear(idx):
+    return ex.bit_clear(idx)
+
+_BT_FETCH = {
+    # opcode -> (helper_kind) for the bittest fetch step
+    # '153ea': [maskIdx][imm16], si_track=maskIdx
+    # '15403': [maskIdx][fldIdx] self, si_track=maskIdx
+    # '1542a': [maskIdx][addr16], si_track=maskIdx
+    # '15445': [maskIdx][fldIdx] partner, si_track=maskIdx, di_track=slot
+}
+
+def _bt_fetch(kind, body):
+    """Returns (lines, value_expr) reproducing the bittest fetch helpers."""
+    idx1 = body[0]
+    L = []
+    if kind == '153ea':
+        imm = int.from_bytes(body[1:3], 'little')
+        L.append(f'  vm.si_track = 0x{idx1:04X};  // 153ea tail: POP si = mask byte')
+        return L, f'((0x{imm:04X} & 0x{_mask(idx1):04X}) ? 1 : 0)'
+    if kind == '15403':
+        a = _self_addr(body[1])
+        L.append(f'  uint16_t _fv = vm.ds_read({a});')
+        L.append(f'  vm.si_track = 0x{idx1:04X};  // 15403 tail: POP si = mask byte')
+        return L, f'((_fv & 0x{_mask(idx1):04X}) ? 1 : 0)'
+    if kind == '1542a':
+        a = int.from_bytes(body[1:3], 'little')
+        L.append(f'  uint16_t _fv = vm.ds_read(0x{a:04X});')
+        L.append(f'  vm.si_track = 0x{idx1:04X};  // 1542a tail: POP si = mask byte')
+        return L, f'((_fv & 0x{_mask(idx1):04X}) ? 1 : 0)'
+    if kind == '15445':
+        L.append('  uint16_t _obj = vm.global_r(DS_CUR_OBJ);')
+        L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{_fcol(body[1]) - 0x14E5:04X});')
+        L.append(f'  // partner.{ex.field_name(body[1])}')
+        L.append('  vm.di_track = _di;')
+        L.append('  uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));')
+        L.append(f'  vm.si_track = 0x{idx1:04X};  // 15445 tail: POP si = first byte')
+        return L, f'((_fv & 0x{_mask(idx1):04X}) ? 1 : 0)'
+    raise KeyError(kind)
+
+_BT_LOAD = {0x97: '153ea', 0x98: '15403', 0x99: '1542a', 0x9A: '15445'}
+_BT_BR = {
+    # op: (fetch, cond ('eq'/'ne'), call?)   — polarity read from the bodies
+    0xA8: ('153ea', 'eq', False), 0xA9: ('15403', 'eq', False),
+    0xAA: ('1542a', 'eq', False), 0xAB: ('15445', 'eq', False),
+    0xAD: ('153ea', 'ne', False), 0xAE: ('15403', 'ne', False),
+    0xB0: ('15445', 'ne', False),
+    0xB2: ('153ea', 'eq', True),  0xB3: ('15403', 'eq', True),
+    0xB5: ('15445', 'eq', True),
+}
+# AF/B8/B9/BB: standalone bodies (no si_track at all — they read idx/addr
+# inline, unlike the helper fetches).
+def _bt_raw(op, body):
+    idx1 = body[0]
+    if op in (0xAF, 0xB9):
+        a = int.from_bytes(body[1:3], 'little')
+        return ([f'  uint16_t _r = (vm.ds_read(0x{a:04X}) & 0x{_mask(idx1):04X}) ? 1 : 0;'],
+                '_r')
+    if op == 0xB8:
+        a = _self_addr(body[1])
+        return ([f'  uint16_t _r = (vm.ds_read({a}) & 0x{_mask(idx1):04X}) ? 1 : 0;'],
+                '_r')
+    if op == 0xBB:
+        return (['  uint16_t _r = v2_vm_read_random(vm) & 1;'], '_r')
+    raise KeyError(op)
+
+def inline_wave3(op, body, kind, tgt, nxt, pc):
+    L = []
+    def jump_or(cond_expr, call):
+        if call:
+            L.append(f'  if ({cond_expr}) {{')
+            L.append('      ObjRef{vm, vm.global_r(DS_CUR_OBJ)}'
+                     f'.w16(OBJ_ALT_PC, 0x{nxt:04X});')
+            L.append(f'      vm.pc = 0x{tgt:04X};')
+            L.append(f'  }} else vm.pc = 0x{nxt:04X};')
+        else:
+            L.append(f'  vm.pc = ({cond_expr}) ? 0x{tgt:04X} : 0x{nxt:04X};')
+    # --- control flow ---
+    if op == 0x00:   # yield: OBJ_PC = pc (already PC+1), stop
+        return ['ObjRef{vm, vm.global_r(DS_CUR_OBJ)}'
+                f'.w16(OBJ_PC, 0x{pc + 1:04X});',
+                'vm.running = false;']
+    if op == 0x01:
+        return [f'vm.pc = 0x{nxt:04X};']
+    if op == 0x03 and tgt is not None:
+        return [f'vm.pc = 0x{tgt:04X};']
+    if op == 0x05 and tgt is not None:   # save_alt_pc = do_call_jump
+        return ['ObjRef{vm, vm.global_r(DS_CUR_OBJ)}'
+                f'.w16(OBJ_ALT_PC, 0x{pc + 3:04X});',
+                f'vm.pc = 0x{tgt:04X};']
+    if op == 0x06:   # ret: dynamic pc from ALT_PC — dispatch re-enters
+        return ['vm.pc = ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.u16(OBJ_ALT_PC);']
+    # --- fixed-effect simple ops ---
+    if op == 0x4B:
+        return ['{ uint16_t _o = vm.global_r(DS_CUR_OBJ);',
+                '  ObjRef{vm, _o}.w16(OBJ_FLAGS, (uint16_t)(ObjRef{vm, _o}.u16(OBJ_FLAGS) | 0x2000)); }',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x96:
+        return ['vm.field_w(OBJ_PARTNER, v2_vm_accumulator);',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x19:
+        imm = _imm16(body)
+        return [f'vm.field_w(OBJ_ANIM_PC, 0x{imm:04X});',
+                'vm.field_w(OBJ_ANIM_TIMER, 1);',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x18:   # anim_tbl=partner; vel = two signed bytes
+        vx = body[0] - 256 if body[0] >= 128 else body[0]
+        vy = body[1] - 256 if body[1] >= 128 else body[1]
+        return ['vm.field_w(OBJ_ANIM_TABLE, vm.field_r(OBJ_PARTNER));',
+                f'vm.field_w(OBJ_VEL_X, (uint16_t)(int16_t){vx});',
+                f'vm.field_w(OBJ_VEL_Y, (uint16_t)(int16_t){vy});',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x17:   # anim_tbl=0; vel
+        vx = body[0] - 256 if body[0] >= 128 else body[0]
+        vy = body[1] - 256 if body[1] >= 128 else body[1]
+        return ['{ uint16_t _o = vm.global_r(DS_CUR_OBJ);',
+                '  ObjRef{vm, _o}.w16(OBJ_ANIM_TABLE, 0);',
+                f'  ObjRef{{vm, _o}}.w16(OBJ_VEL_X, (uint16_t)(int16_t){vx});',
+                f'  ObjRef{{vm, _o}}.w16(OBJ_VEL_Y, (uint16_t)(int16_t){vy}); }}',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x1B:   # obj0: [OBJ_ANIM_TABLE global] = cur; obj0.vel
+        vx = body[0] - 256 if body[0] >= 128 else body[0]
+        vy = body[1] - 256 if body[1] >= 128 else body[1]
+        return ['vm.ds_write(OBJ_ANIM_TABLE, vm.global_r(DS_CUR_OBJ));',
+                f'ObjRef{{vm, 0}}.w16(OBJ_VEL_X, (uint16_t)(int16_t){vx});',
+                f'ObjRef{{vm, 0}}.w16(OBJ_VEL_Y, (uint16_t)(int16_t){vy});',
+                f'vm.pc = 0x{nxt:04X};']
+    if op in (0x07, 0x08, 0x0B):   # hflip variants (primitive call)
+        cond = {0x07: '!(ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x40)',
+                0x08: '(ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x40)',
+                0x0B: 'true'}[op]
+        return ['{ uint16_t _o = vm.global_r(DS_CUR_OBJ);',
+                f'  if ({cond}) v2_vm_hflip_body_136a0(vm, _o); }}',
+                f'vm.pc = 0x{nxt:04X};']
+    if op in (0x09, 0x0A, 0x0C):   # vflip variants
+        cond = {0x09: '!(ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x80)',
+                0x0A: '(ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x80)',
+                0x0C: 'true'}[op]
+        return ['{ uint16_t _o = vm.global_r(DS_CUR_OBJ);',
+                f'  if ({cond}) v2_vm_vflip_body_13757(vm, _o); }}',
+                f'vm.pc = 0x{nxt:04X};']
+    if op in (0x11, 0x12, 0x3A):   # res_deduct(partner)
+        return ['{ uint16_t _di = vm.global_r(DS_CUR_OBJ);',
+                '  uint16_t _si = ObjRef{vm, _di}.u16(OBJ_PARTNER);',
+                '  v2_vm_res_deduct_15505(vm, _si, _di); }',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x2F:
+        return ['v2_vm_anim_interp_1303a(vm);',
+                'v2_vm_anim_tail_135cf(vm);',
+                f'vm.pc = 0x{nxt:04X};']
+    # --- bittest loads ---
+    if op in _BT_LOAD:
+        f, v = _bt_fetch(_BT_LOAD[op], body)
+        return ['{'] + f + [f'  v2_vm_accumulator = {v};', '}',
+                            f'vm.pc = 0x{nxt:04X};']
+    # --- bittest branches ---
+    if op in _BT_BR and tgt is not None:
+        fk, pol, call = _BT_BR[op]
+        f, v = _bt_fetch(fk, body)
+        L.append('{')
+        L.extend(f)
+        cond = (f'{v} == v2_vm_accumulator' if pol == 'eq'
+                else f'{v} != v2_vm_accumulator')
+        jump_or(cond, call)
+        L.append('}')
+        return L
+    if op in (0xAF, 0xB8, 0xB9, 0xBB) and tgt is not None:
+        f, v = _bt_raw(op, body)
+        pol_call = {0xAF: ('ne', False), 0xB8: ('ne', True),
+                    0xB9: ('ne', True), 0xBB: ('ne', True)}[op]
+        L.append('{')
+        L.extend(f)
+        cond = (f'{v} != v2_vm_accumulator' if pol_call[0] == 'ne'
+                else f'{v} == v2_vm_accumulator')
+        jump_or(cond, pol_call[1])
+        L.append('}')
+        return L
+    # --- mask-merge RMW ---
+    if op in (0x9C, 0x9D, 0x9E, 0xA0, 0xA3, 0xA4, 0xA5, 0xA7):
+        idx1 = body[0]
+        m, c = _mask(idx1), _clear(idx1)
+        L.append('{')
+        L.append('  if (v2_vm_accumulator != 0)')
+        L.append(f'      v2_vm_accumulator = 0x{m:04X};')
+        if op == 0x9C:      # self.F = F&clear | acc
+            a = _self_addr(body[1])
+            L.append(f'  uint16_t _a = {a};')
+            L.append(f'  vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x{c:04X}) | v2_vm_accumulator));')
+        elif op == 0x9D:    # [addr] = &clear | acc
+            a = int.from_bytes(body[1:3], 'little')
+            L.append(f'  vm.ds_write(0x{a:04X}, (uint16_t)((vm.ds_read(0x{a:04X}) & 0x{c:04X}) | v2_vm_accumulator));')
+        elif op == 0x9E:    # partner.F via 1995_target (si/di tracks!)
+            L.append('  uint16_t _si = vm.global_r(DS_CUR_OBJ);')
+            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[1]) - 0x14E5:04X});')
+            L.append('  vm.si_track = _si; vm.di_track = _di;')
+            L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+            L.append(f'  vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x{c:04X}) | v2_vm_accumulator));')
+        elif op == 0xA0:    # [addr] &= acc  (no clear)
+            a = int.from_bytes(body[1:3], 'little')
+            L.append(f'  vm.ds_write(0x{a:04X}, (uint16_t)(vm.ds_read(0x{a:04X}) & v2_vm_accumulator));')
+        elif op == 0xA3:
+            a = int.from_bytes(body[1:3], 'little')
+            L.append(f'  vm.ds_write(0x{a:04X}, (uint16_t)(vm.ds_read(0x{a:04X}) | v2_vm_accumulator));')
+        elif op == 0xA5:    # self.F ^= acc
+            a = _self_addr(body[1])
+            L.append(f'  uint16_t _a = {a};')
+            L.append('  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) ^ v2_vm_accumulator));')
+        elif op in (0xA4, 0xA7):   # partner.F |=/^= acc (BOTH tracks per body)
+            oper = '|' if op == 0xA4 else '^'
+            L.append('  uint16_t _obj = vm.global_r(DS_CUR_OBJ);')
+            L.append(f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x{_fcol(body[1]) - 0x14E5:04X});')
+            L.append('  vm.si_track = _obj; vm.di_track = _di;')
+            L.append('  uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);')
+            L.append(f'  vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) {oper} v2_vm_accumulator));')
+        L.append('}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    # --- acc<<8 stores ---
+    if op == 0xBC:
+        return ['v2_vm_accumulator <<= 8;',
+                f'vm.ds_write({_self_addr(body[0])}, v2_vm_accumulator);',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0xBD:
+        a = _imm16(body)
+        return ['v2_vm_accumulator <<= 8;',
+                f'vm.ds_write(0x{a:04X}, v2_vm_accumulator);',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0xBE:   # via 1995_target (si/di tracks)
+        return ['v2_vm_accumulator <<= 8;',
+                '{ uint16_t _si = vm.global_r(DS_CUR_OBJ);',
+                f'  uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x{_fcol(body[0]) - 0x14E5:04X});',
+                '  vm.si_track = _si; vm.di_track = _di;',
+                '  vm.ds_write((uint16_t)(_di + OBJ_FIELD_BASE), v2_vm_accumulator); }',
+                f'vm.pc = 0x{nxt:04X};']
+    return None
+
 def handler_map():
     src = open('src/sdl/v2_vm.cpp').read()
     tbl = {}
@@ -264,12 +507,16 @@ def transpile(cid, outdir='src/sdl/gen'):
         w(f'        g_last_pc = 0x{pc:04X};')
         w(f'        G_PRE(0x{pc:04X}, 0x{op:02X});')
         inl = None
-        if kind == 'fall':
+        try:
+            inl = inline_wave3(op, body, kind, tgt, pc + ln, pc)
+        except Exception:
+            inl = None
+        if inl is None and kind == 'fall':
             try:
                 inl = inline_wave1(op, body, pc + ln)
             except Exception:
                 inl = None
-        elif kind == 'br' and tgt is not None:
+        if inl is None and kind == 'br' and tgt is not None:
             try:
                 inl = inline_wave2(op, body, tgt, pc + ln)
             except Exception:
