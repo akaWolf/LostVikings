@@ -131,6 +131,108 @@ def gs_write_stmt(a, vexpr):
 
 _RD_RE = re.compile(r'vm\.ds_read\((?:\(uint16_t\))?0x([0-9A-Fa-f]{1,4})\)')
 
+# slot forms: vm.ds_read((uint16_t)(EXPR + CONST)) — EXPR is a computed slot
+# (object cursor, partner, cmd-ring cursor). CONST resolves to a covering
+# field; the emission keeps EXACT flat semantics via the _at accessors
+# (full 16-bit wrap of base+offset).
+_SLOT_TAIL_RE = re.compile(r'\s*\+\s*(0x[0-9A-Fa-f]{1,4}|[A-Z][A-Z0-9_]*)$')
+
+def _lay_const(tok):
+    if tok.startswith('0x'):
+        return int(tok, 16)
+    import re as _re
+    for m in _re.finditer(r'constexpr uint16_t (\w+)\s*=\s*0x([0-9A-Fa-f]+);',
+                          open('src/sdl/v2_ds_layout.h').read()):
+        if m.group(1) == tok:
+            return int(m.group(2), 16)
+    return None
+
+_LAY_CACHE = {}
+def lay_const(tok):
+    if tok not in _LAY_CACHE:
+        _LAY_CACHE[tok] = _lay_const(tok)
+    return _LAY_CACHE[tok]
+
+def _slot_emit(rw, inner, vexpr):
+    """inner = text inside (uint16_t)(...). Returns replacement or None."""
+    m = _SLOT_TAIL_RE.search(inner)
+    if not m:
+        return None
+    base_tok = m.group(1)
+    base = lay_const(base_tok)
+    if base is None:
+        return None
+    c = _GS_COV.get(base)
+    if c is None:
+        return None
+    name, kind, fbase, n = c
+    expr = inner[:m.start()].strip()
+    delta = (base - fbase) & 0xFFFF
+    off = f'(uint16_t)({expr})' if delta == 0 else \
+          f'(uint16_t)(({expr}) + 0x{delta:X})'
+    _GS_STATS['slot'] = _GS_STATS.get('slot', 0) + 1
+    if rw == 'read':
+        return f'v2gs(vm.shadow).{name}_at({off})'
+    return f'v2gs(vm.shadow).{name}_at({off}, {vexpr});'
+
+def apply_slot_names(text):
+    out = []
+    i = 0
+    while True:
+        jr = text.find('vm.ds_read((uint16_t)(', i)
+        jw = text.find('vm.ds_write((uint16_t)(', i)
+        js = [x for x in (jr, jw) if x >= 0]
+        if not js:
+            out.append(text[i:])
+            break
+        j = min(js)
+        rw = 'read' if j == jr else 'write'
+        k = text.find('(uint16_t)(', j) + len('(uint16_t)(')
+        depth = 1
+        p = k
+        while depth > 0:
+            ch = text[p]
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            p += 1
+        inner = text[k:p - 1]
+        # optional inline /* field name */ comment after the inner sum
+        cm = re.match(r'\s*/\*[^*]*\*/\s*', text[p:])
+        pc = p + (cm.end() if cm else 0)
+        if rw == 'read':
+            if text[pc] != ')':          # not the plain read form
+                out.append(text[i:p]); i = p; continue
+            rep = _slot_emit('read', inner, None)
+            if rep is None:
+                out.append(text[i:pc + 1]); i = pc + 1; continue
+            out.append(text[i:j]); out.append(rep)
+            i = pc + 1
+        else:
+            m = re.match(r',\s*', text[pc:])
+            if not m:
+                out.append(text[i:p]); i = p; continue
+            q = pc + m.end()
+            depth = 1
+            r = q
+            while depth > 0:
+                ch = text[r]
+                if ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                r += 1
+            vexpr = text[q:r - 1]
+            if text[r] != ';':
+                out.append(text[i:r]); i = r; continue
+            rep = _slot_emit('write', inner, vexpr)
+            if rep is None:
+                out.append(text[i:r + 1]); i = r + 1; continue
+            out.append(text[i:j]); out.append(rep)
+            i = r + 1
+    return ''.join(out)
+
 def apply_gs_names(text):
     """Rewrite numeric ds_read/ds_write to named view accessors."""
     text = _RD_RE.sub(lambda m: gs_read_expr(int(m.group(1), 16)), text)
@@ -1456,6 +1558,7 @@ def transpile(cid, outdir='src/sdl/gen'):
     os.makedirs(outdir, exist_ok=True)
     path = f'{outdir}/chunk_{cid:04x}.gen.inc'
     text = apply_gs_names('\n'.join(lines) + '\n')   # stage 4 phase I
+    text = apply_slot_names(text)                    # stage 4 phase II.a
     open(path, 'w').write(text)
     print(f'{path}: {len(lines)} lines, {len(seen)} instructions, '
           f'gs-named {_GS_STATS}')

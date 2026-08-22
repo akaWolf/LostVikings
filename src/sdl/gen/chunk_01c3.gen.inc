@@ -10219,11 +10219,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x13E9;
@@ -10243,7 +10243,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x13EC, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x13ED;
@@ -10254,7 +10254,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x13ED, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x13EE;
@@ -10338,7 +10338,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x140D;
         G_PRE(0x140D, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x140F;
         G_POST(0x140D, 0x56);
         continue;
@@ -10377,7 +10377,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1418;
         G_PRE(0x1418, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x141A;
         G_POST(0x1418, 0x56);
         continue;
@@ -10399,7 +10399,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x141E;
         G_PRE(0x141E, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1420;
         G_POST(0x141E, 0x56);
         continue;
@@ -10458,10 +10458,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0118);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x144C : 0x1431;
         }
         G_POST(0x142D, 0x7A);
@@ -10504,7 +10504,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x143C;
         G_PRE(0x143C, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y0
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x14E5) /* partner.bbox_y0 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x14E5) /* partner.bbox_y0 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x143E;
@@ -10535,7 +10535,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1445;
         G_PRE(0x1445, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1447;
@@ -10553,7 +10553,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x144A;
         G_PRE(0x144A, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x144C;
@@ -10594,7 +10594,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1454;
         G_PRE(0x1454, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1456;
@@ -10614,7 +10614,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1458;
         G_PRE(0x1458, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x145A;
@@ -10669,7 +10669,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1463, 0x5B);
         // inlined v2_vm_op_5B: partner.state_18cd += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           // partner.state_18cd (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -10698,7 +10698,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1468, 0x5B);
         // inlined v2_vm_op_5B: partner.state_18cd += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           // partner.state_18cd (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -10718,7 +10718,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x146D;
         G_PRE(0x146D, 0x56);
         // inlined v2_vm_op_56: self.res_cost = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_cost_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x146F;
         G_POST(0x146D, 0x56);
         continue;
@@ -10744,7 +10744,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1497, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x4000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x4000) ? 1 : 0) == v2_vm_accumulator) ? 0x14AB : 0x149C;
         }
@@ -10824,7 +10824,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x14B9;
         G_PRE(0x14B9, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x14BB;
         G_POST(0x14B9, 0x56);
         continue;
@@ -11032,7 +11032,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x14EA, 0xAE);
         // inlined v2_vm_op_AE: when acc != bit(self.state_18f5 & 0x2000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001A;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x2000) ? 1 : 0) != v2_vm_accumulator) ? 0x1501 : 0x14EF;
         }
@@ -11258,7 +11258,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1520;
         G_PRE(0x1520, 0x56);
         // inlined v2_vm_op_56: self.res_handle = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15AD) /* self.res_handle */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_handle_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1522;
         G_POST(0x1520, 0x56);
         continue;
@@ -11274,7 +11274,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1525;
         G_PRE(0x1525, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1527;
         G_POST(0x1525, 0x56);
         continue;
@@ -11316,7 +11316,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x152E, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -11329,10 +11329,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x153F : 0x1536;
         }
@@ -11425,7 +11425,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1551, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x1562 : 0x1556;
         }
@@ -11453,7 +11453,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x155D, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x1571 : 0x1562;
         }
@@ -11602,7 +11602,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -11760,7 +11760,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x15EC;
         G_PRE(0x15EC, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x15EE;
         G_POST(0x15EC, 0x56);
         continue;
@@ -11849,10 +11849,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x00C8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v == v2_vm_accumulator) ? 0x1654 : 0x160B;
         }
         G_POST(0x1607, 0x75);
@@ -11861,7 +11861,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x160B;
         G_PRE(0x160B, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.child
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x182D) /* partner.child */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x182D) /* partner.child */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x160D;
@@ -11930,10 +11930,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x00C8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v == v2_vm_accumulator) ? 0x15F6 : 0x1620;
         }
         G_POST(0x161C, 0x75);
@@ -11954,10 +11954,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_x0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0050);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0050);
           // partner.bbox_x0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x15F6 : 0x1626;
         }
         G_POST(0x1622, 0x84);
@@ -11966,7 +11966,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1626;
         G_PRE(0x1626, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_x1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x155D) /* partner.bbox_x1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x155D) /* partner.bbox_x1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x1628;
@@ -12000,10 +12000,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_y0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0000);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0000);
           // partner.bbox_y0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x15F6 : 0x1632;
         }
         G_POST(0x162E, 0x84);
@@ -12012,7 +12012,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1632;
         G_PRE(0x1632, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x1634;
@@ -12139,7 +12139,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x165B, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18cd & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -12235,7 +12235,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1676;
         G_PRE(0x1676, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1678;
         G_POST(0x1676, 0x56);
         continue;
@@ -12251,7 +12251,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x167B;
         G_PRE(0x167B, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x167D;
         G_POST(0x167B, 0x56);
         continue;
@@ -12272,7 +12272,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1681, 0xAE);
         // inlined v2_vm_op_AE: when acc != bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x168B : 0x1686;
         }
@@ -12290,7 +12290,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1689;
         G_PRE(0x1689, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x168B;
         G_POST(0x1689, 0x56);
         continue;
@@ -12299,7 +12299,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x168B, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -12328,7 +12328,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1697;
         G_PRE(0x1697, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1699;
         G_POST(0x1697, 0x56);
         continue;
@@ -12350,7 +12350,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x169F;
         G_PRE(0x169F, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x16A1;
         G_POST(0x169F, 0x56);
         continue;
@@ -12523,7 +12523,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x16C5;
         G_PRE(0x16C5, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x16C7;
         G_POST(0x16C5, 0x56);
         continue;
@@ -12548,7 +12548,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x16CB;
         G_PRE(0x16CB, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x16CD;
         G_POST(0x16CB, 0x56);
         continue;
@@ -12579,7 +12579,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x16D2, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -12592,10 +12592,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x16A5 : 0x16DA;
         }
@@ -12633,7 +12633,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x16E4;
         G_PRE(0x16E4, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x16E6;
         G_POST(0x16E4, 0x56);
         continue;
@@ -12664,7 +12664,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x16ED, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -12677,10 +12677,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x16A9 : 0x16F5;
         }
@@ -12718,7 +12718,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x16FF;
         G_PRE(0x16FF, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1701;
         G_POST(0x16FF, 0x56);
         continue;
@@ -12760,7 +12760,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x170E;
         G_PRE(0x170E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1710;
         G_POST(0x170E, 0x56);
         continue;
@@ -12802,7 +12802,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x171D;
         G_PRE(0x171D, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x171F;
         G_POST(0x171D, 0x56);
         continue;
@@ -12837,7 +12837,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1731;
         G_PRE(0x1731, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1733;
         G_POST(0x1731, 0x56);
         continue;
@@ -12892,7 +12892,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1740, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x195F : 0x1745;
         }
@@ -12937,7 +12937,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x174E;
         G_PRE(0x174E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1750;
         G_POST(0x174E, 0x56);
         continue;
@@ -12962,7 +12962,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1756;
         G_PRE(0x1756, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1758;
         G_POST(0x1756, 0x56);
         continue;
@@ -12978,7 +12978,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x175B;
         G_PRE(0x175B, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x175D;
         G_POST(0x175B, 0x56);
         continue;
@@ -13046,7 +13046,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1774;
         G_PRE(0x1774, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1776;
         G_POST(0x1774, 0x56);
         continue;
@@ -13068,7 +13068,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x177C;
         G_PRE(0x177C, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x177E;
         G_POST(0x177C, 0x56);
         continue;
@@ -13090,7 +13090,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1784;
         G_PRE(0x1784, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1786;
         G_POST(0x1784, 0x56);
         continue;
@@ -13396,7 +13396,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x17D2;
         G_PRE(0x17D2, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x17D4;
         G_POST(0x17D2, 0x56);
         continue;
@@ -13492,7 +13492,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x17F2;
         G_PRE(0x17F2, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x17F4;
         G_POST(0x17F2, 0x56);
         continue;
@@ -13569,7 +13569,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x180E;
         G_PRE(0x180E, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1810;
         G_POST(0x180E, 0x56);
         continue;
@@ -13591,7 +13591,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1816;
         G_PRE(0x1816, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1818;
         G_POST(0x1816, 0x56);
         continue;
@@ -13613,7 +13613,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x181E;
         G_PRE(0x181E, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1820;
         G_POST(0x181E, 0x56);
         continue;
@@ -13919,7 +13919,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x186C;
         G_PRE(0x186C, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x186E;
         G_POST(0x186C, 0x56);
         continue;
@@ -14015,7 +14015,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x188C;
         G_PRE(0x188C, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x188E;
         G_POST(0x188C, 0x56);
         continue;
@@ -14198,7 +14198,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x18BC;
         G_PRE(0x18BC, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x18BE;
         G_POST(0x18BC, 0x56);
         continue;
@@ -14214,7 +14214,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x18C1;
         G_PRE(0x18C1, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x18C3;
         G_POST(0x18C1, 0x56);
         continue;
@@ -14437,7 +14437,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x18FB;
         G_PRE(0x18FB, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x18FD;
         G_POST(0x18FB, 0x56);
         continue;
@@ -14557,7 +14557,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -14602,7 +14602,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1931;
         G_PRE(0x1931, 0x58);
         // inlined v2_vm_op_58: partner.anim_dy = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1675) /* partner.anim_dy */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1675) /* partner.anim_dy */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1933;
@@ -14660,7 +14660,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1944;
         G_PRE(0x1944, 0x58);
         // inlined v2_vm_op_58: partner.anim_dx = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x164D) /* partner.anim_dx */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x164D) /* partner.anim_dx */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1946;
@@ -14684,7 +14684,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x194C;
         G_PRE(0x194C, 0x58);
         // inlined v2_vm_op_58: partner.anim_dx = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x164D) /* partner.anim_dx */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x164D) /* partner.anim_dx */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x194E;
@@ -14708,7 +14708,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1954;
         G_PRE(0x1954, 0x58);
         // inlined v2_vm_op_58: partner.anim_dx = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x164D) /* partner.anim_dx */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x164D) /* partner.anim_dx */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1956;
@@ -15067,7 +15067,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x19C8;
         G_PRE(0x19C8, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x19CA;
         G_POST(0x19C8, 0x56);
         continue;
@@ -15109,7 +15109,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x19D7;
         G_PRE(0x19D7, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x19D9;
         G_POST(0x19D7, 0x56);
         continue;
@@ -15125,7 +15125,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x19DC;
         G_PRE(0x19DC, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x19DE;
         G_POST(0x19DC, 0x56);
         continue;
@@ -15150,7 +15150,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x19E4;
         G_PRE(0x19E4, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x19E6;
         G_POST(0x19E4, 0x56);
         continue;
@@ -15287,7 +15287,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1A0E;
         G_PRE(0x1A0E, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1A10;
         G_POST(0x1A0E, 0x56);
         continue;
@@ -15312,7 +15312,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1A16;
         G_PRE(0x1A16, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1A18;
         G_POST(0x1A16, 0x56);
         continue;
@@ -15397,7 +15397,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1A2A;
         G_PRE(0x1A2A, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1A2C;
         G_POST(0x1A2A, 0x56);
         continue;
@@ -15422,7 +15422,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1A32;
         G_PRE(0x1A32, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1A34;
         G_POST(0x1A32, 0x56);
         continue;
@@ -15511,7 +15511,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1AA7;
         G_PRE(0x1AA7, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1AA9;
         G_POST(0x1AA7, 0x56);
         continue;
@@ -15566,7 +15566,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1AB6, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x1BCB : 0x1ABB;
         }
@@ -15611,7 +15611,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1AC4;
         G_PRE(0x1AC4, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1AC6;
         G_POST(0x1AC4, 0x56);
         continue;
@@ -15803,7 +15803,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1AF4;
         G_PRE(0x1AF4, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1AF6;
         G_POST(0x1AF4, 0x56);
         continue;
@@ -15959,7 +15959,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1B2C;
         G_PRE(0x1B2C, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1B2E;
         G_POST(0x1B2C, 0x56);
         continue;
@@ -15975,7 +15975,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1B31;
         G_PRE(0x1B31, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1B33;
         G_POST(0x1B31, 0x56);
         continue;
@@ -16203,7 +16203,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1B7B;
         G_PRE(0x1B7B, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1B7D;
         G_POST(0x1B7B, 0x56);
         continue;
@@ -16273,7 +16273,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1B91;
         G_PRE(0x1B91, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1B93;
         G_POST(0x1B91, 0x56);
         continue;
@@ -16287,7 +16287,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1B94;
         G_PRE(0x1B94, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x1B96;
@@ -16315,7 +16315,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1B9E;
         G_PRE(0x1B9E, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1BA0;
@@ -16326,7 +16326,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1BA0, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -16341,7 +16341,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -16446,7 +16446,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -16789,7 +16789,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1C37;
         G_PRE(0x1C37, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1C39;
         G_POST(0x1C37, 0x56);
         continue;
@@ -16845,7 +16845,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1C4A;
         G_PRE(0x1C4A, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1C4C;
         G_POST(0x1C4A, 0x56);
         continue;
@@ -16867,7 +16867,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1C52;
         G_PRE(0x1C52, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1C54;
         G_POST(0x1C52, 0x56);
         continue;
@@ -16892,7 +16892,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1C5A;
         G_PRE(0x1C5A, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1C5C;
         G_POST(0x1C5A, 0x56);
         continue;
@@ -16968,7 +16968,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1C6D;
         G_PRE(0x1C6D, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1C6F;
         G_POST(0x1C6D, 0x56);
         continue;
@@ -16993,7 +16993,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1C75;
         G_PRE(0x1C75, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1C77;
         G_POST(0x1C75, 0x56);
         continue;
@@ -17078,7 +17078,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1C89;
         G_PRE(0x1C89, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1C8B;
         G_POST(0x1C89, 0x56);
         continue;
@@ -17176,7 +17176,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1CFC;
         G_PRE(0x1CFC, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1CFE;
         G_POST(0x1CFC, 0x56);
         continue;
@@ -17231,7 +17231,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1D0B, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x1EC1 : 0x1D10;
         }
@@ -17285,7 +17285,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1D1C;
         G_PRE(0x1D1C, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1D1E;
         G_POST(0x1D1C, 0x56);
         continue;
@@ -17353,7 +17353,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1D35;
         G_PRE(0x1D35, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1D37;
         G_POST(0x1D35, 0x56);
         continue;
@@ -17375,7 +17375,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1D3D;
         G_PRE(0x1D3D, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1D3F;
         G_POST(0x1D3D, 0x56);
         continue;
@@ -17397,7 +17397,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1D45;
         G_PRE(0x1D45, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1D47;
         G_POST(0x1D45, 0x56);
         continue;
@@ -17602,7 +17602,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1D76;
         G_PRE(0x1D76, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1D78;
         G_POST(0x1D76, 0x56);
         continue;
@@ -17821,7 +17821,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1DC4;
         G_PRE(0x1DC4, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1DC6;
         G_POST(0x1DC4, 0x56);
         continue;
@@ -17837,7 +17837,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1DC9;
         G_PRE(0x1DC9, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1DCB;
         G_POST(0x1DC9, 0x56);
         continue;
@@ -18167,7 +18167,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E32;
         G_PRE(0x1E32, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1E34;
         G_POST(0x1E32, 0x56);
         continue;
@@ -18189,7 +18189,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E38;
         G_PRE(0x1E38, 0x56);
         // inlined v2_vm_op_56: self.res_cost = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_cost_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1E3A;
         G_POST(0x1E38, 0x56);
         continue;
@@ -18228,7 +18228,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E43;
         G_PRE(0x1E43, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1E45;
         G_POST(0x1E43, 0x56);
         continue;
@@ -18271,7 +18271,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E4E;
         G_PRE(0x1E4E, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x1E50;
@@ -18299,7 +18299,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E58;
         G_PRE(0x1E58, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1E5A;
@@ -18317,7 +18317,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E5D;
         G_PRE(0x1E5D, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x1E5F;
@@ -18328,7 +18328,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1E5F, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -18343,7 +18343,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -18448,7 +18448,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -18495,7 +18495,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1E91;
         G_PRE(0x1E91, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1E93;
         G_POST(0x1E91, 0x56);
         continue;
@@ -18548,7 +18548,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1EA0;
         G_PRE(0x1EA0, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1EA2;
         G_POST(0x1EA0, 0x56);
         continue;
@@ -18597,7 +18597,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1EB1;
         G_PRE(0x1EB1, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1EB3;
         G_POST(0x1EB1, 0x56);
         continue;
@@ -18613,7 +18613,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1EB6;
         G_PRE(0x1EB6, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1EB8;
         G_POST(0x1EB6, 0x56);
         continue;
@@ -18976,7 +18976,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x1F24, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -18989,10 +18989,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x1F40 : 0x1F2C;
         }
@@ -19065,7 +19065,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1F3E;
         G_PRE(0x1F3E, 0x56);
         // inlined v2_vm_op_56: self.res_cost = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_cost_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1F40;
         G_POST(0x1F3E, 0x56);
         continue;
@@ -19287,7 +19287,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1F8A;
         G_PRE(0x1F8A, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1F8C;
         G_POST(0x1F8A, 0x56);
         continue;
@@ -19329,7 +19329,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1F99;
         G_PRE(0x1F99, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1F9B;
         G_POST(0x1F99, 0x56);
         continue;
@@ -19354,7 +19354,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1FA1;
         G_PRE(0x1FA1, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1FA3;
         G_POST(0x1FA1, 0x56);
         continue;
@@ -19430,7 +19430,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1FB4;
         G_PRE(0x1FB4, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1FB6;
         G_POST(0x1FB4, 0x56);
         continue;
@@ -19455,7 +19455,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1FBC;
         G_PRE(0x1FBC, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1FBE;
         G_POST(0x1FBC, 0x56);
         continue;
@@ -19540,7 +19540,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1FD0;
         G_PRE(0x1FD0, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1FD2;
         G_POST(0x1FD0, 0x56);
         continue;
@@ -19565,7 +19565,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x1FD8;
         G_PRE(0x1FD8, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x1FDA;
         G_POST(0x1FD8, 0x56);
         continue;
@@ -19672,7 +19672,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2050;
         G_PRE(0x2050, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2052;
         G_POST(0x2050, 0x56);
         continue;
@@ -19714,7 +19714,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x205D;
         G_PRE(0x205D, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x205F;
         G_POST(0x205D, 0x56);
         continue;
@@ -19732,7 +19732,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2061;
         G_PRE(0x2061, 0x56);
         // inlined v2_vm_op_56: self.bbox_y0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2063;
         G_POST(0x2061, 0x56);
         continue;
@@ -19748,7 +19748,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2066;
         G_PRE(0x2066, 0x56);
         // inlined v2_vm_op_56: self.class_bits = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1625) /* self.class_bits */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_class_bits_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2068;
         G_POST(0x2066, 0x56);
         continue;
@@ -19855,7 +19855,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2084;
         G_PRE(0x2084, 0x56);
         // inlined v2_vm_op_56: self.class_bits = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1625) /* self.class_bits */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_class_bits_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2086;
         G_POST(0x2084, 0x56);
         continue;
@@ -20012,7 +20012,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x20AC;
         G_PRE(0x20AC, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x20AE;
@@ -20030,7 +20030,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x20B1;
         G_PRE(0x20B1, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x20B3;
@@ -20087,7 +20087,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x20C1, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -20102,7 +20102,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -20232,7 +20232,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x20EE, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x20FD : 0x20F3;
         }
@@ -20257,7 +20257,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -20290,7 +20290,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -20345,7 +20345,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -20455,7 +20455,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -20621,7 +20621,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x216B;
         G_PRE(0x216B, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x216D;
         G_POST(0x216B, 0x56);
         continue;
@@ -20716,7 +20716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2185;
         G_PRE(0x2185, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2187;
         G_POST(0x2185, 0x56);
         continue;
@@ -20732,7 +20732,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x218A;
         G_PRE(0x218A, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x218C;
         G_POST(0x218A, 0x56);
         continue;
@@ -20975,7 +20975,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2225;
         G_PRE(0x2225, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2227;
         G_POST(0x2225, 0x56);
         continue;
@@ -21137,7 +21137,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2269, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -21188,7 +21188,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2276;
         G_PRE(0x2276, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2278;
         G_POST(0x2276, 0x56);
         continue;
@@ -21197,7 +21197,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2278, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.spawn_pool & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -21222,7 +21222,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x227E, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.spawn_pool & 0x4000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -21292,7 +21292,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2292, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x20)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000A;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0020) ? 1 : 0) == v2_vm_accumulator) ? 0x229F : 0x2297;
         }
@@ -21310,7 +21310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x229A;
         G_PRE(0x229A, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x229C;
         G_POST(0x229A, 0x56);
         continue;
@@ -21332,7 +21332,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x22A2;
         G_PRE(0x22A2, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x22A4;
         G_POST(0x22A2, 0x56);
         continue;
@@ -21456,7 +21456,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x22C6;
         G_PRE(0x22C6, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x22C8;
         G_POST(0x22C6, 0x56);
         continue;
@@ -21465,7 +21465,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x22C8, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -21533,7 +21533,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x22DA;
         G_PRE(0x22DA, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x22DC;
         G_POST(0x22DA, 0x56);
         continue;
@@ -21695,7 +21695,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2309, 0xAE);
         // inlined v2_vm_op_AE: when acc != bit(self.state_18f5 & 0x1)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0000;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0001) ? 1 : 0) != v2_vm_accumulator) ? 0x2348 : 0x230E;
         }
@@ -21732,7 +21732,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2315;
         G_PRE(0x2315, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2317;
         G_POST(0x2315, 0x56);
         continue;
@@ -21783,7 +21783,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2324, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x232D : 0x2329;
         }
@@ -21935,7 +21935,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2350;
         G_PRE(0x2350, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2352;
         G_POST(0x2350, 0x56);
         continue;
@@ -22005,7 +22005,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2363, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x236C : 0x2368;
         }
@@ -22151,7 +22151,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x238E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0000;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0001) ? 1 : 0) == v2_vm_accumulator) ? 0x232D : 0x2393;
         }
@@ -22179,7 +22179,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x239A, 0xAE);
         // inlined v2_vm_op_AE: when acc != bit(self.state_18f5 & 0x2)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0002;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0002) ? 1 : 0) != v2_vm_accumulator) ? 0x246D : 0x239F;
         }
@@ -22216,7 +22216,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x23A6;
         G_PRE(0x23A6, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x23A8;
         G_POST(0x23A6, 0x56);
         continue;
@@ -22236,7 +22236,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x23AC, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x20)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000A;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0020) ? 1 : 0) == v2_vm_accumulator) ? 0x23BD : 0x23B1;
         }
@@ -22258,7 +22258,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x23B5, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x10)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0008;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0010) ? 1 : 0) == v2_vm_accumulator) ? 0x2411 : 0x23BA;
         }
@@ -22286,7 +22286,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x23C1, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x10)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0008;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0010) ? 1 : 0) == v2_vm_accumulator) ? 0x243A : 0x23C6;
         }
@@ -22869,7 +22869,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2475;
         G_PRE(0x2475, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2477;
         G_POST(0x2475, 0x56);
         continue;
@@ -23036,7 +23036,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x24A3, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x4)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0004;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0004) ? 1 : 0) == v2_vm_accumulator) ? 0x24B4 : 0x24A8;
         }
@@ -23058,7 +23058,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x24AC, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x2)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0002;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0002) ? 1 : 0) == v2_vm_accumulator) ? 0x246D : 0x24B1;
         }
@@ -23086,7 +23086,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x24B8, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0000;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0001) ? 1 : 0) == v2_vm_accumulator) ? 0x2348 : 0x24BD;
         }
@@ -23110,7 +23110,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x24C3;
         G_PRE(0x24C3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x24C5;
         G_POST(0x24C3, 0x56);
         continue;
@@ -23130,7 +23130,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x24C9, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x4)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0004;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0004) ? 1 : 0) == v2_vm_accumulator) ? 0x22E7 : 0x24CE;
         }
@@ -23146,7 +23146,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x24D1;
         G_PRE(0x24D1, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x24D3;
@@ -23212,7 +23212,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x24E5, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_x += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0460);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0460);
           // partner.vel_x (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -23235,7 +23235,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x24E9, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -23253,7 +23253,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x24EC;
         G_PRE(0x24EC, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x24EE;
@@ -23285,10 +23285,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0118);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x252F : 0x24F9;
         }
         G_POST(0x24F5, 0x7A);
@@ -23297,7 +23297,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x24F9;
         G_PRE(0x24F9, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_dy
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1675) /* partner.anim_dy */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1675) /* partner.anim_dy */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x24FB;
@@ -23328,7 +23328,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2502, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -23340,7 +23340,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2504;
         G_PRE(0x2504, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2506;
@@ -23420,7 +23420,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x251D, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -23440,7 +23440,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2522;
         G_PRE(0x2522, 0x58);
         // inlined v2_vm_op_58: partner.frac_y = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x19E5) /* partner.frac_y */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x19E5) /* partner.frac_y */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x2524;
@@ -23450,7 +23450,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2524;
         G_PRE(0x2524, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_dy
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1675) /* partner.anim_dy */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1675) /* partner.anim_dy */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2526;
@@ -23470,7 +23470,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x252B;
         G_PRE(0x252B, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_dy
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1675) /* partner.anim_dy */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1675) /* partner.anim_dy */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x252D;
@@ -23481,7 +23481,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x252D, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -23499,7 +23499,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2530;
         G_PRE(0x2530, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2532;
@@ -23531,10 +23531,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0118);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x2568 : 0x253D;
         }
         G_POST(0x2539, 0x7A);
@@ -23543,7 +23543,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x253D;
         G_PRE(0x253D, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_dy
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1675) /* partner.anim_dy */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1675) /* partner.anim_dy */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x253F;
@@ -23563,7 +23563,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2544;
         G_PRE(0x2544, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2546;
@@ -23643,7 +23643,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x255D, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -23655,7 +23655,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x255F;
         G_PRE(0x255F, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_dy
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1675) /* partner.anim_dy */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1675) /* partner.anim_dy */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2561;
@@ -23666,7 +23666,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2561, 0x5E);
         // inlined v2_vm_op_5E: partner.vel_y -= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -23686,7 +23686,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2566;
         G_PRE(0x2566, 0x58);
         // inlined v2_vm_op_58: partner.frac_y = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x19E5) /* partner.frac_y */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x19E5) /* partner.frac_y */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x2568;
@@ -23735,7 +23735,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2574, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -23767,7 +23767,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x257D;
         G_PRE(0x257D, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x257F;
         G_POST(0x257D, 0x56);
         continue;
@@ -23790,7 +23790,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2585;
         G_PRE(0x2585, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2587;
         G_POST(0x2585, 0x56);
         continue;
@@ -23894,7 +23894,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x25A4;
         G_PRE(0x25A4, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x25A6;
         G_POST(0x25A4, 0x56);
         continue;
@@ -24322,7 +24322,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2639;
         G_PRE(0x2639, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x263B;
         G_POST(0x2639, 0x56);
         continue;
@@ -24338,7 +24338,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x263E;
         G_PRE(0x263E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2640;
         G_POST(0x263E, 0x56);
         continue;
@@ -24354,7 +24354,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2643;
         G_PRE(0x2643, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2645;
         G_POST(0x2643, 0x56);
         continue;
@@ -24376,7 +24376,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2649;
         G_PRE(0x2649, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x264B;
         G_POST(0x2649, 0x56);
         continue;
@@ -24392,7 +24392,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x264E;
         G_PRE(0x264E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2650;
         G_POST(0x264E, 0x56);
         continue;
@@ -24408,7 +24408,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2653;
         G_PRE(0x2653, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2655;
         G_POST(0x2653, 0x56);
         continue;
@@ -24430,7 +24430,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2659;
         G_PRE(0x2659, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x265B;
         G_POST(0x2659, 0x56);
         continue;
@@ -24446,7 +24446,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x265E;
         G_PRE(0x265E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2660;
         G_POST(0x265E, 0x56);
         continue;
@@ -24462,7 +24462,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2663;
         G_PRE(0x2663, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2665;
         G_POST(0x2663, 0x56);
         continue;
@@ -24484,7 +24484,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2669;
         G_PRE(0x2669, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x266B;
         G_POST(0x2669, 0x56);
         continue;
@@ -24500,7 +24500,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x266E;
         G_PRE(0x266E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2670;
         G_POST(0x266E, 0x56);
         continue;
@@ -24516,7 +24516,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2673;
         G_PRE(0x2673, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2675;
         G_POST(0x2673, 0x56);
         continue;
@@ -24538,7 +24538,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2679;
         G_PRE(0x2679, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x267B;
         G_POST(0x2679, 0x56);
         continue;
@@ -24554,7 +24554,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x267E;
         G_PRE(0x267E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2680;
         G_POST(0x267E, 0x56);
         continue;
@@ -24570,7 +24570,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2683;
         G_PRE(0x2683, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2685;
         G_POST(0x2683, 0x56);
         continue;
@@ -24592,7 +24592,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2689;
         G_PRE(0x2689, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x268B;
         G_POST(0x2689, 0x56);
         continue;
@@ -24608,7 +24608,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x268E;
         G_PRE(0x268E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2690;
         G_POST(0x268E, 0x56);
         continue;
@@ -24624,7 +24624,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2693;
         G_PRE(0x2693, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2695;
         G_POST(0x2693, 0x56);
         continue;
@@ -24646,7 +24646,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2699;
         G_PRE(0x2699, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x269B;
         G_POST(0x2699, 0x56);
         continue;
@@ -24662,7 +24662,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x269E;
         G_PRE(0x269E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26A0;
         G_POST(0x269E, 0x56);
         continue;
@@ -24678,7 +24678,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26A3;
         G_PRE(0x26A3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26A5;
         G_POST(0x26A3, 0x56);
         continue;
@@ -24700,7 +24700,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26A9;
         G_PRE(0x26A9, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26AB;
         G_POST(0x26A9, 0x56);
         continue;
@@ -24716,7 +24716,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26AE;
         G_PRE(0x26AE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26B0;
         G_POST(0x26AE, 0x56);
         continue;
@@ -24732,7 +24732,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26B3;
         G_PRE(0x26B3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26B5;
         G_POST(0x26B3, 0x56);
         continue;
@@ -24754,7 +24754,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26B9;
         G_PRE(0x26B9, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26BB;
         G_POST(0x26B9, 0x56);
         continue;
@@ -24770,7 +24770,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26BE;
         G_PRE(0x26BE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26C0;
         G_POST(0x26BE, 0x56);
         continue;
@@ -24786,7 +24786,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26C3;
         G_PRE(0x26C3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26C5;
         G_POST(0x26C3, 0x56);
         continue;
@@ -24808,7 +24808,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26C9;
         G_PRE(0x26C9, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26CB;
         G_POST(0x26C9, 0x56);
         continue;
@@ -24824,7 +24824,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26CE;
         G_PRE(0x26CE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26D0;
         G_POST(0x26CE, 0x56);
         continue;
@@ -24840,7 +24840,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26D3;
         G_PRE(0x26D3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26D5;
         G_POST(0x26D3, 0x56);
         continue;
@@ -24862,7 +24862,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26D9;
         G_PRE(0x26D9, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26DB;
         G_POST(0x26D9, 0x56);
         continue;
@@ -24878,7 +24878,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26DE;
         G_PRE(0x26DE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26E0;
         G_POST(0x26DE, 0x56);
         continue;
@@ -24894,7 +24894,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26E3;
         G_PRE(0x26E3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26E5;
         G_POST(0x26E3, 0x56);
         continue;
@@ -24916,7 +24916,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26E9;
         G_PRE(0x26E9, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26EB;
         G_POST(0x26E9, 0x56);
         continue;
@@ -24932,7 +24932,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26EE;
         G_PRE(0x26EE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26F0;
         G_POST(0x26EE, 0x56);
         continue;
@@ -24948,7 +24948,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26F3;
         G_PRE(0x26F3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26F5;
         G_POST(0x26F3, 0x56);
         continue;
@@ -24970,7 +24970,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26F9;
         G_PRE(0x26F9, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x26FB;
         G_POST(0x26F9, 0x56);
         continue;
@@ -24986,7 +24986,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x26FE;
         G_PRE(0x26FE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2700;
         G_POST(0x26FE, 0x56);
         continue;
@@ -25002,7 +25002,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2703;
         G_PRE(0x2703, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2705;
         G_POST(0x2703, 0x56);
         continue;
@@ -25024,7 +25024,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2709;
         G_PRE(0x2709, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x270B;
         G_POST(0x2709, 0x56);
         continue;
@@ -25040,7 +25040,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x270E;
         G_PRE(0x270E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2710;
         G_POST(0x270E, 0x56);
         continue;
@@ -25056,7 +25056,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2713;
         G_PRE(0x2713, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2715;
         G_POST(0x2713, 0x56);
         continue;
@@ -25078,7 +25078,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2719;
         G_PRE(0x2719, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x271B;
         G_POST(0x2719, 0x56);
         continue;
@@ -25094,7 +25094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x271E;
         G_PRE(0x271E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2720;
         G_POST(0x271E, 0x56);
         continue;
@@ -25110,7 +25110,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2723;
         G_PRE(0x2723, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2725;
         G_POST(0x2723, 0x56);
         continue;
@@ -25132,7 +25132,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2729;
         G_PRE(0x2729, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x272B;
         G_POST(0x2729, 0x56);
         continue;
@@ -25148,7 +25148,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x272E;
         G_PRE(0x272E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2730;
         G_POST(0x272E, 0x56);
         continue;
@@ -25164,7 +25164,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2733;
         G_PRE(0x2733, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2735;
         G_POST(0x2733, 0x56);
         continue;
@@ -25186,7 +25186,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2739;
         G_PRE(0x2739, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x273B;
         G_POST(0x2739, 0x56);
         continue;
@@ -25202,7 +25202,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x273E;
         G_PRE(0x273E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2740;
         G_POST(0x273E, 0x56);
         continue;
@@ -25218,7 +25218,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2743;
         G_PRE(0x2743, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2745;
         G_POST(0x2743, 0x56);
         continue;
@@ -25240,7 +25240,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2749;
         G_PRE(0x2749, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x274B;
         G_POST(0x2749, 0x56);
         continue;
@@ -25256,7 +25256,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x274E;
         G_PRE(0x274E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2750;
         G_POST(0x274E, 0x56);
         continue;
@@ -25272,7 +25272,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2753;
         G_PRE(0x2753, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2755;
         G_POST(0x2753, 0x56);
         continue;
@@ -25294,7 +25294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2759;
         G_PRE(0x2759, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x275B;
         G_POST(0x2759, 0x56);
         continue;
@@ -25310,7 +25310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x275E;
         G_PRE(0x275E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2760;
         G_POST(0x275E, 0x56);
         continue;
@@ -25326,7 +25326,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2763;
         G_PRE(0x2763, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2765;
         G_POST(0x2763, 0x56);
         continue;
@@ -25348,7 +25348,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2769;
         G_PRE(0x2769, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x276B;
         G_POST(0x2769, 0x56);
         continue;
@@ -25364,7 +25364,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x276E;
         G_PRE(0x276E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2770;
         G_POST(0x276E, 0x56);
         continue;
@@ -25380,7 +25380,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2773;
         G_PRE(0x2773, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2775;
         G_POST(0x2773, 0x56);
         continue;
@@ -25401,7 +25401,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x281C, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -25442,7 +25442,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2828;
         G_PRE(0x2828, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x282A;
         G_POST(0x2828, 0x56);
         continue;
@@ -25462,7 +25462,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x282E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x2873 : 0x2833;
         }
@@ -25703,7 +25703,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2893, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18f5 & 0x4000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -25752,7 +25752,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x28A1;
         G_PRE(0x28A1, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x28A3;
         G_POST(0x28A1, 0x56);
         continue;
@@ -25802,7 +25802,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x28E9;
         G_PRE(0x28E9, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x28EB;
         G_POST(0x28E9, 0x56);
         continue;
@@ -25832,7 +25832,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x28FD;
         G_PRE(0x28FD, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x28FF;
         G_POST(0x28FD, 0x56);
         continue;
@@ -25980,7 +25980,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x292E;
         G_PRE(0x292E, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_x
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x173D) /* partner.world_x */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x173D) /* partner.world_x */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2930;
@@ -26000,7 +26000,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2935;
         G_PRE(0x2935, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_x
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x173D) /* partner.world_x */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x173D) /* partner.world_x */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2937;
@@ -26020,7 +26020,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x293C;
         G_PRE(0x293C, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_y
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1765) /* partner.world_y */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1765) /* partner.world_y */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x293E;
@@ -26040,7 +26040,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2943;
         G_PRE(0x2943, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_y
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1765) /* partner.world_y */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1765) /* partner.world_y */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2945;
@@ -26085,7 +26085,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -26119,7 +26119,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x295E;
         G_PRE(0x295E, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_x
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x173D) /* partner.world_x */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x173D) /* partner.world_x */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2960;
@@ -26139,7 +26139,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2965;
         G_PRE(0x2965, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_x
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x173D) /* partner.world_x */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x173D) /* partner.world_x */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2967;
@@ -26159,7 +26159,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x296C;
         G_PRE(0x296C, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_y
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1765) /* partner.world_y */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1765) /* partner.world_y */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x296E;
@@ -26179,7 +26179,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2973;
         G_PRE(0x2973, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_y
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1765) /* partner.world_y */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1765) /* partner.world_y */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x2975;
@@ -26224,7 +26224,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -26300,7 +26300,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x299A, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x2A1D : 0x299F;
         }
@@ -26339,7 +26339,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x29A5;
         G_PRE(0x29A5, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.state_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15FD) /* partner.state_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15FD) /* partner.state_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x29A7;
@@ -26409,7 +26409,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x29B9;
         G_PRE(0x29B9, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.state_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15FD) /* partner.state_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15FD) /* partner.state_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x29BB;
@@ -26479,7 +26479,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x29CD;
         G_PRE(0x29CD, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.state_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15FD) /* partner.state_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15FD) /* partner.state_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x29CF;
@@ -26654,7 +26654,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x2A0E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x2A1D : 0x2A13;
         }
@@ -26815,7 +26815,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2A39;
         G_PRE(0x2A39, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2A3B;
         G_POST(0x2A39, 0x56);
         continue;
@@ -26864,7 +26864,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2A45;
         G_PRE(0x2A45, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2A47;
         G_POST(0x2A45, 0x56);
         continue;
@@ -26978,7 +26978,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2A5F;
         G_PRE(0x2A5F, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2A61;
         G_POST(0x2A5F, 0x56);
         continue;
@@ -27000,7 +27000,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2A67;
         G_PRE(0x2A67, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x2A69;
@@ -27038,7 +27038,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2A73;
         G_PRE(0x2A73, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x2A75;
@@ -27064,7 +27064,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2A78;
         G_PRE(0x2A78, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x2A7A;
@@ -27167,7 +27167,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2AC7;
         G_PRE(0x2AC7, 0x56);
         // inlined v2_vm_op_56: self.bbox_x0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1535) /* self.bbox_x0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2AC9;
         G_POST(0x2AC7, 0x56);
         continue;
@@ -27183,7 +27183,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2ACC;
         G_PRE(0x2ACC, 0x56);
         // inlined v2_vm_op_56: self.bbox_x1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x155D) /* self.bbox_x1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2ACE;
         G_POST(0x2ACC, 0x56);
         continue;
@@ -27199,7 +27199,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2AD1;
         G_PRE(0x2AD1, 0x56);
         // inlined v2_vm_op_56: self.bbox_y0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2AD3;
         G_POST(0x2AD1, 0x56);
         continue;
@@ -27215,7 +27215,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2AD6;
         G_PRE(0x2AD6, 0x56);
         // inlined v2_vm_op_56: self.bbox_y1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x150D) /* self.bbox_y1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2AD8;
         G_POST(0x2AD6, 0x56);
         continue;
@@ -27996,7 +27996,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28015,7 +28015,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2BE0;
         G_PRE(0x2BE0, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2BE2;
         G_POST(0x2BE0, 0x56);
         continue;
@@ -28071,7 +28071,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28090,7 +28090,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2BF9;
         G_PRE(0x2BF9, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2BFB;
         G_POST(0x2BF9, 0x56);
         continue;
@@ -28146,7 +28146,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28165,7 +28165,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2C12;
         G_PRE(0x2C12, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2C14;
         G_POST(0x2C12, 0x56);
         continue;
@@ -28221,7 +28221,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28240,7 +28240,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2C2B;
         G_PRE(0x2C2B, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2C2D;
         G_POST(0x2C2B, 0x56);
         continue;
@@ -28296,7 +28296,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28315,7 +28315,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2C44;
         G_PRE(0x2C44, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2C46;
         G_POST(0x2C44, 0x56);
         continue;
@@ -28371,7 +28371,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28390,7 +28390,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2C5D;
         G_PRE(0x2C5D, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2C5F;
         G_POST(0x2C5D, 0x56);
         continue;
@@ -28446,7 +28446,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28465,7 +28465,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2C76;
         G_PRE(0x2C76, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2C78;
         G_POST(0x2C76, 0x56);
         continue;
@@ -28521,7 +28521,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28540,7 +28540,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2C8F;
         G_PRE(0x2C8F, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2C91;
         G_POST(0x2C8F, 0x56);
         continue;
@@ -28596,7 +28596,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28615,7 +28615,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2CA8;
         G_PRE(0x2CA8, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2CAA;
         G_POST(0x2CA8, 0x56);
         continue;
@@ -28671,7 +28671,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28690,7 +28690,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2CC1;
         G_PRE(0x2CC1, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2CC3;
         G_POST(0x2CC1, 0x56);
         continue;
@@ -28746,7 +28746,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28765,7 +28765,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2CDA;
         G_PRE(0x2CDA, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2CDC;
         G_POST(0x2CDA, 0x56);
         continue;
@@ -28821,7 +28821,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28840,7 +28840,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2CF3;
         G_PRE(0x2CF3, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2CF5;
         G_POST(0x2CF3, 0x56);
         continue;
@@ -28896,7 +28896,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28915,7 +28915,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2D0C;
         G_PRE(0x2D0C, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2D0E;
         G_POST(0x2D0C, 0x56);
         continue;
@@ -28971,7 +28971,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -28990,7 +28990,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2D25;
         G_PRE(0x2D25, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2D27;
         G_POST(0x2D25, 0x56);
         continue;
@@ -29046,7 +29046,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29065,7 +29065,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2D3E;
         G_PRE(0x2D3E, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2D40;
         G_POST(0x2D3E, 0x56);
         continue;
@@ -29121,7 +29121,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29140,7 +29140,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2D57;
         G_PRE(0x2D57, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2D59;
         G_POST(0x2D57, 0x56);
         continue;
@@ -29196,7 +29196,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29232,7 +29232,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29268,7 +29268,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29304,7 +29304,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29340,7 +29340,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2D99;
         G_PRE(0x2D99, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2D9B;
         G_POST(0x2D99, 0x56);
         continue;
@@ -29379,7 +29379,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29415,7 +29415,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29434,7 +29434,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2DB9;
         G_PRE(0x2DB9, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2DBB;
         G_POST(0x2DB9, 0x56);
         continue;
@@ -29490,7 +29490,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29526,7 +29526,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29562,7 +29562,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29581,7 +29581,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2DEA;
         G_PRE(0x2DEA, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2DEC;
         G_POST(0x2DEA, 0x56);
         continue;
@@ -29637,7 +29637,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29673,7 +29673,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29692,7 +29692,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2E0F;
         G_PRE(0x2E0F, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2E11;
         G_POST(0x2E0F, 0x56);
         continue;
@@ -29748,7 +29748,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29784,7 +29784,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29820,7 +29820,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29839,7 +29839,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2E40;
         G_PRE(0x2E40, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2E42;
         G_POST(0x2E40, 0x56);
         continue;
@@ -29895,7 +29895,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29931,7 +29931,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -29950,7 +29950,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2E65;
         G_PRE(0x2E65, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2E67;
         G_POST(0x2E65, 0x56);
         continue;
@@ -30006,7 +30006,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30025,7 +30025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2E7E;
         G_PRE(0x2E7E, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2E80;
         G_POST(0x2E7E, 0x56);
         continue;
@@ -30081,7 +30081,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30100,7 +30100,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2E97;
         G_PRE(0x2E97, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2E99;
         G_POST(0x2E97, 0x56);
         continue;
@@ -30156,7 +30156,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30175,7 +30175,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2EB0;
         G_PRE(0x2EB0, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2EB2;
         G_POST(0x2EB0, 0x56);
         continue;
@@ -30231,7 +30231,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30267,7 +30267,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30286,7 +30286,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2ED5;
         G_PRE(0x2ED5, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2ED7;
         G_POST(0x2ED5, 0x56);
         continue;
@@ -30342,7 +30342,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30361,7 +30361,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2EEE;
         G_PRE(0x2EEE, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2EF0;
         G_POST(0x2EEE, 0x56);
         continue;
@@ -30417,7 +30417,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30436,7 +30436,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2F07;
         G_PRE(0x2F07, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2F09;
         G_POST(0x2F07, 0x56);
         continue;
@@ -30492,7 +30492,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30528,7 +30528,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30547,7 +30547,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2F2C;
         G_PRE(0x2F2C, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2F2E;
         G_POST(0x2F2C, 0x56);
         continue;
@@ -30603,7 +30603,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30639,7 +30639,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30658,7 +30658,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2F51;
         G_PRE(0x2F51, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2F53;
         G_POST(0x2F51, 0x56);
         continue;
@@ -30714,7 +30714,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -30771,7 +30771,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2F76;
         G_PRE(0x2F76, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2F78;
         G_POST(0x2F76, 0x56);
         continue;
@@ -30928,7 +30928,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2F9E;
         G_PRE(0x2F9E, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2FA0;
         G_POST(0x2F9E, 0x56);
         continue;
@@ -31173,7 +31173,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x2FFD;
         G_PRE(0x2FFD, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x2FFF;
         G_POST(0x2FFD, 0x56);
         continue;
@@ -31247,10 +31247,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0118);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x3029 : 0x3014;
         }
         G_POST(0x3010, 0x7A);
@@ -31271,10 +31271,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.bbox_y1
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0028);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0028);
           // partner.bbox_y1
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x3024 : 0x301A;
         }
         G_POST(0x3016, 0x7A);
@@ -31291,7 +31291,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x301D;
         G_PRE(0x301D, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x301F;
@@ -31309,7 +31309,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3022;
         G_PRE(0x3022, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x3024;
@@ -31327,7 +31327,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3027;
         G_PRE(0x3027, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3029;
         G_POST(0x3027, 0x56);
         continue;
@@ -31348,7 +31348,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3039, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -31389,7 +31389,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3045;
         G_PRE(0x3045, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3047;
         G_POST(0x3045, 0x56);
         continue;
@@ -31409,7 +31409,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x304B, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x30E0 : 0x3050;
         }
@@ -31635,7 +31635,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3092, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18f5 & 0x4000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x4000) ? 1 : 0);
         }
@@ -31684,7 +31684,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x30A0;
         G_PRE(0x30A0, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x30A2;
         G_POST(0x30A0, 0x56);
         continue;
@@ -31706,7 +31706,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x30A8;
         G_PRE(0x30A8, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x30AA;
@@ -31772,7 +31772,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x30BC, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -31880,7 +31880,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x30D4;
         G_PRE(0x30D4, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_x0
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1535) /* partner.bbox_x0 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1535) /* partner.bbox_x0 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x30D6;
@@ -31914,10 +31914,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_x1
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0078);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0078);
           // partner.bbox_x1
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x30BF : 0x30E0;
         }
         G_POST(0x30DC, 0x84);
@@ -32033,7 +32033,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x30FF;
         G_PRE(0x30FF, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3101;
         G_POST(0x30FF, 0x56);
         continue;
@@ -32128,7 +32128,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3146;
         G_PRE(0x3146, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3148;
         G_POST(0x3146, 0x56);
         continue;
@@ -32148,7 +32148,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x314C, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x31A6 : 0x3151;
         }
@@ -32210,7 +32210,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x315E;
         G_PRE(0x315E, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3160;
         G_POST(0x315E, 0x56);
         continue;
@@ -32291,7 +32291,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3172;
         G_PRE(0x3172, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3174;
         G_POST(0x3172, 0x56);
         continue;
@@ -32305,7 +32305,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3177;
         G_PRE(0x3177, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x3179;
@@ -32371,7 +32371,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x318B, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -32481,7 +32481,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x31A9;
         G_PRE(0x31A9, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x31AB;
         G_POST(0x31A9, 0x56);
         continue;
@@ -32658,7 +32658,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x31DB;
         G_PRE(0x31DB, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x31DD;
         G_POST(0x31DB, 0x56);
         continue;
@@ -33016,7 +33016,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3260;
         G_PRE(0x3260, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3262;
         G_POST(0x3260, 0x56);
         continue;
@@ -33147,7 +33147,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3284;
         G_PRE(0x3284, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3286;
         G_POST(0x3284, 0x56);
         continue;
@@ -33284,7 +33284,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32AB;
         G_PRE(0x32AB, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x32AD;
         G_POST(0x32AB, 0x56);
         continue;
@@ -33300,7 +33300,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32B0;
         G_PRE(0x32B0, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x32B2;
         G_POST(0x32B0, 0x56);
         continue;
@@ -33338,7 +33338,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32B8;
         G_PRE(0x32B8, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x32BA;
         G_POST(0x32B8, 0x56);
         continue;
@@ -33389,7 +33389,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32C8;
         G_PRE(0x32C8, 0x56);
         // inlined v2_vm_op_56: self.bbox_y0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x32CA;
         G_POST(0x32C8, 0x56);
         continue;
@@ -33405,7 +33405,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32CD;
         G_PRE(0x32CD, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x32CF;
         G_POST(0x32CD, 0x56);
         continue;
@@ -33512,7 +33512,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x32EC;
         G_PRE(0x32EC, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x32EE;
         G_POST(0x32EC, 0x56);
         continue;
@@ -33542,7 +33542,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3387, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -33574,7 +33574,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3390;
         G_PRE(0x3390, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3392;
         G_POST(0x3390, 0x56);
         continue;
@@ -33708,7 +33708,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x33B5;
         G_PRE(0x33B5, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x33B7;
         G_POST(0x33B5, 0x56);
         continue;
@@ -33853,7 +33853,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x33DF;
         G_PRE(0x33DF, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x33E1;
         G_POST(0x33DF, 0x56);
         continue;
@@ -33900,7 +33900,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x33EF;
         G_PRE(0x33EF, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x33F1;
         G_POST(0x33EF, 0x56);
         continue;
@@ -33942,7 +33942,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x33FE;
         G_PRE(0x33FE, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3400;
         G_POST(0x33FE, 0x56);
         continue;
@@ -34405,7 +34405,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x34B1;
         G_PRE(0x34B1, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x34B3;
         G_POST(0x34B1, 0x56);
         continue;
@@ -34423,7 +34423,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x34B5;
         G_PRE(0x34B5, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x34B7;
         G_POST(0x34B5, 0x56);
         continue;
@@ -34441,7 +34441,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x34B9;
         G_PRE(0x34B9, 0x56);
         // inlined v2_vm_op_56: self.res_handle = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15AD) /* self.res_handle */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_handle_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x34BB;
         G_POST(0x34B9, 0x56);
         continue;
@@ -35128,7 +35128,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x35A4;
         G_PRE(0x35A4, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x35A6;
         G_POST(0x35A4, 0x56);
         continue;
@@ -35142,7 +35142,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x35A9;
         G_PRE(0x35A9, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_x
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x173D) /* partner.world_x */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x173D) /* partner.world_x */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x35AB;
@@ -35176,10 +35176,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.world_x
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0258);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0258);
           // partner.world_x
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x35DF : 0x35B5;
         }
         G_POST(0x35B1, 0x84);
@@ -35188,7 +35188,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x35B5;
         G_PRE(0x35B5, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x35B7;
@@ -35270,7 +35270,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x35CF, 0x5B);
         // inlined v2_vm_op_5B: partner.vel_y += acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0488);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0488);
           // partner.vel_y (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -35442,7 +35442,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x360E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x20)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000A;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0020) ? 1 : 0) == v2_vm_accumulator) ? 0x35DF : 0x3613;
         }
@@ -35578,7 +35578,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3639, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x35DF : 0x363E;
         }
@@ -35731,7 +35731,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3669, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x4)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0004;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0004) ? 1 : 0) == v2_vm_accumulator) ? 0x367D : 0x366E;
         }
@@ -35753,7 +35753,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3672, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x368C : 0x3677;
         }
@@ -35794,7 +35794,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3680;
         G_PRE(0x3680, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3682;
         G_POST(0x3680, 0x56);
         continue;
@@ -35840,7 +35840,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x368F;
         G_PRE(0x368F, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3691;
         G_POST(0x368F, 0x56);
         continue;
@@ -35890,7 +35890,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x369F, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x10)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0008;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0010) ? 1 : 0) == v2_vm_accumulator) ? 0x36AC : 0x36A4;
         }
@@ -37162,7 +37162,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3847;
         G_PRE(0x3847, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3849;
         G_POST(0x3847, 0x56);
         continue;
@@ -37265,7 +37265,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3865;
         G_PRE(0x3865, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3867;
         G_POST(0x3865, 0x56);
         continue;
@@ -37376,7 +37376,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3885;
         G_PRE(0x3885, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3887;
         G_POST(0x3885, 0x56);
         continue;
@@ -37642,7 +37642,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x38D8, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x38EF : 0x38DD;
         }
@@ -37664,7 +37664,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x38E1, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x20)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000A;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0020) ? 1 : 0) == v2_vm_accumulator) ? 0x38F8 : 0x38E6;
         }
@@ -37825,7 +37825,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3931;
         G_PRE(0x3931, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3933;
         G_POST(0x3931, 0x56);
         continue;
@@ -38310,7 +38310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x39CB;
         G_PRE(0x39CB, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x39CD;
@@ -38960,7 +38960,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3B26;
         G_PRE(0x3B26, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3B28;
         G_POST(0x3B26, 0x56);
         continue;
@@ -38976,7 +38976,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3B2B;
         G_PRE(0x3B2B, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3B2D;
         G_POST(0x3B2B, 0x56);
         continue;
@@ -39117,7 +39117,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3B84;
         G_PRE(0x3B84, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3B86;
         G_POST(0x3B84, 0x56);
         continue;
@@ -39295,7 +39295,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3BCD;
         G_PRE(0x3BCD, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3BCF;
         G_POST(0x3BCD, 0x56);
         continue;
@@ -39311,7 +39311,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3BD2;
         G_PRE(0x3BD2, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3BD4;
         G_POST(0x3BD2, 0x56);
         continue;
@@ -39327,7 +39327,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3BD7;
         G_PRE(0x3BD7, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3BD9;
         G_POST(0x3BD7, 0x56);
         continue;
@@ -39336,8 +39336,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3BD9, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0000);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0000);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x3BDC;
@@ -39370,11 +39370,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x3BE7;
@@ -39624,7 +39624,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3C4C;
         G_PRE(0x3C4C, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3C4E;
         G_POST(0x3C4C, 0x56);
         continue;
@@ -39702,11 +39702,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x3C69;
@@ -39830,7 +39830,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C99, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x3C9A;
@@ -39860,7 +39860,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3C9D, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x3C9E;
@@ -39982,10 +39982,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.di_track = _py;                        // orig 0x2610
           uint16_t _sp = vm.si_track, _dp = _py;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0x0A);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), vm.ds_read(DS_TEXT_IDX));
             v2_cmdq_log("v2", 0x0A, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40031,10 +40031,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.di_track = _py;                        // orig 0x2610
           uint16_t _sp = vm.si_track, _dp = _py;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0x0A);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), vm.ds_read(DS_TEXT_IDX));
             v2_cmdq_log("v2", 0x0A, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40086,10 +40086,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.di_track = _py;                        // orig 0x2610
           uint16_t _sp = vm.si_track, _dp = _py;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0x0A);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), vm.ds_read(DS_TEXT_IDX));
             v2_cmdq_log("v2", 0x0A, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40121,10 +40121,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.di_track = _py;                        // orig 0x2610
           uint16_t _sp = vm.si_track, _dp = _py;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0x0A);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), vm.ds_read(DS_TEXT_IDX));
             v2_cmdq_log("v2", 0x0A, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40150,10 +40150,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.di_track = _py;                        // orig 0x2610
           uint16_t _sp = vm.si_track, _dp = _py;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0x0A);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), vm.ds_read(DS_TEXT_IDX));
             v2_cmdq_log("v2", 0x0A, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40178,7 +40178,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3D04;
         G_PRE(0x3D04, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3D06;
         G_POST(0x3D04, 0x56);
         continue;
@@ -40200,7 +40200,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3D0C;
         G_PRE(0x3D0C, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3D0E;
         G_POST(0x3D0C, 0x56);
         continue;
@@ -40643,7 +40643,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3D96;
         G_PRE(0x3D96, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3D98;
         G_POST(0x3D96, 0x56);
         continue;
@@ -40691,7 +40691,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3DA4, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x3DA5;
@@ -40715,8 +40715,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x3DA7, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0000);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0000);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x3DAA;
@@ -40749,11 +40749,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x3DB5;
@@ -40775,10 +40775,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40801,10 +40801,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40827,10 +40827,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40853,10 +40853,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -40904,7 +40904,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3DE7;
         G_PRE(0x3DE7, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3DE9;
         G_POST(0x3DE7, 0x56);
         continue;
@@ -41528,7 +41528,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3F48;
         G_PRE(0x3F48, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3F4A;
         G_POST(0x3F48, 0x56);
         continue;
@@ -41546,7 +41546,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3F4C;
         G_PRE(0x3F4C, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3F4E;
         G_POST(0x3F4C, 0x56);
         continue;
@@ -41686,7 +41686,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3FA3;
         G_PRE(0x3FA3, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3FA5;
         G_POST(0x3FA3, 0x56);
         continue;
@@ -41702,7 +41702,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x3FA8;
         G_PRE(0x3FA8, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x3FAA;
         G_POST(0x3FA8, 0x56);
         continue;
@@ -42371,7 +42371,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4089, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x408E);
@@ -42484,7 +42484,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x40AC;
         G_PRE(0x40AC, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x40AE;
         G_POST(0x40AC, 0x56);
         continue;
@@ -42541,7 +42541,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x40C2, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x40C7);
@@ -42654,7 +42654,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x40E5;
         G_PRE(0x40E5, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x40E7;
         G_POST(0x40E5, 0x56);
         continue;
@@ -42705,7 +42705,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x40F7;
         G_PRE(0x40F7, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x40F9;
         G_POST(0x40F7, 0x56);
         continue;
@@ -42730,7 +42730,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x40FF;
         G_PRE(0x40FF, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4101;
         G_POST(0x40FF, 0x56);
         continue;
@@ -42849,7 +42849,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x412C;
         G_PRE(0x412C, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x412E;
         G_POST(0x412C, 0x56);
         continue;
@@ -42891,7 +42891,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x413B;
         G_PRE(0x413B, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x413D;
         G_POST(0x413B, 0x56);
         continue;
@@ -43065,7 +43065,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4172;
         G_PRE(0x4172, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4174;
         G_POST(0x4172, 0x56);
         continue;
@@ -43162,7 +43162,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4190, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x41B5 : 0x4195;
         }
@@ -43223,7 +43223,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x41A6, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x41B5 : 0x41AB;
         }
@@ -43448,7 +43448,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x41F7, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x41FC);
@@ -43517,7 +43517,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4211, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4216);
@@ -43854,7 +43854,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4272;
         G_PRE(0x4272, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4274;
         G_POST(0x4272, 0x56);
         continue;
@@ -43870,7 +43870,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4277;
         G_PRE(0x4277, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4279;
         G_POST(0x4277, 0x56);
         continue;
@@ -43925,7 +43925,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4289;
         G_PRE(0x4289, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x428B;
         G_POST(0x4289, 0x56);
         continue;
@@ -43941,7 +43941,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x428E;
         G_PRE(0x428E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4290;
         G_POST(0x428E, 0x56);
         continue;
@@ -43957,7 +43957,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4293;
         G_PRE(0x4293, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4295;
         G_POST(0x4293, 0x56);
         continue;
@@ -44242,7 +44242,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x42E2, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x4)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0004;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0004) ? 1 : 0) == v2_vm_accumulator) ? 0x42F8 : 0x42E7;
         }
@@ -44288,7 +44288,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -44341,7 +44341,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -44479,7 +44479,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x432A;
         G_PRE(0x432A, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x432C;
         G_POST(0x432A, 0x56);
         continue;
@@ -44495,7 +44495,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x432F;
         G_PRE(0x432F, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4331;
         G_POST(0x432F, 0x56);
         continue;
@@ -44563,7 +44563,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -44796,7 +44796,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4383;
         G_PRE(0x4383, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4385;
         G_POST(0x4383, 0x56);
         continue;
@@ -44871,7 +44871,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -45089,7 +45089,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x43D4;
         G_PRE(0x43D4, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x43D6;
         G_POST(0x43D4, 0x56);
         continue;
@@ -45105,7 +45105,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x43D9;
         G_PRE(0x43D9, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x43DB;
         G_POST(0x43D9, 0x56);
         continue;
@@ -45121,7 +45121,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x43DE;
         G_PRE(0x43DE, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x43E0;
         G_POST(0x43DE, 0x56);
         continue;
@@ -45347,7 +45347,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4435;
         G_PRE(0x4435, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4437;
         G_POST(0x4435, 0x56);
         continue;
@@ -45363,7 +45363,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x443A;
         G_PRE(0x443A, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x443C;
         G_POST(0x443A, 0x56);
         continue;
@@ -45379,7 +45379,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x443F;
         G_PRE(0x443F, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4441;
         G_POST(0x443F, 0x56);
         continue;
@@ -46648,7 +46648,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x460D;
         G_PRE(0x460D, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x460F;
         G_POST(0x460D, 0x56);
         continue;
@@ -46708,7 +46708,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4622;
         G_PRE(0x4622, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4624;
         G_POST(0x4622, 0x56);
         continue;
@@ -46892,7 +46892,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4660, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x80)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0080) ? 1 : 0) == v2_vm_accumulator) ? 0x13DB : 0x4665;
         }
@@ -46940,7 +46940,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4673, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x80)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0080) ? 1 : 0) == v2_vm_accumulator) ? 0x13DB : 0x4678;
         }
@@ -47612,7 +47612,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x475C;
         G_PRE(0x475C, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x475E;
         G_POST(0x475C, 0x56);
         continue;
@@ -47634,7 +47634,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4762;
         G_PRE(0x4762, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4764;
         G_POST(0x4762, 0x56);
         continue;
@@ -47665,7 +47665,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x476D;
         G_PRE(0x476D, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x476F;
         G_POST(0x476D, 0x56);
         continue;
@@ -47711,7 +47711,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x477E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x2)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0002;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0002) ? 1 : 0) == v2_vm_accumulator) ? 0x4784 : 0x4783;
         }
@@ -47750,7 +47750,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x49BC;
         G_PRE(0x49BC, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x49BE;
         G_POST(0x49BC, 0x56);
         continue;
@@ -47766,7 +47766,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x49C1;
         G_PRE(0x49C1, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x49C3;
         G_POST(0x49C1, 0x56);
         continue;
@@ -48536,7 +48536,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4AC0, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4AC5);
@@ -48649,7 +48649,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4AE3;
         G_PRE(0x4AE3, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4AE5;
         G_POST(0x4AE3, 0x56);
         continue;
@@ -48706,7 +48706,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4AF9, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4AFE);
@@ -48819,7 +48819,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4B1C;
         G_PRE(0x4B1C, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4B1E;
         G_POST(0x4B1C, 0x56);
         continue;
@@ -48870,7 +48870,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4B2E;
         G_PRE(0x4B2E, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4B30;
         G_POST(0x4B2E, 0x56);
         continue;
@@ -48950,7 +48950,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4B4A;
         G_PRE(0x4B4A, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4B4C;
         G_POST(0x4B4A, 0x56);
         continue;
@@ -48998,7 +48998,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4B5C;
         G_PRE(0x4B5C, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4B5E;
         G_POST(0x4B5C, 0x56);
         continue;
@@ -49221,7 +49221,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4B9F, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x4BB1 : 0x4BA4;
         }
@@ -49295,7 +49295,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4BC1;
         G_PRE(0x4BC1, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x4BC3;
@@ -49313,7 +49313,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4BC6;
         G_PRE(0x4BC6, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x4BC8;
@@ -49324,7 +49324,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4BC8, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -49339,7 +49339,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -49361,10 +49361,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.anim_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0208);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0208);
           // partner.anim_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x4BE6 : 0x4BD5;
         }
         G_POST(0x4BD1, 0x7A);
@@ -49373,7 +49373,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4BD5;
         G_PRE(0x4BD5, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.cur_sprite_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x191D) /* partner.cur_sprite_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x191D) /* partner.cur_sprite_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x4BD7;
@@ -49393,7 +49393,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4BDC;
         G_PRE(0x4BDC, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.cur_sprite_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x191D) /* partner.cur_sprite_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x191D) /* partner.cur_sprite_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x4BDE;
@@ -49479,7 +49479,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -49577,7 +49577,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -49596,7 +49596,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4C23;
         G_PRE(0x4C23, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4C25;
         G_POST(0x4C23, 0x56);
         continue;
@@ -49622,7 +49622,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4C2B;
         G_PRE(0x4C2B, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4C2D;
         G_POST(0x4C2B, 0x56);
         continue;
@@ -49819,7 +49819,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4C6B;
         G_PRE(0x4C6B, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4C6D;
         G_POST(0x4C6B, 0x56);
         continue;
@@ -49835,7 +49835,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4C70;
         G_PRE(0x4C70, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4C72;
         G_POST(0x4C70, 0x56);
         continue;
@@ -49851,7 +49851,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4C75;
         G_PRE(0x4C75, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4C77;
         G_POST(0x4C75, 0x56);
         continue;
@@ -50230,7 +50230,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4CF1;
         G_PRE(0x4CF1, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4CF3;
         G_POST(0x4CF1, 0x56);
         continue;
@@ -50255,7 +50255,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4CF9;
         G_PRE(0x4CF9, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4CFB;
         G_POST(0x4CF9, 0x56);
         continue;
@@ -50654,7 +50654,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4D7C;
         G_PRE(0x4D7C, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4D7E;
         G_POST(0x4D7C, 0x56);
         continue;
@@ -50687,7 +50687,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4D87;
         G_PRE(0x4D87, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4D89;
         G_POST(0x4D87, 0x56);
         continue;
@@ -50703,7 +50703,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4D8C;
         G_PRE(0x4D8C, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4D8E;
         G_POST(0x4D8C, 0x56);
         continue;
@@ -50921,7 +50921,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4DCF;
         G_PRE(0x4DCF, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4DD1;
         G_POST(0x4DCF, 0x56);
         continue;
@@ -51138,7 +51138,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4E12;
         G_PRE(0x4E12, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4E14;
         G_POST(0x4E12, 0x56);
         continue;
@@ -51441,7 +51441,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4E76;
         G_PRE(0x4E76, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4E78;
         G_POST(0x4E76, 0x56);
         continue;
@@ -51608,7 +51608,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4EAC, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x4EEF : 0x4EB1;
         }
@@ -51721,7 +51721,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4ED2, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18f5 & 0x10)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0008;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0010) ? 1 : 0);
         }
@@ -51987,7 +51987,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4F31, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F36);
@@ -52056,7 +52056,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x4F4B, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F50);
@@ -52423,7 +52423,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FBA;
         G_PRE(0x4FBA, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4FBC;
         G_POST(0x4FBA, 0x56);
         continue;
@@ -52439,7 +52439,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FBF;
         G_PRE(0x4FBF, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4FC1;
         G_POST(0x4FBF, 0x56);
         continue;
@@ -52485,7 +52485,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FCE;
         G_PRE(0x4FCE, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4FD0;
         G_POST(0x4FCE, 0x56);
         continue;
@@ -52501,7 +52501,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FD3;
         G_PRE(0x4FD3, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4FD5;
         G_POST(0x4FD3, 0x56);
         continue;
@@ -52517,7 +52517,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x4FD8;
         G_PRE(0x4FD8, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x4FDA;
         G_POST(0x4FD8, 0x56);
         continue;
@@ -52743,7 +52743,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x502F;
         G_PRE(0x502F, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5031;
         G_POST(0x502F, 0x56);
         continue;
@@ -52759,7 +52759,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5034;
         G_PRE(0x5034, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5036;
         G_POST(0x5034, 0x56);
         continue;
@@ -52775,7 +52775,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5039;
         G_PRE(0x5039, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x503B;
         G_POST(0x5039, 0x56);
         continue;
@@ -54050,7 +54050,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5211;
         G_PRE(0x5211, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5213;
         G_POST(0x5211, 0x56);
         continue;
@@ -54110,7 +54110,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5226;
         G_PRE(0x5226, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5228;
         G_POST(0x5226, 0x56);
         continue;
@@ -54294,7 +54294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5264, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x80)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0080) ? 1 : 0) == v2_vm_accumulator) ? 0x13DB : 0x5269;
         }
@@ -54462,7 +54462,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x52A1, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x80)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0080) ? 1 : 0) == v2_vm_accumulator) ? 0x13DB : 0x52A6;
         }
@@ -54625,7 +54625,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x52CF;
         G_PRE(0x52CF, 0x67);
         // inlined v2_vm_op_67: partner.fld_1612 ^= acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1612) /* partner.fld_1612 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1612) /* partner.fld_1612 */;
           vm.ds_write(_a, (uint16_t)(vm.ds_read(_a) ^ v2_vm_accumulator));
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x52D1;
@@ -54720,7 +54720,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x52DC, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.fld_1612 & 0x2C00)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1612) /* self.fld_1612 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_idx_at((uint16_t)((vm.global_r(DS_CUR_OBJ)) + 0x15));
           vm.si_track = 0x004B;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x2C00) ? 1 : 0);
         }
@@ -55379,7 +55379,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x53B4;
         G_PRE(0x53B4, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x53B6;
         G_POST(0x53B4, 0x56);
         continue;
@@ -55401,7 +55401,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x53BA;
         G_PRE(0x53BA, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x53BC;
         G_POST(0x53BA, 0x56);
         continue;
@@ -55432,7 +55432,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x53C5;
         G_PRE(0x53C5, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x53C7;
         G_POST(0x53C5, 0x56);
         continue;
@@ -55479,7 +55479,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5614;
         G_PRE(0x5614, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5616;
         G_POST(0x5614, 0x56);
         continue;
@@ -55540,7 +55540,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -55559,7 +55559,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x562A;
         G_PRE(0x562A, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x562C;
         G_POST(0x562A, 0x56);
         continue;
@@ -55655,7 +55655,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5643, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x1000) ? 1 : 0);
         }
@@ -56207,7 +56207,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5700, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5705);
@@ -56344,7 +56344,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x572A;
         G_PRE(0x572A, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x572C;
         G_POST(0x572A, 0x56);
         continue;
@@ -56364,7 +56364,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5730, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x573B : 0x5735;
         }
@@ -56438,7 +56438,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x574F, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5754);
@@ -56575,7 +56575,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5779;
         G_PRE(0x5779, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x577B;
         G_POST(0x5779, 0x56);
         continue;
@@ -56595,7 +56595,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x577F, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x578A : 0x5784;
         }
@@ -56663,7 +56663,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x579A;
         G_PRE(0x579A, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x579C;
         G_POST(0x579A, 0x56);
         continue;
@@ -56707,7 +56707,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x57A7, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x57B7 : 0x57AC;
         }
@@ -56725,7 +56725,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x57AF;
         G_PRE(0x57AF, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x57B1;
         G_POST(0x57AF, 0x56);
         continue;
@@ -56756,7 +56756,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x57BA;
         G_PRE(0x57BA, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x57BC;
         G_POST(0x57BA, 0x56);
         continue;
@@ -56791,7 +56791,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x57C6, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x581B : 0x57CB;
         }
@@ -57559,7 +57559,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x58E1;
         G_PRE(0x58E1, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x58E3;
         G_POST(0x58E1, 0x56);
         continue;
@@ -57618,7 +57618,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x58F5;
         G_PRE(0x58F5, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x58F7;
         G_POST(0x58F5, 0x56);
         continue;
@@ -57792,7 +57792,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x592C;
         G_PRE(0x592C, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x592E;
         G_POST(0x592C, 0x56);
         continue;
@@ -57908,7 +57908,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x594E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5959 : 0x5953;
         }
@@ -58018,7 +58018,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x597C, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x598E : 0x5981;
         }
@@ -58345,7 +58345,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x59ED, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x59F2);
@@ -58414,7 +58414,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5A07, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5A0C);
@@ -58484,7 +58484,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5A1E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5A56 : 0x5A23;
         }
@@ -58515,7 +58515,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5A2A, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18f5 & 0x400)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0014;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -58576,7 +58576,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5A40, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18f5 & 0x400)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0014;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0400) ? 1 : 0);
         }
@@ -58668,7 +58668,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5A61, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x5A86 : 0x5A66;
         }
@@ -58729,7 +58729,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5A77, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0006;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0008) ? 1 : 0) == v2_vm_accumulator) ? 0x5A86 : 0x5A7C;
         }
@@ -58897,7 +58897,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5AAA, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5ABB : 0x5AAF;
         }
@@ -58935,7 +58935,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5AB9;
         G_PRE(0x5AB9, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5ABB;
         G_POST(0x5AB9, 0x56);
         continue;
@@ -59100,7 +59100,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5AE8;
         G_PRE(0x5AE8, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5AEA;
         G_POST(0x5AE8, 0x56);
         continue;
@@ -59116,7 +59116,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5AED;
         G_PRE(0x5AED, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5AEF;
         G_POST(0x5AED, 0x56);
         continue;
@@ -59162,7 +59162,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5AFC;
         G_PRE(0x5AFC, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5AFE;
         G_POST(0x5AFC, 0x56);
         continue;
@@ -59419,7 +59419,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B5D;
         G_PRE(0x5B5D, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5B5F;
         G_POST(0x5B5D, 0x56);
         continue;
@@ -59435,7 +59435,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B62;
         G_PRE(0x5B62, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5B64;
         G_POST(0x5B62, 0x56);
         continue;
@@ -59451,7 +59451,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5B67;
         G_PRE(0x5B67, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5B69;
         G_POST(0x5B67, 0x56);
         continue;
@@ -59628,7 +59628,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5BA9, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5BB4 : 0x5BAE;
         }
@@ -60353,7 +60353,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5CAF, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5CBA : 0x5CB4;
         }
@@ -60752,7 +60752,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5D48, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5D53 : 0x5D4D;
         }
@@ -60804,7 +60804,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5D5D, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5D68 : 0x5D62;
         }
@@ -60852,7 +60852,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5D71;
         G_PRE(0x5D71, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5D73;
         G_POST(0x5D71, 0x56);
         continue;
@@ -60872,7 +60872,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5D77, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5D82 : 0x5D7C;
         }
@@ -60949,7 +60949,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5D95;
         G_PRE(0x5D95, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5D97;
         G_POST(0x5D95, 0x56);
         continue;
@@ -61002,7 +61002,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5DA7;
         G_PRE(0x5DA7, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5DA9;
         G_POST(0x5DA7, 0x56);
         continue;
@@ -61018,7 +61018,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5DAC;
         G_PRE(0x5DAC, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5DAE;
         G_POST(0x5DAC, 0x56);
         continue;
@@ -61166,7 +61166,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5DDE;
         G_PRE(0x5DDE, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5DE0;
         G_POST(0x5DDE, 0x56);
         continue;
@@ -61291,7 +61291,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5E0F;
         G_PRE(0x5E0F, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5E11;
         G_POST(0x5E0F, 0x56);
         continue;
@@ -61488,7 +61488,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5E51, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x80)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0080) ? 1 : 0) == v2_vm_accumulator) ? 0x13DB : 0x5E56;
         }
@@ -61536,7 +61536,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5E64, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x80)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0080) ? 1 : 0) == v2_vm_accumulator) ? 0x13DB : 0x5E69;
         }
@@ -62288,7 +62288,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5F69;
         G_PRE(0x5F69, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5F6B;
         G_POST(0x5F69, 0x56);
         continue;
@@ -62310,7 +62310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5F6F;
         G_PRE(0x5F6F, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5F71;
         G_POST(0x5F6F, 0x56);
         continue;
@@ -62332,7 +62332,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5F77;
         G_PRE(0x5F77, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5F79;
         G_POST(0x5F77, 0x56);
         continue;
@@ -62352,7 +62352,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5F7D, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x642A : 0x5F82;
         }
@@ -62392,7 +62392,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5F89;
         G_PRE(0x5F89, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5F8B;
         G_POST(0x5F89, 0x56);
         continue;
@@ -62408,7 +62408,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5F8E;
         G_PRE(0x5F8E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5F90;
         G_POST(0x5F8E, 0x56);
         continue;
@@ -62475,7 +62475,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x5F9E;
         G_PRE(0x5F9E, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x5FA0;
         G_POST(0x5F9E, 0x56);
         continue;
@@ -62495,7 +62495,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5FA4, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x5FAF : 0x5FA9;
         }
@@ -62567,7 +62567,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x5FC1, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x2)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0002;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0002) ? 1 : 0) == v2_vm_accumulator) ? 0x5FC7 : 0x5FC6;
         }
@@ -62660,7 +62660,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6216;
         G_PRE(0x6216, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.res_handle
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15AD) /* partner.res_handle */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15AD) /* partner.res_handle */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x6218;
@@ -62760,10 +62760,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x800)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x0410);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x0016;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) == v2_vm_accumulator) ? 0x6267 : 0x6241;
         }
@@ -62785,7 +62785,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6245, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) == v2_vm_accumulator) ? 0x6252 : 0x624A;
         }
@@ -62796,7 +62796,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x624A, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18f5 & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x1000) ? 1 : 0);
         }
@@ -62809,10 +62809,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x0410);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x626A : 0x6252;
         }
@@ -62835,10 +62835,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B5: call when acc != bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x0410);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           if (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x625B);
@@ -62864,10 +62864,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B5: call when acc != bit(partner.state_18f5 & 0x1000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x0410);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0410);
           // partner.state_18f5
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x0018;  // 15445 tail: POP si = first byte
           if (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6264);
@@ -63025,10 +63025,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_89: call when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x00C8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           if (_v == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x629E);  // do_call_jump: return pc
               vm.pc = 0x62B5;
@@ -63066,10 +63066,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_89: call when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x00C8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           if (_v == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x62A9);  // do_call_jump: return pc
               vm.pc = 0x62B5;
@@ -63107,10 +63107,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_89: call when acc == partner.res_handle
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x00C8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00C8);
           // partner.res_handle
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           if (_v == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x62B4);  // do_call_jump: return pc
               vm.pc = 0x62B5;
@@ -63136,7 +63136,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62B8;
         G_PRE(0x62B8, 0x58);
         // inlined v2_vm_op_58: partner.res_handle = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15AD) /* partner.res_handle */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15AD) /* partner.res_handle */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x62BA;
@@ -63162,7 +63162,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62BD;
         G_PRE(0x62BD, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x62BF;
@@ -63182,7 +63182,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62C1;
         G_PRE(0x62C1, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x62C3;
@@ -63200,7 +63200,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62C6;
         G_PRE(0x62C6, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x62C8;
         G_POST(0x62C6, 0x56);
         continue;
@@ -63216,7 +63216,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62CB;
         G_PRE(0x62CB, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x62CD;
         G_POST(0x62CB, 0x56);
         continue;
@@ -63286,7 +63286,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62DF;
         G_PRE(0x62DF, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x62E1;
         G_POST(0x62DF, 0x56);
         continue;
@@ -63302,7 +63302,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62E4;
         G_PRE(0x62E4, 0x56);
         // inlined v2_vm_op_56: self.state_idx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15FD) /* self.state_idx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_idx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x62E6;
         G_POST(0x62E4, 0x56);
         continue;
@@ -63318,7 +63318,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62E9;
         G_PRE(0x62E9, 0x56);
         // inlined v2_vm_op_56: self.class_bits = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1625) /* self.class_bits */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_class_bits_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x62EB;
         G_POST(0x62E9, 0x56);
         continue;
@@ -63336,7 +63336,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62ED;
         G_PRE(0x62ED, 0x56);
         // inlined v2_vm_op_56: self.bbox_x0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1535) /* self.bbox_x0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x62EF;
         G_POST(0x62ED, 0x56);
         continue;
@@ -63371,7 +63371,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62F6;
         G_PRE(0x62F6, 0x56);
         // inlined v2_vm_op_56: self.bbox_x1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x155D) /* self.bbox_x1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x62F8;
         G_POST(0x62F6, 0x56);
         continue;
@@ -63406,7 +63406,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x62FF;
         G_PRE(0x62FF, 0x56);
         // inlined v2_vm_op_56: self.bbox_y0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6301;
         G_POST(0x62FF, 0x56);
         continue;
@@ -63441,7 +63441,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6308;
         G_PRE(0x6308, 0x56);
         // inlined v2_vm_op_56: self.bbox_y1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x150D) /* self.bbox_y1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x630A;
         G_POST(0x6308, 0x56);
         continue;
@@ -63528,7 +63528,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6321;
         G_PRE(0x6321, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6323;
         G_POST(0x6321, 0x56);
         continue;
@@ -63544,7 +63544,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6326;
         G_PRE(0x6326, 0x56);
         // inlined v2_vm_op_56: self.state_idx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15FD) /* self.state_idx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_idx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6328;
         G_POST(0x6326, 0x56);
         continue;
@@ -63560,7 +63560,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x632B;
         G_PRE(0x632B, 0x56);
         // inlined v2_vm_op_56: self.class_bits = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1625) /* self.class_bits */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_class_bits_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x632D;
         G_POST(0x632B, 0x56);
         continue;
@@ -63578,7 +63578,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x632F;
         G_PRE(0x632F, 0x56);
         // inlined v2_vm_op_56: self.bbox_y0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6331;
         G_POST(0x632F, 0x56);
         continue;
@@ -63613,7 +63613,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6338;
         G_PRE(0x6338, 0x56);
         // inlined v2_vm_op_56: self.bbox_y1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x150D) /* self.bbox_y1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x633A;
         G_POST(0x6338, 0x56);
         continue;
@@ -63650,7 +63650,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6343, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x635B : 0x6348;
         }
@@ -63670,7 +63670,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x634A;
         G_PRE(0x634A, 0x56);
         // inlined v2_vm_op_56: self.bbox_x0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1535) /* self.bbox_x0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x634C;
         G_POST(0x634A, 0x56);
         continue;
@@ -63705,7 +63705,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6353;
         G_PRE(0x6353, 0x56);
         // inlined v2_vm_op_56: self.bbox_x1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x155D) /* self.bbox_x1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6355;
         G_POST(0x6353, 0x56);
         continue;
@@ -63746,7 +63746,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x635D;
         G_PRE(0x635D, 0x56);
         // inlined v2_vm_op_56: self.bbox_x0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1535) /* self.bbox_x0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x635F;
         G_POST(0x635D, 0x56);
         continue;
@@ -63781,7 +63781,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6366;
         G_PRE(0x6366, 0x56);
         // inlined v2_vm_op_56: self.bbox_x1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x155D) /* self.bbox_x1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6368;
         G_POST(0x6366, 0x56);
         continue;
@@ -63844,7 +63844,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6378;
         G_PRE(0x6378, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x637A;
         G_POST(0x6378, 0x56);
         continue;
@@ -63860,7 +63860,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x637D;
         G_PRE(0x637D, 0x56);
         // inlined v2_vm_op_56: self.state_idx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15FD) /* self.state_idx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_idx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x637F;
         G_POST(0x637D, 0x56);
         continue;
@@ -63876,7 +63876,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6382;
         G_PRE(0x6382, 0x56);
         // inlined v2_vm_op_56: self.class_bits = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1625) /* self.class_bits */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_class_bits_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6384;
         G_POST(0x6382, 0x56);
         continue;
@@ -63985,7 +63985,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x63BF, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x4000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x4000) ? 1 : 0) == v2_vm_accumulator) ? 0x63D3 : 0x63C4;
         }
@@ -64089,7 +64089,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x63DD;
         G_PRE(0x63DD, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x63DF;
         G_POST(0x63DD, 0x56);
         continue;
@@ -64153,7 +64153,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x63EF;
         G_PRE(0x63EF, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x63F1;
         G_POST(0x63EF, 0x56);
         continue;
@@ -64169,7 +64169,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x63F4;
         G_PRE(0x63F4, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x63F6;
         G_POST(0x63F4, 0x56);
         continue;
@@ -64191,7 +64191,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x63FA;
         G_PRE(0x63FA, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x63FC;
         G_POST(0x63FA, 0x56);
         continue;
@@ -64237,7 +64237,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6407;
         G_PRE(0x6407, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6409;
         G_POST(0x6407, 0x56);
         continue;
@@ -64259,7 +64259,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x640D;
         G_PRE(0x640D, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x640F;
         G_POST(0x640D, 0x56);
         continue;
@@ -64538,7 +64538,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6468;
         G_PRE(0x6468, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x646A;
         G_POST(0x6468, 0x56);
         continue;
@@ -64562,7 +64562,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x646D;
         G_PRE(0x646D, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x646F;
         G_POST(0x646D, 0x56);
         continue;
@@ -64578,7 +64578,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6472;
         G_PRE(0x6472, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6474;
         G_POST(0x6472, 0x56);
         continue;
@@ -64670,7 +64670,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x648E, 0xBC);
         // inlined v2_vm_op_BC: acc <<= 8; self.vel_x = acc
         v2_vm_accumulator <<= 8;
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1945) /* self.vel_x */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_vel_x_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6490;
         G_POST(0x648E, 0xBC);
         continue;
@@ -64740,7 +64740,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x64A3, 0xBC);
         // inlined v2_vm_op_BC: acc <<= 8; self.vel_y = acc
         v2_vm_accumulator <<= 8;
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x196D) /* self.vel_y */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_vel_y_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x64A5;
         G_POST(0x64A3, 0xBC);
         continue;
@@ -64847,7 +64847,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x64BF, 0xBC);
         // inlined v2_vm_op_BC: acc <<= 8; self.vel_x = acc
         v2_vm_accumulator <<= 8;
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1945) /* self.vel_x */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_vel_x_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x64C1;
         G_POST(0x64BF, 0xBC);
         continue;
@@ -64917,7 +64917,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x64D4, 0xBC);
         // inlined v2_vm_op_BC: acc <<= 8; self.vel_y = acc
         v2_vm_accumulator <<= 8;
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x196D) /* self.vel_y */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_vel_y_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x64D6;
         G_POST(0x64D4, 0xBC);
         continue;
@@ -64970,7 +64970,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x64E0;
         G_PRE(0x64E0, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x64E2;
         G_POST(0x64E0, 0x56);
         continue;
@@ -65113,7 +65113,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x64FB, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -65394,7 +65394,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x654C;
         G_PRE(0x654C, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x654E;
@@ -65413,7 +65413,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6551;
         G_PRE(0x6551, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x6553;
@@ -65538,7 +65538,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x657E;
         G_PRE(0x657E, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6580;
         G_POST(0x657E, 0x56);
         continue;
@@ -65547,7 +65547,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6580, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.state_18cd & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -65559,7 +65559,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x6583, 0xAE);
         // inlined v2_vm_op_AE: when acc != bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x6597 : 0x6588;
         }
@@ -65577,7 +65577,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x658B;
         G_PRE(0x658B, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x658D;
         G_POST(0x658B, 0x56);
         continue;
@@ -65647,7 +65647,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x65A1;
         G_PRE(0x65A1, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x65A3;
         G_POST(0x65A1, 0x56);
         continue;
@@ -65730,7 +65730,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x65B7, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x65BD : 0x65BC;
         }
@@ -65786,7 +65786,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x65C8;
         G_PRE(0x65C8, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x65CA;
         G_POST(0x65C8, 0x56);
         continue;
@@ -65948,7 +65948,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x65FF;
         G_PRE(0x65FF, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6601;
         G_POST(0x65FF, 0x56);
         continue;
@@ -66110,7 +66110,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6636;
         G_PRE(0x6636, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6638;
         G_POST(0x6636, 0x56);
         continue;
@@ -66126,7 +66126,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x663B;
         G_PRE(0x663B, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x663D;
         G_POST(0x663B, 0x56);
         continue;
@@ -66142,7 +66142,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6640;
         G_PRE(0x6640, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6642;
         G_POST(0x6640, 0x56);
         continue;
@@ -66264,7 +66264,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x666B;
         G_PRE(0x666B, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x666D;
         G_POST(0x666B, 0x56);
         continue;
@@ -66286,7 +66286,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6671;
         G_PRE(0x6671, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6673;
         G_POST(0x6671, 0x56);
         continue;
@@ -66352,7 +66352,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6685;
         G_PRE(0x6685, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6687;
         G_POST(0x6685, 0x56);
         continue;
@@ -66368,7 +66368,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x668A;
         G_PRE(0x668A, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x668C;
         G_POST(0x668A, 0x56);
         continue;
@@ -66437,7 +66437,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x66A1;
         G_PRE(0x66A1, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x66A3;
         G_POST(0x66A1, 0x56);
         continue;
@@ -66589,7 +66589,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x66D4;
         G_PRE(0x66D4, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x66D6;
         G_POST(0x66D4, 0x56);
         continue;
@@ -66808,7 +66808,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6718;
         G_PRE(0x6718, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x671A;
         G_POST(0x6718, 0x56);
         continue;
@@ -66967,7 +66967,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x674F;
         G_PRE(0x674F, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6751;
         G_POST(0x674F, 0x56);
         continue;
@@ -67126,7 +67126,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6786;
         G_PRE(0x6786, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6788;
         G_POST(0x6786, 0x56);
         continue;
@@ -67146,7 +67146,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x678C, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x6796 : 0x6791;
         }
@@ -67164,7 +67164,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6794;
         G_PRE(0x6794, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6796;
         G_POST(0x6794, 0x56);
         continue;
@@ -67210,7 +67210,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x67A3;
         G_PRE(0x67A3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x67A5;
         G_POST(0x67A3, 0x56);
         continue;
@@ -67332,7 +67332,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x67CE;
         G_PRE(0x67CE, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x67D0;
         G_POST(0x67CE, 0x56);
         continue;
@@ -67376,7 +67376,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x67D8;
         G_PRE(0x67D8, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x67DA;
         G_POST(0x67D8, 0x56);
         continue;
@@ -67533,7 +67533,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6810;
         G_PRE(0x6810, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6812;
         G_POST(0x6810, 0x56);
         continue;
@@ -67549,7 +67549,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6815;
         G_PRE(0x6815, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6817;
         G_POST(0x6815, 0x56);
         continue;
@@ -67681,7 +67681,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6844;
         G_PRE(0x6844, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6846;
         G_POST(0x6844, 0x56);
         continue;
@@ -67734,7 +67734,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6853;
         G_PRE(0x6853, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6855;
         G_POST(0x6853, 0x56);
         continue;
@@ -67750,7 +67750,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6858;
         G_PRE(0x6858, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x685A;
         G_POST(0x6858, 0x56);
         continue;
@@ -67954,7 +67954,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x68A2, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x6DBB : 0x68A7;
         }
@@ -68026,7 +68026,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x68B9;
         G_PRE(0x68B9, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x68BB;
         G_POST(0x68B9, 0x56);
         continue;
@@ -68062,7 +68062,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x68C5;
         G_PRE(0x68C5, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x68C7;
         G_POST(0x68C5, 0x56);
         continue;
@@ -68084,7 +68084,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x68CD;
         G_PRE(0x68CD, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x68CF;
         G_POST(0x68CD, 0x56);
         continue;
@@ -68144,7 +68144,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x68E1, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x68FD : 0x68E6;
         }
@@ -68196,7 +68196,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x68F1, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x68FD : 0x68F6;
         }
@@ -68283,7 +68283,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x690A;
         G_PRE(0x690A, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x690C;
         G_POST(0x690A, 0x56);
         continue;
@@ -68299,7 +68299,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x690F;
         G_PRE(0x690F, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6911;
         G_POST(0x690F, 0x56);
         continue;
@@ -68315,7 +68315,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6914;
         G_PRE(0x6914, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6916;
         G_POST(0x6914, 0x56);
         continue;
@@ -68649,7 +68649,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6977;
         G_PRE(0x6977, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6979;
         G_POST(0x6977, 0x56);
         continue;
@@ -68766,7 +68766,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x699D;
         G_PRE(0x699D, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x699F;
         G_POST(0x699D, 0x56);
         continue;
@@ -68827,7 +68827,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x69B2;
         G_PRE(0x69B2, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x69B4;
         G_POST(0x69B2, 0x56);
         continue;
@@ -68843,7 +68843,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x69B7;
         G_PRE(0x69B7, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x69B9;
         G_POST(0x69B7, 0x56);
         continue;
@@ -68942,7 +68942,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x69DA, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x69E8 : 0x69DF;
         }
@@ -69083,7 +69083,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -69153,7 +69153,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A12;
         G_PRE(0x6A12, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6A14;
         G_POST(0x6A12, 0x56);
         continue;
@@ -69270,7 +69270,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6A38;
         G_PRE(0x6A38, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6A3A;
         G_POST(0x6A38, 0x56);
         continue;
@@ -69603,7 +69603,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6AB0;
         G_PRE(0x6AB0, 0x56);
         // inlined v2_vm_op_56: self.res_handle = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15AD) /* self.res_handle */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_handle_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6AB2;
         G_POST(0x6AB0, 0x56);
         continue;
@@ -69675,7 +69675,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6ABF;
         G_PRE(0x6ABF, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6AC1;
         G_POST(0x6ABF, 0x56);
         continue;
@@ -69691,7 +69691,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6AC4;
         G_PRE(0x6AC4, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6AC6;
         G_POST(0x6AC4, 0x56);
         continue;
@@ -69984,7 +69984,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6B17;
         G_PRE(0x6B17, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6B19;
         G_POST(0x6B17, 0x56);
         continue;
@@ -70000,7 +70000,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6B1C;
         G_PRE(0x6B1C, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6B1E;
         G_POST(0x6B1C, 0x56);
         continue;
@@ -70140,7 +70140,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6B4E;
         G_PRE(0x6B4E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6B50;
         G_POST(0x6B4E, 0x56);
         continue;
@@ -70156,7 +70156,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6B53;
         G_PRE(0x6B53, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6B55;
         G_POST(0x6B53, 0x56);
         continue;
@@ -70289,7 +70289,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6B82;
         G_PRE(0x6B82, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6B84;
         G_POST(0x6B82, 0x56);
         continue;
@@ -70305,7 +70305,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6B87;
         G_PRE(0x6B87, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6B89;
         G_POST(0x6B87, 0x56);
         continue;
@@ -70352,7 +70352,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6B96;
         G_PRE(0x6B96, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6B98;
         G_POST(0x6B96, 0x56);
         continue;
@@ -70461,7 +70461,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6BBE;
         G_PRE(0x6BBE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6BC0;
         G_POST(0x6BBE, 0x56);
         continue;
@@ -70477,7 +70477,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6BC3;
         G_PRE(0x6BC3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6BC5;
         G_POST(0x6BC3, 0x56);
         continue;
@@ -70524,7 +70524,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6BD2;
         G_PRE(0x6BD2, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6BD4;
         G_POST(0x6BD2, 0x56);
         continue;
@@ -70640,7 +70640,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6BFD;
         G_PRE(0x6BFD, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6BFF;
         G_POST(0x6BFD, 0x56);
         continue;
@@ -70791,7 +70791,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C2C;
         G_PRE(0x6C2C, 0x56);
         // inlined v2_vm_op_56: self.res_handle = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15AD) /* self.res_handle */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_handle_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6C2E;
         G_POST(0x6C2C, 0x56);
         continue;
@@ -70807,7 +70807,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C31;
         G_PRE(0x6C31, 0x56);
         // inlined v2_vm_op_56: self.state_idx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15FD) /* self.state_idx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_idx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6C33;
         G_POST(0x6C31, 0x56);
         continue;
@@ -70823,7 +70823,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C36;
         G_PRE(0x6C36, 0x56);
         // inlined v2_vm_op_56: self.class_bits = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1625) /* self.class_bits */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_class_bits_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6C38;
         G_POST(0x6C36, 0x56);
         continue;
@@ -70969,7 +70969,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C65;
         G_PRE(0x6C65, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6C67;
         G_POST(0x6C65, 0x56);
         continue;
@@ -71025,7 +71025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6C78;
         G_PRE(0x6C78, 0x56);
         // inlined v2_vm_op_56: self.anim_idx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x16ED) /* self.anim_idx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_idx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6C7A;
         G_POST(0x6C78, 0x56);
         continue;
@@ -71143,7 +71143,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6CA2;
         G_PRE(0x6CA2, 0x56);
         // inlined v2_vm_op_56: self.anim_idx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x16ED) /* self.anim_idx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_idx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6CA4;
         G_POST(0x6CA2, 0x56);
         continue;
@@ -71261,7 +71261,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6CCC;
         G_PRE(0x6CCC, 0x56);
         // inlined v2_vm_op_56: self.anim_idx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x16ED) /* self.anim_idx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_idx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6CCE;
         G_POST(0x6CCC, 0x56);
         continue;
@@ -71401,7 +71401,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6CFA;
         G_PRE(0x6CFA, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6CFC;
         G_POST(0x6CFA, 0x56);
         continue;
@@ -72101,7 +72101,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6DDC;
         G_PRE(0x6DDC, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6DDE;
         G_POST(0x6DDC, 0x56);
         continue;
@@ -72189,7 +72189,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6DF4;
         G_PRE(0x6DF4, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x6DF6;
         G_POST(0x6DF4, 0x56);
         continue;
@@ -72246,10 +72246,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.class_bits & 0x20)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x0140);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x0140);
           // partner.class_bits
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000A;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0020) ? 1 : 0) != v2_vm_accumulator) ? 0x6E1E : 0x6E0B;
         }
@@ -72284,7 +72284,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6E12;
         G_PRE(0x6E12, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x6E14;
@@ -72302,7 +72302,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x6E17;
         G_PRE(0x6E17, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x6E19;
@@ -72346,7 +72346,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x72F7;
         G_PRE(0x72F7, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x72F9;
         G_POST(0x72F7, 0x56);
         continue;
@@ -72481,7 +72481,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7322;
         G_PRE(0x7322, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7324;
         G_POST(0x7322, 0x56);
         continue;
@@ -72497,7 +72497,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7327;
         G_PRE(0x7327, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7329;
         G_POST(0x7327, 0x56);
         continue;
@@ -72521,10 +72521,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.anim_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0208);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0208);
           // partner.anim_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v == v2_vm_accumulator) ? 0x7366 : 0x7333;
         }
         G_POST(0x732F, 0x75);
@@ -72543,10 +72543,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.anim_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0208);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0208);
           // partner.anim_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v == v2_vm_accumulator) ? 0x739D : 0x733A;
         }
         G_POST(0x7336, 0x75);
@@ -72563,7 +72563,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x733D;
         G_PRE(0x733D, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x733F;
@@ -72581,7 +72581,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7342;
         G_PRE(0x7342, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x7344;
@@ -72592,7 +72592,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7344, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -72607,7 +72607,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -72697,7 +72697,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -72715,7 +72715,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7366, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -72728,10 +72728,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0x733A : 0x736E;
         }
@@ -72755,7 +72755,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7374;
         G_PRE(0x7374, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x7376;
@@ -72773,7 +72773,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7379;
         G_PRE(0x7379, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x737B;
@@ -72784,7 +72784,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x737B, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -72799,7 +72799,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -72889,7 +72889,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -72999,7 +72999,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x73B8;
         G_PRE(0x73B8, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x73BA;
         G_POST(0x73B8, 0x56);
         continue;
@@ -73094,7 +73094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x73D4;
         G_PRE(0x73D4, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x73D6;
@@ -73112,7 +73112,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x73D9;
         G_PRE(0x73D9, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x73DB;
@@ -73123,7 +73123,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x73DB, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -73138,7 +73138,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -73228,7 +73228,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -73259,7 +73259,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x745F;
         G_PRE(0x745F, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7461;
         G_POST(0x745F, 0x56);
         continue;
@@ -73366,7 +73366,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x747F;
         G_PRE(0x747F, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x7481;
@@ -73384,7 +73384,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7484;
         G_PRE(0x7484, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x7486;
@@ -73395,7 +73395,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7486, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -73410,7 +73410,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -73500,7 +73500,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -73525,7 +73525,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x74AB;
         G_PRE(0x74AB, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x74AD;
@@ -73543,7 +73543,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x74B0;
         G_PRE(0x74B0, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x74B2;
@@ -73554,7 +73554,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x74B2, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -73569,7 +73569,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -74492,7 +74492,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7625;
         G_PRE(0x7625, 0x56);
         // inlined v2_vm_op_56: self.res_handle = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15AD) /* self.res_handle */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_handle_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7627;
         G_POST(0x7625, 0x56);
         continue;
@@ -74568,7 +74568,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x763F;
         G_PRE(0x763F, 0x56);
         // inlined v2_vm_op_56: self.res_handle = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15AD) /* self.res_handle */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_handle_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7641;
         G_POST(0x763F, 0x56);
         continue;
@@ -75776,7 +75776,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -75830,7 +75830,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -75859,7 +75859,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x77AE, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x4)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0004;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0004) ? 1 : 0) == v2_vm_accumulator) ? 0x7834 : 0x77B3;
         }
@@ -76018,10 +76018,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_187d
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0398);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0398);
           // partner.state_187d
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x6D6A : 0x77E4;
         }
         G_POST(0x77E0, 0x7A);
@@ -76038,7 +76038,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x77E7;
         G_PRE(0x77E7, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x77E9;
@@ -76070,7 +76070,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x77F2;
         G_PRE(0x77F2, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x77F4;
@@ -78332,7 +78332,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7B84;
         G_PRE(0x7B84, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7B86;
         G_POST(0x7B84, 0x56);
         continue;
@@ -78530,7 +78530,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7C34;
         G_PRE(0x7C34, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7C36;
         G_POST(0x7C34, 0x56);
         continue;
@@ -78550,7 +78550,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x7C3A, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x7C57 : 0x7C3F;
         }
@@ -78568,7 +78568,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7C42;
         G_PRE(0x7C42, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7C44;
         G_POST(0x7C42, 0x56);
         continue;
@@ -78651,7 +78651,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7C5F;
         G_PRE(0x7C5F, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7C61;
         G_POST(0x7C5F, 0x56);
         continue;
@@ -78762,7 +78762,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7C81;
         G_PRE(0x7C81, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7C83;
         G_POST(0x7C81, 0x56);
         continue;
@@ -78778,7 +78778,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7C86;
         G_PRE(0x7C86, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7C88;
         G_POST(0x7C86, 0x56);
         continue;
@@ -78822,7 +78822,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7C95;
         G_PRE(0x7C95, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7C97;
         G_POST(0x7C95, 0x56);
         continue;
@@ -78888,7 +78888,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7CAD;
         G_PRE(0x7CAD, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7CAF;
         G_POST(0x7CAD, 0x56);
         continue;
@@ -79150,7 +79150,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D36;
         G_PRE(0x7D36, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7D38;
         G_POST(0x7D36, 0x56);
         continue;
@@ -79226,7 +79226,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D4B;
         G_PRE(0x7D4B, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7D4D;
         G_POST(0x7D4B, 0x56);
         continue;
@@ -79242,7 +79242,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D50;
         G_PRE(0x7D50, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7D52;
         G_POST(0x7D50, 0x56);
         continue;
@@ -79450,7 +79450,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7D8D;
         G_PRE(0x7D8D, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7D8F;
         G_POST(0x7D8D, 0x56);
         continue;
@@ -79535,7 +79535,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7DA4;
         G_PRE(0x7DA4, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7DA6;
         G_POST(0x7DA4, 0x56);
         continue;
@@ -79677,7 +79677,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7DCC;
         G_PRE(0x7DCC, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7DCE;
         G_POST(0x7DCC, 0x56);
         continue;
@@ -79834,7 +79834,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7E14;
         G_PRE(0x7E14, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7E16;
         G_POST(0x7E14, 0x56);
         continue;
@@ -79898,7 +79898,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7E27;
         G_PRE(0x7E27, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7E29;
         G_POST(0x7E27, 0x56);
         continue;
@@ -79962,7 +79962,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7E3A;
         G_PRE(0x7E3A, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7E3C;
         G_POST(0x7E3A, 0x56);
         continue;
@@ -80133,7 +80133,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7E67;
         G_PRE(0x7E67, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7E69;
         G_POST(0x7E67, 0x56);
         continue;
@@ -80919,7 +80919,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x7F8E;
         G_PRE(0x7F8E, 0x56);
         // inlined v2_vm_op_56: self.res_handle = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15AD) /* self.res_handle */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_res_handle_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x7F90;
         G_POST(0x7F8E, 0x56);
         continue;
@@ -81551,7 +81551,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8049;
         G_PRE(0x8049, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x804B;
         G_POST(0x8049, 0x56);
         continue;
@@ -82231,7 +82231,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x811B;
         G_PRE(0x811B, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x811D;
         G_POST(0x811B, 0x56);
         continue;
@@ -82261,7 +82261,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8129;
         G_PRE(0x8129, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x812B;
         G_POST(0x8129, 0x56);
         continue;
@@ -82380,7 +82380,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x814D;
         G_PRE(0x814D, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x814F;
         G_POST(0x814D, 0x56);
         continue;
@@ -82493,7 +82493,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8173;
         G_PRE(0x8173, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8175;
         G_POST(0x8173, 0x56);
         continue;
@@ -82526,7 +82526,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -82568,7 +82568,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -82610,7 +82610,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -82652,7 +82652,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -82694,7 +82694,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -82719,7 +82719,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x81C3;
         G_PRE(0x81C3, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x81C5;
         G_POST(0x81C3, 0x56);
         continue;
@@ -82852,7 +82852,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x81F0;
         G_PRE(0x81F0, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x81F2;
         G_POST(0x81F0, 0x56);
         continue;
@@ -82922,7 +82922,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -82968,7 +82968,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -83047,7 +83047,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -83089,7 +83089,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8239;
         G_PRE(0x8239, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x823B;
         G_POST(0x8239, 0x56);
         continue;
@@ -83357,7 +83357,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -83381,7 +83381,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8296, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.spawn_pool & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -83460,7 +83460,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x82AD, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.spawn_pool & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -84183,7 +84183,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x83AE, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.state_18f5 & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */);
+          uint16_t _fv = v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x83BC : 0x83B3;
         }
@@ -84402,7 +84402,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x83E8;
         G_PRE(0x83E8, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x83EA;
         G_POST(0x83E8, 0x56);
         continue;
@@ -84446,7 +84446,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x83F4;
         G_PRE(0x83F4, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x83F6;
@@ -84466,7 +84466,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x83FB;
         G_PRE(0x83FB, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x83FD;
@@ -84486,7 +84486,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8402;
         G_PRE(0x8402, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x8404;
@@ -84520,7 +84520,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x840F;
         G_PRE(0x840F, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8411;
         G_POST(0x840F, 0x56);
         continue;
@@ -84555,7 +84555,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x841C;
         G_PRE(0x841C, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x841E;
         G_POST(0x841C, 0x56);
         continue;
@@ -84614,7 +84614,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8431;
         G_PRE(0x8431, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8433;
         G_POST(0x8431, 0x56);
         continue;
@@ -84673,7 +84673,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8446;
         G_PRE(0x8446, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8448;
         G_POST(0x8446, 0x56);
         continue;
@@ -84732,7 +84732,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x845B;
         G_PRE(0x845B, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x845D;
         G_POST(0x845B, 0x56);
         continue;
@@ -84772,7 +84772,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8468;
         G_PRE(0x8468, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x846A;
         G_POST(0x8468, 0x56);
         continue;
@@ -84807,7 +84807,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8475;
         G_PRE(0x8475, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8477;
         G_POST(0x8475, 0x56);
         continue;
@@ -84866,7 +84866,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x848A;
         G_PRE(0x848A, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x848C;
         G_POST(0x848A, 0x56);
         continue;
@@ -84925,7 +84925,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x849F;
         G_PRE(0x849F, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x84A1;
         G_POST(0x849F, 0x56);
         continue;
@@ -84984,7 +84984,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x84B4;
         G_PRE(0x84B4, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x84B6;
         G_POST(0x84B4, 0x56);
         continue;
@@ -85024,7 +85024,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x84C1;
         G_PRE(0x84C1, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x84C3;
         G_POST(0x84C1, 0x56);
         continue;
@@ -85059,7 +85059,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x84CE;
         G_PRE(0x84CE, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x84D0;
         G_POST(0x84CE, 0x56);
         continue;
@@ -85118,7 +85118,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x84E3;
         G_PRE(0x84E3, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x84E5;
         G_POST(0x84E3, 0x56);
         continue;
@@ -85177,7 +85177,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x84F8;
         G_PRE(0x84F8, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x84FA;
         G_POST(0x84F8, 0x56);
         continue;
@@ -85236,7 +85236,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x850D;
         G_PRE(0x850D, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x850F;
         G_POST(0x850D, 0x56);
         continue;
@@ -85284,7 +85284,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x851B;
         G_PRE(0x851B, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x851D;
@@ -85318,10 +85318,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_y0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0000);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0000);
           // partner.bbox_y0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8536 : 0x8527;
         }
         G_POST(0x8523, 0x84);
@@ -85330,7 +85330,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8527;
         G_PRE(0x8527, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_x1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x155D) /* partner.bbox_x1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x155D) /* partner.bbox_x1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x8529;
@@ -85364,10 +85364,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_x0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0050);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0050);
           // partner.bbox_x0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8536 : 0x8533;
         }
         G_POST(0x852F, 0x84);
@@ -85398,7 +85398,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x853A;
         G_PRE(0x853A, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x853C;
@@ -85432,10 +85432,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_y0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0000);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0000);
           // partner.bbox_y0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8555 : 0x8546;
         }
         G_POST(0x8542, 0x84);
@@ -85444,7 +85444,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8546;
         G_PRE(0x8546, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_x1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x155D) /* partner.bbox_x1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x155D) /* partner.bbox_x1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x8548;
@@ -85478,10 +85478,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.bbox_x0
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0050);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0050);
           // partner.bbox_x0
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8555 : 0x8552;
         }
         G_POST(0x854E, 0x84);
@@ -86655,7 +86655,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -86682,7 +86682,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8768;
         G_PRE(0x8768, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x876A;
         G_POST(0x8768, 0x56);
         continue;
@@ -86924,7 +86924,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -86943,7 +86943,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x87BB;
         G_PRE(0x87BB, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x87BD;
         G_POST(0x87BB, 0x56);
         continue;
@@ -86959,7 +86959,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x87C0;
         G_PRE(0x87C0, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x87C2;
         G_POST(0x87C0, 0x56);
         continue;
@@ -87002,7 +87002,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -87021,7 +87021,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x87D2;
         G_PRE(0x87D2, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x87D4;
         G_POST(0x87D2, 0x56);
         continue;
@@ -87037,7 +87037,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x87D7;
         G_PRE(0x87D7, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x87D9;
         G_POST(0x87D7, 0x56);
         continue;
@@ -87080,7 +87080,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -87099,7 +87099,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x87E9;
         G_PRE(0x87E9, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x87EB;
         G_POST(0x87E9, 0x56);
         continue;
@@ -87115,7 +87115,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x87EE;
         G_PRE(0x87EE, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x87F0;
         G_POST(0x87EE, 0x56);
         continue;
@@ -87177,7 +87177,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x87FE;
         G_PRE(0x87FE, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8800;
         G_POST(0x87FE, 0x56);
         continue;
@@ -87241,7 +87241,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8811;
         G_PRE(0x8811, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8813;
         G_POST(0x8811, 0x56);
         continue;
@@ -87387,7 +87387,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x883E;
         G_PRE(0x883E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8840;
         G_POST(0x883E, 0x56);
         continue;
@@ -87454,7 +87454,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8852;
         G_PRE(0x8852, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x8854;
@@ -87472,7 +87472,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8857;
         G_PRE(0x8857, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x8859;
@@ -87483,7 +87483,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8859, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -87498,7 +87498,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -87539,7 +87539,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -87564,7 +87564,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x886D;
         G_PRE(0x886D, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x886F;
         G_POST(0x886D, 0x56);
         continue;
@@ -87580,7 +87580,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8872;
         G_PRE(0x8872, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8874;
         G_POST(0x8872, 0x56);
         continue;
@@ -87871,7 +87871,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x892F;
         G_PRE(0x892F, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8931;
         G_POST(0x892F, 0x56);
         continue;
@@ -87889,7 +87889,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8933;
         G_PRE(0x8933, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8935;
         G_POST(0x8933, 0x56);
         continue;
@@ -87943,7 +87943,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8943, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0x894E : 0x8948;
         }
@@ -88182,7 +88182,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x898E;
         G_PRE(0x898E, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8990;
         G_POST(0x898E, 0x56);
         continue;
@@ -88198,7 +88198,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8993;
         G_PRE(0x8993, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8995;
         G_POST(0x8993, 0x56);
         continue;
@@ -88294,7 +88294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89B4;
         G_PRE(0x89B4, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x89B6;
         G_POST(0x89B4, 0x56);
         continue;
@@ -88325,7 +88325,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89BF;
         G_PRE(0x89BF, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x89C1;
         G_POST(0x89BF, 0x56);
         continue;
@@ -88356,7 +88356,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89CA;
         G_PRE(0x89CA, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x89CC;
         G_POST(0x89CA, 0x56);
         continue;
@@ -88387,7 +88387,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x89D5;
         G_PRE(0x89D5, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x89D7;
         G_POST(0x89D5, 0x56);
         continue;
@@ -88580,7 +88580,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A13, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x100)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0010;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0100) ? 1 : 0) == v2_vm_accumulator) ? 0x8A57 : 0x8A18;
         }
@@ -88602,7 +88602,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A1C, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x200)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0012;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0200) ? 1 : 0) == v2_vm_accumulator) ? 0x8A5D : 0x8A21;
         }
@@ -88624,7 +88624,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A25, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x400)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0014;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0400) ? 1 : 0) == v2_vm_accumulator) ? 0x8A63 : 0x8A2A;
         }
@@ -88646,7 +88646,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A2E, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) == v2_vm_accumulator) ? 0x8A69 : 0x8A33;
         }
@@ -88668,7 +88668,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A37, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x8A6F : 0x8A3C;
         }
@@ -88690,7 +88690,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A40, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x2000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001A;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x2000) ? 1 : 0) == v2_vm_accumulator) ? 0x8A75 : 0x8A45;
         }
@@ -88712,7 +88712,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A49, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x4000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x4000) ? 1 : 0) == v2_vm_accumulator) ? 0x8A7B : 0x8A4E;
         }
@@ -88734,7 +88734,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A52, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x8A81 : 0x8A57;
         }
@@ -88753,7 +88753,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A5A;
         G_PRE(0x8A5A, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A5C;
         G_POST(0x8A5A, 0x56);
         continue;
@@ -88776,7 +88776,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A60;
         G_PRE(0x8A60, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A62;
         G_POST(0x8A60, 0x56);
         continue;
@@ -88799,7 +88799,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A66;
         G_PRE(0x8A66, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A68;
         G_POST(0x8A66, 0x56);
         continue;
@@ -88822,7 +88822,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A6C;
         G_PRE(0x8A6C, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A6E;
         G_POST(0x8A6C, 0x56);
         continue;
@@ -88845,7 +88845,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A72;
         G_PRE(0x8A72, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A74;
         G_POST(0x8A72, 0x56);
         continue;
@@ -88868,7 +88868,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A78;
         G_PRE(0x8A78, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A7A;
         G_POST(0x8A78, 0x56);
         continue;
@@ -88891,7 +88891,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A7E;
         G_PRE(0x8A7E, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A80;
         G_POST(0x8A7E, 0x56);
         continue;
@@ -88914,7 +88914,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8A84;
         G_PRE(0x8A84, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8A86;
         G_POST(0x8A84, 0x56);
         continue;
@@ -88940,7 +88940,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A8B, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x100)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0010;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0100) ? 1 : 0) == v2_vm_accumulator) ? 0x8ACF : 0x8A90;
         }
@@ -88962,7 +88962,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A94, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x200)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0012;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0200) ? 1 : 0) == v2_vm_accumulator) ? 0x8AD5 : 0x8A99;
         }
@@ -88984,7 +88984,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8A9D, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x400)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0014;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0400) ? 1 : 0) == v2_vm_accumulator) ? 0x8ADB : 0x8AA2;
         }
@@ -89006,7 +89006,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8AA6, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0800) ? 1 : 0) == v2_vm_accumulator) ? 0x8AE1 : 0x8AAB;
         }
@@ -89028,7 +89028,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8AAF, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x1000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0018;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x1000) ? 1 : 0) == v2_vm_accumulator) ? 0x8AE7 : 0x8AB4;
         }
@@ -89050,7 +89050,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8AB8, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x2000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001A;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x2000) ? 1 : 0) == v2_vm_accumulator) ? 0x8AED : 0x8ABD;
         }
@@ -89072,7 +89072,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8AC1, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x4000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001C;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x4000) ? 1 : 0) == v2_vm_accumulator) ? 0x8AF3 : 0x8AC6;
         }
@@ -89094,7 +89094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8ACA, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.spawn_pool & 0x8000)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */);
+          uint16_t _fv = v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x001E;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x8000) ? 1 : 0) == v2_vm_accumulator) ? 0x8AF9 : 0x8ACF;
         }
@@ -89418,7 +89418,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8B65;
         G_PRE(0x8B65, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8B67;
         G_POST(0x8B65, 0x56);
         continue;
@@ -89434,7 +89434,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8B6A;
         G_PRE(0x8B6A, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8B6C;
         G_POST(0x8B6A, 0x56);
         continue;
@@ -89529,7 +89529,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8B85;
         G_PRE(0x8B85, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8B87;
         G_POST(0x8B85, 0x56);
         continue;
@@ -89569,7 +89569,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8B91;
         G_PRE(0x8B91, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8B93;
         G_POST(0x8B91, 0x56);
         continue;
@@ -89714,7 +89714,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8BB6;
         G_PRE(0x8BB6, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8BB8;
         G_POST(0x8BB6, 0x56);
         continue;
@@ -89745,7 +89745,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8BBF;
         G_PRE(0x8BBF, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8BC1;
         G_POST(0x8BBF, 0x56);
         continue;
@@ -89797,7 +89797,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8BD1;
         G_PRE(0x8BD1, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8BD3;
         G_POST(0x8BD1, 0x56);
         continue;
@@ -89921,7 +89921,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8C34;
         G_PRE(0x8C34, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8C36;
         G_POST(0x8C34, 0x56);
         continue;
@@ -89937,7 +89937,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8C39;
         G_PRE(0x8C39, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8C3B;
         G_POST(0x8C39, 0x56);
         continue;
@@ -89960,7 +89960,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8C41;
         G_PRE(0x8C41, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8C43;
         G_POST(0x8C41, 0x56);
         continue;
@@ -89976,7 +89976,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8C46;
         G_PRE(0x8C46, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8C48;
         G_POST(0x8C46, 0x56);
         continue;
@@ -90068,7 +90068,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8C62;
         G_PRE(0x8C62, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8C64;
         G_POST(0x8C62, 0x56);
         continue;
@@ -90167,7 +90167,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -90186,7 +90186,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8C89;
         G_PRE(0x8C89, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8C8B;
         G_POST(0x8C89, 0x56);
         continue;
@@ -90202,7 +90202,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8C8E;
         G_PRE(0x8C8E, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8C90;
         G_POST(0x8C8E, 0x56);
         continue;
@@ -90241,7 +90241,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -90260,7 +90260,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CA2;
         G_PRE(0x8CA2, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CA4;
         G_POST(0x8CA2, 0x56);
         continue;
@@ -90276,7 +90276,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CA7;
         G_PRE(0x8CA7, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CA9;
         G_POST(0x8CA7, 0x56);
         continue;
@@ -90319,7 +90319,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -90338,7 +90338,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CB9;
         G_PRE(0x8CB9, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CBB;
         G_POST(0x8CB9, 0x56);
         continue;
@@ -90382,7 +90382,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CC7;
         G_PRE(0x8CC7, 0x56);
         // inlined v2_vm_op_56: self.bbox_x0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1535) /* self.bbox_x0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CC9;
         G_POST(0x8CC7, 0x56);
         continue;
@@ -90417,7 +90417,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CD0;
         G_PRE(0x8CD0, 0x56);
         // inlined v2_vm_op_56: self.bbox_x1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x155D) /* self.bbox_x1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CD2;
         G_POST(0x8CD0, 0x56);
         continue;
@@ -90452,7 +90452,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CD9;
         G_PRE(0x8CD9, 0x56);
         // inlined v2_vm_op_56: self.bbox_y0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CDB;
         G_POST(0x8CD9, 0x56);
         continue;
@@ -90487,7 +90487,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CE2;
         G_PRE(0x8CE2, 0x56);
         // inlined v2_vm_op_56: self.bbox_y1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x150D) /* self.bbox_y1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CE4;
         G_POST(0x8CE2, 0x56);
         continue;
@@ -90528,7 +90528,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CEC;
         G_PRE(0x8CEC, 0x56);
         // inlined v2_vm_op_56: self.bbox_x0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1535) /* self.bbox_x0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CEE;
         G_POST(0x8CEC, 0x56);
         continue;
@@ -90563,7 +90563,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CF5;
         G_PRE(0x8CF5, 0x56);
         // inlined v2_vm_op_56: self.bbox_x1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x155D) /* self.bbox_x1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_x1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8CF7;
         G_POST(0x8CF5, 0x56);
         continue;
@@ -90598,7 +90598,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8CFE;
         G_PRE(0x8CFE, 0x56);
         // inlined v2_vm_op_56: self.bbox_y0 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8D00;
         G_POST(0x8CFE, 0x56);
         continue;
@@ -90633,7 +90633,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8D07;
         G_PRE(0x8D07, 0x56);
         // inlined v2_vm_op_56: self.bbox_y1 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x150D) /* self.bbox_y1 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_bbox_y1_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8D09;
         G_POST(0x8D07, 0x56);
         continue;
@@ -90773,7 +90773,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8D30;
         G_PRE(0x8D30, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8D32;
         G_POST(0x8D30, 0x56);
         continue;
@@ -90886,7 +90886,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8D50;
         G_PRE(0x8D50, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8D52;
         G_POST(0x8D50, 0x56);
         continue;
@@ -90938,7 +90938,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8D5E;
         G_PRE(0x8D5E, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x8D60;
@@ -90956,7 +90956,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8D63;
         G_PRE(0x8D63, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x8D65;
@@ -90967,7 +90967,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8D65, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -90982,7 +90982,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -91023,7 +91023,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -91137,7 +91137,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8DBE;
         G_PRE(0x8DBE, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8DC0;
         G_POST(0x8DBE, 0x56);
         continue;
@@ -91168,7 +91168,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8DC9;
         G_PRE(0x8DC9, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8DCB;
         G_POST(0x8DC9, 0x56);
         continue;
@@ -91327,7 +91327,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8E06;
         G_PRE(0x8E06, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8E08;
         G_POST(0x8E06, 0x56);
         continue;
@@ -91655,7 +91655,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8E88;
         G_PRE(0x8E88, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8E8A;
         G_POST(0x8E88, 0x56);
         continue;
@@ -91707,7 +91707,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8E96;
         G_PRE(0x8E96, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x8E98;
@@ -91725,7 +91725,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8E9B;
         G_PRE(0x8E9B, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x8E9D;
@@ -91747,10 +91747,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_84: when acc <s partner.world_x
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0258);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0258);
           // partner.world_x
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = ((int16_t)v2_vm_accumulator < (int16_t)_v) ? 0x8EAA : 0x8EA3;
         }
         G_POST(0x8E9F, 0x84);
@@ -91774,7 +91774,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -91815,7 +91815,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -91839,7 +91839,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x8ED9, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x800)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0016;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0800) ? 1 : 0);
         }
@@ -91873,7 +91873,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8EE1;
         G_PRE(0x8EE1, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8EE3;
         G_POST(0x8EE1, 0x56);
         continue;
@@ -91941,7 +91941,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8EF4;
         G_PRE(0x8EF4, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8EF6;
         G_POST(0x8EF4, 0x56);
         continue;
@@ -92090,7 +92090,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F1D;
         G_PRE(0x8F1D, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_dy
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x1675) /* partner.anim_dy */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x1675) /* partner.anim_dy */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x8F1F;
@@ -92110,7 +92110,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F24;
         G_PRE(0x8F24, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.bbox_y1
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x150D) /* partner.bbox_y1 */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x150D) /* partner.bbox_y1 */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x8F26;
@@ -92180,7 +92180,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x0800;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0140);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0140);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0xF7FF) | v2_vm_accumulator));
@@ -92217,7 +92217,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F46;
         G_PRE(0x8F46, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8F48;
         G_POST(0x8F46, 0x56);
         continue;
@@ -92385,7 +92385,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F89;
         G_PRE(0x8F89, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8F8B;
         G_POST(0x8F89, 0x56);
         continue;
@@ -92401,7 +92401,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8F8E;
         G_PRE(0x8F8E, 0x56);
         // inlined v2_vm_op_56: self.state_18cd = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18CD) /* self.state_18cd */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18cd_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8F90;
         G_POST(0x8F8E, 0x56);
         continue;
@@ -92510,7 +92510,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x8FA9;
         G_PRE(0x8FA9, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x8FAB;
         G_POST(0x8FA9, 0x56);
         continue;
@@ -92728,7 +92728,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9049;
         G_PRE(0x9049, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x904B;
         G_POST(0x9049, 0x56);
         continue;
@@ -92748,7 +92748,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x904F, 0xB3);
         // inlined v2_vm_op_B3: call when acc == bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           if (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) {
               ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9054);
@@ -92875,7 +92875,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9073;
         G_PRE(0x9073, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x9075;
         G_POST(0x9073, 0x56);
         continue;
@@ -92892,7 +92892,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9078, 0x64);
         // inlined v2_vm_op_64: partner.flags |= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
           // partner.flags (indexed_1995_target)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -92984,7 +92984,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x908F;
         G_PRE(0x908F, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x9091;
         G_POST(0x908F, 0x56);
         continue;
@@ -93039,7 +93039,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x90A1;
         G_PRE(0x90A1, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x90A3;
         G_POST(0x90A1, 0x56);
         continue;
@@ -93079,7 +93079,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x90AD;
         G_PRE(0x90AD, 0x56);
         // inlined v2_vm_op_56: self.timer = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x90AF;
         G_POST(0x90AD, 0x56);
         continue;
@@ -93221,7 +93221,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x90D5, 0xA9);
         // inlined v2_vm_op_A9: when acc == bit(self.timer & 0x2)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1715) /* self.timer */);
+          uint16_t _fv = v2gs(vm.shadow).obj_timer_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x0002;  // 15403 tail: POP si = mask byte
           vm.pc = (((_fv & 0x0002) ? 1 : 0) == v2_vm_accumulator) ? 0x90E1 : 0x90DA;
         }
@@ -93311,7 +93311,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x90F5;
         G_PRE(0x90F5, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x90F7;
         G_POST(0x90F5, 0x56);
         continue;
@@ -93411,10 +93411,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0118);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x9142 : 0x9119;
         }
         G_POST(0x9115, 0x7A);
@@ -94249,7 +94249,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -94268,7 +94268,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x922B;
         G_PRE(0x922B, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x922D;
         G_POST(0x922B, 0x56);
         continue;
@@ -94310,7 +94310,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9238;
         G_PRE(0x9238, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x923A;
@@ -94328,7 +94328,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x923D;
         G_PRE(0x923D, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x923F;
@@ -94339,7 +94339,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x923F, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -94354,7 +94354,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -94420,10 +94420,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_7A: when acc != partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0118);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v != v2_vm_accumulator) ? 0x925C : 0x9257;
         }
         G_POST(0x9253, 0x7A);
@@ -94441,7 +94441,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x925A, 0x61);
         // inlined v2_vm_op_61: partner.flags &= acc
         { uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x00A0);
           // partner.flags (field_addr_A)
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
@@ -94706,7 +94706,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x92BF;
         G_PRE(0x92BF, 0x56);
         // inlined v2_vm_op_56: self.spawn_pool = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x169D) /* self.spawn_pool */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_spawn_pool_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x92C1;
         G_POST(0x92BF, 0x56);
         continue;
@@ -94805,10 +94805,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_75: when acc == partner.state_idx
         {
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x0118);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x0118);
           // partner.state_idx
           vm.si_track = _si; vm.di_track = _di;
-          const uint16_t _v = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          const uint16_t _v = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.pc = (_v == v2_vm_accumulator) ? 0x92E3 : 0x92E2;
         }
         G_POST(0x92DE, 0x75);
@@ -94831,7 +94831,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x92E6;
         G_PRE(0x92E6, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x92E8;
@@ -94849,7 +94849,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x92EB;
         G_PRE(0x92EB, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x92ED;
@@ -95056,7 +95056,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9322;
         G_PRE(0x9322, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x9324;
@@ -95193,7 +95193,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9353;
         G_PRE(0x9353, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x9355;
         G_POST(0x9353, 0x56);
         continue;
@@ -95327,8 +95327,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x937E, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9381;
@@ -95394,11 +95394,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x938C;
@@ -95409,7 +95409,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x938C, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x938D;
@@ -95420,7 +95420,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x938D, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x938E;
@@ -95490,8 +95490,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x939E, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x93A1;
@@ -95557,11 +95557,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x93AC;
@@ -95572,7 +95572,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93AC, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x93AD;
@@ -95583,7 +95583,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93AD, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x93AE;
@@ -95649,11 +95649,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x93B9;
@@ -95664,7 +95664,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93B9, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x93BA;
@@ -95675,7 +95675,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93BA, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x93BB;
@@ -95745,8 +95745,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93CB, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x93CE;
@@ -95812,11 +95812,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x93D9;
@@ -95827,7 +95827,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93D9, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x93DA;
@@ -95838,7 +95838,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x93DA, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x93DB;
@@ -95957,8 +95957,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9421, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9424;
@@ -95975,8 +95975,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9425, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9428;
@@ -95993,8 +95993,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9429, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x942C;
@@ -96034,7 +96034,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9434;
         G_PRE(0x9434, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x9436;
@@ -96068,7 +96068,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x943D;
         G_PRE(0x943D, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x943F;
@@ -96102,7 +96102,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9446;
         G_PRE(0x9446, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x9448;
@@ -96356,7 +96356,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9497;
         G_PRE(0x9497, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x9499;
@@ -96493,7 +96493,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x94C8;
         G_PRE(0x94C8, 0x56);
         // inlined v2_vm_op_56: self.state_18f5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18f5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x94CA;
         G_POST(0x94C8, 0x56);
         continue;
@@ -96703,8 +96703,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9513, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9516;
@@ -96770,11 +96770,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9521;
@@ -96785,7 +96785,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9521, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9522;
@@ -96796,7 +96796,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9522, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9523;
@@ -96866,8 +96866,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9533, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9536;
@@ -96933,11 +96933,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9541;
@@ -96948,7 +96948,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9541, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9542;
@@ -96959,7 +96959,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9542, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9543;
@@ -97029,8 +97029,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9553, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9556;
@@ -97096,11 +97096,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9561;
@@ -97111,7 +97111,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9561, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9562;
@@ -97122,7 +97122,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9562, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9563;
@@ -97192,8 +97192,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9573, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9576;
@@ -97259,11 +97259,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9581;
@@ -97274,7 +97274,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9581, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9582;
@@ -97285,7 +97285,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9582, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9583;
@@ -97376,8 +97376,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x959C, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x959F;
@@ -97443,11 +97443,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x95AA;
@@ -97458,7 +97458,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95AA, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x95AB;
@@ -97469,7 +97469,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95AB, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x95AC;
@@ -97539,8 +97539,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95BC, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x95BF;
@@ -97606,11 +97606,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x95CA;
@@ -97621,7 +97621,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95CA, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x95CB;
@@ -97632,7 +97632,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95CB, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x95CC;
@@ -97702,8 +97702,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95DC, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x95DF;
@@ -97769,11 +97769,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x95EA;
@@ -97784,7 +97784,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95EA, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x95EB;
@@ -97795,7 +97795,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x95EB, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x95EC;
@@ -97886,8 +97886,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9605, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9608;
@@ -97953,11 +97953,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9613;
@@ -97968,7 +97968,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9613, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9614;
@@ -97979,7 +97979,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9614, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9615;
@@ -98049,8 +98049,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9625, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9628;
@@ -98116,11 +98116,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9633;
@@ -98131,7 +98131,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9633, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9634;
@@ -98142,7 +98142,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9634, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9635;
@@ -98212,8 +98212,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9645, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9648;
@@ -98279,11 +98279,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9653;
@@ -98294,7 +98294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9653, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9654;
@@ -98305,7 +98305,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9654, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9655;
@@ -98375,8 +98375,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9665, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9668;
@@ -98442,11 +98442,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9673;
@@ -98457,7 +98457,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9673, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9674;
@@ -98468,7 +98468,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9674, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9675;
@@ -98559,8 +98559,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x968E, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9691;
@@ -98626,11 +98626,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x969C;
@@ -98641,7 +98641,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x969C, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x969D;
@@ -98652,7 +98652,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x969D, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x969E;
@@ -98722,8 +98722,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x96AE, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x96B1;
@@ -98789,11 +98789,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x96BC;
@@ -98804,7 +98804,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x96BC, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x96BD;
@@ -98815,7 +98815,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x96BD, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x96BE;
@@ -98885,8 +98885,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x96CE, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x96D1;
@@ -98952,11 +98952,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x96DC;
@@ -98967,7 +98967,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x96DC, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x96DD;
@@ -98978,7 +98978,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x96DD, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x96DE;
@@ -99069,8 +99069,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x96F7, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x96FA;
@@ -99136,11 +99136,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9705;
@@ -99151,7 +99151,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9705, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9706;
@@ -99162,7 +99162,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9706, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9707;
@@ -99232,8 +99232,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9717, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x971A;
@@ -99299,11 +99299,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9725;
@@ -99314,7 +99314,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9725, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9726;
@@ -99325,7 +99325,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9726, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9727;
@@ -99395,8 +99395,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9737, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x973A;
@@ -99462,11 +99462,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9745;
@@ -99477,7 +99477,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9745, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9746;
@@ -99488,7 +99488,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9746, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9747;
@@ -99579,7 +99579,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9761;
         G_PRE(0x9761, 0x56);
         // inlined v2_vm_op_56: self.type_id = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x17DD) /* self.type_id */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_type_id_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x9763;
         G_POST(0x9761, 0x56);
         continue;
@@ -99806,10 +99806,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_bit_test_indexed: acc = bit(partner.flags & 0x8000)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x001E;  // 15445 tail: POP si = first byte
           v2_vm_accumulator = ((_fv & 0x8000) ? 1 : 0);
         }
@@ -99863,7 +99863,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x97BC;
         G_PRE(0x97BC, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.world_x
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x173D) /* partner.world_x */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x173D) /* partner.world_x */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0x97BE;
@@ -99924,8 +99924,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x97CF, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x97D2;
@@ -99989,11 +99989,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x97DD;
@@ -100014,7 +100014,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x97DF, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x97E0;
@@ -100025,7 +100025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x97E0, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x97E1;
@@ -100098,11 +100098,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x97EF;
@@ -100123,7 +100123,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x97F1, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x97F2;
@@ -100134,7 +100134,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x97F2, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x97F3;
@@ -100145,8 +100145,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x97F3, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x97F6;
@@ -100210,11 +100210,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9801;
@@ -100235,7 +100235,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9803, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9804;
@@ -100246,7 +100246,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9804, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9805;
@@ -100319,11 +100319,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9813;
@@ -100344,7 +100344,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9815, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9816;
@@ -100355,7 +100355,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9816, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9817;
@@ -100366,8 +100366,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9817, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x981A;
@@ -100431,11 +100431,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9825;
@@ -100456,7 +100456,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9827, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9828;
@@ -100467,7 +100467,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9828, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9829;
@@ -100478,8 +100478,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9829, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x982C;
@@ -100543,11 +100543,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9837;
@@ -100568,7 +100568,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9839, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x983A;
@@ -100579,7 +100579,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x983A, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x983B;
@@ -100590,8 +100590,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x983B, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x983E;
@@ -100655,11 +100655,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9849;
@@ -100680,7 +100680,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x984B, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x984C;
@@ -100691,7 +100691,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x984C, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x984D;
@@ -100764,11 +100764,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x985B;
@@ -100789,7 +100789,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x985D, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x985E;
@@ -100800,7 +100800,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x985E, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x985F;
@@ -100811,8 +100811,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x985F, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9862;
@@ -100876,11 +100876,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x986D;
@@ -100901,7 +100901,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x986F, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9870;
@@ -100912,7 +100912,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9870, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9871;
@@ -100948,7 +100948,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9879;
         G_PRE(0x9879, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x987B;
         G_POST(0x9879, 0x56);
         continue;
@@ -101025,7 +101025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9895;
         G_PRE(0x9895, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x9897;
         G_POST(0x9895, 0x56);
         continue;
@@ -101047,7 +101047,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x989B;
         G_PRE(0x989B, 0x56);
         // inlined v2_vm_op_56: self.state_18a5 = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18A5) /* self.state_18a5 */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_18a5_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0x989D;
         G_POST(0x989B, 0x56);
         continue;
@@ -101591,7 +101591,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9981;
         G_PRE(0x9981, 0x58);
         // inlined v2_vm_op_58: partner.res_handle = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15AD) /* partner.res_handle */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15AD) /* partner.res_handle */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x9983;
@@ -101625,7 +101625,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x998A;
         G_PRE(0x998A, 0x58);
         // inlined v2_vm_op_58: partner.res_handle = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15AD) /* partner.res_handle */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15AD) /* partner.res_handle */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x998C;
@@ -101659,7 +101659,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0x9993;
         G_PRE(0x9993, 0x58);
         // inlined v2_vm_op_58: partner.res_handle = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x15AD) /* partner.res_handle */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x15AD) /* partner.res_handle */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0x9995;
@@ -102117,8 +102117,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9A41, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0000);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0000);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9A44;
@@ -102151,11 +102151,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9A4F;
@@ -102177,10 +102177,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -102203,10 +102203,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -102229,10 +102229,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -102255,10 +102255,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           const uint16_t _v = 0x000C;
           vm.ds_write(DS_TEXT_ROW, _v);
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 8);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _x);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _y);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v);
             v2_cmdq_log("v2", 8, _bx, 8);
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
         }
@@ -102279,7 +102279,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9A76, 0xCB);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9A77;
@@ -102290,7 +102290,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9A77, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9A78;
@@ -102688,11 +102688,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9AFF;
@@ -102703,7 +102703,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9AFF, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B00;
@@ -102714,7 +102714,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B00, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B01;
@@ -102846,11 +102846,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9B1F;
@@ -102861,7 +102861,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B1F, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B20;
@@ -102872,7 +102872,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B20, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B21;
@@ -103004,11 +103004,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9B3F;
@@ -103019,7 +103019,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B3F, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B40;
@@ -103030,7 +103030,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B40, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B41;
@@ -103162,11 +103162,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9B5F;
@@ -103177,7 +103177,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B5F, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B60;
@@ -103188,7 +103188,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9B60, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9B61;
@@ -103451,8 +103451,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BB8, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9BBB;
@@ -103518,11 +103518,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9BC6;
@@ -103533,7 +103533,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BC6, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9BC7;
@@ -103544,7 +103544,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BC7, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9BC8;
@@ -103614,8 +103614,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BD8, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9BDB;
@@ -103683,11 +103683,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9BE5;
@@ -103698,7 +103698,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BE5, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9BE6;
@@ -103709,7 +103709,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BE6, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9BE7;
@@ -103777,11 +103777,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9BF1;
@@ -103792,7 +103792,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BF1, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9BF2;
@@ -103803,7 +103803,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9BF2, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9BF3;
@@ -103873,8 +103873,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C03, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9C06;
@@ -103942,11 +103942,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9C10;
@@ -103957,7 +103957,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C10, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C11;
@@ -103968,7 +103968,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C11, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C12;
@@ -104044,8 +104044,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C25, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9C28;
@@ -104111,11 +104111,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9C33;
@@ -104126,7 +104126,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C33, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C34;
@@ -104137,7 +104137,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C34, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C35;
@@ -104207,8 +104207,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C45, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9C48;
@@ -104276,11 +104276,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9C52;
@@ -104291,7 +104291,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C52, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C53;
@@ -104302,7 +104302,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C53, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C54;
@@ -104372,8 +104372,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C64, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9C67;
@@ -104441,11 +104441,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9C71;
@@ -104456,7 +104456,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C71, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C72;
@@ -104467,7 +104467,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C72, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C73;
@@ -104543,8 +104543,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C86, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9C89;
@@ -104612,11 +104612,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9C93;
@@ -104627,7 +104627,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C93, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C94;
@@ -104638,7 +104638,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9C94, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9C95;
@@ -104708,8 +104708,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CA5, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9CA8;
@@ -104777,11 +104777,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9CB2;
@@ -104792,7 +104792,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CB2, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9CB3;
@@ -104803,7 +104803,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CB3, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9CB4;
@@ -104873,8 +104873,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CC4, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9CC7;
@@ -104940,11 +104940,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9CD2;
@@ -104955,7 +104955,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CD2, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9CD3;
@@ -104966,7 +104966,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CD3, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9CD4;
@@ -105036,8 +105036,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CE4, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9CE7;
@@ -105105,11 +105105,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9CF1;
@@ -105120,7 +105120,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CF1, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9CF2;
@@ -105131,7 +105131,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9CF2, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9CF3;
@@ -105207,8 +105207,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D06, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9D09;
@@ -105274,11 +105274,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9D14;
@@ -105289,7 +105289,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D14, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D15;
@@ -105300,7 +105300,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D15, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D16;
@@ -105370,8 +105370,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D26, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9D29;
@@ -105439,11 +105439,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9D33;
@@ -105454,7 +105454,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D33, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D34;
@@ -105465,7 +105465,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D34, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D35;
@@ -105535,8 +105535,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D45, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9D48;
@@ -105604,11 +105604,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9D52;
@@ -105619,7 +105619,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D52, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D53;
@@ -105630,7 +105630,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D53, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D54;
@@ -105700,8 +105700,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D64, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9D67;
@@ -105767,11 +105767,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9D72;
@@ -105782,7 +105782,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D72, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D73;
@@ -105793,7 +105793,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D73, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D74;
@@ -105869,8 +105869,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D87, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9D8A;
@@ -105938,11 +105938,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9D94;
@@ -105953,7 +105953,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D94, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D95;
@@ -105964,7 +105964,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9D95, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9D96;
@@ -106034,8 +106034,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DA6, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9DA9;
@@ -106101,11 +106101,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9DB4;
@@ -106116,7 +106116,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DB4, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9DB5;
@@ -106127,7 +106127,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DB5, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9DB6;
@@ -106197,8 +106197,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DC6, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9DC9;
@@ -106266,11 +106266,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9DD3;
@@ -106281,7 +106281,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DD3, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9DD4;
@@ -106292,7 +106292,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DD4, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9DD5;
@@ -106368,8 +106368,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DE8, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9DEB;
@@ -106437,11 +106437,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9DF5;
@@ -106452,7 +106452,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DF5, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9DF6;
@@ -106463,7 +106463,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9DF6, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9DF7;
@@ -106533,8 +106533,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E07, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9E0A;
@@ -106600,11 +106600,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9E15;
@@ -106615,7 +106615,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E15, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E16;
@@ -106626,7 +106626,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E16, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E17;
@@ -106696,8 +106696,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E27, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9E2A;
@@ -106765,11 +106765,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9E34;
@@ -106780,7 +106780,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E34, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E35;
@@ -106791,7 +106791,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E35, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E36;
@@ -106867,8 +106867,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E49, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9E4C;
@@ -106934,11 +106934,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9E57;
@@ -106949,7 +106949,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E57, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E58;
@@ -106960,7 +106960,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E58, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E59;
@@ -107030,8 +107030,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E69, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9E6C;
@@ -107099,11 +107099,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9E76;
@@ -107114,7 +107114,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E76, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E77;
@@ -107125,7 +107125,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E77, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E78;
@@ -107201,8 +107201,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E8B, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9E8E;
@@ -107268,11 +107268,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9E99;
@@ -107283,7 +107283,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E99, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E9A;
@@ -107294,7 +107294,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9E9A, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9E9B;
@@ -107364,8 +107364,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9EAB, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9EAE;
@@ -107433,11 +107433,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9EB8;
@@ -107448,7 +107448,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9EB8, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9EB9;
@@ -107459,7 +107459,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9EB9, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9EBA;
@@ -107529,8 +107529,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9ECA, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9ECD;
@@ -107598,11 +107598,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9ED7;
@@ -107613,7 +107613,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9ED7, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9ED8;
@@ -107624,7 +107624,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9ED8, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9ED9;
@@ -107767,8 +107767,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F06, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9F09;
@@ -107834,11 +107834,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9F14;
@@ -107849,7 +107849,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F14, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F15;
@@ -107860,7 +107860,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F15, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F16;
@@ -107930,8 +107930,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F26, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9F29;
@@ -107999,11 +107999,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9F33;
@@ -108014,7 +108014,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F33, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F34;
@@ -108025,7 +108025,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F34, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F35;
@@ -108095,8 +108095,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F45, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9F48;
@@ -108164,11 +108164,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9F52;
@@ -108179,7 +108179,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F52, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F53;
@@ -108190,7 +108190,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F53, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F54;
@@ -108266,8 +108266,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F67, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9F6A;
@@ -108333,11 +108333,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9F75;
@@ -108348,7 +108348,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F75, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F76;
@@ -108359,7 +108359,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F76, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F77;
@@ -108429,8 +108429,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F87, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9F8A;
@@ -108498,11 +108498,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9F94;
@@ -108513,7 +108513,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F94, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F95;
@@ -108524,7 +108524,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9F95, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9F96;
@@ -108594,8 +108594,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FA6, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9FA9;
@@ -108661,11 +108661,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9FB4;
@@ -108676,7 +108676,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FB4, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9FB5;
@@ -108687,7 +108687,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FB5, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9FB6;
@@ -108757,8 +108757,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FC6, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9FC9;
@@ -108826,11 +108826,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9FD3;
@@ -108841,7 +108841,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FD3, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9FD4;
@@ -108852,7 +108852,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FD4, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9FD5;
@@ -108922,8 +108922,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FE5, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0x9FE8;
@@ -108989,11 +108989,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0x9FF3;
@@ -109004,7 +109004,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FF3, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9FF4;
@@ -109015,7 +109015,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0x9FF4, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0x9FF5;
@@ -109091,8 +109091,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA008, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA00B;
@@ -109160,11 +109160,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA015;
@@ -109175,7 +109175,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA015, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA016;
@@ -109186,7 +109186,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA016, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA017;
@@ -109256,8 +109256,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA027, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA02A;
@@ -109325,11 +109325,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA034;
@@ -109340,7 +109340,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA034, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA035;
@@ -109351,7 +109351,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA035, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA036;
@@ -109421,8 +109421,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA046, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA049;
@@ -109488,11 +109488,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA054;
@@ -109503,7 +109503,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA054, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA055;
@@ -109514,7 +109514,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA055, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA056;
@@ -109584,8 +109584,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA066, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA069;
@@ -109653,11 +109653,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA073;
@@ -109668,7 +109668,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA073, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA074;
@@ -109679,7 +109679,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA074, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA075;
@@ -109803,8 +109803,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA09A, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA09D;
@@ -109872,11 +109872,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA0A7;
@@ -109887,7 +109887,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0A7, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0A8;
@@ -109898,7 +109898,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0A8, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0A9;
@@ -109968,8 +109968,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0B9, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA0BC;
@@ -110037,11 +110037,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA0C6;
@@ -110052,7 +110052,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0C6, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0C7;
@@ -110063,7 +110063,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0C7, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0C8;
@@ -110133,8 +110133,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0D8, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA0DB;
@@ -110200,11 +110200,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA0E6;
@@ -110215,7 +110215,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0E6, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0E7;
@@ -110226,7 +110226,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0E7, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0E8;
@@ -110292,11 +110292,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA0F3;
@@ -110307,7 +110307,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0F3, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0F4;
@@ -110318,7 +110318,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA0F4, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA0F5;
@@ -110388,8 +110388,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA105, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA108;
@@ -110457,11 +110457,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA112;
@@ -110472,7 +110472,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA112, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA113;
@@ -110483,7 +110483,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA113, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA114;
@@ -110559,8 +110559,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA127, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA12A;
@@ -110628,11 +110628,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA134;
@@ -110643,7 +110643,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA134, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA135;
@@ -110654,7 +110654,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA135, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA136;
@@ -110724,8 +110724,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA146, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA149;
@@ -110791,11 +110791,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA154;
@@ -110806,7 +110806,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA154, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA155;
@@ -110817,7 +110817,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA155, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA156;
@@ -110887,8 +110887,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA166, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA169;
@@ -110956,11 +110956,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA173;
@@ -110971,7 +110971,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA173, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA174;
@@ -110982,7 +110982,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA174, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA175;
@@ -111052,8 +111052,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA185, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA188;
@@ -111119,11 +111119,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA193;
@@ -111134,7 +111134,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA193, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA194;
@@ -111145,7 +111145,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA194, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA195;
@@ -111177,8 +111177,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA19E, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA1A1;
@@ -111211,11 +111211,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA1AC;
@@ -111226,7 +111226,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1AC, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1AD;
@@ -111237,7 +111237,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1AD, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1AE;
@@ -111270,11 +111270,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA1B9;
@@ -111285,7 +111285,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1B9, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1BA;
@@ -111296,7 +111296,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1BA, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1BB;
@@ -111366,8 +111366,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1CB, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA1CE;
@@ -111433,11 +111433,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA1D9;
@@ -111448,7 +111448,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1D9, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1DA;
@@ -111459,7 +111459,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1DA, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1DB;
@@ -111529,8 +111529,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1EB, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA1EE;
@@ -111598,11 +111598,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA1F8;
@@ -111613,7 +111613,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1F8, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1F9;
@@ -111624,7 +111624,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1F9, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA1FA;
@@ -111635,8 +111635,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA1FA, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA1FD;
@@ -111669,11 +111669,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA208;
@@ -111684,7 +111684,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA208, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA209;
@@ -111695,7 +111695,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA209, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA20A;
@@ -111765,8 +111765,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA21A, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA21D;
@@ -111832,11 +111832,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA228;
@@ -111847,7 +111847,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA228, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA229;
@@ -111858,7 +111858,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA229, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA22A;
@@ -111869,8 +111869,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA22A, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA22D;
@@ -111903,11 +111903,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA238;
@@ -111918,7 +111918,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA238, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA239;
@@ -111929,7 +111929,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA239, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA23A;
@@ -111999,8 +111999,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA24A, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA24D;
@@ -112068,11 +112068,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA257;
@@ -112083,7 +112083,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA257, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA258;
@@ -112094,7 +112094,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA258, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA259;
@@ -112105,8 +112105,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA259, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x7C00);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA25C;
@@ -112139,11 +112139,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA267;
@@ -112154,7 +112154,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA267, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA268;
@@ -112165,7 +112165,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA268, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA269;
@@ -112256,8 +112256,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA282, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA285;
@@ -112325,11 +112325,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA28F;
@@ -112340,7 +112340,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA28F, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA290;
@@ -112351,7 +112351,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA290, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA291;
@@ -112421,8 +112421,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2A1, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA2A4;
@@ -112490,11 +112490,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA2AE;
@@ -112505,7 +112505,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2AE, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2AF;
@@ -112516,7 +112516,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2AF, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2B0;
@@ -112584,11 +112584,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA2BA;
@@ -112599,7 +112599,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2BA, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2BB;
@@ -112610,7 +112610,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2BB, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2BC;
@@ -112680,8 +112680,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2CC, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA2CF;
@@ -112747,11 +112747,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA2DA;
@@ -112762,7 +112762,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2DA, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2DB;
@@ -112773,7 +112773,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2DB, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2DC;
@@ -112839,11 +112839,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA2E7;
@@ -112854,7 +112854,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2E7, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2E8;
@@ -112865,7 +112865,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2E8, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA2E9;
@@ -112935,8 +112935,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA2F9, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA2FC;
@@ -113004,11 +113004,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA306;
@@ -113019,7 +113019,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA306, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA307;
@@ -113030,7 +113030,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA307, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA308;
@@ -113100,8 +113100,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA318, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA31B;
@@ -113167,11 +113167,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA326;
@@ -113182,7 +113182,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA326, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA327;
@@ -113193,7 +113193,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA327, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA328;
@@ -113284,8 +113284,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA341, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x12)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x0012);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA344;
@@ -113351,11 +113351,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA34F;
@@ -113366,7 +113366,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA34F, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA350;
@@ -113377,7 +113377,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA350, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA351;
@@ -113447,8 +113447,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA361, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x110D);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA364;
@@ -113516,11 +113516,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA36E;
@@ -113531,7 +113531,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA36E, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA36F;
@@ -113542,7 +113542,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA36F, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA370;
@@ -113612,8 +113612,8 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA380, 0x46);
         // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 6);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), 0x01E3);
           v2_cmdq_log("v2", 6, _bx, 4);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
         vm.pc = 0xA383;
@@ -113681,11 +113681,11 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           v2_vm_glyph_clamp_12613(vm, _sp, _dp);
           vm.si_track = _sp; vm.di_track = _dp;
           { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
-            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
-            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 0);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x2), _sp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x4), _dp);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x6), _v2v);
+            v2gs(vm.shadow).cmd_ring_at((uint16_t)((_bx) + 0x8), vm.ds_read(DS_TEXT_IDX));
             vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
         }
         vm.pc = 0xA38D;
@@ -113696,7 +113696,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA38D, 0x43);
         // inlined v2_vm_op_43: cmdq_push(4)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 4);
           v2_cmdq_log("v2", 4, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA38E;
@@ -113707,7 +113707,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA38E, 0x42);
         // inlined v2_vm_op_42: cmdq_push(2)
         { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
-          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2gs(vm.shadow).cmd_ring_at((uint16_t)(_bx), 2);
           v2_cmdq_log("v2", 2, _bx, 2);
           vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
         vm.pc = 0xA38F;
@@ -113752,10 +113752,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0xA3A5 : 0xA39F;
         }
@@ -113773,7 +113773,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA3A2;
         G_PRE(0xA3A2, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0xA3A4;
         G_POST(0xA3A2, 0x56);
         continue;
@@ -113795,7 +113795,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA3A8;
         G_PRE(0xA3A8, 0x56);
         // inlined v2_vm_op_56: self.state_187d = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_state_187d_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0xA3AA;
         G_POST(0xA3A8, 0x56);
         continue;
@@ -114088,7 +114088,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA4FD, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -114101,10 +114101,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_AB: when acc == bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) == v2_vm_accumulator) ? 0xA513 : 0xA505;
         }
@@ -114174,7 +114174,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA517;
         G_PRE(0xA517, 0x58);
         // inlined v2_vm_op_58: partner.state_18a5 = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18A5) /* partner.state_18a5 */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18A5) /* partner.state_18a5 */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0xA519;
@@ -114192,7 +114192,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA51C;
         G_PRE(0xA51C, 0x58);
         // inlined v2_vm_op_58: partner.state_18cd = acc
-        { uint16_t _a = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x18CD) /* partner.state_18cd */;
+        { uint16_t _a = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x18CD) /* partner.state_18cd */;
           vm.ds_write(_a, v2_vm_accumulator);
           vm.di_track = (uint16_t)(_a - OBJ_FIELD_BASE); }
         vm.pc = 0xA51E;
@@ -114203,7 +114203,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA51E, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -114218,7 +114218,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           if (v2_vm_accumulator != 0)
               v2_vm_accumulator = 0x8000;
           uint16_t _si = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_si + OBJ_PARTNER)) + 0x03E8);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_si)) + 0x03E8);
           vm.si_track = _si; vm.di_track = _di;
           uint16_t _a = (uint16_t)(_di + OBJ_FIELD_BASE);
           vm.ds_write(_a, (uint16_t)((vm.ds_read(_a) & 0x7FFF) | v2_vm_accumulator));
@@ -114259,7 +114259,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
               ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
               if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
                   uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
-                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  v2gs(vm.shadow).rt_0378_at((uint16_t)(_ix), _dn);
                   vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
               }
           } }
@@ -114345,18 +114345,18 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
           vm.ds_write(DS_SCRATCH_34, 0x1E1B);   // full mode word
           vm.ch4_mul_clobber = false;
           { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
-            _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x0258);
+            _t3 = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3)) + 0x0258);
             vm.si_track = _o3; vm.di_track = _t3; }
-          const uint16_t _tx = vm.ds_read((uint16_t)(_t3 + OBJ_FIELD_BASE));
+          const uint16_t _tx = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_t3));
           { uint16_t _o = vm.global_r(DS_CUR_OBJ);
             int16_t _dx = (int16_t)(_tx - ObjRef{vm, _o}.u16(OBJ_WORLD_X));
             if (_dx < 0) { _dx = -_dx; vm.ds_write(DS_AIM_SIGN_X, 1); }
             vm.ds_write(DS_TEXT_COL, (uint16_t)_dx); }
           vm.ch4_mul_clobber = false;
           { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
-            _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x0280);
+            _t3 = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_o3)) + 0x0280);
             vm.si_track = _o3; vm.di_track = _t3; }
-          const uint16_t _ty = vm.ds_read((uint16_t)(_t3 + OBJ_FIELD_BASE));
+          const uint16_t _ty = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_t3));
           { uint16_t _o = vm.global_r(DS_CUR_OBJ);
             int16_t _dy = (int16_t)(_ty - ObjRef{vm, _o}.u16(OBJ_WORLD_Y));
             if (_dy < 0) { _dy = -_dy; vm.ds_write(DS_AIM_SIGN_Y, 1); }
@@ -114469,7 +114469,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA555;
         G_PRE(0xA555, 0x54);
         // inlined v2_vm_op_load_acc_indexed_1995: acc = partner.anim_idx
-        { uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + OBJ_PARTNER)) + 0x16ED) /* partner.anim_idx */;
+        { uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(vm.global_r(DS_CUR_OBJ))) + 0x16ED) /* partner.anim_idx */;
           v2_vm_accumulator = vm.ds_read(_di);
           vm.di_track = (uint16_t)(_di - OBJ_FIELD_BASE); }
         vm.pc = 0xA557;
@@ -114490,7 +114490,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         G_PRE(0xA55C, 0x98);
         // inlined v2_vm_op_98: acc = bit(self.flags & 0x40)
         {
-          uint16_t _fv = vm.ds_read((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1585) /* self.flags */);
+          uint16_t _fv = v2gs(vm.shadow).obj_flags_at((uint16_t)(vm.global_r(DS_CUR_OBJ)));
           vm.si_track = 0x000C;  // 15403 tail: POP si = mask byte
           v2_vm_accumulator = ((_fv & 0x0040) ? 1 : 0);
         }
@@ -114503,10 +114503,10 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_B0: when acc != bit(partner.flags & 0x40)
         {
           uint16_t _obj = vm.global_r(DS_CUR_OBJ);
-          uint16_t _di = (uint16_t)(vm.ds_read((uint16_t)(_obj + OBJ_PARTNER)) + 0x00A0);
+          uint16_t _di = (uint16_t)(v2gs(vm.shadow).obj_partner_at((uint16_t)(_obj)) + 0x00A0);
           // partner.flags
           vm.di_track = _di;
-          uint16_t _fv = vm.ds_read((uint16_t)(_di + OBJ_FIELD_BASE));
+          uint16_t _fv = v2gs(vm.shadow).obj_bbox_y0_at((uint16_t)(_di));
           vm.si_track = 0x000C;  // 15445 tail: POP si = first byte
           vm.pc = (((_fv & 0x0040) ? 1 : 0) != v2_vm_accumulator) ? 0xA565 : 0xA564;
         }
@@ -114547,7 +114547,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA56E;
         G_PRE(0xA56E, 0x56);
         // inlined v2_vm_op_56: self.anim_dx = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x164D) /* self.anim_dx */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dx_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0xA570;
         G_POST(0xA56E, 0x56);
         continue;
@@ -114636,7 +114636,7 @@ static bool v2_gen_exec_1c3(V2VM& vm, int& max_ops) {
         g_last_pc = 0xA5B3;
         G_PRE(0xA5B3, 0x56);
         // inlined v2_vm_op_56: self.anim_dy = acc
-        vm.ds_write((uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1675) /* self.anim_dy */, v2_vm_accumulator);
+        v2gs(vm.shadow).obj_anim_dy_at((uint16_t)(vm.global_r(DS_CUR_OBJ)), v2_vm_accumulator);
         vm.pc = 0xA5B5;
         G_POST(0xA5B3, 0x56);
         continue;

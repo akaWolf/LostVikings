@@ -812,6 +812,18 @@ struct V2StateView {
     const uint8_t* name##_bytes() const { return ds + (off); }
     V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
     V2_GS_FIELDS_GAPFILL(V2_GS_AB1, V2_GS_ABN)
+    // Stage 4 II.a: word access at a runtime byte offset from a field base.
+    // EXACT flat semantics incl. 8086 wrap: addr = (uint16_t)((off) + o).
+#define V2_GS_ATW1(name, off) \
+    uint16_t name##_at(uint16_t o) const { return *(const uint16_t*)(ds + (uint16_t)((off) + o)); } \
+    void     name##_at(uint16_t o, uint16_t v) { *(uint16_t*)(ds + (uint16_t)((off) + o)) = v; }
+#define V2_GS_ATWN(name, off, n) V2_GS_ATW1(name, off)
+    V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN)
+    V2_GS_FIELDS_B(V2_GS_ATW1, V2_GS_ATWN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_ATW1, V2_GS_ATWN)
+#undef V2_GS_ATW1
+#undef V2_GS_ATWN
+
 #undef V2_GS_AB1
 #undef V2_GS_ABN
 #define V2_GS_A1(name, off) \
@@ -856,6 +868,16 @@ struct V2StateViewC {
     const uint8_t* name##_bytes() const { return ds + (off); }
     V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
     V2_GS_FIELDS_GAPFILL(V2_GS_AB1, V2_GS_ABN)
+    // Stage 4 II.a (const view): read-only _at counterpart.
+#define V2_GS_ATW1(name, off) \
+    uint16_t name##_at(uint16_t o) const { return *(const uint16_t*)(ds + (uint16_t)((off) + o)); }
+#define V2_GS_ATWN(name, off, n) V2_GS_ATW1(name, off)
+    V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN)
+    V2_GS_FIELDS_B(V2_GS_ATW1, V2_GS_ATWN)
+    V2_GS_FIELDS_GAPFILL(V2_GS_ATW1, V2_GS_ATWN)
+#undef V2_GS_ATW1
+#undef V2_GS_ATWN
+
 #undef V2_GS_AB1
 #undef V2_GS_ABN
 #define V2_GS_A1(name, off) \
