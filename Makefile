@@ -112,6 +112,15 @@ EXE_NAME := vikings_headless
 OBJDIR := .obj-headless
 endif
 
+# GENCODE=1: stage-3A transpiled object code (src/sdl/gen/*.gen.inc) replaces
+# the VM fetch-decode loop for covered chunks; unknown pcs fall back to the
+# interpreter. Separate binary + objdir so the canonical binaries stay put.
+ifdef GENCODE
+V2_DEFINES += -DV2_GENCODE
+EXE_NAME := $(EXE_NAME)_gen
+OBJDIR := $(OBJDIR)-gen
+endif
+
 # COV_SEG000=1: instrument ONLY the m2c oracle (vikings.exe_seg000.cpp) with
 # gcov, for the fn-test coverage report (task #47). Everything else compiles
 # as usual; the link adds --coverage for the gcov runtime. Use with HEADLESS:

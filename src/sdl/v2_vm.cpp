@@ -1549,6 +1549,14 @@ static int v2_vm_trace_count[128];
 // Per-object detailed trace: set v2_trace_object to object index (0,2,4,...) to log every opcode.
 // Set to 0xFFFF to disable. Traces to stderr with PC, opcode, accumulator, key DS reads.
 static uint16_t v2_trace_object = 0xFFFF;
+// Env override (diagnostics): V2_TRACE_OBJECT=hex object index.
+static void v2_trace_object_env_init() {
+    static bool done = false;
+    if (done) return;
+    done = true;
+    const char* e = getenv("V2_TRACE_OBJECT");
+    if (e) v2_trace_object = (uint16_t)strtoul(e, nullptr, 16);
+}
 
 // Anim command counters for verification
 int v2_orig_anim_cmd_count = 0;  // incremented by original's anim cmd loop
@@ -17511,7 +17519,93 @@ static void v2_vm_init_table() {
 // ============================================================================
 // Execute VM for one animation object
 // ============================================================================
+// ============================================================================
+// Stage 3A gencode: transpiled object code (fetch-decode loop unrolled into
+// direct handler calls with static control flow). The generated functions
+// live in src/sdl/gen/*.gen.inc (same TU — the static handlers are directly
+// callable). G_PRE/G_POST reproduce the interpreter loop's per-opcode side
+// channels exactly (si_track seed, hash-before snaps, trace_record_v2_ext,
+// per-slot trace ring), so a gencode binary verifies against the real side
+// through the standard canon. Unknown pc returns false — the caller resumes
+// the classic interpreter loop on coherent vm state.
+// ============================================================================
+#ifdef V2_GENCODE
+static int v2_gencode_enabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("V2_GENCODE");
+        on = (e && *e == '0') ? 0 : 1;
+    }
+    return on;
+}
+#ifndef V2_ONLY
+#define V2_GEN_HASHSNAP \
+        const uint32_t _h1 = v2_ds_hash(vm.shadow); \
+        const uint32_t _h2 = v2_obj_hash(vm.shadow, vm.obj);
+#define V2_GEN_TRACES(PC, OP, PCB, ACCB) \
+        { extern void v2_vm_trace_record_v2_ext(uint16_t, uint16_t, uint8_t, \
+              uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*, uint32_t, uint32_t); \
+          extern uint16_t v2_vm_step_per_obj[128]; \
+          v2_vm_trace_record_v2_ext(vm.obj, v2_vm_step_per_obj[vm.slot]++, (OP), \
+                                    (PCB), vm.pc, (ACCB), v2_vm_accumulator, \
+                                    vm.shadow, _h1, _h2); } \
+        { int& _cnt = v2_vm_trace_count[vm.slot]; \
+          if (_cnt < V2_VM_TRACE_MAX) { \
+              v2_vm_trace[vm.slot][_cnt].opcode = (OP); \
+              v2_vm_trace[vm.slot][_cnt].pc_before = (uint16_t)((PCB) + 1); \
+              v2_vm_trace[vm.slot][_cnt].pc_after = vm.pc; \
+              v2_vm_trace[vm.slot][_cnt].acc_before = (ACCB); \
+              v2_vm_trace[vm.slot][_cnt].acc_after = v2_vm_accumulator; \
+              v2_vm_trace[vm.slot][_cnt].es_seg = \
+                  (uint16_t)((vm.es - v2_m2c_base) >> 4); \
+              _cnt++; } }
+#else
+#define V2_GEN_HASHSNAP
+#define V2_GEN_TRACES(PC, OP, PCB, ACCB) \
+        { extern uint16_t v2_vm_step_per_obj[128]; \
+          v2_vm_step_per_obj[vm.slot]++; } \
+        { int& _cnt = v2_vm_trace_count[vm.slot]; \
+          if (_cnt < V2_VM_TRACE_MAX) { \
+              v2_vm_trace[vm.slot][_cnt].opcode = (OP); \
+              v2_vm_trace[vm.slot][_cnt].pc_before = (uint16_t)((PCB) + 1); \
+              v2_vm_trace[vm.slot][_cnt].pc_after = vm.pc; \
+              v2_vm_trace[vm.slot][_cnt].acc_before = (ACCB); \
+              v2_vm_trace[vm.slot][_cnt].acc_after = v2_vm_accumulator; \
+              v2_vm_trace[vm.slot][_cnt].es_seg = \
+                  (uint16_t)((vm.es - v2_m2c_base) >> 4); \
+              _cnt++; } }
+#endif
+#define G_PRE(PC, OP) \
+        if (--max_ops < 0) return true; \
+        { const uint16_t _pcb = (PC); \
+          const uint16_t _accb = v2_vm_accumulator; \
+          V2_GEN_HASHSNAP \
+          vm.pc = (uint16_t)((PC) + 1); \
+          vm.si_track = (uint16_t)((OP) << 1);
+#define G_POST(PC, OP) \
+          V2_GEN_TRACES(PC, OP, _pcb, _accb) \
+          if (vm.obj == v2_trace_object) \
+              fprintf(stderr, "V2-OBJ-TRACE: obj=%02X op=%02X pc=%04X\xe2\x86\x92%04X " \
+                      "acc=%04X\xe2\x86\x92%04X es=%04X\n", vm.obj, (OP), _pcb, vm.pc, \
+                      _accb, v2_vm_accumulator, \
+                      *(uint16_t*)(vm.shadow + vm.obj + OBJ_CODE_SEG)); \
+          if (!vm.running) return true; }
+
+#include "gen/chunk_01c1.gen.inc"
+#include "gen/chunk_01c2.gen.inc"
+#include "gen/chunk_01c3.gen.inc"
+#include "gen/chunk_01c4.gen.inc"
+#include "gen/chunk_01c5.gen.inc"
+#include "gen/chunk_01c6.gen.inc"
+
+#undef G_PRE
+#undef G_POST
+#undef V2_GEN_HASHSNAP
+#undef V2_GEN_TRACES
+#endif // V2_GENCODE
+
 static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
+    v2_trace_object_env_init();
 
     uint16_t code_seg = *(uint16_t*)(shadow + obj_idx + OBJ_CODE_SEG);
     if (!code_seg) return;
@@ -17606,6 +17700,22 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
     vm.pc = init_pc;
 
     int max_ops = 10000; // safety limit
+#ifdef V2_GENCODE
+    // Stage 3A: transpiled dispatch for the world template chunk. Returns
+    // false on a pc outside the static model — the interpreter loop below
+    // resumes seamlessly (vm state stays coherent, max_ops is shared).
+    if (v2_gencode_enabled() && es_seg == v2gs(shadow).seg_anim()) {
+        switch (v2gs(shadow).template_chunk()) {
+        case 0x1C1: v2_gen_exec_1c1(vm, max_ops); break;
+        case 0x1C2: v2_gen_exec_1c2(vm, max_ops); break;
+        case 0x1C3: v2_gen_exec_1c3(vm, max_ops); break;
+        case 0x1C4: v2_gen_exec_1c4(vm, max_ops); break;
+        case 0x1C5: v2_gen_exec_1c5(vm, max_ops); break;
+        case 0x1C6: v2_gen_exec_1c6(vm, max_ops); break;
+        default: break;
+        }
+    }
+#endif
     while (vm.running && max_ops-- > 0) {
         if (vm.pc > 0xFFFF) {
             printf("V2-VM: PC out of bounds 0x%x obj=%d\n", vm.pc, obj_idx);
