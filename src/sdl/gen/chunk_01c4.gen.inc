@@ -11802,7 +11802,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1528:
         g_last_pc = 0x1528;
         G_PRE(0x1528, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x152E;
         G_POST(0x1528, 0x16);
         continue;
     L_152E:
@@ -12272,7 +12293,38 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_15CB:
         g_last_pc = 0x15CB;
         G_PRE(0x15CB, 0x34);
-        v2_vm_op_34(vm);  // [0206], [0208] = delta(nearest_vik)
+        // inlined v2_vm_op_34: [0206], [0208] = delta(nearest_vik)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _bd = 0xFFFF;
+          for (uint16_t _si = 0; _si < 6; _si += 2) {
+              if (ObjRef{vm, _si}.u16(OBJ_RES_HANDLE) == 0) continue;
+              int16_t _dx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _si}.u16(OBJ_WORLD_X));
+              if (_dx < 0) _dx = -_dx;
+              int16_t _dy = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _si}.u16(OBJ_WORLD_Y));
+              if (_dy < 0) _dy = -_dy;
+              uint16_t _d = (uint16_t)((uint16_t)_dx + (uint16_t)_dy);
+              if (_d < _bd) { _bd = _d; vm.ds_write(DS_SEARCH_BEST, _si); }
+          }
+          uint16_t _ss = vm.ds_read(DS_SEARCH_BEST);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, (uint16_t)_rx);
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, (uint16_t)_ry);
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x15D1;
         G_POST(0x15CB, 0x34);
         continue;
     L_15D1:
@@ -13705,13 +13757,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_180D:
         g_last_pc = 0x180D;
         G_PRE(0x180D, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x1811;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x180D, 0x2C);
         continue;
     L_1811:
         g_last_pc = 0x1811;
         G_PRE(0x1811, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x1811, 0x2D);
         continue;
     L_1812:
@@ -13924,13 +13979,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_184C:
         g_last_pc = 0x184C;
         G_PRE(0x184C, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x1850;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x184C, 0x2C);
         continue;
     L_1850:
         g_last_pc = 0x1850;
         G_PRE(0x1850, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x1850, 0x2D);
         continue;
     L_1851:
@@ -14261,13 +14319,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_18BF:
         g_last_pc = 0x18BF;
         G_PRE(0x18BF, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x18C3;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x18BF, 0x2C);
         continue;
     L_18C3:
         g_last_pc = 0x18C3;
         G_PRE(0x18C3, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x18C3, 0x2D);
         continue;
     L_18C4:
@@ -14385,13 +14446,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_18E3:
         g_last_pc = 0x18E3;
         G_PRE(0x18E3, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x18E7;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x18E3, 0x2C);
         continue;
     L_18E7:
         g_last_pc = 0x18E7;
         G_PRE(0x18E7, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x18E7, 0x2D);
         continue;
     L_18E8:
@@ -14509,13 +14573,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1907:
         g_last_pc = 0x1907;
         G_PRE(0x1907, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x190B;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x1907, 0x2C);
         continue;
     L_190B:
         g_last_pc = 0x190B;
         G_PRE(0x190B, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x190B, 0x2D);
         continue;
     L_190C:
@@ -14627,13 +14694,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1928:
         g_last_pc = 0x1928;
         G_PRE(0x1928, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x192C;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x1423);
         G_POST(0x1928, 0xD1);
         continue;
     L_192C:
         g_last_pc = 0x192C;
         G_PRE(0x192C, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x192C, 0x2D);
         continue;
     L_192D:
@@ -14645,13 +14715,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1930:
         g_last_pc = 0x1930;
         G_PRE(0x1930, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x1934;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x1930, 0x2C);
         continue;
     L_1934:
         g_last_pc = 0x1934;
         G_PRE(0x1934, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x1934, 0x2D);
         continue;
     L_1935:
@@ -14763,13 +14836,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1951:
         g_last_pc = 0x1951;
         G_PRE(0x1951, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x1955;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x1423);
         G_POST(0x1951, 0xD1);
         continue;
     L_1955:
         g_last_pc = 0x1955;
         G_PRE(0x1955, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x1955, 0x2D);
         continue;
     L_1956:
@@ -14833,13 +14909,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1971:
         g_last_pc = 0x1971;
         G_PRE(0x1971, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x1975;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x1971, 0x2C);
         continue;
     L_1975:
         g_last_pc = 0x1975;
         G_PRE(0x1975, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x1975, 0x2D);
         continue;
     L_1976:
@@ -15748,13 +15827,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1A82:
         g_last_pc = 0x1A82;
         G_PRE(0x1A82, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x1A86;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x19C7);
         G_POST(0x1A82, 0x2C);
         continue;
     L_1A86:
         g_last_pc = 0x1A86;
         G_PRE(0x1A86, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x1A86, 0x2D);
         continue;
     L_1A87:
@@ -18091,13 +18173,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_1EB0:
         g_last_pc = 0x1EB0;
         G_PRE(0x1EB0, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x1EB4;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x1ED5);
         G_POST(0x1EB0, 0x2C);
         continue;
     L_1EB4:
         g_last_pc = 0x1EB4;
         G_PRE(0x1EB4, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x1EB4, 0x2D);
         continue;
     L_1EB5:
@@ -20795,13 +20880,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_2277:
         g_last_pc = 0x2277;
         G_PRE(0x2277, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x227B;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x22EE);
         G_POST(0x2277, 0x2C);
         continue;
     L_227B:
         g_last_pc = 0x227B;
         G_PRE(0x227B, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x227B, 0x2D);
         continue;
     L_227C:
@@ -20854,13 +20942,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_2287:
         g_last_pc = 0x2287;
         G_PRE(0x2287, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x228B;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x228F);
         G_POST(0x2287, 0x2C);
         continue;
     L_228B:
         g_last_pc = 0x228B;
         G_PRE(0x228B, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x228B, 0x2D);
         continue;
     L_228C:
@@ -20907,13 +20998,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_229A:
         g_last_pc = 0x229A;
         G_PRE(0x229A, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x229E;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x22B9);
         G_POST(0x229A, 0x2C);
         continue;
     L_229E:
         g_last_pc = 0x229E;
         G_PRE(0x229E, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x229E, 0x2D);
         continue;
     L_229F:
@@ -20964,13 +21058,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_22AA:
         g_last_pc = 0x22AA;
         G_PRE(0x22AA, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x22AE;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x22C6);
         G_POST(0x22AA, 0x2C);
         continue;
     L_22AE:
         g_last_pc = 0x22AE;
         G_PRE(0x22AE, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x22AE, 0x2D);
         continue;
     L_22AF:
@@ -21388,13 +21485,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_234F:
         g_last_pc = 0x234F;
         G_PRE(0x234F, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x2353;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x2357);
         G_POST(0x234F, 0x2C);
         continue;
     L_2353:
         g_last_pc = 0x2353;
         G_PRE(0x2353, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x2353, 0x2D);
         continue;
     L_2354:
@@ -21826,7 +21926,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_23D1:
         g_last_pc = 0x23D1;
         G_PRE(0x23D1, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x23D7;
         G_POST(0x23D1, 0x16);
         continue;
     L_23D7:
@@ -23488,7 +23609,38 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_25DB:
         g_last_pc = 0x25DB;
         G_PRE(0x25DB, 0x34);
-        v2_vm_op_34(vm);  // [0206], [0208] = delta(nearest_vik)
+        // inlined v2_vm_op_34: [0206], [0208] = delta(nearest_vik)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _bd = 0xFFFF;
+          for (uint16_t _si = 0; _si < 6; _si += 2) {
+              if (ObjRef{vm, _si}.u16(OBJ_RES_HANDLE) == 0) continue;
+              int16_t _dx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _si}.u16(OBJ_WORLD_X));
+              if (_dx < 0) _dx = -_dx;
+              int16_t _dy = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _si}.u16(OBJ_WORLD_Y));
+              if (_dy < 0) _dy = -_dy;
+              uint16_t _d = (uint16_t)((uint16_t)_dx + (uint16_t)_dy);
+              if (_d < _bd) { _bd = _d; vm.ds_write(DS_SEARCH_BEST, _si); }
+          }
+          uint16_t _ss = vm.ds_read(DS_SEARCH_BEST);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, (uint16_t)_rx);
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, (uint16_t)_ry);
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x25E1;
         G_POST(0x25DB, 0x34);
         continue;
     L_25E1:
@@ -26199,13 +26351,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_2A42:
         g_last_pc = 0x2A42;
         G_PRE(0x2A42, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x2A46;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x2B00);
         G_POST(0x2A42, 0x2C);
         continue;
     L_2A46:
         g_last_pc = 0x2A46;
         G_PRE(0x2A46, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x2A46, 0x2D);
         continue;
     L_2A47:
@@ -26306,25 +26461,31 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_2A60:
         g_last_pc = 0x2A60;
         G_PRE(0x2A60, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x2A64;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x2A6D);
         G_POST(0x2A60, 0x2C);
         continue;
     L_2A64:
         g_last_pc = 0x2A64;
         G_PRE(0x2A64, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x2A64, 0x2D);
         continue;
     L_2A65:
         g_last_pc = 0x2A65;
         G_PRE(0x2A65, 0x35);
-        v2_vm_op_35(vm);  // search_all_up(f=9)
+        // inlined v2_vm_op_35: search_all_up(f=9)
+        vm.pc = 0x2A69;  // continuation position
+        v2_vm_search_35_core(vm, 0x09, 0x2A6D);
         G_POST(0x2A65, 0x35);
         continue;
     L_2A69:
         g_last_pc = 0x2A69;
         G_PRE(0x2A69, 0x36);
-        v2_vm_op_36(vm);  // search_next_all
+        // inlined v2_vm_op_36: search_next_all
+        v2_vm_op_36(vm);   // open search continuation (no stream reads)
         G_POST(0x2A69, 0x36);
         continue;
     L_2A6A:
@@ -26549,13 +26710,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_2AB5:
         g_last_pc = 0x2AB5;
         G_PRE(0x2AB5, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x2AB9;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x2AE8);
         G_POST(0x2AB5, 0x2C);
         continue;
     L_2AB9:
         g_last_pc = 0x2AB9;
         G_PRE(0x2AB9, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x2AB9, 0x2D);
         continue;
     L_2ABA:
@@ -31578,13 +31742,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_31F3:
         g_last_pc = 0x31F3;
         G_PRE(0x31F3, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x31F7;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x1423);
         G_POST(0x31F3, 0xD1);
         continue;
     L_31F7:
         g_last_pc = 0x31F7;
         G_PRE(0x31F7, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x31F7, 0x2D);
         continue;
     L_31F8:
@@ -32570,13 +32737,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_332F:
         g_last_pc = 0x332F;
         G_PRE(0x332F, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x3333;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x3364);
         G_POST(0x332F, 0xD1);
         continue;
     L_3333:
         g_last_pc = 0x3333;
         G_PRE(0x3333, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x3333, 0x2D);
         continue;
     L_3334:
@@ -32624,13 +32794,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_333E:
         g_last_pc = 0x333E;
         G_PRE(0x333E, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x3342;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x1423);
         G_POST(0x333E, 0xD1);
         continue;
     L_3342:
         g_last_pc = 0x3342;
         G_PRE(0x3342, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x3342, 0x2D);
         continue;
     L_3343:
@@ -33282,13 +33455,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_3465:
         g_last_pc = 0x3465;
         G_PRE(0x3465, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x3469;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x35E9);
         G_POST(0x3465, 0x2C);
         continue;
     L_3469:
         g_last_pc = 0x3469;
         G_PRE(0x3469, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x3469, 0x2D);
         continue;
     L_346A:
@@ -33564,13 +33740,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_34D1:
         g_last_pc = 0x34D1;
         G_PRE(0x34D1, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x34D5;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x35E9);
         G_POST(0x34D1, 0x2C);
         continue;
     L_34D5:
         g_last_pc = 0x34D5;
         G_PRE(0x34D5, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x34D5, 0x2D);
         continue;
     L_34D6:
@@ -33859,13 +34038,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_3536:
         g_last_pc = 0x3536;
         G_PRE(0x3536, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x353A;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x1423);
         G_POST(0x3536, 0xD1);
         continue;
     L_353A:
         g_last_pc = 0x353A;
         G_PRE(0x353A, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x353A, 0x2D);
         continue;
     L_353B:
@@ -36950,13 +37132,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_3A54:
         g_last_pc = 0x3A54;
         G_PRE(0x3A54, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x3A58;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x3A6D);
         G_POST(0x3A54, 0xD1);
         continue;
     L_3A58:
         g_last_pc = 0x3A58;
         G_PRE(0x3A58, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x3A58, 0x2D);
         continue;
     L_3A59:
@@ -37229,13 +37414,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_3AA8:
         g_last_pc = 0x3AA8;
         G_PRE(0x3AA8, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x3AAC;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x3AC1);
         G_POST(0x3AA8, 0x2C);
         continue;
     L_3AAC:
         g_last_pc = 0x3AAC;
         G_PRE(0x3AAC, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x3AAC, 0x2D);
         continue;
     L_3AAD:
@@ -38408,13 +38596,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_3C8D:
         g_last_pc = 0x3C8D;
         G_PRE(0x3C8D, 0x2C);
-        v2_vm_op_2C(vm);  // search_vik_up(f=0x79)
+        // inlined v2_vm_op_2C: search_vik_up(f=0x79)
+        vm.pc = 0x3C91;  // continuation position
+        v2_vm_search_2c_core(vm, 0x79, 0x3CBA);
         G_POST(0x3C8D, 0x2C);
         continue;
     L_3C91:
         g_last_pc = 0x3C91;
         G_PRE(0x3C91, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x3C91, 0x2D);
         continue;
     L_3C92:
@@ -38470,13 +38661,16 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_3C9D:
         g_last_pc = 0x3C9D;
         G_PRE(0x3C9D, 0xD1);
-        v2_vm_op_D1(vm);  // search_vik_down(f=0x79)
+        // inlined v2_vm_op_D1: search_vik_down(f=0x79)
+        vm.pc = 0x3CA1;  // continuation position
+        v2_vm_search_d1_core(vm, 0x79, 0x1423);
         G_POST(0x3C9D, 0xD1);
         continue;
     L_3CA1:
         g_last_pc = 0x3CA1;
         G_PRE(0x3CA1, 0x2D);
-        v2_vm_op_2D(vm);  // search_next_vik
+        // inlined v2_vm_op_2D: search_next_vik
+        v2_vm_op_2D(vm);   // open search continuation (no stream reads)
         G_POST(0x3CA1, 0x2D);
         continue;
     L_3CA2:
@@ -64709,7 +64903,21 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_6960:
         g_last_pc = 0x6960;
         G_PRE(0x6960, 0x48);
-        v2_vm_op_48(vm);  // vel_to(x=[022A], y=[022C])
+        // inlined v2_vm_op_48: vel_to(x=[022A], y=[022C])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x022A;
+          const uint16_t _x = vm.ds_read(0x022A);
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            ObjRef{vm, _o}.w16(OBJ_VEL_X, (uint16_t)(_x - ObjRef{vm, _o}.u16(OBJ_WORLD_X))); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x022C;
+          const uint16_t _y = vm.ds_read(0x022C);
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            ObjRef{vm, _o}.w16(OBJ_VEL_Y, (uint16_t)(_y - ObjRef{vm, _o}.u16(OBJ_WORLD_Y)));
+            ObjRef{vm, _o}.w16(OBJ_ANIM_TABLE, 0x100); }   // MOV [si+141D],100h
+        }
+        vm.pc = 0x6966;
         G_POST(0x6960, 0x48);
         continue;
     L_6966:
@@ -64730,7 +64938,21 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_696C:
         g_last_pc = 0x696C;
         G_PRE(0x696C, 0x48);
-        v2_vm_op_48(vm);  // vel_to(x=[0222], y=[0224])
+        // inlined v2_vm_op_48: vel_to(x=[0222], y=[0224])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0222;
+          const uint16_t _x = vm.ds_read(0x0222);
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            ObjRef{vm, _o}.w16(OBJ_VEL_X, (uint16_t)(_x - ObjRef{vm, _o}.u16(OBJ_WORLD_X))); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0224;
+          const uint16_t _y = vm.ds_read(0x0224);
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            ObjRef{vm, _o}.w16(OBJ_VEL_Y, (uint16_t)(_y - ObjRef{vm, _o}.u16(OBJ_WORLD_Y)));
+            ObjRef{vm, _o}.w16(OBJ_ANIM_TABLE, 0x100); }   // MOV [si+141D],100h
+        }
+        vm.pc = 0x6972;
         G_POST(0x696C, 0x48);
         continue;
     L_6972:
@@ -64751,7 +64973,21 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_6978:
         g_last_pc = 0x6978;
         G_PRE(0x6978, 0x48);
-        v2_vm_op_48(vm);  // vel_to(x=[0226], y=[0228])
+        // inlined v2_vm_op_48: vel_to(x=[0226], y=[0228])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0226;
+          const uint16_t _x = vm.ds_read(0x0226);
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            ObjRef{vm, _o}.w16(OBJ_VEL_X, (uint16_t)(_x - ObjRef{vm, _o}.u16(OBJ_WORLD_X))); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0228;
+          const uint16_t _y = vm.ds_read(0x0228);
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            ObjRef{vm, _o}.w16(OBJ_VEL_Y, (uint16_t)(_y - ObjRef{vm, _o}.u16(OBJ_WORLD_Y)));
+            ObjRef{vm, _o}.w16(OBJ_ANIM_TABLE, 0x100); }   // MOV [si+141D],100h
+        }
+        vm.pc = 0x697E;
         G_POST(0x6978, 0x48);
         continue;
     L_697E:
@@ -86456,7 +86692,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_8ED0:
         g_last_pc = 0x8ED0;
         G_PRE(0x8ED0, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x8ED6;
         G_POST(0x8ED0, 0x16);
         continue;
     L_8ED6:
@@ -87715,7 +87972,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_90E0:
         g_last_pc = 0x90E0;
         G_PRE(0x90E0, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x90E6;
         G_POST(0x90E0, 0x16);
         continue;
     L_90E6:
@@ -87899,7 +88177,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9129:
         g_last_pc = 0x9129;
         G_PRE(0x9129, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x912F;
         G_POST(0x9129, 0x16);
         continue;
     L_912F:
@@ -87961,7 +88260,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9149:
         g_last_pc = 0x9149;
         G_PRE(0x9149, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x914F;
         G_POST(0x9149, 0x16);
         continue;
     L_914F:
@@ -88023,7 +88343,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9169:
         g_last_pc = 0x9169;
         G_PRE(0x9169, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x916F;
         G_POST(0x9169, 0x16);
         continue;
     L_916F:
@@ -88121,7 +88462,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_91A3:
         g_last_pc = 0x91A3;
         G_PRE(0x91A3, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x91A9;
         G_POST(0x91A3, 0x16);
         continue;
     L_91A9:
@@ -88676,7 +89038,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9282:
         g_last_pc = 0x9282;
         G_PRE(0x9282, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9288;
         G_POST(0x9282, 0x16);
         continue;
     L_9288:
@@ -88974,7 +89357,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_92FB:
         g_last_pc = 0x92FB;
         G_PRE(0x92FB, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9301;
         G_POST(0x92FB, 0x16);
         continue;
     L_9301:
@@ -89036,7 +89440,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_931B:
         g_last_pc = 0x931B;
         G_PRE(0x931B, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9321;
         G_POST(0x931B, 0x16);
         continue;
     L_9321:
@@ -89098,7 +89523,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_933B:
         g_last_pc = 0x933B;
         G_PRE(0x933B, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9341;
         G_POST(0x933B, 0x16);
         continue;
     L_9341:
@@ -89178,7 +89624,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9368:
         g_last_pc = 0x9368;
         G_PRE(0x9368, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x936E;
         G_POST(0x9368, 0x16);
         continue;
     L_936E:
@@ -89259,7 +89726,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9391:
         g_last_pc = 0x9391;
         G_PRE(0x9391, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9397;
         G_POST(0x9391, 0x16);
         continue;
     L_9397:
@@ -89339,7 +89827,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_93BE:
         g_last_pc = 0x93BE;
         G_PRE(0x93BE, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x93C4;
         G_POST(0x93BE, 0x16);
         continue;
     L_93C4:
@@ -89401,7 +89910,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_93DE:
         g_last_pc = 0x93DE;
         G_PRE(0x93DE, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x93E4;
         G_POST(0x93DE, 0x16);
         continue;
     L_93E4:
@@ -89482,7 +90012,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9407:
         g_last_pc = 0x9407;
         G_PRE(0x9407, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x940D;
         G_POST(0x9407, 0x16);
         continue;
     L_940D:
@@ -89544,7 +90095,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9427:
         g_last_pc = 0x9427;
         G_PRE(0x9427, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x942D;
         G_POST(0x9427, 0x16);
         continue;
     L_942D:
@@ -89606,7 +90178,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9447:
         g_last_pc = 0x9447;
         G_PRE(0x9447, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x944D;
         G_POST(0x9447, 0x16);
         continue;
     L_944D:
@@ -89668,7 +90261,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9467:
         g_last_pc = 0x9467;
         G_PRE(0x9467, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x946D;
         G_POST(0x9467, 0x16);
         continue;
     L_946D:
@@ -89730,7 +90344,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9487:
         g_last_pc = 0x9487;
         G_PRE(0x9487, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x948D;
         G_POST(0x9487, 0x16);
         continue;
     L_948D:
@@ -89811,7 +90446,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_94B0:
         g_last_pc = 0x94B0;
         G_PRE(0x94B0, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x94B6;
         G_POST(0x94B0, 0x16);
         continue;
     L_94B6:
@@ -89873,7 +90529,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_94D0:
         g_last_pc = 0x94D0;
         G_PRE(0x94D0, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x94D6;
         G_POST(0x94D0, 0x16);
         continue;
     L_94D6:
@@ -89935,7 +90612,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_94F0:
         g_last_pc = 0x94F0;
         G_PRE(0x94F0, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x94F6;
         G_POST(0x94F0, 0x16);
         continue;
     L_94F6:
@@ -89997,7 +90695,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9510:
         g_last_pc = 0x9510;
         G_PRE(0x9510, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9516;
         G_POST(0x9510, 0x16);
         continue;
     L_9516:
@@ -90059,7 +90778,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9530:
         g_last_pc = 0x9530;
         G_PRE(0x9530, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9536;
         G_POST(0x9530, 0x16);
         continue;
     L_9536:
@@ -90140,7 +90880,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9559:
         g_last_pc = 0x9559;
         G_PRE(0x9559, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x955F;
         G_POST(0x9559, 0x16);
         continue;
     L_955F:
@@ -90202,7 +90963,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9579:
         g_last_pc = 0x9579;
         G_PRE(0x9579, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x957F;
         G_POST(0x9579, 0x16);
         continue;
     L_957F:
@@ -90264,7 +91046,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9599:
         g_last_pc = 0x9599;
         G_PRE(0x9599, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x959F;
         G_POST(0x9599, 0x16);
         continue;
     L_959F:
@@ -90326,7 +91129,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_95B9:
         g_last_pc = 0x95B9;
         G_PRE(0x95B9, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x95BF;
         G_POST(0x95B9, 0x16);
         continue;
     L_95BF:
@@ -90388,7 +91212,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_95D9:
         g_last_pc = 0x95D9;
         G_PRE(0x95D9, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x95DF;
         G_POST(0x95D9, 0x16);
         continue;
     L_95DF:
@@ -90468,7 +91313,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9606:
         g_last_pc = 0x9606;
         G_PRE(0x9606, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x960C;
         G_POST(0x9606, 0x16);
         continue;
     L_960C:
@@ -90549,7 +91415,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_962F:
         g_last_pc = 0x962F;
         G_PRE(0x962F, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9635;
         G_POST(0x962F, 0x16);
         continue;
     L_9635:
@@ -90611,7 +91498,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_964F:
         g_last_pc = 0x964F;
         G_PRE(0x964F, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9655;
         G_POST(0x964F, 0x16);
         continue;
     L_9655:
@@ -90673,7 +91581,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_966F:
         g_last_pc = 0x966F;
         G_PRE(0x966F, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9675;
         G_POST(0x966F, 0x16);
         continue;
     L_9675:
@@ -90735,7 +91664,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_968F:
         g_last_pc = 0x968F;
         G_PRE(0x968F, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9695;
         G_POST(0x968F, 0x16);
         continue;
     L_9695:
@@ -90816,7 +91766,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_96B8:
         g_last_pc = 0x96B8;
         G_PRE(0x96B8, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x96BE;
         G_POST(0x96B8, 0x16);
         continue;
     L_96BE:
@@ -90878,7 +91849,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_96D8:
         g_last_pc = 0x96D8;
         G_PRE(0x96D8, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x96DE;
         G_POST(0x96D8, 0x16);
         continue;
     L_96DE:
@@ -90940,7 +91932,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_96F8:
         g_last_pc = 0x96F8;
         G_PRE(0x96F8, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x96FE;
         G_POST(0x96F8, 0x16);
         continue;
     L_96FE:
@@ -93159,7 +94172,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9C61:
         g_last_pc = 0x9C61;
         G_PRE(0x9C61, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9C67;
         G_POST(0x9C61, 0x16);
         continue;
     L_9C67:
@@ -93222,7 +94256,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9C81:
         g_last_pc = 0x9C81;
         G_PRE(0x9C81, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9C87;
         G_POST(0x9C81, 0x16);
         continue;
     L_9C87:
@@ -93285,7 +94340,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9CA1:
         g_last_pc = 0x9CA1;
         G_PRE(0x9CA1, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9CA7;
         G_POST(0x9CA1, 0x16);
         continue;
     L_9CA7:
@@ -93526,7 +94602,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9D08:
         g_last_pc = 0x9D08;
         G_PRE(0x9D08, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9D0E;
         G_POST(0x9D08, 0x16);
         continue;
     L_9D0E:
@@ -93588,7 +94685,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9D28:
         g_last_pc = 0x9D28;
         G_PRE(0x9D28, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9D2E;
         G_POST(0x9D28, 0x16);
         continue;
     L_9D2E:
@@ -93668,7 +94786,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9D53:
         g_last_pc = 0x9D53;
         G_PRE(0x9D53, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9D59;
         G_POST(0x9D53, 0x16);
         continue;
     L_9D59:
@@ -93736,7 +94875,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9D75:
         g_last_pc = 0x9D75;
         G_PRE(0x9D75, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9D7B;
         G_POST(0x9D75, 0x16);
         continue;
     L_9D7B:
@@ -93798,7 +94958,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9D95:
         g_last_pc = 0x9D95;
         G_PRE(0x9D95, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9D9B;
         G_POST(0x9D95, 0x16);
         continue;
     L_9D9B:
@@ -93860,7 +95041,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9DB4:
         g_last_pc = 0x9DB4;
         G_PRE(0x9DB4, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9DBA;
         G_POST(0x9DB4, 0x16);
         continue;
     L_9DBA:
@@ -93928,7 +95130,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9DD6:
         g_last_pc = 0x9DD6;
         G_PRE(0x9DD6, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9DDC;
         G_POST(0x9DD6, 0x16);
         continue;
     L_9DDC:
@@ -93990,7 +95213,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9DF5:
         g_last_pc = 0x9DF5;
         G_PRE(0x9DF5, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9DFB;
         G_POST(0x9DF5, 0x16);
         continue;
     L_9DFB:
@@ -94052,7 +95296,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9E14:
         g_last_pc = 0x9E14;
         G_PRE(0x9E14, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9E1A;
         G_POST(0x9E14, 0x16);
         continue;
     L_9E1A:
@@ -94114,7 +95379,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9E34:
         g_last_pc = 0x9E34;
         G_PRE(0x9E34, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9E3A;
         G_POST(0x9E34, 0x16);
         continue;
     L_9E3A:
@@ -94182,7 +95468,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9E56:
         g_last_pc = 0x9E56;
         G_PRE(0x9E56, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9E5C;
         G_POST(0x9E56, 0x16);
         continue;
     L_9E5C:
@@ -94244,7 +95551,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9E76:
         g_last_pc = 0x9E76;
         G_PRE(0x9E76, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9E7C;
         G_POST(0x9E76, 0x16);
         continue;
     L_9E7C:
@@ -94306,7 +95634,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9E95:
         g_last_pc = 0x9E95;
         G_PRE(0x9E95, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9E9B;
         G_POST(0x9E95, 0x16);
         continue;
     L_9E9B:
@@ -94368,7 +95717,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9EB4:
         g_last_pc = 0x9EB4;
         G_PRE(0x9EB4, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9EBA;
         G_POST(0x9EB4, 0x16);
         continue;
     L_9EBA:
@@ -94436,7 +95806,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9ED7:
         g_last_pc = 0x9ED7;
         G_PRE(0x9ED7, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9EDD;
         G_POST(0x9ED7, 0x16);
         continue;
     L_9EDD:
@@ -94498,7 +95889,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9EF6:
         g_last_pc = 0x9EF6;
         G_PRE(0x9EF6, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9EFC;
         G_POST(0x9EF6, 0x16);
         continue;
     L_9EFC:
@@ -94560,7 +95972,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9F16:
         g_last_pc = 0x9F16;
         G_PRE(0x9F16, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9F1C;
         G_POST(0x9F16, 0x16);
         continue;
     L_9F1C:
@@ -94628,7 +96061,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9F38:
         g_last_pc = 0x9F38;
         G_PRE(0x9F38, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9F3E;
         G_POST(0x9F38, 0x16);
         continue;
     L_9F3E:
@@ -94690,7 +96144,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9F57:
         g_last_pc = 0x9F57;
         G_PRE(0x9F57, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9F5D;
         G_POST(0x9F57, 0x16);
         continue;
     L_9F5D:
@@ -94752,7 +96227,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9F77:
         g_last_pc = 0x9F77;
         G_PRE(0x9F77, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9F7D;
         G_POST(0x9F77, 0x16);
         continue;
     L_9F7D:
@@ -94820,7 +96316,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9F99:
         g_last_pc = 0x9F99;
         G_PRE(0x9F99, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9F9F;
         G_POST(0x9F99, 0x16);
         continue;
     L_9F9F:
@@ -94882,7 +96399,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9FB9:
         g_last_pc = 0x9FB9;
         G_PRE(0x9FB9, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9FBF;
         G_POST(0x9FB9, 0x16);
         continue;
     L_9FBF:
@@ -94950,7 +96488,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9FDB:
         g_last_pc = 0x9FDB;
         G_PRE(0x9FDB, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0x9FE1;
         G_POST(0x9FDB, 0x16);
         continue;
     L_9FE1:
@@ -95012,7 +96571,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_9FFB:
         g_last_pc = 0x9FFB;
         G_PRE(0x9FFB, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA001;
         G_POST(0x9FFB, 0x16);
         continue;
     L_A001:
@@ -95074,7 +96654,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A01A:
         g_last_pc = 0xA01A;
         G_PRE(0xA01A, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA020;
         G_POST(0xA01A, 0x16);
         continue;
     L_A020:
@@ -95207,7 +96808,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A056:
         g_last_pc = 0xA056;
         G_PRE(0xA056, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA05C;
         G_POST(0xA056, 0x16);
         continue;
     L_A05C:
@@ -95269,7 +96891,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A076:
         g_last_pc = 0xA076;
         G_PRE(0xA076, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA07C;
         G_POST(0xA076, 0x16);
         continue;
     L_A07C:
@@ -95331,7 +96974,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A095:
         g_last_pc = 0xA095;
         G_PRE(0xA095, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA09B;
         G_POST(0xA095, 0x16);
         continue;
     L_A09B:
@@ -95399,7 +97063,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A0B7:
         g_last_pc = 0xA0B7;
         G_PRE(0xA0B7, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA0BD;
         G_POST(0xA0B7, 0x16);
         continue;
     L_A0BD:
@@ -95461,7 +97146,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A0D7:
         g_last_pc = 0xA0D7;
         G_PRE(0xA0D7, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA0DD;
         G_POST(0xA0D7, 0x16);
         continue;
     L_A0DD:
@@ -95523,7 +97229,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A0F6:
         g_last_pc = 0xA0F6;
         G_PRE(0xA0F6, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA0FC;
         G_POST(0xA0F6, 0x16);
         continue;
     L_A0FC:
@@ -95585,7 +97312,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A116:
         g_last_pc = 0xA116;
         G_PRE(0xA116, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA11C;
         G_POST(0xA116, 0x16);
         continue;
     L_A11C:
@@ -95647,7 +97395,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A135:
         g_last_pc = 0xA135;
         G_PRE(0xA135, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA13B;
         G_POST(0xA135, 0x16);
         continue;
     L_A13B:
@@ -95715,7 +97484,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A158:
         g_last_pc = 0xA158;
         G_PRE(0xA158, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA15E;
         G_POST(0xA158, 0x16);
         continue;
     L_A15E:
@@ -95777,7 +97567,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A177:
         g_last_pc = 0xA177;
         G_PRE(0xA177, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA17D;
         G_POST(0xA177, 0x16);
         continue;
     L_A17D:
@@ -95839,7 +97650,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A196:
         g_last_pc = 0xA196;
         G_PRE(0xA196, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA19C;
         G_POST(0xA196, 0x16);
         continue;
     L_A19C:
@@ -95901,7 +97733,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A1B6:
         g_last_pc = 0xA1B6;
         G_PRE(0xA1B6, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA1BC;
         G_POST(0xA1B6, 0x16);
         continue;
     L_A1BC:
@@ -96015,7 +97868,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A1EA:
         g_last_pc = 0xA1EA;
         G_PRE(0xA1EA, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA1F0;
         G_POST(0xA1EA, 0x16);
         continue;
     L_A1F0:
@@ -96077,7 +97951,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A209:
         g_last_pc = 0xA209;
         G_PRE(0xA209, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA20F;
         G_POST(0xA209, 0x16);
         continue;
     L_A20F:
@@ -96139,7 +98034,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A228:
         g_last_pc = 0xA228;
         G_PRE(0xA228, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA22E;
         G_POST(0xA228, 0x16);
         continue;
     L_A22E:
@@ -96219,7 +98135,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A255:
         g_last_pc = 0xA255;
         G_PRE(0xA255, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA25B;
         G_POST(0xA255, 0x16);
         continue;
     L_A25B:
@@ -96287,7 +98224,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A277:
         g_last_pc = 0xA277;
         G_PRE(0xA277, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA27D;
         G_POST(0xA277, 0x16);
         continue;
     L_A27D:
@@ -96349,7 +98307,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A296:
         g_last_pc = 0xA296;
         G_PRE(0xA296, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA29C;
         G_POST(0xA296, 0x16);
         continue;
     L_A29C:
@@ -96411,7 +98390,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A2B6:
         g_last_pc = 0xA2B6;
         G_PRE(0xA2B6, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA2BC;
         G_POST(0xA2B6, 0x16);
         continue;
     L_A2BC:
@@ -96473,7 +98473,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A2D5:
         g_last_pc = 0xA2D5;
         G_PRE(0xA2D5, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA2DB;
         G_POST(0xA2D5, 0x16);
         continue;
     L_A2DB:
@@ -96596,7 +98617,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A31B:
         g_last_pc = 0xA31B;
         G_PRE(0xA31B, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA321;
         G_POST(0xA31B, 0x16);
         continue;
     L_A321:
@@ -96658,7 +98700,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A33B:
         g_last_pc = 0xA33B;
         G_PRE(0xA33B, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA341;
         G_POST(0xA33B, 0x16);
         continue;
     L_A341:
@@ -96744,7 +98807,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A36A:
         g_last_pc = 0xA36A;
         G_PRE(0xA36A, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA370;
         G_POST(0xA36A, 0x16);
         continue;
     L_A370:
@@ -96830,7 +98914,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A39A:
         g_last_pc = 0xA39A;
         G_PRE(0xA39A, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA3A0;
         G_POST(0xA39A, 0x16);
         continue;
     L_A3A0:
@@ -96935,7 +99040,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A3D2:
         g_last_pc = 0xA3D2;
         G_PRE(0xA3D2, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA3D8;
         G_POST(0xA3D2, 0x16);
         continue;
     L_A3D8:
@@ -96997,7 +99123,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A3F1:
         g_last_pc = 0xA3F1;
         G_PRE(0xA3F1, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA3F7;
         G_POST(0xA3F1, 0x16);
         continue;
     L_A3F7:
@@ -97077,7 +99224,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A41C:
         g_last_pc = 0xA41C;
         G_PRE(0xA41C, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA422;
         G_POST(0xA41C, 0x16);
         continue;
     L_A422:
@@ -97157,7 +99325,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A449:
         g_last_pc = 0xA449;
         G_PRE(0xA449, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA44F;
         G_POST(0xA449, 0x16);
         continue;
     L_A44F:
@@ -97219,7 +99408,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A468:
         g_last_pc = 0xA468;
         G_PRE(0xA468, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA46E;
         G_POST(0xA468, 0x16);
         continue;
     L_A46E:
@@ -97300,7 +99510,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A491:
         g_last_pc = 0xA491;
         G_PRE(0xA491, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA497;
         G_POST(0xA491, 0x16);
         continue;
     L_A497:
@@ -97362,7 +99593,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A4B1:
         g_last_pc = 0xA4B1;
         G_PRE(0xA4B1, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA4B7;
         G_POST(0xA4B1, 0x16);
         continue;
     L_A4B7:
@@ -97424,7 +99676,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_A4D0:
         g_last_pc = 0xA4D0;
         G_PRE(0xA4D0, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xA4D6;
         G_POST(0xA4D0, 0x16);
         continue;
     L_A4D6:
@@ -101782,7 +104055,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_AC84:
         g_last_pc = 0xAC84;
         G_PRE(0xAC84, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xAC8A;
         G_POST(0xAC84, 0x16);
         continue;
     L_AC8A:
@@ -101991,7 +104285,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_ACD3:
         g_last_pc = 0xACD3;
         G_PRE(0xACD3, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xACD9;
         G_POST(0xACD3, 0x16);
         continue;
     L_ACD9:
@@ -102200,7 +104515,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_AD22:
         g_last_pc = 0xAD22;
         G_PRE(0xAD22, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xAD28;
         G_POST(0xAD22, 0x16);
         continue;
     L_AD28:
@@ -102489,7 +104825,28 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
     L_AD82:
         g_last_pc = 0xAD82;
         G_PRE(0xAD82, 0x16);
-        v2_vm_op_16(vm);  // [0206], [0208] = delta(partner)
+        // inlined v2_vm_op_16: [0206], [0208] = delta(partner)
+        { uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);
+          int16_t _rx;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)
+              _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));
+          else
+              _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));
+          vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);
+          int16_t _ry;
+          if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)
+              _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));
+          else
+              _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_ROW));
+          vm.di_track = _di;   // orig: di=[0x42]; setters leave DI
+        }
+        vm.pc = 0xAD88;
         G_POST(0xAD82, 0x16);
         continue;
     L_AD88:

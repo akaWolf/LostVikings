@@ -13253,16 +13253,19 @@ static void v2_vm_op_29(V2VM& vm) {
 // 0x2C (sub_15f2c): Collision search with type filter + jump. 3 bytes (1 mode + 2 target).
 // Searches objects 0,2,4 for matching type + bounds overlap.
 // On match: bx = jump target, stores matched obj. On no match: bx += 4 (3 params + 1 extra).
+static void v2_vm_search_2c_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target);
 static void v2_vm_op_2C(V2VM& vm) {
+    uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
+    uint16_t filter_idx = ax_word & 0xFF;
+    uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
+    v2_vm_search_2c_core(vm, filter_idx, jump_target);
+}
+static void v2_vm_search_2c_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target) {
     // ds:0x3AE = ds:[si+0x14E5] - 1 (self Y - 1)
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
     vm.ds_write(DS_SEARCH_Y, ObjRef{vm, self_si}.u16(OBJ_BBOX_Y0) - 1);
 
-    // Read params: filter type index (1 byte) + jump target word (2 bytes)
-    uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
-    uint16_t filter_idx = ax_word & 0xFF;
     vm.ds_write(DS_SEARCH_FILTER, filter_idx);
-    uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
     vm.ds_write(DS_SEARCH_JUMP, jump_target);
 
     // Search objects 0, 2, 4
@@ -13332,14 +13335,18 @@ static void v2_vm_op_48(V2VM& vm) {
 // 0x35 (sub_15e91): Collision search ALL objects (not just vikings). 3 bytes + 1 skip on miss.
 // Like 0x2C but loop range is 0..ds:0x372 instead of 0..6.
 // Verified with seg000 lines 14143-14201.
+static void v2_vm_search_35_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target);
 static void v2_vm_op_35(V2VM& vm) {
+    uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
+    uint16_t filter_idx = ax_word & 0xFF;
+    uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
+    v2_vm_search_35_core(vm, filter_idx, jump_target);
+}
+static void v2_vm_search_35_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target) {
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
     vm.ds_write(DS_SEARCH_Y, ObjRef{vm, self_si}.u16(OBJ_BBOX_Y0) - 1);
 
-    uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
-    uint16_t filter_idx = ax_word & 0xFF;
     vm.ds_write(DS_SEARCH_FILTER, filter_idx);
-    uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
     vm.ds_write(DS_SEARCH_JUMP, jump_target);
 
     uint16_t max_obj = vm.ds_read(DS_OBJ_COUNT);
@@ -13838,12 +13845,16 @@ static void v2_vm_op_D0(V2VM& vm) {
 // 0xD1 (sub_15f17): Vikings-only collision search (unsigned comparisons). 3 bytes.
 // DIFFERENT from D0: loop limit si<6 (3 vikings only), unsigned JB/JNB for Y bounds,
 // inverted second Y check (JNB = skip if >=, NOT JL = skip if <).
+static void v2_vm_search_d1_core(V2VM& vm, uint16_t filter, uint16_t target);
 static void v2_vm_op_D1(V2VM& vm) {
+    uint8_t filter = vm.read_u8();
+    uint16_t target = vm.read_u16();
+    v2_vm_search_d1_core(vm, filter, target);
+}
+static void v2_vm_search_d1_core(V2VM& vm, uint16_t filter, uint16_t target) {
     uint16_t si_self = vm.global_r(DS_CUR_OBJ);
     vm.ds_write(DS_SEARCH_Y, ObjRef{vm, si_self}.u16(OBJ_BBOX_Y1) + 1);
-    uint8_t filter = vm.read_u8();
     vm.ds_write(DS_SEARCH_FILTER, filter);
-    uint16_t target = vm.read_u16();
     vm.ds_write(DS_SEARCH_JUMP, target);
     // D1 search loop: vikings only (si<6), unsigned comparisons
     for (uint16_t si = 0; si < 6; si += 2) {

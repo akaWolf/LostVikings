@@ -603,6 +603,171 @@ def inline_wave4(op, body, kind, tgt, nxt, pc):
         return L
     return None
 
+# Wave 5: search cores + full unrolling of the 30C98 channel operands.
+# Getter channels (dispatch semantics reproduced): every dispatch first
+# clears ch4_mul_clobber; ch4 (random) sets it inside the primitive.
+# ch5 returns the constant 0x000A (the dispatch prologue's (mode&7)<<1).
+# ch6/7 sites keep their handler call (orig-UB escape guards).
+def _ch_get(L, var, chan, body, o):
+    """Emit getter channel code; returns bytes consumed or None if the
+    site must stay on the handler (UB channels)."""
+    L.append('  vm.ch4_mul_clobber = false;')
+    if chan == 0:
+        v = int.from_bytes(body[o:o+2], 'little')
+        L.append(f'  const uint16_t {var} = 0x{v:04X};')
+        return 2
+    if chan == 1:
+        a = _self_addr(body[o])
+        L.append(f'  uint16_t {var}_a = {a};')
+        L.append(f'  vm.si_track = (uint16_t)({var}_a - OBJ_FIELD_BASE);')
+        L.append(f'  const uint16_t {var} = vm.ds_read({var}_a);')
+        return 1
+    if chan == 2:
+        a = int.from_bytes(body[o:o+2], 'little')
+        L.append(f'  vm.si_track = 0x{a:04X};')
+        L.append(f'  const uint16_t {var} = vm.ds_read(0x{a:04X});')
+        return 2
+    if chan == 3:
+        L.append('  { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);')
+        L.append(f'    _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x{_fcol(body[o]) - 0x14E5:04X});')
+        L.append('    vm.si_track = _o3; vm.di_track = _t3; }')
+        L.append(f'  const uint16_t {var} = vm.ds_read((uint16_t)(_t3 + OBJ_FIELD_BASE));')
+        return 1
+    if chan == 4:
+        L.append(f'  const uint16_t {var} = v2_vm_read_random(vm);')
+        return 0
+    if chan == 5:
+        L.append(f'  const uint16_t {var} = 0x000A;  // locret_15504 getter')
+        return 0
+    return None
+
+def _ch_set(L, chan, body, o, val_expr):
+    """Emit setter channel (154bf) code; returns bytes consumed or None."""
+    if chan == 1:
+        a = _self_addr(body[o])
+        L.append(f'  {{ uint16_t _sa = {a};')
+        L.append('    vm.si_track = _sa;   // 154cb: slot addr in SI')
+        L.append(f'    vm.ds_write(_sa, {val_expr}); }}')
+        return 1
+    if chan == 2:
+        a = int.from_bytes(body[o:o+2], 'little')
+        L.append(f'  vm.si_track = 0x{a:04X};')
+        L.append(f'  vm.ds_write(0x{a:04X}, {val_expr});')
+        return 2
+    if chan == 3:
+        L.append('  { uint16_t _so = vm.global_r(DS_CUR_OBJ);')
+        L.append(f'    uint16_t _sd = (uint16_t)(vm.ds_read((uint16_t)(_so + OBJ_PARTNER)) + 0x{_fcol(body[o]) - 0x14E5:04X});')
+        L.append('    vm.si_track = _so; vm.di_track = _sd;')
+        L.append(f'    vm.ds_write((uint16_t)(_sd + OBJ_FIELD_BASE), {val_expr}); }}')
+        return 1
+    if chan == 5:
+        # setter ch5 stores the CURRENT anim pc — depends on live vm.pc,
+        # which inline sites do not maintain mid-instruction: keep handler.
+        return None
+    return None
+
+def inline_wave5(op, body, kind, tgt, nxt, pc):
+    import os as _os
+    _skip = set(int(x,16) for x in _os.environ.get('W5SKIP','').split(',') if x)
+    if op in _skip:
+        return None
+    L = []
+    # --- search family ---
+    if op in (0x2C, 0x35) and kind == 'srch':
+        core = 'v2_vm_search_2c_core' if op == 0x2C else 'v2_vm_search_35_core'
+        # The core relies on vm.pc sitting at the continuation byte (pc+4):
+        # found -> ALT_PC = pc, pc = target; miss -> pc += 1 (skip 2D/36).
+        return [f'vm.pc = 0x{pc + 4:04X};  // continuation position',
+                f'{core}(vm, 0x{body[0]:02X}, 0x{tgt:04X});']
+    if op == 0xD1 and kind == 'srch':
+        return [f'vm.pc = 0x{pc + 4:04X};  // continuation position',
+                f'v2_vm_search_d1_core(vm, 0x{body[0]:02X}, 0x{tgt:04X});']
+    if op in (0x2D, 0x36):
+        # continuations: 0 operands; the body starts with pc-=1 and owns
+        # all pc outcomes (SEARCH_JUMP / +1 / +2) — open primitive call.
+        h = 'v2_vm_op_2D' if op == 0x2D else 'v2_vm_op_36'
+        return [f'{h}(vm);   // open search continuation (no stream reads)']
+    if op == 0xD0 and tgt is not None:
+        return ['{ uint16_t _si = vm.global_r(DS_CUR_OBJ);',
+                '  vm.ds_write(DS_SEARCH_Y, (uint16_t)(ObjRef{vm, _si}.u16(OBJ_BBOX_Y1) + 1));',
+                f'  vm.ds_write(DS_SEARCH_FILTER, 0x{body[0]:02X});',
+                f'  vm.ds_write(DS_SEARCH_JUMP, 0x{tgt:04X});',
+                f'  vm.pc = 0x{pc + 4:04X};  // post-operand position for the loop',
+                '  v2_vm_collision_search_loop(vm, 0xFFFE); }']
+    # --- channel ops ---
+    if op == 0x48:   # vel_to: [m][chX][chY]
+        m = body[0]
+        ca, cb = m & 7, (m >> 3) & 7
+        if ca > 5 or cb > 5:
+            return None
+        L.append('{ uint16_t _t3 = 0; (void)_t3;')
+        o = 1
+        used = _ch_get(L, '_x', ca, body, o)
+        if used is None: return None
+        o += used
+        L.append('  { uint16_t _o = vm.global_r(DS_CUR_OBJ);')
+        L.append('    ObjRef{vm, _o}.w16(OBJ_VEL_X, (uint16_t)(_x - ObjRef{vm, _o}.u16(OBJ_WORLD_X))); }')
+        used = _ch_get(L, '_y', cb, body, o)
+        if used is None: return None
+        L.append('  { uint16_t _o = vm.global_r(DS_CUR_OBJ);')
+        L.append('    ObjRef{vm, _o}.w16(OBJ_VEL_Y, (uint16_t)(_y - ObjRef{vm, _o}.u16(OBJ_WORLD_Y)));')
+        L.append('    ObjRef{vm, _o}.w16(OBJ_ANIM_TABLE, 0x100); }   // MOV [si+141D],100h')
+        L.append('}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    if op in (0x15, 0x16, 0x34):
+        # delta writers: compute rel x/y per body, then setter pair.
+        m = body[0]
+        sa, sb = m & 7, (m >> 3) & 7
+        probe = []
+        u1 = _ch_set(probe, sa, body, 1, '0')
+        if u1 is None: return None
+        u2 = _ch_set(probe, sb, body, 1 + u1, '0')
+        if u2 is None: return None
+        L.append('{ uint16_t _di = vm.global_r(DS_CUR_OBJ);')
+        if op == 0x15:
+            L.append('  uint16_t _ss = vm.ds_read(DS_ACTIVE_VIKING);')
+        elif op == 0x16:
+            L.append('  uint16_t _ss = ObjRef{vm, _di}.u16(OBJ_PARTNER);')
+        else:   # 0x34: nearest-viking scan (task #94 exact semantics)
+            L.append('  uint16_t _bd = 0xFFFF;')
+            L.append('  for (uint16_t _si = 0; _si < 6; _si += 2) {')
+            L.append('      if (ObjRef{vm, _si}.u16(OBJ_RES_HANDLE) == 0) continue;')
+            L.append('      int16_t _dx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _si}.u16(OBJ_WORLD_X));')
+            L.append('      if (_dx < 0) _dx = -_dx;')
+            L.append('      int16_t _dy = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _si}.u16(OBJ_WORLD_Y));')
+            L.append('      if (_dy < 0) _dy = -_dy;')
+            L.append('      uint16_t _d = (uint16_t)((uint16_t)_dx + (uint16_t)_dy);')
+            L.append('      if (_d < _bd) { _bd = _d; vm.ds_write(DS_SEARCH_BEST, _si); }')
+            L.append('  }')
+            L.append('  uint16_t _ss = vm.ds_read(DS_SEARCH_BEST);')
+        L.append('  int16_t _rx;')
+        L.append('  if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40)')
+        L.append('      _rx = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_X) - ObjRef{vm, _ss}.u16(OBJ_WORLD_X));')
+        L.append('  else')
+        L.append('      _rx = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_X) - ObjRef{vm, _di}.u16(OBJ_WORLD_X));')
+        L.append('  vm.ds_write(DS_TEXT_COL, (uint16_t)_rx);')
+        L.append('  int16_t _ry;')
+        L.append('  if (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x80)')
+        L.append('      _ry = (int16_t)(ObjRef{vm, _di}.u16(OBJ_WORLD_Y) - ObjRef{vm, _ss}.u16(OBJ_WORLD_Y));')
+        L.append('  else')
+        L.append('      _ry = (int16_t)(ObjRef{vm, _ss}.u16(OBJ_WORLD_Y) - ObjRef{vm, _di}.u16(OBJ_WORLD_Y));')
+        L.append('  vm.ds_write(DS_TEXT_ROW, (uint16_t)_ry);')
+        o = 1
+        # 16 re-reads the freshly written 6C/6E for the setters; 15/34
+        # pass the local values — copied per body.
+        va = 'vm.ds_read(DS_TEXT_COL)' if op == 0x16 else '(uint16_t)_rx'
+        vb = 'vm.ds_read(DS_TEXT_ROW)' if op == 0x16 else '(uint16_t)_ry'
+        u = _ch_set(L, sa, body, o, va)
+        o += u
+        _ch_set(L, sb, body, o, vb)
+        if op in (0x16, 0x34):
+            L.append('  vm.di_track = _di;   // orig: di=[0x42]; setters leave DI')
+        L.append('}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    return None
+
 def handler_map():
     src = open('src/sdl/v2_vm.cpp').read()
     tbl = {}
@@ -655,6 +820,11 @@ def transpile(cid, outdir='src/sdl/gen'):
             inl = inline_wave4(op, body, kind, tgt, pc + ln, pc)
         except Exception:
             inl = None
+        if inl is None:
+            try:
+                inl = inline_wave5(op, body, kind, tgt, pc + ln, pc)
+            except Exception:
+                inl = None
         if inl is None:
             try:
                 inl = inline_wave3(op, body, kind, tgt, pc + ln, pc)
