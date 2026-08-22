@@ -98,7 +98,55 @@ def transpile(cid, outdir='src/sdl/gen'):
     print(f'{path}: {len(lines)} lines, {len(seen)} instructions')
     return path
 
+def transpile_anim(cid, outdir='src/sdl/gen'):
+    """Anim-VM executor: cmd fetch + table read unrolled per known bx.
+    The handler word still comes from the DS table (runtime semantics —
+    exec_anim_cmd dispatches on it exactly like the loop); operand
+    consumption stays inside exec_anim_cmd. Unknown bx -> false ->
+    the caller resumes the interpreter loop."""
+    anims = lf.anim_layer(cid)
+    lines = []
+    w = lines.append
+    w(f'// AUTO-GENERATED anim executor for chunk 0x{cid:X} '
+      f'({len(anims)} commands).')
+    w(f'static bool v2_gen_anim_{cid:x}(V2VM& vm, uint16_t& anim_bx, int& max) {{')
+    w('    while (max > 0) {')
+    w('        switch (anim_bx) {')
+    for pc in sorted(anims):
+        w(f'        case 0x{pc:04X}: goto A_{pc:04X};')
+    w('        default: return false;   // unknown bx -> interpreter fallback')
+    w('        }')
+    for pc in sorted(anims):
+        cmd, ln, kind, tgt = anims[pc]
+        w(f'    A_{pc:04X}:')
+        w('        max--;')
+        w('        {')
+        w('        v2_v2_anim_cmd_count++;')
+        if cmd <= 0x1A:
+            w(f'        v2_op_anim_count[0x{cmd:02X}]++;')
+        w(f'        const uint16_t _bxb = 0x{pc:04X};')
+        w(f'        anim_bx = 0x{pc + 1:04X};')
+        w(f'        const uint16_t _h = *(uint16_t*)(vm.shadow + '
+          f'DS_CMD_HANDLER_TBL + 0x{cmd:02X} * 2);')
+        w(f'        bool _ok = v2_vm_exec_anim_cmd(vm, _h, anim_bx, 0x{cmd:02X});')
+        w('        AnimCmdTrace& _t = v2_anim_trace[v2_anim_trace_idx & 15];')
+        w(f'        _t.cmd = 0x{cmd:02X}; _t.handler = _h; '
+          f'_t.bx_before = _bxb; _t.bx_after = anim_bx;')
+        w('        v2_anim_trace_idx++;')
+        w('        if (!_ok) return true;')
+        w('        }')
+        w('        continue;')
+    w('    }')
+    w('    return true;')
+    w('}')
+    os.makedirs(outdir, exist_ok=True)
+    path = f'{outdir}/anim_{cid:04x}.gen.inc'
+    open(path, 'w').write('\n'.join(lines) + '\n')
+    print(f'{path}: {len(lines)} lines, {len(anims)} commands')
+    return path
+
 if __name__ == '__main__':
     cid = int(sys.argv[1], 16)
     outdir = sys.argv[2] if len(sys.argv) > 2 else 'src/sdl/gen'
     transpile(cid, outdir)
+    transpile_anim(cid, outdir)

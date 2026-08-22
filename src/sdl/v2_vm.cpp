@@ -14849,6 +14849,9 @@ struct AnimCmdTrace {
 static AnimCmdTrace v2_anim_trace[16];
 static int v2_anim_trace_idx = 0;
 
+#ifdef V2_GENCODE
+static bool v2_gen_anim_dispatch(V2VM& vm, uint16_t& anim_bx, int& max);
+#endif
 static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
     uint16_t timer = vm.ds_read(DS_ANIM_TIMER);
     if (timer > 0) {
@@ -14856,6 +14859,11 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
         if (timer - 1 > 0) return;
     }
     int max = 200;
+#ifdef V2_GENCODE
+    // Stage 3A anim: transpiled cmd dispatch; unknown bx falls back to
+    // the interpreter loop below (shared max budget).
+    if (v2_gen_anim_dispatch(vm, anim_bx, max)) return;
+#endif
     while (max-- > 0) {
         v2_v2_anim_cmd_count++;
         uint16_t bx_before = anim_bx;
@@ -17597,6 +17605,29 @@ static int v2_gencode_enabled() {
 #include "gen/chunk_01c4.gen.inc"
 #include "gen/chunk_01c5.gen.inc"
 #include "gen/chunk_01c6.gen.inc"
+#include "gen/anim_01c1.gen.inc"
+#include "gen/anim_01c2.gen.inc"
+#include "gen/anim_01c3.gen.inc"
+#include "gen/anim_01c4.gen.inc"
+#include "gen/anim_01c5.gen.inc"
+#include "gen/anim_01c6.gen.inc"
+
+static bool v2_gen_anim_dispatch(V2VM& vm, uint16_t& anim_bx, int& max) {
+    if (!v2_gencode_enabled()) return false;
+    { static bool _logged = false;
+      if (!_logged) { _logged = true;
+          fprintf(stderr, "V2-GEN: anim dispatch active (chunk 0x%X, bx=%04X)\n",
+                  v2gs(vm.shadow).template_chunk(), anim_bx); } }
+    switch (v2gs(vm.shadow).template_chunk()) {
+    case 0x1C1: return v2_gen_anim_1c1(vm, anim_bx, max);
+    case 0x1C2: return v2_gen_anim_1c2(vm, anim_bx, max);
+    case 0x1C3: return v2_gen_anim_1c3(vm, anim_bx, max);
+    case 0x1C4: return v2_gen_anim_1c4(vm, anim_bx, max);
+    case 0x1C5: return v2_gen_anim_1c5(vm, anim_bx, max);
+    case 0x1C6: return v2_gen_anim_1c6(vm, anim_bx, max);
+    default: return false;
+    }
+}
 
 #undef G_PRE
 #undef G_POST
