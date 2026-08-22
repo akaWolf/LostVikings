@@ -134,15 +134,84 @@
   F1(scroll_limit_y,     DS_SCROLL_LIMIT_Y) \
   F1(level_prev,         DS_LEVEL_PREV) \
   F1(level,              DS_LEVEL) \
-  F1(music_track,        DS_MUSIC_TRACK)
+  F1(music_track,        DS_MUSIC_TRACK) \
+  F1(seg_tiledata,       DS_SEG_TILEDATA) \
+  F1(seg_tilegfx,        DS_SEG_TILEGFX) \
+  F1(seg_gs,             DS_SEG_GS) \
+  F1(seg_tilemap,        DS_SEG_TILEMAP) \
+  F1(decomp_di_end,      DS_DECOMP_DI_END) \
+  F1(seg_anim,           DS_SEG_ANIM) \
+  F1(seg_fs,             DS_SEG_FS) \
+  F1(seg_sound,          DS_SEG_SOUND) \
+  F1(seg_sound2,         DS_SEG_SOUND2) \
+  F1(seg_sound3,         DS_SEG_SOUND3) \
+  F1(template_chunk,     DS_TEMPLATE_CHUNK) \
+  F1(seg_sprite,         DS_SEG_SPRITE) \
+  F1(anim_init_off,      DS_ANIM_INIT_OFF) \
+  F1(seg_chunk,          DS_SEG_CHUNK) \
+  F1(anim_ptr_lo,        DS_ANIM_PTR_LO) \
+  F1(anim_ptr_hi,        DS_ANIM_PTR_HI) \
+  F1(pal_req,            DS_PAL_REQ) \
+  F1(pal_src_ptr,        DS_PAL_SRC_PTR) \
+  F1(page_draw,          DS_PAGE_DRAW) \
+  F1(page_shown,         DS_PAGE_SHOWN) \
+  F1(page_bg,            DS_PAGE_BG) \
+  F1(page_rowcur_2,      DS_PAGE_ROWCUR_2) \
+  F1(page_rowcur_3,      DS_PAGE_ROWCUR_3) \
+  F1(page_rowcur_1,      DS_PAGE_ROWCUR_1) \
+  F1(page_vga_2,         DS_PAGE_VGA_2) \
+  F1(page_vga_3,         DS_PAGE_VGA_3) \
+  F1(page_vga_1,         DS_PAGE_VGA_1) \
+  F1(page_copy_src1,     DS_PAGE_COPY_SRC1) \
+  F1(page_copy_dst1,     DS_PAGE_COPY_DST1) \
+  F1(page_copy_src2,     DS_PAGE_COPY_SRC2) \
+  F1(page_copy_dst2,     DS_PAGE_COPY_DST2) \
+  F1(page_copy_src3,     DS_PAGE_COPY_SRC3) \
+  F1(page_scratch_346,   DS_PAGE_SCRATCH_346) \
+  FN(page_row_lut,       LUT_PAGE_ROW, 560) \
+  FN(lut_subrow,         LUT_SUBROW, 8) \
+  FN(fs_row_off_tbl,     DS_FS_ROW_OFF_TBL, 256) \
+  FN(kbd_ascii_lut,      LUT_KBD_ASCII, 128) \
+  FN(audio_cmd_tbl,      DS_AUDIO_CMD_TBL, 7) \
+  FN(field_off_lut,      0x9348, 33) \
+  FN(row43_lut,          0x938A, 25) \
+  FN(bit_mask_lut,       0x93CC, 16) \
+  FN(bit_clear_lut,      0x93EC, 16) \
+  FN(level_chunk_tbl,    0x940C, 48) \
+  FN(level_template_tbl, 0x946C, 48) \
+  F1(text_fullscreen,    DS_TEXT_FULLSCREEN) \
+  FN(glyph_buf,          DS_GLYPH_BUF, 0x1B8) \
+  F1(ui_throttle,        DS_UI_THROTTLE) \
+  F1(clip_limit_x,       DS_CLIP_LIMIT_X) \
+  F1(clip_limit_y,       DS_CLIP_LIMIT_Y) \
+  F1(spec_mask_1ee, DS_SPEC_MASK_1EE) F1(spec_mask_20a, DS_SPEC_MASK_20A) \
+  F1(spec_mask_210, DS_SPEC_MASK_210) F1(spec_mask_21e, DS_SPEC_MASK_21E) \
+  F1(spec_mask_224, DS_SPEC_MASK_224) F1(spec_mask_226, DS_SPEC_MASK_226) \
+  F1(spec_mask_22a, DS_SPEC_MASK_22A) F1(spec_mask_22c, DS_SPEC_MASK_22C) \
+  F1(spec_mask_22e, DS_SPEC_MASK_22E) F1(spec_mask_25e, DS_SPEC_MASK_25E) \
+  F1(spec_mask_260, DS_SPEC_MASK_260) F1(spec_mask_27a, DS_SPEC_MASK_27A) \
+  F1(spec_mask_27c, DS_SPEC_MASK_27C) F1(spec_mask_27e, DS_SPEC_MASK_27E) \
+  F1(spec_mask_282, DS_SPEC_MASK_282) F1(spec_mask_284, DS_SPEC_MASK_284) \
+  F1(spec_mask_286, DS_SPEC_MASK_286) F1(spec_mask_288, DS_SPEC_MASK_288) \
+  F1(spec_mask_28c, DS_SPEC_MASK_28C) F1(spec_mask_290, DS_SPEC_MASK_290) \
+  F1(anim_scroll_dx,     DS_ANIM_SCROLL_DX) \
+  F1(anim_scroll_dy,     DS_ANIM_SCROLL_DY) \
+  F1(spawn_x,            DS_SPAWN_X) \
+  F1(spawn_y,            DS_SPAWN_Y) \
+  F1(spawn_code,         DS_SPAWN_CODE) \
+  F1(spawn_anim,         DS_SPAWN_ANIM) \
+  F1(level_load,         DS_LEVEL_LOAD) \
+  F1(level_load_aux,     DS_LEVEL_LOAD_AUX) \
+  F1(map_bp,             DS_MAP_BP) \
+  F1(map_height,         DS_MAP_HEIGHT) \
+  F1(level_var_25c5,     0x25C5) \
+  F1(level_var_25c7,     0x25C7)
 // bulk-copies on level switch — the evac check caught the desync on the
 // level-3→4 transition. They evacuate only after that copy goes through
 // the view (deserialize-based level load); until then they stay flat.
 
 // Core globals + input + scroll + collision scratch
 #define V2_GS_FIELDS_CORE(F1, FN) \
-  F1(level_var_25c5,     0x25C5) \
-  F1(level_var_25c7,     0x25C7) \
   F1(accumulator,        DS_ACCUMULATOR) \
   F1(music_mute,         DS_MUSIC_MUTE) \
   F1(sfx_mute,           DS_SFX_MUTE) \
@@ -159,17 +228,7 @@
 
 // Level / scroll state / palette-anim / sound-track / spawn descriptors
 #define V2_GS_FIELDS_LEVEL(F1, FN) \
-  F1(anim_scroll_dx,     DS_ANIM_SCROLL_DX) \
-  F1(anim_scroll_dy,     DS_ANIM_SCROLL_DY) \
-  F1(spawn_x,            DS_SPAWN_X) \
-  F1(spawn_y,            DS_SPAWN_Y) \
-  F1(spawn_code,         DS_SPAWN_CODE) \
-  F1(spawn_anim,         DS_SPAWN_ANIM) \
   F1(spawn_pool0,        DS_SPAWN_POOL0) \
-  F1(level_load,         DS_LEVEL_LOAD) \
-  F1(level_load_aux,     DS_LEVEL_LOAD_AUX) \
-  F1(map_bp,             DS_MAP_BP) \
-  F1(map_height,         DS_MAP_HEIGHT) \
   F1(chunk_cur,          DS_CHUNK_CUR) \
   F1(chunk_tile,         DS_CHUNK_TILE) \
   F1(chunk_bg,           DS_CHUNK_BG) \
@@ -183,63 +242,13 @@
 
 // Segment registry + loader cursors + sound/config words
 #define V2_GS_FIELDS_SEG(F1, FN) \
-  F1(seg_tiledata,       DS_SEG_TILEDATA)       \
-  F1(seg_tilegfx,        DS_SEG_TILEGFX)        \
-  F1(seg_gs,             DS_SEG_GS)             \
-  F1(seg_tilemap,        DS_SEG_TILEMAP)        \
-  F1(decomp_di_end,      DS_DECOMP_DI_END)      \
-  F1(seg_anim,           DS_SEG_ANIM)           \
-  F1(seg_fs,             DS_SEG_FS)             \
-  F1(seg_sound,          DS_SEG_SOUND)          \
-  F1(seg_sound2,         DS_SEG_SOUND2)         \
-  F1(seg_sound3,         DS_SEG_SOUND3)         \
-  F1(template_chunk,     DS_TEMPLATE_CHUNK)     \
-  F1(seg_sprite,         DS_SEG_SPRITE)         \
-  F1(anim_init_off,      DS_ANIM_INIT_OFF)      \
-  F1(seg_chunk,          DS_SEG_CHUNK)          \
-  F1(anim_ptr_lo,        DS_ANIM_PTR_LO)        \
-  F1(anim_ptr_hi,        DS_ANIM_PTR_HI)        \
   FN(anim_chunk_ids,     DS_ANIM_CHUNK_IDS, 16) \
   FN(anim_chunk_off,     DS_ANIM_CHUNK_OFF, 16) \
   FN(anim_chunk_seg,     DS_ANIM_CHUNK_SEG, 16) \
-  FN(sprite_res_id,      DS_SPRITE_RES_ID, 32)  \
+  FN(sprite_res_id,      DS_SPRITE_RES_ID, 32) \
   FN(sprite_res_base,    DS_SPRITE_RES_BASE, 32)
-
 // Page emulator / palette pipeline words / VGA-page state
-#define V2_GS_FIELDS_PAGES(F1, FN) \
-  F1(pal_req,            DS_PAL_REQ)            \
-  F1(pal_src_ptr,        DS_PAL_SRC_PTR)        \
-  F1(page_draw,          DS_PAGE_DRAW)          \
-  F1(page_shown,         DS_PAGE_SHOWN)         \
-  F1(page_bg,            DS_PAGE_BG)            \
-  F1(page_rowcur_2,      DS_PAGE_ROWCUR_2)      \
-  F1(page_rowcur_3,      DS_PAGE_ROWCUR_3)      \
-  F1(page_rowcur_1,      DS_PAGE_ROWCUR_1)      \
-  F1(page_vga_2,         DS_PAGE_VGA_2)         \
-  F1(page_vga_3,         DS_PAGE_VGA_3)         \
-  F1(page_vga_1,         DS_PAGE_VGA_1)         \
-  F1(page_copy_src1,     DS_PAGE_COPY_SRC1)     \
-  F1(page_copy_dst1,     DS_PAGE_COPY_DST1)     \
-  F1(page_copy_src2,     DS_PAGE_COPY_SRC2)     \
-  F1(page_copy_dst2,     DS_PAGE_COPY_DST2)     \
-  F1(page_copy_src3,     DS_PAGE_COPY_SRC3)     \
-  F1(page_scratch_346,   DS_PAGE_SCRATCH_346)   \
-  FN(page_row_lut,       LUT_PAGE_ROW, 560)     \
-  FN(lut_subrow,         LUT_SUBROW, 8)         \
-  FN(fs_row_off_tbl,     DS_FS_ROW_OFF_TBL, 256) \
-  FN(kbd_ascii_lut,      LUT_KBD_ASCII, 128)    \
-  FN(audio_cmd_tbl,      DS_AUDIO_CMD_TBL, 7)   \
-  FN(field_off_lut,      0x9348, 33)            \
-  FN(row43_lut,          0x938A, 25)            \
-  FN(bit_mask_lut,       0x93CC, 16)            \
-  FN(bit_clear_lut,      0x93EC, 16)            \
-  FN(level_chunk_tbl,    0x940C, 48)            \
-  FN(level_template_tbl, 0x946C, 48)            \
-  F1(text_fullscreen,    DS_TEXT_FULLSCREEN)    \
-  FN(glyph_buf,          DS_GLYPH_BUF, 0x1B8)   \
-  F1(ui_throttle,        DS_UI_THROTTLE)        \
-  F1(clip_limit_x,       DS_CLIP_LIMIT_X)       \
-  F1(clip_limit_y,       DS_CLIP_LIMIT_Y)
+#define V2_GS_FIELDS_PAGES(F1, FN)
 
 // Sound / AIL / startup config words
 #define V2_GS_FIELDS_SOUND(F1, FN) \
@@ -284,16 +293,6 @@
 
 // Spec-key init bit-mask words (INT9 cluster)
 #define V2_GS_FIELDS_SPEC(F1, FN) \
-  F1(spec_mask_1ee, DS_SPEC_MASK_1EE) F1(spec_mask_20a, DS_SPEC_MASK_20A) \
-  F1(spec_mask_210, DS_SPEC_MASK_210) F1(spec_mask_21e, DS_SPEC_MASK_21E) \
-  F1(spec_mask_224, DS_SPEC_MASK_224) F1(spec_mask_226, DS_SPEC_MASK_226) \
-  F1(spec_mask_22a, DS_SPEC_MASK_22A) F1(spec_mask_22c, DS_SPEC_MASK_22C) \
-  F1(spec_mask_22e, DS_SPEC_MASK_22E) F1(spec_mask_25e, DS_SPEC_MASK_25E) \
-  F1(spec_mask_260, DS_SPEC_MASK_260) F1(spec_mask_27a, DS_SPEC_MASK_27A) \
-  F1(spec_mask_27c, DS_SPEC_MASK_27C) F1(spec_mask_27e, DS_SPEC_MASK_27E) \
-  F1(spec_mask_282, DS_SPEC_MASK_282) F1(spec_mask_284, DS_SPEC_MASK_284) \
-  F1(spec_mask_286, DS_SPEC_MASK_286) F1(spec_mask_288, DS_SPEC_MASK_288) \
-  F1(spec_mask_28c, DS_SPEC_MASK_28C) F1(spec_mask_290, DS_SPEC_MASK_290)
 
 // Sprite table columns — 128 contiguous words each (slot addressing obj=slot*2)
 #define V2_GS_FIELDS_SPRITE(F1, FN) \
@@ -855,6 +854,23 @@ static inline void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_
     V2_GS_FIELDS_EVAC(V2_GS_EM1, V2_GS_EMN)
 #undef V2_GS_EM1
 #undef V2_GS_EMN
+}
+
+// Bulk-span mirror: after a bulk image write (memset/memcpy stripe) refresh
+// every evacuated field overlapping [addr, addr+len) from the image.
+static inline void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len) {
+    if (!v2_gs_evac_on(ds) || len == 0) return;
+    uint32_t end = addr + len;
+#define V2_GS_ES1(name, off) \
+    if ((off) < end && (off) + 2u > addr) \
+        g_gs_evac.name = *(const uint16_t*)(ds + (off));
+#define V2_GS_ESN(name, off, n) \
+    if ((off) < end && (off) + 2u * (n) > addr) \
+        for (uint32_t _i = 0; _i < (n); _i++) \
+            g_gs_evac.name[_i] = *(const uint16_t*)(ds + (off) + 2u * _i);
+    V2_GS_FIELDS_EVAC(V2_GS_ES1, V2_GS_ESN)
+#undef V2_GS_ES1
+#undef V2_GS_ESN
 }
 
 // Byte-granular mirror for the side channels (alias words that overlap an

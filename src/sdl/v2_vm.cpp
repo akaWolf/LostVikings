@@ -3794,7 +3794,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
         // line 3043: CMP word ptr ds:98DCh, 3                      ; throttle check
         if ((int16_t)v2gs(s).ui_throttle() > 3) return;          // JG locret_1E16C
         // line 3045: INC word ptr ds:98DCh                         ; throttle increment
-        v2gs(s).ui_throttle_ref() += 1;
+        v2gs(s).ui_throttle((uint16_t)(v2gs(s).ui_throttle() + (1)));
     }
 
     // loc_1E0E4: scan glyph buffer for non-zero entries
@@ -4490,6 +4490,7 @@ static void v2_glyph_put_1241e(uint8_t* s, uint8_t ch, uint16_t& si_col, uint16_
     uint16_t di2 = di_row << 1;                                      // SHL di, 1
     uint16_t row_off = *(uint16_t*)(s + (uint16_t)(di2 - LUT_FIELD_OFF));   // [di-6CBAh]
     uint16_t addr = (uint16_t)(si_col + row_off - 0x6A94);           // ADD si,[...]; [si-6A94h]
+    v2_gs_evac_mirror_b(s, addr, ch);
     s[addr] = ch;                                                     // MOV [si-6A94h], al
     if (addr >= 0x8200 && addr <= 0x82FF) {
         extern int v2_dbg_pre_vm_iter;
@@ -4706,6 +4707,7 @@ static void v2_glyph_list_clear_12816(uint8_t* s) {
         v2_dbg_pre_vm_iter, v2gs(s).level(), v2gs(s).glyph_dirty_b());
     v2gs(s).glyph_dirty_b(0); // byte_31A4B
     memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2); // REP STOSW
+    v2_gs_evac_mirror_span(s, DS_GLYPH_BUF, 0x1B8 * 2);
 }
 
 // sub_1133a: init HUD from spawn table extension.
@@ -4881,9 +4883,9 @@ static void v2_vga_band_16ded(uint8_t* s) {
         v2_tile_row_16dc1(s, bx, 1);         // CALL sub_16DC1 (43-tile row, di = ds:930B)
         v2_page_copy_col_171dc(s);           // CALL sub_171DC
         bx += v2gs(s).fs_page_stride();                 // 0x6e5f
-        v2gs(s).page_rowcur_2_ref() += 2;                   // 0x6e63
-        v2gs(s).page_rowcur_3_ref() += 2;                   // 0x6e68
-        v2gs(s).page_rowcur_1_ref() += 2;                   // 0x6e6d
+        v2gs(s).page_rowcur_2((uint16_t)(v2gs(s).page_rowcur_2() + (2)));                   // 0x6e63
+        v2gs(s).page_rowcur_3((uint16_t)(v2gs(s).page_rowcur_3() + (2)));                   // 0x6e68
+        v2gs(s).page_rowcur_1((uint16_t)(v2gs(s).page_rowcur_1() + (2)));                   // 0x6e6d
     }
 }
 
@@ -4922,10 +4924,10 @@ static void v2_vga_scroll_col_left_16e75(uint8_t* s) {
     bx_r += ax_col; bx_r <<= 1;                                      // 0x6f25/0x6f27
     ax_col <<= 1;                                                    // 0x6f29
     di_vga3 += ax_col + 8;                                           // 0x6f2b/0x6f2d
-    v2gs(s).page_copy_dst1_ref() += ax_col + 8;               // 0x6f30/0x6f34
-    v2gs(s).page_copy_src2_ref() += ax_col + 8;               // 0x6f39/0x6f3d
-    v2gs(s).page_copy_dst2_ref() += ax_col + 8;               // 0x6f42/0x6f46
-    v2gs(s).page_copy_src3_ref() += ax_col + 8;               // 0x6f4b/0x6f4f
+    v2gs(s).page_copy_dst1((uint16_t)(v2gs(s).page_copy_dst1() + (ax_col + 8)));               // 0x6f30/0x6f34
+    v2gs(s).page_copy_src2((uint16_t)(v2gs(s).page_copy_src2() + (ax_col + 8)));               // 0x6f39/0x6f3d
+    v2gs(s).page_copy_dst2((uint16_t)(v2gs(s).page_copy_dst2() + (ax_col + 8)));               // 0x6f42/0x6f46
+    v2gs(s).page_copy_src3((uint16_t)(v2gs(s).page_copy_src3() + (ax_col + 8)));               // 0x6f4b/0x6f4f
     v2gs(s).page_copy_src1(di_vga3);                   // 0x6f54 -> 9315
     v2_tile_col_16dd9(s, bx_r);                                      // 0x6f58 CALL sub_16DD9
     v2_page_copy_row_1712b(s);                                       // 0x6f5b CALL sub_1712B
@@ -4962,10 +4964,10 @@ static void v2_vga_scroll_col_right_16f5f(uint8_t* s) {
     bx_r += ax_col; bx_r <<= 1;
     ax_col <<= 1;
     di_vga3 += ax_col + 8;
-    v2gs(s).page_copy_dst1_ref() += ax_col + 8;
-    v2gs(s).page_copy_src2_ref() += ax_col + 8;
-    v2gs(s).page_copy_dst2_ref() += ax_col + 8;
-    v2gs(s).page_copy_src3_ref() += ax_col + 8;
+    v2gs(s).page_copy_dst1((uint16_t)(v2gs(s).page_copy_dst1() + (ax_col + 8)));
+    v2gs(s).page_copy_src2((uint16_t)(v2gs(s).page_copy_src2() + (ax_col + 8)));
+    v2gs(s).page_copy_dst2((uint16_t)(v2gs(s).page_copy_dst2() + (ax_col + 8)));
+    v2gs(s).page_copy_src3((uint16_t)(v2gs(s).page_copy_src3() + (ax_col + 8)));
     v2gs(s).page_copy_src1(di_vga3);                   // -> 9315
     v2_tile_col_16dd9(s, bx_r);                                      // CALL sub_16DD9
     v2_page_copy_row_1712b(s);                                       // CALL sub_1712B
@@ -5628,7 +5630,8 @@ static uint16_t v2_load_viking_cfg_112ae(uint8_t* s, uint16_t di_start) {
         if (chunk_id == 0xFFFF) break;
         uint16_t type_val = *(uint16_t*)(s + (uint16_t)(di + 2) + DS_SPAWN_TABLE) & 0xFF;
         uint16_t dest_off = type_val * 3 + DS_PAL_SRC;
-        v2_read_chunk(chunk_id, s + dest_off, 0x10000 - dest_off, s);  // ds_ctx: header 2BB4/2BBC (class #22)
+        { uint32_t _lsz = v2_read_chunk(chunk_id, s + dest_off, 0x10000 - dest_off, s);  // ds_ctx: header 2BB4/2BBC (class #22)
+          v2_gs_evac_mirror_span(s, dest_off, _lsz); }
         di += 3;
     }
     // loc_112da: palette clearing + state copy (falls through from loop end)
@@ -5816,7 +5819,8 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
     }
     // loc_11774 (3070-3072): load the transition chunk at ds:2193.
     v2gs(s).obj_queue_head(2);                       // word_2A671
-    v2_read_chunk(chunk, s + 0x2193, 0x10000 - 0x2193, s);
+    { uint32_t _lsz = v2_read_chunk(chunk, s + 0x2193, 0x10000 - 0x2193, s);
+      v2_gs_evac_mirror_span(s, 0x2193, _lsz); }
     v2_viking_health_init_12ce4(s);                                // 3075 jmp sub_12CE4
 }
 
@@ -7335,6 +7339,9 @@ static void v2_load_template(uint8_t* shadow) {
 
     // Load level chunk → DS at offset 0x25B3 (level header)
     uint32_t lsz = v2_read_chunk(level_chunk, shadow + DS_ANIM_SCROLL_DX, 0x10000 - 0x25B3, shadow);  // ds_ctx (class #22)
+    // stage-4 II.c: the stripe is a bulk image write — refresh every
+    // evacuated field it covers (this is what unfreezes the header fields).
+    v2_gs_evac_mirror_span(shadow, 0x25B3, lsz);
 }
 
 // sub_11204: load level data chunks (tile graphics, tilemap, etc.)
@@ -9333,8 +9340,11 @@ struct V2VM {
 
     // DS byte write
     void ds_write_b(uint16_t addr, uint8_t val) {
-        if (addr < V2_VM_SHADOW_SIZE)
+        if (addr < V2_VM_SHADOW_SIZE) {
+            // stage-4 II.c: byte operand path mirrors evacuated fields too
+            v2_gs_evac_mirror_b(shadow, addr, val);
             shadow[addr] = val;
+        }
     }
 
     // Field access for current object
@@ -20668,6 +20678,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2gs(s).glyph_dirty_b(0);                                         // 01A2:27BE mov byte_31A4B, 0
         v2gs(s).ui_throttle(0);                          // 01A2:27C3 mov word_31DBC, 0
         memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2);                      // 01A2:27CC..27D4 rep stosw (ax=0, cx=1B8)
+        v2_gs_evac_mirror_span(s, DS_GLYPH_BUF, 0x1B8 * 2);
         bx_read += 2;                                          // 01A2:27D7 add bx, 2
     } else if (cmd_type == 4) {
         v2gs(s).frame_flags_ref() |= 4;
