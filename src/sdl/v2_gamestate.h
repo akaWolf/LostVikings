@@ -110,7 +110,31 @@
   F1(scroll_amt_right,   DS_SCROLL_AMT_RIGHT) \
   F1(scroll_amt_down,    DS_SCROLL_AMT_DOWN) \
   F1(scroll_amt_up,      DS_SCROLL_AMT_UP) \
-  F1(spawn_tbl_hi,       DS_SPAWN_TBL_HI)
+  F1(spawn_tbl_hi,       DS_SPAWN_TBL_HI) \
+  FN(hud_items,          DS_HUD_ITEMS, 12) \
+  FN(hud_items_prev,     DS_HUD_ITEMS_PREV, 12) \
+  FN(hud_sel,            DS_HUD_SEL, 3) \
+  FN(hud_sel_prev,       DS_HUD_SEL_PREV, 3) \
+  F1(hud_draw_di,        DS_HUD_DRAW_DI) \
+  FN(portrait_prev,      DS_PORTRAIT_PREV, 3) \
+  FN(portrait_snd,       DS_PORTRAIT_SND, 3) \
+  FN(portrait_snd_prev,  DS_PORTRAIT_SND_PREV, 3) \
+  FN(hud_health,         DS_HUD_HEALTH, 3) \
+  FN(hud_health_prev,    DS_HUD_HEALTH_PREV, 3) \
+  F1(hud_blink_field,    DS_HUD_BLINK_FIELD) \
+  F1(quit_active,        DS_QUIT_ACTIVE) \
+  F1(quit_blink,         DS_QUIT_BLINK) \
+  F1(quit_mode,          DS_QUIT_MODE) \
+  F1(hud_field_449,      DS_HUD_FIELD_449) \
+  F1(saved_vp_x,         DS_SAVED_VP_X) \
+  F1(saved_vp_y,         DS_SAVED_VP_Y) \
+  F1(scroll_col,         DS_SCROLL_COL) \
+  F1(scroll_row,         DS_SCROLL_ROW) \
+  F1(scroll_limit_x,     DS_SCROLL_LIMIT_X) \
+  F1(scroll_limit_y,     DS_SCROLL_LIMIT_Y) \
+  F1(level_prev,         DS_LEVEL_PREV) \
+  F1(level,              DS_LEVEL) \
+  F1(music_track,        DS_MUSIC_TRACK)
 // bulk-copies on level switch — the evac check caught the desync on the
 // level-3→4 transition. They evacuate only after that copy goes through
 // the view (deserialize-based level load); until then they stay flat.
@@ -132,50 +156,26 @@
 
 // HUD / vikings / quit prompt
 #define V2_GS_FIELDS_HUD(F1, FN) \
-  FN(hud_items,          DS_HUD_ITEMS, 12)      \
-  FN(hud_items_prev,     DS_HUD_ITEMS_PREV, 12) \
-  FN(hud_sel,            DS_HUD_SEL, 3)         \
-  FN(hud_sel_prev,       DS_HUD_SEL_PREV, 3)    \
-  F1(hud_draw_di,        DS_HUD_DRAW_DI)        \
-  FN(portrait_prev,      DS_PORTRAIT_PREV, 3)   \
-  FN(portrait_snd,       DS_PORTRAIT_SND, 3)    \
-  FN(portrait_snd_prev,  DS_PORTRAIT_SND_PREV, 3) \
-  FN(hud_health,         DS_HUD_HEALTH, 3)      \
-  FN(hud_health_prev,    DS_HUD_HEALTH_PREV, 3) \
-  F1(hud_blink_field,    DS_HUD_BLINK_FIELD)    \
-  F1(quit_active,        DS_QUIT_ACTIVE)        \
-  F1(quit_blink,         DS_QUIT_BLINK)         \
-  F1(quit_mode,          DS_QUIT_MODE)          \
-  F1(hud_field_449,      DS_HUD_FIELD_449)
 
 // Level / scroll state / palette-anim / sound-track / spawn descriptors
 #define V2_GS_FIELDS_LEVEL(F1, FN) \
-  F1(saved_vp_x,         DS_SAVED_VP_X)         \
-  F1(saved_vp_y,         DS_SAVED_VP_Y)         \
-  F1(scroll_col,         DS_SCROLL_COL)         \
-  F1(scroll_row,         DS_SCROLL_ROW)         \
-  F1(scroll_limit_x,     DS_SCROLL_LIMIT_X)     \
-  F1(scroll_limit_y,     DS_SCROLL_LIMIT_Y)     \
-  F1(level_prev,         DS_LEVEL_PREV)         \
-  F1(level,              DS_LEVEL)              \
-  F1(music_track,        DS_MUSIC_TRACK)        \
-  F1(anim_scroll_dx,     DS_ANIM_SCROLL_DX)     \
-  F1(anim_scroll_dy,     DS_ANIM_SCROLL_DY)     \
-  F1(spawn_x,            DS_SPAWN_X)            \
-  F1(spawn_y,            DS_SPAWN_Y)            \
-  F1(spawn_code,         DS_SPAWN_CODE)         \
-  F1(spawn_anim,         DS_SPAWN_ANIM)         \
-  F1(spawn_pool0,        DS_SPAWN_POOL0)        \
-  F1(level_load,         DS_LEVEL_LOAD)         \
-  F1(level_load_aux,     DS_LEVEL_LOAD_AUX)     \
-  F1(map_bp,             DS_MAP_BP)             \
-  F1(map_height,         DS_MAP_HEIGHT)         \
-  F1(chunk_cur,          DS_CHUNK_CUR)          \
-  F1(chunk_tile,         DS_CHUNK_TILE)         \
-  F1(chunk_bg,           DS_CHUNK_BG)           \
-  F1(cmd_write,          DS_CMD_WRITE)          \
-  F1(obj_queue_head,     DS_OBJ_QUEUE_HEAD)     \
-  F1(cmd_read,           DS_CMD_READ)           \
+  F1(anim_scroll_dx,     DS_ANIM_SCROLL_DX) \
+  F1(anim_scroll_dy,     DS_ANIM_SCROLL_DY) \
+  F1(spawn_x,            DS_SPAWN_X) \
+  F1(spawn_y,            DS_SPAWN_Y) \
+  F1(spawn_code,         DS_SPAWN_CODE) \
+  F1(spawn_anim,         DS_SPAWN_ANIM) \
+  F1(spawn_pool0,        DS_SPAWN_POOL0) \
+  F1(level_load,         DS_LEVEL_LOAD) \
+  F1(level_load_aux,     DS_LEVEL_LOAD_AUX) \
+  F1(map_bp,             DS_MAP_BP) \
+  F1(map_height,         DS_MAP_HEIGHT) \
+  F1(chunk_cur,          DS_CHUNK_CUR) \
+  F1(chunk_tile,         DS_CHUNK_TILE) \
+  F1(chunk_bg,           DS_CHUNK_BG) \
+  F1(cmd_write,          DS_CMD_WRITE) \
+  F1(obj_queue_head,     DS_OBJ_QUEUE_HEAD) \
+  F1(cmd_read,           DS_CMD_READ) \
   FN(transition_level_tbl, DS_TRANSITION_LEVEL_TBL, 7) \
   FN(transition_chunk_tbl, DS_TRANSITION_CHUNK_TBL, 6) \
   FN(scroll_px_lut,      DS_SCROLL_STEP2_TBL, 19) \
@@ -857,6 +857,24 @@ static inline void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_
 #undef V2_GS_EMN
 }
 
+// Byte-granular mirror for the side channels (alias words that overlap an
+// evacuated span, lob/byte setters). Splits the byte into the member half.
+static inline void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val) {
+    if (!v2_gs_evac_on(ds)) return;
+#define V2_GS_EB1(name, off) \
+    if (addr == (off)) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0xFF00) | val); return; } \
+    if (addr == (off) + 1) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0x00FF) | ((uint16_t)val << 8)); return; }
+#define V2_GS_EBN(name, off, n) \
+    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
+        uint16_t _d = (uint16_t)(addr - (off)); \
+        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0xFF00) | val); \
+        else g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | ((uint16_t)val << 8)); \
+        return; }
+    V2_GS_FIELDS_EVAC(V2_GS_EB1, V2_GS_EBN)
+#undef V2_GS_EB1
+#undef V2_GS_EBN
+}
+
 // Stage 4 II.b: bounds sanitizer. Reports (dedup) every runtime-indexed
 // access that leaves its field's span — building the wrap map that decides
 // which fields may leave the flat layout in the carrier swap.
@@ -903,7 +921,7 @@ struct V2StateView {
 #undef V2_GS_AN
 #define V2_GS_AB1(name, off) \
     uint8_t  name##_b() const          { return ds[(off)]; } \
-    void     name##_b(uint8_t v)       { ds[(off)] = v; } \
+    void     name##_b(uint8_t v)       { v2_gs_evac_mirror_b(ds, (off), v); ds[(off)] = v; } \
     uint8_t& name##_bref()             { return ds[(off)]; }
 #define V2_GS_ABN(name, off, n) \
     uint8_t* name##_bytes()            { return ds + (off); } \
@@ -937,7 +955,7 @@ struct V2StateView {
 #undef V2_GS_ABN
 #define V2_GS_A1(name, off) \
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
-    void     name(uint16_t v)          { *(uint16_t*)(ds + (off)) = v; } \
+    void     name(uint16_t v)          { v2_gs_evac_mirror_w(ds, (off), v); *(uint16_t*)(ds + (off)) = v; } \
     uint16_t& name##_ref()             { return *(uint16_t*)(ds + (off)); }
     V2_GS_ALIASES(V2_GS_A1)
 #undef V2_GS_A1
@@ -945,7 +963,7 @@ struct V2StateView {
     // (phase-9 view translation; the byte IS the word's low half).
 #define V2_GS_LOB(name, off) \
     uint8_t  name##_lob() const        { return ds[(off)]; } \
-    void     name##_lob(uint8_t v)     { ds[(off)] = v; } \
+    void     name##_lob(uint8_t v)     { v2_gs_evac_mirror_b(ds, (off), v); ds[(off)] = v; } \
     uint8_t& name##_lobref()           { return ds[(off)]; }
     V2_GS_LOB(sfx_mute,    DS_SFX_MUTE)
     V2_GS_LOB(music_mute,  DS_MUSIC_MUTE)

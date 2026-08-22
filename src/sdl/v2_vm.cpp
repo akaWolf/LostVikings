@@ -2597,7 +2597,7 @@ extern "C" int v2_fntest_call_104a1(uint8_t* shadow, int max_iters) {
     // (1450b save + QUIT? prints) belongs to the 1047C/103CA callers —
     // v2_pw_pre_loop mirrors THAT and is not part of this pair.
     v2gs(shadow).quit_blink(0x11);          // word_28925
-    v2gs(shadow).quit_active_ref() = 1;     // word_28923
+    v2gs(shadow).quit_active(1);     // word_28923
     v2gs(shadow).glyph_dirty_b(1);          // byte_31A4B
     // DAC color 3 = white: OUT-only in the orig entry (no DS bytes; the
     // [7F0B]-mirror writes belong to the 1041C/10389 callers).
@@ -3015,7 +3015,7 @@ static void v2_viking_proximity_11f47(uint8_t* s) {
                      - (int16_t)*(uint16_t*)(s + di + OBJ_WORLD_Y);
         if (dx_d < 0) dx_d = -dx_d;
         uint16_t dist = (uint16_t)ax_d + (uint16_t)dx_d;
-        if ((int16_t)dist < 0x40) s[(si >> 1) + 0x449] = 0;
+        if ((int16_t)dist < 0x40) { uint16_t _a = (uint16_t)((si >> 1) + 0x449); v2_gs_evac_mirror_b(s, _a, 0); s[_a] = 0; }
     }
 }
 
@@ -3035,7 +3035,7 @@ static void v2_hud_sel_sync_1205b(uint8_t* s) {
             uint16_t old_di = (uint16_t)((*(uint16_t*)(s + prev_off) + base) * 2);
             v2_draw_hud_item(v2_current_ds_val, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
             v2_vga_hud_item_1183d(s, old_di, *(uint16_t*)(s + old_di + (DS_HUD_ITEMS)));
-            *(uint16_t*)(s + prev_off) = *(uint16_t*)(s + cur_off);
+            v2gs(s).hud_sel_prev_at((uint16_t)(vk * 2), *(uint16_t*)(s + cur_off));
             uint16_t new_di = (uint16_t)((*(uint16_t*)(s + cur_off) + base) * 2);
             v2_draw_hud_selector(v2_current_ds_val, new_di);
             v2_vga_selector_118ad(s, new_di);
@@ -3103,7 +3103,7 @@ static void v2_hud_item_sync_12199(uint8_t* s) {
         }
         uint16_t item = *(uint16_t*)(s + di2 + (DS_HUD_ITEMS));
         if (item != *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV))) {
-            *(uint16_t*)(s + di2 + (DS_HUD_ITEMS_PREV)) = item;
+            v2gs(s).hud_items_prev_at((uint16_t)(di2), item);
             v2_draw_hud_item(v2_current_ds_val, di2, item);
             v2_vga_hud_item_1183d(s, di2, item);
             di2 = v2_hud_selectors_120d1(s);   // orig DI-clobber inherited
@@ -3133,7 +3133,7 @@ static void v2_hud_health_120ff(uint8_t* s) {
 static void v2_hud_items_full_1201d(uint8_t* s) {
     for (uint16_t di = 0; di < 0x18; di += 2) {
         uint16_t item = *(uint16_t*)(s + di + DS_HUD_ITEMS);
-        *(uint16_t*)(s + di + DS_HUD_ITEMS_PREV) = item;
+        v2gs(s).hud_items_prev_at((uint16_t)(di), item);
         v2_draw_hud_item(v2_current_ds_val, di, item);
         v2_vga_hud_item_1183d(s, di, item);
     }
@@ -5306,9 +5306,9 @@ static uint16_t v2_load_sprites_1167a(uint8_t* s, uint16_t di) {
         uint16_t chunk_id = *(uint16_t*)(s + di + DS_SPAWN_TABLE);
         if (chunk_id == 0xFFFF) { di += 2; break; }
         // Store chunk_id in resource table
-        *(uint16_t*)(s + si + DS_SPRITE_RES_ID) = chunk_id;
+        v2gs(s).sprite_res_id_at((uint16_t)(si), chunk_id);
         // Store sprite base (bx + 1) in resource table
-        *(uint16_t*)(s + si + DS_SPRITE_RES_BASE) = bx + 1;
+        v2gs(s).sprite_res_base_at((uint16_t)(si), (uint16_t)(bx + 1));
         // Decompress chunk into sprite shadow buffer at offset bx.
         // Original: es = word_2B353 (ds:0x2E73 = sprite segment), di = bx.
         // For v2: decompress into v2_sprite_shadow linear buffer.
@@ -5335,12 +5335,12 @@ static uint16_t v2_load_anims_116ae(uint8_t* s, uint16_t di) {
     while (true) {
         uint16_t chunk_id = *(uint16_t*)(s + di + DS_SPAWN_TABLE);
         if (chunk_id == 0xFFFF) break;
-        *(uint16_t*)(s + si + DS_ANIM_CHUNK_IDS) = chunk_id;
+        v2gs(s).anim_chunk_ids_at((uint16_t)(si), chunk_id);
         // les di, dword_2B359: load es:di from animation buffer pointer
         uint16_t buf_di = v2gs(s).anim_ptr_lo();  // offset
         uint16_t buf_es = v2gs(s).anim_ptr_hi();  // segment
-        *(uint16_t*)(s + si + DS_ANIM_CHUNK_OFF) = buf_di;       // store buffer offset
-        *(uint16_t*)(s + si + DS_ANIM_CHUNK_SEG) = buf_es;       // store buffer segment
+        v2gs(s).anim_chunk_off_at((uint16_t)(si), buf_di);       // store buffer offset
+        v2gs(s).anim_chunk_seg_at((uint16_t)(si), buf_es);       // store buffer segment
         // Decompress into chunk buffer shadow at linear offset from chunk buffer base
         uint32_t linear = ((uint32_t)buf_es << 4) + buf_di;
         uint32_t chunk_base = (uint32_t)chunk_base_seg << 4;
@@ -5755,7 +5755,7 @@ static void v2_viking_health_init_12ce4(uint8_t* s) {
     v2gs(s).hud_sel(1, 0);
     v2gs(s).hud_sel(2, 0);
     for (uint16_t si = 0; si < 0x18; si += 2)
-        *(uint16_t*)(s + si + (DS_HUD_ITEMS)) = 0;
+        v2gs(s).hud_items_at((uint16_t)(si), 0);
     v2gs(s).portrait_prev(0, 6);
     v2gs(s).portrait_snd_2(6);
     v2gs(s).portrait_snd_3(6);
@@ -5792,7 +5792,7 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
         } else if (ac == 0x8001) {
             // loc_11720 (3027-3034): clear 0x800 words at ds:2191.
             for (uint16_t di = 0; di < 0x800; di += 2)
-                *(uint16_t*)(s + di + DS_OBJ_QUEUE_HEAD) = 0;
+                v2gs(s).obj_queue_head_at((uint16_t)(di), 0);
             return;
         } else {
             v2gs(s).game_mode_ac(0);                 // 3022-3023
@@ -20953,8 +20953,8 @@ static void v2_item_take_next_121f6(uint8_t* s, uint16_t di_in) {
     v2_vga_hud_item_1183d(s, di3, 0);
     uint16_t si_v = (uint16_t)(saved >> 1);
     di3 = (uint16_t)((di3 >> 2) & 0xFFFE);
-    *(uint16_t*)(s + di3 + (DS_HUD_SEL)) = si_v;
-    *(uint16_t*)(s + di3 + (DS_HUD_SEL)) &= 3;
+    v2gs(s).hud_sel_at((uint16_t)(di3), si_v);
+    v2gs(s).hud_sel_at((uint16_t)(di3), (uint16_t)(v2gs(s).hud_sel_at((uint16_t)(di3)) & 3));
     v2gs(s).quit_active(si_v);
 }
 
@@ -20978,7 +20978,7 @@ static bool v2_item_place_11f93(uint8_t* s) {
     } else {
         if (v2gs(s).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(s, 2);
         uint16_t ax = v2gs(s).hud_blink_field();
-        *(uint16_t*)(s + di + (DS_HUD_ITEMS)) = ax;
+        v2gs(s).hud_items_at((uint16_t)(di), ax);
         uint16_t si = v2gs(s).quit_active();
         si = (uint16_t)((si & 0xFFFC) >> 1);
         uint16_t di2 = *(uint16_t*)(s + si + (DS_HUD_SEL));
@@ -20988,7 +20988,7 @@ static bool v2_item_place_11f93(uint8_t* s) {
             v2_draw_hud_item(v2_current_ds_val, di2, 0);
             v2_vga_hud_item_1183d(s, di2, 0);
             uint16_t ax2 = v2gs(s).quit_active() & 3;
-            *(uint16_t*)(s + si2 + (DS_HUD_SEL)) = ax2;
+            v2gs(s).hud_sel_at((uint16_t)(si2), ax2);
         }
     }
     v2_item_take_next_121f6(s, v2gs(s).hud_draw_di());   // loc_11FFB
@@ -21008,7 +21008,7 @@ static void v2_item_pop_121b9(uint8_t* s) {
     uint16_t item = *(uint16_t*)(s + di + (DS_HUD_ITEMS));
     if (item == 0) return;
     v2gs(s).hud_blink_field(item);
-    *(uint16_t*)(s + di + (DS_HUD_ITEMS)) = 0;
+    v2gs(s).hud_items_at((uint16_t)(di), 0);
     di >>= 1;
     v2gs(s).quit_active(di);
     v2gs(s).quit_mode(0);
@@ -21170,8 +21170,8 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             erase_old_slot();                                        // 3891-3894
             uint16_t viking = v2gs(shadow).active_viking();
             if (*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 1) {  // 3896-3897
-                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) &= 0xFFFE; // 3898
-                v2gs(shadow).quit_active_ref() &= 0xFFFE;     // 3899
+                v2gs(shadow).hud_sel_at((uint16_t)(viking), (uint16_t)(v2gs(shadow).hud_sel_at((uint16_t)(viking)) & 0xFFFE)); // 3898
+                v2gs(shadow).quit_active((uint16_t)(v2gs(shadow).quit_active() & 0xFFFE));     // 3899
                 arrow_commit();                                      // 3900-3906
             }
         }
@@ -21179,8 +21179,8 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             erase_old_slot();                                        // 3912-3915
             uint16_t viking = v2gs(shadow).active_viking();
             if (!(*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 1)) { // 3917-3918
-                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) |= 1;   // 3919
-                v2gs(shadow).quit_active_ref() |= 1;          // 3920
+                v2gs(shadow).hud_sel_at((uint16_t)(viking), (uint16_t)(v2gs(shadow).hud_sel_at((uint16_t)(viking)) | 1));   // 3919
+                v2gs(shadow).quit_active((uint16_t)(v2gs(shadow).quit_active() | 1));          // 3920
                 arrow_commit();                                      // 3921-3927
             }
         }
@@ -21188,8 +21188,8 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             erase_old_slot();                                        // 3933-3936
             uint16_t viking = v2gs(shadow).active_viking();
             if (*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 2) {  // 3938-3939
-                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) &= 0xFFFD; // 3940
-                v2gs(shadow).quit_active_ref() &= 0xFFFD;     // 3941
+                v2gs(shadow).hud_sel_at((uint16_t)(viking), (uint16_t)(v2gs(shadow).hud_sel_at((uint16_t)(viking)) & 0xFFFD)); // 3940
+                v2gs(shadow).quit_active((uint16_t)(v2gs(shadow).quit_active() & 0xFFFD));     // 3941
                 arrow_commit();                                      // 3942-3948
             }
         }
@@ -21197,8 +21197,8 @@ static bool v2_pause_items_11cbb(uint8_t* shadow) {
             erase_old_slot();                                        // 3954-3957
             uint16_t viking = v2gs(shadow).active_viking();
             if (!(*(uint16_t*)(shadow + viking + (DS_HUD_SEL)) & 2)) { // 3959-3960
-                *(uint16_t*)(shadow + viking + (DS_HUD_SEL)) |= 2;   // 3961
-                v2gs(shadow).quit_active_ref() |= 2;          // 3962
+                v2gs(shadow).hud_sel_at((uint16_t)(viking), (uint16_t)(v2gs(shadow).hud_sel_at((uint16_t)(viking)) | 2));   // 3961
+                v2gs(shadow).quit_active((uint16_t)(v2gs(shadow).quit_active() | 2));          // 3962
                 arrow_commit();                                      // 3963-3969
             }
         }
@@ -21434,7 +21434,7 @@ bool v2_pw_did_save_1450b = false;   // non-static: the wave-5 bare-entry wrappe
 // then 165AA + 1DD9C + 1C8F1(ax=0xFFFF — the ONLY 0xFFFF site) + 1E0C7 +
 // the 16775 flip tail (no vsync wait inside).
 static void v2_pw_blink_10555(uint8_t* shadow) {
-    v2gs(shadow).quit_blink_ref() -= 1;            // DEC word_28925
+    v2gs(shadow).quit_blink((uint16_t)(v2gs(shadow).quit_blink() - 1));            // DEC word_28925
     if ((v2gs(shadow).quit_blink() & 0xF) != 0) return;
     uint16_t si_b, ax_b;
     if (v2gs(shadow).quit_blink() & 0x10) {
@@ -21545,14 +21545,14 @@ static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
     uint16_t ni = v2gs(shadow).input_edges();
     if (ni & 0x200) {
         if (v2gs(shadow).quit_active() != 0) {
-            v2gs(shadow).quit_active_ref() -= 1;    // DEC word_28923
+            v2gs(shadow).quit_active((uint16_t)(v2gs(shadow).quit_active() - 1));    // DEC word_28923
             v2gs(shadow).quit_blink(0x11);
             v2_text_print_1265b(shadow, 4, 0x16, 0x0F);    // sub_1265b
         }
     }
     if (ni & 0x100) {
         if (v2gs(shadow).quit_active() == 0) {
-            v2gs(shadow).quit_active_ref() += 1;    // INC word_28923
+            v2gs(shadow).quit_active((uint16_t)(v2gs(shadow).quit_active() + 1));    // INC word_28923
             v2gs(shadow).quit_blink(0x11);
             v2_text_print_1265b(shadow, 5, 0x10, 0x0F);    // sub_1265b
         }

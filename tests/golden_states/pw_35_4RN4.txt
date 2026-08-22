@@ -70,18 +70,6 @@ scroll_amt_right       @03DA = 0000
 scroll_amt_down        @03DC = 0000
 scroll_amt_up          @03DE = 0000
 spawn_tbl_hi           @03E2 = 000E
-level_var_25c5         @25C5 = F45E
-level_var_25c7         @25C7 = 0000
-accumulator            @008A = 0000
-music_mute             @0302 = 0000
-sfx_mute               @0304 = 0000
-frame_flags            @0334 = 0000
-rng_seed_lo            @8639 = 5678
-pal_chunk_addr_tbl     @854A [11]: 2E7D 317D 347D 377D 3A7D 3D7D 407D 437D 467D 066D 067F
-obj_count              @0372 = 000C
-input_keys             @03B6 = 0000
-input_edges            @03B8 = 0000
-input_prev             @03BA = 0000
 hud_items              @03E4 [12]: 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
 hud_items_prev         @03FC [12]: 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
 hud_sel                @0414 [3]: 0000 0000 0000
@@ -106,6 +94,18 @@ scroll_limit_y         @25A6 = 0540
 level_prev             @25AB = 0026
 level                  @25AD = 0023
 music_track            @25AF = 0002
+level_var_25c5         @25C5 = F45E
+level_var_25c7         @25C7 = 0000
+accumulator            @008A = 0000
+music_mute             @0302 = 0000
+sfx_mute               @0304 = 0000
+frame_flags            @0334 = 0000
+rng_seed_lo            @8639 = 5678
+pal_chunk_addr_tbl     @854A [11]: 2E7D 317D 347D 377D 3A7D 3D7D 407D 437D 467D 066D 067F
+obj_count              @0372 = 000C
+input_keys             @03B6 = 0000
+input_edges            @03B8 = 0000
+input_prev             @03BA = 0000
 anim_scroll_dx         @25B3 = 0100
 anim_scroll_dy         @25B5 = 00F8
 spawn_x                @25BB = 0060
