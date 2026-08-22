@@ -459,6 +459,150 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
                 f'vm.pc = 0x{nxt:04X};']
     return None
 
+# Wave 4: collision family (via the new _f cores), viking scan family,
+# probe family with the runtime 30C8E sub-dispatch reproduced verbatim.
+def _dispatch_c8e(L, tbl_index, tgt, nxt, carry='vm.carry'):
+    """Reproduce the off_30C8E[tbl_index] runtime dispatch used by the
+    probe opcodes: 44E9 no-carry-skip/carry-jump, 44F3 inverse, 42CF
+    unconditional jump; anything else -> the shared runtime_dispatch
+    (which the loop path also uses)."""
+    L.append(f'  uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl({tbl_index});')
+    L.append('  if (_cs == 0x44E9) {')
+    L.append(f'      vm.pc = (!{carry}) ? 0x{nxt:04X} : 0x{tgt:04X};')
+    L.append('  } else if (_cs == 0x44F3) {')
+    L.append(f'      vm.pc = ({carry}) ? 0x{nxt:04X} : 0x{tgt:04X};')
+    L.append('  } else if (_cs == 0x42CF) {')
+    L.append(f'      vm.pc = 0x{tgt:04X};')
+    L.append('  } else {')
+    L.append(f'      vm.pc = 0x{nxt - 2:04X};  // T-word position for runtime_dispatch')
+    L.append(f'      v2_vm_runtime_dispatch(vm, 0x87AE, {tbl_index});')
+    L.append('  }')
+
+_COLL = {
+    # op: (core_f, filter_width, vik_limit)
+    0x1A: ('v2_vm_collision_155d6_f', 1, True),
+    0x1D: ('v2_vm_collision_156c0_f', 2, True),
+    0x32: ('v2_vm_collision_15788_f', 1, False),
+    0x33: ('v2_vm_collision_157eb_f', 1, False),
+    0x37: ('v2_vm_collision_155d6_f', 1, False),
+    0x38: ('v2_vm_collision_156c0_f', 2, False),
+    0x3C: ('v2_vm_collision_1584e_f', 1, False),
+}
+
+_SCAN = {
+    # viking scan family: explicit filter byte + primitive + branch shape.
+    # op: (call_expr(filter), branch)  branch: 'jump' carry->TGT,
+    # 'skip' carry->NEXT, 'flip_rl'/'flip_lr' pick the primitive by hflip.
+    0xBF: ('v2_vm_obj_search_up_15fb1(vm, {f}, _di)', 'jump'),
+    0xC0: ('v2_vm_obj_search_down_15fbe(vm, {f}, _di)', 'jump'),
+    0xC3: ('v2_vm_obj_search_up_15fb1(vm, {f}, _di)', 'skip'),
+    0xC4: ('v2_vm_obj_search_down_15fbe(vm, {f}, _di)', 'skip'),
+}
+
+def inline_wave4(op, body, kind, tgt, nxt, pc):
+    L = []
+    if op in _COLL and tgt is not None:
+        core, w, vik = _COLL[op]
+        filt = _imm16(body) if w == 2 else body[0]
+        L.append('{')
+        if vik:
+            L.append('  uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);')
+            L.append('  vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit')
+        L.append(f'  bool _c = {core}(vm, 0x{filt:0{w*2}X});')
+        if vik:
+            L.append('  vm.ds_write(DS_OBJ_COUNT, _saved);')
+        L.append('  vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS')
+        L.append('  if (_c) {')
+        L.append('      ObjRef{vm, vm.global_r(DS_CUR_OBJ)}'
+                 f'.w16(OBJ_ALT_PC, 0x{nxt:04X});  // do_call_jump')
+        L.append(f'      vm.pc = 0x{tgt:04X};')
+        L.append(f'  }} else vm.pc = 0x{nxt:04X};')
+        L.append('}')
+        return L
+    if op in (0x4E, 0x4F) and tgt is not None:
+        L.append('{')
+        L.append('  vm.carry = v2_vm_platform_check_163ac(vm);')
+        if op == 0x4F:   # fixed: no-carry -> jump, carry -> skip
+            L.append(f'  vm.pc = (!vm.carry) ? 0x{tgt:04X} : 0x{nxt:04X};')
+        else:            # 4E: 30C8E[0] dispatch
+            _dispatch_c8e(L, 0, tgt, nxt)
+        L.append('}')
+        return L
+    if op in _SCAN and tgt is not None:
+        call, br = _SCAN[op]
+        f = body[0]
+        L.append('{')
+        L.append('  vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);')
+        L.append('  uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);')
+        L.append('  vm.ds_write(DS_OBJ_COUNT, 6);')
+        L.append('  uint16_t _di = vm.global_r(DS_CUR_OBJ);')
+        if op == 0xC0:   # only the C0 body seeds si/di tracks
+            L.append(f'  vm.si_track = 0x{f:02X}; vm.di_track = _di;')
+        L.append(f'  vm.carry = {call.format(f=f"0x{f:02X}")};')
+        L.append('  vm.ds_write(DS_OBJ_COUNT, _saved);')
+        if br == 'jump':
+            L.append(f'  vm.pc = vm.carry ? 0x{tgt:04X} : 0x{nxt:04X};')
+        else:
+            L.append(f'  vm.pc = vm.carry ? 0x{nxt:04X} : 0x{tgt:04X};')
+        L.append('}')
+        return L
+    if op in (0xC1, 0xC2, 0xC5, 0xC6) and tgt is not None:
+        # side scans: hflip picks the primitive; C1/C2 carry->jump,
+        # C5/C6 carry->skip; C1/C5: flip->right-scan, C2/C6: !flip->right.
+        f = body[0]
+        right_on_flip = op in (0xC1, 0xC5)
+        carry_jump = op in (0xC1, 0xC2)
+        L.append('{')
+        L.append('  vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);')
+        L.append('  uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);')
+        L.append('  vm.ds_write(DS_OBJ_COUNT, 6);')
+        L.append('  uint16_t _di = vm.global_r(DS_CUR_OBJ);')
+        L.append('  bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;')
+        cond = '_flip' if right_on_flip else '!_flip'
+        L.append(f'  if ({cond})')
+        L.append(f'      vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x{f:02X}, _di, '
+                 '(uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));')
+        L.append('  else')
+        L.append(f'      vm.carry = v2_vm_obj_search_left_15de5(vm, 0x{f:02X}, _di);')
+        L.append('  vm.ds_write(DS_OBJ_COUNT, _saved);')
+        if carry_jump:
+            L.append(f'  vm.pc = vm.carry ? 0x{tgt:04X} : 0x{nxt:04X};')
+        else:
+            L.append(f'  vm.pc = vm.carry ? 0x{nxt:04X} : 0x{tgt:04X};')
+        L.append('}')
+        return L
+    # probe family: explicit anim/filter byte; carry semantics per body.
+    if op in (0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x30, 0x31) and tgt is not None:
+        f = body[0]
+        L.append('{')
+        L.append('  uint16_t _di = vm.global_r(DS_CUR_OBJ);')
+        if op in (0x20, 0x21, 0x24, 0x25):
+            L.append('  bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;')
+            first_left = op in (0x20, 0x24)   # !flip -> left for 20/24
+            a, b = ('v2_vm_probe_left_158aa', 'v2_vm_probe_right_158b9')
+            if not first_left:
+                a, b = b, a
+            L.append(f'  if (!_flip) {a}(vm, 0x{f:02X}, _di);')
+            L.append(f'  else        {b}(vm, 0x{f:02X}, _di);')
+        elif op in (0x1F, 0x23):
+            L.append(f'  v2_vm_probe_down_158d7(vm, 0x{f:02X}, _di);')
+        elif op in (0x1E, 0x22):
+            L.append(f'  v2_vm_probe_up_158c8(vm, 0x{f:02X}, _di);')
+        elif op in (0x30, 0x31):
+            L.append(f'  v2_vm_probe_front_158e6(vm, 0x{f:02X}, _di);')
+        if op in (0x24, 0x30):   # fixed carry branch
+            L.append(f'  vm.pc = vm.carry ? 0x{nxt:04X} : 0x{tgt:04X};'
+                     if op == 0x24 else
+                     f'  vm.pc = vm.carry ? 0x{tgt:04X} : 0x{nxt:04X};')
+        else:
+            # table index per body: 1E/1F/20/21 use off_30C8E[0],
+            # 22/23/25/31 use off_30C8E[2] (byte offset -> index 1)
+            tbl = 0 if op in (0x1E, 0x1F, 0x20, 0x21) else 1
+            _dispatch_c8e(L, tbl, tgt, nxt)
+        L.append('}')
+        return L
+    return None
+
 def handler_map():
     src = open('src/sdl/v2_vm.cpp').read()
     tbl = {}
@@ -508,9 +652,14 @@ def transpile(cid, outdir='src/sdl/gen'):
         w(f'        G_PRE(0x{pc:04X}, 0x{op:02X});')
         inl = None
         try:
-            inl = inline_wave3(op, body, kind, tgt, pc + ln, pc)
+            inl = inline_wave4(op, body, kind, tgt, pc + ln, pc)
         except Exception:
             inl = None
+        if inl is None:
+            try:
+                inl = inline_wave3(op, body, kind, tgt, pc + ln, pc)
+            except Exception:
+                inl = None
         if inl is None and kind == 'fall':
             try:
                 inl = inline_wave1(op, body, pc + ln)

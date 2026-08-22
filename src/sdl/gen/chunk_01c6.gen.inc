@@ -10542,25 +10542,93 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_16A1:
         g_last_pc = 0x16A1;
         G_PRE(0x16A1, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x16A5 : 0x16CE;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x16A5 : 0x16CE;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x16CE;
+          } else {
+              vm.pc = 0x16A3;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x16A1, 0x21);
         continue;
     L_16A5:
         g_last_pc = 0x16A5;
         G_PRE(0x16A5, 0x20);
-        v2_vm_op_20(vm);  // when probe_l/r(0x7D)
+        // inlined v2_vm_op_20: when probe_l/r(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          else        v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x16A9 : 0x16E9;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x16A9 : 0x16E9;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x16E9;
+          } else {
+              vm.pc = 0x16A7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x16A5, 0x20);
         continue;
     L_16A9:
         g_last_pc = 0x16A9;
         G_PRE(0x16A9, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7F)
+        // inlined v2_vm_op_21: when probe_r/l(0x7F)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7F, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7F, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x16AD : 0x1704;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x16AD : 0x1704;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1704;
+          } else {
+              vm.pc = 0x16AB;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x16A9, 0x21);
         continue;
     L_16AD:
         g_last_pc = 0x16AD;
         G_PRE(0x16AD, 0x20);
-        v2_vm_op_20(vm);  // when probe_l/r(0x7F)
+        // inlined v2_vm_op_20: when probe_l/r(0x7F)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_left_158aa(vm, 0x7F, _di);
+          else        v2_vm_probe_right_158b9(vm, 0x7F, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x16B1 : 0x1713;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x16B1 : 0x1713;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1713;
+          } else {
+              vm.pc = 0x16AF;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x16AD, 0x20);
         continue;
     L_16B1:
@@ -11041,7 +11109,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1776:
         g_last_pc = 0x1776;
         G_PRE(0x1776, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x177A);  // do_call_jump
+              vm.pc = 0x17B2;
+          } else vm.pc = 0x177A;
+        }
         G_POST(0x1776, 0x37);
         continue;
     L_177A:
@@ -11105,19 +11181,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1785:
         g_last_pc = 0x1785;
         G_PRE(0x1785, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1789);  // do_call_jump
+              vm.pc = 0x15E9;
+          } else vm.pc = 0x1789;
+        }
         G_POST(0x1785, 0x32);
         continue;
     L_1789:
         g_last_pc = 0x1789;
         G_PRE(0x1789, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x178D);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x178D;
+        }
         G_POST(0x1789, 0x37);
         continue;
     L_178D:
         g_last_pc = 0x178D;
         G_PRE(0x178D, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1791);  // do_call_jump
+              vm.pc = 0x17B2;
+          } else vm.pc = 0x1791;
+        }
         G_POST(0x178D, 0x37);
         continue;
     L_1791:
@@ -11159,7 +11259,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_179C:
         g_last_pc = 0x179C;
         G_PRE(0x179C, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x17A5 : 0x179F;
+        }
         G_POST(0x179C, 0x4F);
         continue;
     L_179F:
@@ -11178,7 +11282,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_17A5:
         g_last_pc = 0x17A5;
         G_PRE(0x17A5, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x17A9 : 0x188C;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x17A9 : 0x188C;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x188C;
+          } else {
+              vm.pc = 0x17A7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x17A5, 0x23);
         continue;
     L_17A9:
@@ -11376,7 +11495,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_17EE:
         g_last_pc = 0x17EE;
         G_PRE(0x17EE, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x17F2);  // do_call_jump
+              vm.pc = 0x1847;
+          } else vm.pc = 0x17F2;
+        }
         G_POST(0x17EE, 0x37);
         continue;
     L_17F2:
@@ -11543,7 +11670,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1831:
         g_last_pc = 0x1831;
         G_PRE(0x1831, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1835 : 0x1889;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1835 : 0x1889;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1889;
+          } else {
+              vm.pc = 0x1833;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x1831, 0x23);
         continue;
     L_1835:
@@ -11823,13 +11965,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1893:
         g_last_pc = 0x1893;
         G_PRE(0x1893, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1897);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x1897;
+        }
         G_POST(0x1893, 0x32);
         continue;
     L_1897:
         g_last_pc = 0x1897;
         G_PRE(0x1897, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x189B);  // do_call_jump
+              vm.pc = 0x18A6;
+          } else vm.pc = 0x189B;
+        }
         G_POST(0x1897, 0x3C);
         continue;
     L_189B:
@@ -12619,19 +12777,46 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_19D3:
         g_last_pc = 0x19D3;
         G_PRE(0x19D3, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x19D7);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x19D7;
+        }
         G_POST(0x19D3, 0x32);
         continue;
     L_19D7:
         g_last_pc = 0x19D7;
         G_PRE(0x19D7, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7D)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7D)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7D);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x19DB);  // do_call_jump
+              vm.pc = 0x19FF;
+          } else vm.pc = 0x19DB;
+        }
         G_POST(0x19D7, 0x32);
         continue;
     L_19DB:
         g_last_pc = 0x19DB;
         G_PRE(0x19DB, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x19DF);  // do_call_jump
+              vm.pc = 0x1A0A;
+          } else vm.pc = 0x19DF;
+        }
         G_POST(0x19DB, 0x1A);
         continue;
     L_19DF:
@@ -12673,7 +12858,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_19EA:
         g_last_pc = 0x19EA;
         G_PRE(0x19EA, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x19F7 : 0x19ED;
+        }
         G_POST(0x19EA, 0x4F);
         continue;
     L_19ED:
@@ -12705,7 +12894,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_19F7:
         g_last_pc = 0x19F7;
         G_PRE(0x19F7, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x19FB : 0x1C29;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x19FB : 0x1C29;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1C29;
+          } else {
+              vm.pc = 0x19F9;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x19F7, 0x23);
         continue;
     L_19FB:
@@ -13636,19 +13840,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1B27:
         g_last_pc = 0x1B27;
         G_PRE(0x1B27, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1B2B);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x1B2B;
+        }
         G_POST(0x1B27, 0x32);
         continue;
     L_1B2B:
         g_last_pc = 0x1B2B;
         G_PRE(0x1B2B, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1B2F);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x1B2F;
+        }
         G_POST(0x1B2B, 0x37);
         continue;
     L_1B2F:
         g_last_pc = 0x1B2F;
         G_PRE(0x1B2F, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1B33);  // do_call_jump
+              vm.pc = 0x1B53;
+          } else vm.pc = 0x1B33;
+        }
         G_POST(0x1B2F, 0x37);
         continue;
     L_1B33:
@@ -13690,7 +13918,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1B3E:
         g_last_pc = 0x1B3E;
         G_PRE(0x1B3E, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x1B4B : 0x1B41;
+        }
         G_POST(0x1B3E, 0x4F);
         continue;
     L_1B41:
@@ -13722,7 +13954,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1B4B:
         g_last_pc = 0x1B4B;
         G_PRE(0x1B4B, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1B4F : 0x1C29;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1B4F : 0x1C29;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1C29;
+          } else {
+              vm.pc = 0x1B4D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x1B4B, 0x23);
         continue;
     L_1B4F:
@@ -13904,7 +14151,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1B8F:
         g_last_pc = 0x1B8F;
         G_PRE(0x1B8F, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1B93);  // do_call_jump
+              vm.pc = 0x1BDD;
+          } else vm.pc = 0x1B93;
+        }
         G_POST(0x1B8F, 0x37);
         continue;
     L_1B93:
@@ -14051,7 +14306,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1BCB:
         g_last_pc = 0x1BCB;
         G_PRE(0x1BCB, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1BCF : 0x1C26;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1BCF : 0x1C26;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1C26;
+          } else {
+              vm.pc = 0x1BCD;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x1BCB, 0x23);
         continue;
     L_1BCF:
@@ -14344,13 +14614,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1C30:
         g_last_pc = 0x1C30;
         G_PRE(0x1C30, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1C34);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x1C34;
+        }
         G_POST(0x1C30, 0x32);
         continue;
     L_1C34:
         g_last_pc = 0x1C34;
         G_PRE(0x1C34, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1C38);  // do_call_jump
+              vm.pc = 0x1C43;
+          } else vm.pc = 0x1C38;
+        }
         G_POST(0x1C34, 0x3C);
         continue;
     L_1C38:
@@ -15120,7 +15406,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1D1E:
         g_last_pc = 0x1D1E;
         G_PRE(0x1D1E, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x1D2B : 0x1D21;
+        }
         G_POST(0x1D1E, 0x4F);
         continue;
     L_1D21:
@@ -15152,7 +15442,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1D2B:
         g_last_pc = 0x1D2B;
         G_PRE(0x1D2B, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1D2F : 0x1D53;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1D2F : 0x1D53;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1D53;
+          } else {
+              vm.pc = 0x1D2D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x1D2B, 0x23);
         continue;
     L_1D2F:
@@ -15236,7 +15541,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1D42:
         g_last_pc = 0x1D42;
         G_PRE(0x1D42, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x1D4F : 0x1D45;
+        }
         G_POST(0x1D42, 0x4F);
         continue;
     L_1D45:
@@ -15316,7 +15625,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1D5A:
         g_last_pc = 0x1D5A;
         G_PRE(0x1D5A, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1D5E);  // do_call_jump
+              vm.pc = 0x1D69;
+          } else vm.pc = 0x1D5E;
+        }
         G_POST(0x1D5A, 0x3C);
         continue;
     L_1D5E:
@@ -15481,13 +15798,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1DFB:
         g_last_pc = 0x1DFB;
         G_PRE(0x1DFB, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1DFF : 0x1E49;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1DFF : 0x1E49;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1E49;
+          } else {
+              vm.pc = 0x1DFD;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x1DFB, 0x21);
         continue;
     L_1DFF:
         g_last_pc = 0x1DFF;
         G_PRE(0x1DFF, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x1E49 : 0x1E03;
+        }
         G_POST(0x1DFF, 0xC2);
         continue;
     L_1E03:
@@ -15509,13 +15856,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1E05:
         g_last_pc = 0x1E05;
         G_PRE(0x1E05, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0xD)
+        // inlined v2_vm_op_32: call when coll_15788(f=0xD)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x0D);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1E09);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x1E09;
+        }
         G_POST(0x1E05, 0x32);
         continue;
     L_1E09:
         g_last_pc = 0x1E09;
         G_PRE(0x1E09, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1E0D);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x1E0D;
+        }
         G_POST(0x1E09, 0x37);
         continue;
     L_1E0D:
@@ -15557,13 +15920,33 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1E18:
         g_last_pc = 0x1E18;
         G_PRE(0x1E18, 0x30);
-        v2_vm_op_30(vm);  // when probe_front(f=0x24)
+        // inlined v2_vm_op_30: when probe_front(f=0x24)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_front_158e6(vm, 0x24, _di);
+          vm.pc = vm.carry ? 0x1E21 : 0x1E1C;
+        }
         G_POST(0x1E18, 0x30);
         continue;
     L_1E1C:
         g_last_pc = 0x1E1C;
         G_PRE(0x1E1C, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x24)
+        // inlined v2_vm_op_23: when probe_down2(0x24)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x24, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1E20 : 0x1ED3;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1E20 : 0x1ED3;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1ED3;
+          } else {
+              vm.pc = 0x1E1E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x1E1C, 0x23);
         continue;
     L_1E20:
@@ -15699,13 +16082,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1E53:
         g_last_pc = 0x1E53;
         G_PRE(0x1E53, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1E57 : 0x1E5E;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1E57 : 0x1E5E;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1E5E;
+          } else {
+              vm.pc = 0x1E55;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x1E53, 0x21);
         continue;
     L_1E57:
         g_last_pc = 0x1E57;
         G_PRE(0x1E57, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x1E5E : 0x1E5B;
+        }
         G_POST(0x1E57, 0xC2);
         continue;
     L_1E5B:
@@ -15762,7 +16175,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1E68:
         g_last_pc = 0x1E68;
         G_PRE(0x1E68, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x24)
+        // inlined v2_vm_op_23: when probe_down2(0x24)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x24, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1E6C : 0x1ED3;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1E6C : 0x1ED3;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1ED3;
+          } else {
+              vm.pc = 0x1E6A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x1E68, 0x23);
         continue;
     L_1E6C:
@@ -16083,13 +16511,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1EDA:
         g_last_pc = 0x1EDA;
         G_PRE(0x1EDA, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0xD)
+        // inlined v2_vm_op_32: call when coll_15788(f=0xD)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x0D);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1EDE);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x1EDE;
+        }
         G_POST(0x1EDA, 0x32);
         continue;
     L_1EDE:
         g_last_pc = 0x1EDE;
         G_PRE(0x1EDE, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1EE2);  // do_call_jump
+              vm.pc = 0x1EED;
+          } else vm.pc = 0x1EE2;
+        }
         G_POST(0x1EDE, 0x3C);
         continue;
     L_1EE2:
@@ -16190,13 +16634,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1F03:
         g_last_pc = 0x1F03;
         G_PRE(0x1F03, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1F07 : 0x1F2C;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1F07 : 0x1F2C;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1F2C;
+          } else {
+              vm.pc = 0x1F05;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x1F03, 0x21);
         continue;
     L_1F07:
         g_last_pc = 0x1F07;
         G_PRE(0x1F07, 0x20);
-        v2_vm_op_20(vm);  // when probe_l/r(0x7D)
+        // inlined v2_vm_op_20: when probe_l/r(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          else        v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x1F0B : 0x1F47;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x1F0B : 0x1F47;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x1F47;
+          } else {
+              vm.pc = 0x1F09;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x1F07, 0x20);
         continue;
     L_1F0B:
@@ -16218,13 +16696,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1F0D:
         g_last_pc = 0x1F0D;
         G_PRE(0x1F0D, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0xD)
+        // inlined v2_vm_op_32: call when coll_15788(f=0xD)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x0D);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1F11);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x1F11;
+        }
         G_POST(0x1F0D, 0x32);
         continue;
     L_1F11:
         g_last_pc = 0x1F11;
         G_PRE(0x1F11, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x1F15);  // do_call_jump
+              vm.pc = 0x1410;
+          } else vm.pc = 0x1F15;
+        }
         G_POST(0x1F11, 0x3C);
         continue;
     L_1F15:
@@ -17396,19 +17890,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_20D6:
         g_last_pc = 0x20D6;
         G_PRE(0x20D6, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x20DA);  // do_call_jump
+              vm.pc = 0x20F8;
+          } else vm.pc = 0x20DA;
+        }
         G_POST(0x20D6, 0x32);
         continue;
     L_20DA:
         g_last_pc = 0x20DA;
         G_PRE(0x20DA, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x20DF);  // do_call_jump
+              vm.pc = 0x20E8;
+          } else vm.pc = 0x20DF;
+        }
         G_POST(0x20DA, 0x38);
         continue;
     L_20DF:
         g_last_pc = 0x20DF;
         G_PRE(0x20DF, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x20E4);  // do_call_jump
+              vm.pc = 0x210C;
+          } else vm.pc = 0x20E4;
+        }
         G_POST(0x20DF, 0x38);
         continue;
     L_20E4:
@@ -17747,7 +18265,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_217A:
         g_last_pc = 0x217A;
         G_PRE(0x217A, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x217E);  // do_call_jump
+              vm.pc = 0x22EA;
+          } else vm.pc = 0x217E;
+        }
         G_POST(0x217A, 0x37);
         continue;
     L_217E:
@@ -17928,19 +18454,53 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_21BA:
         g_last_pc = 0x21BA;
         G_PRE(0x21BA, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x21BE : 0x22BD;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x21BE : 0x22BD;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x22BD;
+          } else {
+              vm.pc = 0x21BC;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x21BA, 0x21);
         continue;
     L_21BE:
         g_last_pc = 0x21BE;
         G_PRE(0x21BE, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x22BD : 0x21C2;
+        }
         G_POST(0x21BE, 0xC2);
         continue;
     L_21C2:
         g_last_pc = 0x21C2;
         G_PRE(0x21C2, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x21FE : 0x21C5;
+        }
         G_POST(0x21C2, 0x4F);
         continue;
     L_21C5:
@@ -17971,13 +18531,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_21C8:
         g_last_pc = 0x21C8;
         G_PRE(0x21C8, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x21CC);  // do_call_jump
+              vm.pc = 0x15E9;
+          } else vm.pc = 0x21CC;
+        }
         G_POST(0x21C8, 0x32);
         continue;
     L_21CC:
         g_last_pc = 0x21CC;
         G_PRE(0x21CC, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x21D0);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x21D0;
+        }
         G_POST(0x21CC, 0x37);
         continue;
     L_21D0:
@@ -18096,7 +18672,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_21FE:
         g_last_pc = 0x21FE;
         G_PRE(0x21FE, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2202 : 0x2393;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2202 : 0x2393;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2393;
+          } else {
+              vm.pc = 0x2200;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x21FE, 0x23);
         continue;
     L_2202:
@@ -18344,19 +18935,53 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2254:
         g_last_pc = 0x2254;
         G_PRE(0x2254, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2258 : 0x22BD;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2258 : 0x22BD;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x22BD;
+          } else {
+              vm.pc = 0x2256;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2254, 0x21);
         continue;
     L_2258:
         g_last_pc = 0x2258;
         G_PRE(0x2258, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x22BD : 0x225C;
+        }
         G_POST(0x2258, 0xC2);
         continue;
     L_225C:
         g_last_pc = 0x225C;
         G_PRE(0x225C, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x2298 : 0x225F;
+        }
         G_POST(0x225C, 0x4F);
         continue;
     L_225F:
@@ -18387,13 +19012,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2262:
         g_last_pc = 0x2262;
         G_PRE(0x2262, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2266);  // do_call_jump
+              vm.pc = 0x15E9;
+          } else vm.pc = 0x2266;
+        }
         G_POST(0x2262, 0x32);
         continue;
     L_2266:
         g_last_pc = 0x2266;
         G_PRE(0x2266, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x226A);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x226A;
+        }
         G_POST(0x2266, 0x37);
         continue;
     L_226A:
@@ -18512,7 +19153,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2298:
         g_last_pc = 0x2298;
         G_PRE(0x2298, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x229C : 0x2393;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x229C : 0x2393;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2393;
+          } else {
+              vm.pc = 0x229A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x2298, 0x23);
         continue;
     L_229C:
@@ -18639,13 +19295,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_22C2:
         g_last_pc = 0x22C2;
         G_PRE(0x22C2, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x22C6 : 0x22CD;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x22C6 : 0x22CD;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x22CD;
+          } else {
+              vm.pc = 0x22C4;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x22C2, 0x21);
         continue;
     L_22C6:
         g_last_pc = 0x22C6;
         G_PRE(0x22C6, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x22CD : 0x22CA;
+        }
         G_POST(0x22C6, 0xC2);
         continue;
     L_22CA:
@@ -18702,7 +19388,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_22D7:
         g_last_pc = 0x22D7;
         G_PRE(0x22D7, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x22DB : 0x2393;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x22DB : 0x2393;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2393;
+          } else {
+              vm.pc = 0x22D9;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x22D7, 0x23);
         continue;
     L_22DB:
@@ -18879,7 +19580,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2313:
         g_last_pc = 0x2313;
         G_PRE(0x2313, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2317 : 0x2390;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2317 : 0x2390;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2390;
+          } else {
+              vm.pc = 0x2315;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x2313, 0x23);
         continue;
     L_2317:
@@ -19272,13 +19988,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_239A:
         g_last_pc = 0x239A;
         G_PRE(0x239A, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x239E);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x239E;
+        }
         G_POST(0x239A, 0x32);
         continue;
     L_239E:
         g_last_pc = 0x239E;
         G_PRE(0x239E, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x23A2);  // do_call_jump
+              vm.pc = 0x23AD;
+          } else vm.pc = 0x23A2;
+        }
         G_POST(0x239E, 0x3C);
         continue;
     L_23A2:
@@ -20056,7 +20788,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_24F0:
         g_last_pc = 0x24F0;
         G_PRE(0x24F0, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x24F4);  // do_call_jump
+              vm.pc = 0x252D;
+          } else vm.pc = 0x24F4;
+        }
         G_POST(0x24F0, 0x37);
         continue;
     L_24F4:
@@ -20118,19 +20858,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2500:
         g_last_pc = 0x2500;
         G_PRE(0x2500, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2504);  // do_call_jump
+              vm.pc = 0x15E9;
+          } else vm.pc = 0x2504;
+        }
         G_POST(0x2500, 0x32);
         continue;
     L_2504:
         g_last_pc = 0x2504;
         G_PRE(0x2504, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2508);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x2508;
+        }
         G_POST(0x2504, 0x37);
         continue;
     L_2508:
         g_last_pc = 0x2508;
         G_PRE(0x2508, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x250C);  // do_call_jump
+              vm.pc = 0x252D;
+          } else vm.pc = 0x250C;
+        }
         G_POST(0x2508, 0x37);
         continue;
     L_250C:
@@ -20172,7 +20936,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2517:
         g_last_pc = 0x2517;
         G_PRE(0x2517, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x2520 : 0x251A;
+        }
         G_POST(0x2517, 0x4F);
         continue;
     L_251A:
@@ -20191,7 +20959,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2520:
         g_last_pc = 0x2520;
         G_PRE(0x2520, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2524 : 0x25FF;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2524 : 0x25FF;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x25FF;
+          } else {
+              vm.pc = 0x2522;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x2520, 0x23);
         continue;
     L_2524:
@@ -20389,7 +21172,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2569:
         g_last_pc = 0x2569;
         G_PRE(0x2569, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x256D);  // do_call_jump
+              vm.pc = 0x25C2;
+          } else vm.pc = 0x256D;
+        }
         G_POST(0x2569, 0x37);
         continue;
     L_256D:
@@ -20572,7 +21363,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_25B1:
         g_last_pc = 0x25B1;
         G_PRE(0x25B1, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x25B5 : 0x25FF;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x25B5 : 0x25FF;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x25FF;
+          } else {
+              vm.pc = 0x25B3;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x25B1, 0x23);
         continue;
     L_25B5:
@@ -20818,13 +21624,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2609:
         g_last_pc = 0x2609;
         G_PRE(0x2609, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x260D);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x260D;
+        }
         G_POST(0x2609, 0x32);
         continue;
     L_260D:
         g_last_pc = 0x260D;
         G_PRE(0x260D, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2611);  // do_call_jump
+              vm.pc = 0x261C;
+          } else vm.pc = 0x2611;
+        }
         G_POST(0x260D, 0x3C);
         continue;
     L_2611:
@@ -21545,7 +22367,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2745:
         g_last_pc = 0x2745;
         G_PRE(0x2745, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2749);  // do_call_jump
+              vm.pc = 0x27BB;
+          } else vm.pc = 0x2749;
+        }
         G_POST(0x2745, 0x37);
         continue;
     L_2749:
@@ -21719,19 +22549,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_277E:
         g_last_pc = 0x277E;
         G_PRE(0x277E, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2782);  // do_call_jump
+              vm.pc = 0x15E9;
+          } else vm.pc = 0x2782;
+        }
         G_POST(0x277E, 0x32);
         continue;
     L_2782:
         g_last_pc = 0x2782;
         G_PRE(0x2782, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2786);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x2786;
+        }
         G_POST(0x2782, 0x37);
         continue;
     L_2786:
         g_last_pc = 0x2786;
         G_PRE(0x2786, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x278A);  // do_call_jump
+              vm.pc = 0x27BB;
+          } else vm.pc = 0x278A;
+        }
         G_POST(0x2786, 0x37);
         continue;
     L_278A:
@@ -21743,7 +22597,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_278B:
         g_last_pc = 0x278B;
         G_PRE(0x278B, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x278F : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x278F : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x278D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x278B, 0x1F);
         continue;
     L_278F:
@@ -21779,7 +22648,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2799:
         g_last_pc = 0x2799;
         G_PRE(0x2799, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x27A2 : 0x279C;
+        }
         G_POST(0x2799, 0x4F);
         continue;
     L_279C:
@@ -21798,7 +22671,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_27A2:
         g_last_pc = 0x27A2;
         G_PRE(0x27A2, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x27A6 : 0x28F5;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x27A6 : 0x28F5;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x28F5;
+          } else {
+              vm.pc = 0x27A4;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x27A2, 0x23);
         continue;
     L_27A6:
@@ -22079,13 +22967,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2808:
         g_last_pc = 0x2808;
         G_PRE(0x2808, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x280C);  // do_call_jump
+              vm.pc = 0x141B;
+          } else vm.pc = 0x280C;
+        }
         G_POST(0x2808, 0x33);
         continue;
     L_280C:
         g_last_pc = 0x280C;
         G_PRE(0x280C, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2810);  // do_call_jump
+              vm.pc = 0x2863;
+          } else vm.pc = 0x2810;
+        }
         G_POST(0x280C, 0x37);
         continue;
     L_2810:
@@ -22119,13 +23023,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2816:
         g_last_pc = 0x2816;
         G_PRE(0x2816, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x281A);  // do_call_jump
+              vm.pc = 0x286F;
+          } else vm.pc = 0x281A;
+        }
         G_POST(0x2816, 0x3C);
         continue;
     L_281A:
         g_last_pc = 0x281A;
         G_PRE(0x281A, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x281E);  // do_call_jump
+              vm.pc = 0x2863;
+          } else vm.pc = 0x281E;
+        }
         G_POST(0x281A, 0x37);
         continue;
     L_281E:
@@ -22578,7 +23498,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_28BE:
         g_last_pc = 0x28BE;
         G_PRE(0x28BE, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x28C2 : 0x28F5;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x28C2 : 0x28F5;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x28F5;
+          } else {
+              vm.pc = 0x28C0;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x28BE, 0x23);
         continue;
     L_28C2:
@@ -22615,7 +23550,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_28CD:
         g_last_pc = 0x28CD;
         G_PRE(0x28CD, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x28D1 : 0x28F5;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x28D1 : 0x28F5;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x28F5;
+          } else {
+              vm.pc = 0x28CF;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x28CD, 0x23);
         continue;
     L_28D1:
@@ -22770,25 +23720,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2903:
         g_last_pc = 0x2903;
         G_PRE(0x2903, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2907);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x2907;
+        }
         G_POST(0x2903, 0x32);
         continue;
     L_2907:
         g_last_pc = 0x2907;
         G_PRE(0x2907, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x290B);  // do_call_jump
+              vm.pc = 0x141B;
+          } else vm.pc = 0x290B;
+        }
         G_POST(0x2907, 0x33);
         continue;
     L_290B:
         g_last_pc = 0x290B;
         G_PRE(0x290B, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2910);  // do_call_jump
+              vm.pc = 0x2954;
+          } else vm.pc = 0x2910;
+        }
         G_POST(0x290B, 0x38);
         continue;
     L_2910:
         g_last_pc = 0x2910;
         G_PRE(0x2910, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2914);  // do_call_jump
+              vm.pc = 0x27BB;
+          } else vm.pc = 0x2914;
+        }
         G_POST(0x2910, 0x37);
         continue;
     L_2914:
@@ -22861,31 +23843,71 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2927:
         g_last_pc = 0x2927;
         G_PRE(0x2927, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x292B);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x292B;
+        }
         G_POST(0x2927, 0x32);
         continue;
     L_292B:
         g_last_pc = 0x292B;
         G_PRE(0x292B, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7D)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7D)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7D);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x292F);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x292F;
+        }
         G_POST(0x292B, 0x32);
         continue;
     L_292F:
         g_last_pc = 0x292F;
         G_PRE(0x292F, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2933);  // do_call_jump
+              vm.pc = 0x294E;
+          } else vm.pc = 0x2933;
+        }
         G_POST(0x292F, 0x3C);
         continue;
     L_2933:
         g_last_pc = 0x2933;
         G_PRE(0x2933, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2938);  // do_call_jump
+              vm.pc = 0x2954;
+          } else vm.pc = 0x2938;
+        }
         G_POST(0x2933, 0x38);
         continue;
     L_2938:
         g_last_pc = 0x2938;
         G_PRE(0x2938, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=1)
+        // inlined v2_vm_op_37: call when coll_155d6(f=1)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x293C);  // do_call_jump
+              vm.pc = 0x27BB;
+          } else vm.pc = 0x293C;
+        }
         G_POST(0x2938, 0x37);
         continue;
     L_293C:
@@ -22897,7 +23919,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_293D:
         g_last_pc = 0x293D;
         G_PRE(0x293D, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2941 : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2941 : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x293F;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x293D, 0x1F);
         continue;
     L_2941:
@@ -23799,13 +24836,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2ABD:
         g_last_pc = 0x2ABD;
         G_PRE(0x2ABD, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2AC1 : 0x2B20;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2AC1 : 0x2B20;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2B20;
+          } else {
+              vm.pc = 0x2ABF;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2ABD, 0x21);
         continue;
     L_2AC1:
         g_last_pc = 0x2AC1;
         G_PRE(0x2AC1, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x2B20 : 0x2AC5;
+        }
         G_POST(0x2AC1, 0xC2);
         continue;
     L_2AC5:
@@ -23836,19 +24903,46 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2AC8:
         g_last_pc = 0x2AC8;
         G_PRE(0x2AC8, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2ACC);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x2ACC;
+        }
         G_POST(0x2AC8, 0x32);
         continue;
     L_2ACC:
         g_last_pc = 0x2ACC;
         G_PRE(0x2ACC, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2AD0);  // do_call_jump
+              vm.pc = 0x2B91;
+          } else vm.pc = 0x2AD0;
+        }
         G_POST(0x2ACC, 0x1A);
         continue;
     L_2AD0:
         g_last_pc = 0x2AD0;
         G_PRE(0x2AD0, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2AD4);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x2AD4;
+        }
         G_POST(0x2AD0, 0x37);
         continue;
     L_2AD4:
@@ -23890,13 +24984,42 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2ADF:
         g_last_pc = 0x2ADF;
         G_PRE(0x2ADF, 0x4E);
-        v2_vm_op_4E(vm);  // when !platform0
+        // inlined v2_vm_op_4E: when !platform0
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2AE2 : 0x2AE7;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2AE2 : 0x2AE7;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2AE7;
+          } else {
+              vm.pc = 0x2AE0;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2ADF, 0x4E);
         continue;
     L_2AE2:
         g_last_pc = 0x2AE2;
         G_PRE(0x2AE2, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2AE6 : 0x2C08;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2AE6 : 0x2C08;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2C08;
+          } else {
+              vm.pc = 0x2AE4;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x2AE2, 0x23);
         continue;
     L_2AE6:
@@ -24066,13 +25189,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2B28:
         g_last_pc = 0x2B28;
         G_PRE(0x2B28, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2B2C : 0x2B33;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2B2C : 0x2B33;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2B33;
+          } else {
+              vm.pc = 0x2B2A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2B28, 0x21);
         continue;
     L_2B2C:
         g_last_pc = 0x2B2C;
         G_PRE(0x2B2C, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x2B33 : 0x2B30;
+        }
         G_POST(0x2B2C, 0xC2);
         continue;
     L_2B30:
@@ -24109,7 +25262,18 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2B36:
         g_last_pc = 0x2B36;
         G_PRE(0x2B36, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2B3A);  // do_call_jump
+              vm.pc = 0x2B91;
+          } else vm.pc = 0x2B3A;
+        }
         G_POST(0x2B36, 0x1A);
         continue;
     L_2B3A:
@@ -24144,7 +25308,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2B42:
         g_last_pc = 0x2B42;
         G_PRE(0x2B42, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2B46 : 0x2C08;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2B46 : 0x2C08;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2C08;
+          } else {
+              vm.pc = 0x2B44;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x2B42, 0x23);
         continue;
     L_2B46:
@@ -24234,7 +25413,18 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2B5E:
         g_last_pc = 0x2B5E;
         G_PRE(0x2B5E, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2B62);  // do_call_jump
+              vm.pc = 0x2B91;
+          } else vm.pc = 0x2B62;
+        }
         G_POST(0x2B5E, 0x1A);
         continue;
     L_2B62:
@@ -24729,13 +25919,32 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2C17:
         g_last_pc = 0x2C17;
         G_PRE(0x2C17, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2C1B);  // do_call_jump
+              vm.pc = 0x2C2A;
+          } else vm.pc = 0x2C1B;
+        }
         G_POST(0x2C17, 0x3C);
         continue;
     L_2C1B:
         g_last_pc = 0x2C1B;
         G_PRE(0x2C1B, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2C1F);  // do_call_jump
+              vm.pc = 0x2B91;
+          } else vm.pc = 0x2C1F;
+        }
         G_POST(0x2C1B, 0x1A);
         continue;
     L_2C1F:
@@ -25691,13 +26900,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2DD0:
         g_last_pc = 0x2DD0;
         G_PRE(0x2DD0, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2DD4 : 0x2E39;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2DD4 : 0x2E39;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2E39;
+          } else {
+              vm.pc = 0x2DD2;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2DD0, 0x21);
         continue;
     L_2DD4:
         g_last_pc = 0x2DD4;
         G_PRE(0x2DD4, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x2E39 : 0x2DD8;
+        }
         G_POST(0x2DD4, 0xC2);
         continue;
     L_2DD8:
@@ -25728,13 +26967,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2DDB:
         g_last_pc = 0x2DDB;
         G_PRE(0x2DDB, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2DDF);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x2DDF;
+        }
         G_POST(0x2DDB, 0x32);
         continue;
     L_2DDF:
         g_last_pc = 0x2DDF;
         G_PRE(0x2DDF, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2DE3);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x2DE3;
+        }
         G_POST(0x2DDF, 0x37);
         continue;
     L_2DE3:
@@ -25776,13 +27031,42 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2DEE:
         g_last_pc = 0x2DEE;
         G_PRE(0x2DEE, 0x4E);
-        v2_vm_op_4E(vm);  // when !platform0
+        // inlined v2_vm_op_4E: when !platform0
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2DF1 : 0x2DF6;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2DF1 : 0x2DF6;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2DF6;
+          } else {
+              vm.pc = 0x2DEF;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2DEE, 0x4E);
         continue;
     L_2DF1:
         g_last_pc = 0x2DF1;
         G_PRE(0x2DF1, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2DF5 : 0x2F43;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2DF5 : 0x2F43;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2F43;
+          } else {
+              vm.pc = 0x2DF3;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x2DF1, 0x23);
         continue;
     L_2DF5:
@@ -25998,13 +27282,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2E46:
         g_last_pc = 0x2E46;
         G_PRE(0x2E46, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2E4A : 0x2E51;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2E4A : 0x2E51;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2E51;
+          } else {
+              vm.pc = 0x2E48;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2E46, 0x21);
         continue;
     L_2E4A:
         g_last_pc = 0x2E4A;
         G_PRE(0x2E4A, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x2E51 : 0x2E4E;
+        }
         G_POST(0x2E4A, 0xC2);
         continue;
     L_2E4E:
@@ -26061,7 +27375,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2E5B:
         g_last_pc = 0x2E5B;
         G_PRE(0x2E5B, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2E5F : 0x2F43;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2E5F : 0x2F43;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2F43;
+          } else {
+              vm.pc = 0x2E5D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x2E5B, 0x23);
         continue;
     L_2E5F:
@@ -26310,7 +27639,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2EA9:
         g_last_pc = 0x2EA9;
         G_PRE(0x2EA9, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2EAD);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x2EAD;
+        }
         G_POST(0x2EA9, 0x32);
         continue;
     L_2EAD:
@@ -26329,7 +27666,21 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2EB1:
         g_last_pc = 0x2EB1;
         G_PRE(0x2EB1, 0x4E);
-        v2_vm_op_4E(vm);  // when !platform0
+        // inlined v2_vm_op_4E: when !platform0
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x2EB4 : 0x2EB5;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x2EB4 : 0x2EB5;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x2EB5;
+          } else {
+              vm.pc = 0x2EB2;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x2EB1, 0x4E);
         continue;
     L_2EB4:
@@ -26807,13 +28158,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2F4A:
         g_last_pc = 0x2F4A;
         G_PRE(0x2F4A, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2F4E);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x2F4E;
+        }
         G_POST(0x2F4A, 0x32);
         continue;
     L_2F4E:
         g_last_pc = 0x2F4E;
         G_PRE(0x2F4E, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x2F52);  // do_call_jump
+              vm.pc = 0x2F5D;
+          } else vm.pc = 0x2F52;
+        }
         G_POST(0x2F4E, 0x3C);
         continue;
     L_2F52:
@@ -27816,13 +29183,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3118:
         g_last_pc = 0x3118;
         G_PRE(0x3118, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x311C : 0x316A;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x311C : 0x316A;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x316A;
+          } else {
+              vm.pc = 0x311A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x3118, 0x21);
         continue;
     L_311C:
         g_last_pc = 0x311C;
         G_PRE(0x311C, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x316A : 0x3120;
+        }
         G_POST(0x311C, 0xC2);
         continue;
     L_3120:
@@ -27853,13 +29250,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3123:
         g_last_pc = 0x3123;
         G_PRE(0x3123, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3127);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x3127;
+        }
         G_POST(0x3123, 0x32);
         continue;
     L_3127:
         g_last_pc = 0x3127;
         G_PRE(0x3127, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x312B);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x312B;
+        }
         G_POST(0x3127, 0x37);
         continue;
     L_312B:
@@ -27871,7 +29284,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_312C:
         g_last_pc = 0x312C;
         G_PRE(0x312C, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3130 : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3130 : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x312E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x312C, 0x1F);
         continue;
     L_3130:
@@ -27907,13 +29335,42 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_313A:
         g_last_pc = 0x313A;
         G_PRE(0x313A, 0x4E);
-        v2_vm_op_4E(vm);  // when !platform0
+        // inlined v2_vm_op_4E: when !platform0
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x313D : 0x3142;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x313D : 0x3142;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3142;
+          } else {
+              vm.pc = 0x313B;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x313A, 0x4E);
         continue;
     L_313D:
         g_last_pc = 0x313D;
         G_PRE(0x313D, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3141 : 0x31F8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3141 : 0x31F8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x31F8;
+          } else {
+              vm.pc = 0x313F;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x313D, 0x23);
         continue;
     L_3141:
@@ -28049,13 +29506,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3174:
         g_last_pc = 0x3174;
         G_PRE(0x3174, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3178 : 0x317F;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3178 : 0x317F;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x317F;
+          } else {
+              vm.pc = 0x3176;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x3174, 0x21);
         continue;
     L_3178:
         g_last_pc = 0x3178;
         G_PRE(0x3178, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x317F : 0x317C;
+        }
         G_POST(0x3178, 0xC2);
         continue;
     L_317C:
@@ -28098,7 +29585,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3183:
         g_last_pc = 0x3183;
         G_PRE(0x3183, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3187 : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3187 : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x3185;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x3183, 0x1F);
         continue;
     L_3187:
@@ -28127,7 +29629,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_318E:
         g_last_pc = 0x318E;
         G_PRE(0x318E, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3192 : 0x31F8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3192 : 0x31F8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x31F8;
+          } else {
+              vm.pc = 0x3190;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x318E, 0x23);
         continue;
     L_3192:
@@ -28253,7 +29770,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_31B5:
         g_last_pc = 0x31B5;
         G_PRE(0x31B5, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x31B9 : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x31B9 : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x31B7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x31B5, 0x1F);
         continue;
     L_31B9:
@@ -28453,13 +29985,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3202:
         g_last_pc = 0x3202;
         G_PRE(0x3202, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3206);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x3206;
+        }
         G_POST(0x3202, 0x32);
         continue;
     L_3206:
         g_last_pc = 0x3206;
         G_PRE(0x3206, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x320A);  // do_call_jump
+              vm.pc = 0x3219;
+          } else vm.pc = 0x320A;
+        }
         G_POST(0x3206, 0x3C);
         continue;
     L_320A:
@@ -28471,7 +30019,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_320B:
         g_last_pc = 0x320B;
         G_PRE(0x320B, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x320F : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x320F : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x320D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x320B, 0x1F);
         continue;
     L_320F:
@@ -29290,19 +30853,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3364:
         g_last_pc = 0x3364;
         G_PRE(0x3364, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3368);  // do_call_jump
+              vm.pc = 0x3386;
+          } else vm.pc = 0x3368;
+        }
         G_POST(0x3364, 0x32);
         continue;
     L_3368:
         g_last_pc = 0x3368;
         G_PRE(0x3368, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x336D);  // do_call_jump
+              vm.pc = 0x3376;
+          } else vm.pc = 0x336D;
+        }
         G_POST(0x3368, 0x38);
         continue;
     L_336D:
         g_last_pc = 0x336D;
         G_PRE(0x336D, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3372);  // do_call_jump
+              vm.pc = 0x339F;
+          } else vm.pc = 0x3372;
+        }
         G_POST(0x336D, 0x38);
         continue;
     L_3372:
@@ -29709,7 +31296,18 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3415:
         g_last_pc = 0x3415;
         G_PRE(0x3415, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3419);  // do_call_jump
+              vm.pc = 0x35AD;
+          } else vm.pc = 0x3419;
+        }
         G_POST(0x3415, 0x1A);
         continue;
     L_3419:
@@ -29721,7 +31319,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_341A:
         g_last_pc = 0x341A;
         G_PRE(0x341A, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x341E : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x341E : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x341C;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x341A, 0x1F);
         continue;
     L_341E:
@@ -29998,19 +31611,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3476:
         g_last_pc = 0x3476;
         G_PRE(0x3476, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x347A);  // do_call_jump
+              vm.pc = 0x34D7;
+          } else vm.pc = 0x347A;
+        }
         G_POST(0x3476, 0x32);
         continue;
     L_347A:
         g_last_pc = 0x347A;
         G_PRE(0x347A, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x347F);  // do_call_jump
+              vm.pc = 0x34BE;
+          } else vm.pc = 0x347F;
+        }
         G_POST(0x347A, 0x38);
         continue;
     L_347F:
         g_last_pc = 0x347F;
         G_PRE(0x347F, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3484);  // do_call_jump
+              vm.pc = 0x3495;
+          } else vm.pc = 0x3484;
+        }
         G_POST(0x347F, 0x38);
         continue;
     L_3484:
@@ -30052,7 +31689,21 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_348F:
         g_last_pc = 0x348F;
         G_PRE(0x348F, 0x4E);
-        v2_vm_op_4E(vm);  // when !platform0
+        // inlined v2_vm_op_4E: when !platform0
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3492 : 0x3473;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3492 : 0x3473;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3473;
+          } else {
+              vm.pc = 0x3490;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x348F, 0x4E);
         continue;
     L_3492:
@@ -30306,7 +31957,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_34E2:
         g_last_pc = 0x34E2;
         G_PRE(0x34E2, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x34E6 : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x34E6 : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x34E4;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x34E2, 0x1F);
         continue;
     L_34E6:
@@ -30374,7 +32040,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_34FA:
         g_last_pc = 0x34FA;
         G_PRE(0x34FA, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x34FE : 0x3532;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x34FE : 0x3532;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3532;
+          } else {
+              vm.pc = 0x34FC;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x34FA, 0x23);
         continue;
     L_34FE:
@@ -30441,25 +32122,60 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_350F:
         g_last_pc = 0x350F;
         G_PRE(0x350F, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3513);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x3513;
+        }
         G_POST(0x350F, 0x32);
         continue;
     L_3513:
         g_last_pc = 0x3513;
         G_PRE(0x3513, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x7F)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x7F)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3517);  // do_call_jump
+              vm.pc = 0x141B;
+          } else vm.pc = 0x3517;
+        }
         G_POST(0x3513, 0x33);
         continue;
     L_3517:
         g_last_pc = 0x3517;
         G_PRE(0x3517, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x351C);  // do_call_jump
+              vm.pc = 0x358C;
+          } else vm.pc = 0x351C;
+        }
         G_POST(0x3517, 0x38);
         continue;
     L_351C:
         g_last_pc = 0x351C;
         G_PRE(0x351C, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3520);  // do_call_jump
+              vm.pc = 0x35AD;
+          } else vm.pc = 0x3520;
+        }
         G_POST(0x351C, 0x1A);
         continue;
     L_3520:
@@ -30471,7 +32187,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3521:
         g_last_pc = 0x3521;
         G_PRE(0x3521, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3525 : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3525 : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x3523;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x3521, 0x1F);
         continue;
     L_3525:
@@ -30538,25 +32269,60 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3537:
         g_last_pc = 0x3537;
         G_PRE(0x3537, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x353B);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x353B;
+        }
         G_POST(0x3537, 0x32);
         continue;
     L_353B:
         g_last_pc = 0x353B;
         G_PRE(0x353B, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x353F);  // do_call_jump
+              vm.pc = 0x355A;
+          } else vm.pc = 0x353F;
+        }
         G_POST(0x353B, 0x3C);
         continue;
     L_353F:
         g_last_pc = 0x353F;
         G_PRE(0x353F, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3544);  // do_call_jump
+              vm.pc = 0x358C;
+          } else vm.pc = 0x3544;
+        }
         G_POST(0x353F, 0x38);
         continue;
     L_3544:
         g_last_pc = 0x3544;
         G_PRE(0x3544, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3548);  // do_call_jump
+              vm.pc = 0x35AD;
+          } else vm.pc = 0x3548;
+        }
         G_POST(0x3544, 0x1A);
         continue;
     L_3548:
@@ -30568,7 +32334,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3549:
         g_last_pc = 0x3549;
         G_PRE(0x3549, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x354D : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x354D : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x354B;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x3549, 0x1F);
         continue;
     L_354D:
@@ -30649,7 +32430,18 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3565:
         g_last_pc = 0x3565;
         G_PRE(0x3565, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3569);  // do_call_jump
+              vm.pc = 0x35AD;
+          } else vm.pc = 0x3569;
+        }
         G_POST(0x3565, 0x1A);
         continue;
     L_3569:
@@ -30661,7 +32453,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_356A:
         g_last_pc = 0x356A;
         G_PRE(0x356A, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x6D)
+        // inlined v2_vm_op_1F: when probe_down(0x6D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x6D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x356E : 0x15B8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x356E : 0x15B8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x15B8;
+          } else {
+              vm.pc = 0x356C;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x356A, 0x1F);
         continue;
     L_356E:
@@ -31853,19 +33660,46 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_375E:
         g_last_pc = 0x375E;
         G_PRE(0x375E, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3762);  // do_call_jump
+              vm.pc = 0x15E9;
+          } else vm.pc = 0x3762;
+        }
         G_POST(0x375E, 0x32);
         continue;
     L_3762:
         g_last_pc = 0x3762;
         G_PRE(0x3762, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3766);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x3766;
+        }
         G_POST(0x3762, 0x37);
         continue;
     L_3766:
         g_last_pc = 0x3766;
         G_PRE(0x3766, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x376A);  // do_call_jump
+              vm.pc = 0x379E;
+          } else vm.pc = 0x376A;
+        }
         G_POST(0x3766, 0x1A);
         continue;
     L_376A:
@@ -31907,7 +33741,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3775:
         g_last_pc = 0x3775;
         G_PRE(0x3775, 0x4F);
-        v2_vm_op_4F(vm);  // when !platform
+        // inlined v2_vm_op_4F: when !platform
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          vm.pc = (!vm.carry) ? 0x3791 : 0x3778;
+        }
         G_POST(0x3775, 0x4F);
         continue;
     L_3778:
@@ -31982,7 +33820,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3791:
         g_last_pc = 0x3791;
         G_PRE(0x3791, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3795 : 0x3816;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3795 : 0x3816;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3816;
+          } else {
+              vm.pc = 0x3793;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x3791, 0x23);
         continue;
     L_3795:
@@ -32389,13 +34242,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_381D:
         g_last_pc = 0x381D;
         G_PRE(0x381D, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3821);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x3821;
+        }
         G_POST(0x381D, 0x32);
         continue;
     L_3821:
         g_last_pc = 0x3821;
         G_PRE(0x3821, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3825);  // do_call_jump
+              vm.pc = 0x3830;
+          } else vm.pc = 0x3825;
+        }
         G_POST(0x3821, 0x3C);
         continue;
     L_3825:
@@ -32528,7 +34397,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_384C:
         g_last_pc = 0x384C;
         G_PRE(0x384C, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3850);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x3850;
+        }
         G_POST(0x384C, 0x32);
         continue;
     L_3850:
@@ -33330,13 +35207,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_395B:
         g_last_pc = 0x395B;
         G_PRE(0x395B, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x395F : 0x3987;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x395F : 0x3987;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3987;
+          } else {
+              vm.pc = 0x395D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x395B, 0x21);
         continue;
     L_395F:
         g_last_pc = 0x395F;
         G_PRE(0x395F, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x3987 : 0x3963;
+        }
         G_POST(0x395F, 0xC2);
         continue;
     L_3963:
@@ -33367,13 +35274,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3966:
         g_last_pc = 0x3966;
         G_PRE(0x3966, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x396A);  // do_call_jump
+              vm.pc = 0x1421;
+          } else vm.pc = 0x396A;
+        }
         G_POST(0x3966, 0x32);
         continue;
     L_396A:
         g_last_pc = 0x396A;
         G_PRE(0x396A, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=2)
+        // inlined v2_vm_op_37: call when coll_155d6(f=2)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x02);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x396E);  // do_call_jump
+              vm.pc = 0x1528;
+          } else vm.pc = 0x396E;
+        }
         G_POST(0x396A, 0x37);
         continue;
     L_396E:
@@ -33415,13 +35338,42 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3979:
         g_last_pc = 0x3979;
         G_PRE(0x3979, 0x4E);
-        v2_vm_op_4E(vm);  // when !platform0
+        // inlined v2_vm_op_4E: when !platform0
+        {
+          vm.carry = v2_vm_platform_check_163ac(vm);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x397C : 0x3981;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x397C : 0x3981;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3981;
+          } else {
+              vm.pc = 0x397A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x3979, 0x4E);
         continue;
     L_397C:
         g_last_pc = 0x397C;
         G_PRE(0x397C, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3980 : 0x3A3B;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3980 : 0x3A3B;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3A3B;
+          } else {
+              vm.pc = 0x397E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x397C, 0x23);
         continue;
     L_3980:
@@ -33481,13 +35433,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3991:
         g_last_pc = 0x3991;
         G_PRE(0x3991, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x7D)
+        // inlined v2_vm_op_21: when probe_r/l(0x7D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x7D, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x7D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x3995 : 0x399C;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x3995 : 0x399C;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x399C;
+          } else {
+              vm.pc = 0x3993;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x3991, 0x21);
         continue;
     L_3995:
         g_last_pc = 0x3995;
         G_PRE(0x3995, 0xC2);
-        v2_vm_op_C2(vm);  // when scan_side_vik(0x79)
+        // inlined v2_vm_op_C2: when scan_side_vik(0x79)
+        {
+          vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip)
+              vm.carry = v2_vm_obj_scan_x_15dfd(vm, 0x79, _di, (uint16_t)(ObjRef{vm, _di}.u16(OBJ_BBOX_X1) + 1));
+          else
+              vm.carry = v2_vm_obj_search_left_15de5(vm, 0x79, _di);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.pc = vm.carry ? 0x399C : 0x3999;
+        }
         G_POST(0x3995, 0xC2);
         continue;
     L_3999:
@@ -33553,7 +35535,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_39A7:
         g_last_pc = 0x39A7;
         G_PRE(0x39A7, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x39AB : 0x3A3B;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x39AB : 0x3A3B;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x3A3B;
+          } else {
+              vm.pc = 0x39A9;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x39A7, 0x23);
         continue;
     L_39AB:
@@ -33969,13 +35966,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3A42:
         g_last_pc = 0x3A42;
         G_PRE(0x3A42, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=0x7F)
+        // inlined v2_vm_op_32: call when coll_15788(f=0x7F)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x7F);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3A46);  // do_call_jump
+              vm.pc = 0x140A;
+          } else vm.pc = 0x3A46;
+        }
         G_POST(0x3A42, 0x32);
         continue;
     L_3A46:
         g_last_pc = 0x3A46;
         G_PRE(0x3A46, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3A4A);  // do_call_jump
+              vm.pc = 0x3A55;
+          } else vm.pc = 0x3A4A;
+        }
         G_POST(0x3A46, 0x3C);
         continue;
     L_3A4A:
@@ -34768,19 +36781,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3B88:
         g_last_pc = 0x3B88;
         G_PRE(0x3B88, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3B8C);  // do_call_jump
+              vm.pc = 0x3BAA;
+          } else vm.pc = 0x3B8C;
+        }
         G_POST(0x3B88, 0x32);
         continue;
     L_3B8C:
         g_last_pc = 0x3B8C;
         G_PRE(0x3B8C, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3B91);  // do_call_jump
+              vm.pc = 0x3B9A;
+          } else vm.pc = 0x3B91;
+        }
         G_POST(0x3B8C, 0x38);
         continue;
     L_3B91:
         g_last_pc = 0x3B91;
         G_PRE(0x3B91, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x3B96);  // do_call_jump
+              vm.pc = 0x3BBE;
+          } else vm.pc = 0x3B96;
+        }
         G_POST(0x3B91, 0x38);
         continue;
     L_3B96:
@@ -35610,13 +37647,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_42A4:
         g_last_pc = 0x42A4;
         G_PRE(0x42A4, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x42A8);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x42A8;
+        }
         G_POST(0x42A4, 0x32);
         continue;
     L_42A8:
         g_last_pc = 0x42A8;
         G_PRE(0x42A8, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x42AC);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x42AC;
+        }
         G_POST(0x42A8, 0x33);
         continue;
     L_42AC:
@@ -35651,7 +37704,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_42B4:
         g_last_pc = 0x42B4;
         G_PRE(0x42B4, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x42B8 : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x42B8 : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x42B6;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x42B4, 0x23);
         continue;
     L_42B8:
@@ -35894,7 +37962,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_431E:
         g_last_pc = 0x431E;
         G_PRE(0x431E, 0x22);
-        v2_vm_op_22(vm);  // when probe_up(0x29)
+        // inlined v2_vm_op_22: when probe_up(0x29)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_up_158c8(vm, 0x29, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4322 : 0x4350;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4322 : 0x4350;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4350;
+          } else {
+              vm.pc = 0x4320;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x431E, 0x22);
         continue;
     L_4322:
@@ -35934,7 +38017,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4336:
         g_last_pc = 0x4336;
         G_PRE(0x4336, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x2D)
+        // inlined v2_vm_op_23: when probe_down2(0x2D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x2D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x433A : 0x4350;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x433A : 0x4350;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4350;
+          } else {
+              vm.pc = 0x4338;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4336, 0x23);
         continue;
     L_433A:
@@ -36965,7 +39063,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_44B3:
         g_last_pc = 0x44B3;
         G_PRE(0x44B3, 0x22);
-        v2_vm_op_22(vm);  // when probe_up(0x29)
+        // inlined v2_vm_op_22: when probe_up(0x29)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_up_158c8(vm, 0x29, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x44B7 : 0x44BE;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x44B7 : 0x44BE;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x44BE;
+          } else {
+              vm.pc = 0x44B5;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x44B3, 0x22);
         continue;
     L_44B7:
@@ -37174,19 +39287,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4502:
         g_last_pc = 0x4502;
         G_PRE(0x4502, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4506);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x4506;
+        }
         G_POST(0x4502, 0x32);
         continue;
     L_4506:
         g_last_pc = 0x4506;
         G_PRE(0x4506, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x450A);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x450A;
+        }
         G_POST(0x4506, 0x33);
         continue;
     L_450A:
         g_last_pc = 0x450A;
         G_PRE(0x450A, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x450E);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x450E;
+        }
         G_POST(0x450A, 0x33);
         continue;
     L_450E:
@@ -37243,19 +39380,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_451B:
         g_last_pc = 0x451B;
         G_PRE(0x451B, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x451F);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x451F;
+        }
         G_POST(0x451B, 0x32);
         continue;
     L_451F:
         g_last_pc = 0x451F;
         G_PRE(0x451F, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4523);  // do_call_jump
+              vm.pc = 0x4532;
+          } else vm.pc = 0x4523;
+        }
         G_POST(0x451F, 0x3C);
         continue;
     L_4523:
         g_last_pc = 0x4523;
         G_PRE(0x4523, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4527);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4527;
+        }
         G_POST(0x4523, 0x33);
         continue;
     L_4527:
@@ -37296,7 +39457,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4532:
         g_last_pc = 0x4532;
         G_PRE(0x4532, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x71)
+        // inlined v2_vm_op_1F: when probe_down(0x71)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x71, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4536 : 0x445A;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4536 : 0x445A;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x445A;
+          } else {
+              vm.pc = 0x4534;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x4532, 0x1F);
         continue;
     L_4536:
@@ -37504,7 +39680,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4573:
         g_last_pc = 0x4573;
         G_PRE(0x4573, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4577);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4577;
+        }
         G_POST(0x4573, 0x33);
         continue;
     L_4577:
@@ -37516,7 +39700,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4578:
         g_last_pc = 0x4578;
         G_PRE(0x4578, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x457C : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x457C : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x457A;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4578, 0x23);
         continue;
     L_457C:
@@ -37575,7 +39774,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_458B:
         g_last_pc = 0x458B;
         G_PRE(0x458B, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x458F);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x458F;
+        }
         G_POST(0x458B, 0x33);
         continue;
     L_458F:
@@ -37587,7 +39794,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4590:
         g_last_pc = 0x4590;
         G_PRE(0x4590, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4594 : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4594 : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x4592;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4590, 0x23);
         continue;
     L_4594:
@@ -37749,7 +39971,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_45DD:
         g_last_pc = 0x45DD;
         G_PRE(0x45DD, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x45E1);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x45E1;
+        }
         G_POST(0x45DD, 0x33);
         continue;
     L_45E1:
@@ -37761,7 +39991,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_45E2:
         g_last_pc = 0x45E2;
         G_PRE(0x45E2, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x45E6 : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x45E6 : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x45E4;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x45E2, 0x23);
         continue;
     L_45E6:
@@ -37914,7 +40159,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_461E:
         g_last_pc = 0x461E;
         G_PRE(0x461E, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4622);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4622;
+        }
         G_POST(0x461E, 0x33);
         continue;
     L_4622:
@@ -37926,7 +40179,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4623:
         g_last_pc = 0x4623;
         G_PRE(0x4623, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4627 : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4627 : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x4625;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4623, 0x23);
         continue;
     L_4627:
@@ -37994,7 +40262,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4639:
         g_last_pc = 0x4639;
         G_PRE(0x4639, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x463D);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x463D;
+        }
         G_POST(0x4639, 0x33);
         continue;
     L_463D:
@@ -38006,7 +40282,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_463E:
         g_last_pc = 0x463E;
         G_PRE(0x463E, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4642 : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4642 : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x4640;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x463E, 0x23);
         continue;
     L_4642:
@@ -38141,7 +40432,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4675:
         g_last_pc = 0x4675;
         G_PRE(0x4675, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4679);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4679;
+        }
         G_POST(0x4675, 0x33);
         continue;
     L_4679:
@@ -38153,7 +40452,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_467A:
         g_last_pc = 0x467A;
         G_PRE(0x467A, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x467E : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x467E : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x467C;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x467A, 0x23);
         continue;
     L_467E:
@@ -38221,7 +40535,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4690:
         g_last_pc = 0x4690;
         G_PRE(0x4690, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4694);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4694;
+        }
         G_POST(0x4690, 0x33);
         continue;
     L_4694:
@@ -38233,7 +40555,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4695:
         g_last_pc = 0x4695;
         G_PRE(0x4695, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4699 : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4699 : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x4697;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4695, 0x23);
         continue;
     L_4699:
@@ -38706,13 +41043,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_475A:
         g_last_pc = 0x475A;
         G_PRE(0x475A, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x475E);  // do_call_jump
+              vm.pc = 0x66D2;
+          } else vm.pc = 0x475E;
+        }
         G_POST(0x475A, 0x33);
         continue;
     L_475E:
         g_last_pc = 0x475E;
         G_PRE(0x475E, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4762);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4762;
+        }
         G_POST(0x475E, 0x33);
         continue;
     L_4762:
@@ -39775,7 +42128,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_491B:
         g_last_pc = 0x491B;
         G_PRE(0x491B, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x491F : 0x4444;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x491F : 0x4444;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4444;
+          } else {
+              vm.pc = 0x491D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x491B, 0x23);
         continue;
     L_491F:
@@ -40870,13 +43238,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4CC0:
         g_last_pc = 0x4CC0;
         G_PRE(0x4CC0, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4CC4);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x4CC4;
+        }
         G_POST(0x4CC0, 0x32);
         continue;
     L_4CC4:
         g_last_pc = 0x4CC4;
         G_PRE(0x4CC4, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4CC8);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4CC8;
+        }
         G_POST(0x4CC4, 0x33);
         continue;
     L_4CC8:
@@ -40911,7 +43295,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4CD0:
         g_last_pc = 0x4CD0;
         G_PRE(0x4CD0, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4CD4 : 0x5148;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4CD4 : 0x5148;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5148;
+          } else {
+              vm.pc = 0x4CD2;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4CD0, 0x23);
         continue;
     L_4CD4:
@@ -41247,7 +43646,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4D55:
         g_last_pc = 0x4D55;
         G_PRE(0x4D55, 0x22);
-        v2_vm_op_22(vm);  // when probe_up(0x29)
+        // inlined v2_vm_op_22: when probe_up(0x29)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_up_158c8(vm, 0x29, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4D59 : 0x4D87;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4D59 : 0x4D87;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4D87;
+          } else {
+              vm.pc = 0x4D57;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4D55, 0x22);
         continue;
     L_4D59:
@@ -41287,7 +43701,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4D6D:
         g_last_pc = 0x4D6D;
         G_PRE(0x4D6D, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x2D)
+        // inlined v2_vm_op_23: when probe_down2(0x2D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x2D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4D71 : 0x4D87;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4D71 : 0x4D87;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4D87;
+          } else {
+              vm.pc = 0x4D6F;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4D6D, 0x23);
         continue;
     L_4D71:
@@ -41831,25 +44260,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4E39:
         g_last_pc = 0x4E39;
         G_PRE(0x4E39, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x80)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x80)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0080);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4E3E);  // do_call_jump
+              vm.pc = 0x4E93;
+          } else vm.pc = 0x4E3E;
+        }
         G_POST(0x4E39, 0x38);
         continue;
     L_4E3E:
         g_last_pc = 0x4E3E;
         G_PRE(0x4E3E, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=4)
+        // inlined v2_vm_op_32: call when coll_15788(f=4)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x04);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4E42);  // do_call_jump
+              vm.pc = 0x4ED4;
+          } else vm.pc = 0x4E42;
+        }
         G_POST(0x4E3E, 0x32);
         continue;
     L_4E42:
         g_last_pc = 0x4E42;
         G_PRE(0x4E42, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4E46);  // do_call_jump
+              vm.pc = 0x4EF5;
+          } else vm.pc = 0x4E46;
+        }
         G_POST(0x4E42, 0x32);
         continue;
     L_4E46:
         g_last_pc = 0x4E46;
         G_PRE(0x4E46, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4E4A);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4E4A;
+        }
         G_POST(0x4E46, 0x33);
         continue;
     L_4E4A:
@@ -41861,7 +44322,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4E4B:
         g_last_pc = 0x4E4B;
         G_PRE(0x4E4B, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4E4F : 0x5148;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4E4F : 0x5148;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5148;
+          } else {
+              vm.pc = 0x4E4D;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4E4B, 0x23);
         continue;
     L_4E4F:
@@ -42325,7 +44801,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4F0D:
         g_last_pc = 0x4F0D;
         G_PRE(0x4F0D, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F11);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4F11;
+        }
         G_POST(0x4F0D, 0x33);
         continue;
     L_4F11:
@@ -42337,7 +44821,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4F12:
         g_last_pc = 0x4F12;
         G_PRE(0x4F12, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4F16 : 0x5148;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4F16 : 0x5148;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5148;
+          } else {
+              vm.pc = 0x4F14;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4F12, 0x23);
         continue;
     L_4F16:
@@ -42585,19 +45084,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4F66:
         g_last_pc = 0x4F66;
         G_PRE(0x4F66, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F6A);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x4F6A;
+        }
         G_POST(0x4F66, 0x32);
         continue;
     L_4F6A:
         g_last_pc = 0x4F6A;
         G_PRE(0x4F6A, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F6E);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x4F6E;
+        }
         G_POST(0x4F6A, 0x33);
         continue;
     L_4F6E:
         g_last_pc = 0x4F6E;
         G_PRE(0x4F6E, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F72);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4F72;
+        }
         G_POST(0x4F6E, 0x33);
         continue;
     L_4F72:
@@ -42699,19 +45222,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4F95:
         g_last_pc = 0x4F95;
         G_PRE(0x4F95, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F99);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x4F99;
+        }
         G_POST(0x4F95, 0x32);
         continue;
     L_4F99:
         g_last_pc = 0x4F99;
         G_PRE(0x4F99, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4F9D);  // do_call_jump
+              vm.pc = 0x4FC3;
+          } else vm.pc = 0x4F9D;
+        }
         G_POST(0x4F99, 0x3C);
         continue;
     L_4F9D:
         g_last_pc = 0x4F9D;
         G_PRE(0x4F9D, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4FA1);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4FA1;
+        }
         G_POST(0x4F9D, 0x33);
         continue;
     L_4FA1:
@@ -42961,19 +45508,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4FF1:
         g_last_pc = 0x4FF1;
         G_PRE(0x4FF1, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4FF5);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x4FF5;
+        }
         G_POST(0x4FF1, 0x32);
         continue;
     L_4FF5:
         g_last_pc = 0x4FF5;
         G_PRE(0x4FF5, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4FF9);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x4FF9;
+        }
         G_POST(0x4FF5, 0x33);
         continue;
     L_4FF9:
         g_last_pc = 0x4FF9;
         G_PRE(0x4FF9, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x4FFD);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x4FFD;
+        }
         G_POST(0x4FF9, 0x33);
         continue;
     L_4FFD:
@@ -43075,19 +45646,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5020:
         g_last_pc = 0x5020;
         G_PRE(0x5020, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5024);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x5024;
+        }
         G_POST(0x5020, 0x32);
         continue;
     L_5024:
         g_last_pc = 0x5024;
         G_PRE(0x5024, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5028);  // do_call_jump
+              vm.pc = 0x504E;
+          } else vm.pc = 0x5028;
+        }
         G_POST(0x5024, 0x3C);
         continue;
     L_5028:
         g_last_pc = 0x5028;
         G_PRE(0x5028, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x502C);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x502C;
+        }
         G_POST(0x5028, 0x33);
         continue;
     L_502C:
@@ -43294,13 +45889,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_506D:
         g_last_pc = 0x506D;
         G_PRE(0x506D, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5071);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x5071;
+        }
         G_POST(0x506D, 0x32);
         continue;
     L_5071:
         g_last_pc = 0x5071;
         G_PRE(0x5071, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5075);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x5075;
+        }
         G_POST(0x5071, 0x33);
         continue;
     L_5075:
@@ -43312,7 +45923,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5076:
         g_last_pc = 0x5076;
         G_PRE(0x5076, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x507A : 0x5148;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x507A : 0x5148;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5148;
+          } else {
+              vm.pc = 0x5078;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x5076, 0x23);
         continue;
     L_507A:
@@ -43465,13 +46091,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_50AC:
         g_last_pc = 0x50AC;
         G_PRE(0x50AC, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x50B0);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x50B0;
+        }
         G_POST(0x50AC, 0x32);
         continue;
     L_50B0:
         g_last_pc = 0x50B0;
         G_PRE(0x50B0, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x50B4);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x50B4;
+        }
         G_POST(0x50B0, 0x33);
         continue;
     L_50B4:
@@ -43483,7 +46125,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_50B5:
         g_last_pc = 0x50B5;
         G_PRE(0x50B5, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x50B9 : 0x5148;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x50B9 : 0x5148;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5148;
+          } else {
+              vm.pc = 0x50B7;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x50B5, 0x23);
         continue;
     L_50B9:
@@ -44371,7 +47028,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_51ED:
         g_last_pc = 0x51ED;
         G_PRE(0x51ED, 0x22);
-        v2_vm_op_22(vm);  // when probe_up(0x29)
+        // inlined v2_vm_op_22: when probe_up(0x29)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_up_158c8(vm, 0x29, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x51F1 : 0x51F8;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x51F1 : 0x51F8;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x51F8;
+          } else {
+              vm.pc = 0x51EF;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x51ED, 0x22);
         continue;
     L_51F1:
@@ -44580,19 +47252,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_523C:
         g_last_pc = 0x523C;
         G_PRE(0x523C, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5240);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x5240;
+        }
         G_POST(0x523C, 0x32);
         continue;
     L_5240:
         g_last_pc = 0x5240;
         G_PRE(0x5240, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5244);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x5244;
+        }
         G_POST(0x5240, 0x33);
         continue;
     L_5244:
         g_last_pc = 0x5244;
         G_PRE(0x5244, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5248);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x5248;
+        }
         G_POST(0x5244, 0x33);
         continue;
     L_5248:
@@ -44679,19 +47375,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5263:
         g_last_pc = 0x5263;
         G_PRE(0x5263, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5267);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x5267;
+        }
         G_POST(0x5263, 0x32);
         continue;
     L_5267:
         g_last_pc = 0x5267;
         G_PRE(0x5267, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x526B);  // do_call_jump
+              vm.pc = 0x527A;
+          } else vm.pc = 0x526B;
+        }
         G_POST(0x5267, 0x3C);
         continue;
     L_526B:
         g_last_pc = 0x526B;
         G_PRE(0x526B, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x526F);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x526F;
+        }
         G_POST(0x526B, 0x33);
         continue;
     L_526F:
@@ -44732,7 +47452,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_527A:
         g_last_pc = 0x527A;
         G_PRE(0x527A, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x71)
+        // inlined v2_vm_op_1F: when probe_down(0x71)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x71, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x527E : 0x5162;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x527E : 0x5162;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5162;
+          } else {
+              vm.pc = 0x527C;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x527A, 0x1F);
         continue;
     L_527E:
@@ -45273,13 +48008,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5354:
         g_last_pc = 0x5354;
         G_PRE(0x5354, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5358);  // do_call_jump
+              vm.pc = 0x66D2;
+          } else vm.pc = 0x5358;
+        }
         G_POST(0x5354, 0x33);
         continue;
     L_5358:
         g_last_pc = 0x5358;
         G_PRE(0x5358, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x535C);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x535C;
+        }
         G_POST(0x5358, 0x33);
         continue;
     L_535C:
@@ -46364,7 +49115,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_551F:
         g_last_pc = 0x551F;
         G_PRE(0x551F, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5523 : 0x5148;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5523 : 0x5148;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5148;
+          } else {
+              vm.pc = 0x5521;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x551F, 0x23);
         continue;
     L_5523:
@@ -47703,13 +50469,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_592D:
         g_last_pc = 0x592D;
         G_PRE(0x592D, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5931);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x5931;
+        }
         G_POST(0x592D, 0x32);
         continue;
     L_5931:
         g_last_pc = 0x5931;
         G_PRE(0x5931, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5935);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x5935;
+        }
         G_POST(0x5931, 0x33);
         continue;
     L_5935:
@@ -47744,7 +50526,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_593D:
         g_last_pc = 0x593D;
         G_PRE(0x593D, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x44)
+        // inlined v2_vm_op_23: when probe_down2(0x44)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x44, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5941 : 0x5BFE;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5941 : 0x5BFE;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5BFE;
+          } else {
+              vm.pc = 0x593F;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x593D, 0x23);
         continue;
     L_5941:
@@ -47948,7 +50745,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5995:
         g_last_pc = 0x5995;
         G_PRE(0x5995, 0x22);
-        v2_vm_op_22(vm);  // when probe_up(0x29)
+        // inlined v2_vm_op_22: when probe_up(0x29)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_up_158c8(vm, 0x29, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5999 : 0x59C7;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5999 : 0x59C7;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x59C7;
+          } else {
+              vm.pc = 0x5997;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x5995, 0x22);
         continue;
     L_5999:
@@ -47988,7 +50800,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_59AD:
         g_last_pc = 0x59AD;
         G_PRE(0x59AD, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x2D)
+        // inlined v2_vm_op_23: when probe_down2(0x2D)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x2D, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x59B1 : 0x59C7;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x59B1 : 0x59C7;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x59C7;
+          } else {
+              vm.pc = 0x59AF;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x59AD, 0x23);
         continue;
     L_59B1:
@@ -50080,7 +52907,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5CA9:
         g_last_pc = 0x5CA9;
         G_PRE(0x5CA9, 0x22);
-        v2_vm_op_22(vm);  // when probe_up(0x29)
+        // inlined v2_vm_op_22: when probe_up(0x29)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_up_158c8(vm, 0x29, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5CAD : 0x5CB4;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5CAD : 0x5CB4;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5CB4;
+          } else {
+              vm.pc = 0x5CAB;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x5CA9, 0x22);
         continue;
     L_5CAD:
@@ -50589,19 +53431,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5D64:
         g_last_pc = 0x5D64;
         G_PRE(0x5D64, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5D68);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x5D68;
+        }
         G_POST(0x5D64, 0x32);
         continue;
     L_5D68:
         g_last_pc = 0x5D68;
         G_PRE(0x5D68, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5D6C);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x5D6C;
+        }
         G_POST(0x5D68, 0x33);
         continue;
     L_5D6C:
         g_last_pc = 0x5D6C;
         G_PRE(0x5D6C, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5D70);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x5D70;
+        }
         G_POST(0x5D6C, 0x33);
         continue;
     L_5D70:
@@ -50707,19 +53573,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5D91:
         g_last_pc = 0x5D91;
         G_PRE(0x5D91, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5D95);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x5D95;
+        }
         G_POST(0x5D91, 0x32);
         continue;
     L_5D95:
         g_last_pc = 0x5D95;
         G_PRE(0x5D95, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x44)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x44)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x44);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5D99);  // do_call_jump
+              vm.pc = 0x5DA8;
+          } else vm.pc = 0x5D99;
+        }
         G_POST(0x5D95, 0x3C);
         continue;
     L_5D99:
         g_last_pc = 0x5D99;
         G_PRE(0x5D99, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5D9D);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x5D9D;
+        }
         G_POST(0x5D99, 0x33);
         continue;
     L_5D9D:
@@ -50760,7 +53650,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5DA8:
         g_last_pc = 0x5DA8;
         G_PRE(0x5DA8, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x71)
+        // inlined v2_vm_op_1F: when probe_down(0x71)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x71, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x5DAC : 0x5C31;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x5DAC : 0x5C31;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5C31;
+          } else {
+              vm.pc = 0x5DAA;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x5DA8, 0x1F);
         continue;
     L_5DAC:
@@ -51337,13 +54242,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5E91:
         g_last_pc = 0x5E91;
         G_PRE(0x5E91, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5E95);  // do_call_jump
+              vm.pc = 0x66D2;
+          } else vm.pc = 0x5E95;
+        }
         G_POST(0x5E91, 0x33);
         continue;
     L_5E95:
         g_last_pc = 0x5E95;
         G_PRE(0x5E95, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x5E99);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x5E99;
+        }
         G_POST(0x5E95, 0x33);
         continue;
     L_5E99:
@@ -52555,7 +55476,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6088:
         g_last_pc = 0x6088;
         G_PRE(0x6088, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x608C);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x608C;
+        }
         G_POST(0x6088, 0x32);
         continue;
     L_608C:
@@ -52901,7 +55830,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_610C:
         g_last_pc = 0x610C;
         G_PRE(0x610C, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x44)
+        // inlined v2_vm_op_23: when probe_down2(0x44)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x44, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x6110 : 0x5BFE;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x6110 : 0x5BFE;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5BFE;
+          } else {
+              vm.pc = 0x610E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x610C, 0x23);
         continue;
     L_6110:
@@ -53842,7 +56786,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6257:
         g_last_pc = 0x6257;
         G_PRE(0x6257, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x44)
+        // inlined v2_vm_op_23: when probe_down2(0x44)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x44, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x625B : 0x5BFE;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x625B : 0x5BFE;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x5BFE;
+          } else {
+              vm.pc = 0x6259;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x6257, 0x23);
         continue;
     L_625B:
@@ -53905,7 +56864,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6268:
         g_last_pc = 0x6268;
         G_PRE(0x6268, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x626C);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x626C;
+        }
         G_POST(0x6268, 0x32);
         continue;
     L_626C:
@@ -55870,7 +58837,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6735:
         g_last_pc = 0x6735;
         G_PRE(0x6735, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6739);  // do_call_jump
+              vm.pc = 0x66FF;
+          } else vm.pc = 0x6739;
+        }
         G_POST(0x6735, 0x32);
         continue;
     L_6739:
@@ -56373,7 +59348,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_67D6:
         g_last_pc = 0x67D6;
         G_PRE(0x67D6, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x44)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x44)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x44);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x67DA);  // do_call_jump
+              vm.pc = 0x67DE;
+          } else vm.pc = 0x67DA;
+        }
         G_POST(0x67D6, 0x3C);
         continue;
     L_67DA:
@@ -56955,13 +59938,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_687F:
         g_last_pc = 0x687F;
         G_PRE(0x687F, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x75)
+        // inlined v2_vm_op_21: when probe_r/l(0x75)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x75, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x75, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x6883 : 0x6896;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x6883 : 0x6896;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x6896;
+          } else {
+              vm.pc = 0x6881;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x687F, 0x21);
         continue;
     L_6883:
         g_last_pc = 0x6883;
         G_PRE(0x6883, 0x20);
-        v2_vm_op_20(vm);  // when probe_l/r(0x75)
+        // inlined v2_vm_op_20: when probe_l/r(0x75)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_left_158aa(vm, 0x75, _di);
+          else        v2_vm_probe_right_158b9(vm, 0x75, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x6887 : 0x6896;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x6887 : 0x6896;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x6896;
+          } else {
+              vm.pc = 0x6885;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x6883, 0x20);
         continue;
     L_6887:
@@ -57032,19 +60049,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_68A2:
         g_last_pc = 0x68A2;
         G_PRE(0x68A2, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68A6);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x68A6;
+        }
         G_POST(0x68A2, 0x32);
         continue;
     L_68A6:
         g_last_pc = 0x68A6;
         G_PRE(0x68A6, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68AA);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x68AA;
+        }
         G_POST(0x68A6, 0x33);
         continue;
     L_68AA:
         g_last_pc = 0x68AA;
         G_PRE(0x68AA, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x40)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x40)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0040);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68AF);  // do_call_jump
+              vm.pc = 0x68E4;
+          } else vm.pc = 0x68AF;
+        }
         G_POST(0x68AA, 0x38);
         continue;
     L_68AF:
@@ -57092,25 +60133,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_68B9:
         g_last_pc = 0x68B9;
         G_PRE(0x68B9, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68BD);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x68BD;
+        }
         G_POST(0x68B9, 0x32);
         continue;
     L_68BD:
         g_last_pc = 0x68BD;
         G_PRE(0x68BD, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68C1);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x68C1;
+        }
         G_POST(0x68BD, 0x33);
         continue;
     L_68C1:
         g_last_pc = 0x68C1;
         G_PRE(0x68C1, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68C5);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x68C5;
+        }
         G_POST(0x68C1, 0x33);
         continue;
     L_68C5:
         g_last_pc = 0x68C5;
         G_PRE(0x68C5, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x40)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x40)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0040);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68CA);  // do_call_jump
+              vm.pc = 0x68E4;
+          } else vm.pc = 0x68CA;
+        }
         G_POST(0x68C5, 0x38);
         continue;
     L_68CA:
@@ -57135,25 +60208,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_68CF:
         g_last_pc = 0x68CF;
         G_PRE(0x68CF, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68D3);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x68D3;
+        }
         G_POST(0x68CF, 0x32);
         continue;
     L_68D3:
         g_last_pc = 0x68D3;
         G_PRE(0x68D3, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68D7);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x68D7;
+        }
         G_POST(0x68D3, 0x3C);
         continue;
     L_68D7:
         g_last_pc = 0x68D7;
         G_PRE(0x68D7, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68DB);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x68DB;
+        }
         G_POST(0x68D7, 0x33);
         continue;
     L_68DB:
         g_last_pc = 0x68DB;
         G_PRE(0x68DB, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x40)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x40)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0040);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x68E0);  // do_call_jump
+              vm.pc = 0x68E4;
+          } else vm.pc = 0x68E0;
+        }
         G_POST(0x68DB, 0x38);
         continue;
     L_68E0:
@@ -57435,7 +60540,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_693C:
         g_last_pc = 0x693C;
         G_PRE(0x693C, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x17)
+        // inlined v2_vm_op_1F: when probe_down(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x6940 : 0x6947;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x6940 : 0x6947;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x6947;
+          } else {
+              vm.pc = 0x693E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x693C, 0x1F);
         continue;
     L_6940:
@@ -57548,19 +60668,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_695F:
         g_last_pc = 0x695F;
         G_PRE(0x695F, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6963);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x6963;
+        }
         G_POST(0x695F, 0x32);
         continue;
     L_6963:
         g_last_pc = 0x6963;
         G_PRE(0x6963, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6967);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x6967;
+        }
         G_POST(0x6963, 0x33);
         continue;
     L_6967:
         g_last_pc = 0x6967;
         G_PRE(0x6967, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x696B);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x696B;
+        }
         G_POST(0x6967, 0x33);
         continue;
     L_696B:
@@ -57686,19 +60830,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6996:
         g_last_pc = 0x6996;
         G_PRE(0x6996, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x699A);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x699A;
+        }
         G_POST(0x6996, 0x32);
         continue;
     L_699A:
         g_last_pc = 0x699A;
         G_PRE(0x699A, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x699E);  // do_call_jump
+              vm.pc = 0x66D2;
+          } else vm.pc = 0x699E;
+        }
         G_POST(0x699A, 0x3C);
         continue;
     L_699E:
         g_last_pc = 0x699E;
         G_PRE(0x699E, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x69A2);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x69A2;
+        }
         G_POST(0x699E, 0x33);
         continue;
     L_69A2:
@@ -58338,7 +61506,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6A7C:
         g_last_pc = 0x6A7C;
         G_PRE(0x6A7C, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x6A80 : 0x6AB5;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x6A80 : 0x6AB5;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x6AB5;
+          } else {
+              vm.pc = 0x6A7E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x6A7C, 0x23);
         continue;
     L_6A80:
@@ -58385,13 +61568,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6A88:
         g_last_pc = 0x6A88;
         G_PRE(0x6A88, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6A8C);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x6A8C;
+        }
         G_POST(0x6A88, 0x32);
         continue;
     L_6A8C:
         g_last_pc = 0x6A8C;
         G_PRE(0x6A8C, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6A90);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x6A90;
+        }
         G_POST(0x6A8C, 0x33);
         continue;
     L_6A90:
@@ -58570,19 +61769,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6ACA:
         g_last_pc = 0x6ACA;
         G_PRE(0x6ACA, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6ACE);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x6ACE;
+        }
         G_POST(0x6ACA, 0x32);
         continue;
     L_6ACE:
         g_last_pc = 0x6ACE;
         G_PRE(0x6ACE, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6AD2);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x6AD2;
+        }
         G_POST(0x6ACE, 0x33);
         continue;
     L_6AD2:
         g_last_pc = 0x6AD2;
         G_PRE(0x6AD2, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6AD6);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x6AD6;
+        }
         G_POST(0x6AD2, 0x33);
         continue;
     L_6AD6:
@@ -58705,19 +61928,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6B01:
         g_last_pc = 0x6B01;
         G_PRE(0x6B01, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6B05);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x6B05;
+        }
         G_POST(0x6B01, 0x32);
         continue;
     L_6B05:
         g_last_pc = 0x6B05;
         G_PRE(0x6B05, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6B09);  // do_call_jump
+              vm.pc = 0x6B48;
+          } else vm.pc = 0x6B09;
+        }
         G_POST(0x6B05, 0x3C);
         continue;
     L_6B09:
         g_last_pc = 0x6B09;
         G_PRE(0x6B09, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6B0D);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x6B0D;
+        }
         G_POST(0x6B09, 0x33);
         continue;
     L_6B0D:
@@ -59085,7 +62332,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6B8E:
         g_last_pc = 0x6B8E;
         G_PRE(0x6B8E, 0x1F);
-        v2_vm_op_1F(vm);  // when probe_down(0x17)
+        // inlined v2_vm_op_1F: when probe_down(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x6B92 : 0x13DB;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x6B92 : 0x13DB;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x13DB;
+          } else {
+              vm.pc = 0x6B90;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x6B8E, 0x1F);
         continue;
     L_6B92:
@@ -59577,7 +62839,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6C3F:
         g_last_pc = 0x6C3F;
         G_PRE(0x6C3F, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x6C43 : 0x6C60;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x6C43 : 0x6C60;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x6C60;
+          } else {
+              vm.pc = 0x6C41;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x6C3F, 0x23);
         continue;
     L_6C43:
@@ -60251,19 +63528,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6E1F:
         g_last_pc = 0x6E1F;
         G_PRE(0x6E1F, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=1)
+        // inlined v2_vm_op_38: call when coll_156c0(class=1)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0001);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6E24);  // do_call_jump
+              vm.pc = 0x6E4D;
+          } else vm.pc = 0x6E24;
+        }
         G_POST(0x6E1F, 0x38);
         continue;
     L_6E24:
         g_last_pc = 0x6E24;
         G_PRE(0x6E24, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=2)
+        // inlined v2_vm_op_38: call when coll_156c0(class=2)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0002);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6E29);  // do_call_jump
+              vm.pc = 0x6E31;
+          } else vm.pc = 0x6E29;
+        }
         G_POST(0x6E24, 0x38);
         continue;
     L_6E29:
         g_last_pc = 0x6E29;
         G_PRE(0x6E29, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6E2D);  // do_call_jump
+              vm.pc = 0x6E31;
+          } else vm.pc = 0x6E2D;
+        }
         G_POST(0x6E29, 0x32);
         continue;
     L_6E2D:
@@ -60709,19 +64010,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6EC1:
         g_last_pc = 0x6EC1;
         G_PRE(0x6EC1, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6EC5);  // do_call_jump
+              vm.pc = 0x6E31;
+          } else vm.pc = 0x6EC5;
+        }
         G_POST(0x6EC1, 0x32);
         continue;
     L_6EC5:
         g_last_pc = 0x6EC5;
         G_PRE(0x6EC5, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6ECA);  // do_call_jump
+              vm.pc = 0x6E31;
+          } else vm.pc = 0x6ECA;
+        }
         G_POST(0x6EC5, 0x38);
         continue;
     L_6ECA:
         g_last_pc = 0x6ECA;
         G_PRE(0x6ECA, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6ECF);  // do_call_jump
+              vm.pc = 0x6E92;
+          } else vm.pc = 0x6ECF;
+        }
         G_POST(0x6ECA, 0x38);
         continue;
     L_6ECF:
@@ -60786,19 +64111,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6EE0:
         g_last_pc = 0x6EE0;
         G_PRE(0x6EE0, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x1000)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x1000)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x1000);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6EE5);  // do_call_jump
+              vm.pc = 0x6EF2;
+          } else vm.pc = 0x6EE5;
+        }
         G_POST(0x6EE0, 0x38);
         continue;
     L_6EE5:
         g_last_pc = 0x6EE5;
         G_PRE(0x6EE5, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x2000)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x2000)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x2000);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6EEA);  // do_call_jump
+              vm.pc = 0x6E3A;
+          } else vm.pc = 0x6EEA;
+        }
         G_POST(0x6EE5, 0x38);
         continue;
     L_6EEA:
         g_last_pc = 0x6EEA;
         G_PRE(0x6EEA, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6EEE);  // do_call_jump
+              vm.pc = 0x6E3A;
+          } else vm.pc = 0x6EEE;
+        }
         G_POST(0x6EEA, 0x32);
         continue;
     L_6EEE:
@@ -60995,13 +64344,29 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6F8A:
         g_last_pc = 0x6F8A;
         G_PRE(0x6F8A, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x100)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x100)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0100);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6F8F);  // do_call_jump
+              vm.pc = 0x6F9D;
+          } else vm.pc = 0x6F8F;
+        }
         G_POST(0x6F8A, 0x38);
         continue;
     L_6F8F:
         g_last_pc = 0x6F8F;
         G_PRE(0x6F8F, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x4000)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x4000)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x4000);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x6F94);  // do_call_jump
+              vm.pc = 0x6FC9;
+          } else vm.pc = 0x6F94;
+        }
         G_POST(0x6F8F, 0x38);
         continue;
     L_6F94:
@@ -62224,13 +65589,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7165:
         g_last_pc = 0x7165;
         G_PRE(0x7165, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x85)
+        // inlined v2_vm_op_21: when probe_r/l(0x85)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x85, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x85, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x7169 : 0x717E;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x7169 : 0x717E;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x717E;
+          } else {
+              vm.pc = 0x7167;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x7165, 0x21);
         continue;
     L_7169:
         g_last_pc = 0x7169;
         G_PRE(0x7169, 0x20);
-        v2_vm_op_20(vm);  // when probe_l/r(0x85)
+        // inlined v2_vm_op_20: when probe_l/r(0x85)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_left_158aa(vm, 0x85, _di);
+          else        v2_vm_probe_right_158b9(vm, 0x85, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x716D : 0x717E;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x716D : 0x717E;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x717E;
+          } else {
+              vm.pc = 0x716B;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x7169, 0x20);
         continue;
     L_716D:
@@ -62290,25 +65689,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7187:
         g_last_pc = 0x7187;
         G_PRE(0x7187, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x718B);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x718B;
+        }
         G_POST(0x7187, 0x32);
         continue;
     L_718B:
         g_last_pc = 0x718B;
         G_PRE(0x718B, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x718F);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x718F;
+        }
         G_POST(0x718B, 0x33);
         continue;
     L_718F:
         g_last_pc = 0x718F;
         G_PRE(0x718F, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7193);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x7193;
+        }
         G_POST(0x718F, 0x33);
         continue;
     L_7193:
         g_last_pc = 0x7193;
         G_PRE(0x7193, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=7)
+        // inlined v2_vm_op_37: call when coll_155d6(f=7)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x07);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7197);  // do_call_jump
+              vm.pc = 0x7310;
+          } else vm.pc = 0x7197;
+        }
         G_POST(0x7193, 0x37);
         continue;
     L_7197:
@@ -62333,25 +65764,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_719C:
         g_last_pc = 0x719C;
         G_PRE(0x719C, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71A0);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x71A0;
+        }
         G_POST(0x719C, 0x32);
         continue;
     L_71A0:
         g_last_pc = 0x71A0;
         G_PRE(0x71A0, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71A4);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x71A4;
+        }
         G_POST(0x71A0, 0x3C);
         continue;
     L_71A4:
         g_last_pc = 0x71A4;
         G_PRE(0x71A4, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71A8);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x71A8;
+        }
         G_POST(0x71A4, 0x33);
         continue;
     L_71A8:
         g_last_pc = 0x71A8;
         G_PRE(0x71A8, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=7)
+        // inlined v2_vm_op_37: call when coll_155d6(f=7)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x07);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71AC);  // do_call_jump
+              vm.pc = 0x7310;
+          } else vm.pc = 0x71AC;
+        }
         G_POST(0x71A8, 0x37);
         continue;
     L_71AC:
@@ -62369,13 +65832,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_71B0:
         g_last_pc = 0x71B0;
         G_PRE(0x71B0, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x85)
+        // inlined v2_vm_op_21: when probe_r/l(0x85)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x85, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x85, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x71B4 : 0x71C9;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x71B4 : 0x71C9;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x71C9;
+          } else {
+              vm.pc = 0x71B2;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x71B0, 0x21);
         continue;
     L_71B4:
         g_last_pc = 0x71B4;
         G_PRE(0x71B4, 0x20);
-        v2_vm_op_20(vm);  // when probe_l/r(0x85)
+        // inlined v2_vm_op_20: when probe_l/r(0x85)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_left_158aa(vm, 0x85, _di);
+          else        v2_vm_probe_right_158b9(vm, 0x85, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x71B8 : 0x71C9;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x71B8 : 0x71C9;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x71C9;
+          } else {
+              vm.pc = 0x71B6;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x71B4, 0x20);
         continue;
     L_71B8:
@@ -62435,25 +65932,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_71D2:
         g_last_pc = 0x71D2;
         G_PRE(0x71D2, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71D6);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x71D6;
+        }
         G_POST(0x71D2, 0x32);
         continue;
     L_71D6:
         g_last_pc = 0x71D6;
         G_PRE(0x71D6, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71DA);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x71DA;
+        }
         G_POST(0x71D6, 0x33);
         continue;
     L_71DA:
         g_last_pc = 0x71DA;
         G_PRE(0x71DA, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71DE);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x71DE;
+        }
         G_POST(0x71DA, 0x33);
         continue;
     L_71DE:
         g_last_pc = 0x71DE;
         G_PRE(0x71DE, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=8)
+        // inlined v2_vm_op_37: call when coll_155d6(f=8)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x08);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71E2);  // do_call_jump
+              vm.pc = 0x7310;
+          } else vm.pc = 0x71E2;
+        }
         G_POST(0x71DE, 0x37);
         continue;
     L_71E2:
@@ -62478,25 +66007,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_71E7:
         g_last_pc = 0x71E7;
         G_PRE(0x71E7, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71EB);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x71EB;
+        }
         G_POST(0x71E7, 0x32);
         continue;
     L_71EB:
         g_last_pc = 0x71EB;
         G_PRE(0x71EB, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71EF);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x71EF;
+        }
         G_POST(0x71EB, 0x3C);
         continue;
     L_71EF:
         g_last_pc = 0x71EF;
         G_PRE(0x71EF, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71F3);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x71F3;
+        }
         G_POST(0x71EF, 0x33);
         continue;
     L_71F3:
         g_last_pc = 0x71F3;
         G_PRE(0x71F3, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=8)
+        // inlined v2_vm_op_37: call when coll_155d6(f=8)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x08);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x71F7);  // do_call_jump
+              vm.pc = 0x7310;
+          } else vm.pc = 0x71F7;
+        }
         G_POST(0x71F3, 0x37);
         continue;
     L_71F7:
@@ -62514,13 +66075,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_71FB:
         g_last_pc = 0x71FB;
         G_PRE(0x71FB, 0x21);
-        v2_vm_op_21(vm);  // when probe_r/l(0x85)
+        // inlined v2_vm_op_21: when probe_r/l(0x85)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_right_158b9(vm, 0x85, _di);
+          else        v2_vm_probe_left_158aa(vm, 0x85, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x71FF : 0x7214;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x71FF : 0x7214;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x7214;
+          } else {
+              vm.pc = 0x71FD;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x71FB, 0x21);
         continue;
     L_71FF:
         g_last_pc = 0x71FF;
         G_PRE(0x71FF, 0x20);
-        v2_vm_op_20(vm);  // when probe_l/r(0x85)
+        // inlined v2_vm_op_20: when probe_l/r(0x85)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;
+          if (!_flip) v2_vm_probe_left_158aa(vm, 0x85, _di);
+          else        v2_vm_probe_right_158b9(vm, 0x85, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x7203 : 0x7214;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x7203 : 0x7214;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x7214;
+          } else {
+              vm.pc = 0x7201;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 0);
+          }
+        }
         G_POST(0x71FF, 0x20);
         continue;
     L_7203:
@@ -62580,25 +66175,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_721D:
         g_last_pc = 0x721D;
         G_PRE(0x721D, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7221);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x7221;
+        }
         G_POST(0x721D, 0x32);
         continue;
     L_7221:
         g_last_pc = 0x7221;
         G_PRE(0x7221, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=9)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=9)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7225);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x7225;
+        }
         G_POST(0x7221, 0x33);
         continue;
     L_7225:
         g_last_pc = 0x7225;
         G_PRE(0x7225, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7229);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x7229;
+        }
         G_POST(0x7225, 0x33);
         continue;
     L_7229:
         g_last_pc = 0x7229;
         G_PRE(0x7229, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=9)
+        // inlined v2_vm_op_37: call when coll_155d6(f=9)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x722D);  // do_call_jump
+              vm.pc = 0x7310;
+          } else vm.pc = 0x722D;
+        }
         G_POST(0x7229, 0x37);
         continue;
     L_722D:
@@ -62623,25 +66250,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7232:
         g_last_pc = 0x7232;
         G_PRE(0x7232, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7236);  // do_call_jump
+              vm.pc = 0x66CC;
+          } else vm.pc = 0x7236;
+        }
         G_POST(0x7232, 0x32);
         continue;
     L_7236:
         g_last_pc = 0x7236;
         G_PRE(0x7236, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x723A);  // do_call_jump
+              vm.pc = 0x66DF;
+          } else vm.pc = 0x723A;
+        }
         G_POST(0x7236, 0x3C);
         continue;
     L_723A:
         g_last_pc = 0x723A;
         G_PRE(0x723A, 0x33);
-        v2_vm_op_33(vm);  // call when coll_up_157eb(f=0x5C)
+        // inlined v2_vm_op_33: call when coll_up_157eb(f=0x5C)
+        {
+          bool _c = v2_vm_collision_157eb_f(vm, 0x5C);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x723E);  // do_call_jump
+              vm.pc = 0x13DB;
+          } else vm.pc = 0x723E;
+        }
         G_POST(0x723A, 0x33);
         continue;
     L_723E:
         g_last_pc = 0x723E;
         G_PRE(0x723E, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=9)
+        // inlined v2_vm_op_37: call when coll_155d6(f=9)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7242);  // do_call_jump
+              vm.pc = 0x7310;
+          } else vm.pc = 0x7242;
+        }
         G_POST(0x723E, 0x37);
         continue;
     L_7242:
@@ -63069,7 +66728,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_72EE:
         g_last_pc = 0x72EE;
         G_PRE(0x72EE, 0x22);
-        v2_vm_op_22(vm);  // when probe_up(0x87)
+        // inlined v2_vm_op_22: when probe_up(0x87)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_up_158c8(vm, 0x87, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x72F2 : 0x7355;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x72F2 : 0x7355;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x7355;
+          } else {
+              vm.pc = 0x72F0;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x72EE, 0x22);
         continue;
     L_72F2:
@@ -63082,7 +66756,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_72F3:
         g_last_pc = 0x72F3;
         G_PRE(0x72F3, 0x37);
-        v2_vm_op_37(vm);  // call when coll_155d6(f=0xB)
+        // inlined v2_vm_op_37: call when coll_155d6(f=0xB)
+        {
+          bool _c = v2_vm_collision_155d6_f(vm, 0x0B);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x72F7);  // do_call_jump
+              vm.pc = 0x72FB;
+          } else vm.pc = 0x72F7;
+        }
         G_POST(0x72F3, 0x37);
         continue;
     L_72F7:
@@ -66898,7 +70580,18 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_796C:
         g_last_pc = 0x796C;
         G_PRE(0x796C, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7970);  // do_call_jump
+              vm.pc = 0x79A5;
+          } else vm.pc = 0x7970;
+        }
         G_POST(0x796C, 0x1A);
         continue;
     L_7970:
@@ -66923,7 +70616,18 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7975:
         g_last_pc = 0x7975;
         G_PRE(0x7975, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7979);  // do_call_jump
+              vm.pc = 0x79A5;
+          } else vm.pc = 0x7979;
+        }
         G_POST(0x7975, 0x1A);
         continue;
     L_7979:
@@ -66935,7 +70639,22 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_797A:
         g_last_pc = 0x797A;
         G_PRE(0x797A, 0x23);
-        v2_vm_op_23(vm);  // when probe_down2(0x17)
+        // inlined v2_vm_op_23: when probe_down2(0x17)
+        {
+          uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          v2_vm_probe_down_158d7(vm, 0x17, _di);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x797E : 0x7981;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x797E : 0x7981;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x7981;
+          } else {
+              vm.pc = 0x797C;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x797A, 0x23);
         continue;
     L_797E:
@@ -66987,13 +70706,32 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_798A:
         g_last_pc = 0x798A;
         G_PRE(0x798A, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x17)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x17)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x17);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x798E);  // do_call_jump
+              vm.pc = 0x7996;
+          } else vm.pc = 0x798E;
+        }
         G_POST(0x798A, 0x3C);
         continue;
     L_798E:
         g_last_pc = 0x798E;
         G_PRE(0x798E, 0x1A);
-        v2_vm_op_1A(vm);  // call when coll_155d6_vik(f=1)
+        // inlined v2_vm_op_1A: call when coll_155d6_vik(f=1)
+        {
+          uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);
+          vm.ds_write(DS_OBJ_COUNT, 6);   // viking-only scan limit
+          bool _c = v2_vm_collision_155d6_f(vm, 0x01);
+          vm.ds_write(DS_OBJ_COUNT, _saved);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7992);  // do_call_jump
+              vm.pc = 0x79A5;
+          } else vm.pc = 0x7992;
+        }
         G_POST(0x798E, 0x1A);
         continue;
     L_7992:
@@ -68900,19 +72638,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7CA7:
         g_last_pc = 0x7CA7;
         G_PRE(0x7CA7, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7CAC);  // do_call_jump
+              vm.pc = 0x7CD4;
+          } else vm.pc = 0x7CAC;
+        }
         G_POST(0x7CA7, 0x38);
         continue;
     L_7CAC:
         g_last_pc = 0x7CAC;
         G_PRE(0x7CAC, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7CB1);  // do_call_jump
+              vm.pc = 0x7CB9;
+          } else vm.pc = 0x7CB1;
+        }
         G_POST(0x7CAC, 0x38);
         continue;
     L_7CB1:
         g_last_pc = 0x7CB1;
         G_PRE(0x7CB1, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x7CB5);  // do_call_jump
+              vm.pc = 0x7CE4;
+          } else vm.pc = 0x7CB5;
+        }
         G_POST(0x7CB1, 0x32);
         continue;
     L_7CB5:
@@ -82053,25 +85815,57 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9404:
         g_last_pc = 0x9404;
         G_PRE(0x9404, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9408);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x9408;
+        }
         G_POST(0x9404, 0x32);
         continue;
     L_9408:
         g_last_pc = 0x9408;
         G_PRE(0x9408, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x940D);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x940D;
+        }
         G_POST(0x9408, 0x38);
         continue;
     L_940D:
         g_last_pc = 0x940D;
         G_PRE(0x940D, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x10)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x10)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0010);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9412);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x9412;
+        }
         G_POST(0x940D, 0x38);
         continue;
     L_9412:
         g_last_pc = 0x9412;
         G_PRE(0x9412, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9417);  // do_call_jump
+              vm.pc = 0x945B;
+          } else vm.pc = 0x9417;
+        }
         G_POST(0x9412, 0x38);
         continue;
     L_9417:
@@ -82119,37 +85913,85 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9421:
         g_last_pc = 0x9421;
         G_PRE(0x9421, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9425);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x9425;
+        }
         G_POST(0x9421, 0x32);
         continue;
     L_9425:
         g_last_pc = 0x9425;
         G_PRE(0x9425, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=9)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=9)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9429);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x9429;
+        }
         G_POST(0x9425, 0x3C);
         continue;
     L_9429:
         g_last_pc = 0x9429;
         G_PRE(0x9429, 0x3C);
-        v2_vm_op_3C(vm);  // call when coll_down_1584e(f=0x7B)
+        // inlined v2_vm_op_3C: call when coll_down_1584e(f=0x7B)
+        {
+          bool _c = v2_vm_collision_1584e_f(vm, 0x7B);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x942D);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x942D;
+        }
         G_POST(0x9429, 0x3C);
         continue;
     L_942D:
         g_last_pc = 0x942D;
         G_PRE(0x942D, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9432);  // do_call_jump
+              vm.pc = 0x9440;
+          } else vm.pc = 0x9432;
+        }
         G_POST(0x942D, 0x38);
         continue;
     L_9432:
         g_last_pc = 0x9432;
         G_PRE(0x9432, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x10)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x10)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0010);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9437);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x9437;
+        }
         G_POST(0x9432, 0x38);
         continue;
     L_9437:
         g_last_pc = 0x9437;
         G_PRE(0x9437, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x943C);  // do_call_jump
+              vm.pc = 0x945B;
+          } else vm.pc = 0x943C;
+        }
         G_POST(0x9437, 0x38);
         continue;
     L_943C:
@@ -82371,19 +86213,43 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_948A:
         g_last_pc = 0x948A;
         G_PRE(0x948A, 0x32);
-        v2_vm_op_32(vm);  // call when coll_15788(f=9)
+        // inlined v2_vm_op_32: call when coll_15788(f=9)
+        {
+          bool _c = v2_vm_collision_15788_f(vm, 0x09);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x948E);  // do_call_jump
+              vm.pc = 0x94AC;
+          } else vm.pc = 0x948E;
+        }
         G_POST(0x948A, 0x32);
         continue;
     L_948E:
         g_last_pc = 0x948E;
         G_PRE(0x948E, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=8)
+        // inlined v2_vm_op_38: call when coll_156c0(class=8)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0008);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9493);  // do_call_jump
+              vm.pc = 0x949C;
+          } else vm.pc = 0x9493;
+        }
         G_POST(0x948E, 0x38);
         continue;
     L_9493:
         g_last_pc = 0x9493;
         G_PRE(0x9493, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=4)
+        // inlined v2_vm_op_38: call when coll_156c0(class=4)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0004);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9498);  // do_call_jump
+              vm.pc = 0x945B;
+          } else vm.pc = 0x9498;
+        }
         G_POST(0x9493, 0x38);
         continue;
     L_9498:
@@ -85363,7 +89229,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9A85:
         g_last_pc = 0x9A85;
         G_PRE(0x9A85, 0x38);
-        v2_vm_op_38(vm);  // call when coll_156c0(class=0x400)
+        // inlined v2_vm_op_38: call when coll_156c0(class=0x400)
+        {
+          bool _c = v2_vm_collision_156c0_f(vm, 0x0400);
+          vm.ds_write(DS_COLL_BIT_IDX, (uint16_t)(vm.ds_read(DS_COLL_BIT_IDX) + 2));  // ALWAYS
+          if (_c) {
+              ObjRef{vm, vm.global_r(DS_CUR_OBJ)}.w16(OBJ_ALT_PC, 0x9A8A);  // do_call_jump
+              vm.pc = 0x9A8E;
+          } else vm.pc = 0x9A8A;
+        }
         G_POST(0x9A85, 0x38);
         continue;
     L_9A8A:

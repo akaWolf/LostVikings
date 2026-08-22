@@ -12927,12 +12927,17 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
 // Path 1 (ds:0x390 > 0): full bounding box check via sub_15AFD etc.
 // Path 2 (ds:0x390 < 0): no collision, just consume byte
 // Path 3 (ds:0x390 == 0): check bit in [obj+0x13F5] → collision if set
+static bool v2_vm_collision_1584e_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_1584e(V2VM& vm) {
+    // stream wrapper: every phase branch consumes exactly 1 byte
+    uint8_t filter = vm.read_u8();
+    return v2_vm_collision_1584e_f(vm, filter);
+}
+static bool v2_vm_collision_1584e_f(V2VM& vm, uint8_t filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
 
     if (state == 0) {
-        // loc_15886: INC bx + check bit in collision flags
-        vm.pc += 1;
+        // loc_15886: INC bx (consumed by the wrapper) + check collision bit
         uint16_t di = vm.global_r(DS_CUR_OBJ);
         vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(DS_COLL_BIT_IDX);
@@ -12945,8 +12950,7 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
     }
 
     if (state < 0) {
-        // loc_15883: INC bx + CLC
-        vm.pc += 1;
+        // loc_15883: INC bx (consumed by the wrapper) + CLC
         return false;
     }
 
@@ -12954,7 +12958,6 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
     // sub_15AFD (tile) → sub_15972 (snap), or sub_1614E (obj) → sub_15DA8 (snap).
     // Set collision bit if found. ALWAYS returns CLC (false).
     {
-        uint8_t filter = vm.read_u8();
         uint16_t di = vm.global_r(DS_CUR_OBJ);
         vm.di_track = di;   // orig 0x585F: MOV di,ds:42h; scans preserve DI (task #15)
         uint16_t filter_si = (uint16_t)filter;
@@ -12992,11 +12995,16 @@ static bool v2_vm_collision_check_1584e(V2VM& vm) {
 // sub_157eb: UPward collision check (orig — analog sub_1584e but uses sub_15911/sub_15c93).
 // Same state-machine: state==0 → check collision bit (return CARRY if set),
 // state<0 → INC bx, no carry, state>0 → full check (always CLC).
+static bool v2_vm_collision_157eb_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_157eb(V2VM& vm) {
+    // stream wrapper: every phase branch consumes exactly 1 byte
+    uint8_t filter = vm.read_u8();
+    return v2_vm_collision_157eb_f(vm, filter);
+}
+static bool v2_vm_collision_157eb_f(V2VM& vm, uint8_t filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     if (state == 0) {
-        // loc_15823: INC bx + check collision bit
-        vm.pc += 1;
+        // loc_15823: INC bx (consumed by the wrapper) + check collision bit
         uint16_t di = vm.global_r(DS_CUR_OBJ);
         vm.di_track = di;   // orig: MOV di,ds:42h (task #15)
         uint16_t si = vm.global_r(DS_COLL_BIT_IDX);
@@ -13005,15 +13013,13 @@ static bool v2_vm_collision_check_157eb(V2VM& vm) {
         return false;
     }
     if (state < 0) {
-        // loc_15820: INC bx + CLC — DI untouched
-        vm.pc += 1;
+        // loc_15820: INC bx (consumed by the wrapper) + CLC — DI untouched
         return false;
     }
     // state > 0 (orig sub_157eb body):
     //   mov si, es:[bx]; inc bx; and si, 0xFF; mov di, ds:42
     //   call sub_15911; if carry → sub_15972 + set bit; else call sub_15c93;
     //   if carry → sub_15da8 + set bit; else skip. Returns CLC always.
-    uint8_t filter = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig 0x57FC: MOV di,ds:42h; scans preserve DI (task #15)
     // NOTE: orig sub_157eb does NOT write ds:0x3A — filter is passed via SI register.
@@ -16404,9 +16410,13 @@ static void v2_vm_op_load_acc_indirect(V2VM& vm) {
 //   state == 0 (loc_1566a): check collision BIT in [di+0x13F5] → STC if set
 //   state > 0 (loc_15667): CLC always (no collision)
 //   state < 0 (loc_155e5): bounding box check, SET collision bit, CLC always
+static bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_155d6(V2VM& vm) {
-    int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     uint8_t filter = vm.read_u8(); // ALL paths consume 1 byte
+    return v2_vm_collision_155d6_f(vm, filter);
+}
+static bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter) {
+    int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
 
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     ObjRef self{vm, di};
@@ -16474,14 +16484,19 @@ static bool v2_vm_collision_check_155d6(V2VM& vm) {
 // Same 2-phase system as sub_155d6 but:
 // - Filter is a 2-byte word (not 1 byte)
 // - Filter check: TEST [si+0x1625], dx (bit test, not equality)
+static bool v2_vm_collision_156c0_f(V2VM& vm, uint16_t dx_filter);
 static bool v2_vm_collision_check_156c0(V2VM& vm) {
+    // stream wrapper: every phase branch consumes exactly 2 bytes
+    uint16_t dx_filter = vm.read_u16();
+    return v2_vm_collision_156c0_f(vm, dx_filter);
+}
+static bool v2_vm_collision_156c0_f(V2VM& vm, uint16_t dx_filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     ObjRef self{vm, di};
 
     if (state == 0) {
-        // loc_15754: ADD bx,2; check bit in [di+0x13F5]
-        vm.pc += 2;
+        // loc_15754: ADD bx,2 (consumed by the wrapper); check bit in [di+0x13F5]
         vm.di_track = di;   // orig 0x5757: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
@@ -16496,14 +16511,12 @@ static bool v2_vm_collision_check_156c0(V2VM& vm) {
     }
 
     if (state > 0) {
-        // loc_1574f: ADD bx,2; CLC
-        vm.pc += 2;
+        // loc_1574f: ADD bx,2 (consumed by the wrapper); CLC
         return false;
     }
 
     // state < 0 (loc_156cf): full bounding box check, 2-byte filter
     vm.di_track = di;   // orig 0x56D5: MOV di,ds:42h (state>0 path leaves DI)
-    uint16_t dx_filter = vm.read_u16();
     uint16_t x_left  = self.u16(OBJ_BBOX_X0);
     uint16_t x_right = self.u16(OBJ_BBOX_X1);
     uint16_t y_top   = self.u16(OBJ_BBOX_Y0);
@@ -16622,14 +16635,19 @@ static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t d
 // state > 0: calls sub_158f5 (search) + sub_15c37 (directional check). Complex.
 // Phase 1 (state==0) and phase-skip (state<0) fully implemented.
 // Phase 2 (state>0): full search + directional check → always returns CLC with collision bit setting.
+static bool v2_vm_collision_15788_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_15788(V2VM& vm) {
+    // stream wrapper: every phase branch consumes exactly 1 byte
+    uint8_t filter = vm.read_u8();
+    return v2_vm_collision_15788_f(vm, filter);
+}
+static bool v2_vm_collision_15788_f(V2VM& vm, uint8_t filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     uint16_t di = vm.global_r(DS_CUR_OBJ);
 
     ObjRef self{vm, di};
     if (state == 0) {
-        // loc_157c0: INC bx + check bit
-        vm.pc += 1;
+        // loc_157c0: INC bx (consumed by the wrapper) + check bit
         vm.di_track = di;   // orig 0x57C1: MOV di,ds:42h (task #15)
         uint16_t si_38e = vm.global_r(DS_COLL_BIT_IDX);
         uint16_t mask = *(uint16_t*)(vm.shadow +(uint16_t)(si_38e - LUT_BIT_MASK));
@@ -16640,14 +16658,12 @@ static bool v2_vm_collision_check_15788(V2VM& vm) {
     }
 
     if (state < 0) {
-        // loc_157bd: INC bx + CLC — DI untouched
-        vm.pc += 1;
+        // loc_157bd: INC bx (consumed by the wrapper) + CLC — DI untouched
         return false;
     }
 
     // state > 0: read filter, call sub_158f5/sub_15c37, set collision bit.
     // This path ALWAYS returns CLC (false). Collision is recorded via [di+13F5] bits.
-    uint8_t filter = vm.read_u8();
     di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig 0x5799: MOV di,ds:42h; scans preserve DI
     // (the OR [di+13F5h] tail uses it — verified by units 0-3/27-30)
