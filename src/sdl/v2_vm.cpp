@@ -9543,8 +9543,12 @@ static void v2_vm_op_skip3(V2VM& vm) { vm.pc += 3; }
 //   printf debug; play_xmidi_external(raddr(ds:0x2E6D, 0), chunk_sizes[ds:0x2E6D<<4], ax); RETN
 // The slot-allocation logic below RETN is dead code in SDL build (was AIL bookkeeping).
 // We still keep the slot writes for shadow-DS bookkeeping (excluded from verify).
+static void v2_vm_sfx_core(V2VM& vm, uint16_t seq);
 static void v2_vm_op_sound(V2VM& vm) {
     uint16_t seq = vm.read_u16();
+    v2_vm_sfx_core(vm, seq);
+}
+static void v2_vm_sfx_core(V2VM& vm, uint16_t seq) {
     seq &= 0xFF; // AND ax, 0FFh
     extern int v2_dbg_pre_vm_iter;
     extern uint16_t v2_current_level;
@@ -9566,8 +9570,12 @@ static void v2_vm_op_sound(V2VM& vm) {
 // 0x04 (sub_1782a): Stop sound. 1 byte consumed.
 // Original: reads channel number, checks ds:0x304, finds matching slot,
 // calls AIL stop sequence.
+static void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param);
 static void v2_vm_op_sound1(V2VM& vm) {
     uint8_t param = vm.read_u8();
+    v2_vm_sfx_stop_core(vm, param);
+}
+static void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param) {
     param &= 0xFF;
     extern int v2_dbg_pre_vm_iter;
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
@@ -9888,9 +9896,13 @@ static void v2_vm_op_D6(V2VM& vm) {
 // If found: AIL stop+release (sub_1C79F + sub_1C769) — orig SDL port LEFT THESE
 // AS AIL stubs (no SDL replacement). Then clears slots.
 // V2 uses adlmidi via stored handle (v2_vm_op_sound stored player num).
+static void v2_vm_sfx_stopslots_core(V2VM& vm, uint8_t seq);
 static void v2_vm_op_D7(V2VM& vm) {
     uint8_t seq = vm.es[vm.pc] & 0xFF;
     vm.pc += 3;
+    v2_vm_sfx_stopslots_core(vm, seq);
+}
+static void v2_vm_sfx_stopslots_core(V2VM& vm, uint8_t seq) {
     extern int v2_dbg_pre_vm_iter;
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
     bool muted = vm.ds_read(DS_SFX_MUTE) != 0;

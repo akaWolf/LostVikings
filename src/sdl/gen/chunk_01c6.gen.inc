@@ -9327,7 +9327,38 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_13DE:
         g_last_pc = 0x13DE;
         G_PRE(0x13DE, 0x44);
-        v2_vm_op_44(vm);  // text_menu(id=0x10D, edge=6, x=0xA, y=0xC)
+        // inlined v2_vm_op_44: text_menu(id=0x10D, edge=6, x=0xA, y=0xC)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0D00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x010D;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0006;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000A;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x000C;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x13E9;
         G_POST(0x13DE, 0x44);
         continue;
     L_13E9:
@@ -9342,25 +9373,35 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_13EC:
         g_last_pc = 0x13EC;
         G_PRE(0x13EC, 0xCB);
-        v2_vm_op_43(vm);  // cmdq_push(4)
+        // inlined v2_vm_op_43: cmdq_push(4)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2_cmdq_log("v2", 4, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x13ED;
         G_POST(0x13EC, 0xCB);
         continue;
     L_13ED:
         g_last_pc = 0x13ED;
         G_PRE(0x13ED, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x13EE;
         G_POST(0x13ED, 0x42);
         continue;
     L_13EE:
         g_last_pc = 0x13EE;
         G_PRE(0x13EE, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x13EE, 0x10);
         continue;
     L_13EF:
         g_last_pc = 0x13EF;
         G_PRE(0x13EF, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x13EF, 0x10);
         continue;
     L_140A:
@@ -9528,7 +9569,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1516:
         g_last_pc = 0x1516;
         G_PRE(0x1516, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x1516, 0x10);
         continue;
     L_1517:
@@ -9879,19 +9920,66 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_15B8:
         g_last_pc = 0x15B8;
         G_PRE(0x15B8, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0D, x=self.world_x, y=self.bbox_y1, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0D, x=self.world_x, y=self.bbox_y1, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x150D) /* self.bbox_y1 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0D, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x15C2;
         G_POST(0x15B8, 0x14);
         continue;
     L_15C2:
         g_last_pc = 0x15C2;
         G_PRE(0x15C2, 0x0E);
-        v2_vm_op_0E(vm);  // bits[0x356+sub>>3] |= 1<<(sub&7)
+        // inlined v2_vm_op_0E: bits[0x356+sub>>3] |= 1<<(sub&7)
+        { vm.si_track = vm.global_r(DS_CUR_OBJ);   // MOV si, ds:42h
+          int16_t _v = (int16_t)vm.field_r(OBJ_ANIM_SUB);
+          vm.di_track = (uint16_t)_v;              // MOV di, [si+16C5h]
+          if (_v >= 0) {
+              uint16_t _bit = (uint16_t)(_v & 7);
+              vm.di_track = _bit;                  // AND di, 7
+              uint16_t _off = (uint16_t)(_v >> 3);
+              vm.si_track = _off;                  // SHR si, 3
+              uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
+              uint16_t _a = (uint16_t)(_off + 0x356);
+              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+          } }
+        vm.pc = 0x15C3;
         G_POST(0x15C2, 0x0E);
         continue;
     L_15C3:
         g_last_pc = 0x15C3;
         G_PRE(0x15C3, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x15C3, 0x10);
         continue;
     L_15C4:
@@ -10389,7 +10477,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1658:
         g_last_pc = 0x1658;
         G_PRE(0x1658, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x2821
+        // inlined v2_vm_op_sound: sfx 0x2821
+        v2_vm_sfx_core(vm, 0x2821);
+        vm.pc = 0x165B;
         G_POST(0x1658, 0x02);
         continue;
     L_165B:
@@ -11358,6 +11448,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -11788,6 +11879,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -12026,7 +12118,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_187A:
         g_last_pc = 0x187A;
         G_PRE(0x187A, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x1886;
         G_POST(0x187A, 0x14);
         continue;
     L_1886:
@@ -13012,6 +13136,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -13476,7 +13601,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1A81:
         g_last_pc = 0x1A81;
         G_PRE(0x1A81, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x1A8D;
         G_POST(0x1A81, 0x14);
         continue;
     L_1A8D:
@@ -14093,6 +14250,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -14487,6 +14645,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -14525,7 +14684,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1BD6:
         g_last_pc = 0x1BD6;
         G_PRE(0x1BD6, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0x101)
+        // inlined v2_vm_op_3B: shake_y(0x101)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x0004);
+        vm.pc = 0x1BD9;
         G_POST(0x1BD6, 0x3B);
         continue;
     L_1BD9:
@@ -14738,7 +14901,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1C17:
         g_last_pc = 0x1C17;
         G_PRE(0x1C17, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x1C23;
         G_POST(0x1C17, 0x14);
         continue;
     L_1C23:
@@ -15218,7 +15413,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1CBB:
         g_last_pc = 0x1CBB;
         G_PRE(0x1CBB, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0x101)
+        // inlined v2_vm_op_3B: shake_y(0x101)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x0004);
+        vm.pc = 0x1CBE;
         G_POST(0x1CBB, 0x3B);
         continue;
     L_1CBE:
@@ -15623,6 +15822,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -16112,6 +16312,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x24)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x24, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -16387,6 +16588,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x24)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x24, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -16647,13 +16849,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1EB9:
         g_last_pc = 0x1EB9;
         G_PRE(0x1EB9, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=64, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=64, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x64, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x1EC5;
         G_POST(0x1EB9, 0x14);
         continue;
     L_1EC5:
         g_last_pc = 0x1EC5;
         G_PRE(0x1EC5, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4D52
+        // inlined v2_vm_op_sound: sfx 0x4D52
+        v2_vm_sfx_core(vm, 0x4D52);
+        vm.pc = 0x1EC8;
         G_POST(0x1EC5, 0x02);
         continue;
     L_1EC8:
@@ -17396,7 +17632,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_1FAE:
         g_last_pc = 0x1FAE;
         G_PRE(0x1FAE, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x2821
+        // inlined v2_vm_op_sound: sfx 0x2821
+        v2_vm_sfx_core(vm, 0x2821);
+        vm.pc = 0x1FB1;
         G_POST(0x1FAE, 0x02);
         continue;
     L_1FB1:
@@ -17823,13 +18061,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2035:
         g_last_pc = 0x2035;
         G_PRE(0x2035, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=64, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=64, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x64, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x2041;
         G_POST(0x2035, 0x14);
         continue;
     L_2041:
         g_last_pc = 0x2041;
         G_PRE(0x2041, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4D52
+        // inlined v2_vm_op_sound: sfx 0x4D52
+        v2_vm_sfx_core(vm, 0x4D52);
+        vm.pc = 0x2044;
         G_POST(0x2041, 0x02);
         continue;
     L_2044:
@@ -18206,7 +18478,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_20F8:
         g_last_pc = 0x20F8;
         G_PRE(0x20F8, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x321D
+        // inlined v2_vm_op_sound: sfx 0x321D
+        v2_vm_sfx_core(vm, 0x321D);
+        vm.pc = 0x20FB;
         G_POST(0x20F8, 0x02);
         continue;
     L_20FB:
@@ -18369,7 +18643,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2127:
         g_last_pc = 0x2127;
         G_PRE(0x2127, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x2132;
         G_POST(0x2127, 0x14);
         continue;
     L_2132:
@@ -18915,6 +19222,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -19427,6 +19735,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -19662,6 +19971,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -19885,6 +20195,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -20071,13 +20382,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2350:
         g_last_pc = 0x2350;
         G_PRE(0x2350, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=D0, x=[0206], y=[0208], pool=1, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=D0, x=[0206], y=[0208], pool=1, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0001;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0xD0, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x235C;
         G_POST(0x2350, 0x14);
         continue;
     L_235C:
         g_last_pc = 0x235C;
         G_PRE(0x235C, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4D54
+        // inlined v2_vm_op_sound: sfx 0x4D54
+        v2_vm_sfx_core(vm, 0x4D54);
+        vm.pc = 0x235F;
         G_POST(0x235C, 0x02);
         continue;
     L_235F:
@@ -21264,6 +21609,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -21710,6 +22056,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -21914,7 +22261,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_25F0:
         g_last_pc = 0x25F0;
         G_PRE(0x25F0, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x25FC;
         G_POST(0x25F0, 0x14);
         continue;
     L_25FC:
@@ -22944,6 +23323,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -23018,6 +23398,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -23872,7 +24253,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_28AF:
         g_last_pc = 0x28AF;
         G_PRE(0x28AF, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x28BB;
         G_POST(0x28AF, 0x14);
         continue;
     L_28BB:
@@ -23887,6 +24300,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -23939,6 +24353,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -24308,6 +24723,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -25414,6 +25830,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -25749,6 +26166,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -25954,13 +26372,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2B7F:
         g_last_pc = 0x2B7F;
         G_PRE(0x2B7F, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x05, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x2B8B;
         G_POST(0x2B7F, 0x14);
         continue;
     L_2B8B:
         g_last_pc = 0x2B8B;
         G_PRE(0x2B8B, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4D4D
+        // inlined v2_vm_op_sound: sfx 0x4D4D
+        v2_vm_sfx_core(vm, 0x4D4D);
+        vm.pc = 0x2B8E;
         G_POST(0x2B8B, 0x02);
         continue;
     L_2B8E:
@@ -26308,7 +26760,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2BFB:
         g_last_pc = 0x2BFB;
         G_PRE(0x2BFB, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x2C07;
         G_POST(0x2BFB, 0x14);
         continue;
     L_2C07:
@@ -26874,13 +27358,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2CB9:
         g_last_pc = 0x2CB9;
         G_PRE(0x2CB9, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x05, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x2CC5;
         G_POST(0x2CB9, 0x14);
         continue;
     L_2CC5:
         g_last_pc = 0x2CC5;
         G_PRE(0x2CC5, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4D4D
+        // inlined v2_vm_op_sound: sfx 0x4D4D
+        v2_vm_sfx_core(vm, 0x4D4D);
+        vm.pc = 0x2CC8;
         G_POST(0x2CC5, 0x02);
         continue;
     L_2CC8:
@@ -27252,7 +27770,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2DAF:
         g_last_pc = 0x2DAF;
         G_PRE(0x2DAF, 0x3F);
-        v2_vm_op_3F(vm);  // subsprites: fl|=0x4000, dirty|=0x200
+        // inlined v2_vm_op_3F: subsprites: fl|=0x4000, dirty|=0x200
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) | 0x4000));
+              _sub.w16(OBJ_DIRTY_MODE, (uint16_t)(_sub.u16(OBJ_DIRTY_MODE) | 0x0200));
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x2DB0;
         G_POST(0x2DAF, 0x3F);
         continue;
     L_2DB0:
@@ -27513,6 +28041,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -27868,6 +28397,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -28082,7 +28612,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2EA0:
         g_last_pc = 0x2EA0;
         G_PRE(0x2EA0, 0x3F);
-        v2_vm_op_3F(vm);  // subsprites: fl|=0x4000, dirty|=0x200
+        // inlined v2_vm_op_3F: subsprites: fl|=0x4000, dirty|=0x200
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) | 0x4000));
+              _sub.w16(OBJ_DIRTY_MODE, (uint16_t)(_sub.u16(OBJ_DIRTY_MODE) | 0x0200));
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x2EA1;
         G_POST(0x2EA0, 0x3F);
         continue;
     L_2EA1:
@@ -28252,7 +28792,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2EC7:
         g_last_pc = 0x2EC7;
         G_PRE(0x2EC7, 0x40);
-        v2_vm_op_40(vm);  // subsprites: fl&=0x9FFF, dirty=2
+        // inlined v2_vm_op_40: subsprites: fl&=0x9FFF, dirty=2
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF));
+              _sub.w16(OBJ_DIRTY_MODE, 2);
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x2EC8;
         G_POST(0x2EC7, 0x40);
         continue;
     L_2EC8:
@@ -28597,13 +29147,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_2F31:
         g_last_pc = 0x2F31;
         G_PRE(0x2F31, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x05, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x2F3D;
         G_POST(0x2F31, 0x14);
         continue;
     L_2F3D:
         g_last_pc = 0x2F3D;
         G_PRE(0x2F3D, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x6130
+        // inlined v2_vm_op_sound: sfx 0x6130
+        v2_vm_sfx_core(vm, 0x6130);
+        vm.pc = 0x2F40;
         G_POST(0x2F3D, 0x02);
         continue;
     L_2F40:
@@ -29317,13 +29901,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3023:
         g_last_pc = 0x3023;
         G_PRE(0x3023, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=05, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x05, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x302F;
         G_POST(0x3023, 0x14);
         continue;
     L_302F:
         g_last_pc = 0x302F;
         G_PRE(0x302F, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F30
+        // inlined v2_vm_op_sound: sfx 0x7F30
+        v2_vm_sfx_core(vm, 0x7F30);
+        vm.pc = 0x3032;
         G_POST(0x302F, 0x02);
         continue;
     L_3032:
@@ -29777,6 +30395,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -29848,6 +30467,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -30109,6 +30729,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -30153,6 +30774,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -30294,6 +30916,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -30428,7 +31051,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_31E2:
         g_last_pc = 0x31E2;
         G_PRE(0x31E2, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=83, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=83, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x83, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x31EE;
         G_POST(0x31E2, 0x14);
         continue;
     L_31EE:
@@ -30543,6 +31198,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -31080,7 +31736,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_32BC:
         g_last_pc = 0x32BC;
         G_PRE(0x32BC, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=83, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=83, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x83, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x32C8;
         G_POST(0x32BC, 0x14);
         continue;
     L_32C8:
@@ -31481,7 +32169,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3386:
         g_last_pc = 0x3386;
         G_PRE(0x3386, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x435A
+        // inlined v2_vm_op_sound: sfx 0x435A
+        v2_vm_sfx_core(vm, 0x435A);
+        vm.pc = 0x3389;
         G_POST(0x3386, 0x02);
         continue;
     L_3389:
@@ -31628,19 +32318,55 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_33AF:
         g_last_pc = 0x33AF;
         G_PRE(0x33AF, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x33B9;
         G_POST(0x33AF, 0x14);
         continue;
     L_33B9:
         g_last_pc = 0x33B9;
         G_PRE(0x33B9, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x435A
+        // inlined v2_vm_op_sound: sfx 0x435A
+        v2_vm_sfx_core(vm, 0x435A);
+        vm.pc = 0x33BC;
         G_POST(0x33B9, 0x02);
         continue;
     L_33BC:
         g_last_pc = 0x33BC;
         G_PRE(0x33BC, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x33BC, 0x10);
         continue;
     L_33E0:
@@ -31843,6 +32569,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -32363,7 +33090,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_34B0:
         g_last_pc = 0x34B0;
         G_PRE(0x34B0, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x34BB;
         G_POST(0x34B0, 0x14);
         continue;
     L_34BB:
@@ -32512,6 +33272,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -32595,6 +33356,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -32742,6 +33504,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -32889,6 +33652,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -33008,6 +33772,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x6D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x6D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -33334,7 +34099,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_35CB:
         g_last_pc = 0x35CB;
         G_PRE(0x35CB, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x35D5;
         G_POST(0x35CB, 0x14);
         continue;
     L_35D5:
@@ -34396,6 +35195,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -34791,7 +35591,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3809:
         g_last_pc = 0x3809;
         G_PRE(0x3809, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=[0208], pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x3815;
         G_POST(0x3809, 0x14);
         continue;
     L_3815:
@@ -35247,7 +36079,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_38A3:
         g_last_pc = 0x38A3;
         G_PRE(0x38A3, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x2821
+        // inlined v2_vm_op_sound: sfx 0x2821
+        v2_vm_sfx_core(vm, 0x2821);
+        vm.pc = 0x38A6;
         G_POST(0x38A3, 0x02);
         continue;
     L_38A6:
@@ -35473,7 +36307,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_38E3:
         g_last_pc = 0x38E3;
         G_PRE(0x38E3, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x38E3, 0x10);
         continue;
     L_38E4:
@@ -35955,6 +36789,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -36132,6 +36967,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -36518,13 +37354,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3A21:
         g_last_pc = 0x3A21;
         G_PRE(0x3A21, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=8A, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=8A, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x8A, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x3A2D;
         G_POST(0x3A21, 0x14);
         continue;
     L_3A2D:
         g_last_pc = 0x3A2D;
         G_PRE(0x3A2D, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F33
+        // inlined v2_vm_op_sound: sfx 0x7F33
+        v2_vm_sfx_core(vm, 0x7F33);
+        vm.pc = 0x3A30;
         G_POST(0x3A2D, 0x02);
         continue;
     L_3A30:
@@ -37107,13 +37977,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3AEB:
         g_last_pc = 0x3AEB;
         G_PRE(0x3AEB, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=8A, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=8A, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x8A, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x3AF7;
         G_POST(0x3AEB, 0x14);
         continue;
     L_3AF7:
         g_last_pc = 0x3AF7;
         G_PRE(0x3AF7, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F33
+        // inlined v2_vm_op_sound: sfx 0x7F33
+        v2_vm_sfx_core(vm, 0x7F33);
+        vm.pc = 0x3AFA;
         G_POST(0x3AF7, 0x02);
         continue;
     L_3AFA:
@@ -37513,7 +38417,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3BAA:
         g_last_pc = 0x3BAA;
         G_PRE(0x3BAA, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x321D
+        // inlined v2_vm_op_sound: sfx 0x321D
+        v2_vm_sfx_core(vm, 0x321D);
+        vm.pc = 0x3BAD;
         G_POST(0x3BAA, 0x02);
         continue;
     L_3BAD:
@@ -37644,7 +38550,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3BCE:
         g_last_pc = 0x3BCE;
         G_PRE(0x3BCE, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x3BD8;
         G_POST(0x3BCE, 0x14);
         continue;
     L_3BD8:
@@ -37938,7 +38878,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EC7:
         g_last_pc = 0x3EC7;
         G_PRE(0x3EC7, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9f63b)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9f63b)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3BF6 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3BF6 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3ECB;
         G_POST(0x3EC7, 0x13);
         continue;
     L_3ECB:
@@ -37950,7 +38900,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3ECC:
         g_last_pc = 0x3ECC;
         G_PRE(0x3ECC, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9563c)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9563c)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3C56 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3C56 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3ED0;
         G_POST(0x3ECC, 0x13);
         continue;
     L_3ED0:
@@ -37962,7 +38922,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3ED1:
         g_last_pc = 0x3ED1;
         G_PRE(0x3ED1, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9863c)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9863c)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3C86 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3C86 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3ED5;
         G_POST(0x3ED1, 0x13);
         continue;
     L_3ED5:
@@ -37974,7 +38944,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3ED6:
         g_last_pc = 0x3ED6;
         G_PRE(0x3ED6, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9b63c)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9b63c)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3CB6 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3CB6 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EDA;
         G_POST(0x3ED6, 0x13);
         continue;
     L_3EDA:
@@ -37986,7 +38966,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EDB:
         g_last_pc = 0x3EDB;
         G_PRE(0x3EDB, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9e63c)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9e63c)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3CE6 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3CE6 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EDF;
         G_POST(0x3EDB, 0x13);
         continue;
     L_3EDF:
@@ -37998,7 +38988,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EE0:
         g_last_pc = 0x3EE0;
         G_PRE(0x3EE0, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9163d)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9163d)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3D16 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3D16 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EE4;
         G_POST(0x3EE0, 0x13);
         continue;
     L_3EE4:
@@ -38010,7 +39010,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EE5:
         g_last_pc = 0x3EE5;
         G_PRE(0x3EE5, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9463d)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9463d)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3D46 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3D46 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EE9;
         G_POST(0x3EE5, 0x13);
         continue;
     L_3EE9:
@@ -38022,7 +39032,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EEA:
         g_last_pc = 0x3EEA;
         G_PRE(0x3EEA, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9763d)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9763d)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3D76 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3D76 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EEE;
         G_POST(0x3EEA, 0x13);
         continue;
     L_3EEE:
@@ -38034,7 +39054,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EEF:
         g_last_pc = 0x3EEF;
         G_PRE(0x3EEF, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9a63d)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9a63d)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3DA6 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3DA6 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EF3;
         G_POST(0x3EEF, 0x13);
         continue;
     L_3EF3:
@@ -38046,7 +39076,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EF4:
         g_last_pc = 0x3EF4;
         G_PRE(0x3EF4, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9d63d)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9d63d)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3DD6 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3DD6 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EF8;
         G_POST(0x3EF4, 0x13);
         continue;
     L_3EF8:
@@ -38058,7 +39098,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EF9:
         g_last_pc = 0x3EF9;
         G_PRE(0x3EF9, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9063e)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9063e)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3E06 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3E06 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3EFD;
         G_POST(0x3EF9, 0x13);
         continue;
     L_3EFD:
@@ -38070,7 +39120,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3EFE:
         g_last_pc = 0x3EFE;
         G_PRE(0x3EFE, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9263c)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9263c)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3C26 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3C26 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3F02;
         G_POST(0x3EFE, 0x13);
         continue;
     L_3F02:
@@ -38082,7 +39142,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_3F03:
         g_last_pc = 0x3F03;
         G_PRE(0x3F03, 0x13);
-        v2_vm_op_13(vm);  // pal_src = es[ptr] (d9363e)
+        // inlined v2_vm_op_13: pal_src = es[ptr] (d9363e)
+        { for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x3E36 + _i]);
+          }
+          for (int _i = 0; _i < 48; _i++) {
+              vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x3E36 + _i]);
+          }
+          v2_vm_pal_correct_10e99(vm);
+          vm.ds_write(DS_PAL_REQ, 4);
+          vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }
+        vm.pc = 0x3F07;
         G_POST(0x3F03, 0x13);
         continue;
     L_3F07:
@@ -38332,6 +39402,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -38590,6 +39661,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_22: when probe_up(0x29)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_up_158c8(vm, 0x29, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -38608,7 +39680,31 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4322:
         g_last_pc = 0x4322;
         G_PRE(0x4322, 0x4A);
-        v2_vm_op_4A(vm);  // when probe_at2(29, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_4A: when probe_at2(29, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4329 : 0x4350;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4329 : 0x4350;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4350;
+          } else {
+              vm.pc = 0x4327;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4322, 0x4A);
         continue;
     L_4329:
@@ -38645,6 +39741,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x2D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x2D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -38697,7 +39794,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4345:
         g_last_pc = 0x4345;
         G_PRE(0x4345, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(3A, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(3A, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x3A);
+          vm.pc = vm.carry ? 0x4350 : 0x434D;
+        }
         G_POST(0x4345, 0x49);
         continue;
     L_434D:
@@ -38799,7 +39909,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_436F:
         g_last_pc = 0x436F;
         G_PRE(0x436F, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(09, x=[0206], y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(09, x=[0206], y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x09);
+          vm.pc = vm.carry ? 0x48EA : 0x4377;
+        }
         G_POST(0x436F, 0x49);
         continue;
     L_4377:
@@ -38946,7 +40069,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_43A8:
         g_last_pc = 0x43A8;
         G_PRE(0x43A8, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(09, x=[0206], y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(09, x=[0206], y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x09);
+          vm.pc = vm.carry ? 0x48EA : 0x43B0;
+        }
         G_POST(0x43A8, 0x49);
         continue;
     L_43B0:
@@ -39691,6 +40827,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_22: when probe_up(0x29)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_up_158c8(vm, 0x29, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -39709,7 +40846,21 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_44B7:
         g_last_pc = 0x44B7;
         G_PRE(0x44B7, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x46A6 : 0x44BE;
+        }
         G_POST(0x44B7, 0x49);
         continue;
     L_44BE:
@@ -40085,6 +41236,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x71)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x71, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -40328,6 +41480,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -40422,6 +41575,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -40550,13 +41704,48 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_45BC:
         g_last_pc = 0x45BC;
         G_PRE(0x45BC, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x401B
+        // inlined v2_vm_op_sound: sfx 0x401B
+        v2_vm_sfx_core(vm, 0x401B);
+        vm.pc = 0x45BF;
         G_POST(0x45BC, 0x02);
         continue;
     L_45BF:
         g_last_pc = 0x45BF;
         G_PRE(0x45BF, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=07, x=self.world_x, y=[0206], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=07, x=self.world_x, y=[0206], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x07, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x45CA;
         G_POST(0x45BF, 0x14);
         continue;
     L_45CA:
@@ -40568,13 +41757,48 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_45CD:
         g_last_pc = 0x45CD;
         G_PRE(0x45CD, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x401B
+        // inlined v2_vm_op_sound: sfx 0x401B
+        v2_vm_sfx_core(vm, 0x401B);
+        vm.pc = 0x45D0;
         G_POST(0x45CD, 0x02);
         continue;
     L_45D0:
         g_last_pc = 0x45D0;
         G_PRE(0x45D0, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=08, x=self.world_x, y=[0206], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=08, x=self.world_x, y=[0206], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x08, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x45DB;
         G_POST(0x45D0, 0x14);
         continue;
     L_45DB:
@@ -40619,6 +41843,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -40762,7 +41987,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4611:
         g_last_pc = 0x4611;
         G_PRE(0x4611, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=06, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=06, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x06, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x461C;
         G_POST(0x4611, 0x14);
         continue;
     L_461C:
@@ -40807,6 +42065,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -40910,6 +42169,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -41035,7 +42295,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4668:
         g_last_pc = 0x4668;
         G_PRE(0x4668, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=06, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=06, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x06, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x4673;
         G_POST(0x4668, 0x14);
         continue;
     L_4673:
@@ -41080,6 +42373,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -41183,6 +42477,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -41344,7 +42639,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_46C7:
         g_last_pc = 0x46C7;
         G_PRE(0x46C7, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x46D1;
         G_POST(0x46C7, 0x26);
         continue;
     L_46D1:
@@ -41366,7 +42677,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_46D7:
         g_last_pc = 0x46D7;
         G_PRE(0x46D7, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x46E0;
+        }
         G_POST(0x46D7, 0x27);
         continue;
     L_46E0:
@@ -41570,7 +42897,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4728:
         g_last_pc = 0x4728;
         G_PRE(0x4728, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x4732;
         G_POST(0x4728, 0x26);
         continue;
     L_4732:
@@ -41592,7 +42935,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4738:
         g_last_pc = 0x4738;
         G_PRE(0x4738, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x4741;
+        }
         G_POST(0x4738, 0x27);
         continue;
     L_4741:
@@ -41962,13 +43321,45 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_47CC:
         g_last_pc = 0x47CC;
         G_PRE(0x47CC, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x47D6;
         G_POST(0x47CC, 0x26);
         continue;
     L_47D6:
         g_last_pc = 0x47D6;
         G_PRE(0x47D6, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x47DF;
+        }
         G_POST(0x47D6, 0x27);
         continue;
     L_47DF:
@@ -42027,7 +43418,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_47F2:
         g_last_pc = 0x47F2;
         G_PRE(0x47F2, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(44, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(44, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x44);
+          vm.pc = vm.carry ? 0x4532 : 0x47FA;
+        }
         G_POST(0x47F2, 0x49);
         continue;
     L_47FA:
@@ -42051,7 +43455,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_47FF:
         g_last_pc = 0x47FF;
         G_PRE(0x47FF, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x481D : 0x4807;
+        }
         G_POST(0x47FF, 0x49);
         continue;
     L_4807:
@@ -42091,7 +43508,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4812:
         g_last_pc = 0x4812;
         G_PRE(0x4812, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x481D : 0x481A;
+        }
         G_POST(0x4812, 0x49);
         continue;
     L_481A:
@@ -42317,13 +43747,45 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_486C:
         g_last_pc = 0x486C;
         G_PRE(0x486C, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x4876;
         G_POST(0x486C, 0x26);
         continue;
     L_4876:
         g_last_pc = 0x4876;
         G_PRE(0x4876, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x487F;
+        }
         G_POST(0x4876, 0x27);
         continue;
     L_487F:
@@ -42756,6 +44218,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -43817,7 +45280,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4CB4:
         g_last_pc = 0x4CB4;
         G_PRE(0x4CB4, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F5D
+        // inlined v2_vm_op_sound: sfx 0x7F5D
+        v2_vm_sfx_core(vm, 0x7F5D);
+        vm.pc = 0x4CB7;
         G_POST(0x4CB4, 0x02);
         continue;
     L_4CB7:
@@ -43923,6 +45388,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -44274,6 +45740,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_22: when probe_up(0x29)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_up_158c8(vm, 0x29, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -44292,7 +45759,31 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4D59:
         g_last_pc = 0x4D59;
         G_PRE(0x4D59, 0x4A);
-        v2_vm_op_4A(vm);  // when probe_at2(29, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_4A: when probe_at2(29, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x4D60 : 0x4D87;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x4D60 : 0x4D87;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x4D87;
+          } else {
+              vm.pc = 0x4D5E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x4D59, 0x4A);
         continue;
     L_4D60:
@@ -44329,6 +45820,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x2D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x2D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -44381,7 +45873,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4D7C:
         g_last_pc = 0x4D7C;
         G_PRE(0x4D7C, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(3A, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(3A, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x3A);
+          vm.pc = vm.carry ? 0x4D87 : 0x4D84;
+        }
         G_POST(0x4D7C, 0x49);
         continue;
     L_4D84:
@@ -44483,7 +45988,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4DA6:
         g_last_pc = 0x4DA6;
         G_PRE(0x4DA6, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(09, x=[0206], y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(09, x=[0206], y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x09);
+          vm.pc = vm.carry ? 0x54EE : 0x4DAE;
+        }
         G_POST(0x4DA6, 0x49);
         continue;
     L_4DAE:
@@ -44630,7 +46148,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4DDF:
         g_last_pc = 0x4DDF;
         G_PRE(0x4DDF, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(09, x=[0206], y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(09, x=[0206], y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x09);
+          vm.pc = vm.carry ? 0x54EE : 0x4DE7;
+        }
         G_POST(0x4DDF, 0x49);
         continue;
     L_4DE7:
@@ -44950,6 +46481,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -45295,7 +46827,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4EC6:
         g_last_pc = 0x4EC6;
         G_PRE(0x4EC6, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0001;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x4ED1;
         G_POST(0x4EC6, 0x14);
         continue;
     L_4ED1:
@@ -45339,13 +46904,61 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4EDF:
         g_last_pc = 0x4EDF;
         G_PRE(0x4EDF, 0x28);
-        v2_vm_op_28(vm);  // [0206] = ([020A]&~0xF)|8; [0208] = (self.world_y&~0xF)|8
+        // inlined v2_vm_op_28: [0206] = ([020A]&~0xF)|8; [0208] = (self.world_y&~0xF)|8
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _a = vm.ds_read(0x020A);
+          vm.ch4_mul_clobber = false;
+          uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
+          const uint16_t _b = vm.ds_read(_b_a);
+          uint16_t _cx = (uint16_t)((_a & 0xFFF0) | 8);
+          uint16_t _dx = (uint16_t)((_b & 0xFFF0) | 8);
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _cx);
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, _dx);
+        }
+        vm.pc = 0x4EE9;
         G_POST(0x4EDF, 0x28);
         continue;
     L_4EE9:
         g_last_pc = 0x4EE9;
         G_PRE(0x4EE9, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=10, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=10, x=[0206], y=[0208], pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x10, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x4EF5;
         G_POST(0x4EE9, 0x14);
         continue;
     L_4EF5:
@@ -45367,7 +46980,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4EFA:
         g_last_pc = 0x4EFA;
         G_PRE(0x4EFA, 0x2E);
-        v2_vm_op_2E(vm);  // shake_x(0x101)
+        // inlined v2_vm_op_2E: shake_x(0x101)
+        vm.ds_write(DS_SHAKE_SRC_X, 0x0001);
+        vm.ds_write(DS_SHAKE_X, 0);
+        vm.ds_write(DS_SHAKE_GATE_X, 0x0002);
+        vm.pc = 0x4EFD;
         G_POST(0x4EFA, 0x2E);
         continue;
     L_4EFD:
@@ -45398,7 +47015,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_4F05:
         g_last_pc = 0x4F05;
         G_PRE(0x4F05, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F24
+        // inlined v2_vm_op_sound: sfx 0x7F24
+        v2_vm_sfx_core(vm, 0x7F24);
+        vm.pc = 0x4F08;
         G_POST(0x4F05, 0x02);
         continue;
     L_4F08:
@@ -45449,6 +47068,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -46418,7 +48038,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5053:
         g_last_pc = 0x5053;
         G_PRE(0x5053, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x2244
+        // inlined v2_vm_op_sound: sfx 0x2244
+        v2_vm_sfx_core(vm, 0x2244);
+        vm.pc = 0x5056;
         G_POST(0x5053, 0x02);
         continue;
     L_5056:
@@ -46551,6 +48173,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -46753,6 +48376,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -47656,6 +49280,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_22: when probe_up(0x29)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_up_158c8(vm, 0x29, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -47674,7 +49299,21 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_51F1:
         g_last_pc = 0x51F1;
         G_PRE(0x51F1, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x52A0 : 0x51F8;
+        }
         G_POST(0x51F1, 0x49);
         continue;
     L_51F8:
@@ -48080,6 +49719,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x71)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x71, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -48309,7 +49949,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_52C1:
         g_last_pc = 0x52C1;
         G_PRE(0x52C1, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x52CB;
         G_POST(0x52C1, 0x26);
         continue;
     L_52CB:
@@ -48331,7 +49987,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_52D1:
         g_last_pc = 0x52D1;
         G_PRE(0x52D1, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x52DA;
+        }
         G_POST(0x52D1, 0x27);
         continue;
     L_52DA:
@@ -48535,7 +50207,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5322:
         g_last_pc = 0x5322;
         G_PRE(0x5322, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x532C;
         G_POST(0x5322, 0x26);
         continue;
     L_532C:
@@ -48557,7 +50245,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5332:
         g_last_pc = 0x5332;
         G_PRE(0x5332, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x533B;
+        }
         G_POST(0x5332, 0x27);
         continue;
     L_533B:
@@ -48949,13 +50653,45 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_53D0:
         g_last_pc = 0x53D0;
         G_PRE(0x53D0, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x53DA;
         G_POST(0x53D0, 0x26);
         continue;
     L_53DA:
         g_last_pc = 0x53DA;
         G_PRE(0x53DA, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x53E3;
+        }
         G_POST(0x53DA, 0x27);
         continue;
     L_53E3:
@@ -49014,7 +50750,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_53F6:
         g_last_pc = 0x53F6;
         G_PRE(0x53F6, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(44, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(44, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x44);
+          vm.pc = vm.carry ? 0x527A : 0x53FE;
+        }
         G_POST(0x53F6, 0x49);
         continue;
     L_53FE:
@@ -49038,7 +50787,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5403:
         g_last_pc = 0x5403;
         G_PRE(0x5403, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x5421 : 0x540B;
+        }
         G_POST(0x5403, 0x49);
         continue;
     L_540B:
@@ -49078,7 +50840,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5416:
         g_last_pc = 0x5416;
         G_PRE(0x5416, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x5421 : 0x541E;
+        }
         G_POST(0x5416, 0x49);
         continue;
     L_541E:
@@ -49304,13 +51079,45 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5470:
         g_last_pc = 0x5470;
         G_PRE(0x5470, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x547A;
         G_POST(0x5470, 0x26);
         continue;
     L_547A:
         g_last_pc = 0x547A;
         G_PRE(0x547A, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x5483;
+        }
         G_POST(0x547A, 0x27);
         continue;
     L_5483:
@@ -49743,6 +51550,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -50914,7 +52722,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_58F2:
         g_last_pc = 0x58F2;
         G_PRE(0x58F2, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=03, x=self.world_x, y=self.world_y, pool=0xF, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=03, x=self.world_x, y=self.world_y, pool=0xF, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x000F;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x03, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x58FC;
         G_POST(0x58F2, 0x14);
         continue;
     L_58FC:
@@ -51154,6 +52996,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x44)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x44, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -51373,6 +53216,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_22: when probe_up(0x29)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_up_158c8(vm, 0x29, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -51391,7 +53235,31 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5999:
         g_last_pc = 0x5999;
         G_PRE(0x5999, 0x4A);
-        v2_vm_op_4A(vm);  // when probe_at2(29, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_4A: when probe_at2(29, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x59A0 : 0x59C7;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x59A0 : 0x59C7;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x59C7;
+          } else {
+              vm.pc = 0x599E;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x5999, 0x4A);
         continue;
     L_59A0:
@@ -51428,6 +53296,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x2D)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x2D, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -51480,7 +53349,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_59BC:
         g_last_pc = 0x59BC;
         G_PRE(0x59BC, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(3A, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(3A, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x3A);
+          vm.pc = vm.carry ? 0x59C7 : 0x59C4;
+        }
         G_POST(0x59BC, 0x49);
         continue;
     L_59C4:
@@ -51582,7 +53464,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_59E6:
         g_last_pc = 0x59E6;
         G_PRE(0x59E6, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(09, x=[0206], y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(09, x=[0206], y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x09);
+          vm.pc = vm.carry ? 0x605D : 0x59EE;
+        }
         G_POST(0x59E6, 0x49);
         continue;
     L_59EE:
@@ -51790,7 +53685,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5A35:
         g_last_pc = 0x5A35;
         G_PRE(0x5A35, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(09, x=[0206], y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(09, x=[0206], y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x09);
+          vm.pc = vm.carry ? 0x605D : 0x5A3D;
+        }
         G_POST(0x5A35, 0x49);
         continue;
     L_5A3D:
@@ -53535,6 +55443,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_22: when probe_up(0x29)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_up_158c8(vm, 0x29, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -53553,7 +55462,21 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5CAD:
         g_last_pc = 0x5CAD;
         G_PRE(0x5CAD, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x5DCE : 0x5CB4;
+        }
         G_POST(0x5CAD, 0x49);
         continue;
     L_5CB4:
@@ -54278,6 +56201,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x71)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x71, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -54482,7 +56406,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5DE8:
         g_last_pc = 0x5DE8;
         G_PRE(0x5DE8, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x5DF2;
         G_POST(0x5DE8, 0x26);
         continue;
     L_5DF2:
@@ -54504,7 +56444,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5DF8:
         g_last_pc = 0x5DF8;
         G_PRE(0x5DF8, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x5E01;
+        }
         G_POST(0x5DF8, 0x27);
         continue;
     L_5E01:
@@ -54732,7 +56688,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5E50:
         g_last_pc = 0x5E50;
         G_PRE(0x5E50, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x5E5A;
         G_POST(0x5E50, 0x26);
         continue;
     L_5E5A:
@@ -54754,7 +56726,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5E60:
         g_last_pc = 0x5E60;
         G_PRE(0x5E60, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x5E69;
+        }
         G_POST(0x5E60, 0x27);
         continue;
     L_5E69:
@@ -55161,13 +57149,45 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5F03:
         g_last_pc = 0x5F03;
         G_PRE(0x5F03, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x5F0D;
         G_POST(0x5F03, 0x26);
         continue;
     L_5F0D:
         g_last_pc = 0x5F0D;
         G_PRE(0x5F0D, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x5F16;
+        }
         G_POST(0x5F0D, 0x27);
         continue;
     L_5F16:
@@ -55226,7 +57246,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5F29:
         g_last_pc = 0x5F29;
         G_PRE(0x5F29, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(44, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(44, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x44);
+          vm.pc = vm.carry ? 0x5DA8 : 0x5F31;
+        }
         G_POST(0x5F29, 0x49);
         continue;
     L_5F31:
@@ -55250,7 +57283,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5F36:
         g_last_pc = 0x5F36;
         G_PRE(0x5F36, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x5F54 : 0x5F3E;
+        }
         G_POST(0x5F36, 0x49);
         continue;
     L_5F3E:
@@ -55290,7 +57336,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5F49:
         g_last_pc = 0x5F49;
         G_PRE(0x5F49, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(29, x=self.world_x, y=[0206])
+        // inlined v2_vm_op_49: when probe_at(29, x=self.world_x, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x29);
+          vm.pc = vm.carry ? 0x5F54 : 0x5F51;
+        }
         G_POST(0x5F49, 0x49);
         continue;
     L_5F51:
@@ -55553,13 +57612,45 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_5FB2:
         g_last_pc = 0x5FB2;
         G_PRE(0x5FB2, 0x26);
-        v2_vm_op_26(vm);  // [0208] = self.world_x>>4; [020A] = [0206]>>4
+        // inlined v2_vm_op_26: [0208] = self.world_x>>4; [020A] = [0206]>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _b = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          vm.si_track = 0x0208;
+          vm.ds_write(0x0208, vm.ds_read(DS_TEXT_COL));
+          vm.si_track = 0x020A;
+          vm.ds_write(0x020A, vm.ds_read(DS_TEXT_ROW));
+        }
+        vm.pc = 0x5FBC;
         G_POST(0x5FB2, 0x26);
         continue;
     L_5FBC:
         g_last_pc = 0x5FBC;
         G_PRE(0x5FBC, 0x27);
-        v2_vm_op_27(vm);  // [0206] = tile_type([0208], [020A])
+        // inlined v2_vm_op_27: [0206] = tile_type([0208], [020A])
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _a = vm.ds_read(0x0208);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _b = vm.ds_read(0x020A);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          vm.si_track = 0x0206;
+          vm.ds_write(0x0206, _tt);
+        }
+        vm.pc = 0x5FC5;
+        }
         G_POST(0x5FBC, 0x27);
         continue;
     L_5FC5:
@@ -56458,6 +58549,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x44)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x44, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -57414,6 +59506,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x44)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x44, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -58170,7 +60263,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6589:
         g_last_pc = 0x6589;
         G_PRE(0x6589, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x6589, 0x0F);
         continue;
     L_658A:
@@ -59021,7 +61114,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_66A9:
         g_last_pc = 0x66A9;
         G_PRE(0x66A9, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x66A9, 0x10);
         continue;
     L_66AA:
@@ -59273,7 +61366,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_66F0:
         g_last_pc = 0x66F0;
         G_PRE(0x66F0, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x66F0, 0x10);
         continue;
     L_66FF:
@@ -59999,13 +62092,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_67DE:
         g_last_pc = 0x67DE;
         G_PRE(0x67DE, 0x04);
-        v2_vm_op_sound1(vm);  // sfx_stop 0x5D
+        // inlined v2_vm_op_sound1: sfx_stop 0x5D
+        v2_vm_sfx_stop_core(vm, 0x5D);
+        vm.pc = 0x67E0;
         G_POST(0x67DE, 0x04);
         continue;
     L_67E0:
         g_last_pc = 0x67E0;
         G_PRE(0x67E0, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4013
+        // inlined v2_vm_op_sound: sfx 0x4013
+        v2_vm_sfx_core(vm, 0x4013);
+        vm.pc = 0x67E3;
         G_POST(0x67E0, 0x02);
         continue;
     L_67E3:
@@ -60551,7 +62648,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_687D:
         g_last_pc = 0x687D;
         G_PRE(0x687D, 0x40);
-        v2_vm_op_40(vm);  // subsprites: fl&=0x9FFF, dirty=2
+        // inlined v2_vm_op_40: subsprites: fl&=0x9FFF, dirty=2
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF));
+              _sub.w16(OBJ_DIRTY_MODE, 2);
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x687E;
         G_POST(0x687D, 0x40);
         continue;
     L_687E:
@@ -60609,13 +62716,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6887:
         g_last_pc = 0x6887;
         G_PRE(0x6887, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(75, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_49: when probe_at(75, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x75);
+          vm.pc = vm.carry ? 0x6896 : 0x688E;
+        }
         G_POST(0x6887, 0x49);
         continue;
     L_688E:
         g_last_pc = 0x688E;
         G_PRE(0x688E, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(75, x=self.world_x, y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(75, x=self.world_x, y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x75);
+          vm.pc = vm.carry ? 0x6896 : 0x6895;
+        }
         G_POST(0x688E, 0x49);
         continue;
     L_6895:
@@ -61017,7 +63152,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_690C:
         g_last_pc = 0x690C;
         G_PRE(0x690C, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4020
+        // inlined v2_vm_op_sound: sfx 0x4020
+        v2_vm_sfx_core(vm, 0x4020);
+        vm.pc = 0x690F;
         G_POST(0x690C, 0x02);
         continue;
     L_690F:
@@ -61168,6 +63305,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -61978,7 +64116,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6A42:
         g_last_pc = 0x6A42;
         G_PRE(0x6A42, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0x201)
+        // inlined v2_vm_op_3B: shake_y(0x201)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x0008);
+        vm.pc = 0x6A45;
         G_POST(0x6A42, 0x3B);
         continue;
     L_6A45:
@@ -62046,7 +64188,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6A5C:
         g_last_pc = 0x6A5C;
         G_PRE(0x6A5C, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4013
+        // inlined v2_vm_op_sound: sfx 0x4013
+        v2_vm_sfx_core(vm, 0x4013);
+        vm.pc = 0x6A5F;
         G_POST(0x6A5C, 0x02);
         continue;
     L_6A5F:
@@ -62134,6 +64278,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -62960,6 +65105,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_1F: when probe_down(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(0);
           if (_cs == 0x44E9) {
@@ -63467,6 +65613,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -64207,7 +66354,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6E31:
         g_last_pc = 0x6E31;
         G_PRE(0x6E31, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F1C
+        // inlined v2_vm_op_sound: sfx 0x7F1C
+        v2_vm_sfx_core(vm, 0x7F1C);
+        vm.pc = 0x6E34;
         G_POST(0x6E31, 0x02);
         continue;
     L_6E34:
@@ -64237,7 +66386,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6E3D:
         g_last_pc = 0x6E3D;
         G_PRE(0x6E3D, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F1C
+        // inlined v2_vm_op_sound: sfx 0x7F1C
+        v2_vm_sfx_core(vm, 0x7F1C);
+        vm.pc = 0x6E40;
         G_POST(0x6E3D, 0x02);
         continue;
     L_6E40:
@@ -64439,13 +66590,46 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6E7B:
         g_last_pc = 0x6E7B;
         G_PRE(0x6E7B, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0001;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x6E86;
         G_POST(0x6E7B, 0x14);
         continue;
     L_6E86:
         g_last_pc = 0x6E86;
         G_PRE(0x6E86, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x6E86, 0x10);
         continue;
     L_6E87:
@@ -64598,13 +66782,46 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6EB2:
         g_last_pc = 0x6EB2;
         G_PRE(0x6EB2, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x6EBD;
         G_POST(0x6EB2, 0x14);
         continue;
     L_6EBD:
         g_last_pc = 0x6EBD;
         G_PRE(0x6EBD, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x6EBD, 0x10);
         continue;
     L_6EBE:
@@ -64904,13 +67121,46 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6F12:
         g_last_pc = 0x6F12;
         G_PRE(0x6F12, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0001;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x6F1D;
         G_POST(0x6F12, 0x14);
         continue;
     L_6F1D:
         g_last_pc = 0x6F1D;
         G_PRE(0x6F1D, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x6F1D, 0x10);
         continue;
     L_6F7A:
@@ -65023,7 +67273,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6F9C:
         g_last_pc = 0x6F9C;
         G_PRE(0x6F9C, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x6F9C, 0x10);
         continue;
     L_6F9D:
@@ -65143,13 +67393,46 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6FBD:
         g_last_pc = 0x6FBD;
         G_PRE(0x6FBD, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=[0206], y=self.world_y, pool=1, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0001;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x6FC8;
         G_POST(0x6FBD, 0x14);
         continue;
     L_6FC8:
         g_last_pc = 0x6FC8;
         G_PRE(0x6FC8, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x6FC8, 0x10);
         continue;
     L_6FC9:
@@ -65219,7 +67502,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_6FD9:
         g_last_pc = 0x6FD9;
         G_PRE(0x6FD9, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x6FD9, 0x10);
         continue;
     L_6FDB:
@@ -66054,7 +68337,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_712D:
         g_last_pc = 0x712D;
         G_PRE(0x712D, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F03
+        // inlined v2_vm_op_sound: sfx 0x7F03
+        v2_vm_sfx_core(vm, 0x7F03);
+        vm.pc = 0x7130;
         G_POST(0x712D, 0x02);
         continue;
     L_7130:
@@ -66090,7 +68375,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7139:
         g_last_pc = 0x7139;
         G_PRE(0x7139, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F14
+        // inlined v2_vm_op_sound: sfx 0x7F14
+        v2_vm_sfx_core(vm, 0x7F14);
+        vm.pc = 0x713C;
         G_POST(0x7139, 0x02);
         continue;
     L_713C:
@@ -66164,7 +68451,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7153:
         g_last_pc = 0x7153;
         G_PRE(0x7153, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F14
+        // inlined v2_vm_op_sound: sfx 0x7F14
+        v2_vm_sfx_core(vm, 0x7F14);
+        vm.pc = 0x7156;
         G_POST(0x7153, 0x02);
         continue;
     L_7156:
@@ -66260,13 +68549,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_716D:
         g_last_pc = 0x716D;
         G_PRE(0x716D, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(85, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_49: when probe_at(85, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x85);
+          vm.pc = vm.carry ? 0x717E : 0x7174;
+        }
         G_POST(0x716D, 0x49);
         continue;
     L_7174:
         g_last_pc = 0x7174;
         G_PRE(0x7174, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(85, x=self.world_x, y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(85, x=self.world_x, y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x85);
+          vm.pc = vm.carry ? 0x717E : 0x717B;
+        }
         G_POST(0x7174, 0x49);
         continue;
     L_717B:
@@ -66503,13 +68820,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_71B8:
         g_last_pc = 0x71B8;
         G_PRE(0x71B8, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(85, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_49: when probe_at(85, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x85);
+          vm.pc = vm.carry ? 0x71C9 : 0x71BF;
+        }
         G_POST(0x71B8, 0x49);
         continue;
     L_71BF:
         g_last_pc = 0x71BF;
         G_PRE(0x71BF, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(85, x=self.world_x, y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(85, x=self.world_x, y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x85);
+          vm.pc = vm.carry ? 0x71C9 : 0x71C6;
+        }
         G_POST(0x71BF, 0x49);
         continue;
     L_71C6:
@@ -66746,13 +69091,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7203:
         g_last_pc = 0x7203;
         G_PRE(0x7203, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(85, x=self.world_x, y=self.bbox_y0)
+        // inlined v2_vm_op_49: when probe_at(85, x=self.world_x, y=self.bbox_y0)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x14E5) /* self.bbox_y0 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x85);
+          vm.pc = vm.carry ? 0x7214 : 0x720A;
+        }
         G_POST(0x7203, 0x49);
         continue;
     L_720A:
         g_last_pc = 0x720A;
         G_PRE(0x720A, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(85, x=self.world_x, y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(85, x=self.world_x, y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x85);
+          vm.pc = vm.carry ? 0x7214 : 0x7211;
+        }
         G_POST(0x720A, 0x49);
         continue;
     L_7211:
@@ -67053,7 +69426,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_726C:
         g_last_pc = 0x726C;
         G_PRE(0x726C, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x726F;
         G_POST(0x726C, 0x02);
         continue;
     L_726F:
@@ -67135,7 +69510,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_728A:
         g_last_pc = 0x728A;
         G_PRE(0x728A, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x728D;
         G_POST(0x728A, 0x02);
         continue;
     L_728D:
@@ -67217,7 +69594,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_72A8:
         g_last_pc = 0x72A8;
         G_PRE(0x72A8, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x72AB;
         G_POST(0x72A8, 0x02);
         continue;
     L_72AB:
@@ -67229,13 +69608,49 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_72AE:
         g_last_pc = 0x72AE;
         G_PRE(0x72AE, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=21, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=21, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x21, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x72B8;
         G_POST(0x72AE, 0x14);
         continue;
     L_72B8:
         g_last_pc = 0x72B8;
         G_PRE(0x72B8, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x72BB;
         G_POST(0x72B8, 0x02);
         continue;
     L_72BB:
@@ -67247,7 +69662,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_72BE:
         g_last_pc = 0x72BE;
         G_PRE(0x72BE, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=22, x=self.world_x, y=self.world_y, pool=0, fl=0&0x801)
+        // inlined v2_vm_op_14: spawn(t=22, x=self.world_x, y=self.world_y, pool=0, fl=0&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0000;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x22, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x72C8;
         G_POST(0x72BE, 0x14);
         continue;
     L_72C8:
@@ -67305,7 +69754,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_72DB:
         g_last_pc = 0x72DB;
         G_PRE(0x72DB, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x72DE;
         G_POST(0x72DB, 0x02);
         continue;
     L_72DE:
@@ -67341,7 +69792,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_72E8:
         g_last_pc = 0x72E8;
         G_PRE(0x72E8, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x72EB;
         G_POST(0x72E8, 0x02);
         continue;
     L_72EB:
@@ -67356,6 +69809,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_22: when probe_up(0x87)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_up_158c8(vm, 0x87, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -67455,7 +69909,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_730A:
         g_last_pc = 0x730A;
         G_PRE(0x730A, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x730D;
         G_POST(0x730A, 0x02);
         continue;
     L_730D:
@@ -67485,7 +69941,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7315:
         g_last_pc = 0x7315;
         G_PRE(0x7315, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5011
+        // inlined v2_vm_op_sound: sfx 0x5011
+        v2_vm_sfx_core(vm, 0x5011);
+        vm.pc = 0x7318;
         G_POST(0x7315, 0x02);
         continue;
     L_7318:
@@ -67643,7 +70101,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_734F:
         g_last_pc = 0x734F;
         G_PRE(0x734F, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F03
+        // inlined v2_vm_op_sound: sfx 0x7F03
+        v2_vm_sfx_core(vm, 0x7F03);
+        vm.pc = 0x7352;
         G_POST(0x734F, 0x02);
         continue;
     L_7352:
@@ -67655,7 +70115,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7355:
         g_last_pc = 0x7355;
         G_PRE(0x7355, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F03
+        // inlined v2_vm_op_sound: sfx 0x7F03
+        v2_vm_sfx_core(vm, 0x7F03);
+        vm.pc = 0x7358;
         G_POST(0x7355, 0x02);
         continue;
     L_7358:
@@ -67772,7 +70234,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7382:
         g_last_pc = 0x7382;
         G_PRE(0x7382, 0x57);
-        v2_vm_op_57(vm);  // [03F4] = acc
+        // inlined v2_vm_op_57: [03F4] = acc
+        vm.pc = 0x7383;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7382, 0x57);
         continue;
     L_7385:
@@ -67792,7 +70256,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_738B:
         g_last_pc = 0x738B;
         G_PRE(0x738B, 0x57);
-        v2_vm_op_57(vm);  // [03F6] = acc
+        // inlined v2_vm_op_57: [03F6] = acc
+        vm.pc = 0x738C;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x738B, 0x57);
         continue;
     L_738E:
@@ -67812,7 +70278,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7394:
         g_last_pc = 0x7394;
         G_PRE(0x7394, 0x57);
-        v2_vm_op_57(vm);  // [03F8] = acc
+        // inlined v2_vm_op_57: [03F8] = acc
+        vm.pc = 0x7395;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7394, 0x57);
         continue;
     L_7397:
@@ -67832,7 +70300,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_739D:
         g_last_pc = 0x739D;
         G_PRE(0x739D, 0x57);
-        v2_vm_op_57(vm);  // [03FA] = acc
+        // inlined v2_vm_op_57: [03FA] = acc
+        vm.pc = 0x739E;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x739D, 0x57);
         continue;
     L_73A0:
@@ -67909,7 +70379,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_73BE:
         g_last_pc = 0x73BE;
         G_PRE(0x73BE, 0x57);
-        v2_vm_op_57(vm);  // [03EC] = acc
+        // inlined v2_vm_op_57: [03EC] = acc
+        vm.pc = 0x73BF;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x73BE, 0x57);
         continue;
     L_73C1:
@@ -67929,7 +70401,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_73C7:
         g_last_pc = 0x73C7;
         G_PRE(0x73C7, 0x57);
-        v2_vm_op_57(vm);  // [03EE] = acc
+        // inlined v2_vm_op_57: [03EE] = acc
+        vm.pc = 0x73C8;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x73C7, 0x57);
         continue;
     L_73CA:
@@ -67949,7 +70423,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_73D0:
         g_last_pc = 0x73D0;
         G_PRE(0x73D0, 0x57);
-        v2_vm_op_57(vm);  // [03F0] = acc
+        // inlined v2_vm_op_57: [03F0] = acc
+        vm.pc = 0x73D1;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x73D0, 0x57);
         continue;
     L_73D3:
@@ -67969,7 +70445,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_73D9:
         g_last_pc = 0x73D9;
         G_PRE(0x73D9, 0x57);
-        v2_vm_op_57(vm);  // [03F2] = acc
+        // inlined v2_vm_op_57: [03F2] = acc
+        vm.pc = 0x73DA;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x73D9, 0x57);
         continue;
     L_73DC:
@@ -68046,7 +70524,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_73FA:
         g_last_pc = 0x73FA;
         G_PRE(0x73FA, 0x57);
-        v2_vm_op_57(vm);  // [hud_items] = acc
+        // inlined v2_vm_op_57: [hud_items] = acc
+        vm.pc = 0x73FB;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x73FA, 0x57);
         continue;
     L_73FD:
@@ -68066,7 +70546,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7403:
         g_last_pc = 0x7403;
         G_PRE(0x7403, 0x57);
-        v2_vm_op_57(vm);  // [03E6] = acc
+        // inlined v2_vm_op_57: [03E6] = acc
+        vm.pc = 0x7404;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7403, 0x57);
         continue;
     L_7406:
@@ -68086,7 +70568,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_740C:
         g_last_pc = 0x740C;
         G_PRE(0x740C, 0x57);
-        v2_vm_op_57(vm);  // [03E8] = acc
+        // inlined v2_vm_op_57: [03E8] = acc
+        vm.pc = 0x740D;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x740C, 0x57);
         continue;
     L_740F:
@@ -68106,7 +70590,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7415:
         g_last_pc = 0x7415;
         G_PRE(0x7415, 0x57);
-        v2_vm_op_57(vm);  // [03EA] = acc
+        // inlined v2_vm_op_57: [03EA] = acc
+        vm.pc = 0x7416;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7415, 0x57);
         continue;
     L_7418:
@@ -69749,13 +72235,59 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_76B2:
         g_last_pc = 0x76B2;
         G_PRE(0x76B2, 0x4A);
-        v2_vm_op_4A(vm);  // when probe_at2(24, x=self.bbox_x0, y=[0206])
+        // inlined v2_vm_op_4A: when probe_at2(24, x=self.bbox_x0, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1535) /* self.bbox_x0 */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x24);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x76BA : 0x76C9;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x76BA : 0x76C9;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x76C9;
+          } else {
+              vm.pc = 0x76B8;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x76B2, 0x4A);
         continue;
     L_76BA:
         g_last_pc = 0x76BA;
         G_PRE(0x76BA, 0x4A);
-        v2_vm_op_4A(vm);  // when probe_at2(24, x=self.bbox_x1, y=[0206])
+        // inlined v2_vm_op_4A: when probe_at2(24, x=self.bbox_x1, y=[0206])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x155D) /* self.bbox_x1 */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _y = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x24);
+          uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
+          if (_cs == 0x44E9) {
+              vm.pc = (!vm.carry) ? 0x76C2 : 0x76C9;
+          } else if (_cs == 0x44F3) {
+              vm.pc = (vm.carry) ? 0x76C2 : 0x76C9;
+          } else if (_cs == 0x42CF) {
+              vm.pc = 0x76C9;
+          } else {
+              vm.pc = 0x76C0;  // T-word position for runtime_dispatch
+              v2_vm_runtime_dispatch(vm, 0x87AE, 1);
+          }
+        }
         G_POST(0x76BA, 0x4A);
         continue;
     L_76C2:
@@ -69875,13 +72407,51 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7759:
         g_last_pc = 0x7759;
         G_PRE(0x7759, 0x26);
-        v2_vm_op_26(vm);  // self.state_187d = self.world_x>>4; self.state_18f5 = self.world_y>>4
+        // inlined v2_vm_op_26: self.state_187d = self.world_x>>4; self.state_18f5 = self.world_y>>4
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));
+          vm.ch4_mul_clobber = false;
+          uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
+          const uint16_t _b = vm.ds_read(_b_a);
+          vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));
+          { uint16_t _sa = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
+            vm.si_track = _sa;   // 154cb: slot addr in SI
+            vm.ds_write(_sa, vm.ds_read(DS_TEXT_COL)); }
+          { uint16_t _sa = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */;
+            vm.si_track = _sa;   // 154cb: slot addr in SI
+            vm.ds_write(_sa, vm.ds_read(DS_TEXT_ROW)); }
+        }
+        vm.pc = 0x7760;
         G_POST(0x7759, 0x26);
         continue;
     L_7760:
         g_last_pc = 0x7760;
         G_PRE(0x7760, 0x27);
-        v2_vm_op_27(vm);  // self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        // inlined v2_vm_op_27: self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ch4_mul_clobber = false;
+          uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */;
+          vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
+          const uint16_t _b = vm.ds_read(_b_a);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          { uint16_t _sa = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */;
+            vm.si_track = _sa;   // 154cb: slot addr in SI
+            vm.ds_write(_sa, _tt); }
+        }
+        vm.pc = 0x7766;
+        }
         G_POST(0x7760, 0x27);
         continue;
     L_7766:
@@ -69927,7 +72497,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7774:
         g_last_pc = 0x7774;
         G_PRE(0x7774, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x7774, 0x10);
         continue;
     L_7775:
@@ -69951,7 +72521,25 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7779:
         g_last_pc = 0x7779;
         G_PRE(0x7779, 0x29);
-        v2_vm_op_29(vm);  // tile[self.state_187d,self.state_18f5] = [022E]
+        // inlined v2_vm_op_29: tile[self.state_187d,self.state_18f5] = [022E]
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x022E;
+          const uint16_t _v = vm.ds_read(0x022E);
+          { uint16_t _si = _x, _di = _y;
+            if (vm.ch4_mul_clobber) _di = vm.ch4_mul_dx;
+            v2_vm_tile_write_141e0(vm, _si, _di, _v);
+            v2_vm_tile_dirty_13fc2(vm, _si, _di, _v); }
+        }
+        vm.pc = 0x7780;
         G_POST(0x7779, 0x29);
         continue;
     L_7780:
@@ -70061,7 +72649,26 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_779B:
         g_last_pc = 0x779B;
         G_PRE(0x779B, 0x27);
-        v2_vm_op_27(vm);  // self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        // inlined v2_vm_op_27: self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ch4_mul_clobber = false;
+          uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */;
+          vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
+          const uint16_t _b = vm.ds_read(_b_a);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          { uint16_t _sa = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */;
+            vm.si_track = _sa;   // 154cb: slot addr in SI
+            vm.ds_write(_sa, _tt); }
+        }
+        vm.pc = 0x77A1;
+        }
         G_POST(0x779B, 0x27);
         continue;
     L_77A1:
@@ -70141,7 +72748,26 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_77B9:
         g_last_pc = 0x77B9;
         G_PRE(0x77B9, 0x27);
-        v2_vm_op_27(vm);  // self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        // inlined v2_vm_op_27: self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ch4_mul_clobber = false;
+          uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */;
+          vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
+          const uint16_t _b = vm.ds_read(_b_a);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          { uint16_t _sa = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */;
+            vm.si_track = _sa;   // 154cb: slot addr in SI
+            vm.ds_write(_sa, _tt); }
+        }
+        vm.pc = 0x77BF;
+        }
         G_POST(0x77B9, 0x27);
         continue;
     L_77BF:
@@ -70218,7 +72844,26 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_77D7:
         g_last_pc = 0x77D7;
         G_PRE(0x77D7, 0x27);
-        v2_vm_op_27(vm);  // self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        // inlined v2_vm_op_27: self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ch4_mul_clobber = false;
+          uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */;
+          vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
+          const uint16_t _b = vm.ds_read(_b_a);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          { uint16_t _sa = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */;
+            vm.si_track = _sa;   // 154cb: slot addr in SI
+            vm.ds_write(_sa, _tt); }
+        }
+        vm.pc = 0x77DD;
+        }
         G_POST(0x77D7, 0x27);
         continue;
     L_77DD:
@@ -70292,7 +72937,26 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_77F5:
         g_last_pc = 0x77F5;
         G_PRE(0x77F5, 0x27);
-        v2_vm_op_27(vm);  // self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        // inlined v2_vm_op_27: self.res_cost = tile_type(self.state_187d, self.state_18f5)
+        { uint16_t _tt = 0; (void)_tt;
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _a_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
+          vm.si_track = (uint16_t)(_a_a - OBJ_FIELD_BASE);
+          const uint16_t _a = vm.ds_read(_a_a);
+          vm.ch4_mul_clobber = false;
+          uint16_t _b_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x18F5) /* self.state_18f5 */;
+          vm.si_track = (uint16_t)(_b_a - OBJ_FIELD_BASE);
+          const uint16_t _b = vm.ds_read(_b_a);
+          { uint16_t _sx = _a, _dy = _b;
+            if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;
+            _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }
+          { uint16_t _sa = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x15D5) /* self.res_cost */;
+            vm.si_track = _sa;   // 154cb: slot addr in SI
+            vm.ds_write(_sa, _tt); }
+        }
+        vm.pc = 0x77FB;
+        }
         G_POST(0x77F5, 0x27);
         continue;
     L_77FB:
@@ -70338,7 +73002,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7809:
         g_last_pc = 0x7809;
         G_PRE(0x7809, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x7809, 0x10);
         continue;
     L_780A:
@@ -70891,7 +73555,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_78F4:
         g_last_pc = 0x78F4;
         G_PRE(0x78F4, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x78F4, 0x10);
         continue;
     L_78F5:
@@ -71267,6 +73931,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
         // inlined v2_vm_op_23: when probe_down2(0x17)
         {
           uint16_t _di = vm.global_r(DS_CUR_OBJ);
+          vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)
           v2_vm_probe_down_158d7(vm, 0x17, _di);
           uint16_t _cs = v2gs(vm.shadow).vm_subdispatch_tbl(1);
           if (_cs == 0x44E9) {
@@ -71420,7 +74085,21 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_79A5:
         g_last_pc = 0x79A5;
         G_PRE(0x79A5, 0x49);
-        v2_vm_op_49(vm);  // when probe_at(44, x=self.world_x, y=self.world_y)
+        // inlined v2_vm_op_49: when probe_at(44, x=self.world_x, y=self.world_y)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          v2_vm_probe_at_pos_1589b(vm, 0x44);
+          vm.pc = vm.carry ? 0x7B0D : 0x79AC;
+        }
         G_POST(0x79A5, 0x49);
         continue;
     L_79AC:
@@ -71553,7 +74232,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_79D8:
         g_last_pc = 0x79D8;
         G_PRE(0x79D8, 0x57);
-        v2_vm_op_57(vm);  // [hud_items] = acc
+        // inlined v2_vm_op_57: [hud_items] = acc
+        vm.pc = 0x79D9;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x79D8, 0x57);
         continue;
     L_79DB:
@@ -71610,7 +74291,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_79ED:
         g_last_pc = 0x79ED;
         G_PRE(0x79ED, 0x57);
-        v2_vm_op_57(vm);  // [03E6] = acc
+        // inlined v2_vm_op_57: [03E6] = acc
+        vm.pc = 0x79EE;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x79ED, 0x57);
         continue;
     L_79F0:
@@ -71667,7 +74350,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A02:
         g_last_pc = 0x7A02;
         G_PRE(0x7A02, 0x57);
-        v2_vm_op_57(vm);  // [03E8] = acc
+        // inlined v2_vm_op_57: [03E8] = acc
+        vm.pc = 0x7A03;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A02, 0x57);
         continue;
     L_7A05:
@@ -71724,7 +74409,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A17:
         g_last_pc = 0x7A17;
         G_PRE(0x7A17, 0x57);
-        v2_vm_op_57(vm);  // [03EA] = acc
+        // inlined v2_vm_op_57: [03EA] = acc
+        vm.pc = 0x7A18;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A17, 0x57);
         continue;
     L_7A1A:
@@ -71797,7 +74484,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A31:
         g_last_pc = 0x7A31;
         G_PRE(0x7A31, 0x57);
-        v2_vm_op_57(vm);  // [03EC] = acc
+        // inlined v2_vm_op_57: [03EC] = acc
+        vm.pc = 0x7A32;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A31, 0x57);
         continue;
     L_7A34:
@@ -71854,7 +74543,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A46:
         g_last_pc = 0x7A46;
         G_PRE(0x7A46, 0x57);
-        v2_vm_op_57(vm);  // [03EE] = acc
+        // inlined v2_vm_op_57: [03EE] = acc
+        vm.pc = 0x7A47;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A46, 0x57);
         continue;
     L_7A49:
@@ -71911,7 +74602,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A5B:
         g_last_pc = 0x7A5B;
         G_PRE(0x7A5B, 0x57);
-        v2_vm_op_57(vm);  // [03F0] = acc
+        // inlined v2_vm_op_57: [03F0] = acc
+        vm.pc = 0x7A5C;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A5B, 0x57);
         continue;
     L_7A5E:
@@ -71968,7 +74661,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A70:
         g_last_pc = 0x7A70;
         G_PRE(0x7A70, 0x57);
-        v2_vm_op_57(vm);  // [03F2] = acc
+        // inlined v2_vm_op_57: [03F2] = acc
+        vm.pc = 0x7A71;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A70, 0x57);
         continue;
     L_7A73:
@@ -72041,7 +74736,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A8A:
         g_last_pc = 0x7A8A;
         G_PRE(0x7A8A, 0x57);
-        v2_vm_op_57(vm);  // [03F4] = acc
+        // inlined v2_vm_op_57: [03F4] = acc
+        vm.pc = 0x7A8B;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A8A, 0x57);
         continue;
     L_7A8D:
@@ -72098,7 +74795,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7A9F:
         g_last_pc = 0x7A9F;
         G_PRE(0x7A9F, 0x57);
-        v2_vm_op_57(vm);  // [03F6] = acc
+        // inlined v2_vm_op_57: [03F6] = acc
+        vm.pc = 0x7AA0;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7A9F, 0x57);
         continue;
     L_7AA2:
@@ -72155,7 +74854,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7AB4:
         g_last_pc = 0x7AB4;
         G_PRE(0x7AB4, 0x57);
-        v2_vm_op_57(vm);  // [03F8] = acc
+        // inlined v2_vm_op_57: [03F8] = acc
+        vm.pc = 0x7AB5;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7AB4, 0x57);
         continue;
     L_7AB7:
@@ -72212,7 +74913,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7AC9:
         g_last_pc = 0x7AC9;
         G_PRE(0x7AC9, 0x57);
-        v2_vm_op_57(vm);  // [03FA] = acc
+        // inlined v2_vm_op_57: [03FA] = acc
+        vm.pc = 0x7ACA;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7AC9, 0x57);
         continue;
     L_7ACC:
@@ -72458,7 +75161,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7B0E:
         g_last_pc = 0x7B0E;
         G_PRE(0x7B0E, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x501E
+        // inlined v2_vm_op_sound: sfx 0x501E
+        v2_vm_sfx_core(vm, 0x501E);
+        vm.pc = 0x7B11;
         G_POST(0x7B0E, 0x02);
         continue;
     L_7B11:
@@ -73204,13 +75909,26 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7C29:
         g_last_pc = 0x7C29;
         G_PRE(0x7C29, 0x0E);
-        v2_vm_op_0E(vm);  // bits[0x356+sub>>3] |= 1<<(sub&7)
+        // inlined v2_vm_op_0E: bits[0x356+sub>>3] |= 1<<(sub&7)
+        { vm.si_track = vm.global_r(DS_CUR_OBJ);   // MOV si, ds:42h
+          int16_t _v = (int16_t)vm.field_r(OBJ_ANIM_SUB);
+          vm.di_track = (uint16_t)_v;              // MOV di, [si+16C5h]
+          if (_v >= 0) {
+              uint16_t _bit = (uint16_t)(_v & 7);
+              vm.di_track = _bit;                  // AND di, 7
+              uint16_t _off = (uint16_t)(_v >> 3);
+              vm.si_track = _off;                  // SHR si, 3
+              uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
+              uint16_t _a = (uint16_t)(_off + 0x356);
+              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+          } }
+        vm.pc = 0x7C2A;
         G_POST(0x7C29, 0x0E);
         continue;
     L_7C2A:
         g_last_pc = 0x7C2A;
         G_PRE(0x7C2A, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x7C2A, 0x10);
         continue;
     L_7C9A:
@@ -73381,13 +76099,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7CC9:
         g_last_pc = 0x7CC9;
         G_PRE(0x7CC9, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x7CD3;
         G_POST(0x7CC9, 0x14);
         continue;
     L_7CD3:
         g_last_pc = 0x7CD3;
         G_PRE(0x7CD3, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x7CD3, 0x10);
         continue;
     L_7CD4:
@@ -73446,7 +76198,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7CE4:
         g_last_pc = 0x7CE4;
         G_PRE(0x7CE4, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x501D
+        // inlined v2_vm_op_sound: sfx 0x501D
+        v2_vm_sfx_core(vm, 0x501D);
+        vm.pc = 0x7CE7;
         G_POST(0x7CE4, 0x02);
         continue;
     L_7CE7:
@@ -73513,7 +76267,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7CF8:
         g_last_pc = 0x7CF8;
         G_PRE(0x7CF8, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x7CF8, 0x10);
         continue;
     L_7D7F:
@@ -74171,7 +76925,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E6F:
         g_last_pc = 0x7E6F;
         G_PRE(0x7E6F, 0x57);
-        v2_vm_op_57(vm);  // [03EC] = acc
+        // inlined v2_vm_op_57: [03EC] = acc
+        vm.pc = 0x7E70;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E6F, 0x57);
         continue;
     L_7E72:
@@ -74185,7 +76941,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E75:
         g_last_pc = 0x7E75;
         G_PRE(0x7E75, 0x57);
-        v2_vm_op_57(vm);  // [03EE] = acc
+        // inlined v2_vm_op_57: [03EE] = acc
+        vm.pc = 0x7E76;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E75, 0x57);
         continue;
     L_7E78:
@@ -74199,7 +76957,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E7B:
         g_last_pc = 0x7E7B;
         G_PRE(0x7E7B, 0x57);
-        v2_vm_op_57(vm);  // [03F0] = acc
+        // inlined v2_vm_op_57: [03F0] = acc
+        vm.pc = 0x7E7C;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E7B, 0x57);
         continue;
     L_7E7E:
@@ -74213,7 +76973,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E81:
         g_last_pc = 0x7E81;
         G_PRE(0x7E81, 0x57);
-        v2_vm_op_57(vm);  // [03F2] = acc
+        // inlined v2_vm_op_57: [03F2] = acc
+        vm.pc = 0x7E82;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E81, 0x57);
         continue;
     L_7E84:
@@ -74227,7 +76989,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E87:
         g_last_pc = 0x7E87;
         G_PRE(0x7E87, 0x57);
-        v2_vm_op_57(vm);  // [hud_items] = acc
+        // inlined v2_vm_op_57: [hud_items] = acc
+        vm.pc = 0x7E88;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E87, 0x57);
         continue;
     L_7E8A:
@@ -74241,7 +77005,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E8D:
         g_last_pc = 0x7E8D;
         G_PRE(0x7E8D, 0x57);
-        v2_vm_op_57(vm);  // [03E6] = acc
+        // inlined v2_vm_op_57: [03E6] = acc
+        vm.pc = 0x7E8E;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E8D, 0x57);
         continue;
     L_7E90:
@@ -74255,7 +77021,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E93:
         g_last_pc = 0x7E93;
         G_PRE(0x7E93, 0x57);
-        v2_vm_op_57(vm);  // [03E8] = acc
+        // inlined v2_vm_op_57: [03E8] = acc
+        vm.pc = 0x7E94;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E93, 0x57);
         continue;
     L_7E96:
@@ -74269,7 +77037,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E99:
         g_last_pc = 0x7E99;
         G_PRE(0x7E99, 0x57);
-        v2_vm_op_57(vm);  // [03EA] = acc
+        // inlined v2_vm_op_57: [03EA] = acc
+        vm.pc = 0x7E9A;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E99, 0x57);
         continue;
     L_7E9C:
@@ -74283,7 +77053,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7E9F:
         g_last_pc = 0x7E9F;
         G_PRE(0x7E9F, 0x57);
-        v2_vm_op_57(vm);  // [03F4] = acc
+        // inlined v2_vm_op_57: [03F4] = acc
+        vm.pc = 0x7EA0;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7E9F, 0x57);
         continue;
     L_7EA2:
@@ -74297,7 +77069,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7EA5:
         g_last_pc = 0x7EA5;
         G_PRE(0x7EA5, 0x57);
-        v2_vm_op_57(vm);  // [03F6] = acc
+        // inlined v2_vm_op_57: [03F6] = acc
+        vm.pc = 0x7EA6;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7EA5, 0x57);
         continue;
     L_7EA8:
@@ -74311,7 +77085,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7EAB:
         g_last_pc = 0x7EAB;
         G_PRE(0x7EAB, 0x57);
-        v2_vm_op_57(vm);  // [03F8] = acc
+        // inlined v2_vm_op_57: [03F8] = acc
+        vm.pc = 0x7EAC;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7EAB, 0x57);
         continue;
     L_7EAE:
@@ -74325,7 +77101,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7EB1:
         g_last_pc = 0x7EB1;
         G_PRE(0x7EB1, 0x57);
-        v2_vm_op_57(vm);  // [03FA] = acc
+        // inlined v2_vm_op_57: [03FA] = acc
+        vm.pc = 0x7EB2;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x7EB1, 0x57);
         continue;
     L_7EB4:
@@ -74493,7 +77271,8 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7EF5:
         g_last_pc = 0x7EF5;
         G_PRE(0x7EF5, 0xD2);
-        v2_vm_op_D2(vm);  // pw_chars = password[level]
+        // inlined v2_vm_op_D2: pw_chars = password[level]
+        v2_vm_op_D2(vm);   // open primitive (no stream reads)
         G_POST(0x7EF5, 0xD2);
         continue;
     L_7EF6:
@@ -74537,37 +77316,154 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7F06:
         g_last_pc = 0x7F06;
         G_PRE(0x7F06, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0)
+        // inlined v2_vm_op_46: cmdq_push(6, 0)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0000);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x7F09;
         G_POST(0x7F06, 0x46);
         continue;
     L_7F09:
         g_last_pc = 0x7F09;
         G_PRE(0x7F09, 0x44);
-        v2_vm_op_44(vm);  // text_menu(id=0x10D, edge=6, x=0xF, y=0xA)
+        // inlined v2_vm_op_44: text_menu(id=0x10D, edge=6, x=0xF, y=0xA)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0D00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x010D;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0006;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000F;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x000A;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x7F14;
         G_POST(0x7F09, 0x44);
         continue;
     L_7F14:
         g_last_pc = 0x7F14;
         G_PRE(0x7F14, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char0], y=0x12, p=0xC)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char0], y=0x12, p=0xC)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0310;
+          const uint16_t _x = vm.ds_read(0x0310);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0012;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x000C;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x7F1D;
         G_POST(0x7F14, 0x50);
         continue;
     L_7F1D:
         g_last_pc = 0x7F1D;
         G_PRE(0x7F1D, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char1], y=0x13, p=0xC)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char1], y=0x13, p=0xC)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0312;
+          const uint16_t _x = vm.ds_read(0x0312);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0013;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x000C;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x7F26;
         G_POST(0x7F1D, 0x50);
         continue;
     L_7F26:
         g_last_pc = 0x7F26;
         G_PRE(0x7F26, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char2], y=0x14, p=0xC)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char2], y=0x14, p=0xC)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0314;
+          const uint16_t _x = vm.ds_read(0x0314);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0014;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x000C;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x7F2F;
         G_POST(0x7F26, 0x50);
         continue;
     L_7F2F:
         g_last_pc = 0x7F2F;
         G_PRE(0x7F2F, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char3], y=0x15, p=0xC)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char3], y=0x15, p=0xC)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0316;
+          const uint16_t _x = vm.ds_read(0x0316);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0015;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x000C;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x7F38;
         G_POST(0x7F2F, 0x50);
         continue;
     L_7F38:
@@ -74582,13 +77478,23 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7F3B:
         g_last_pc = 0x7F3B;
         G_PRE(0x7F3B, 0xCB);
-        v2_vm_op_43(vm);  // cmdq_push(4)
+        // inlined v2_vm_op_43: cmdq_push(4)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 4);
+          v2_cmdq_log("v2", 4, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x7F3C;
         G_POST(0x7F3B, 0xCB);
         continue;
     L_7F3C:
         g_last_pc = 0x7F3C;
         G_PRE(0x7F3C, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x7F3D;
         G_POST(0x7F3C, 0x42);
         continue;
     L_7F3D:
@@ -74687,13 +77593,26 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_7F5D:
         g_last_pc = 0x7F5D;
         G_PRE(0x7F5D, 0x0E);
-        v2_vm_op_0E(vm);  // bits[0x356+sub>>3] |= 1<<(sub&7)
+        // inlined v2_vm_op_0E: bits[0x356+sub>>3] |= 1<<(sub&7)
+        { vm.si_track = vm.global_r(DS_CUR_OBJ);   // MOV si, ds:42h
+          int16_t _v = (int16_t)vm.field_r(OBJ_ANIM_SUB);
+          vm.di_track = (uint16_t)_v;              // MOV di, [si+16C5h]
+          if (_v >= 0) {
+              uint16_t _bit = (uint16_t)(_v & 7);
+              vm.di_track = _bit;                  // AND di, 7
+              uint16_t _off = (uint16_t)(_v >> 3);
+              vm.si_track = _off;                  // SHR si, 3
+              uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
+              uint16_t _a = (uint16_t)(_off + 0x356);
+              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+          } }
+        vm.pc = 0x7F5E;
         G_POST(0x7F5D, 0x0E);
         continue;
     L_7F5E:
         g_last_pc = 0x7F5E;
         G_PRE(0x7F5E, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x7F5E, 0x10);
         continue;
     L_7F64:
@@ -74815,7 +77734,37 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8085:
         g_last_pc = 0x8085;
         G_PRE(0x8085, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=4D, x=0, y=0x5C, pool=0, fl=0x800&0x801)
+        // inlined v2_vm_op_14: spawn(t=4D, x=0, y=0x5C, pool=0, fl=0x800&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _x = 0x0000;
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x005C;
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0800;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x4D, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8091;
         G_POST(0x8085, 0x14);
         continue;
     L_8091:
@@ -74844,7 +77793,13 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8099:
         g_last_pc = 0x8099;
         G_PRE(0x8099, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x809C;
         G_POST(0x8099, 0x46);
         continue;
     L_809C:
@@ -75158,7 +78113,37 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8109:
         g_last_pc = 0x8109;
         G_PRE(0x8109, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=52, x=0xA0, y=0, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=52, x=0xA0, y=0, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _x = 0x00A0;
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0000;
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x52, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8115;
         G_POST(0x8109, 0x14);
         continue;
     L_8115:
@@ -75187,7 +78172,37 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_811D:
         g_last_pc = 0x811D;
         G_PRE(0x811D, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=62, x=0xC0, y=0, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=62, x=0xC0, y=0, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _x = 0x00C0;
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0000;
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x62, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8129;
         G_POST(0x811D, 0x14);
         continue;
     L_8129:
@@ -75229,7 +78244,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8131:
         g_last_pc = 0x8131;
         G_PRE(0x8131, 0x0E);
-        v2_vm_op_0E(vm);  // bits[0x356+sub>>3] |= 1<<(sub&7)
+        // inlined v2_vm_op_0E: bits[0x356+sub>>3] |= 1<<(sub&7)
+        { vm.si_track = vm.global_r(DS_CUR_OBJ);   // MOV si, ds:42h
+          int16_t _v = (int16_t)vm.field_r(OBJ_ANIM_SUB);
+          vm.di_track = (uint16_t)_v;              // MOV di, [si+16C5h]
+          if (_v >= 0) {
+              uint16_t _bit = (uint16_t)(_v & 7);
+              vm.di_track = _bit;                  // AND di, 7
+              uint16_t _off = (uint16_t)(_v >> 3);
+              vm.si_track = _off;                  // SHR si, 3
+              uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
+              uint16_t _a = (uint16_t)(_off + 0x356);
+              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+          } }
+        vm.pc = 0x8132;
         G_POST(0x8131, 0x0E);
         continue;
     L_8132:
@@ -75254,7 +78282,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8137:
         g_last_pc = 0x8137;
         G_PRE(0x8137, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=60, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=60, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x60, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8141;
         G_POST(0x8137, 0x14);
         continue;
     L_8141:
@@ -75332,7 +78394,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_815B:
         g_last_pc = 0x815B;
         G_PRE(0x815B, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=69, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=69, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x69, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8166;
         G_POST(0x815B, 0x14);
         continue;
     L_8166:
@@ -75344,7 +78439,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8169:
         g_last_pc = 0x8169;
         G_PRE(0x8169, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=62, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=62, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x62, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8173;
         G_POST(0x8169, 0x14);
         continue;
     L_8173:
@@ -75422,7 +78551,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_818D:
         g_last_pc = 0x818D;
         G_PRE(0x818D, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=68, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=68, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x68, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8198;
         G_POST(0x818D, 0x14);
         continue;
     L_8198:
@@ -75466,7 +78628,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_81A7:
         g_last_pc = 0x81A7;
         G_PRE(0x81A7, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=67, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=67, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x67, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x81B1;
         G_POST(0x81A7, 0x14);
         continue;
     L_81B1:
@@ -75544,7 +78740,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_81CB:
         g_last_pc = 0x81CB;
         G_PRE(0x81CB, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=87, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=87, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x87, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x81D6;
         G_POST(0x81CB, 0x14);
         continue;
     L_81D6:
@@ -75588,7 +78817,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_81E5:
         g_last_pc = 0x81E5;
         G_PRE(0x81E5, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=88, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=88, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x88, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x81EF;
         G_POST(0x81E5, 0x14);
         continue;
     L_81EF:
@@ -75666,7 +78929,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8209:
         g_last_pc = 0x8209;
         G_PRE(0x8209, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=84, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=84, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x84, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8214;
         G_POST(0x8209, 0x14);
         continue;
     L_8214:
@@ -75726,7 +79022,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8229:
         g_last_pc = 0x8229;
         G_PRE(0x8229, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=77, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=77, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x77, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8233;
         G_POST(0x8229, 0x14);
         continue;
     L_8233:
@@ -75804,7 +79134,40 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_824D:
         g_last_pc = 0x824D;
         G_PRE(0x824D, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=82, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=82, x=[0206], y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x82, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8258;
         G_POST(0x824D, 0x14);
         continue;
     L_8258:
@@ -75848,7 +79211,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8267:
         g_last_pc = 0x8267;
         G_PRE(0x8267, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=79, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=79, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x79, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x8271;
         G_POST(0x8267, 0x14);
         continue;
     L_8271:
@@ -75960,7 +79357,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8296:
         g_last_pc = 0x8296;
         G_PRE(0x8296, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=63, x=[0206], y=[0208], pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=63, x=[0206], y=[0208], pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _x = vm.ds_read(0x0206);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _y = vm.ds_read(0x0208);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x63, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x82A2;
         G_POST(0x8296, 0x14);
         continue;
     L_82A2:
@@ -76004,7 +79433,41 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_82B1:
         g_last_pc = 0x82B1;
         G_PRE(0x82B1, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=60, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        // inlined v2_vm_op_14: spawn(t=60, x=self.world_x, y=self.world_y, pool=0, fl=0x801&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0801;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x60, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x82BB;
         G_POST(0x82B1, 0x14);
         continue;
     L_82BB:
@@ -76451,7 +79914,72 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_833F:
         g_last_pc = 0x833F;
         G_PRE(0x833F, 0x41);
-        v2_vm_op_41(vm);  // text(id=[020A], edge=0, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=[020A], edge=0, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0A02);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x020A;
+          const uint16_t _r0 = vm.ds_read(0x020A);
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x834A;
         G_POST(0x833F, 0x41);
         continue;
     L_834A:
@@ -76506,7 +80034,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8358:
         g_last_pc = 0x8358;
         G_PRE(0x8358, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x8359;
         G_POST(0x8358, 0x42);
         continue;
     L_8359:
@@ -76623,7 +80156,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_83CD:
         g_last_pc = 0x83CD;
         G_PRE(0x83CD, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(0,5,5)
+        // inlined v2_vm_op_3D: pal_shade(0,5,5)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x00);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x0A);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x0A);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x83D1;
         G_POST(0x83CD, 0x3D);
         continue;
     L_83D1:
@@ -76652,7 +80194,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_83D9:
         g_last_pc = 0x83D9;
         G_PRE(0x83D9, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(5,0,0)
+        // inlined v2_vm_op_3D: pal_shade(5,0,0)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x0A);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x00);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x00);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x83DD;
         G_POST(0x83D9, 0x3D);
         continue;
     L_83DD:
@@ -76767,7 +80318,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8435:
         g_last_pc = 0x8435;
         G_PRE(0x8435, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F3C
+        // inlined v2_vm_op_sound: sfx 0x7F3C
+        v2_vm_sfx_core(vm, 0x7F3C);
+        vm.pc = 0x8438;
         G_POST(0x8435, 0x02);
         continue;
     L_8438:
@@ -76807,7 +80360,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8441:
         g_last_pc = 0x8441;
         G_PRE(0x8441, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0x202)
+        // inlined v2_vm_op_3B: shake_y(0x202)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0002);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x0008);
+        vm.pc = 0x8444;
         G_POST(0x8441, 0x3B);
         continue;
     L_8444:
@@ -76890,13 +80447,19 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_845A:
         g_last_pc = 0x845A;
         G_PRE(0x845A, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0x101)
+        // inlined v2_vm_op_3B: shake_y(0x101)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x0004);
+        vm.pc = 0x845D;
         G_POST(0x845A, 0x3B);
         continue;
     L_845D:
         g_last_pc = 0x845D;
         G_PRE(0x845D, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x403C
+        // inlined v2_vm_op_sound: sfx 0x403C
+        v2_vm_sfx_core(vm, 0x403C);
+        vm.pc = 0x8460;
         G_POST(0x845D, 0x02);
         continue;
     L_8460:
@@ -77169,7 +80732,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8524:
         g_last_pc = 0x8524;
         G_PRE(0x8524, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(31,31,31)
+        // inlined v2_vm_op_3D: pal_shade(31,31,31)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x3E);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x3E);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x3E);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x8528;
         G_POST(0x8524, 0x3D);
         continue;
     L_8528:
@@ -77188,7 +80760,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_852A:
         g_last_pc = 0x852A;
         G_PRE(0x852A, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(24,24,24)
+        // inlined v2_vm_op_3D: pal_shade(24,24,24)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x30);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x30);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x30);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x852E;
         G_POST(0x852A, 0x3D);
         continue;
     L_852E:
@@ -77207,7 +80788,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8530:
         g_last_pc = 0x8530;
         G_PRE(0x8530, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(16,16,16)
+        // inlined v2_vm_op_3D: pal_shade(16,16,16)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x20);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x20);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x20);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x8534;
         G_POST(0x8530, 0x3D);
         continue;
     L_8534:
@@ -77226,7 +80816,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8536:
         g_last_pc = 0x8536;
         G_PRE(0x8536, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(8,8,8)
+        // inlined v2_vm_op_3D: pal_shade(8,8,8)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x10);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x10);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x10);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x853A;
         G_POST(0x8536, 0x3D);
         continue;
     L_853A:
@@ -77245,7 +80844,8 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_853C:
         g_last_pc = 0x853C;
         G_PRE(0x853C, 0x3E);
-        v2_vm_op_3E(vm);  // pal_shade_off
+        // inlined v2_vm_op_3E: pal_shade_off
+        v2_vm_op_3E(vm);   // open primitive (no stream reads)
         G_POST(0x853C, 0x3E);
         continue;
     L_853D:
@@ -77257,7 +80857,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_853E:
         g_last_pc = 0x853E;
         G_PRE(0x853E, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(4,4,4)
+        // inlined v2_vm_op_3D: pal_shade(4,4,4)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x08);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x08);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x08);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x8542;
         G_POST(0x853E, 0x3D);
         continue;
     L_8542:
@@ -77276,7 +80885,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8544:
         g_last_pc = 0x8544;
         G_PRE(0x8544, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(8,8,8)
+        // inlined v2_vm_op_3D: pal_shade(8,8,8)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x10);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x10);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x10);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x8548;
         G_POST(0x8544, 0x3D);
         continue;
     L_8548:
@@ -77295,7 +80913,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_854A:
         g_last_pc = 0x854A;
         G_PRE(0x854A, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(12,12,12)
+        // inlined v2_vm_op_3D: pal_shade(12,12,12)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x18);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x18);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x18);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x854E;
         G_POST(0x854A, 0x3D);
         continue;
     L_854E:
@@ -77314,7 +80941,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8550:
         g_last_pc = 0x8550;
         G_PRE(0x8550, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(16,16,16)
+        // inlined v2_vm_op_3D: pal_shade(16,16,16)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x20);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x20);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x20);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x8554;
         G_POST(0x8550, 0x3D);
         continue;
     L_8554:
@@ -77333,7 +80969,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8556:
         g_last_pc = 0x8556;
         G_PRE(0x8556, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(20,20,20)
+        // inlined v2_vm_op_3D: pal_shade(20,20,20)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x28);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x28);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x28);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x855A;
         G_POST(0x8556, 0x3D);
         continue;
     L_855A:
@@ -77352,7 +80997,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_855C:
         g_last_pc = 0x855C;
         G_PRE(0x855C, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(24,24,24)
+        // inlined v2_vm_op_3D: pal_shade(24,24,24)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x30);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x30);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x30);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x8560;
         G_POST(0x855C, 0x3D);
         continue;
     L_8560:
@@ -77371,7 +81025,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8562:
         g_last_pc = 0x8562;
         G_PRE(0x8562, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(28,28,28)
+        // inlined v2_vm_op_3D: pal_shade(28,28,28)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x38);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x38);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x38);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x8566;
         G_POST(0x8562, 0x3D);
         continue;
     L_8566:
@@ -77390,7 +81053,16 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8568:
         g_last_pc = 0x8568;
         G_PRE(0x8568, 0x3D);
-        v2_vm_op_3D(vm);  // pal_shade(31,31,31)
+        // inlined v2_vm_op_3D: pal_shade(31,31,31)
+        vm.ds_write_b(DS_PAL_SHADE_R, (uint8_t)0x3E);
+        vm.ds_write_b(DS_PAL_SHADE_G, (uint8_t)0x3E);
+        vm.ds_write_b(DS_PAL_SHADE_B, (uint8_t)0x3E);
+        { uint8_t _fl = v2gs(vm.shadow).pal_flags_b();
+          vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | 1)); }
+        vm.ds_write(DS_PAL_REQ, 4);
+        vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);
+        v2_vm_pal_correct_10e99(vm);
+        vm.pc = 0x856C;
         G_POST(0x8568, 0x3D);
         continue;
     L_856C:
@@ -77461,7 +81133,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8580:
         g_last_pc = 0x8580;
         G_PRE(0x8580, 0x13);
-        v2_vm_op_13(vm);  // menu_bg_reset (116f85)
+        // inlined v2_vm_op_13: menu_bg_reset (116f85)
+        vm.pc = 0x8581;
+        v2_vm_op_13(vm);   // open primitive (menu/VGA/quit sub-command)
         G_POST(0x8580, 0x13);
         continue;
     L_8584:
@@ -77521,25 +81195,100 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8592:
         g_last_pc = 0x8592;
         G_PRE(0x8592, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0)
+        // inlined v2_vm_op_46: cmdq_push(6, 0)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0000);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x8595;
         G_POST(0x8592, 0x46);
         continue;
     L_8595:
         g_last_pc = 0x8595;
         G_PRE(0x8595, 0x45);
-        v2_vm_op_45(vm);  // cmdq_push(0xA, id=0xFF, x=0xE, y=0xE)
+        // inlined v2_vm_op_45: cmdq_push(0xA, id=0xFF, x=0xE, y=0xE)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0xFF00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x00FF;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000E;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x000E;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2_cmdq_log("v2", 0x0A, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x859E;
         G_POST(0x8595, 0x45);
         continue;
     L_859E:
         g_last_pc = 0x859E;
         G_PRE(0x859E, 0x45);
-        v2_vm_op_45(vm);  // cmdq_push(0xA, id=0x100, x=0xE, y=0x10)
+        // inlined v2_vm_op_45: cmdq_push(0xA, id=0x100, x=0xE, y=0x10)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0000);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0100;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000E;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0010;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2_cmdq_log("v2", 0x0A, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x85A7;
         G_POST(0x859E, 0x45);
         continue;
     L_85A7:
         g_last_pc = 0x85A7;
         G_PRE(0x85A7, 0x45);
-        v2_vm_op_45(vm);  // cmdq_push(0xA, id=0x110, x=0xE, y=0x12)
+        // inlined v2_vm_op_45: cmdq_push(0xA, id=0x110, x=0xE, y=0x12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x1000);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0110;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000E;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0012;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2_cmdq_log("v2", 0x0A, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x85B0;
         G_POST(0x85A7, 0x45);
         continue;
     L_85B0:
@@ -77558,7 +81307,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_85B2:
         g_last_pc = 0x85B2;
         G_PRE(0x85B2, 0x40);
-        v2_vm_op_40(vm);  // subsprites: fl&=0x9FFF, dirty=2
+        // inlined v2_vm_op_40: subsprites: fl&=0x9FFF, dirty=2
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF));
+              _sub.w16(OBJ_DIRTY_MODE, 2);
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x85B3;
         G_POST(0x85B2, 0x40);
         continue;
     L_85B3:
@@ -77942,7 +81701,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_863C:
         g_last_pc = 0x863C;
         G_PRE(0x863C, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4301
+        // inlined v2_vm_op_sound: sfx 0x4301
+        v2_vm_sfx_core(vm, 0x4301);
+        vm.pc = 0x863F;
         G_POST(0x863C, 0x02);
         continue;
     L_863F:
@@ -78049,7 +81810,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8665:
         g_last_pc = 0x8665;
         G_PRE(0x8665, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x8665, 0x0F);
         continue;
     L_8666:
@@ -78095,13 +81856,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8674:
         g_last_pc = 0x8674;
         G_PRE(0x8674, 0x13);
-        v2_vm_op_13(vm);  // quit_game (010100)
+        // inlined v2_vm_op_13: quit_game (010100)
+        vm.pc = 0x8675;
+        v2_vm_op_13(vm);   // open primitive (menu/VGA/quit sub-command)
         G_POST(0x8674, 0x13);
         continue;
     L_8678:
         g_last_pc = 0x8678;
         G_PRE(0x8678, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F3E
+        // inlined v2_vm_op_sound: sfx 0x7F3E
+        v2_vm_sfx_core(vm, 0x7F3E);
+        vm.pc = 0x867B;
         G_POST(0x8678, 0x02);
         continue;
     L_867B:
@@ -78152,13 +81917,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8689:
         g_last_pc = 0x8689;
         G_PRE(0x8689, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x8689, 0x0F);
         continue;
     L_868A:
         g_last_pc = 0x868A;
         G_PRE(0x868A, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x613D
+        // inlined v2_vm_op_sound: sfx 0x613D
+        v2_vm_sfx_core(vm, 0x613D);
+        vm.pc = 0x868D;
         G_POST(0x868A, 0x02);
         continue;
     L_868D:
@@ -78213,25 +81980,100 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8697:
         g_last_pc = 0x8697;
         G_PRE(0x8697, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0)
+        // inlined v2_vm_op_46: cmdq_push(6, 0)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0000);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x869A;
         G_POST(0x8697, 0x46);
         continue;
     L_869A:
         g_last_pc = 0x869A;
         G_PRE(0x869A, 0x45);
-        v2_vm_op_45(vm);  // cmdq_push(0xA, id=0x101, x=0xE, y=0xE)
+        // inlined v2_vm_op_45: cmdq_push(0xA, id=0x101, x=0xE, y=0xE)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0100);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0101;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000E;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x000E;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2_cmdq_log("v2", 0x0A, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x86A3;
         G_POST(0x869A, 0x45);
         continue;
     L_86A3:
         g_last_pc = 0x86A3;
         G_PRE(0x86A3, 0x45);
-        v2_vm_op_45(vm);  // cmdq_push(0xA, id=0x100, x=0xE, y=0x10)
+        // inlined v2_vm_op_45: cmdq_push(0xA, id=0x100, x=0xE, y=0x10)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0000);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0100;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000E;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0010;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2_cmdq_log("v2", 0x0A, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x86AC;
         G_POST(0x86A3, 0x45);
         continue;
     L_86AC:
         g_last_pc = 0x86AC;
         G_PRE(0x86AC, 0x45);
-        v2_vm_op_45(vm);  // cmdq_push(0xA, id=0x101, x=0xE, y=0x12)
+        // inlined v2_vm_op_45: cmdq_push(0xA, id=0x101, x=0xE, y=0x12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0100);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0101;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000E;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0012;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2_cmdq_log("v2", 0x0A, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x86B5;
         G_POST(0x86AC, 0x45);
         continue;
     L_86B5:
@@ -78680,31 +82522,117 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8765:
         g_last_pc = 0x8765;
         G_PRE(0x8765, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0)
+        // inlined v2_vm_op_46: cmdq_push(6, 0)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0000);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x8768;
         G_POST(0x8765, 0x46);
         continue;
     L_8768:
         g_last_pc = 0x8768;
         G_PRE(0x8768, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char0], y=0x10, p=0x12)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char0], y=0x10, p=0x12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0310;
+          const uint16_t _x = vm.ds_read(0x0310);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0010;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x0012;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x8771;
         G_POST(0x8768, 0x50);
         continue;
     L_8771:
         g_last_pc = 0x8771;
         G_PRE(0x8771, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char1], y=0x11, p=0x12)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char1], y=0x11, p=0x12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0312;
+          const uint16_t _x = vm.ds_read(0x0312);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0011;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x0012;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x877A;
         G_POST(0x8771, 0x50);
         continue;
     L_877A:
         g_last_pc = 0x877A;
         G_PRE(0x877A, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char2], y=0x12, p=0x12)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char2], y=0x12, p=0x12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0314;
+          const uint16_t _x = vm.ds_read(0x0314);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0012;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x0012;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x8783;
         G_POST(0x877A, 0x50);
         continue;
     L_8783:
         g_last_pc = 0x8783;
         G_PRE(0x8783, 0x50);
-        v2_vm_op_50(vm);  // cmdq_push(8, x=[pw_char3], y=0x13, p=0x12)
+        // inlined v2_vm_op_50: cmdq_push(8, x=[pw_char3], y=0x13, p=0x12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0316;
+          const uint16_t _x = vm.ds_read(0x0316);
+          vm.ds_write(DS_SCRATCH_34, _x);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _y = 0x0013;
+          vm.ds_write(DS_TEXT_COL, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v = 0x0012;
+          vm.ds_write(DS_TEXT_ROW, _v);
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);
+            v2_cmdq_log("v2", 8, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x878C;
         G_POST(0x8783, 0x50);
         continue;
     L_878C:
@@ -78794,7 +82722,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_87A8:
         g_last_pc = 0x87A8;
         G_PRE(0x87A8, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4301
+        // inlined v2_vm_op_sound: sfx 0x4301
+        v2_vm_sfx_core(vm, 0x4301);
+        vm.pc = 0x87AB;
         G_POST(0x87A8, 0x02);
         continue;
     L_87AB:
@@ -79202,7 +83132,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_883A:
         g_last_pc = 0x883A;
         G_PRE(0x883A, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4301
+        // inlined v2_vm_op_sound: sfx 0x4301
+        v2_vm_sfx_core(vm, 0x4301);
+        vm.pc = 0x883D;
         G_POST(0x883A, 0x02);
         continue;
     L_883D:
@@ -79685,7 +83617,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_88E7:
         g_last_pc = 0x88E7;
         G_PRE(0x88E7, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4301
+        // inlined v2_vm_op_sound: sfx 0x4301
+        v2_vm_sfx_core(vm, 0x4301);
+        vm.pc = 0x88EA;
         G_POST(0x88E7, 0x02);
         continue;
     L_88EA:
@@ -80277,19 +84211,36 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_89AF:
         g_last_pc = 0x89AF;
         G_PRE(0x89AF, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F3E
+        // inlined v2_vm_op_sound: sfx 0x7F3E
+        v2_vm_sfx_core(vm, 0x7F3E);
+        vm.pc = 0x89B2;
         G_POST(0x89AF, 0x02);
         continue;
     L_89B2:
         g_last_pc = 0x89B2;
         G_PRE(0x89B2, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x89B3;
         G_POST(0x89B2, 0x42);
         continue;
     L_89B3:
         g_last_pc = 0x89B3;
         G_PRE(0x89B3, 0x3F);
-        v2_vm_op_3F(vm);  // subsprites: fl|=0x4000, dirty|=0x200
+        // inlined v2_vm_op_3F: subsprites: fl|=0x4000, dirty|=0x200
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) | 0x4000));
+              _sub.w16(OBJ_DIRTY_MODE, (uint16_t)(_sub.u16(OBJ_DIRTY_MODE) | 0x0200));
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x89B4;
         G_POST(0x89B3, 0x3F);
         continue;
     L_89B4:
@@ -80326,7 +84277,8 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_89BF:
         g_last_pc = 0x89BF;
         G_PRE(0x89BF, 0xD3);
-        v2_vm_op_D3(vm);  // level_load = find_password(pw); cmd_active = !found
+        // inlined v2_vm_op_D3: level_load = find_password(pw); cmd_active = !found
+        v2_vm_op_D3(vm);   // open primitive (no stream reads)
         G_POST(0x89BF, 0xD3);
         continue;
     L_89C0:
@@ -80351,25 +84303,39 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_89C8:
         g_last_pc = 0x89C8;
         G_PRE(0x89C8, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x7F3E
+        // inlined v2_vm_op_sound: sfx 0x7F3E
+        v2_vm_sfx_core(vm, 0x7F3E);
+        vm.pc = 0x89CB;
         G_POST(0x89C8, 0x02);
         continue;
     L_89CB:
         g_last_pc = 0x89CB;
         G_PRE(0x89CB, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x89CB, 0x0F);
         continue;
     L_89CC:
         g_last_pc = 0x89CC;
         G_PRE(0x89CC, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x6103
+        // inlined v2_vm_op_sound: sfx 0x6103
+        v2_vm_sfx_core(vm, 0x6103);
+        vm.pc = 0x89CF;
         G_POST(0x89CC, 0x02);
         continue;
     L_89CF:
         g_last_pc = 0x89CF;
         G_PRE(0x89CF, 0x3F);
-        v2_vm_op_3F(vm);  // subsprites: fl|=0x4000, dirty|=0x200
+        // inlined v2_vm_op_3F: subsprites: fl|=0x4000, dirty|=0x200
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) | 0x4000));
+              _sub.w16(OBJ_DIRTY_MODE, (uint16_t)(_sub.u16(OBJ_DIRTY_MODE) | 0x0200));
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x89D0;
         G_POST(0x89CF, 0x3F);
         continue;
     L_89D0:
@@ -80388,7 +84354,30 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_89D2:
         g_last_pc = 0x89D2;
         G_PRE(0x89D2, 0x45);
-        v2_vm_op_45(vm);  // cmdq_push(0xA, id=0x10E, x=0xA, y=0x12)
+        // inlined v2_vm_op_45: cmdq_push(0xA, id=0x10E, x=0xA, y=0x12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x0E00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x010E;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000A;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0012;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));
+            v2_cmdq_log("v2", 0x0A, _bx, 8);
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }
+        }
+        vm.pc = 0x89DB;
         G_POST(0x89D2, 0x45);
         continue;
     L_89DB:
@@ -80506,7 +84495,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8A02:
         g_last_pc = 0x8A02;
         G_PRE(0x8A02, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x8A03;
         G_POST(0x8A02, 0x42);
         continue;
     L_8A03:
@@ -80727,7 +84721,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8ACF:
         g_last_pc = 0x8ACF;
         G_PRE(0x8ACF, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x8ACF, 0x0F);
         continue;
     L_8BC4:
@@ -80822,7 +84816,8 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8BE8:
         g_last_pc = 0x8BE8;
         G_PRE(0x8BE8, 0xD5);
-        v2_vm_op_D5(vm);  // music_start (1B pad)
+        // inlined v2_vm_op_D5: music_start (1B pad)
+        v2_vm_op_D5(vm);   // open primitive (no stream reads)
         G_POST(0x8BE8, 0xD5);
         continue;
     L_8BEA:
@@ -80896,13 +84891,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_8BFC:
         g_last_pc = 0x8BFC;
         G_PRE(0x8BFC, 0x57);
-        v2_vm_op_57(vm);  // [music_mute] = acc
+        // inlined v2_vm_op_57: [music_mute] = acc
+        vm.pc = 0x8BFD;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x8BFC, 0x57);
         continue;
     L_8BFF:
         g_last_pc = 0x8BFF;
         G_PRE(0x8BFF, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x8BFF, 0x0F);
         continue;
     L_8C00:
@@ -86814,13 +90811,47 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_946B:
         g_last_pc = 0x946B;
         G_PRE(0x946B, 0x14);
-        v2_vm_op_14(vm);  // spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        // inlined v2_vm_op_14: spawn(t=0C, x=self.world_x, y=self.world_y, pool=0, fl=1&0x801)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ch4_mul_clobber = false;
+          uint16_t _x_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x173D) /* self.world_x */;
+          vm.si_track = (uint16_t)(_x_a - OBJ_FIELD_BASE);
+          const uint16_t _x = vm.ds_read(_x_a);
+          vm.ds_write(DS_TEXT_COL, _x);
+          vm.ch4_mul_clobber = false;
+          uint16_t _y_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x1765) /* self.world_y */;
+          vm.si_track = (uint16_t)(_y_a - OBJ_FIELD_BASE);
+          const uint16_t _y = vm.ds_read(_y_a);
+          vm.ds_write(DS_TEXT_ROW, _y);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _pool = 0x0000;
+          vm.ds_write(DS_SPAWN_POOL_SEL, _pool);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _flr = 0x0001;
+          vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));
+          uint16_t _cur = vm.global_r(DS_CUR_OBJ);
+          uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));
+          vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);
+          int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x0C, 0xFFFF, _sf);
+          if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0
+          else {
+              uint16_t _dn = (uint16_t)_slot;
+              vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)
+              uint16_t _obj = vm.global_r(DS_CUR_OBJ);
+              ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);
+              if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {
+                  uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);
+                  vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);
+                  vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));
+              }
+          } }
+        vm.pc = 0x9475;
         G_POST(0x946B, 0x14);
         continue;
     L_9475:
         g_last_pc = 0x9475;
         G_PRE(0x9475, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x9475, 0x10);
         continue;
     L_9476:
@@ -86889,7 +90920,61 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9483:
         g_last_pc = 0x9483;
         G_PRE(0x9483, 0xD4);
-        v2_vm_op_D4(vm);  // aim(x=partner.world_x, y=partner.world_y, thr=12)
+        // inlined v2_vm_op_D4: aim(x=partner.world_x, y=partner.world_y, thr=12)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_AIM_SIGN_X, 0);
+          vm.ds_write(DS_AIM_SIGN_Y, 0);
+          vm.ds_write(DS_SCRATCH_34, 0x1E1B);   // full mode word
+          vm.ch4_mul_clobber = false;
+          { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
+            _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x0258);
+            vm.si_track = _o3; vm.di_track = _t3; }
+          const uint16_t _tx = vm.ds_read((uint16_t)(_t3 + OBJ_FIELD_BASE));
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            int16_t _dx = (int16_t)(_tx - ObjRef{vm, _o}.u16(OBJ_WORLD_X));
+            if (_dx < 0) { _dx = -_dx; vm.ds_write(DS_AIM_SIGN_X, 1); }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_dx); }
+          vm.ch4_mul_clobber = false;
+          { uint16_t _o3 = vm.global_r(DS_CUR_OBJ);
+            _t3 = (uint16_t)(vm.ds_read((uint16_t)(_o3 + OBJ_PARTNER)) + 0x0280);
+            vm.si_track = _o3; vm.di_track = _t3; }
+          const uint16_t _ty = vm.ds_read((uint16_t)(_t3 + OBJ_FIELD_BASE));
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            int16_t _dy = (int16_t)(_ty - ObjRef{vm, _o}.u16(OBJ_WORLD_Y));
+            if (_dy < 0) { _dy = -_dy; vm.ds_write(DS_AIM_SIGN_Y, 1); }
+            vm.ds_write(DS_TEXT_ROW, (uint16_t)_dy); }
+          uint16_t _maxd = ((int16_t)vm.ds_read(DS_TEXT_ROW) >= (int16_t)vm.ds_read(DS_TEXT_COL))
+              ? vm.ds_read(DS_TEXT_ROW) : vm.ds_read(DS_TEXT_COL);
+          vm.ds_write(DS_MODE_WORD, 0x000C);
+          vm.ds_write(DS_SCRATCH_34, 0);
+          vm.ds_write(DS_SCRATCH_36, 0);
+          vm.ds_write(DS_MODE_WORD, 0x000C);
+          while ((int16_t)_maxd > (int16_t)0x000C) {
+              uint16_t _c; _maxd >>= 1;
+              uint16_t _v6c = vm.ds_read(DS_TEXT_COL);
+              _c = _v6c & 1; vm.ds_write(DS_TEXT_COL, (uint16_t)(_v6c >> 1));
+              uint16_t _v34 = vm.ds_read(DS_SCRATCH_34);
+              vm.ds_write(DS_SCRATCH_34, (uint16_t)((_v34 >> 1) | (_c << 15)));
+              uint16_t _v6e = vm.ds_read(DS_TEXT_ROW);
+              _c = _v6e & 1; vm.ds_write(DS_TEXT_ROW, (uint16_t)(_v6e >> 1));
+              uint16_t _v36 = vm.ds_read(DS_SCRATCH_36);
+              vm.ds_write(DS_SCRATCH_36, (uint16_t)((_v36 >> 1) | (_c << 15)));
+          }
+          { uint16_t _o = vm.global_r(DS_CUR_OBJ);
+            if (ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x40)
+                vm.ds_write(DS_AIM_SIGN_X, (uint16_t)(vm.ds_read(DS_AIM_SIGN_X) ^ 1));
+            if (ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x80)
+                vm.ds_write(DS_AIM_SIGN_Y, (uint16_t)(vm.ds_read(DS_AIM_SIGN_Y) ^ 1));
+            uint16_t _xr = (uint16_t)((vm.ds_read(DS_SCRATCH_34) & 0xFF00) | vm.ds_read(DS_TEXT_COL));
+            _xr = (uint16_t)(((_xr >> 8) & 0xFF) | ((_xr & 0xFF) << 8)); // XCHG ah,al
+            if (vm.ds_read(DS_AIM_SIGN_X) != 0) _xr = (uint16_t)(-(int16_t)_xr);
+            ObjRef{vm, _o}.w16(OBJ_ANIM_DX, _xr);
+            uint16_t _yr = (uint16_t)((vm.ds_read(DS_SCRATCH_36) & 0xFF00) | vm.ds_read(DS_TEXT_ROW));
+            _yr = (uint16_t)(((_yr >> 8) & 0xFF) | ((_yr & 0xFF) << 8));
+            if (vm.ds_read(DS_AIM_SIGN_Y) != 0) _yr = (uint16_t)(-(int16_t)_yr);
+            ObjRef{vm, _o}.w16(OBJ_ANIM_DY, _yr); }
+        }
+        vm.pc = 0x9488;
         G_POST(0x9483, 0xD4);
         continue;
     L_9488:
@@ -87018,7 +91103,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_94AC:
         g_last_pc = 0x94AC;
         G_PRE(0x94AC, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x321D
+        // inlined v2_vm_op_sound: sfx 0x321D
+        v2_vm_sfx_core(vm, 0x321D);
+        vm.pc = 0x94AF;
         G_POST(0x94AC, 0x02);
         continue;
     L_94AF:
@@ -87092,7 +91179,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_94D7:
         g_last_pc = 0x94D7;
         G_PRE(0x94D7, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x94D7, 0x10);
         continue;
     L_94F0:
@@ -87221,7 +91308,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9513:
         g_last_pc = 0x9513;
         G_PRE(0x9513, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x5040
+        // inlined v2_vm_op_sound: sfx 0x5040
+        v2_vm_sfx_core(vm, 0x5040);
+        vm.pc = 0x9516;
         G_POST(0x9513, 0x02);
         continue;
     L_9516:
@@ -87240,13 +91329,50 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9518:
         g_last_pc = 0x9518;
         G_PRE(0x9518, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x951B;
         G_POST(0x9518, 0x46);
         continue;
     L_951B:
         g_last_pc = 0x951B;
         G_PRE(0x951B, 0x44);
-        v2_vm_op_44(vm);  // text_menu(id=0x162, edge=6, x=0xA, y=2)
+        // inlined v2_vm_op_44: text_menu(id=0x162, edge=6, x=0xA, y=2)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6200);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0162;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0006;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x000A;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0002;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9526;
         G_POST(0x951B, 0x44);
         continue;
     L_9526:
@@ -87275,7 +91401,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_952E:
         g_last_pc = 0x952E;
         G_PRE(0x952E, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x952F;
         G_POST(0x952E, 0x42);
         continue;
     L_952F:
@@ -87294,7 +91425,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9531:
         g_last_pc = 0x9531;
         G_PRE(0x9531, 0xD7);
-        v2_vm_op_D7(vm);  // sfx_stop_slots(0x40) (2B pad)
+        // inlined v2_vm_op_D7: sfx_stop_slots(0x40) (2B pad)
+        v2_vm_sfx_stopslots_core(vm, 0x40);
+        vm.pc = 0x9535;
         G_POST(0x9531, 0xD7);
         continue;
     L_9535:
@@ -87313,13 +91446,19 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9537:
         g_last_pc = 0x9537;
         G_PRE(0x9537, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4F3B
+        // inlined v2_vm_op_sound: sfx 0x4F3B
+        v2_vm_sfx_core(vm, 0x4F3B);
+        vm.pc = 0x953A;
         G_POST(0x9537, 0x02);
         continue;
     L_953A:
         g_last_pc = 0x953A;
         G_PRE(0x953A, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0xFF01)
+        // inlined v2_vm_op_3B: shake_y(0xFF01)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x03FC);
+        vm.pc = 0x953D;
         G_POST(0x953A, 0x3B);
         continue;
     L_953D:
@@ -87382,7 +91521,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_954E:
         g_last_pc = 0x954E;
         G_PRE(0x954E, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x203F
+        // inlined v2_vm_op_sound: sfx 0x203F
+        v2_vm_sfx_core(vm, 0x203F);
+        vm.pc = 0x9551;
         G_POST(0x954E, 0x02);
         continue;
     L_9551:
@@ -87427,7 +91568,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_955F:
         g_last_pc = 0x955F;
         G_PRE(0x955F, 0x04);
-        v2_vm_op_sound1(vm);  // sfx_stop 0x3F
+        // inlined v2_vm_op_sound1: sfx_stop 0x3F
+        v2_vm_sfx_stop_core(vm, 0x3F);
+        vm.pc = 0x9561;
         G_POST(0x955F, 0x04);
         continue;
     L_9561:
@@ -87449,7 +91592,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9567:
         g_last_pc = 0x9567;
         G_PRE(0x9567, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0xFF01)
+        // inlined v2_vm_op_3B: shake_y(0xFF01)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x03FC);
+        vm.pc = 0x956A;
         G_POST(0x9567, 0x3B);
         continue;
     L_956A:
@@ -87496,7 +91643,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9577:
         g_last_pc = 0x9577;
         G_PRE(0x9577, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x203F
+        // inlined v2_vm_op_sound: sfx 0x203F
+        v2_vm_sfx_core(vm, 0x203F);
+        vm.pc = 0x957A;
         G_POST(0x9577, 0x02);
         continue;
     L_957A:
@@ -87541,7 +91690,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9588:
         g_last_pc = 0x9588;
         G_PRE(0x9588, 0x04);
-        v2_vm_op_sound1(vm);  // sfx_stop 0x3F
+        // inlined v2_vm_op_sound1: sfx_stop 0x3F
+        v2_vm_sfx_stop_core(vm, 0x3F);
+        vm.pc = 0x958A;
         G_POST(0x9588, 0x04);
         continue;
     L_958A:
@@ -87563,7 +91714,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9590:
         g_last_pc = 0x9590;
         G_PRE(0x9590, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0xFF01)
+        // inlined v2_vm_op_3B: shake_y(0xFF01)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x03FC);
+        vm.pc = 0x9593;
         G_POST(0x9590, 0x3B);
         continue;
     L_9593:
@@ -87704,7 +91859,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_95C0:
         g_last_pc = 0x95C0;
         G_PRE(0x95C0, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x203F
+        // inlined v2_vm_op_sound: sfx 0x203F
+        v2_vm_sfx_core(vm, 0x203F);
+        vm.pc = 0x95C3;
         G_POST(0x95C0, 0x02);
         continue;
     L_95C3:
@@ -87783,7 +91940,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_95DB:
         g_last_pc = 0x95DB;
         G_PRE(0x95DB, 0x04);
-        v2_vm_op_sound1(vm);  // sfx_stop 0x3F
+        // inlined v2_vm_op_sound1: sfx_stop 0x3F
+        v2_vm_sfx_stop_core(vm, 0x3F);
+        vm.pc = 0x95DD;
         G_POST(0x95DB, 0x04);
         continue;
     L_95DD:
@@ -87805,7 +91964,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_95E3:
         g_last_pc = 0x95E3;
         G_PRE(0x95E3, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0xFF01)
+        // inlined v2_vm_op_3B: shake_y(0xFF01)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x03FC);
+        vm.pc = 0x95E6;
         G_POST(0x95E3, 0x3B);
         continue;
     L_95E6:
@@ -87852,13 +92015,19 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_95F3:
         g_last_pc = 0x95F3;
         G_PRE(0x95F3, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0xFF01)
+        // inlined v2_vm_op_3B: shake_y(0xFF01)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0001);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x03FC);
+        vm.pc = 0x95F6;
         G_POST(0x95F3, 0x3B);
         continue;
     L_95F6:
         g_last_pc = 0x95F6;
         G_PRE(0x95F6, 0xD7);
-        v2_vm_op_D7(vm);  // sfx_stop_slots(0x3B) (2B pad)
+        // inlined v2_vm_op_D7: sfx_stop_slots(0x3B) (2B pad)
+        v2_vm_sfx_stopslots_core(vm, 0x3B);
+        vm.pc = 0x95FA;
         G_POST(0x95F6, 0xD7);
         continue;
     L_95FA:
@@ -87946,7 +92115,11 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9614:
         g_last_pc = 0x9614;
         G_PRE(0x9614, 0x3B);
-        v2_vm_op_3B(vm);  // shake_y(0)
+        // inlined v2_vm_op_3B: shake_y(0)
+        vm.ds_write(DS_SHAKE_SRC_Y, 0x0000);
+        vm.ds_write(DS_SHAKE_Y, 0);
+        vm.ds_write(DS_SHAKE_GATE_Y, 0x0000);
+        vm.pc = 0x9617;
         G_POST(0x9614, 0x3B);
         continue;
     L_9617:
@@ -87975,7 +92148,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_961F:
         g_last_pc = 0x961F;
         G_PRE(0x961F, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x961F, 0x0F);
         continue;
     L_9620:
@@ -88058,7 +92231,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9636:
         g_last_pc = 0x9636;
         G_PRE(0x9636, 0x0E);
-        v2_vm_op_0E(vm);  // bits[0x356+sub>>3] |= 1<<(sub&7)
+        // inlined v2_vm_op_0E: bits[0x356+sub>>3] |= 1<<(sub&7)
+        { vm.si_track = vm.global_r(DS_CUR_OBJ);   // MOV si, ds:42h
+          int16_t _v = (int16_t)vm.field_r(OBJ_ANIM_SUB);
+          vm.di_track = (uint16_t)_v;              // MOV di, [si+16C5h]
+          if (_v >= 0) {
+              uint16_t _bit = (uint16_t)(_v & 7);
+              vm.di_track = _bit;                  // AND di, 7
+              uint16_t _off = (uint16_t)(_v >> 3);
+              vm.si_track = _off;                  // SHR si, 3
+              uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
+              uint16_t _a = (uint16_t)(_off + 0x356);
+              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+          } }
+        vm.pc = 0x9637;
         G_POST(0x9636, 0x0E);
         continue;
     L_9637:
@@ -88673,7 +92859,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_97F9:
         g_last_pc = 0x97F9;
         G_PRE(0x97F9, 0x3F);
-        v2_vm_op_3F(vm);  // subsprites: fl|=0x4000, dirty|=0x200
+        // inlined v2_vm_op_3F: subsprites: fl|=0x4000, dirty|=0x200
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) | 0x4000));
+              _sub.w16(OBJ_DIRTY_MODE, (uint16_t)(_sub.u16(OBJ_DIRTY_MODE) | 0x0200));
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x97FA;
         G_POST(0x97F9, 0x3F);
         continue;
     L_97FA:
@@ -88735,7 +92931,17 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_980B:
         g_last_pc = 0x980B;
         G_PRE(0x980B, 0x40);
-        v2_vm_op_40(vm);  // subsprites: fl&=0x9FFF, dirty=2
+        // inlined v2_vm_op_40: subsprites: fl&=0x9FFF, dirty=2
+        { ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};
+          uint16_t _cx = _self.u16(OBJ_SUB_END);
+          uint16_t _si = _self.u16(OBJ_SUB_SLOT);
+          do {
+              ObjRef _sub{vm, _si};
+              _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF));
+              _sub.w16(OBJ_DIRTY_MODE, 2);
+              _si += 2;
+          } while ((int16_t)_si < (int16_t)_cx); }
+        vm.pc = 0x980C;
         G_POST(0x980B, 0x40);
         continue;
     L_980C:
@@ -88861,7 +93067,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_982D:
         g_last_pc = 0x982D;
         G_PRE(0x982D, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x982D, 0x10);
         continue;
     L_98AA:
@@ -89200,7 +93406,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9946:
         g_last_pc = 0x9946;
         G_PRE(0x9946, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x502F
+        // inlined v2_vm_op_sound: sfx 0x502F
+        v2_vm_sfx_core(vm, 0x502F);
+        vm.pc = 0x9949;
         G_POST(0x9946, 0x02);
         continue;
     L_9949:
@@ -89249,13 +93457,83 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9955:
         g_last_pc = 0x9955;
         G_PRE(0x9955, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9958;
         G_POST(0x9955, 0x46);
         continue;
     L_9958:
         g_last_pc = 0x9958;
         G_PRE(0x9958, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x15B, edge=1, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x15B, edge=1, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x5B00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x015B;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0001;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9963;
         G_POST(0x9958, 0x41);
         continue;
     L_9963:
@@ -89284,13 +93562,82 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_996B:
         g_last_pc = 0x996B;
         G_PRE(0x996B, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x996C;
         G_POST(0x996B, 0x42);
         continue;
     L_996C:
         g_last_pc = 0x996C;
         G_PRE(0x996C, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x15C, edge=1, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x15C, edge=1, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x5C00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x015C;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0001;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9977;
         G_POST(0x996C, 0x41);
         continue;
     L_9977:
@@ -89319,13 +93666,24 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_997F:
         g_last_pc = 0x997F;
         G_PRE(0x997F, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9980;
         G_POST(0x997F, 0x42);
         continue;
     L_9980:
         g_last_pc = 0x9980;
         G_PRE(0x9980, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x7C00)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9983;
         G_POST(0x9980, 0x46);
         continue;
     L_9983:
@@ -89347,7 +93705,71 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9989:
         g_last_pc = 0x9989;
         G_PRE(0x9989, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x178, edge=0, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x178, edge=0, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7800);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0178;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9994;
         G_POST(0x9989, 0x41);
         continue;
     L_9994:
@@ -89376,7 +93798,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_999C:
         g_last_pc = 0x999C;
         G_PRE(0x999C, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x999D;
         G_POST(0x999C, 0x42);
         continue;
     L_999D:
@@ -89466,7 +93893,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_99BB:
         g_last_pc = 0x99BB;
         G_PRE(0x99BB, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x502F
+        // inlined v2_vm_op_sound: sfx 0x502F
+        v2_vm_sfx_core(vm, 0x502F);
+        vm.pc = 0x99BE;
         G_POST(0x99BB, 0x02);
         continue;
     L_99BE:
@@ -89515,13 +93944,83 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_99CA:
         g_last_pc = 0x99CA;
         G_PRE(0x99CA, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x1E3)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x99CD;
         G_POST(0x99CA, 0x46);
         continue;
     L_99CD:
         g_last_pc = 0x99CD;
         G_PRE(0x99CD, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x15D, edge=0, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x15D, edge=0, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x5D00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x015D;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x99D8;
         G_POST(0x99CD, 0x41);
         continue;
     L_99D8:
@@ -89550,7 +94049,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_99E0:
         g_last_pc = 0x99E0;
         G_PRE(0x99E0, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x99E1;
         G_POST(0x99E0, 0x42);
         continue;
     L_99E1:
@@ -89640,7 +94144,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_99FF:
         g_last_pc = 0x99FF;
         G_PRE(0x99FF, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x502F
+        // inlined v2_vm_op_sound: sfx 0x502F
+        v2_vm_sfx_core(vm, 0x502F);
+        vm.pc = 0x9A02;
         G_POST(0x99FF, 0x02);
         continue;
     L_9A02:
@@ -89689,13 +94195,83 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9A0E:
         g_last_pc = 0x9A0E;
         G_PRE(0x9A0E, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x110D)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9A11;
         G_POST(0x9A0E, 0x46);
         continue;
     L_9A11:
         g_last_pc = 0x9A11;
         G_PRE(0x9A11, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x15E, edge=0, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x15E, edge=0, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x5E00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x015E;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9A1C;
         G_POST(0x9A11, 0x41);
         continue;
     L_9A1C:
@@ -89724,13 +94300,82 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9A24:
         g_last_pc = 0x9A24;
         G_PRE(0x9A24, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9A25;
         G_POST(0x9A24, 0x42);
         continue;
     L_9A25:
         g_last_pc = 0x9A25;
         G_PRE(0x9A25, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x15F, edge=0, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x15F, edge=0, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x5F00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x015F;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9A30;
         G_POST(0x9A25, 0x41);
         continue;
     L_9A30:
@@ -89759,7 +94404,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9A38:
         g_last_pc = 0x9A38;
         G_PRE(0x9A38, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9A39;
         G_POST(0x9A38, 0x42);
         continue;
     L_9A39:
@@ -89841,13 +94491,26 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9A53:
         g_last_pc = 0x9A53;
         G_PRE(0x9A53, 0x0E);
-        v2_vm_op_0E(vm);  // bits[0x356+sub>>3] |= 1<<(sub&7)
+        // inlined v2_vm_op_0E: bits[0x356+sub>>3] |= 1<<(sub&7)
+        { vm.si_track = vm.global_r(DS_CUR_OBJ);   // MOV si, ds:42h
+          int16_t _v = (int16_t)vm.field_r(OBJ_ANIM_SUB);
+          vm.di_track = (uint16_t)_v;              // MOV di, [si+16C5h]
+          if (_v >= 0) {
+              uint16_t _bit = (uint16_t)(_v & 7);
+              vm.di_track = _bit;                  // AND di, 7
+              uint16_t _off = (uint16_t)(_v >> 3);
+              vm.si_track = _off;                  // SHR si, 3
+              uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
+              uint16_t _a = (uint16_t)(_off + 0x356);
+              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+          } }
+        vm.pc = 0x9A54;
         G_POST(0x9A53, 0x0E);
         continue;
     L_9A54:
         g_last_pc = 0x9A54;
         G_PRE(0x9A54, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x9A54, 0x10);
         continue;
     L_9A55:
@@ -90038,19 +94701,89 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9A98:
         g_last_pc = 0x9A98;
         G_PRE(0x9A98, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x502F
+        // inlined v2_vm_op_sound: sfx 0x502F
+        v2_vm_sfx_core(vm, 0x502F);
+        vm.pc = 0x9A9B;
         G_POST(0x9A98, 0x02);
         continue;
     L_9A9B:
         g_last_pc = 0x9A9B;
         G_PRE(0x9A9B, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9A9E;
         G_POST(0x9A9B, 0x46);
         continue;
     L_9A9E:
         g_last_pc = 0x9A9E;
         G_PRE(0x9A9E, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x160, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x160, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6000);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0160;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9AA9;
         G_POST(0x9A9E, 0x41);
         continue;
     L_9AA9:
@@ -90079,13 +94812,80 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9AB1:
         g_last_pc = 0x9AB1;
         G_PRE(0x9AB1, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9AB2;
         G_POST(0x9AB1, 0x42);
         continue;
     L_9AB2:
         g_last_pc = 0x9AB2;
         G_PRE(0x9AB2, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x161, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x161, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6100);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0161;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9ABD;
         G_POST(0x9AB2, 0x41);
         continue;
     L_9ABD:
@@ -90114,19 +94914,92 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9AC5:
         g_last_pc = 0x9AC5;
         G_PRE(0x9AC5, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9AC6;
         G_POST(0x9AC5, 0x42);
         continue;
     L_9AC6:
         g_last_pc = 0x9AC6;
         G_PRE(0x9AC6, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x7C00)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9AC9;
         G_POST(0x9AC6, 0x46);
         continue;
     L_9AC9:
         g_last_pc = 0x9AC9;
         G_PRE(0x9AC9, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x179, edge=2, x=0x20, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x179, edge=2, x=0x20, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7900);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0179;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0002;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0020;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9AD4;
         G_POST(0x9AC9, 0x41);
         continue;
     L_9AD4:
@@ -90155,7 +95028,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9ADC:
         g_last_pc = 0x9ADC;
         G_PRE(0x9ADC, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9ADD;
         G_POST(0x9ADC, 0x42);
         continue;
     L_9ADD:
@@ -90169,7 +95047,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9AE0:
         g_last_pc = 0x9AE0;
         G_PRE(0x9AE0, 0x57);
-        v2_vm_op_57(vm);  // [hud_items] = acc
+        // inlined v2_vm_op_57: [hud_items] = acc
+        vm.pc = 0x9AE1;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x9AE0, 0x57);
         continue;
     L_9AE3:
@@ -90183,7 +95063,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9AE6:
         g_last_pc = 0x9AE6;
         G_PRE(0x9AE6, 0x57);
-        v2_vm_op_57(vm);  // [03EC] = acc
+        // inlined v2_vm_op_57: [03EC] = acc
+        vm.pc = 0x9AE7;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x9AE6, 0x57);
         continue;
     L_9AE9:
@@ -90197,13 +95079,15 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9AEC:
         g_last_pc = 0x9AEC;
         G_PRE(0x9AEC, 0x57);
-        v2_vm_op_57(vm);  // [03F4] = acc
+        // inlined v2_vm_op_57: [03F4] = acc
+        vm.pc = 0x9AED;
+        v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside
         G_POST(0x9AEC, 0x57);
         continue;
     L_9AEF:
         g_last_pc = 0x9AEF;
         G_PRE(0x9AEF, 0x10);
-        v2_vm_op_10(vm);
+        v2_vm_op_10(vm);   // open primitive (no stream reads)
         G_POST(0x9AEF, 0x10);
         continue;
     L_9AF0:
@@ -90340,7 +95224,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9B16:
         g_last_pc = 0x9B16;
         G_PRE(0x9B16, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x502F
+        // inlined v2_vm_op_sound: sfx 0x502F
+        v2_vm_sfx_core(vm, 0x502F);
+        vm.pc = 0x9B19;
         G_POST(0x9B16, 0x02);
         continue;
     L_9B19:
@@ -90405,13 +95291,83 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9B29:
         g_last_pc = 0x9B29;
         G_PRE(0x9B29, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x110D)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9B2C;
         G_POST(0x9B29, 0x46);
         continue;
     L_9B2C:
         g_last_pc = 0x9B2C;
         G_PRE(0x9B2C, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x16A, edge=1, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x16A, edge=1, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6A00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x016A;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0001;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9B37;
         G_POST(0x9B2C, 0x41);
         continue;
     L_9B37:
@@ -90440,7 +95396,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9B3F:
         g_last_pc = 0x9B3F;
         G_PRE(0x9B3F, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9B40;
         G_POST(0x9B3F, 0x42);
         continue;
     L_9B40:
@@ -90673,19 +95634,58 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9B7E:
         g_last_pc = 0x9B7E;
         G_PRE(0x9B7E, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x502F
+        // inlined v2_vm_op_sound: sfx 0x502F
+        v2_vm_sfx_core(vm, 0x502F);
+        vm.pc = 0x9B81;
         G_POST(0x9B7E, 0x02);
         continue;
     L_9B81:
         g_last_pc = 0x9B81;
         G_PRE(0x9B81, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x7C00)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x7C00)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x7C00);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9B84;
         G_POST(0x9B81, 0x46);
         continue;
     L_9B84:
         g_last_pc = 0x9B84;
         G_PRE(0x9B84, 0x44);
-        v2_vm_op_44(vm);  // text_menu(id=0x163, edge=2, x=0x1C, y=5)
+        // inlined v2_vm_op_44: text_menu(id=0x163, edge=2, x=0x1C, y=5)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6300);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0163;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0002;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x001C;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0005;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9B8F;
         G_POST(0x9B84, 0x44);
         continue;
     L_9B8F:
@@ -90714,13 +95714,49 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9B97:
         g_last_pc = 0x9B97;
         G_PRE(0x9B97, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9B98;
         G_POST(0x9B97, 0x42);
         continue;
     L_9B98:
         g_last_pc = 0x9B98;
         G_PRE(0x9B98, 0x44);
-        v2_vm_op_44(vm);  // text_menu(id=0x164, edge=2, x=0x1C, y=1)
+        // inlined v2_vm_op_44: text_menu(id=0x164, edge=2, x=0x1C, y=1)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6400);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0164;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0002;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x001C;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0001;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9BA3;
         G_POST(0x9B98, 0x44);
         continue;
     L_9BA3:
@@ -90749,7 +95785,38 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9BAB:
         g_last_pc = 0x9BAB;
         G_PRE(0x9BAB, 0x44);
-        v2_vm_op_44(vm);  // text_menu(id=0x165, edge=2, x=0x14, y=4)
+        // inlined v2_vm_op_44: text_menu(id=0x165, edge=2, x=0x14, y=4)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6500);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0165;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0002;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0014;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0004;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9BB6;
         G_POST(0x9BAB, 0x44);
         continue;
     L_9BB6:
@@ -90778,7 +95845,38 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9BBE:
         g_last_pc = 0x9BBE;
         G_PRE(0x9BBE, 0x44);
-        v2_vm_op_44(vm);  // text_menu(id=0x166, edge=2, x=0x17, y=7)
+        // inlined v2_vm_op_44: text_menu(id=0x166, edge=2, x=0x17, y=7)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6600);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0166;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0002;
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0017;
+          vm.ds_write(DS_TEXT_COL, _px);
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0007;
+          vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C
+          vm.di_track = _py;                        // orig 0x2610
+          uint16_t _sp = vm.si_track, _dp = _py;
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9BC9;
         G_POST(0x9BBE, 0x44);
         continue;
     L_9BC9:
@@ -90807,7 +95905,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9BD1:
         g_last_pc = 0x9BD1;
         G_PRE(0x9BD1, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9BD2;
         G_POST(0x9BD1, 0x42);
         continue;
     L_9BD2:
@@ -90895,13 +95998,83 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9BEA:
         g_last_pc = 0x9BEA;
         G_PRE(0x9BEA, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9BED;
         G_POST(0x9BEA, 0x46);
         continue;
     L_9BED:
         g_last_pc = 0x9BED;
         G_PRE(0x9BED, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x167, edge=0, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x167, edge=0, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6700);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0167;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9BF8;
         G_POST(0x9BED, 0x41);
         continue;
     L_9BF8:
@@ -90930,7 +96103,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9C00:
         g_last_pc = 0x9C00;
         G_PRE(0x9C00, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9C01;
         G_POST(0x9C00, 0x42);
         continue;
     L_9C01:
@@ -90995,7 +96173,71 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9C11:
         g_last_pc = 0x9C11;
         G_PRE(0x9C11, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x168, edge=0, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x168, edge=0, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6800);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0168;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9C1C;
         G_POST(0x9C11, 0x41);
         continue;
     L_9C1C:
@@ -91024,7 +96266,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9C24:
         g_last_pc = 0x9C24;
         G_PRE(0x9C24, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9C25;
         G_POST(0x9C24, 0x42);
         continue;
     L_9C25:
@@ -91112,13 +96359,83 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9C3D:
         g_last_pc = 0x9C3D;
         G_PRE(0x9C3D, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x110D)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9C40;
         G_POST(0x9C3D, 0x46);
         continue;
     L_9C40:
         g_last_pc = 0x9C40;
         G_PRE(0x9C40, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x169, edge=1, x=[0206], y=[0208])
+        // inlined v2_vm_op_41: text(id=0x169, edge=1, x=[0206], y=[0208])
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x6900);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0169;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0001;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0206;
+          const uint16_t _px = vm.ds_read(0x0206);
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          vm.si_track = 0x0208;
+          const uint16_t _py = vm.ds_read(0x0208);
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9C4B;
         G_POST(0x9C40, 0x41);
         continue;
     L_9C4B:
@@ -91147,7 +96464,12 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9C53:
         g_last_pc = 0x9C53;
         G_PRE(0x9C53, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9C54;
         G_POST(0x9C53, 0x42);
         continue;
     L_9C54:
@@ -91278,7 +96600,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9C77:
         g_last_pc = 0x9C77;
         G_PRE(0x9C77, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x9C77, 0x0F);
         continue;
     L_9C78:
@@ -91588,7 +96910,9 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9D36:
         g_last_pc = 0x9D36;
         G_PRE(0x9D36, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x4F3B
+        // inlined v2_vm_op_sound: sfx 0x4F3B
+        v2_vm_sfx_core(vm, 0x4F3B);
+        vm.pc = 0x9D39;
         G_POST(0x9D36, 0x02);
         continue;
     L_9D39:
@@ -91633,19 +96957,89 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9D47:
         g_last_pc = 0x9D47;
         G_PRE(0x9D47, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x502F
+        // inlined v2_vm_op_sound: sfx 0x502F
+        v2_vm_sfx_core(vm, 0x502F);
+        vm.pc = 0x9D4A;
         G_POST(0x9D47, 0x02);
         continue;
     L_9D4A:
         g_last_pc = 0x9D4A;
         G_PRE(0x9D4A, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x1E3)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x1E3)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x01E3);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9D4D;
         G_POST(0x9D4A, 0x46);
         continue;
     L_9D4D:
         g_last_pc = 0x9D4D;
         G_PRE(0x9D4D, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x17A, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x17A, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7A00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x017A;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9D58;
         G_POST(0x9D4D, 0x41);
         continue;
     L_9D58:
@@ -91674,19 +97068,92 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9D60:
         g_last_pc = 0x9D60;
         G_PRE(0x9D60, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9D61;
         G_POST(0x9D60, 0x42);
         continue;
     L_9D61:
         g_last_pc = 0x9D61;
         G_PRE(0x9D61, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9D64;
         G_POST(0x9D61, 0x46);
         continue;
     L_9D64:
         g_last_pc = 0x9D64;
         G_PRE(0x9D64, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x17B, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x17B, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7B00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x017B;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9D6F;
         G_POST(0x9D64, 0x41);
         continue;
     L_9D6F:
@@ -91715,19 +97182,92 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9D77:
         g_last_pc = 0x9D77;
         G_PRE(0x9D77, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9D78;
         G_POST(0x9D77, 0x42);
         continue;
     L_9D78:
         g_last_pc = 0x9D78;
         G_PRE(0x9D78, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x110D)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9D7B;
         G_POST(0x9D78, 0x46);
         continue;
     L_9D7B:
         g_last_pc = 0x9D7B;
         G_PRE(0x9D7B, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x17C, edge=3, x=0, y=0x28)
+        // inlined v2_vm_op_41: text(id=0x17C, edge=3, x=0, y=0x28)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7C00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x017C;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0003;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0028;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9D86;
         G_POST(0x9D7B, 0x41);
         continue;
     L_9D86:
@@ -91756,19 +97296,92 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9D8E:
         g_last_pc = 0x9D8E;
         G_PRE(0x9D8E, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9D8F;
         G_POST(0x9D8E, 0x42);
         continue;
     L_9D8F:
         g_last_pc = 0x9D8F;
         G_PRE(0x9D8F, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9D92;
         G_POST(0x9D8F, 0x46);
         continue;
     L_9D92:
         g_last_pc = 0x9D92;
         G_PRE(0x9D92, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x17D, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x17D, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7D00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x017D;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9D9D;
         G_POST(0x9D92, 0x41);
         continue;
     L_9D9D:
@@ -91797,31 +97410,107 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9DA5:
         g_last_pc = 0x9DA5;
         G_PRE(0x9DA5, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9DA6;
         G_POST(0x9DA5, 0x42);
         continue;
     L_9DA6:
         g_last_pc = 0x9DA6;
         G_PRE(0x9DA6, 0xD7);
-        v2_vm_op_D7(vm);  // sfx_stop_slots(0x3B) (2B pad)
+        // inlined v2_vm_op_D7: sfx_stop_slots(0x3B) (2B pad)
+        v2_vm_sfx_stopslots_core(vm, 0x3B);
+        vm.pc = 0x9DAA;
         G_POST(0x9DA6, 0xD7);
         continue;
     L_9DAA:
         g_last_pc = 0x9DAA;
         G_PRE(0x9DAA, 0xD5);
-        v2_vm_op_D5(vm);  // music_start (1B pad)
+        // inlined v2_vm_op_D5: music_start (1B pad)
+        v2_vm_op_D5(vm);   // open primitive (no stream reads)
         G_POST(0x9DAA, 0xD5);
         continue;
     L_9DAC:
         g_last_pc = 0x9DAC;
         G_PRE(0x9DAC, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x110D)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9DAF;
         G_POST(0x9DAC, 0x46);
         continue;
     L_9DAF:
         g_last_pc = 0x9DAF;
         G_PRE(0x9DAF, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x17E, edge=3, x=0, y=0x28)
+        // inlined v2_vm_op_41: text(id=0x17E, edge=3, x=0, y=0x28)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7E00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x017E;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0003;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0028;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9DBA;
         G_POST(0x9DAF, 0x41);
         continue;
     L_9DBA:
@@ -91850,13 +97539,80 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9DC2:
         g_last_pc = 0x9DC2;
         G_PRE(0x9DC2, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9DC3;
         G_POST(0x9DC2, 0x42);
         continue;
     L_9DC3:
         g_last_pc = 0x9DC3;
         G_PRE(0x9DC3, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x17F, edge=3, x=0, y=0x28)
+        // inlined v2_vm_op_41: text(id=0x17F, edge=3, x=0, y=0x28)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x7F00);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x017F;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0003;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0028;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9DCE;
         G_POST(0x9DC3, 0x41);
         continue;
     L_9DCE:
@@ -91885,13 +97641,80 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9DD6:
         g_last_pc = 0x9DD6;
         G_PRE(0x9DD6, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9DD7;
         G_POST(0x9DD6, 0x42);
         continue;
     L_9DD7:
         g_last_pc = 0x9DD7;
         G_PRE(0x9DD7, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x180, edge=3, x=0, y=0x28)
+        // inlined v2_vm_op_41: text(id=0x180, edge=3, x=0, y=0x28)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x8000);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0180;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0003;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0028;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9DE2;
         G_POST(0x9DD7, 0x41);
         continue;
     L_9DE2:
@@ -91920,13 +97743,80 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9DEA:
         g_last_pc = 0x9DEA;
         G_PRE(0x9DEA, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9DEB;
         G_POST(0x9DEA, 0x42);
         continue;
     L_9DEB:
         g_last_pc = 0x9DEB;
         G_PRE(0x9DEB, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x181, edge=3, x=0, y=0x28)
+        // inlined v2_vm_op_41: text(id=0x181, edge=3, x=0, y=0x28)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x8100);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0181;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0003;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0028;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9DF6;
         G_POST(0x9DEB, 0x41);
         continue;
     L_9DF6:
@@ -91955,25 +97845,100 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9DFE:
         g_last_pc = 0x9DFE;
         G_PRE(0x9DFE, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9DFF;
         G_POST(0x9DFE, 0x42);
         continue;
     L_9DFF:
         g_last_pc = 0x9DFF;
         G_PRE(0x9DFF, 0x02);
-        v2_vm_op_sound(vm);  // sfx 0x204F
+        // inlined v2_vm_op_sound: sfx 0x204F
+        v2_vm_sfx_core(vm, 0x204F);
+        vm.pc = 0x9E02;
         G_POST(0x9DFF, 0x02);
         continue;
     L_9E02:
         g_last_pc = 0x9E02;
         G_PRE(0x9E02, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9E05;
         G_POST(0x9E02, 0x46);
         continue;
     L_9E05:
         g_last_pc = 0x9E05;
         G_PRE(0x9E05, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x182, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x182, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x8200);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0182;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9E10;
         G_POST(0x9E05, 0x41);
         continue;
     L_9E10:
@@ -92002,13 +97967,80 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9E18:
         g_last_pc = 0x9E18;
         G_PRE(0x9E18, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9E19;
         G_POST(0x9E18, 0x42);
         continue;
     L_9E19:
         g_last_pc = 0x9E19;
         G_PRE(0x9E19, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x183, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x183, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x8300);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0183;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9E24;
         G_POST(0x9E19, 0x41);
         continue;
     L_9E24:
@@ -92037,19 +98069,92 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9E2C:
         g_last_pc = 0x9E2C;
         G_PRE(0x9E2C, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9E2D;
         G_POST(0x9E2C, 0x42);
         continue;
     L_9E2D:
         g_last_pc = 0x9E2D;
         G_PRE(0x9E2D, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x110D)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x110D)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x110D);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9E30;
         G_POST(0x9E2D, 0x46);
         continue;
     L_9E30:
         g_last_pc = 0x9E30;
         G_PRE(0x9E30, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x184, edge=3, x=0, y=0x28)
+        // inlined v2_vm_op_41: text(id=0x184, edge=3, x=0, y=0x28)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x8400);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0184;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0003;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0x0028;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9E3B;
         G_POST(0x9E30, 0x41);
         continue;
     L_9E3B:
@@ -92078,19 +98183,92 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9E43:
         g_last_pc = 0x9E43;
         G_PRE(0x9E43, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9E44;
         G_POST(0x9E43, 0x42);
         continue;
     L_9E44:
         g_last_pc = 0x9E44;
         G_PRE(0x9E44, 0x46);
-        v2_vm_op_46(vm);  // cmdq_push(6, 0x12)
+        // inlined v2_vm_op_46: cmdq_push(6, 0x12)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 6);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x0012);
+          v2_cmdq_log("v2", 6, _bx, 4);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 4)); }
+        vm.pc = 0x9E47;
         G_POST(0x9E44, 0x46);
         continue;
     L_9E47:
         g_last_pc = 0x9E47;
         G_PRE(0x9E47, 0x41);
-        v2_vm_op_41(vm);  // text(id=0x185, edge=0, x=0, y=0xFFD8)
+        // inlined v2_vm_op_41: text(id=0x185, edge=0, x=0, y=0xFFD8)
+        { uint16_t _t3 = 0; (void)_t3;
+          vm.ds_write(DS_MODE_WORD, 0x8500);   // sub_1250b mode word
+          vm.ch4_mul_clobber = false;
+          const uint16_t _r0 = 0x0185;
+          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+            vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
+          { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
+            uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _v2v = 0x0000;
+          { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
+            uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);
+            uint16_t _w38, _w3A;
+            if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }
+            else if (_v2v == 4) { _w38 = 1; _w3A = 0; }
+            else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }
+            else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }
+            else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }
+            vm.ds_write(DS_SCRATCH_38, _w38);
+            vm.ds_write(DS_SCRATCH_3A, _w3A); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _px = 0x0000;
+          uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);
+          vm.si_track = _sobj;                 // orig 0x25AB
+          { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));
+            if (_ax < 0) { _ax = 2; }
+            else {
+                _ax = (int16_t)((uint16_t)_ax >> 3);
+                _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);
+                if (_ax < 0) _ax = 2;
+                else if (_ax < 2) _ax = 2;
+            }
+            vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }
+          vm.ch4_mul_clobber = false;
+          const uint16_t _py = 0xFFD8;
+          vm.si_track = _sobj;                 // orig 0x25D4
+          uint16_t _dp;
+          { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));
+            if (_ay < 0) { _ay = 2; }
+            else {
+                _ay = (int16_t)((uint16_t)_ay >> 3);
+                _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);
+                if (_ay < 0) _ay = 2;
+                else if (_ay < 2) _ay = 2;
+            }
+            _dp = (uint16_t)_ay; }
+          uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3
+          vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7
+          v2_vm_glyph_clamp_12613(vm, _sp, _dp);
+          vm.si_track = _sp; vm.di_track = _dp;
+          { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);
+            vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);
+            vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));
+            vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }
+        }
+        vm.pc = 0x9E52;
         G_POST(0x9E47, 0x41);
         continue;
     L_9E52:
@@ -92119,13 +98297,20 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9E5A:
         g_last_pc = 0x9E5A;
         G_PRE(0x9E5A, 0x42);
-        v2_vm_op_42(vm);  // cmdq_push(2)
+        // inlined v2_vm_op_42: cmdq_push(2)
+        { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);
+          vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 2);
+          v2_cmdq_log("v2", 2, _bx, 2);
+          vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 2)); }
+        vm.pc = 0x9E5B;
         G_POST(0x9E5A, 0x42);
         continue;
     L_9E5B:
         g_last_pc = 0x9E5B;
         G_PRE(0x9E5B, 0xD7);
-        v2_vm_op_D7(vm);  // sfx_stop_slots(0x4F) (2B pad)
+        // inlined v2_vm_op_D7: sfx_stop_slots(0x4F) (2B pad)
+        v2_vm_sfx_stopslots_core(vm, 0x4F);
+        vm.pc = 0x9E5F;
         G_POST(0x9E5B, 0xD7);
         continue;
     L_9E5F:
@@ -92268,7 +98453,7 @@ static bool v2_gen_exec_1c6(V2VM& vm, int& max_ops) {
     L_9E89:
         g_last_pc = 0x9E89;
         G_PRE(0x9E89, 0x0F);
-        v2_vm_op_exit_with_flag(vm);
+        v2_vm_op_exit_with_flag(vm);   // open primitive (no stream reads)
         G_POST(0x9E89, 0x0F);
         continue;
     L_9E8A:

@@ -364,9 +364,16 @@ def inline_wave3(op, body, kind, tgt, nxt, pc):
         return ['{ uint16_t _o = vm.global_r(DS_CUR_OBJ);',
                 f'  if ({cond}) v2_vm_vflip_body_13757(vm, _o); }}',
                 f'vm.pc = 0x{nxt:04X};']
-    if op in (0x11, 0x12, 0x3A):   # res_deduct(partner)
+    if op == 0x11:   # res_deduct: si=CUR, di=PARTNER (roles differ from 12/3A!)
+        return ['{ uint16_t _si = vm.global_r(DS_CUR_OBJ);',
+                '  uint16_t _di = ObjRef{vm, _si}.u16(OBJ_PARTNER);',
+                '  vm.si_track = _si; vm.di_track = _di;   // orig regs at RETN',
+                '  v2_vm_res_deduct_15505(vm, _si, _di); }',
+                f'vm.pc = 0x{nxt:04X};']
+    if op in (0x12, 0x3A):   # res_deduct: di=CUR, si=PARTNER
         return ['{ uint16_t _di = vm.global_r(DS_CUR_OBJ);',
                 '  uint16_t _si = ObjRef{vm, _di}.u16(OBJ_PARTNER);',
+                '  vm.si_track = _si; vm.di_track = _di;   // orig regs at RETN',
                 '  v2_vm_res_deduct_15505(vm, _si, _di); }',
                 f'vm.pc = 0x{nxt:04X};']
     if op == 0x2F:
@@ -536,8 +543,8 @@ def inline_wave4(op, body, kind, tgt, nxt, pc):
         L.append('  uint16_t _saved = vm.ds_read(DS_OBJ_COUNT);')
         L.append('  vm.ds_write(DS_OBJ_COUNT, 6);')
         L.append('  uint16_t _di = vm.global_r(DS_CUR_OBJ);')
-        if op == 0xC0:   # only the C0 body seeds si/di tracks
-            L.append(f'  vm.si_track = 0x{f:02X}; vm.di_track = _di;')
+        # BF/C0/C3/C4 bodies all seed si=filter, di=object (audit pass 4)
+        L.append(f'  vm.si_track = 0x{f:02X}; vm.di_track = _di;')
         L.append(f'  vm.carry = {call.format(f=f"0x{f:02X}")};')
         L.append('  vm.ds_write(DS_OBJ_COUNT, _saved);')
         if br == 'jump':
@@ -576,6 +583,8 @@ def inline_wave4(op, body, kind, tgt, nxt, pc):
         f = body[0]
         L.append('{')
         L.append('  uint16_t _di = vm.global_r(DS_CUR_OBJ);')
+        if op in (0x1E, 0x1F, 0x22, 0x23, 0x24, 0x25, 0x31):
+            L.append('  vm.di_track = _di;   // orig: MOV di,ds:42h (task #15)')
         if op in (0x20, 0x21, 0x24, 0x25):
             L.append('  bool _flip = (ObjRef{vm, _di}.u16(OBJ_FLAGS) & 0x40) != 0;')
             first_left = op in (0x20, 0x24)   # !flip -> left for 20/24
@@ -768,6 +777,472 @@ def inline_wave5(op, body, kind, tgt, nxt, pc):
         return L
     return None
 
+# Wave 6: the final tail — full channel-op bodies unrolled (spawn 14,
+# tile/grid 26-2B/50, aim D4, probe_at 49/4A, text 41/44/45), op 13
+# constant sub-command branch, sfx via the new cores, cmdq pushes with
+# their audit log calls, palettes, subsprite sweeps, viewport branches
+# and every remaining zero-stream op as an open primitive call.
+_OPEN_CALL = {
+    # ops with ZERO stream reads whose bodies stay as named primitives
+    # (diagnostic prints / big subsystem logic live there).
+    0x0F: 'v2_vm_op_exit_with_flag', 0x10: 'v2_vm_op_10',
+    0x3E: 'v2_vm_op_3E', 0x4D: 'v2_vm_op_4D',
+    0xCD: 'v2_vm_op_CD', 0xCE: 'v2_vm_op_CE', 0xCF: 'v2_vm_op_CF',
+    0xD2: 'v2_vm_op_D2', 0xD3: 'v2_vm_op_D3', 0xD5: 'v2_vm_op_D5',
+    0x47: 'v2_vm_op_nop',
+}
+
+def inline_wave6(op, body, kind, tgt, nxt, pc):
+    L = []
+    if op in _OPEN_CALL:
+        h = _OPEN_CALL[op]
+        return [f'{h}(vm);   // open primitive (no stream reads)']
+    if op == 0x02:
+        return [f'v2_vm_sfx_core(vm, 0x{_imm16(body):04X});',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x04:
+        return [f'v2_vm_sfx_stop_core(vm, 0x{body[0]:02X});',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0xD7:
+        return [f'v2_vm_sfx_stopslots_core(vm, 0x{body[0]:02X});',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x39:
+        return [f'vm.pc = 0x{nxt:04X};   // discard 3 operand bytes']
+    if op == 0x2E:
+        w = _imm16(body)
+        return [f'vm.ds_write(DS_SHAKE_SRC_X, 0x{w & 0xFF:04X});',
+                'vm.ds_write(DS_SHAKE_X, 0);',
+                f'vm.ds_write(DS_SHAKE_GATE_X, 0x{(w >> 7) & 0x1FE:04X});',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x3B:
+        w = _imm16(body)
+        return [f'vm.ds_write(DS_SHAKE_SRC_Y, 0x{w & 0xFF:04X});',
+                'vm.ds_write(DS_SHAKE_Y, 0);',
+                f'vm.ds_write(DS_SHAKE_GATE_Y, 0x{(w >> 6) & 0x3FC:04X});',
+                f'vm.pc = 0x{nxt:04X};']
+    if op in (0x42, 0x43, 0xCB, 0x46):
+        typ = {0x42: 2, 0x43: 4, 0xCB: 4, 0x46: 6}[op]
+        step = {0x42: 2, 0x43: 2, 0xCB: 2, 0x46: 4}[op]
+        L.append('{ uint16_t _bx = vm.ds_read(DS_CMD_WRITE);')
+        L.append(f'  vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), {typ});')
+        if op == 0x46:
+            L.append(f'  vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), 0x{_imm16(body):04X});')
+        L.append(f'  v2_cmdq_log("v2", {typ}, _bx, {step});')
+        L.append(f'  vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + {step})); }}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    if op in (0x3D, 0x4C):
+        r, g, b = body[0], body[1], body[2]
+        R = ('DS_PAL_SHADE_R', 'DS_PAL_SHADE_G', 'DS_PAL_SHADE_B') if op == 0x3D else \
+            ('DS_PAL_SHADE_R2', 'DS_PAL_SHADE_G2', 'DS_PAL_SHADE_B2')
+        flag = 1 if op == 0x3D else 2
+        return [f'vm.ds_write_b({R[0]}, (uint8_t)0x{(r << 1) & 0xFF:02X});',
+                f'vm.ds_write_b({R[1]}, (uint8_t)0x{(g << 1) & 0xFF:02X});',
+                f'vm.ds_write_b({R[2]}, (uint8_t)0x{(b << 1) & 0xFF:02X});',
+                '{ uint8_t _fl = v2gs(vm.shadow).pal_flags_b();',
+                f'  vm.ds_write_b(DS_PAL_FLAGS, (uint8_t)(_fl | {flag})); }}',
+                'vm.ds_write(DS_PAL_REQ, 4);',
+                'vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT);',
+                'v2_vm_pal_correct_10e99(vm);',
+                f'vm.pc = 0x{nxt:04X};']
+    if op in (0x3F, 0x40):
+        or_flags = op == 0x3F
+        L.append('{ ObjRef _self{vm, vm.global_r(DS_CUR_OBJ)};')
+        L.append('  uint16_t _cx = _self.u16(OBJ_SUB_END);')
+        L.append('  uint16_t _si = _self.u16(OBJ_SUB_SLOT);')
+        L.append('  do {')
+        L.append('      ObjRef _sub{vm, _si};')
+        if or_flags:
+            L.append('      _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) | 0x4000));')
+            L.append('      _sub.w16(OBJ_DIRTY_MODE, (uint16_t)(_sub.u16(OBJ_DIRTY_MODE) | 0x0200));')
+        else:
+            L.append('      _sub.w16(OBJ_SPRITE_FLAGS, (uint16_t)(_sub.u16(OBJ_SPRITE_FLAGS) & 0x9FFF));')
+            L.append('      _sub.w16(OBJ_DIRTY_MODE, 2);')
+        L.append('      _si += 2;')
+        L.append('  } while ((int16_t)_si < (int16_t)_cx); }')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    if op == 0x0E:
+        return ['{ vm.si_track = vm.global_r(DS_CUR_OBJ);   // MOV si, ds:42h',
+                '  int16_t _v = (int16_t)vm.field_r(OBJ_ANIM_SUB);',
+                '  vm.di_track = (uint16_t)_v;              // MOV di, [si+16C5h]',
+                '  if (_v >= 0) {',
+                '      uint16_t _bit = (uint16_t)(_v & 7);',
+                '      vm.di_track = _bit;                  // AND di, 7',
+                '      uint16_t _off = (uint16_t)(_v >> 3);',
+                '      vm.si_track = _off;                  // SHR si, 3',
+                '      uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));',
+                '      uint16_t _a = (uint16_t)(_off + 0x356);',
+                '      if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;',
+                '  } }',
+                f'vm.pc = 0x{nxt:04X};']
+    if op == 0x57:   # trap sites kept out of wave 1 — inline WITH the traps
+        a = _imm16(body)
+        if not (0x3E4 <= a <= 0x413 or a in (0x302, 0x304)):
+            return None   # wave 1 already handles the plain sites
+        return [f'vm.pc = 0x{pc + 1:04X};',
+                'v2_vm_op_57(vm);   // open primitive: trap diagnostics live inside']
+    if op == 0x13:
+        sub = body[0]
+        if sub == 0xD9:
+            ptr = int.from_bytes(body[1:3], 'little')
+            return ['{ for (int _i = 0; _i < 48; _i++) {',
+                    f'      vm.ds_write_b((uint16_t)(DS_PAL_SRC_C192 + _i), vm.es[0x{ptr:04X} + _i]);',
+                    '  }',
+                    '  for (int _i = 0; _i < 48; _i++) {',
+                    f'      vm.ds_write_b((uint16_t)(DS_PAL_SRC_C224 + _i), vm.es[0x{ptr:04X} + _i]);',
+                    '  }',
+                    '  v2_vm_pal_correct_10e99(vm);',
+                    '  vm.ds_write(DS_PAL_REQ, 4);',
+                    '  vm.ds_write(DS_PAL_SRC_PTR, DS_PAL_OUT); }',
+                    f'vm.pc = 0x{nxt:04X};']
+        # other sub-commands (0x11 VGA reset, 0x01 quit) keep the handler:
+        # they own render-buffer / process-exit side effects.
+        return [f'vm.pc = 0x{pc + 1:04X};',
+                'v2_vm_op_13(vm);   // open primitive (menu/VGA/quit sub-command)']
+    # --- channel bodies ---
+    if op in (0x49, 0x4A) and tgt is not None:
+        m = body[0]
+        ca, cb = m & 7, (m >> 3) & 7
+        if ca > 5 or cb > 5: return None
+        L.append('{ uint16_t _t3 = 0; (void)_t3;')
+        o = 1
+        u = _ch_get(L, '_x', ca, body, o)
+        if u is None: return None
+        o += u
+        L.append('  vm.ds_write(DS_TEXT_COL, _x);')
+        u = _ch_get(L, '_y', cb, body, o)
+        if u is None: return None
+        o += u
+        L.append('  vm.ds_write(DS_TEXT_ROW, _y);')
+        anim = body[o]
+        L.append(f'  v2_vm_probe_at_pos_1589b(vm, 0x{anim:02X});')
+        if op == 0x49:   # off_30C8E[0] documented-fixed branch in the body
+            L.append(f'  vm.pc = vm.carry ? 0x{tgt:04X} : 0x{nxt:04X};')
+        else:            # 4A: same but off_30C8E[2]
+            _dispatch_c8e(L, 1, tgt, nxt)
+        L.append('}')
+        return L
+    if op == 0xD4:
+        m = body[0]
+        ca, cb = m & 7, (m >> 3) & 7
+        if ca > 5 or cb > 5: return None
+        w16 = body[0] | (body[1] << 8)
+        L.append('{ uint16_t _t3 = 0; (void)_t3;')
+        L.append('  vm.ds_write(DS_AIM_SIGN_X, 0);')
+        L.append('  vm.ds_write(DS_AIM_SIGN_Y, 0);')
+        L.append(f'  vm.ds_write(DS_SCRATCH_34, 0x{w16:04X});   // full mode word')
+        o = 1
+        u = _ch_get(L, '_tx', ca, body, o)
+        if u is None: return None
+        o += u
+        L.append('  { uint16_t _o = vm.global_r(DS_CUR_OBJ);')
+        L.append('    int16_t _dx = (int16_t)(_tx - ObjRef{vm, _o}.u16(OBJ_WORLD_X));')
+        L.append('    if (_dx < 0) { _dx = -_dx; vm.ds_write(DS_AIM_SIGN_X, 1); }')
+        L.append('    vm.ds_write(DS_TEXT_COL, (uint16_t)_dx); }')
+        u = _ch_get(L, '_ty', cb, body, o)
+        if u is None: return None
+        o += u
+        L.append('  { uint16_t _o = vm.global_r(DS_CUR_OBJ);')
+        L.append('    int16_t _dy = (int16_t)(_ty - ObjRef{vm, _o}.u16(OBJ_WORLD_Y));')
+        L.append('    if (_dy < 0) { _dy = -_dy; vm.ds_write(DS_AIM_SIGN_Y, 1); }')
+        L.append('    vm.ds_write(DS_TEXT_ROW, (uint16_t)_dy); }')
+        thr = body[o]
+        L.append('  uint16_t _maxd = ((int16_t)vm.ds_read(DS_TEXT_ROW) >= (int16_t)vm.ds_read(DS_TEXT_COL))')
+        L.append('      ? vm.ds_read(DS_TEXT_ROW) : vm.ds_read(DS_TEXT_COL);')
+        L.append(f'  vm.ds_write(DS_MODE_WORD, 0x{thr:04X});')
+        L.append('  vm.ds_write(DS_SCRATCH_34, 0);')
+        L.append('  vm.ds_write(DS_SCRATCH_36, 0);')
+        L.append(f'  vm.ds_write(DS_MODE_WORD, 0x{thr:04X});')
+        L.append(f'  while ((int16_t)_maxd > (int16_t)0x{thr:04X}) {{')
+        L.append('      uint16_t _c; _maxd >>= 1;')
+        L.append('      uint16_t _v6c = vm.ds_read(DS_TEXT_COL);')
+        L.append('      _c = _v6c & 1; vm.ds_write(DS_TEXT_COL, (uint16_t)(_v6c >> 1));')
+        L.append('      uint16_t _v34 = vm.ds_read(DS_SCRATCH_34);')
+        L.append('      vm.ds_write(DS_SCRATCH_34, (uint16_t)((_v34 >> 1) | (_c << 15)));')
+        L.append('      uint16_t _v6e = vm.ds_read(DS_TEXT_ROW);')
+        L.append('      _c = _v6e & 1; vm.ds_write(DS_TEXT_ROW, (uint16_t)(_v6e >> 1));')
+        L.append('      uint16_t _v36 = vm.ds_read(DS_SCRATCH_36);')
+        L.append('      vm.ds_write(DS_SCRATCH_36, (uint16_t)((_v36 >> 1) | (_c << 15)));')
+        L.append('  }')
+        L.append('  { uint16_t _o = vm.global_r(DS_CUR_OBJ);')
+        L.append('    if (ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x40)')
+        L.append('        vm.ds_write(DS_AIM_SIGN_X, (uint16_t)(vm.ds_read(DS_AIM_SIGN_X) ^ 1));')
+        L.append('    if (ObjRef{vm, _o}.u16(OBJ_FLAGS) & 0x80)')
+        L.append('        vm.ds_write(DS_AIM_SIGN_Y, (uint16_t)(vm.ds_read(DS_AIM_SIGN_Y) ^ 1));')
+        # combine tail (orig 0x53B7+): frac|int, XCHG ah/al, sign-negate → ANIM_DX/DY
+        L.append('    uint16_t _xr = (uint16_t)((vm.ds_read(DS_SCRATCH_34) & 0xFF00) | vm.ds_read(DS_TEXT_COL));')
+        L.append('    _xr = (uint16_t)(((_xr >> 8) & 0xFF) | ((_xr & 0xFF) << 8)); // XCHG ah,al')
+        L.append('    if (vm.ds_read(DS_AIM_SIGN_X) != 0) _xr = (uint16_t)(-(int16_t)_xr);')
+        L.append('    ObjRef{vm, _o}.w16(OBJ_ANIM_DX, _xr);')
+        L.append('    uint16_t _yr = (uint16_t)((vm.ds_read(DS_SCRATCH_36) & 0xFF00) | vm.ds_read(DS_TEXT_ROW));')
+        L.append('    _yr = (uint16_t)(((_yr >> 8) & 0xFF) | ((_yr & 0xFF) << 8));')
+        L.append('    if (vm.ds_read(DS_AIM_SIGN_Y) != 0) _yr = (uint16_t)(-(int16_t)_yr);')
+        L.append('    ObjRef{vm, _o}.w16(OBJ_ANIM_DY, _yr); }')
+        L.append('}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    if op in (0x29, 0x2A, 0x2B, 0x50):
+        m1 = body[0]
+        ca, cb = m1 & 7, (m1 >> 3) & 7
+        if ca > 5 or cb > 5: return None
+        L.append('{ uint16_t _t3 = 0; (void)_t3;')
+        o = 1
+        u = _ch_get(L, '_x', ca, body, o)
+        if u is None: return None
+        o += u
+        if op == 0x50:
+            L.append('  vm.ds_write(DS_SCRATCH_34, _x);')
+        elif op in (0x2A, 0x2B):
+            L.append('  vm.ds_write(DS_TEXT_COL, _x);')
+        u = _ch_get(L, '_y', cb, body, o)
+        if u is None: return None
+        o += u
+        if op == 0x50:
+            L.append('  vm.ds_write(DS_TEXT_COL, _y);')
+        elif op in (0x2A, 0x2B):
+            L.append('  vm.ds_write(DS_TEXT_ROW, _y);')
+        m2 = body[o]
+        cc = m2 & 7
+        if cc > 5: return None
+        o += 1
+        u = _ch_get(L, '_v', cc, body, o)
+        if u is None: return None
+        if op == 0x29:
+            L.append('  { uint16_t _si = _x, _di = _y;')
+            L.append('    if (vm.ch4_mul_clobber) _di = vm.ch4_mul_dx;')
+            L.append('    v2_vm_tile_write_141e0(vm, _si, _di, _v);')
+            L.append('    v2_vm_tile_dirty_13fc2(vm, _si, _di, _v); }')
+        elif op == 0x2A:
+            L.append('  vm.ds_write(DS_SCRATCH_34, _v);')
+            L.append('  { uint16_t _si = _x, _di = _y;')
+            L.append('    uint16_t _cur = v2_vm_tile_read_141ba(vm, _si, _di);')
+            L.append('    uint16_t _mg = (uint16_t)((_cur & 0xFC00) | _v);')
+            L.append('    v2_vm_tile_write_141e0(vm, _si, _di, _mg);')
+            L.append('    v2_vm_tile_dirty_13fc2(vm, _si, _di, _mg); }')
+        elif op == 0x2B:
+            L.append('  { uint16_t _sw = (uint16_t)((_v >> 8) | (_v << 8));')
+            L.append('    uint16_t _tr = (uint16_t)((_sw << 2) & 0xFC00);')
+            L.append('    vm.ds_write(DS_SCRATCH_34, _tr);')
+            L.append('    uint16_t _si = _x, _di = _y;')
+            L.append('    uint16_t _lo = v2_vm_tile_low_141b3(vm, _si, _di);')
+            L.append('    v2_vm_tile_write_141e0(vm, _si, _di, (uint16_t)(_lo | _tr));')
+            L.append('    vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x506C re-read')
+            L.append('    vm.di_track = vm.ds_read(DS_TEXT_ROW); }  // orig 0x5070')
+        else:   # 0x50: cmdq push 8 with three values
+            L.append('  vm.ds_write(DS_TEXT_ROW, _v);')
+            L.append('  { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 8);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _x);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _y);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v);')
+            L.append('    v2_cmdq_log("v2", 8, _bx, 8);')
+            L.append('    vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }')
+        L.append('}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    if op in (0x26, 0x27, 0x28):
+        m1 = body[0]
+        ca, cb = m1 & 7, (m1 >> 3) & 7
+        if ca > 5 or cb > 5: return None
+        L.append('{ uint16_t _t3 = 0; (void)_t3;')
+        o = 1
+        u = _ch_get(L, '_a', ca, body, o)
+        if u is None: return None
+        o += u
+        if op == 0x26:
+            # orig writes [6C] BETWEEN the two fetches (0x4EE6, before Y dispatch)
+            L.append('  vm.ds_write(DS_TEXT_COL, (uint16_t)(_a >> 4));')
+        u = _ch_get(L, '_b', cb, body, o)
+        if u is None: return None
+        o += u
+        m2 = body[o]
+        sa, sb = m2 & 7, (m2 >> 3) & 7
+        o += 1
+        if op == 0x26:
+            L.append('  vm.ds_write(DS_TEXT_ROW, (uint16_t)(_b >> 4));')
+            u = _ch_set(L, sa, body, o, 'vm.ds_read(DS_TEXT_COL)')
+            if u is None: return None
+            o += u
+            u = _ch_set(L, sb, body, o, 'vm.ds_read(DS_TEXT_ROW)')
+            if u is None: return None
+        elif op == 0x28:
+            L.append('  uint16_t _cx = (uint16_t)((_a & 0xFFF0) | 8);')
+            L.append('  uint16_t _dx = (uint16_t)((_b & 0xFFF0) | 8);')
+            u = _ch_set(L, sa, body, o, '_cx')
+            if u is None: return None
+            o += u
+            u = _ch_set(L, sb, body, o, '_dx')
+            if u is None: return None
+        else:   # 0x27: tile_type + one setter
+            L.append('  { uint16_t _sx = _a, _dy = _b;')
+            L.append('    if (vm.ch4_mul_clobber) _sx = vm.ch4_mul_dx;')
+            L.append('    _tt = v2_vm_tile_type_141a7(vm, _sx, _dy); }')
+            u = _ch_set(L, sa, body, o, '_tt')
+            if u is None: return None
+        L.append('}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        if op == 0x27:
+            L.insert(0, '{ uint16_t _tt = 0; (void)_tt;')
+            L.append('}')
+        return L
+    if op == 0x14:
+        m1 = body[0]
+        ca, cb = m1 & 7, (m1 >> 3) & 7
+        if ca > 5 or cb > 5: return None
+        L.append('{ uint16_t _t3 = 0; (void)_t3;')
+        o = 1
+        u = _ch_get(L, '_x', ca, body, o)
+        if u is None: return None
+        o += u
+        L.append('  vm.ds_write(DS_TEXT_COL, _x);')
+        u = _ch_get(L, '_y', cb, body, o)
+        if u is None: return None
+        o += u
+        L.append('  vm.ds_write(DS_TEXT_ROW, _y);')
+        m2 = body[o]
+        cc, cd = m2 & 7, (m2 >> 3) & 7
+        if cc > 5 or cd > 5: return None
+        o += 1
+        u = _ch_get(L, '_pool', cc, body, o)
+        if u is None: return None
+        o += u
+        L.append('  vm.ds_write(DS_SPAWN_POOL_SEL, _pool);')
+        u = _ch_get(L, '_flr', cd, body, o)
+        if u is None: return None
+        o += u
+        L.append('  vm.ds_write(DS_MODE_WORD, (uint16_t)(_flr & 0x801));')
+        L.append('  uint16_t _cur = vm.global_r(DS_CUR_OBJ);')
+        L.append('  uint16_t _sf = (uint16_t)((ObjRef{vm, _cur}.u16(OBJ_FLAGS) & 0xFE) | vm.ds_read(DS_MODE_WORD));')
+        anim_t = body[o]
+        L.append('  vm.ds_write(DS_SPAWN_TBL_LO, 0xFFFF);')
+        L.append(f'  int32_t _slot = v2_spawn_object_13809(vm.shadow, 0x{anim_t:02X}, 0xFFFF, _sf);')
+        L.append('  if (_slot < 0) { vm.di_track = 0; }   // orig loc_13866: MOV di,0')
+        L.append('  else {')
+        L.append('      uint16_t _dn = (uint16_t)_slot;')
+        L.append('      vm.di_track = _dn;   // orig loc_1385C: MOV di,si (task #15)')
+        L.append('      uint16_t _obj = vm.global_r(DS_CUR_OBJ);')
+        L.append('      ObjRef{vm, _obj}.w16(OBJ_CHILD, _dn);')
+        L.append('      if ((int16_t)_dn < (int16_t)vm.global_r(DS_CUR_OBJ)) {')
+        L.append('          uint16_t _ix = vm.ds_read(DS_PRIO_COUNT);')
+        L.append('          vm.ds_write((uint16_t)(_ix + DS_PRIO_QUEUE), _dn);')
+        L.append('          vm.ds_write(DS_PRIO_COUNT, (uint16_t)(_ix + 1));')
+        L.append('      }')
+        L.append('  } }')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    if op in (0x41, 0x44, 0x45):
+        w0 = body[0]
+        w016 = body[0] | (body[1] << 8)
+        c0 = w0 & 7
+        if c0 > 5: return None
+        L.append('{ uint16_t _t3 = 0; (void)_t3;')
+        L.append(f'  vm.ds_write(DS_MODE_WORD, 0x{w016:04X});   // sub_1250b mode word')
+        o = 1
+        u = _ch_get(L, '_r0', c0, body, o)
+        if u is None: return None
+        o += u
+        L.append('  { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));')
+        L.append('    vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail')
+        if op in (0x41, 0x44):
+            L.append('  { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);')
+            L.append('    uint8_t* _s1 = v2_m2c_base + 0x9480;')
+            L.append('    vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);')
+            L.append('    vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }')
+            c12543 = (w016 >> 3) & 7
+            if c12543 > 5: return None
+            u = _ch_get(L, '_v2v', c12543, body, o)
+            if u is None: return None
+            o += u
+        if op == 0x41:
+            L.append('  { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);')
+            L.append('    uint16_t _w16v = vm.ds_read(DS_SCRATCH_36);')
+            L.append('    uint16_t _w38, _w3A;')
+            L.append('    if (_v2v == 5) { _w38 = (uint16_t)(_w14 - 2); _w3A = 0; }')
+            L.append('    else if (_v2v == 4) { _w38 = 1; _w3A = 0; }')
+            L.append('    else if (_v2v == 1) { _w38 = 1; _w3A = (uint16_t)(_w16v - 1); }')
+            L.append('    else if (_v2v == 2) { _w38 = (uint16_t)(_w14 - 2); _w3A = (uint16_t)(_w16v - 1); }')
+            L.append('    else if (_v2v == 0 || _v2v == 6) { _w38 = (uint16_t)(_w14 >> 1); _w3A = (uint16_t)(_w16v - 1); }')
+            L.append('    else { _w38 = (uint16_t)(_w14 >> 1); _w3A = 0; }')
+            L.append('    vm.ds_write(DS_SCRATCH_38, _w38);')
+            L.append('    vm.ds_write(DS_SCRATCH_3A, _w3A); }')
+        # trailing X/Y pair. 41 goes through ch_escape_125a3: SCREEN
+        # projection ((raw + WORLD - VIEWPORT)>>3 - SCRATCH_38/3A, min 2).
+        # 44/45 go through text_xy_125fa: RAW coordinates. Copied per body.
+        w1 = body[o]
+        cx, cy = w1 & 7, (w1 >> 3) & 7
+        if cx > 5 or cy > 5: return None
+        o += 1
+        u = _ch_get(L, '_px', cx, body, o)
+        if u is None: return None
+        o += u
+        if op == 0x41:
+            L.append('  uint16_t _sobj = vm.ds_read(DS_CUR_OBJ);')
+            L.append('  vm.si_track = _sobj;                 // orig 0x25AB')
+            L.append('  { int16_t _ax = (int16_t)(_px + ObjRef{vm, _sobj}.u16(OBJ_WORLD_X) - vm.ds_read(DS_VIEWPORT_X));')
+            L.append('    if (_ax < 0) { _ax = 2; }')
+            L.append('    else {')
+            L.append('        _ax = (int16_t)((uint16_t)_ax >> 3);')
+            L.append('        _ax -= (int16_t)vm.ds_read(DS_SCRATCH_38);')
+            L.append('        if (_ax < 0) _ax = 2;')
+            L.append('        else if (_ax < 2) _ax = 2;')
+            L.append('    }')
+            L.append('    vm.ds_write(DS_TEXT_COL, (uint16_t)_ax); }')
+        else:
+            L.append('  vm.ds_write(DS_TEXT_COL, _px);')
+        u = _ch_get(L, '_py', cy, body, o)
+        if u is None: return None
+        o += u
+        if op == 0x41:
+            L.append('  vm.si_track = _sobj;                 // orig 0x25D4')
+            L.append('  uint16_t _dp;')
+            L.append('  { int16_t _ay = (int16_t)(_py + ObjRef{vm, _sobj}.u16(OBJ_WORLD_Y) - vm.ds_read(DS_VIEWPORT_Y));')
+            L.append('    if (_ay < 0) { _ay = 2; }')
+            L.append('    else {')
+            L.append('        _ay = (int16_t)((uint16_t)_ay >> 3);')
+            L.append('        _ay -= (int16_t)vm.ds_read(DS_SCRATCH_3A);')
+            L.append('        if (_ay < 0) _ay = 2;')
+            L.append('        else if (_ay < 2) _ay = 2;')
+            L.append('    }')
+            L.append('    _dp = (uint16_t)_ay; }')
+            L.append('  uint16_t _sp = vm.ds_read(DS_TEXT_COL);   // orig 0x25F3')
+            L.append('  vm.si_track = _sp; vm.di_track = _dp;      // orig 0x25F7')
+        else:
+            L.append('  vm.si_track = vm.ds_read(DS_TEXT_COL);   // orig 0x260C')
+            L.append('  vm.di_track = _py;                        // orig 0x2610')
+            L.append('  uint16_t _sp = vm.si_track, _dp = _py;')
+        if op in (0x41, 0x44):
+            L.append('  v2_vm_glyph_clamp_12613(vm, _sp, _dp);')
+            L.append('  vm.si_track = _sp; vm.di_track = _dp;')
+        if op == 0x41:
+            L.append('  { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);')
+            L.append('    vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));')
+            L.append('    vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }')
+        elif op == 0x44:
+            L.append('  { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), _v2v);')
+            L.append('    vm.ds_write((uint16_t)(_bx + 0x1DAF), vm.ds_read(DS_TEXT_IDX));')
+            L.append('    vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 0xA)); }')
+        else:   # 0x45
+            L.append('  { uint16_t _bx = vm.ds_read(DS_CMD_WRITE);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_BUF), 0x0A);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_SI), _sp);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_DI), _dp);')
+            L.append('    vm.ds_write((uint16_t)(_bx + DS_CMD_ENTRY_PARAM), vm.ds_read(DS_TEXT_IDX));')
+            L.append('    v2_cmdq_log("v2", 0x0A, _bx, 8);')
+            L.append('    vm.ds_write(DS_CMD_WRITE, (uint16_t)(_bx + 8)); }')
+        L.append('}')
+        L.append(f'vm.pc = 0x{nxt:04X};')
+        return L
+    return None
+
 def handler_map():
     src = open('src/sdl/v2_vm.cpp').read()
     tbl = {}
@@ -820,6 +1295,11 @@ def transpile(cid, outdir='src/sdl/gen'):
             inl = inline_wave4(op, body, kind, tgt, pc + ln, pc)
         except Exception:
             inl = None
+        if inl is None:
+            try:
+                inl = inline_wave6(op, body, kind, tgt, pc + ln, pc)
+            except Exception:
+                inl = None
         if inl is None:
             try:
                 inl = inline_wave5(op, body, kind, tgt, pc + ln, pc)
