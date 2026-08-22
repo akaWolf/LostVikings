@@ -112,13 +112,17 @@ EXE_NAME := vikings_headless
 OBJDIR := .obj-headless
 endif
 
-# GENCODE=1: stage-3A transpiled object code (src/sdl/gen/*.gen.inc) replaces
-# the VM fetch-decode loop for covered chunks; unknown pcs fall back to the
-# interpreter. Separate binary + objdir so the canonical binaries stay put.
-ifdef GENCODE
+# Stage-3A transpiled executors (src/sdl/gen/*.gen.inc) are the DEFAULT in
+# every build: the VM fetch-decode loop survives only as the unknown-pc
+# fallback (its removal is scheduled for the end of stage B, together with
+# the opcode table, once the inlining passes retire the handlers).
+# Runtime A/B switch: V2_GENCODE=0 env. Compile-time opt-out: NOGENCODE=1
+# (separate objdir/binary suffix so the two configurations never mix).
+ifdef NOGENCODE
+EXE_NAME := $(EXE_NAME)_nogen
+OBJDIR := $(OBJDIR)-nogen
+else
 V2_DEFINES += -DV2_GENCODE
-EXE_NAME := $(EXE_NAME)_gen
-OBJDIR := $(OBJDIR)-gen
 endif
 
 # COV_SEG000=1: instrument ONLY the m2c oracle (vikings.exe_seg000.cpp) with
