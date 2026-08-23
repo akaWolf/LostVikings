@@ -38,17 +38,77 @@ def parse_header(raw):
         return raw[o] | (raw[o + 1] << 8)
     qw, qh = w16(0x29), w16(0x2B)
     tm_id, ts_id, gt_id = w16(0x2E), w16(0x30), w16(0x32)
-    # spawn table @+0x43: 0x0E-byte records until 0xFFFF, then +2, then the
-    # palette list (3-byte entries until 0xFFFF)
+    # spawn table @+0x43: 0x0E-byte records until 0xFFFF (sub_13bbd layout:
+    # +0 x, +2 y, +4/+6 params, +8 class index, +0xA anim word — bit 0x800 =
+    # permanent spawn, +0xC pool select), then +2, then the palette list
+    # (3-byte {chunk, start_color} entries until 0xFFFF)
     di = 0x43
+    spawns = []
     while w16(di) != 0xFFFF:
+        spawns.append({
+            "x": w16(di), "y": w16(di + 2),
+            "p1": w16(di + 4), "p2": w16(di + 6),
+            "cls": w16(di + 8), "anim": w16(di + 10),
+            "pool": w16(di + 12),
+        })
         di += 0x0E
     di += 2
     pal_entries = []
     while w16(di) != 0xFFFF:
         pal_entries.append((w16(di), raw[di + 2]))
         di += 3
-    return qw, qh, tm_id, ts_id, gt_id, pal_entries
+    return qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns
+
+
+# 4x6 hex glyphs for overlay labels (1 = pixel set), plain ASCII-art rows.
+_HEX_FONT = {c: g.split() for c, g in {
+    "0": "0110 1001 1001 1001 1001 0110", "1": "0010 0110 0010 0010 0010 0111",
+    "2": "0110 1001 0001 0110 1000 1111", "3": "1110 0001 0110 0001 1001 0110",
+    "4": "1001 1001 1111 0001 0001 0001", "5": "1111 1000 1110 0001 1001 0110",
+    "6": "0110 1000 1110 1001 1001 0110", "7": "1111 0001 0010 0010 0100 0100",
+    "8": "0110 1001 0110 1001 1001 0110", "9": "0110 1001 1001 0111 0001 0110",
+    "A": "0110 1001 1001 1111 1001 1001", "B": "1110 1001 1110 1001 1001 1110",
+    "C": "0110 1001 1000 1000 1001 0110", "D": "1110 1001 1001 1001 1001 1110",
+    "E": "1111 1000 1110 1000 1000 1111", "F": "1111 1000 1110 1000 1000 1000",
+}.items()}
+
+
+def draw_text(img, stride, hpx, x, y, text, color):
+    for ch in text:
+        g = _HEX_FONT.get(ch)
+        if g is None:
+            x += 5
+            continue
+        for gy, row in enumerate(g):
+            for gx, bit in enumerate(row):
+                if bit == "1" and 0 <= x + gx < stride and 0 <= y + gy < hpx:
+                    img[(y + gy) * stride + x + gx] = color
+        x += 5
+
+
+def draw_overlay(img, stride, hpx, spawns, grid, marker, marker2):
+    if grid:
+        # quad-grid: small crosses at 16px intersections only (keeps the
+        # art readable; a full line grid drowned it)
+        for y in range(0, hpx, 16):
+            for x in range(0, stride, 16):
+                img[y * stride + x] = marker2
+                if x + 1 < stride:
+                    img[y * stride + x + 1] = marker2
+                if y + 1 < hpx:
+                    img[(y + 1) * stride + x] = marker2
+    for sp in spawns:
+        x, y = sp["x"], sp["y"]
+        if x >= stride or y >= hpx:
+            continue
+        perm = sp["anim"] & 0x800
+        c = marker if not perm else marker2
+        for d in range(-3, 4):                    # crosshair at the spawn point
+            if 0 <= x + d < stride:
+                img[y * stride + x + d] = c
+            if 0 <= y + d < hpx:
+                img[(y + d) * stride + x] = c
+        draw_text(img, stride, hpx, x + 2, y - 7, f"{sp['cls']:X}", marker)
 
 
 def compose_palette(entries):
@@ -66,7 +126,7 @@ def compose_palette(entries):
 def render(hdr_cid_hex):
     with open(os.path.join(HDR_DIR, f"{hdr_cid_hex}.json")) as f:
         raw = bytes.fromhex(json.load(f)["raw"])
-    qw, qh, tm_id, ts_id, gt_id, pal_entries = parse_header(raw)
+    qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = parse_header(raw)
     tmap, _ = read_payload(tm_id, "lzss")
     tgfx, _ = read_payload(ts_id, "lzss")
     gtld, _ = read_payload(gt_id, "lzss")
@@ -99,10 +159,52 @@ def render(hdr_cid_hex):
     return png_write(stride, height * 8, bytes(img), pal), width, height
 
 
+def render_overlay(hdr_cid_hex, grid=True):
+    with open(os.path.join(HDR_DIR, f"{hdr_cid_hex}.json")) as f:
+        raw = bytes.fromhex(json.load(f)["raw"])
+    qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = parse_header(raw)
+    tmap, _ = read_payload(tm_id, "lzss")
+    tgfx, _ = read_payload(ts_id, "lzss")
+    gtld, _ = read_payload(gt_id, "lzss")
+    pal = compose_palette(pal_entries)
+    # overlay colors: repurpose the two visually loudest palette slots
+    pal = pal[:254] + [(255, 64, 255), (64, 255, 64)]
+    marker, marker2 = 254, 255
+    width, height = qw * 2, qh * 2
+    stride, hpx = width * 8, height * 8
+    img = bytearray(stride * hpx)
+    tile_cache = {}
+    for qy in range(qh):
+        for qx in range(qw):
+            wv = tmap[(qy * qw + qx) * 2] | (tmap[(qy * qw + qx) * 2 + 1] << 8)
+            e = gtld[(wv & 0x3FF) << 3:((wv & 0x3FF) << 3) + 8]
+            for (dy, dx, o) in ((0, 0, 0), (0, 1, 2), (1, 0, 4), (1, 1, 6)):
+                dw = e[o] | (e[o + 1] << 8)
+                toff = dw & 0xFFC0
+                px = tile_cache.get(toff)
+                if px is None:
+                    px = tile_decode(tgfx[toff:toff + 64].ljust(64, b"\x00"))
+                    tile_cache[toff] = px
+                hflip = (dw >> 4) & 1
+                vflip = (dw >> 5) & 1
+                cx = (qx * 2 + dx) * 8
+                cy = (qy * 2 + dy) * 8
+                for y in range(8):
+                    sy = 7 - y if vflip else y
+                    row = px[sy * 8:sy * 8 + 8]
+                    if hflip:
+                        row = row[::-1]
+                    img[(cy + y) * stride + cx:(cy + y) * stride + cx + 8] = row
+    draw_overlay(img, stride, hpx, spawns, grid, marker, marker2)
+    return png_write(stride, hpx, bytes(img), pal), width, height, len(spawns)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("header", nargs="?", help="level header chunk id (hex)")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--overlay", action="store_true",
+                    help="spawn markers (class ids) + 16px quad grid")
     ap.add_argument("-o", "--out")
     ap.add_argument("-d", "--outdir", default="/tmp/levels")
     args = ap.parse_args()
@@ -124,7 +226,11 @@ def main():
         return
     if not args.header:
         ap.error("header id or --all required")
-    png, w, h = render(args.header)
+    if args.overlay:
+        png, w, h, nsp = render_overlay(args.header)
+        print(f"spawns: {nsp}")
+    else:
+        png, w, h = render(args.header)
     out = args.out or f"/tmp/level_{args.header}.png"
     with open(out, "wb") as f:
         f.write(png)
