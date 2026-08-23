@@ -869,6 +869,11 @@ extern "C" uint8_t* v2_ail_interp_data_raw(uint32_t* size_out) {
     if (size_out) *size_out = g_ail.drv_size;
     return g_ail.drv;
 }
+// The shadow instance's fake blob paragraph — the native-port unit judge
+// plants far fixtures (timbre records) inside the same 64K arena so both
+// executors resolve identical bytes.
+extern "C" uint16_t v2_ail_interp_drv_para() { return AilInterp::DRV_PARA; }
+
 extern "C" void v2_ail_interp_set_io_hooks(void (*o)(uint16_t, uint8_t),
                                            uint8_t (*i)(uint16_t)) {
     g_ail.out_hook = o; g_ail.in_hook = i;

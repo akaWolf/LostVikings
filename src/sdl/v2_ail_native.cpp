@@ -459,6 +459,285 @@ extern "C" void v2_ailnat_voice_assign_1A5A(uint16_t si) {
 }
 
 // ---------------------------------------------------------------------------
+// Far memory (timbre cache, sequence state) lives OUTSIDE the blob — the
+// native port reaches it through a read hook (seg:off -> byte).
+// ---------------------------------------------------------------------------
+typedef uint8_t (*nat_far_rd_fn)(uint16_t seg, uint16_t off);
+static nat_far_rd_fn g_nat_far_rd = nullptr;
+extern "C" void v2_ailnat_set_far_read(nat_far_rd_fn f) { g_nat_far_rd = f; }
+static inline uint8_t  fr8(uint16_t seg, uint16_t off) {
+    return g_nat_far_rd ? g_nat_far_rd(seg, off) : 0;
+}
+static inline uint16_t fr16(uint16_t seg, uint16_t off) {
+    return (uint16_t)(fr8(seg, off) | (fr8(seg, (uint16_t)(off + 1)) << 8));
+}
+
+// ---------------------------------------------------------------------------
+// 2477: note-off scan — every active slot holding (channel, note).
+// ---------------------------------------------------------------------------
+extern "C" void v2_ailnat_note_off_2477(uint16_t ch, uint16_t note) {
+    uint8_t al = (uint8_t)note;                   // 2480 mov al,[bp+8]
+    uint8_t bl = (uint8_t)ch;                     // 2483 mov bl,[bp+6]
+    for (uint16_t si = 0; si < 0x14; si++) {      // 2486 inc si; cmp 0x14
+        if (rd8n((uint16_t)(si + 0xD95)) != 1) continue;
+        if (rd8n((uint16_t)(si + 0xDF9)) != al) continue;
+        if (rd8n((uint16_t)(si + 0xDD1)) != bl) continue;
+        // 24A2 bh=0 — sustain pedal check is SIGNED (jge)
+        if ((int8_t)rd8n((uint16_t)(bl + 0x1269)) >= 0x40) {
+            wr8n((uint16_t)(si + 0xE35), 1);      // 24D7 held by the pedal
+        } else if (rd8n((uint16_t)(si + 0xDA9)) == 3 ||
+                   rd8n((uint16_t)(si + 0xDA9)) == 0) {   // 24AC/24B4
+            v2_ailnat_voice_release_1B11(si);     // 24BE
+            wr8n((uint16_t)(si + 0xD95), 0);
+        } else {
+            wr16n((uint16_t)(si * 2 + 0xD6D), 1); // 24CE release-pending
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 25EE: sustain-pedal release — key off every pedal-held slot of the channel.
+// (The listing passes the channel BOTH on the stack and in DI — the 2477 call
+// pushes the caller's DI, which every call site loads with the channel.)
+// ---------------------------------------------------------------------------
+extern "C" void v2_ailnat_sustain_release_25EE(uint16_t ch) {
+    for (uint16_t si = 0; si < 0x14; si++) {
+        if (rd8n((uint16_t)(si + 0xD95)) == 0) continue;
+        if (rd8n((uint16_t)(si + 0xDD1)) != (uint8_t)ch) continue;   // 2602
+        if (rd8n((uint16_t)(si + 0xE35)) == 0) continue;             // 2609
+        // 2611 push WORD cs:[si+0xDE5]; push di -> 2477(di, note word)
+        v2_ailnat_note_off_2477(ch, rd16n((uint16_t)(si + 0xDE5)));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 2384: melodic timbre install — map the far timbre record into the BASE
+// parameter layer (cs:0xE99..0x108C rows) of slot si.
+// ---------------------------------------------------------------------------
+extern "C" void v2_ailnat_timbre_mel_2384(uint16_t si) {
+    uint16_t bx = (uint16_t)(si * 2);             // 238D shl bx,1
+    uint16_t di = rd16n((uint16_t)(bx + 0xD1D));  // timbre far ptr (per slot)
+    uint16_t sg = rd16n((uint16_t)(bx + 0xD45));
+    wr8n((uint16_t)(si + 0xE71), 0x20);           // 239B key/sustain image
+    wr8n((uint16_t)(si + 0xDA9), 0x00);           // melodic mode
+    wr16n((uint16_t)(bx + 0xD6D), 0xFFFF);        // 23A7 release-pending off
+    wr16n((uint16_t)(bx + 0xFED), 0x7FFF);        // 23AE priority word
+    uint8_t t8 = fr8(sg, (uint16_t)(di + 0x8));   // 23B7 ah=[di+8]
+    wr8n((uint16_t)(si + 0xE85), (uint8_t)(t8 & 0x1));               // conn bit
+    wr16n((uint16_t)(bx + 0xFC5), (uint16_t)((uint16_t)(t8 << 8) << 4)); // fb/conn word
+    uint8_t k1 = fr8(sg, (uint16_t)(di + 0x4));   // 23CF op1 KSL/TL
+    wr8n((uint16_t)(si + 0xE99), (uint8_t)(k1 & 0xC0));
+    wr16n((uint16_t)(bx + 0x103D),
+          (uint16_t)((uint16_t)((uint8_t)(~k1 & 0x3F) << 8) << 2));  // 23E1 shl x2
+    uint8_t k2 = fr8(sg, (uint16_t)(di + 0xA));   // 23EC op2 KSL/TL
+    wr8n((uint16_t)(si + 0xEAD), (uint8_t)(k2 & 0xC0));
+    wr16n((uint16_t)(bx + 0x1015),
+          (uint16_t)((uint16_t)((uint8_t)(~k2 & 0x3F) << 8) << 2));
+    uint8_t m1 = fr8(sg, (uint16_t)(di + 0x3));   // 2407 op1 AM/VIB/mult
+    wr8n((uint16_t)(si + 0xEC1), (uint8_t)(m1 & 0xF0));
+    wr16n((uint16_t)(bx + 0xF9D), (uint16_t)((uint16_t)(m1 << 8) << 4));
+    uint8_t m2 = fr8(sg, (uint16_t)(di + 0x9));   // 241E op2
+    wr8n((uint16_t)(si + 0xED5), (uint8_t)(m2 & 0xF0));
+    wr16n((uint16_t)(bx + 0xF75), (uint16_t)((uint16_t)(m2 << 8) << 4));
+    wr8n((uint16_t)(si + 0xEE9), fr8(sg, (uint16_t)(di + 0x5)));  // AD op1
+    wr8n((uint16_t)(si + 0xF11), fr8(sg, (uint16_t)(di + 0x6)));  // SR op1
+    wr8n((uint16_t)(si + 0xEFD), fr8(sg, (uint16_t)(di + 0xB)));  // AD op2
+    wr8n((uint16_t)(si + 0xF25), fr8(sg, (uint16_t)(di + 0xC)));  // SR op2
+    wr16n((uint16_t)(bx + 0xF4D),                 // 2455 waveforms: lo=[di+D], hi=[di+7]
+          (uint16_t)(fr8(sg, (uint16_t)(di + 0xD)) |
+                     (fr8(sg, (uint16_t)(di + 0x7)) << 8)));
+    wr8n((uint16_t)(si + 0xF39),                  // 2460 vol-follow flags
+         (uint8_t)(rd8n((uint16_t)(si + 0xE85)) | 0x2));
+    wr8n((uint16_t)(si + 0xE49), 0xF9);           // 246C all dirty groups
+}
+
+// ---------------------------------------------------------------------------
+// 2299: percussion timbre install — 2384 first (base layer), then the 4-op
+// MODIFIED layer (cs:0x108D..0x1208 rows) from the record's second half.
+// ---------------------------------------------------------------------------
+extern "C" void v2_ailnat_timbre_perc_2299(uint16_t si) {
+    v2_ailnat_timbre_mel_2384(si);                // 22A3
+    uint16_t bx = (uint16_t)(si * 2);
+    uint16_t di = rd16n((uint16_t)(bx + 0xD1D));
+    uint16_t sg = rd16n((uint16_t)(bx + 0xD45));
+    wr8n((uint16_t)(si + 0xDA9), 0x3);            // 22BA percussion mode
+    uint8_t c8 = fr8(sg, (uint16_t)(di + 0x8));   // 22C0 [di+8]&0x80 >> 6
+    wr8n((uint16_t)(si + 0xE85),
+         (uint8_t)(rd8n((uint16_t)(si + 0xE85)) | (uint8_t)((c8 & 0x80) >> 6)));
+    { // 22CF vol-follow flags via LUT rows cs:0x637/0x63B indexed by 0xE85
+        uint16_t e = rd8n((uint16_t)(si + 0xE85));
+        wr8n((uint16_t)(si + 0xF39),  rd8n((uint16_t)(e + 0x637)));
+        wr8n((uint16_t)(si + 0x11F5), rd8n((uint16_t)(e + 0x63B)));
+    }
+    uint8_t k1 = fr8(sg, (uint16_t)(di + 0xF));   // 22EE op1 KSL/TL (layer A)
+    wr8n((uint16_t)(si + 0x108D), (uint8_t)(k1 & 0xC0));
+    wr16n((uint16_t)(bx + 0x11CD),
+          (uint16_t)((uint16_t)((uint8_t)(~k1 & 0x3F) << 8) << 2));
+    uint8_t k2 = fr8(sg, (uint16_t)(di + 0x15));  // 230B op2 KSL/TL
+    wr8n((uint16_t)(si + 0x10A1), (uint8_t)(k2 & 0xC0));
+    wr16n((uint16_t)(bx + 0x11A5),
+          (uint16_t)((uint16_t)((uint8_t)(~k2 & 0x3F) << 8) << 2));
+    uint8_t m1 = fr8(sg, (uint16_t)(di + 0xE));   // 2326 op1 AM/VIB/mult
+    wr8n((uint16_t)(si + 0x10B5), (uint8_t)(m1 & 0xF0));
+    wr16n((uint16_t)(bx + 0x117D), (uint16_t)((uint16_t)(m1 << 8) << 4));
+    uint8_t m2 = fr8(sg, (uint16_t)(di + 0x14));  // 233D op2
+    wr8n((uint16_t)(si + 0x10C9), (uint8_t)(m2 & 0xF0));
+    wr16n((uint16_t)(bx + 0x1155), (uint16_t)((uint16_t)(m2 << 8) << 4));
+    wr8n((uint16_t)(si + 0x10DD), fr8(sg, (uint16_t)(di + 0x10)));  // AD op1
+    wr8n((uint16_t)(si + 0x1105), fr8(sg, (uint16_t)(di + 0x11)));  // SR op1
+    wr8n((uint16_t)(si + 0x10F1), fr8(sg, (uint16_t)(di + 0x16)));  // AD op2
+    wr8n((uint16_t)(si + 0x1119), fr8(sg, (uint16_t)(di + 0x17)));  // SR op2
+    wr16n((uint16_t)(bx + 0x112D),                // 2374 waveforms lo=[di+18], hi=[di+12]
+          (uint16_t)(fr8(sg, (uint16_t)(di + 0x18)) |
+                     (fr8(sg, (uint16_t)(di + 0x12)) << 8)));
+}
+
+// ---------------------------------------------------------------------------
+// 24E4: note-on — resolve the channel's timbre, claim a free slot, install
+// the timbre and assign a voice.
+// ---------------------------------------------------------------------------
+extern "C" void v2_ailnat_note_on_24E4(uint16_t ch, uint16_t note, uint16_t vel) {
+    uint16_t bx = rd8n((uint16_t)(ch + 0x1289));  // 24EF channel patch -> timbre
+    if (ch == 9) {                                // 24F4 percussion channel
+        bx = rd8n((uint16_t)(note + 0x12B9));     // drum note -> timbre map
+        if ((uint8_t)bx == 0xFF) {
+            // 2506 search loaded timbres for bank 0x7F, patch = note
+            uint16_t r = v2_ailnat_find_slot_15E9((uint16_t)(0x7F00 | (note & 0xFF)));
+            bx = r;
+            wr8n((uint16_t)(note + 0x12B9), (uint8_t)r);
+        }
+    }
+    if ((uint8_t)bx == 0xFF) return;              // 251A no timbre
+    bx = (uint16_t)(bx << 1);                     // 2522
+    uint16_t doff = rd16n(0xD0B);                 // 2524 lds di,cs:0xD0B
+    uint16_t dseg = rd16n(0xD0D);
+    doff = (uint16_t)(doff + rd16n((uint16_t)(bx + 0x94B)));   // 2529
+    // 252E..2548: LRU stamp dword cs:0x647 -> per-timbre cs:[bx+0x64B/0x7CB]
+    uint32_t lru = (uint32_t)(rd16n(0x647) | ((uint32_t)rd16n(0x649) << 16)) + 1;
+    wr16n(0x647, (uint16_t)lru);
+    wr16n(0x649, (uint16_t)(lru >> 16));
+    wr16n((uint16_t)(bx + 0x64B), (uint16_t)lru);
+    wr16n((uint16_t)(bx + 0x7CB), (uint16_t)(lru >> 16));
+    uint16_t si = 0;                              // 254D free-slot scan
+    while (rd8n((uint16_t)(si + 0xD95)) != 0) {
+        si = (uint16_t)(si + 1);
+        if (si == 0x14) return;                   // 255E no free slot
+    }
+    wr8n((uint16_t)(si + 0xDD1), (uint8_t)ch);    // 2564
+    wr8n((uint16_t)(si + 0xDF9), (uint8_t)note);  // 256C
+    uint8_t al = 0;                               // 2571
+    uint8_t cl = fr8(dseg, (uint16_t)(doff + 0x2));   // timbre transpose byte
+    if (ch != 9) { al = cl; cl = (uint8_t)note; } // 2579..2580
+    wr8n((uint16_t)(si + 0xDE5), cl);             // note (or fixed drum note)
+    wr8n((uint16_t)(si + 0xE0D), al);             // transpose (0 for drums)
+    // 258C velocity curve: al=[bp+0xA]>>3; xlat cs:[0x537]
+    wr8n((uint16_t)(si + 0xE21),
+         rd8n((uint16_t)(0x537 + (uint8_t)((uint8_t)vel >> 3))));
+    wr16n((uint16_t)(si * 2 + 0xD1D), doff);      // 25A3 per-slot timbre far ptr
+    wr16n((uint16_t)(si * 2 + 0xD45), dseg);
+    wr8n((uint16_t)(si + 0xD95), 1);              // active
+    wr8n((uint16_t)(si + 0xE35), 0);              // not pedal-held
+    uint16_t tlen = fr16(dseg, doff);             // 25B9 record type word
+    if (tlen == 0x19)      v2_ailnat_timbre_perc_2299(si);
+    else if (tlen == 0x0E) v2_ailnat_timbre_mel_2384(si);
+    else return;                                  // 25D9 unknown record
+    wr8n((uint16_t)(si + 0xDBD), 0xFF);           // 25DB
+    v2_ailnat_voice_assign_1A5A(si);              // 25E3
+}
+
+// ---------------------------------------------------------------------------
+// 272D tail of the dispatcher: mark the dirty bits on every active slot of
+// the channel and flush it through the register updater.
+// ---------------------------------------------------------------------------
+static void nat_mark_channel_272D(uint16_t ch, uint8_t bits) {
+    for (uint16_t si = 0; si < 0x14; si++) {
+        if (rd8n((uint16_t)(si + 0xD95)) == 0) continue;
+        if (rd8n((uint16_t)(si + 0xDD1)) != (uint8_t)ch) continue;
+        wr8n((uint16_t)(si + 0xE49), (uint8_t)(rd8n((uint16_t)(si + 0xE49)) | bits));
+        v2_ailnat_update_voice_1B7C(si);          // 274A
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 2629: MIDI event dispatcher (status, data1, data2).
+// ---------------------------------------------------------------------------
+extern "C" void v2_ailnat_midi_2629(uint16_t status, uint16_t d1, uint16_t d2) {
+    uint16_t si = (uint16_t)(d1 & 0xFF);          // 262F
+    uint16_t di = (uint16_t)(status & 0xF);       // channel
+    uint16_t ax = (uint16_t)(status & 0xF0);      // family
+    uint8_t  cl = (uint8_t)d2;                    // 2643 (ch=0)
+    if (ax == 0xB0) {                             // 2699 controllers
+        if (si == 0x72) { wr8n((uint16_t)(di + 0x1299), cl); return; }  // bank
+        if (si == 0x70) { wr8n((uint16_t)(di + 0x1279), cl); return; }  // protect
+        if (si == 0x71) {                         // 26A8 timbre lock bit
+            uint16_t t = rd8n((uint16_t)(di + 0x1289));
+            if ((uint8_t)t == 0xFF) return;
+            uint8_t v = (uint8_t)(rd8n((uint16_t)(t + 0xC4B)) & 0xBF);
+            if ((int8_t)cl >= 0x40) v = (uint8_t)(v | 0x40);   // jl = signed
+            wr8n((uint16_t)(t + 0xC4B), v);
+            return;
+        }
+        uint8_t bits; uint16_t row;               // 26F2 the marking controllers
+        if      (si == 0x01) { bits = 0x80; row = 0x1259; }    // modulation
+        else if (si == 0x07) { bits = 0x40; row = 0x1209; }    // volume
+        else if (si == 0x0B) { bits = 0x40; row = 0x1249; }    // expression
+        else if (si == 0x0A) { bits = 0x08; row = 0x1219; }    // pan
+        else if (si == 0x40) {                    // 275B sustain pedal
+            wr8n((uint16_t)(di + 0x1269), cl);
+            if ((int8_t)cl < 0x40)                // release edge only
+                v2_ailnat_sustain_release_25EE(di);
+            return;
+        }
+        else if (si == 0x79) {                    // 279D reset all controllers
+            wr8n((uint16_t)(di + 0x1269), 0x00);
+            v2_ailnat_sustain_release_25EE(di);
+            wr8n((uint16_t)(di + 0x1259), 0x00);
+            wr8n((uint16_t)(di + 0x1249), 0x7F);
+            wr8n((uint16_t)(di + 0x1229), 0x00);
+            wr8n((uint16_t)(di + 0x1239), 0x40);
+            nat_mark_channel_272D(di, 0xC1);
+            return;
+        }
+        else if (si == 0x7B) {                    // 2773 all notes off
+            for (uint16_t s2 = 0; s2 < 0x14; s2++) {
+                if (rd8n((uint16_t)(s2 + 0xD95)) != 1) continue;
+                if (rd8n((uint16_t)(s2 + 0xDD1)) != (uint8_t)di) continue;
+                v2_ailnat_note_off_2477(di, rd16n((uint16_t)(s2 + 0xDE5)));
+            }
+            return;
+        }
+        else return;                              // 2727 unknown controller
+        wr8n((uint16_t)(row + di), cl);           // 272A store
+        nat_mark_channel_272D(di, bits);
+        return;
+    }
+    if (ax == 0xC0) {                             // 26C9 program change
+        wr8n((uint16_t)(di + 0x12A9), (uint8_t)si);
+        uint16_t r = v2_ailnat_find_slot_15E9(
+            (uint16_t)((rd8n((uint16_t)(di + 0x1299)) << 8) | (uint8_t)si));
+        wr8n((uint16_t)(di + 0x1289), (uint8_t)r);
+        return;
+    }
+    if (ax == 0xE0) {                             // 2688 pitch wheel
+        wr8n((uint16_t)(di + 0x1229), (uint8_t)si);
+        wr8n((uint16_t)(di + 0x1239), cl);
+        nat_mark_channel_272D(di, 0x01);          // 2694 al=1 -> 272D
+        return;
+    }
+    if (ax == 0x80) {                             // 2655 note off
+        v2_ailnat_note_off_2477(di, si);
+        return;
+    }
+    if (ax == 0x90) {                             // 265A note on (channels 1..9)
+        if (di < 1 || di > 9) return;
+        if (cl == 0) { v2_ailnat_note_off_2477(di, si); return; }  // 2669 jcxz
+        v2_ailnat_note_on_24E4(di, si, (uint16_t)cl);
+        return;
+    }
+    // any other family: 2683 exit
+}
+
+// ---------------------------------------------------------------------------
 // Self-test vs the interpreter (armed by V2_AILNAT_SELFTEST=1 after boot).
 // ---------------------------------------------------------------------------
 extern "C" uint16_t v2_ail_interp_call(uint16_t fn_off, const uint16_t* args, int argc);
@@ -474,6 +753,14 @@ static void cap_out(uint16_t port, uint8_t val) {
 }
 static uint8_t cap_in(uint16_t) { return 0; }
 
+// far fixture: the unit sweeps point cs:0xD0B into the blob arena itself,
+// so the native far view IS the native image at the same offsets.
+static uint16_t g_fix_seg = 0;
+static uint8_t nat_far_fixture_rd(uint16_t seg, uint16_t off) {
+    if (seg == g_fix_seg) return g_nat[off];
+    return 0;
+}
+
 static uint32_t xr = 0x12345678;   // deterministic LCG for the sweeps
 static uint32_t xrnd() { xr = xr * 1103515245u + 12345u; return xr >> 8; }
 
@@ -484,8 +771,11 @@ extern "C" int v2_ailnat_selftest(void) {
     v2_ailnat_load(idata, isz);
     // the sweeps randomize live driver state — snapshot the whole image and
     // restore it at the end so the diagnostic run stays non-destructive
+    // The shadow blob lives in a full 64K arena (drv_copy) even though the
+    // file itself is shorter — snapshot the whole arena so far fixtures
+    // planted above the blob are part of the judged image too.
     static uint8_t isave[0x10000];
-    uint32_t isave_n = isz <= sizeof(isave) ? isz : (uint32_t)sizeof(isave);
+    uint32_t isave_n = 0x10000;
     memcpy(isave, idata, isave_n);
 
     void (*old_o)(uint16_t, uint8_t); uint8_t (*old_i)(uint16_t);
@@ -664,6 +954,108 @@ extern "C" int v2_ailnat_selftest(void) {
             }
         }
     }
+
+    // --- MIDI layer: 2629/24E4/2477/25EE/2384/2299 over event streams ------
+    // Timbre fixtures are planted INSIDE the 64K blob arena (above the code,
+    // at 0x8000+) with cs:0xD0B pointing at them through the arena's own
+    // paragraph — the interpreter resolves them natively and the far hook
+    // gives the native port the identical view.
+    extern uint16_t v2_ail_interp_drv_para(void);
+    g_fix_seg = v2_ail_interp_drv_para();
+    v2_ailnat_set_far_read(nat_far_fixture_rd);
+    for (int t = 0; t < 512; t++) {
+        memcpy(idata, isave, isave_n);   // hermetic case
+        // slot rows + layers + controllers + rings (driver-invariant domains)
+        for (uint32_t a = 0xE99; a < 0x1269; a++) idata[a] = (uint8_t)(xrnd() & 0xFF);
+        idata[0xD1C] = (uint8_t)(xrnd() & 0xFF);
+        idata[0xD18] = (uint8_t)(xrnd() % 0x12); idata[0xD19] = 0;
+        idata[0xD1A] = (uint8_t)(xrnd() % 0x6);  idata[0xD1B] = 0;
+        for (uint32_t a = 0x1339; a < 0x1390; a++) idata[a] = (uint8_t)(xrnd() & 0xFF);
+        for (uint16_t sl2 = 0; sl2 < 0x14; sl2++) {
+            idata[0xD95 + sl2] = (uint8_t)(xrnd() & 1);
+            uint32_t vv = xrnd();
+            idata[0xDBD + sl2] = (vv & 2) ? 0xFF : (uint8_t)(vv % 0x12);
+            idata[0xDA9 + sl2] = (uint8_t)(xrnd() & 0x3);
+            idata[0xDD1 + sl2] = (uint8_t)(xrnd() & 0x0F);
+            idata[0xDE5 + sl2] = (uint8_t)(xrnd() & 0x7F);
+            idata[0xDF9 + sl2] = (uint8_t)(xrnd() & 0x7F);
+            idata[0xE0D + sl2] = (uint8_t)(xrnd() & 0xFF);
+            idata[0xE21 + sl2] = (uint8_t)(xrnd() & 0xFF);
+            idata[0xE35 + sl2] = (uint8_t)(xrnd() & 1);
+            idata[0xE49 + sl2] = (uint8_t)(xrnd() & 0xFF);
+            idata[0xE5D + sl2] = (uint8_t)(xrnd() & 0xFF);
+            idata[0xE71 + sl2] = (uint8_t)(xrnd() & 0xFF);
+            idata[0xE85 + sl2] = (uint8_t)(xrnd() & 0xFF);
+        }
+        for (uint32_t a = 0x1349; a < 0x135B; a++)
+            idata[a] = (xrnd() & 1) ? 0xFF : (uint8_t)(xrnd() & 0x0F);
+        uint8_t cap = 0;
+        for (uint8_t v = 0; v < 0x12; v++) if (idata[0x5D7 + v]) { cap = v; break; }
+        idata[0xD95 + 0] = 1; idata[0xDBD + 0] = cap; idata[0xDA9 + 0] = 1;
+        // timbre fixture: 8 records at 0x8000+, 0x40 apart; the offset table
+        // and the far base both live in the judged image
+        idata[0xD0B] = 0x00; idata[0xD0C] = 0x80;          // off = 0x8000
+        idata[0xD0D] = (uint8_t)g_fix_seg; idata[0xD0E] = (uint8_t)(g_fix_seg >> 8);
+        for (int r = 0; r < 8; r++) {
+            uint32_t base = 0x8000u + (uint32_t)r * 0x40;
+            idata[0x94B + 2 * r] = (uint8_t)(r * 0x40);
+            idata[0x94C + 2 * r] = (uint8_t)((r * 0x40) >> 8);
+            uint32_t k = xrnd() % 3;               // record type domain
+            uint16_t tl = (k == 0) ? 0x0E : (k == 1) ? 0x19 : (uint16_t)(xrnd() & 0xFF);
+            idata[base] = (uint8_t)tl; idata[base + 1] = (uint8_t)(tl >> 8);
+            for (uint32_t o = 2; o < 0x20; o++) idata[base + o] = (uint8_t)(xrnd() & 0xFF);
+        }
+        // channel patch/bank/drum maps: fixture ids or misses
+        for (uint16_t c2 = 0; c2 < 0x10; c2++) {
+            idata[0x1289 + c2] = (xrnd() & 1) ? 0xFF : (uint8_t)(xrnd() % 8);
+            idata[0x1299 + c2] = (uint8_t)(xrnd() & 0x7F);
+            idata[0x12A9 + c2] = (uint8_t)(xrnd() & 0x7F);
+        }
+        for (uint16_t n2 = 0; n2 < 0x80; n2++)
+            idata[0x12B9 + n2] = (xrnd() & 1) ? 0xFF : (uint8_t)(xrnd() % 8);
+        // loaded-timbre tables for the 15E9 searches (bank 0x7F drums too)
+        for (uint16_t s2 = 0; s2 < 0xC0; s2++) {
+            idata[0xC4B + s2] = (uint8_t)(xrnd() & 0xFF);
+            idata[0xACB + s2] = (xrnd() & 1) ? 0x7F : (uint8_t)(xrnd() & 0x0F);
+            idata[0xB8B + s2] = (uint8_t)(xrnd() & 0x7F);
+        }
+        memcpy(g_nat, idata, isave_n);
+        // random MIDI event (data bytes 7-bit, as the wire format guarantees)
+        static const uint8_t fam[8] = {0x80,0x90,0x90,0xB0,0xB0,0xC0,0xE0,0xA0};
+        static const uint8_t ctl[10] = {0x01,0x07,0x0A,0x0B,0x40,0x70,0x71,0x72,0x79,0x7B};
+        uint16_t st = (uint16_t)(fam[xrnd() & 7] | (xrnd() & 0xF));
+        uint16_t d1 = (uint16_t)(xrnd() & 0x7F);
+        if ((st & 0xF0) == 0xB0 && (xrnd() & 3)) d1 = ctl[xrnd() % 10];
+        uint16_t d2 = (uint16_t)(xrnd() & 0x7F);
+        if ((xrnd() & 7) == 0) d2 = 0x40;          // pedal / lock edges
+        if ((xrnd() & 7) == 1) d2 = 0;             // note-on-as-off edge
+        g_capn[0] = g_capn[1] = 0;
+        g_capw = 0;
+        v2_ail_interp_set_io_hooks(cap_out, cap_in);
+        { uint16_t args[3] = { st, d1, d2 }; v2_ail_interp_call(0x2629, args, 3); }
+        v2_ail_interp_set_io_hooks(old_o, old_i);
+        g_capw = 1;
+        nat_out_fn so = g_nat_out; nat_in_fn si_ = g_nat_in;
+        g_nat_out = cap_out; g_nat_in = cap_in;
+        v2_ailnat_midi_2629(st, d1, d2);
+        g_nat_out = so; g_nat_in = si_;
+        cases++;
+        int bad = (g_capn[0] != g_capn[1] ||
+                   memcmp(g_cap[0], g_cap[1], sizeof(g_cap[0][0]) * g_capn[0]) != 0);
+        if (!bad) bad = memcmp(g_nat, idata, isave_n) != 0;
+        if (bad) {
+            fails++;
+            if (fails <= 4) {
+                uint32_t da = 0;
+                for (uint32_t a = 0; a < isave_n; a++)
+                    if (g_nat[a] != idata[a]) { da = a; break; }
+                fprintf(stderr, "AILNAT-DIFF midi st=%02X d1=%02X d2=%02X outs i=%d n=%d first-diff @%04X i=%02X n=%02X\n",
+                        st, d1, d2, g_capn[0], g_capn[1], da,
+                        da ? idata[da] : 0, da ? g_nat[da] : 0);
+            }
+        }
+    }
+    v2_ailnat_set_far_read(nullptr);
 
     memcpy(idata, isave, isave_n);   // restore the live driver image
     fprintf(stderr, "AILNAT-SELFTEST: cases=%d fails=%d\n", cases, fails);
