@@ -5526,6 +5526,16 @@ static uint16_t v2_load_sprites_1167a(uint8_t* s, uint16_t di) {
         // Original: es = word_2B353 (ds:0x2E73 = sprite segment), di = bx.
         // For v2: decompress into v2_sprite_shadow linear buffer.
         uint32_t dest_sz = v2_read_chunk(chunk_id, v2_sprite_shadow + bx, V2_SPRITE_SHADOW_SIZE - bx, s);
+        // Stage 5.1 tail: bank layout record for the sprite-usage trace.
+        {
+            static FILE* _st2 = nullptr; static int _st2s = -1;
+            if (_st2s < 0) { const char* e = getenv("V2_SPRITE_TRACE");
+                _st2s = (e && *e) ? 1 : 0; if (_st2s) _st2 = fopen(e, "a"); }
+            if (_st2s && _st2) {
+                fprintf(_st2, "T %04X %04X %u\n", chunk_id, (uint16_t)(bx + 1), dest_sz);
+                fflush(_st2);
+            }
+        }
         printf("V2-SPRINIT: chunk=%d bx=%04x decompressed=%d first4=%02x%02x%02x%02x\n",
                chunk_id, bx, dest_sz,
                v2_sprite_shadow[bx], v2_sprite_shadow[bx+1],

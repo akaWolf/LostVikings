@@ -435,6 +435,84 @@ class LevelScript:
             os.unlink(tmp)
         raise RuntimeError("lvsc compile failed")
 
+# ---------------------------------------------------------------- sprites ---
+def sprite_decode(data, off, typ, strips):
+    """One sprite frame -> (w, h, idx bytes, 255 = masked-out). Unified
+    strip model (all three seg003 renderers): 4 sections (plane 0..3) x
+    N strips x (1 mask + bpr*rps data); pixel(x=j*4+plane,
+    y=strip*rps+r) = data[r*bpr+j]; mask bit 7-(r*bpr+j) gates the WRITE
+    (colour 0 paints when the bit is set)."""
+    if typ == 1: nstr, rps, bpr = 2, 4, 2
+    elif typ == 4: nstr, rps, bpr = 8, 2, 4
+    else: nstr, rps, bpr = strips, 1, 8
+    w = bpr*4; h = nstr*rps
+    img = bytearray([255]) * (w*h)
+    img = bytearray([255]*(w*h))
+    ptr = off - 1          # off is 1-based to the first data byte; mask at off-1
+    for plane in range(4):
+        for st in range(nstr):
+            if ptr < 0 or ptr + 1 + bpr*rps > len(data): return None
+            mask = data[ptr]; d = data[ptr+1:ptr+1+bpr*rps]
+            for r in range(rps):
+                for j in range(bpr):
+                    if (mask >> (7 - (r*bpr + j))) & 1:
+                        img[(st*rps + r)*w + j*4 + plane] = d[r*bpr + j]
+            ptr += 1 + bpr*rps
+    return w, h, bytes(img)
+
+SPRITE_PAL = GRAY_PAL[:255] + [[255, 0, 255]]   # 255 = masked-out (magenta)
+
+def sprite_bank_derived(cid, data):
+    """Derived contact-sheet PNG for a sprite bank (usage map from the
+    replay corpus trace: assets_raw/sprite_map.json). NOT read back — the
+    canonical asset stays the byte-exact .bin until the lvs anim model
+    provides the authoritative frame table."""
+    import math
+    smap = _smap()
+    frames = smap.get(f"{cid:04X}")
+    if not frames: return None
+    cells = []
+    for f in frames:
+        r = sprite_decode(data, f["off"], f["type"], f["strips"])
+        if r: cells.append((f, r))
+    if not cells: return None
+    cw = max(r[0] for _, r in cells)
+    ch = max(r[1] for _, r in cells)
+    cols = max(1, min(16, int(math.ceil(len(cells) ** 0.5))))
+    rows = (len(cells) + cols - 1) // cols
+    W, H = cols*(cw+1), rows*(ch+1)
+    img = bytearray([255]) * 0
+    img = bytearray([254]*(W*H))       # 254 = grid background
+    for i, (f, (w, h, px)) in enumerate(cells):
+        bx = (i % cols)*(cw+1); by = (i // cols)*(ch+1)
+        for y in range(h):
+            img[(by+y)*W + bx : (by+y)*W + bx + w] = px[y*w:(y+1)*w]
+    pal = SPRITE_PAL[:254] + [[32, 32, 48]] + [[255, 0, 255]]
+    return png_write(W, H, bytes(img), pal)
+
+def _smap():
+    global _SMAP_CACHE
+    try: return _SMAP_CACHE
+    except NameError:
+        import json as _j
+        pth = os.path.join(RAW, "sprite_map.json")
+        _SMAP_CACHE = _j.load(open(pth)) if os.path.exists(pth) else {}
+        return _SMAP_CACHE
+
+@register("sprite_gfx")
+class SpriteBank:
+    """Canonical = byte-exact .bin; .derived.png contact sheet from the
+    dynamic usage map (regenerated on extract, never read back)."""
+    @staticmethod
+    def extract(cid, data):
+        files = [(f"sprite_banks/{cid:04X}.bin", data)]
+        png = sprite_bank_derived(cid, data)
+        if png: files.append((f"sprite_banks/{cid:04X}.derived.png", png))
+        return files
+    @staticmethod
+    def compile(files):
+        return next(b for r, b in files if r.endswith(".bin"))
+
 # ------------------------------------------------------------- bin fallback --
 class BinPassthrough:
     """Roles whose deep format lands in a later wave keep byte-exact .bin

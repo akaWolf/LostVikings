@@ -741,6 +741,19 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         // Must be active (bit 15) with bits 13-14 clear
         if (!(flags & 0x8000) || (flags & 0x6000)) continue;
 
+        // Stage 5.1 tail: sprite-usage trace (offline PNG slicing map).
+        {
+            static FILE* _st = nullptr; static int _sts = -1;
+            if (_sts < 0) { const char* e = getenv("V2_SPRITE_TRACE");
+                _sts = (e && *e) ? 1 : 0; if (_sts) _st = fopen(e, "a"); }
+            if (_sts && _st) {
+                uint16_t t_off = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF);
+                int t_type = flags & 7;
+                uint16_t t_strips = *(uint16_t*)(ds_base + obj + OBJ_STRIP_COUNT);
+                fprintf(_st, "S %04X %d %u\n", t_off, t_type, t_strips);
+            }
+        }
+
         // Task #21 ring: v2 layer decisions for the traced object; d = checksum
         // of the FULL sprite data as THIS side reads them (shadow) — same size
         // formula as the orig-side probe in sub_1dd9c.
