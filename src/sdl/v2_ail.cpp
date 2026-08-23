@@ -738,7 +738,34 @@ extern "C" uint16_t v2_ail_orig_last_dx() { return g_orig_dx; }
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_tick() {
     uint16_t a[1] = { 0 };
+    // Stage 6.1 w3: window the FULL interpreter trace to one fn67 tick.
+    // V2_AIL_TRACE_TICK=N (+V2_AIL_TRACE_TICKF=path) arms the per-step
+    // register log for exactly the N-th tick of the shadow leg.
+    {
+        extern int v2_ail_pctrace_full_on;
+        extern FILE* v2_ail_pctrace_full_f;
+        static long _tt = -2; static long _cnt = 0;
+        if (_tt == -2) {
+            const char* e = getenv("V2_AIL_TRACE_TICK");
+            _tt = (e && *e) ? strtol(e, 0, 0) : -1;
+            if (_tt >= 0) {
+                const char* f = getenv("V2_AIL_TRACE_TICKF");
+                v2_ail_pctrace_full_f = fopen(f && *f ? f : "/tmp/ail_tick.trace", "w");
+            }
+        }
+        if (_tt >= 0) {
+            v2_ail_pctrace_full_on = (_cnt == _tt) ? 1 : 0;
+            _cnt++;
+        }
+    }
     if (g_booted) sh_call(0x67, a, 1);              // parity noted inside
+    {
+        extern int v2_ail_pctrace_full_on;
+        extern FILE* v2_ail_pctrace_full_f;
+        if (v2_ail_pctrace_full_on && v2_ail_pctrace_full_f)
+            fflush(v2_ail_pctrace_full_f);
+        v2_ail_pctrace_full_on = 0;
+    }
     if (g_orig_inited) {
         v2_ail_interp_lock();
         v2_ail_interp_use(1);

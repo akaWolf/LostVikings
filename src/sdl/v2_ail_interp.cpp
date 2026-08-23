@@ -182,6 +182,13 @@ public:
     uint16_t rd16(uint16_t seg, uint16_t off) { return (uint16_t)(rd8(seg, off) | (rd8(seg, (uint16_t)(off + 1)) << 8)); }
     void wr8 (uint16_t seg, uint16_t off, uint8_t v)  {
         uint8_t* p = mem(seg, off, 1);
+        // stage 6.1 w3: windowed data-write log (same arm as the step trace)
+        {
+            extern int v2_ail_pctrace_full_on;
+            extern FILE* v2_ail_pctrace_full_f;
+            if (v2_ail_pctrace_full_on && v2_ail_pctrace_full_f)
+                fprintf(v2_ail_pctrace_full_f, "W %04X:%04X %02X\n", seg, off, v);
+        }
         *p = v;
         // stage-4 bridge: the blob writes the game DS through a mapped
         // segment (fn9B/timbre-scan results 992E/9930/993E/9940/9946) —
@@ -363,6 +370,9 @@ public:
 // range (see header). Anything not in the census traps loudly via fail() —
 // per project rules an unimplemented path must never be silently skipped.
 // ---------------------------------------------------------------------------
+int v2_ail_pctrace_full_on = 0;
+FILE* v2_ail_pctrace_full_f = nullptr;
+
 void AilInterp::step() {
     // Stage 6.1 w3: execution trace of the blob (the native-sequencer
     // reverse aid). V2_AIL_PCTRACE=<path> logs "ip op" per step; the
@@ -378,6 +388,18 @@ void AilInterp::step() {
             fprintf(_pt, "%04X %02X\n", r.ip, rd8(r.cs, r.ip));
             _ptn++;
             if (_ptn == 2000000) { fflush(_pt); }
+        }
+        // FULL window trace (stage 6.1 w3): armed per fn67 tick from
+        // v2_ail.cpp — every step logs ip, 4 opcode bytes and the regs.
+        extern int v2_ail_pctrace_full_on;
+        extern FILE* v2_ail_pctrace_full_f;
+        if (v2_ail_pctrace_full_on && v2_ail_pctrace_full_f) {
+            fprintf(v2_ail_pctrace_full_f,
+                    "%04X %02X%02X%02X%02X ax=%04X bx=%04X cx=%04X dx=%04X "
+                    "si=%04X di=%04X bp=%04X es=%04X ds=%04X\n",
+                    r.ip, rd8(r.cs, r.ip), rd8(r.cs, (uint16_t)(r.ip+1)),
+                    rd8(r.cs, (uint16_t)(r.ip+2)), rd8(r.cs, (uint16_t)(r.ip+3)),
+                    r.ax, r.bx, r.cx, r.dx, r.si, r.di, r.bp, r.es, r.ds);
         }
     }
     seg_override = -1;
