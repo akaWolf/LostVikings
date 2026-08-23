@@ -7,6 +7,8 @@
 // that no byte has two owners.
 
 #include "v2_gamestate.h"
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -204,6 +206,99 @@ extern "C" void v2_gs_bounds_note(uint32_t base, uint32_t len, uint32_t off) {
 // Stage 4 II.c: evacuated-field storage + integrity check.
 // ============================================================================
 V2GsEvac g_gs_evac;
+
+// Mirror one word written to the flat image into the evacuated member (used
+// by the OPERAND write path — interpreter bodies/helpers write through
+// V2VM::ds_write with computed addresses; this keeps members in sync so the
+// per-frame check stays meaningful and the read flip stays possible).
+// Generated from the same EVAC list: field spans only, cheap range tests.
+extern "C" void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val) {
+    if (!v2_gs_evac_on(ds)) return;
+#define V2_GS_EM1(name, off) \
+    if (addr == (off)) { g_gs_evac.name = val; return; }
+#define V2_GS_EMN(name, off, n) \
+    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
+        uint16_t _d = (uint16_t)(addr - (off)); \
+        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = val; \
+        else { /* odd straddle: two members share the word */ \
+            g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | (val << 8)); \
+            if ((uint32_t)(_d >> 1) + 1 < (n)) \
+                g_gs_evac.name[(_d >> 1) + 1] = (uint16_t)((g_gs_evac.name[(_d >> 1) + 1] & 0xFF00) | (val >> 8)); \
+        } \
+        return; }
+    V2_GS_FIELDS_EVAC(V2_GS_EM1, V2_GS_EMN)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EM1, V2_GS_EMN)
+#undef V2_GS_EM1
+#undef V2_GS_EMN
+#define V2_GS_EMB1(name, off) \
+    if (addr == (off)) { g_gs_evac.name = (uint8_t)val; /* hi goes to the neighbour below */ } \
+    if ((uint16_t)(addr + 1) == (off)) { g_gs_evac.name = (uint8_t)(val >> 8); /* no return: the lo half may belong to a later list entry */ }
+#define V2_GS_EMBN(name, off, n) \
+    if ((uint16_t)(addr - (off)) < (n)) { \
+        uint16_t _d = (uint16_t)(addr - (off)); \
+        g_gs_evac.name[_d] = (uint8_t)val; \
+        if ((uint32_t)_d + 1 < (n)) { g_gs_evac.name[_d + 1] = (uint8_t)(val >> 8); return; } \
+    } \
+    /* straddle head: the hi byte of a word written one byte below us */ \
+    if ((n) > 0 && (uint16_t)(addr + 1) == (off)) { g_gs_evac.name[0] = (uint8_t)(val >> 8); /* no return: see EMB1 */ }
+    V2_GS_FIELDS_EVACB(V2_GS_EMB1, V2_GS_EMBN)
+#undef V2_GS_EMB1
+#undef V2_GS_EMBN
+}
+
+// Bulk-span mirror: after a bulk image write (memset/memcpy stripe) refresh
+// every evacuated field overlapping [addr, addr+len) from the image.
+extern "C" void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len) {
+    if (!v2_gs_evac_on(ds) || len == 0) return;
+    uint32_t end = addr + len;
+#define V2_GS_ES1(name, off) \
+    if ((off) < end && (off) + 2u > addr) \
+        g_gs_evac.name = *(const uint16_t*)(ds + (off));
+#define V2_GS_ESN(name, off, n) \
+    if ((off) < end && (off) + 2u * (n) > addr) \
+        for (uint32_t _i = 0; _i < (n); _i++) \
+            g_gs_evac.name[_i] = *(const uint16_t*)(ds + (off) + 2u * _i);
+    V2_GS_FIELDS_EVAC(V2_GS_ES1, V2_GS_ESN)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_ES1, V2_GS_ESN)
+#undef V2_GS_ES1
+#undef V2_GS_ESN
+#define V2_GS_ESB1(name, off) \
+    if ((off) < end && (off) + 1u > addr) g_gs_evac.name = ds[(off)];
+#define V2_GS_ESBN(name, off, n) \
+    if ((off) < end && (off) + (uint32_t)(n) > addr) \
+        for (uint32_t _i = 0; _i < (n); _i++) g_gs_evac.name[_i] = ds[(off) + _i];
+    V2_GS_FIELDS_EVACB(V2_GS_ESB1, V2_GS_ESBN)
+#undef V2_GS_ESB1
+#undef V2_GS_ESBN
+}
+
+// Byte-granular mirror for the side channels (alias words that overlap an
+// evacuated span, lob/byte setters). Splits the byte into the member half.
+extern "C" void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val) {
+    if (!v2_gs_evac_on(ds)) return;
+#define V2_GS_EB1(name, off) \
+    if (addr == (off)) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0xFF00) | val); return; } \
+    if (addr == (off) + 1) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0x00FF) | ((uint16_t)val << 8)); return; }
+#define V2_GS_EBN(name, off, n) \
+    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
+        uint16_t _d = (uint16_t)(addr - (off)); \
+        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0xFF00) | val); \
+        else g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | ((uint16_t)val << 8)); \
+        return; }
+    V2_GS_FIELDS_EVAC(V2_GS_EB1, V2_GS_EBN)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EB1, V2_GS_EBN)
+#undef V2_GS_EB1
+#undef V2_GS_EBN
+#define V2_GS_EBB1(name, off) \
+    if (addr == (off)) { g_gs_evac.name = val; return; }
+#define V2_GS_EBBN(name, off, n) \
+    if ((uint16_t)(addr - (off)) < (n)) { g_gs_evac.name[(uint16_t)(addr - (off))] = val; return; }
+    V2_GS_FIELDS_EVACB(V2_GS_EBB1, V2_GS_EBBN)
+#undef V2_GS_EBB1
+#undef V2_GS_EBBN
+}
+
+
 extern "C" const uint8_t* v2_gs_evac_canonical = nullptr;
 
 extern "C" void v2_gs_evac_refresh(const uint8_t* ds) {
@@ -213,8 +308,25 @@ extern "C" void v2_gs_evac_refresh(const uint8_t* ds) {
     for (uint32_t i = 0; i < (n); i++) \
         g_gs_evac.name[i] = *(const uint16_t*)(ds + (off) + 2u * i);
     V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN)
 #undef V2_GS_EV1
 #undef V2_GS_EVN
+#define V2_GS_EVB1(name, off) \
+    g_gs_evac.name = ds[(off)];
+#define V2_GS_EVBN(name, off, n) \
+    for (uint32_t i = 0; i < (n); i++) g_gs_evac.name[i] = ds[(off) + i];
+    V2_GS_FIELDS_EVACB(V2_GS_EVB1, V2_GS_EVBN)
+#undef V2_GS_EVB1
+#undef V2_GS_EVBN
+}
+
+// stage-4 bridge helper for the AIL blob interpreter: mirror a byte store
+// that resolved into the canonical shadow DS image (pointer-range test —
+// the sink/real instances resolve elsewhere and fall through untouched).
+void v2_ail_interp_ds_mirror(const uint8_t* p, uint8_t v) {
+    const uint8_t* base = v2_gs_evac_canonical;
+    if (base && p >= base && p < base + 0x10000)
+        v2_gs_evac_mirror_b(base, (uint16_t)(p - base), v);
 }
 
 extern "C" void v2_gs_evac_set_canonical(const uint8_t* ds) {
@@ -233,8 +345,8 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
     do { uint16_t _img = (img_expr); \
          if ((idx_expr) != _img) { \
              if (diffs < 8) \
-                 fprintf(stderr, "V2-GS-EVAC-DIFF: %s @%04X member=%04X image=%04X\n", \
-                         #name, (unsigned)(off), (idx_expr), _img); \
+                 fprintf(stderr, "V2-GS-EVAC-DIFF: %s @%04X member=%04X image=%04X tid=%ld\n", \
+                         #name, (unsigned)(off), (idx_expr), _img, (long)syscall(SYS_gettid)); \
              diffs++; } } while (0)
 #define V2_GS_EV1(name, off) \
     V2_GS_EV_CHK(name, (off), g_gs_evac.name, *(const uint16_t*)(ds + (off)));
@@ -243,8 +355,17 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
         V2_GS_EV_CHK(name, (off) + 2u * i, g_gs_evac.name[i], \
                      *(const uint16_t*)(ds + (off) + 2u * i));
     V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN)
 #undef V2_GS_EV1
 #undef V2_GS_EVN
+#define V2_GS_EVB1(name, off) \
+    V2_GS_EV_CHK(name, (off), g_gs_evac.name, ds[(off)]);
+#define V2_GS_EVBN(name, off, n) \
+    for (uint32_t i = 0; i < (n); i++) \
+        V2_GS_EV_CHK(name, (off) + i, g_gs_evac.name[i], ds[(off) + i]);
+    V2_GS_FIELDS_EVACB(V2_GS_EVB1, V2_GS_EVBN)
+#undef V2_GS_EVB1
+#undef V2_GS_EVBN
 #undef V2_GS_EV_CHK
     if (diffs) {
         // Bridge stage: reads still come from the image, so a desync is a

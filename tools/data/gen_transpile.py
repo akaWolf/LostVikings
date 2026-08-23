@@ -1111,7 +1111,7 @@ def inline_wave6(op, body, kind, tgt, nxt, pc):
                 '      vm.si_track = _off;                  // SHR si, 3',
                 '      uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));',
                 '      uint16_t _a = (uint16_t)(_off + 0x356);',
-                '      if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;',
+                '      if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW',
                 '  } }',
                 f'vm.pc = 0x{nxt:04X};']
     if op == 0x57:   # trap sites kept out of wave 1 — inline WITH the traps

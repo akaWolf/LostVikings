@@ -35,6 +35,10 @@
 #include <cstdlib>
 #include <cstdarg>
 
+// stage-4 bridge (body in v2_gamestate.cpp): mirror blob byte stores
+// that resolve into the canonical shadow DS image.
+void v2_ail_interp_ds_mirror(const uint8_t* p, uint8_t v);
+
 // ---------------------------------------------------------------------------
 // Machine state
 // ---------------------------------------------------------------------------
@@ -176,7 +180,14 @@ public:
 
     uint8_t  rd8 (uint16_t seg, uint16_t off) { return *mem(seg, off, 1); }
     uint16_t rd16(uint16_t seg, uint16_t off) { return (uint16_t)(rd8(seg, off) | (rd8(seg, (uint16_t)(off + 1)) << 8)); }
-    void wr8 (uint16_t seg, uint16_t off, uint8_t v)  { *mem(seg, off, 1) = v; }
+    void wr8 (uint16_t seg, uint16_t off, uint8_t v)  {
+        uint8_t* p = mem(seg, off, 1);
+        *p = v;
+        // stage-4 bridge: the blob writes the game DS through a mapped
+        // segment (fn9B/timbre-scan results 992E/9930/993E/9940/9946) —
+        // mirror byte stores that land inside the canonical shadow image.
+        v2_ail_interp_ds_mirror(p, v);
+    }
     void wr16(uint16_t seg, uint16_t off, uint16_t v) { wr8(seg, off, (uint8_t)v); wr8(seg, (uint16_t)(off + 1), (uint8_t)(v >> 8)); }
 
     void push(uint16_t v) { r.sp = (uint16_t)(r.sp - 2); wr16(r.ss, r.sp, v); }

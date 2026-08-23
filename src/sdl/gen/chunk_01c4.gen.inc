@@ -12863,7 +12863,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x15C3;
         G_POST(0x15C2, 0x0E);
@@ -34453,7 +34453,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x32A0;
         G_POST(0x329F, 0x0E);
@@ -37355,7 +37355,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x36BC;
         G_POST(0x36BB, 0x0E);
@@ -38716,7 +38716,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x393A;
         G_POST(0x3939, 0x0E);
@@ -40565,7 +40565,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x3B73;
         G_POST(0x3B72, 0x0E);
@@ -40967,7 +40967,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x3C45;
         G_POST(0x3C44, 0x0E);
@@ -85570,7 +85570,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x84C9;
         G_POST(0x84C8, 0x0E);
@@ -86927,7 +86927,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x8695;
         G_POST(0x8694, 0x0E);
@@ -87607,7 +87607,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x8767;
         G_POST(0x8766, 0x0E);
@@ -90615,7 +90615,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x8B70;
         G_POST(0x8B6F, 0x0E);
@@ -91662,7 +91662,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x8D10;
         G_POST(0x8D0F, 0x0E);
@@ -91802,7 +91802,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x8D4D;
         G_POST(0x8D4C, 0x0E);
@@ -91977,7 +91977,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x8D7D;
         G_POST(0x8D7C, 0x0E);
@@ -101870,7 +101870,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x9766;
         G_POST(0x9765, 0x0E);
@@ -102441,7 +102441,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x981C;
         G_POST(0x981B, 0x0E);
@@ -102711,7 +102711,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x986F;
         G_POST(0x986E, 0x0E);
@@ -102736,7 +102736,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x9871;
         G_POST(0x9870, 0x0E);
@@ -105551,7 +105551,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0x9CC1;
         G_POST(0x9CC0, 0x0E);
@@ -116633,7 +116633,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA69E;
         G_POST(0xA69D, 0x0E);
@@ -117020,7 +117020,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA70D;
         G_POST(0xA70C, 0x0E);
@@ -117356,7 +117356,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA774;
         G_POST(0xA773, 0x0E);
@@ -117739,7 +117739,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA7EC;
         G_POST(0xA7EB, 0x0E);
@@ -117789,7 +117789,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA7F7;
         G_POST(0xA7F6, 0x0E);
@@ -117839,7 +117839,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA802;
         G_POST(0xA801, 0x0E);
@@ -117889,7 +117889,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA80D;
         G_POST(0xA80C, 0x0E);
@@ -117939,7 +117939,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA818;
         G_POST(0xA817, 0x0E);
@@ -118731,7 +118731,7 @@ static bool v2_gen_exec_1c4(V2VM& vm, int& max_ops) {
               vm.si_track = _off;                  // SHR si, 3
               uint8_t _m = *(vm.shadow + (uint16_t)(_bit - LUT_BYTE_OR));
               uint16_t _a = (uint16_t)(_off + 0x356);
-              if (_a < V2_VM_SHADOW_SIZE) vm.shadow[_a] |= _m;
+              if (_a < V2_VM_SHADOW_SIZE) v2_objmem_w8(vm.shadow, _a, (uint8_t)(vm.shadow[_a] | _m));  // stage-4: mirrored byte RMW
           } }
         vm.pc = 0xA925;
         G_POST(0xA924, 0x0E);

@@ -38,6 +38,56 @@
 // bytes behind the accessors' back. Moving a field here = evacuating it.
 // The list participates in the struct/serializer/coverage exactly like
 // CORE (it is appended in V2_GS_FIELDS_W below).
+// Byte-typed evacuated fields (uint8_t members). Same machinery as the
+// word list: write-through, mirrors, span refresh, per-frame check.
+#define V2_GS_FIELDS_EVACB(B1, BN) \
+  V2_GS_FIELDS_EVACB_B(B1, BN) \
+  V2_GS_FIELDS_GAPFILL(B1, BN)
+
+// Stage 4 II.c BRIDGE stage for freshly evacuated fields: writes go
+// member+image (write-through via setters/mirrors), READS STAY FLAT until
+// the frame check is clean on the full corpus — only then the group moves
+// into V2_GS_FIELDS_EVAC (read flip). Lesson of wave 7: flipping reads in
+// the same commit as the evacuation turns every missed write channel into
+// a behavior change instead of a check report.
+#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN) \
+  F1(startup_cx,         DS_STARTUP_CX)         \
+  F1(int24_vector,       DS_INT24_VECTOR)       \
+  F1(int24_vector_hi,    DS_INT24_VECTOR_HI)    \
+  F1(music_mute_src,     DS_MUSIC_MUTE_SRC)     \
+  F1(sfx_mute_src,       DS_SFX_MUTE_SRC)       \
+  F1(sound_card,         DS_SOUND_CARD)         \
+  F1(music_card,         DS_MUSIC_CARD)         \
+  F1(datadat_magic,      DS_DATADAT_MAGIC)      \
+  F1(bios_checksum,      DS_BIOS_CHECKSUM)      \
+  F1(joystick_present,   DS_JOYSTICK_PRESENT)   \
+  F1(input_joy,          DS_INPUT_JOY)          \
+  F1(input_accum,        DS_INPUT_ACCUM)        \
+  F1(counter_8734,       DS_COUNTER_8734)       \
+  FN(cmd_handler_tbl,    DS_CMD_HANDLER_TBL, 27) \
+  FN(vm_subdispatch_tbl, DS_VM_DISPATCH_TBL, 10) \
+  FN(vm_setter_tbl,      DS_VM_SETTER_TBL, 5)   \
+  FN(vm_optable,         DS_VM_OPTABLE, 216)    \
+  F1(sound_field_8ea,    DS_SOUND_FIELD_8EA)    \
+  F1(sound_init_92a,     DS_SOUND_INIT_92A)     \
+  F1(seg_sound_base,     DS_SEG_SOUND_BASE)     \
+  F1(sound_init_932,     DS_SOUND_INIT_932)     \
+  F1(xmi_buf_ptr,        DS_XMI_BUF_PTR)        \
+  F1(ail_timbre_toff,    0x992E)                \
+  F1(ail_timbre_tseg,    0x9930)                \
+  F1(ail_req_bank,       0x993E)                \
+  F1(ail_req_patch,      0x9940)                \
+  F1(ail_req_raw,        0x9946)                \
+  FN(ail_state_ptrs,     0x9920, 5)             \
+  F1(sound_field_942,    DS_SOUND_FIELD_942)    \
+  F1(ail_music_state,    DS_AIL_MUSIC_STATE)    \
+  F1(ail_init_done,      DS_AIL_INIT_DONE)      \
+  FN(sound_dispatch_tbl, DS_SOUND_DISPATCH_TBL, 5) \
+  FN(music_track_chunk_tbl, DS_SND_DESC_OFF_TBL, 11) \
+  F1(vsync_count,        DS_VSYNC_COUNT)        \
+  F1(vsync_calib,        DS_VSYNC_CALIB)        \
+  F1(pit_latch,          DS_PIT_LATCH)
+
 #define V2_GS_FIELDS_EVAC(F1, FN) \
   FN(script_vars,        0x0204, 68) \
   F1(script_var_28e,     0x028E) \
@@ -317,44 +367,8 @@
 
 // Sound / AIL / startup config words
 #define V2_GS_FIELDS_SOUND(F1, FN) \
-  F1(startup_cx,         DS_STARTUP_CX)         \
-  F1(int24_vector,       DS_INT24_VECTOR)       \
-  F1(int24_vector_hi,    DS_INT24_VECTOR_HI)    \
-  F1(music_mute_src,     DS_MUSIC_MUTE_SRC)     \
-  F1(sfx_mute_src,       DS_SFX_MUTE_SRC)       \
-  F1(sound_card,         DS_SOUND_CARD)         \
-  F1(music_card,         DS_MUSIC_CARD)         \
-  F1(datadat_magic,      DS_DATADAT_MAGIC)      \
-  F1(bios_checksum,      DS_BIOS_CHECKSUM)      \
-  F1(joystick_present,   DS_JOYSTICK_PRESENT)   \
-  F1(input_joy,          DS_INPUT_JOY)          \
-  F1(input_accum,        DS_INPUT_ACCUM)        \
-  F1(counter_8734,       DS_COUNTER_8734)       \
-  FN(cmd_handler_tbl,    DS_CMD_HANDLER_TBL, 27) \
-  FN(vm_subdispatch_tbl, DS_VM_DISPATCH_TBL, 10) \
-  FN(vm_setter_tbl,      DS_VM_SETTER_TBL, 5)   \
-  FN(vm_optable,         DS_VM_OPTABLE, 216)    \
-  F1(sound_field_8ea,    DS_SOUND_FIELD_8EA)    \
   FN(seq_handle_slots,   DS_MUSIC_ID, 5)        \
-  FN(seq_seq_slots,      0x9916, 5)             \
-  F1(sound_init_92a,     DS_SOUND_INIT_92A)     \
-  F1(seg_sound_base,     DS_SEG_SOUND_BASE)     \
-  F1(sound_init_932,     DS_SOUND_INIT_932)     \
-  F1(xmi_buf_ptr,        DS_XMI_BUF_PTR)        \
-  F1(ail_timbre_toff,    0x992E)                \
-  F1(ail_timbre_tseg,    0x9930)                \
-  F1(ail_req_bank,       0x993E)                \
-  F1(ail_req_patch,      0x9940)                \
-  F1(ail_req_raw,        0x9946)                \
-  FN(ail_state_ptrs,     0x9920, 5)             \
-  F1(sound_field_942,    DS_SOUND_FIELD_942)    \
-  F1(ail_music_state,    DS_AIL_MUSIC_STATE)    \
-  F1(ail_init_done,      DS_AIL_INIT_DONE)      \
-  FN(sound_dispatch_tbl, DS_SOUND_DISPATCH_TBL, 5) \
-  FN(music_track_chunk_tbl, DS_SND_DESC_OFF_TBL, 11) \
-  F1(vsync_count,        DS_VSYNC_COUNT)        \
-  F1(vsync_calib,        DS_VSYNC_CALIB)        \
-  F1(pit_latch,          DS_PIT_LATCH)
+  FN(seq_seq_slots,      0x9916, 5)
 
 // Spec-key init bit-mask words (INT9 cluster)
 #define V2_GS_FIELDS_SPEC(F1, FN)
@@ -380,12 +394,13 @@
 
 #define V2_GS_FIELDS_W(F1, FN) \
   V2_GS_FIELDS_EVAC(F1, FN)  \
+  V2_GS_FIELDS_EVAC_BRIDGE(F1, FN) \
   V2_GS_FIELDS_W_NOEVAC(F1, FN)
 
 // ---------------------------------------------------------------------------
 // Byte fields: B1(member, ds_off) scalar byte; BN(member, ds_off, count).
 // ---------------------------------------------------------------------------
-#define V2_GS_FIELDS_B(B1, BN) \
+#define V2_GS_FIELDS_EVACB_B(B1, BN) \
   B1(scratch_28,       DS_SCRATCH_28)          \
   B1(cmd_active,       DS_CMD_ACTIVE)          \
   B1(scratch_32e,      DS_SCRATCH_32E)         \
@@ -442,7 +457,6 @@
   BN(hud_gfx_tail,     0x647D, 1024)           \
   BN(pw_level_tbl,     0x687D, 5760)          \
   BN(spawn_area,       DS_SPAWN_TABLE, 1390)  \
-  BN(ail_seq_states,   0x9950, 2600)           \
   BN(dead_tail_a3a2,      0xA3A2, 23646)         \
   BN(unused_gap_4f9d,  0x4F9D, 224)            \
   BN(unused_8c,        0x008C, 372)            \
@@ -457,6 +471,16 @@
   BN(dead_data_8560,   0x8560, 69)             \
   BN(level_passwords,  0x85A5, 148)            \
   BN(scan_filter_lists,0x94CC, 156)
+
+// AIL sequencer state block: wall-clock zone (handles / driver state written
+// by full-address stores and the AIL bridge) — deferred with the resource
+// tables until the LUT router lands.
+#define V2_GS_FIELDS_B_NOEVAC(B1, BN) \
+BN(ail_seq_states,   0x9950, 2600)
+
+#define V2_GS_FIELDS_B(B1, BN) \
+  V2_GS_FIELDS_EVACB_B(B1, BN) \
+  V2_GS_FIELDS_B_NOEVAC(B1, BN)
 
 // Chunk-loaded DS data zones (bounds = decompressed sizes in DATA.DAT,
 // verified against the loader ladder in v2_vm.cpp:6294):
@@ -816,8 +840,14 @@ struct V2GsEvac {
 #define V2_GS_EV1(name, off)     uint16_t name;
 #define V2_GS_EVN(name, off, n)  uint16_t name[n];
   V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
+  V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN)
 #undef V2_GS_EV1
 #undef V2_GS_EVN
+#define V2_GS_EVB1(name, off)    uint8_t name;
+#define V2_GS_EVBN(name, off, n) uint8_t name[n];
+  V2_GS_FIELDS_EVACB(V2_GS_EVB1, V2_GS_EVBN)
+#undef V2_GS_EVB1
+#undef V2_GS_EVBN
 };
 extern V2GsEvac g_gs_evac;
 extern "C" {
@@ -831,64 +861,12 @@ static inline bool v2_gs_evac_on(const uint8_t* ds) {
     return ds == v2_gs_evac_canonical && ds != nullptr;
 }
 
-// Mirror one word written to the flat image into the evacuated member (used
-// by the OPERAND write path — interpreter bodies/helpers write through
-// V2VM::ds_write with computed addresses; this keeps members in sync so the
-// per-frame check stays meaningful and the read flip stays possible).
-// Generated from the same EVAC list: field spans only, cheap range tests.
-static inline void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val) {
-    if (!v2_gs_evac_on(ds)) return;
-#define V2_GS_EM1(name, off) \
-    if (addr == (off)) { g_gs_evac.name = val; return; }
-#define V2_GS_EMN(name, off, n) \
-    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
-        uint16_t _d = (uint16_t)(addr - (off)); \
-        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = val; \
-        else { /* odd straddle: two members share the word */ \
-            g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | (val << 8)); \
-            if ((uint32_t)(_d >> 1) + 1 < (n)) \
-                g_gs_evac.name[(_d >> 1) + 1] = (uint16_t)((g_gs_evac.name[(_d >> 1) + 1] & 0xFF00) | (val >> 8)); \
-        } \
-        return; }
-    V2_GS_FIELDS_EVAC(V2_GS_EM1, V2_GS_EMN)
-#undef V2_GS_EM1
-#undef V2_GS_EMN
-}
-
-// Bulk-span mirror: after a bulk image write (memset/memcpy stripe) refresh
-// every evacuated field overlapping [addr, addr+len) from the image.
-static inline void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len) {
-    if (!v2_gs_evac_on(ds) || len == 0) return;
-    uint32_t end = addr + len;
-#define V2_GS_ES1(name, off) \
-    if ((off) < end && (off) + 2u > addr) \
-        g_gs_evac.name = *(const uint16_t*)(ds + (off));
-#define V2_GS_ESN(name, off, n) \
-    if ((off) < end && (off) + 2u * (n) > addr) \
-        for (uint32_t _i = 0; _i < (n); _i++) \
-            g_gs_evac.name[_i] = *(const uint16_t*)(ds + (off) + 2u * _i);
-    V2_GS_FIELDS_EVAC(V2_GS_ES1, V2_GS_ESN)
-#undef V2_GS_ES1
-#undef V2_GS_ESN
-}
-
-// Byte-granular mirror for the side channels (alias words that overlap an
-// evacuated span, lob/byte setters). Splits the byte into the member half.
-static inline void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val) {
-    if (!v2_gs_evac_on(ds)) return;
-#define V2_GS_EB1(name, off) \
-    if (addr == (off)) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0xFF00) | val); return; } \
-    if (addr == (off) + 1) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0x00FF) | ((uint16_t)val << 8)); return; }
-#define V2_GS_EBN(name, off, n) \
-    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
-        uint16_t _d = (uint16_t)(addr - (off)); \
-        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0xFF00) | val); \
-        else g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | ((uint16_t)val << 8)); \
-        return; }
-    V2_GS_FIELDS_EVAC(V2_GS_EB1, V2_GS_EBN)
-#undef V2_GS_EB1
-#undef V2_GS_EBN
-}
+// Mirror functions: bodies live in v2_gamestate.cpp (each expands the full
+// EVAC+EVACB field chain — inlining them at thousands of ds_write sites made
+// compile time explode; one out-of-line copy is also kinder to icache).
+extern "C" void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val);
+extern "C" void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len);
+extern "C" void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val);
 
 // Stage 4 II.b: bounds sanitizer. Reports (dedup) every runtime-indexed
 // access that leaves its field's span — building the wrap map that decides
@@ -932,6 +910,16 @@ struct V2StateView {
     V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN)
 #undef V2_GS_AE1
 #undef V2_GS_AEN
+    // BRIDGE stage: reads flat (image is canon), writes member+image.
+#define V2_GS_AE1(name, off) \
+    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
+    void     name(uint16_t v)          { if (v2_gs_evac_on(ds)) g_gs_evac.name = v; *(uint16_t*)(ds + (off)) = v; }
+#define V2_GS_AEN(name, off, n) \
+    uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) return *(const uint16_t*)(ds + (off) + 2u * i); } \
+    void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) g_gs_evac.name[i] = v; *(uint16_t*)(ds + (off) + 2u * i) = v; }
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_AE1, V2_GS_AEN)
+#undef V2_GS_AE1
+#undef V2_GS_AEN
 #undef V2_GS_A1
 #undef V2_GS_AN
 #define V2_GS_AB1(name, off) \
@@ -941,8 +929,28 @@ struct V2StateView {
 #define V2_GS_ABN(name, off, n) \
     uint8_t* name##_bytes()            { return ds + (off); } \
     const uint8_t* name##_bytes() const { return ds + (off); }
-    V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
-    V2_GS_FIELDS_GAPFILL(V2_GS_AB1, V2_GS_ABN)
+    V2_GS_FIELDS_B_NOEVAC(V2_GS_AB1, V2_GS_ABN)
+    // Stage 4 II.c EVACB: byte fields on the typed carrier. Same flip
+    // discipline as the word fields: reads come from the member, writes go
+    // member+image (write-through). No _bref for evacuated fields — a
+    // byte reference would bypass the carrier; the compiler finds clients.
+    // _bytes() stays image-backed (write-through keeps it live for readers);
+    // WRITERS through _bytes() must use _bset()/spans instead.
+// BRIDGE stage (see V2_GS_FIELDS_EVAC_BRIDGE): byte reads stay FLAT until
+// the frame check is clean on the full corpus; writes go member+image.
+#define V2_GS_ABE1(name, off) \
+    uint8_t  name##_b() const          { return ds[(off)]; } \
+    void     name##_b(uint8_t v)       { if (v2_gs_evac_on(ds)) g_gs_evac.name = v; ds[(off)] = v; }
+#define V2_GS_ABEN(name, off, n) \
+    uint8_t* name##_bytes()            { return ds + (off); } \
+    const uint8_t* name##_bytes() const { return ds + (off); } \
+    uint8_t  name##_bat(uint32_t i) const { V2_GS_BCHK(off, (uint32_t)(n), i) \
+        return ds[(off) + i]; } \
+    void     name##_bset(uint32_t i, uint8_t v) { V2_GS_BCHK(off, (uint32_t)(n), i) \
+        if (v2_gs_evac_on(ds)) g_gs_evac.name[i] = v; ds[(off) + i] = v; }
+    V2_GS_FIELDS_EVACB(V2_GS_ABE1, V2_GS_ABEN)
+#undef V2_GS_ABE1
+#undef V2_GS_ABEN
     // Stage 4 II.a: word access at a runtime byte offset from a field base.
     // EXACT flat semantics incl. 8086 wrap: addr = (uint16_t)((off) + o).
     // II.b: with -DV2_GS_BOUNDS every access outside [off, off+len) is
@@ -1007,6 +1015,7 @@ struct V2StateViewC {
 #define V2_GS_AEN(name, off, n) \
     uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
     V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_AE1, V2_GS_AEN)
 #undef V2_GS_AE1
 #undef V2_GS_AEN
 #undef V2_GS_A1

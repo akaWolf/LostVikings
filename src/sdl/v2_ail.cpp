@@ -193,6 +193,7 @@ static uint16_t rdw(const uint8_t* s, uint16_t off) {
 }
 static void wrw(uint8_t* s, uint16_t off, uint16_t v) {
     s[off] = (uint8_t)v; s[(uint16_t)(off + 1)] = (uint8_t)(v >> 8);
+    v2_gs_evac_mirror_w(s, off, v);  // stage-4 bridge: host-side AIL DS writes
 }
 
 // ---------------------------------------------------------------------------
