@@ -50,7 +50,23 @@
 // into V2_GS_FIELDS_EVAC (read flip). Lesson of wave 7: flipping reads in
 // the same commit as the evacuation turns every missed write channel into
 // a behavior change instead of a check report.
-#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN)
+#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN) \
+  FN(obj_frac_x,      OBJ_FRAC_X,      20) \
+  FN(obj_frac_y,      OBJ_FRAC_Y,      20) \
+  FN(obj_anim_pc,     OBJ_ANIM_PC,     20) \
+  FN(obj_anim_timer,  OBJ_ANIM_TIMER,  20) \
+  FN(obj_anim_cont,   OBJ_ANIM_CONT,   20) \
+  FN(obj_sub_slot,    OBJ_SUB_SLOT,    20) \
+  FN(obj_sub_end,     OBJ_SUB_END,     20) \
+  FN(obj_sub_count,   OBJ_SUB_COUNT,   20) \
+  FN(obj_sub_anim_ptr,OBJ_SUB_ANIM_PTR,20) \
+  FN(anim_chunk_ids,     DS_ANIM_CHUNK_IDS, 16) \
+  FN(anim_chunk_off,     DS_ANIM_CHUNK_OFF, 16) \
+  FN(anim_chunk_seg,     DS_ANIM_CHUNK_SEG, 16) \
+  FN(sprite_res_id,      DS_SPRITE_RES_ID, 32) \
+  FN(sprite_res_base,    DS_SPRITE_RES_BASE, 32) \
+  FN(seq_handle_slots,   DS_MUSIC_ID, 5)        \
+  FN(seq_seq_slots,      0x9916, 5)
 
 #define V2_GS_FIELDS_EVAC(F1, FN) \
   F1(accumulator,        DS_ACCUMULATOR) \
@@ -322,15 +338,6 @@
   FN(obj_vel_x,       OBJ_VEL_X,       20) \
   FN(obj_vel_y,       OBJ_VEL_Y,       20) \
   FN(obj_partner,     OBJ_PARTNER,     20) \
-  FN(obj_frac_x,      OBJ_FRAC_X,      20) \
-  FN(obj_frac_y,      OBJ_FRAC_Y,      20) \
-  FN(obj_anim_pc,     OBJ_ANIM_PC,     20) \
-  FN(obj_anim_timer,  OBJ_ANIM_TIMER,  20) \
-  FN(obj_anim_cont,   OBJ_ANIM_CONT,   20) \
-  FN(obj_sub_slot,    OBJ_SUB_SLOT,    20) \
-  FN(obj_sub_end,     OBJ_SUB_END,     20) \
-  FN(obj_sub_count,   OBJ_SUB_COUNT,   20) \
-  FN(obj_sub_anim_ptr,OBJ_SUB_ANIM_PTR,20)
 // bulk-copies on level switch — the evac check caught the desync on the
 // level-3→4 transition. They evacuate only after that copy goes through
 // the view (deserialize-based level load); until then they stay flat.
@@ -339,7 +346,7 @@
 #define V2_GS_FIELDS_CORE(F1, FN)
 
 // HUD / vikings / quit prompt
-#define V2_GS_FIELDS_HUD(F1, FN) \
+#define V2_GS_FIELDS_HUD(F1, FN) 
 
 // Level / scroll state / palette-anim / sound-track / spawn descriptors
 #define V2_GS_FIELDS_LEVEL(F1, FN) \
@@ -356,19 +363,13 @@
   F1(decomp_size,        DS_DECOMP_SIZE)
 
 // Segment registry + loader cursors + sound/config words
-#define V2_GS_FIELDS_SEG(F1, FN) \
-  FN(anim_chunk_ids,     DS_ANIM_CHUNK_IDS, 16) \
-  FN(anim_chunk_off,     DS_ANIM_CHUNK_OFF, 16) \
-  FN(anim_chunk_seg,     DS_ANIM_CHUNK_SEG, 16) \
-  FN(sprite_res_id,      DS_SPRITE_RES_ID, 32) \
-  FN(sprite_res_base,    DS_SPRITE_RES_BASE, 32)
-// Page emulator / palette pipeline words / VGA-page state
-#define V2_GS_FIELDS_PAGES(F1, FN)
+#define V2_GS_FIELDS_SEG(F1, FN)
 
 // Sound / AIL / startup config words
-#define V2_GS_FIELDS_SOUND(F1, FN) \
-  FN(seq_handle_slots,   DS_MUSIC_ID, 5)        \
-  FN(seq_seq_slots,      0x9916, 5)
+#define V2_GS_FIELDS_SOUND(F1, FN)
+
+// Page emulator / palette pipeline words / VGA-page state
+#define V2_GS_FIELDS_PAGES(F1, FN)
 
 // Spec-key init bit-mask words (INT9 cluster)
 #define V2_GS_FIELDS_SPEC(F1, FN)
@@ -401,6 +402,7 @@
 // Byte fields: B1(member, ds_off) scalar byte; BN(member, ds_off, count).
 // ---------------------------------------------------------------------------
 #define V2_GS_FIELDS_EVACB_B(B1, BN) \
+  BN(ail_seq_states,     0x9950, 2600)      \
   B1(scratch_28,       DS_SCRATCH_28)          \
   B1(cmd_active,       DS_CMD_ACTIVE)          \
   B1(scratch_32e,      DS_SCRATCH_32E)         \
@@ -472,11 +474,10 @@
   BN(level_passwords,  0x85A5, 148)            \
   BN(scan_filter_lists,0x94CC, 156)
 
-// AIL sequencer state block: wall-clock zone (handles / driver state written
-// by full-address stores and the AIL bridge) — deferred with the resource
-// tables until the LUT router lands.
-#define V2_GS_FIELDS_B_NOEVAC(B1, BN) \
-BN(ail_seq_states,   0x9950, 2600)
+// AIL sequencer state block: joined the carrier in wave 11 (the router
+// mirrors every write channel; values stay excluded from ORIG-vs-V2 verify
+// as documented wall-clock state).
+#define V2_GS_FIELDS_B_NOEVAC(B1, BN)
 
 #define V2_GS_FIELDS_B(B1, BN) \
   V2_GS_FIELDS_EVACB_B(B1, BN) \
