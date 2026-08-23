@@ -862,6 +862,23 @@ extern "C" void v2_ail_interp_set_code_para(uint16_t para) {
 // driver descriptor far pointer this way).
 extern "C" uint16_t v2_ail_interp_last_dx() { return g_ail.r.dx; }
 
+// stage 6.1 w3: unit-check surface for the native sequencer port.
+// Raw pointer to the CURRENT instance's blob image (code+live data) and
+// swappable IO hooks so the unit judge can capture the OUT stream.
+extern "C" uint8_t* v2_ail_interp_data_raw(uint32_t* size_out) {
+    if (size_out) *size_out = g_ail.drv_size;
+    return g_ail.drv;
+}
+extern "C" void v2_ail_interp_set_io_hooks(void (*o)(uint16_t, uint8_t),
+                                           uint8_t (*i)(uint16_t)) {
+    g_ail.out_hook = o; g_ail.in_hook = i;
+}
+extern "C" void v2_ail_interp_get_io_hooks(void (**o)(uint16_t, uint8_t),
+                                           uint8_t (**i)(uint16_t)) {
+    if (o) *o = g_ail.out_hook;
+    if (i) *i = g_ail.in_hook;
+}
+
 extern "C" void v2_ail_interp_set_callback(uint16_t (*cb)()) { g_ail.ail_callback_hook = cb; }
 
 // ---------------------------------------------------------------------------

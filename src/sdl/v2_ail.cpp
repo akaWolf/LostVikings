@@ -335,6 +335,15 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     // (orig eip 0x7636: [86B6]==8 GM special case — not our device path; its
     // chunk-0x215 load happens through the normal music-load mirror anyway.)
     g_booted = true;
+    // stage 6.1 w3: native-port self-test (unit sweeps vs the interpreter).
+    if (getenv("V2_AILNAT_SELFTEST")) {
+        extern int v2_ailnat_selftest(void);
+        v2_ail_interp_lock();
+        v2_ail_interp_use(0);
+        int ok = v2_ailnat_selftest();
+        v2_ail_interp_unlock();
+        fprintf(stderr, "V2-AILNAT: selftest %s\n", ok ? "PASS" : "FAIL");
+    }
     fprintf(stderr, "V2-AIL: boot OK — drv=0 desc=%04X:%04X tick=%.0f Hz cache=%04X\n",
             rdw(s, (uint16_t)(DS_98E8_DESC + 2)), rdw(s, DS_98E8_DESC), g_tick_hz, cache_size);
     return 1;
