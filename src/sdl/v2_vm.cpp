@@ -2229,6 +2229,38 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
             }
         }
     }
+    // Stage 5.0: chunk-usage trace. V2_CHUNK_TRACE=<path> appends one line
+    // per read: id, destination class+offset, size, caller RA (resolved
+    // offline via addr2line) — builds the fact-based chunk role map.
+    {
+        static FILE* _ct = nullptr; static int _cts = -1;
+        if (_cts < 0) { const char* e = getenv("V2_CHUNK_TRACE");
+            _cts = (e && *e) ? 1 : 0; if (_cts) _ct = fopen(e, "a"); }
+        if (_cts && _ct) {
+            const char* cls = "ext"; long off = -1;
+            if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical && dest < v2_gs_evac_canonical + 0x10000)
+                { cls = "ds"; off = dest - v2_gs_evac_canonical; }
+            else if (dest >= v2_sprite_shadow && dest < v2_sprite_shadow + V2_SPRITE_SHADOW_SIZE)
+                { cls = "sprite"; off = dest - v2_sprite_shadow; }
+            else if (dest >= v2_vm_shadow_chunk && dest < v2_vm_shadow_chunk + V2_CHUNK_SHADOW_SIZE)
+                { cls = "chunk"; off = dest - v2_vm_shadow_chunk; }
+            else if (dest >= v2_vm_shadow_animdata && dest < v2_vm_shadow_animdata + V2_ANIMDATA_SHADOW_SIZE)
+                { cls = "animdata"; off = dest - v2_vm_shadow_animdata; }
+            else if (dest >= v2_vm_shadow_sound && dest < v2_vm_shadow_sound + V2_SOUND_SHADOW_SIZE)
+                { cls = "sound"; off = dest - v2_vm_shadow_sound; }
+            else if (dest >= v2_vm_shadow_tilegfx && dest < v2_vm_shadow_tilegfx + V2_TILEGFX_SHADOW_SIZE)
+                { cls = "tilegfx"; off = dest - v2_vm_shadow_tilegfx; }
+            else if (dest >= v2_vm_shadow_tilemap && dest < v2_vm_shadow_tilemap + V2_TILEMAP_SHADOW_SIZE)
+                { cls = "tilemap"; off = dest - v2_vm_shadow_tilemap; }
+            else if (dest >= v2_vm_shadow_gs && dest < v2_vm_shadow_gs + V2_GS_SHADOW_SIZE)
+                { cls = "gsmask"; off = dest - v2_vm_shadow_gs; }
+            else if (dest >= v2_vm_shadow_gs_tiledata && dest < v2_vm_shadow_gs_tiledata + V2_GS_TILEDATA_SIZE)
+                { cls = "gstiledata"; off = dest - v2_vm_shadow_gs_tiledata; }
+            fprintf(_ct, "C %04X %s %ld %u %p\n", chunk_id, cls, off,
+                    result, __builtin_return_address(0));
+            fflush(_ct);
+        }
+    }
     // stage-4 bridge: chunk payloads land straight in a DS image (fread +
     // LZSS write dest directly). When dest is inside the canonical shadow,
     // refresh the members it covers — closes EVERY read_chunk call site at
@@ -2303,6 +2335,24 @@ static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max
     if (data_size > max_size) data_size = max_size;
     if (fread(dest, 1, data_size, v2_data_handle) != data_size) return 0;
 
+    // Stage 5.0: same trace channel for the raw reader.
+    {
+        static FILE* _ct = nullptr; static int _cts = -1;
+        if (_cts < 0) { const char* e = getenv("V2_CHUNK_TRACE");
+            _cts = (e && *e) ? 1 : 0; if (_cts) _ct = fopen(e, "a"); }
+        if (_cts && _ct) {
+            const char* cls = "ext"; long off = -1;
+            if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical && dest < v2_gs_evac_canonical + 0x10000)
+                { cls = "ds"; off = dest - v2_gs_evac_canonical; }
+            else if (dest >= v2_sprite_shadow && dest < v2_sprite_shadow + V2_SPRITE_SHADOW_SIZE)
+                { cls = "sprite"; off = dest - v2_sprite_shadow; }
+            else if (dest >= v2_vm_shadow_chunk && dest < v2_vm_shadow_chunk + V2_CHUNK_SHADOW_SIZE)
+                { cls = "chunk"; off = dest - v2_vm_shadow_chunk; }
+            fprintf(_ct, "R %04X %s %ld %u %p\n", chunk_id, cls, off,
+                    (unsigned)data_size, __builtin_return_address(0));
+            fflush(_ct);
+        }
+    }
     // stage-4 bridge: same as v2_read_chunk — raw payloads into the DS image.
     if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical
         && dest < v2_gs_evac_canonical + 0x10000)
