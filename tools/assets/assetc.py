@@ -513,6 +513,48 @@ class SpriteBank:
     def compile(files):
         return next(b for r, b in files if r.endswith(".bin"))
 
+# ---------------------------------------------------------------- ail bank --
+@register("sound_bank_20c")
+class AilTimbreBank:
+    """AIL OPL timbre bank (chunk 0x20C+card): directory of 6-byte entries
+    {patch, bank, off16, pad16} terminated by FF FF; each off points at a
+    length-prefixed timbre ([u16 len][len-2 bytes], len=14 for the 2-op
+    SBPFM set). Canonical bytes stay in `raw`; the decoded view is the
+    editable surface — named fields win over raw on compile (level-header
+    pattern)."""
+    @staticmethod
+    def extract(cid, data):
+        ent = []
+        pos = 0
+        while pos + 1 < len(data):
+            if data[pos] == 0xFF and data[pos+1] == 0xFF:
+                break
+            off = data[pos+2] | (data[pos+3] << 8)
+            tlen = (data[off] | (data[off+1] << 8)) if off + 1 < len(data) else 0
+            ent.append({
+                "patch": data[pos], "bank": data[pos+1], "off": off,
+                "pad": data[pos+4] | (data[pos+5] << 8),
+                "timbre": data[off:off+tlen].hex() if 2 <= tlen <= 64 and off+tlen <= len(data) else "",
+            })
+            pos += 6
+        js = {"format": "ail_timbre_bank", "chunk": f"{cid:04X}",
+              "terminator": pos, "entries": ent, "raw": data.hex()}
+        return [(f"sound_banks/{cid:04X}.json", json.dumps(js, indent=1).encode())]
+    @staticmethod
+    def compile(files):
+        js = json.loads(files[0][1])
+        raw = bytearray(bytes.fromhex(js["raw"]))
+        pos = 0
+        for e in js["entries"]:
+            raw[pos] = e["patch"] & 0xFF
+            raw[pos+1] = e["bank"] & 0xFF
+            raw[pos+2] = e["off"] & 0xFF; raw[pos+3] = (e["off"] >> 8) & 0xFF
+            raw[pos+4] = e["pad"] & 0xFF; raw[pos+5] = (e["pad"] >> 8) & 0xFF
+            t = bytes.fromhex(e.get("timbre", ""))
+            if t: raw[e["off"]:e["off"]+len(t)] = t
+            pos += 6
+        return bytes(raw)
+
 # ------------------------------------------------------------- bin fallback --
 class BinPassthrough:
     """Roles whose deep format lands in a later wave keep byte-exact .bin
