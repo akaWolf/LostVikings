@@ -861,9 +861,11 @@ static inline bool v2_gs_evac_on(const uint8_t* ds) {
     return ds == v2_gs_evac_canonical && ds != nullptr;
 }
 
-// Mirror functions: bodies live in v2_gamestate.cpp (each expands the full
-// EVAC+EVACB field chain — inlining them at thousands of ds_write sites made
-// compile time explode; one out-of-line copy is also kinder to icache).
+// Mirror functions (stage-4 wave 10): O(1) LUT-router wrappers — bodies in
+// v2_gamestate.cpp. v2_gs_route[a] points at the byte OWNING DS offset a
+// (a carrier member byte for evacuated fields, the flat image byte
+// otherwise); rebuilt on every canonical change.
+extern uint8_t* v2_gs_route[0x10000];
 extern "C" void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val);
 extern "C" void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len);
 extern "C" void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val);

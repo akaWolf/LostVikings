@@ -212,100 +212,54 @@ V2GsEvac g_gs_evac;
 // V2VM::ds_write with computed addresses; this keeps members in sync so the
 // per-frame check stays meaningful and the read flip stays possible).
 // Generated from the same EVAC list: field spans only, cheap range tests.
-extern "C" void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val) {
-    if (!v2_gs_evac_on(ds)) return;
-#define V2_GS_EM1(name, off) \
-    if (addr == (off)) { g_gs_evac.name = val; return; } \
-    /* word write one byte above our base: its lo lands in our hi */ \
-    if (addr == (uint16_t)((off) + 1)) \
-        g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0x00FF) | ((uint16_t)val << 8)); \
-    /* word write one byte below our base: its hi lands in our lo */ \
-    if ((uint16_t)(addr + 1) == (off)) \
-        g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0xFF00) | (val >> 8));
-#define V2_GS_EMN(name, off, n) \
-    /* word write one byte below the array: its hi lands in [0].lo */ \
-    if ((uint16_t)(addr + 1) == (off)) \
-        g_gs_evac.name[0] = (uint16_t)((g_gs_evac.name[0] & 0xFF00) | (val >> 8)); \
-    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
-        uint16_t _d = (uint16_t)(addr - (off)); \
-        if ((_d & 1u) == 0) { g_gs_evac.name[_d >> 1] = val; return; } \
-        /* odd straddle: two members share the word */ \
-        g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | (val << 8)); \
-        if ((uint32_t)(_d >> 1) + 1 < (n)) { \
-            g_gs_evac.name[(_d >> 1) + 1] = (uint16_t)((g_gs_evac.name[(_d >> 1) + 1] & 0xFF00) | (val >> 8)); \
-            return; } \
-        /* last byte of the array: the write's hi belongs to a neighbour — fall through */ \
-    }
-    V2_GS_FIELDS_EVAC(V2_GS_EM1, V2_GS_EMN)
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EM1, V2_GS_EMN)
-#undef V2_GS_EM1
-#undef V2_GS_EMN
-#define V2_GS_EMB1(name, off) \
-    if (addr == (off)) { g_gs_evac.name = (uint8_t)val; /* hi goes to the neighbour below */ } \
-    if ((uint16_t)(addr + 1) == (off)) { g_gs_evac.name = (uint8_t)(val >> 8); /* no return: the lo half may belong to a later list entry */ }
-#define V2_GS_EMBN(name, off, n) \
-    if ((uint16_t)(addr - (off)) < (n)) { \
-        uint16_t _d = (uint16_t)(addr - (off)); \
-        g_gs_evac.name[_d] = (uint8_t)val; \
-        if ((uint32_t)_d + 1 < (n)) { g_gs_evac.name[_d + 1] = (uint8_t)(val >> 8); return; } \
-    } \
-    /* straddle head: the hi byte of a word written one byte below us */ \
-    if ((n) > 0 && (uint16_t)(addr + 1) == (off)) { g_gs_evac.name[0] = (uint8_t)(val >> 8); /* no return: see EMB1 */ }
-    V2_GS_FIELDS_EVACB(V2_GS_EMB1, V2_GS_EMBN)
-#undef V2_GS_EMB1
-#undef V2_GS_EMBN
+// stage-4 wave 10: the per-byte router replaces the field-list chains.
+uint8_t* v2_gs_route[0x10000];
+
+static void v2_gs_route_build(uint8_t* ds) {
+    for (uint32_t a = 0; a < 0x10000; a++) v2_gs_route[a] = ds + a;
+#define V2_GS_RT1(name, off) \
+    { uint8_t* m = (uint8_t*)&g_gs_evac.name; \
+      v2_gs_route[(off)] = m; v2_gs_route[(uint16_t)((off) + 1)] = m + 1; }
+#define V2_GS_RTN(name, off, n) \
+    for (uint32_t i = 0; i < (n); i++) { \
+        uint8_t* m = (uint8_t*)&g_gs_evac.name[i]; \
+        v2_gs_route[(uint16_t)((off) + 2u * i)] = m; \
+        v2_gs_route[(uint16_t)((off) + 2u * i + 1)] = m + 1; }
+    V2_GS_FIELDS_EVAC(V2_GS_RT1, V2_GS_RTN)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_RT1, V2_GS_RTN)
+#undef V2_GS_RT1
+#undef V2_GS_RTN
+#define V2_GS_RTB1(name, off) v2_gs_route[(off)] = &g_gs_evac.name;
+#define V2_GS_RTBN(name, off, n) \
+    for (uint32_t i = 0; i < (n); i++) \
+        v2_gs_route[(uint16_t)((off) + i)] = &g_gs_evac.name[i];
+    V2_GS_FIELDS_EVACB(V2_GS_RTB1, V2_GS_RTBN)
+#undef V2_GS_RTB1
+#undef V2_GS_RTBN
 }
 
-// Bulk-span mirror: after a bulk image write (memset/memcpy stripe) refresh
-// every evacuated field overlapping [addr, addr+len) from the image.
-extern "C" void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len) {
-    if (!v2_gs_evac_on(ds) || len == 0) return;
-    uint32_t end = addr + len;
-#define V2_GS_ES1(name, off) \
-    if ((off) < end && (off) + 2u > addr) \
-        g_gs_evac.name = *(const uint16_t*)(ds + (off));
-#define V2_GS_ESN(name, off, n) \
-    if ((off) < end && (off) + 2u * (n) > addr) \
-        for (uint32_t _i = 0; _i < (n); _i++) \
-            g_gs_evac.name[_i] = *(const uint16_t*)(ds + (off) + 2u * _i);
-    V2_GS_FIELDS_EVAC(V2_GS_ES1, V2_GS_ESN)
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_ES1, V2_GS_ESN)
-#undef V2_GS_ES1
-#undef V2_GS_ESN
-#define V2_GS_ESB1(name, off) \
-    if ((off) < end && (off) + 1u > addr) g_gs_evac.name = ds[(off)];
-#define V2_GS_ESBN(name, off, n) \
-    if ((off) < end && (off) + (uint32_t)(n) > addr) \
-        for (uint32_t _i = 0; _i < (n); _i++) g_gs_evac.name[_i] = ds[(off) + _i];
-    V2_GS_FIELDS_EVACB(V2_GS_ESB1, V2_GS_ESBN)
-#undef V2_GS_ESB1
-#undef V2_GS_ESBN
-}
-
-// Byte-granular mirror for the side channels (alias words that overlap an
-// evacuated span, lob/byte setters). Splits the byte into the member half.
 extern "C" void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val) {
     if (!v2_gs_evac_on(ds)) return;
-#define V2_GS_EB1(name, off) \
-    if (addr == (off)) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0xFF00) | val); return; } \
-    if (addr == (off) + 1) { g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0x00FF) | ((uint16_t)val << 8)); return; }
-#define V2_GS_EBN(name, off, n) \
-    if ((uint16_t)(addr - (off)) < 2u * (n)) { \
-        uint16_t _d = (uint16_t)(addr - (off)); \
-        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0xFF00) | val); \
-        else g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | ((uint16_t)val << 8)); \
-        return; }
-    V2_GS_FIELDS_EVAC(V2_GS_EB1, V2_GS_EBN)
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EB1, V2_GS_EBN)
-#undef V2_GS_EB1
-#undef V2_GS_EBN
-#define V2_GS_EBB1(name, off) \
-    if (addr == (off)) { g_gs_evac.name = val; return; }
-#define V2_GS_EBBN(name, off, n) \
-    if ((uint16_t)(addr - (off)) < (n)) { g_gs_evac.name[(uint16_t)(addr - (off))] = val; return; }
-    V2_GS_FIELDS_EVACB(V2_GS_EBB1, V2_GS_EBBN)
-#undef V2_GS_EBB1
-#undef V2_GS_EBBN
+    uint8_t* t = v2_gs_route[addr];
+    if (t != ds + addr) *t = val;   // evacuated byte: land in the member
+}
+
+extern "C" void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val) {
+    if (!v2_gs_evac_on(ds)) return;
+    uint16_t a1 = (uint16_t)(addr + 1);
+    uint8_t* lo = v2_gs_route[addr];
+    uint8_t* hi = v2_gs_route[a1];
+    if (lo != ds + addr) *lo = (uint8_t)val;
+    if (hi != ds + a1) *hi = (uint8_t)(val >> 8);
+}
+
+extern "C" void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len) {
+    if (!v2_gs_evac_on(ds) || len == 0) return;
+    uint32_t end = addr + len; if (end > 0x10000) end = 0x10000;
+    for (uint32_t a = addr; a < end; a++) {
+        uint8_t* t = v2_gs_route[a];
+        if (t != ds + a) *t = ds[a];
+    }
 }
 
 
@@ -341,7 +295,13 @@ void v2_ail_interp_ds_mirror(const uint8_t* p, uint8_t v) {
 
 extern "C" void v2_gs_evac_set_canonical(const uint8_t* ds) {
     v2_gs_evac_canonical = ds;
-    if (ds) v2_gs_evac_refresh(ds);
+    if (ds) {
+        v2_gs_evac_refresh(ds);
+        // wave 10: rebuild the per-byte router for the new canonical image.
+        // The shadow is a writable static; const enters this API for the
+        // readers' sake only.
+        v2_gs_route_build(const_cast<uint8_t*>(ds));
+    }
 }
 
 // Members vs image bytes. A diff means something wrote the image behind the
