@@ -50,18 +50,18 @@
 // into V2_GS_FIELDS_EVAC (read flip). Lesson of wave 7: flipping reads in
 // the same commit as the evacuation turns every missed write channel into
 // a behavior change instead of a check report.
-#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN)
+#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN, FR)
 
-#define V2_GS_FIELDS_EVAC(F1, FN) \
-  FN(obj_frac_x,      OBJ_FRAC_X,      20) \
-  FN(obj_frac_y,      OBJ_FRAC_Y,      20) \
-  FN(obj_anim_pc,     OBJ_ANIM_PC,     20) \
-  FN(obj_anim_timer,  OBJ_ANIM_TIMER,  20) \
-  FN(obj_anim_cont,   OBJ_ANIM_CONT,   20) \
-  FN(obj_sub_slot,    OBJ_SUB_SLOT,    20) \
-  FN(obj_sub_end,     OBJ_SUB_END,     20) \
-  FN(obj_sub_count,   OBJ_SUB_COUNT,   20) \
-  FN(obj_sub_anim_ptr,OBJ_SUB_ANIM_PTR,20) \
+#define V2_GS_FIELDS_EVAC(F1, FN, FR) \
+  FR(obj_frac_x,      OBJ_FRAC_X,      20, obj_rec, frac_x) \
+  FR(obj_frac_y,      OBJ_FRAC_Y,      20, obj_rec, frac_y) \
+  FR(obj_anim_pc,     OBJ_ANIM_PC,     20, obj_rec, anim_pc) \
+  FR(obj_anim_timer,  OBJ_ANIM_TIMER,  20, obj_rec, anim_timer) \
+  FR(obj_anim_cont,   OBJ_ANIM_CONT,   20, obj_rec, anim_cont) \
+  FR(obj_sub_slot,    OBJ_SUB_SLOT,    20, obj_rec, sub_slot) \
+  FR(obj_sub_end,     OBJ_SUB_END,     20, obj_rec, sub_end) \
+  FR(obj_sub_count,   OBJ_SUB_COUNT,   20, obj_rec, sub_count) \
+  FR(obj_sub_anim_ptr,OBJ_SUB_ANIM_PTR,20, obj_rec, sub_anim_ptr) \
   FN(anim_chunk_ids,     DS_ANIM_CHUNK_IDS, 16) \
   FN(anim_chunk_off,     DS_ANIM_CHUNK_OFF, 16) \
   FN(anim_chunk_seg,     DS_ANIM_CHUNK_SEG, 16) \
@@ -282,74 +282,74 @@
   F1(map_height,         DS_MAP_HEIGHT) \
   F1(level_var_25c5,     0x25C5) \
   F1(level_var_25c7,     0x25C7) \
-  FN(spr_flags,     OBJ_SPRITE_FLAGS, 128) \
-  FN(spr_class,     OBJ_SUB_CLASS,    128) \
-  FN(spr_x,         OBJ_SPRITE_X,     128) \
-  FN(spr_y,         OBJ_SPRITE_Y,     128) \
-  FN(spr_off,       OBJ_SPRITE_OFF,   128) \
-  FN(spr_seg,       OBJ_SPRITE_SEG,   128) \
-  FN(spr_src_base,  OBJ_SUB_SRC_BASE, 128) \
-  FN(spr_src_seg,   OBJ_SUB_SRC_SEG,  128) \
-  FN(spr_strips,    OBJ_STRIP_COUNT,  128) \
-  FN(spr_cur_x,     OBJ_SPRITE_CUR_X, 128) \
-  FN(spr_cur_y,     OBJ_SPRITE_CUR_Y, 128) \
-  FN(spr_old_x,     OBJ_SPRITE_OLD_X, 128) \
-  FN(spr_old_y,     OBJ_SPRITE_OLD_Y, 128) \
-  FN(spr_dirty,     OBJ_DIRTY_MODE,   128) \
-  FN(obj_pc,          OBJ_PC,          20) \
-  FN(obj_code_seg,    OBJ_CODE_SEG,    20) \
-  FN(obj_alt_pc,      OBJ_ALT_PC,      20) \
-  FN(obj_x_prev,      OBJ_X_PREV,      20) \
-  FN(obj_y_prev,      OBJ_Y_PREV,      20) \
-  FN(obj_coll_bits,   OBJ_COLL_BITS,   20) \
-  FN(obj_anim_table,  OBJ_ANIM_TABLE,  20) \
-  FN(obj_width,       OBJ_WIDTH,       20) \
-  FN(obj_height,      OBJ_HEIGHT,      20) \
-  FN(obj_half_h,      OBJ_HALF_H,      20) \
-  FN(obj_half_w,      OBJ_HALF_W,      20) \
-  FN(obj_bbox_y0,     OBJ_BBOX_Y0,     20) \
-  FN(obj_bbox_y1,     OBJ_BBOX_Y1,     20) \
-  FN(obj_bbox_x0,     OBJ_BBOX_X0,     20) \
-  FN(obj_bbox_x1,     OBJ_BBOX_X1,     20) \
-  FN(obj_flags,       OBJ_FLAGS,       20) \
-  FN(obj_res_handle,  OBJ_RES_HANDLE,  20) \
-  FN(obj_res_cost,    OBJ_RES_COST,    20) \
-  FN(obj_state_idx,   OBJ_STATE_IDX,   20) \
-  FN(obj_class_bits,  OBJ_CLASS_BITS,  20) \
-  FN(obj_anim_dx,     OBJ_ANIM_DX,     20) \
-  FN(obj_anim_dy,     OBJ_ANIM_DY,     20) \
-  FN(obj_spawn_pool,  OBJ_SPAWN_POOL,  20) \
-  FN(obj_anim_sub,    OBJ_ANIM_SUB,    20) \
-  FN(obj_anim_idx,    OBJ_ANIM_IDX,    20) \
-  FN(obj_timer,       OBJ_TIMER,       20) \
-  FN(obj_world_x,     OBJ_WORLD_X,     20) \
-  FN(obj_world_y,     OBJ_WORLD_Y,     20) \
-  FN(obj_vel_x_max,   OBJ_VEL_X_MAX,   20) \
-  FN(obj_vel_y_max,   OBJ_VEL_Y_MAX,   20) \
-  FN(obj_type_id,     OBJ_TYPE_ID,     20) \
-  FN(obj_parent,      OBJ_PARENT,      20) \
-  FN(obj_child,       OBJ_CHILD,       20) \
-  FN(obj_sprite_base, OBJ_SPRITE_BASE, 20) \
-  FN(obj_state_187d,  OBJ_STATE_187D,  20) \
-  FN(obj_state_18a5,  OBJ_STATE_18A5,  20) \
-  FN(obj_state_18cd,  OBJ_STATE_18CD,  20) \
-  FN(obj_state_18f5,  OBJ_STATE_18F5,  20) \
-  FN(obj_cur_sprite,  OBJ_CUR_SPRITE_IDX, 20) \
-  FN(obj_vel_x,       OBJ_VEL_X,       20) \
-  FN(obj_vel_y,       OBJ_VEL_Y,       20) \
-  FN(obj_partner,     OBJ_PARTNER,     20) \
+  FR(spr_flags,     OBJ_SPRITE_FLAGS, 128, spr_rec, flags) \
+  FR(spr_class,     OBJ_SUB_CLASS,    128, spr_rec, cls) \
+  FR(spr_x,         OBJ_SPRITE_X,     128, spr_rec, x) \
+  FR(spr_y,         OBJ_SPRITE_Y,     128, spr_rec, y) \
+  FR(spr_off,       OBJ_SPRITE_OFF,   128, spr_rec, off) \
+  FR(spr_seg,       OBJ_SPRITE_SEG,   128, spr_rec, seg) \
+  FR(spr_src_base,  OBJ_SUB_SRC_BASE, 128, spr_rec, src_base) \
+  FR(spr_src_seg,   OBJ_SUB_SRC_SEG,  128, spr_rec, src_seg) \
+  FR(spr_strips,    OBJ_STRIP_COUNT,  128, spr_rec, strips) \
+  FR(spr_cur_x,     OBJ_SPRITE_CUR_X, 128, spr_rec, cur_x) \
+  FR(spr_cur_y,     OBJ_SPRITE_CUR_Y, 128, spr_rec, cur_y) \
+  FR(spr_old_x,     OBJ_SPRITE_OLD_X, 128, spr_rec, old_x) \
+  FR(spr_old_y,     OBJ_SPRITE_OLD_Y, 128, spr_rec, old_y) \
+  FR(spr_dirty,     OBJ_DIRTY_MODE,   128, spr_rec, dirty) \
+  FR(obj_pc,          OBJ_PC,          20, obj_rec, pc) \
+  FR(obj_code_seg,    OBJ_CODE_SEG,    20, obj_rec, code_seg) \
+  FR(obj_alt_pc,      OBJ_ALT_PC,      20, obj_rec, alt_pc) \
+  FR(obj_x_prev,      OBJ_X_PREV,      20, obj_rec, x_prev) \
+  FR(obj_y_prev,      OBJ_Y_PREV,      20, obj_rec, y_prev) \
+  FR(obj_coll_bits,   OBJ_COLL_BITS,   20, obj_rec, coll_bits) \
+  FR(obj_anim_table,  OBJ_ANIM_TABLE,  20, obj_rec, anim_table) \
+  FR(obj_width,       OBJ_WIDTH,       20, obj_rec, width) \
+  FR(obj_height,      OBJ_HEIGHT,      20, obj_rec, height) \
+  FR(obj_half_h,      OBJ_HALF_H,      20, obj_rec, half_h) \
+  FR(obj_half_w,      OBJ_HALF_W,      20, obj_rec, half_w) \
+  FR(obj_bbox_y0,     OBJ_BBOX_Y0,     20, obj_rec, bbox_y0) \
+  FR(obj_bbox_y1,     OBJ_BBOX_Y1,     20, obj_rec, bbox_y1) \
+  FR(obj_bbox_x0,     OBJ_BBOX_X0,     20, obj_rec, bbox_x0) \
+  FR(obj_bbox_x1,     OBJ_BBOX_X1,     20, obj_rec, bbox_x1) \
+  FR(obj_flags,       OBJ_FLAGS,       20, obj_rec, flags) \
+  FR(obj_res_handle,  OBJ_RES_HANDLE,  20, obj_rec, res_handle) \
+  FR(obj_res_cost,    OBJ_RES_COST,    20, obj_rec, res_cost) \
+  FR(obj_state_idx,   OBJ_STATE_IDX,   20, obj_rec, state_idx) \
+  FR(obj_class_bits,  OBJ_CLASS_BITS,  20, obj_rec, class_bits) \
+  FR(obj_anim_dx,     OBJ_ANIM_DX,     20, obj_rec, anim_dx) \
+  FR(obj_anim_dy,     OBJ_ANIM_DY,     20, obj_rec, anim_dy) \
+  FR(obj_spawn_pool,  OBJ_SPAWN_POOL,  20, obj_rec, spawn_pool) \
+  FR(obj_anim_sub,    OBJ_ANIM_SUB,    20, obj_rec, anim_sub) \
+  FR(obj_anim_idx,    OBJ_ANIM_IDX,    20, obj_rec, anim_idx) \
+  FR(obj_timer,       OBJ_TIMER,       20, obj_rec, timer) \
+  FR(obj_world_x,     OBJ_WORLD_X,     20, obj_rec, world_x) \
+  FR(obj_world_y,     OBJ_WORLD_Y,     20, obj_rec, world_y) \
+  FR(obj_vel_x_max,   OBJ_VEL_X_MAX,   20, obj_rec, vel_x_max) \
+  FR(obj_vel_y_max,   OBJ_VEL_Y_MAX,   20, obj_rec, vel_y_max) \
+  FR(obj_type_id,     OBJ_TYPE_ID,     20, obj_rec, type_id) \
+  FR(obj_parent,      OBJ_PARENT,      20, obj_rec, parent) \
+  FR(obj_child,       OBJ_CHILD,       20, obj_rec, child) \
+  FR(obj_sprite_base, OBJ_SPRITE_BASE, 20, obj_rec, sprite_base) \
+  FR(obj_state_187d,  OBJ_STATE_187D,  20, obj_rec, state_187d) \
+  FR(obj_state_18a5,  OBJ_STATE_18A5,  20, obj_rec, state_18a5) \
+  FR(obj_state_18cd,  OBJ_STATE_18CD,  20, obj_rec, state_18cd) \
+  FR(obj_state_18f5,  OBJ_STATE_18F5,  20, obj_rec, state_18f5) \
+  FR(obj_cur_sprite,  OBJ_CUR_SPRITE_IDX, 20, obj_rec, cur_sprite) \
+  FR(obj_vel_x,       OBJ_VEL_X,       20, obj_rec, vel_x) \
+  FR(obj_vel_y,       OBJ_VEL_Y,       20, obj_rec, vel_y) \
+  FR(obj_partner,     OBJ_PARTNER,     20, obj_rec, partner) \
 // bulk-copies on level switch — the evac check caught the desync on the
 // level-3→4 transition. They evacuate only after that copy goes through
 // the view (deserialize-based level load); until then they stay flat.
 
 // Core globals + input + scroll + collision scratch
-#define V2_GS_FIELDS_CORE(F1, FN)
+#define V2_GS_FIELDS_CORE(F1, FN, FR)
 
 // HUD / vikings / quit prompt
-#define V2_GS_FIELDS_HUD(F1, FN) 
+#define V2_GS_FIELDS_HUD(F1, FN, FR) 
 
 // Level / scroll state / palette-anim / sound-track / spawn descriptors
-#define V2_GS_FIELDS_LEVEL(F1, FN) \
+#define V2_GS_FIELDS_LEVEL(F1, FN, FR) \
   F1(spawn_pool0,        DS_SPAWN_POOL0) \
   F1(chunk_cur,          DS_CHUNK_CUR) \
   F1(chunk_tile,         DS_CHUNK_TILE) \
@@ -363,40 +363,40 @@
   F1(decomp_size,        DS_DECOMP_SIZE)
 
 // Segment registry + loader cursors + sound/config words
-#define V2_GS_FIELDS_SEG(F1, FN)
+#define V2_GS_FIELDS_SEG(F1, FN, FR)
 
 // Sound / AIL / startup config words
-#define V2_GS_FIELDS_SOUND(F1, FN)
+#define V2_GS_FIELDS_SOUND(F1, FN, FR)
 
 // Page emulator / palette pipeline words / VGA-page state
-#define V2_GS_FIELDS_PAGES(F1, FN)
+#define V2_GS_FIELDS_PAGES(F1, FN, FR)
 
 // Spec-key init bit-mask words (INT9 cluster)
-#define V2_GS_FIELDS_SPEC(F1, FN)
+#define V2_GS_FIELDS_SPEC(F1, FN, FR)
 // Sprite table columns — 128 contiguous words each (slot addressing obj=slot*2)
-#define V2_GS_FIELDS_SPRITE(F1, FN)
+#define V2_GS_FIELDS_SPRITE(F1, FN, FR)
 
 // VM object table columns — 20 contiguous words each (stride 0x28 between
 // column bases; the region is a dense run of 20-word columns)
-#define V2_GS_FIELDS_OBJ(F1, FN)
+#define V2_GS_FIELDS_OBJ(F1, FN, FR)
 
 // Word aggregate WITHOUT the evacuated fields — the views generate flat
 // accessors from this and EVAC-backed accessors from V2_GS_FIELDS_EVAC.
-#define V2_GS_FIELDS_W_NOEVAC(F1, FN) \
-  V2_GS_FIELDS_CORE(F1, FN)  \
-  V2_GS_FIELDS_HUD(F1, FN)   \
-  V2_GS_FIELDS_LEVEL(F1, FN) \
-  V2_GS_FIELDS_SEG(F1, FN)   \
-  V2_GS_FIELDS_PAGES(F1, FN) \
-  V2_GS_FIELDS_SOUND(F1, FN) \
-  V2_GS_FIELDS_SPEC(F1, FN)  \
-  V2_GS_FIELDS_SPRITE(F1, FN)\
-  V2_GS_FIELDS_OBJ(F1, FN)
+#define V2_GS_FIELDS_W_NOEVAC(F1, FN, FR) \
+  V2_GS_FIELDS_CORE(F1, FN, FR)  \
+  V2_GS_FIELDS_HUD(F1, FN, FR)   \
+  V2_GS_FIELDS_LEVEL(F1, FN, FR) \
+  V2_GS_FIELDS_SEG(F1, FN, FR)   \
+  V2_GS_FIELDS_PAGES(F1, FN, FR) \
+  V2_GS_FIELDS_SOUND(F1, FN, FR) \
+  V2_GS_FIELDS_SPEC(F1, FN, FR)  \
+  V2_GS_FIELDS_SPRITE(F1, FN, FR)\
+  V2_GS_FIELDS_OBJ(F1, FN, FR)
 
-#define V2_GS_FIELDS_W(F1, FN) \
-  V2_GS_FIELDS_EVAC(F1, FN)  \
-  V2_GS_FIELDS_EVAC_BRIDGE(F1, FN) \
-  V2_GS_FIELDS_W_NOEVAC(F1, FN)
+#define V2_GS_FIELDS_W(F1, FN, FR) \
+  V2_GS_FIELDS_EVAC(F1, FN, FR)  \
+  V2_GS_FIELDS_EVAC_BRIDGE(F1, FN, FR) \
+  V2_GS_FIELDS_W_NOEVAC(F1, FN, FR)
 
 // ---------------------------------------------------------------------------
 // Byte fields: B1(member, ds_off) scalar byte; BN(member, ds_off, count).
@@ -766,15 +766,19 @@
 struct V2GameState {
 #define V2_GS_M1(name, off)      uint16_t name;
 #define V2_GS_MN(name, off, n)   uint16_t name[n];
-  V2_GS_FIELDS_W(V2_GS_M1, V2_GS_MN)
+#define V2_GS_MR(name, off, n, rec, fld) V2_GS_MN(name, off, n)
+  V2_GS_FIELDS_W(V2_GS_M1, V2_GS_MN, V2_GS_MR)
 #undef V2_GS_M1
 #undef V2_GS_MN
+#undef V2_GS_MR
 #define V2_GS_MB1(name, off)     uint8_t name;
 #define V2_GS_MBN(name, off, n)  uint8_t name[n];
+#define V2_GS_MBR(name, off, n, rec, fld) V2_GS_MBN(name, off, n)
   V2_GS_FIELDS_B(V2_GS_MB1, V2_GS_MBN)
   V2_GS_FIELDS_GAPFILL(V2_GS_MB1, V2_GS_MBN)
 #undef V2_GS_MB1
 #undef V2_GS_MBN
+#undef V2_GS_MBR
   // uncovered DS bytes, verbatim (shrinks as fields get carved out)
   uint8_t raw[0x10000];
 };
@@ -837,18 +841,96 @@ int  v2_gs_roundtrip_check(const uint8_t* ds, const char* tag);
 // v2_gs_evac_check FATALs on any image byte changed behind the accessors.
 // All other worlds (oracle copies, unit scratch, save buffers) stay flat.
 // ---------------------------------------------------------------------------
+// wave 14: object/sprite columns live as record arrays — the natural
+// shape (the DS kept them as parallel 20/128-word columns; the router
+// maps every byte back to the flat offsets).
+struct V2ObjRec {
+    uint16_t frac_x;
+    uint16_t frac_y;
+    uint16_t anim_pc;
+    uint16_t anim_timer;
+    uint16_t anim_cont;
+    uint16_t sub_slot;
+    uint16_t sub_end;
+    uint16_t sub_count;
+    uint16_t sub_anim_ptr;
+    uint16_t pc;
+    uint16_t code_seg;
+    uint16_t alt_pc;
+    uint16_t x_prev;
+    uint16_t y_prev;
+    uint16_t coll_bits;
+    uint16_t anim_table;
+    uint16_t width;
+    uint16_t height;
+    uint16_t half_h;
+    uint16_t half_w;
+    uint16_t bbox_y0;
+    uint16_t bbox_y1;
+    uint16_t bbox_x0;
+    uint16_t bbox_x1;
+    uint16_t flags;
+    uint16_t res_handle;
+    uint16_t res_cost;
+    uint16_t state_idx;
+    uint16_t class_bits;
+    uint16_t anim_dx;
+    uint16_t anim_dy;
+    uint16_t spawn_pool;
+    uint16_t anim_sub;
+    uint16_t anim_idx;
+    uint16_t timer;
+    uint16_t world_x;
+    uint16_t world_y;
+    uint16_t vel_x_max;
+    uint16_t vel_y_max;
+    uint16_t type_id;
+    uint16_t parent;
+    uint16_t child;
+    uint16_t sprite_base;
+    uint16_t state_187d;
+    uint16_t state_18a5;
+    uint16_t state_18cd;
+    uint16_t state_18f5;
+    uint16_t cur_sprite;
+    uint16_t vel_x;
+    uint16_t vel_y;
+    uint16_t partner;
+};
+struct V2SprRec {
+    uint16_t flags;
+    uint16_t cls;
+    uint16_t x;
+    uint16_t y;
+    uint16_t off;
+    uint16_t seg;
+    uint16_t src_base;
+    uint16_t src_seg;
+    uint16_t strips;
+    uint16_t cur_x;
+    uint16_t cur_y;
+    uint16_t old_x;
+    uint16_t old_y;
+    uint16_t dirty;
+};
 struct V2GsEvac {
+    V2ObjRec obj_rec[20];
+    V2SprRec spr_rec[128];
 #define V2_GS_EV1(name, off)     uint16_t name;
 #define V2_GS_EVN(name, off, n)  uint16_t name[n];
-  V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
-  V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN)
+#define V2_GS_EVR(name, off, n, rec, fld)
+  V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN, V2_GS_EVR)
+  V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN, V2_GS_EVR)
 #undef V2_GS_EV1
 #undef V2_GS_EVN
+#undef V2_GS_EVR
 #define V2_GS_EVB1(name, off)    uint8_t name;
 #define V2_GS_EVBN(name, off, n) uint8_t name[n];
+#define V2_GS_EVBR(name, off, n, rec, fld) V2_GS_EVBN(name, off, n)
   V2_GS_FIELDS_EVACB(V2_GS_EVB1, V2_GS_EVBN)
 #undef V2_GS_EVB1
 #undef V2_GS_EVBN
+#undef V2_GS_EVBR
 };
 extern V2GsEvac g_gs_evac;
 extern "C" {
@@ -898,7 +980,8 @@ struct V2StateView {
 #define V2_GS_AN(name, off, n) \
     uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) return *(const uint16_t*)(ds + (off) + 2u * i); } \
     void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) *(uint16_t*)(ds + (off) + 2u * i) = v; }
-    V2_GS_FIELDS_W_NOEVAC(V2_GS_A1, V2_GS_AN)
+#define V2_GS_AR(name, off, n, rec, fld) V2_GS_AN(name, off, n)
+    V2_GS_FIELDS_W_NOEVAC(V2_GS_A1, V2_GS_AN, V2_GS_AR)
     // Stage 4 II.c: evacuated fields — typed member carrier + write-through.
 // FLIPPED stage (bridge held: writes still keep the image in sync for the
 // serializer/oracles and the operand read path): READS for the canonical
@@ -914,9 +997,13 @@ struct V2StateView {
 #define V2_GS_AEN(name, off, n) \
     uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) return g_gs_evac.name[i]; return *(const uint16_t*)(ds + (off) + 2u * i); } \
     void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) g_gs_evac.name[i] = v; *(uint16_t*)(ds + (off) + 2u * i) = v; }
-    V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN)
+#define V2_GS_AER(name, off, n, rec, fld) \
+    uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) return g_gs_evac.rec[i].fld; return *(const uint16_t*)(ds + (off) + 2u * i); } \
+    void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) g_gs_evac.rec[i].fld = v; *(uint16_t*)(ds + (off) + 2u * i) = v; }
+    V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN, V2_GS_AER)
 #undef V2_GS_AE1
 #undef V2_GS_AEN
+#undef V2_GS_AER
     // (wave 9) the bridge group moved into V2_GS_FIELDS_EVAC above — this
     // expansion is now empty and kept only as the landing pad for the next
     // freshly evacuated group.
@@ -926,11 +1013,14 @@ struct V2StateView {
 #define V2_GS_AEN(name, off, n) \
     uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) return *(const uint16_t*)(ds + (off) + 2u * i); } \
     void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) g_gs_evac.name[i] = v; *(uint16_t*)(ds + (off) + 2u * i) = v; }
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_AE1, V2_GS_AEN)
+#define V2_GS_AER(name, off, n, rec, fld) V2_GS_AEN(name, off, n)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_AE1, V2_GS_AEN, V2_GS_AER)
 #undef V2_GS_AE1
 #undef V2_GS_AEN
+#undef V2_GS_AER
 #undef V2_GS_A1
 #undef V2_GS_AN
+#undef V2_GS_AR
 #define V2_GS_AB1(name, off) \
     uint8_t  name##_b() const          { return ds[(off)]; } \
     void     name##_b(uint8_t v)       { v2_gs_evac_mirror_b(ds, (off), v); ds[(off)] = v; } \
@@ -938,6 +1028,7 @@ struct V2StateView {
 #define V2_GS_ABN(name, off, n) \
     uint8_t* name##_bytes()            { return ds + (off); } \
     const uint8_t* name##_bytes() const { return ds + (off); }
+#define V2_GS_ABR(name, off, n, rec, fld) V2_GS_ABN(name, off, n)
     V2_GS_FIELDS_B_NOEVAC(V2_GS_AB1, V2_GS_ABN)
     // Stage 4 II.c EVACB: byte fields on the typed carrier. Same flip
     // discipline as the word fields: reads come from the member, writes go
@@ -961,9 +1052,13 @@ struct V2StateView {
         if (v2_gs_evac_on(ds)) return g_gs_evac.name[i]; return ds[(off) + i]; } \
     void     name##_bset(uint32_t i, uint8_t v) { V2_GS_BCHK(off, (uint32_t)(n), i) \
         if (v2_gs_evac_on(ds)) g_gs_evac.name[i] = v; ds[(off) + i] = v; }
+#define V2_GS_ABER(name, off, n, rec, fld) \
+    uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) return g_gs_evac.rec[i].fld; return *(const uint16_t*)(ds + (off) + 2u * i); } \
+    void     name(uint32_t i, uint16_t v) { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) g_gs_evac.rec[i].fld = v; *(uint16_t*)(ds + (off) + 2u * i) = v; }
     V2_GS_FIELDS_EVACB(V2_GS_ABE1, V2_GS_ABEN)
 #undef V2_GS_ABE1
 #undef V2_GS_ABEN
+#undef V2_GS_ABER
     // Stage 4 II.a: word access at a runtime byte offset from a field base.
     // EXACT flat semantics incl. 8086 wrap: addr = (uint16_t)((off) + o).
     // II.b: with -DV2_GS_BOUNDS every access outside [off, off+len) is
@@ -976,19 +1071,24 @@ struct V2StateView {
         *(uint16_t*)(ds + (uint16_t)((off) + o)) = v; }
 #define V2_GS_ATW1(name, off)    V2_GS_ATW_IMPL(name, off, 2u)
 #define V2_GS_ATWN(name, off, n) V2_GS_ATW_IMPL(name, off, 2u*(n))
-    V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN)
+#define V2_GS_ATWR(name, off, n, rec, fld) V2_GS_ATWN(name, off, n)
+    V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN, V2_GS_ATWR)
 #undef V2_GS_ATW1
 #undef V2_GS_ATWN
+#undef V2_GS_ATWR
 #define V2_GS_ATW1(name, off)    V2_GS_ATW_IMPL(name, off, 1u)
 #define V2_GS_ATWN(name, off, n) V2_GS_ATW_IMPL(name, off, (uint32_t)(n))
+#define V2_GS_ATWR(name, off, n, rec, fld) V2_GS_ATWN(name, off, n)
     V2_GS_FIELDS_B(V2_GS_ATW1, V2_GS_ATWN)
     V2_GS_FIELDS_GAPFILL(V2_GS_ATW1, V2_GS_ATWN)
 #undef V2_GS_ATW1
 #undef V2_GS_ATWN
+#undef V2_GS_ATWR
 #undef V2_GS_ATW_IMPL
 
 #undef V2_GS_AB1
 #undef V2_GS_ABN
+#undef V2_GS_ABR
 #define V2_GS_A1(name, off) \
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
     void     name(uint16_t v)          { v2_gs_evac_mirror_w(ds, (off), v); *(uint16_t*)(ds + (off)) = v; } \
@@ -1022,35 +1122,43 @@ struct V2StateViewC {
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
 #define V2_GS_AN(name, off, n) \
     uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
-    V2_GS_FIELDS_W_NOEVAC(V2_GS_A1, V2_GS_AN)
+#define V2_GS_AR(name, off, n, rec, fld) V2_GS_AN(name, off, n)
+    V2_GS_FIELDS_W_NOEVAC(V2_GS_A1, V2_GS_AN, V2_GS_AR)
 #define V2_GS_AE1(name, off) \
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
 #define V2_GS_AEN(name, off, n) \
     uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
-    V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN)
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_AE1, V2_GS_AEN)
+#define V2_GS_AER(name, off, n, rec, fld) V2_GS_AEN(name, off, n)
+    V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN, V2_GS_AER)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_AE1, V2_GS_AEN, V2_GS_AER)
 #undef V2_GS_AE1
 #undef V2_GS_AEN
+#undef V2_GS_AER
 #undef V2_GS_A1
 #undef V2_GS_AN
+#undef V2_GS_AR
 #define V2_GS_AB1(name, off) \
     uint8_t  name##_b() const          { return ds[(off)]; }
 #define V2_GS_ABN(name, off, n) \
     const uint8_t* name##_bytes() const { return ds + (off); }
+#define V2_GS_ABR(name, off, n, rec, fld) V2_GS_ABN(name, off, n)
     V2_GS_FIELDS_B(V2_GS_AB1, V2_GS_ABN)
     V2_GS_FIELDS_GAPFILL(V2_GS_AB1, V2_GS_ABN)
     // Stage 4 II.a (const view): read-only _at counterpart.
 #define V2_GS_ATW1(name, off) \
     uint16_t name##_at(uint16_t o) const { return *(const uint16_t*)(ds + (uint16_t)((off) + o)); }
 #define V2_GS_ATWN(name, off, n) V2_GS_ATW1(name, off)
-    V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN)
+#define V2_GS_ATWR(name, off, n, rec, fld) V2_GS_ATWN(name, off, n)
+    V2_GS_FIELDS_W(V2_GS_ATW1, V2_GS_ATWN, V2_GS_ATWR)
     V2_GS_FIELDS_B(V2_GS_ATW1, V2_GS_ATWN)
     V2_GS_FIELDS_GAPFILL(V2_GS_ATW1, V2_GS_ATWN)
 #undef V2_GS_ATW1
 #undef V2_GS_ATWN
+#undef V2_GS_ATWR
 
 #undef V2_GS_AB1
 #undef V2_GS_ABN
+#undef V2_GS_ABR
 #define V2_GS_A1(name, off) \
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
     V2_GS_ALIASES(V2_GS_A1)

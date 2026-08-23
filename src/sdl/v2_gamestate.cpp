@@ -36,15 +36,19 @@ static void cov_build(void) {
     memset(g_cov, 0, sizeof(g_cov));
 #define V2_GS_C1(name, off)      cov_mark((off), 2, #name);
 #define V2_GS_CN(name, off, n)   cov_mark((off), 2u * (n), #name);
-    V2_GS_FIELDS_W(V2_GS_C1, V2_GS_CN)
+#define V2_GS_CR(name, off, n, rec, fld) V2_GS_CN(name, off, n)
+    V2_GS_FIELDS_W(V2_GS_C1, V2_GS_CN, V2_GS_CR)
 #undef V2_GS_C1
 #undef V2_GS_CN
+#undef V2_GS_CR
 #define V2_GS_CB1(name, off)     cov_mark((off), 1, #name);
 #define V2_GS_CBN(name, off, n)  cov_mark((off), (n), #name);
+#define V2_GS_CBR(name, off, n, rec, fld) V2_GS_CBN(name, off, n)
     V2_GS_FIELDS_B(V2_GS_CB1, V2_GS_CBN)
     V2_GS_FIELDS_GAPFILL(V2_GS_CB1, V2_GS_CBN)
 #undef V2_GS_CB1
 #undef V2_GS_CBN
+#undef V2_GS_CBR
     g_cov_built = true;
     uint32_t covered = 0;
     for (uint32_t i = 0; i < 0x10000; i++) covered += g_cov[i];
@@ -64,15 +68,19 @@ extern "C" void v2_gs_deserialize(V2GameState* gs, const uint8_t* ds) {
     cov_build();
 #define V2_GS_D1(name, off)      gs->name = rd_w(ds, (off));
 #define V2_GS_DN(name, off, n)   for (uint32_t i = 0; i < (n); i++) gs->name[i] = rd_w(ds, (off) + 2u * i);
-    V2_GS_FIELDS_W(V2_GS_D1, V2_GS_DN)
+#define V2_GS_DR(name, off, n, rec, fld) V2_GS_DN(name, off, n)
+    V2_GS_FIELDS_W(V2_GS_D1, V2_GS_DN, V2_GS_DR)
 #undef V2_GS_D1
 #undef V2_GS_DN
+#undef V2_GS_DR
 #define V2_GS_DB1(name, off)     gs->name = ds[(off)];
 #define V2_GS_DBN(name, off, n)  memcpy(gs->name, ds + (off), (n));
+#define V2_GS_DBR(name, off, n, rec, fld) V2_GS_DBN(name, off, n)
     V2_GS_FIELDS_B(V2_GS_DB1, V2_GS_DBN)
     V2_GS_FIELDS_GAPFILL(V2_GS_DB1, V2_GS_DBN)
 #undef V2_GS_DB1
 #undef V2_GS_DBN
+#undef V2_GS_DBR
     memcpy(gs->raw, ds, 0x10000);   // backing; covered bytes unused on serialize
 }
 
@@ -83,15 +91,19 @@ extern "C" void v2_gs_serialize(const V2GameState* gs, uint8_t* ds_out) {
     memcpy(ds_out, gs->raw, 0x10000);
 #define V2_GS_S1(name, off)      wr_w(ds_out, (off), gs->name);
 #define V2_GS_SN(name, off, n)   for (uint32_t i = 0; i < (n); i++) wr_w(ds_out, (off) + 2u * i, gs->name[i]);
-    V2_GS_FIELDS_W(V2_GS_S1, V2_GS_SN)
+#define V2_GS_SR(name, off, n, rec, fld) V2_GS_SN(name, off, n)
+    V2_GS_FIELDS_W(V2_GS_S1, V2_GS_SN, V2_GS_SR)
 #undef V2_GS_S1
 #undef V2_GS_SN
+#undef V2_GS_SR
 #define V2_GS_SB1(name, off)     ds_out[(off)] = gs->name;
 #define V2_GS_SBN(name, off, n)  memcpy(ds_out + (off), gs->name, (n));
+#define V2_GS_SBR(name, off, n, rec, fld) V2_GS_SBN(name, off, n)
     V2_GS_FIELDS_B(V2_GS_SB1, V2_GS_SBN)
     V2_GS_FIELDS_GAPFILL(V2_GS_SB1, V2_GS_SBN)
 #undef V2_GS_SB1
 #undef V2_GS_SBN
+#undef V2_GS_SBR
 }
 
 // Named-field text dump — the phase-D state inspector. Every field the
@@ -107,9 +119,11 @@ extern "C" void v2_gs_dump_text(const uint8_t* ds, const char* path) {
     fprintf(f, "%-22s @%04X [%u]:", #name, (unsigned)(off), (unsigned)(n)); \
     for (uint32_t i = 0; i < (n); i++) fprintf(f, " %04X", gs.name[i]); \
     fprintf(f, "\n"); }
-    V2_GS_FIELDS_W(V2_GS_P1, V2_GS_PN)
+#define V2_GS_PR(name, off, n, rec, fld) V2_GS_PN(name, off, n)
+    V2_GS_FIELDS_W(V2_GS_P1, V2_GS_PN, V2_GS_PR)
 #undef V2_GS_P1
 #undef V2_GS_PN
+#undef V2_GS_PR
 #define V2_GS_PB1(name, off) fprintf(f, "%-22s @%04X = %02X\n", #name, (unsigned)(off), gs.name);
 #define V2_GS_PBN(name, off, n) { \
     fprintf(f, "%-22s @%04X [%u]:", #name, (unsigned)(off), (unsigned)(n)); \
@@ -117,10 +131,12 @@ extern "C" void v2_gs_dump_text(const uint8_t* ds, const char* path) {
         if ((i & 31) == 0) fprintf(f, "\n  %04X:", (unsigned)((off) + i)); \
         fprintf(f, " %02X", gs.name[i]); } \
     fprintf(f, "\n"); }
+#define V2_GS_PBR(name, off, n, rec, fld) V2_GS_PBN(name, off, n)
     V2_GS_FIELDS_B(V2_GS_PB1, V2_GS_PBN)
     V2_GS_FIELDS_GAPFILL(V2_GS_PB1, V2_GS_PBN)
 #undef V2_GS_PB1
 #undef V2_GS_PBN
+#undef V2_GS_PBR
     fclose(f);
 }
 
@@ -225,17 +241,29 @@ static void v2_gs_route_build(uint8_t* ds) {
         uint8_t* m = (uint8_t*)&g_gs_evac.name[i]; \
         v2_gs_route[(uint16_t)((off) + 2u * i)] = m; \
         v2_gs_route[(uint16_t)((off) + 2u * i + 1)] = m + 1; }
-    V2_GS_FIELDS_EVAC(V2_GS_RT1, V2_GS_RTN)
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_RT1, V2_GS_RTN)
+#define V2_GS_RTR(name, off, n, rec, fld) \
+    for (uint32_t i = 0; i < (n); i++) { \
+        uint8_t* m = (uint8_t*)&g_gs_evac.rec[i].fld; \
+        v2_gs_route[(uint16_t)((off) + 2u * i)] = m; \
+        v2_gs_route[(uint16_t)((off) + 2u * i + 1)] = m + 1; }
+    V2_GS_FIELDS_EVAC(V2_GS_RT1, V2_GS_RTN, V2_GS_RTR)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_RT1, V2_GS_RTN, V2_GS_RTR)
 #undef V2_GS_RT1
 #undef V2_GS_RTN
+#undef V2_GS_RTR
 #define V2_GS_RTB1(name, off) v2_gs_route[(off)] = &g_gs_evac.name;
 #define V2_GS_RTBN(name, off, n) \
     for (uint32_t i = 0; i < (n); i++) \
         v2_gs_route[(uint16_t)((off) + i)] = &g_gs_evac.name[i];
+#define V2_GS_RTBR(name, off, n, rec, fld) \
+    for (uint32_t i = 0; i < (n); i++) { \
+        uint8_t* m = (uint8_t*)&g_gs_evac.rec[i].fld; \
+        v2_gs_route[(uint16_t)((off) + 2u * i)] = m; \
+        v2_gs_route[(uint16_t)((off) + 2u * i + 1)] = m + 1; }
     V2_GS_FIELDS_EVACB(V2_GS_RTB1, V2_GS_RTBN)
 #undef V2_GS_RTB1
 #undef V2_GS_RTBN
+#undef V2_GS_RTBR
 }
 
 extern "C" void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val) {
@@ -271,17 +299,23 @@ extern "C" void v2_gs_evac_refresh(const uint8_t* ds) {
 #define V2_GS_EVN(name, off, n) \
     for (uint32_t i = 0; i < (n); i++) \
         g_gs_evac.name[i] = *(const uint16_t*)(ds + (off) + 2u * i);
-    V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN)
+#define V2_GS_EVR(name, off, n, rec, fld) \
+    for (uint32_t i = 0; i < (n); i++) \
+        g_gs_evac.rec[i].fld = *(const uint16_t*)(ds + (off) + 2u * i);
+    V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN, V2_GS_EVR)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN, V2_GS_EVR)
 #undef V2_GS_EV1
 #undef V2_GS_EVN
+#undef V2_GS_EVR
 #define V2_GS_EVB1(name, off) \
     g_gs_evac.name = ds[(off)];
 #define V2_GS_EVBN(name, off, n) \
     for (uint32_t i = 0; i < (n); i++) g_gs_evac.name[i] = ds[(off) + i];
+#define V2_GS_EVBR(name, off, n, rec, fld) V2_GS_EVBN(name, off, n)
     V2_GS_FIELDS_EVACB(V2_GS_EVB1, V2_GS_EVBN)
 #undef V2_GS_EVB1
 #undef V2_GS_EVBN
+#undef V2_GS_EVBR
 }
 
 // stage-4 bridge helper for the AIL blob interpreter: mirror a byte store
@@ -334,18 +368,28 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
     for (uint32_t i = 0; i < (n); i++) \
         V2_GS_EV_CHK(name, (off) + 2u * i, g_gs_evac.name[i], \
                      *(const uint16_t*)(ds + (off) + 2u * i));
-    V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN)
-    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN)
+#define V2_GS_EVR(name, off, n, rec, fld) \
+    for (uint32_t i = 0; i < (n); i++) \
+        V2_GS_EV_CHK(name, (off) + 2u * i, g_gs_evac.rec[i].fld, \
+                     *(const uint16_t*)(ds + (off) + 2u * i));
+    V2_GS_FIELDS_EVAC(V2_GS_EV1, V2_GS_EVN, V2_GS_EVR)
+    V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EV1, V2_GS_EVN, V2_GS_EVR)
 #undef V2_GS_EV1
 #undef V2_GS_EVN
+#undef V2_GS_EVR
 #define V2_GS_EVB1(name, off) \
     V2_GS_EV_CHK(name, (off), g_gs_evac.name, ds[(off)]);
 #define V2_GS_EVBN(name, off, n) \
     for (uint32_t i = 0; i < (n); i++) \
         V2_GS_EV_CHK(name, (off) + i, g_gs_evac.name[i], ds[(off) + i]);
+#define V2_GS_EVBR(name, off, n, rec, fld) \
+    for (uint32_t i = 0; i < (n); i++) \
+        V2_GS_EV_CHK(name, (off) + 2u * i, g_gs_evac.rec[i].fld, \
+                     *(const uint16_t*)(ds + (off) + 2u * i));
     V2_GS_FIELDS_EVACB(V2_GS_EVB1, V2_GS_EVBN)
 #undef V2_GS_EVB1
 #undef V2_GS_EVBN
+#undef V2_GS_EVBR
 #undef V2_GS_EV_CHK
     if (diffs) {
         // Bridge stage: reads still come from the image, so a desync is a
