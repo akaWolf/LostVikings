@@ -1556,7 +1556,26 @@ static bool v2_sprite_shadow_active = false;
 // v2_vm_acc_base points to whichever shadow is active (main or replay).
 // This ensures opcode handlers always write acc to the correct shadow.
 static uint8_t* v2_vm_acc_base = v2_vm_shadow_ds;
-#define v2_vm_accumulator (*(uint16_t*)(v2_vm_acc_base + 0x8A))
+// stage-4: the accumulator lives on the typed carrier. The proxy keeps the
+// 159 call sites reading/writing naturally while every store goes
+// member+image (write-through) via the mirror. acc_base may point at a
+// fn-test shadow — evac_on() is false there and the flat path is used.
+struct V2AccProxy {
+    // BRIDGE stage: reads stay flat until the frame check is clean on the
+    // full corpus (wave-7 lesson) — the read flip is a separate later step.
+    operator uint16_t() const {
+        return *(const uint16_t*)(v2_vm_acc_base + DS_ACCUMULATOR);
+    }
+    V2AccProxy& operator=(uint16_t v) {
+        uint8_t* b = v2_vm_acc_base;
+        if (v2_gs_evac_on(b)) g_gs_evac.accumulator = v;
+        *(uint16_t*)(b + DS_ACCUMULATOR) = v;
+        return *this;
+    }
+    V2AccProxy& operator&=(uint16_t v)  { return *this = (uint16_t)((uint16_t)*this & v); }
+    V2AccProxy& operator<<=(int sh)     { return *this = (uint16_t)((uint16_t)*this << sh); }
+};
+static V2AccProxy v2_vm_accumulator;
 
 // Per-opcode execution trace for verification
 struct V2VMTraceEntry {
@@ -3012,7 +3031,7 @@ static void v2_viking_death_next_12e16(uint8_t* s) {
     uint16_t si = v2gs(s).active_viking();
     si = v2_viking_death_scan_12e2d(s, si);
     v2gs(s).active_viking(si);
-    if (si == 0xFFFF) v2gs(s).frame_flags_ref() |= 2;
+    if (si == 0xFFFF) v2gs(s).frame_flags(v2gs(s).frame_flags() | (2));
 }
 
 // sub_12e84: viking cycling by input bits (0x20=prev, 0x10=next in ds:0x3B8);
@@ -7946,7 +7965,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 #ifdef V2_ONLY
     if ((v2gs(shadow).level_flags_b() & 1) && (v2gs(shadow).input_edges() & 0x2000)) {
         // Mirror orig sub_11ba5 entry: clear bit, plays pause SFX, init state, render block.
-        v2gs(shadow).frame_flags_ref() &= 0xFFFB;       // clear word_28814 bit 4 (analog viking switch)
+        v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() & (0xFFFB));       // clear word_28814 bit 4 (analog viking switch)
         extern void v2_run_pause_entry(uint8_t*);
         extern bool v2_run_pause_loop_iter_exit(uint8_t*);
         extern bool need_quit;
@@ -9637,7 +9656,7 @@ static void v2_vm_op_exit_with_flag(V2VM& vm) {
         fprintf(stderr, "V2-op_0F[%d]: pre=%d post=%d rec=%d obj=%d pc=%04X 334before=%04X\n",
             _vc, v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter, v2_orig_post_vm_frame,
             vm.obj, vm.pc, v2gs(vm.shadow).frame_flags()); }
-    v2gs(vm.shadow).frame_flags_ref() |= 1;
+    v2gs(vm.shadow).frame_flags(v2gs(vm.shadow).frame_flags() | (1));
     vm.running = false;
 }
 
@@ -14591,10 +14610,10 @@ static void v2_vm_op_55(V2VM& vm) {
         // LCG: orig: eax=dword_30b19; edx=0x15A4E35; mul edx; add eax,1;
         //            dword_30b19=eax; ror eax,16; acc=ax (low half of rotated)
         // 32-bit LCG on shadow ds:0x8639 (mirrors orig real ds:0x8639).
-        uint32_t seed = *(uint32_t*)(vm.shadow + DS_RNG_SEED);
+        uint32_t seed = (uint32_t)v2gs(vm.shadow).rng_seed_lo() | ((uint32_t)v2gs(vm.shadow).startup_cx() /* LCG hi overlays the startup probe word @863B */ << 16);
         uint64_t tmp = (uint64_t)seed * 0x15A4E35;
         seed = (uint32_t)(tmp + 1);
-        *(uint32_t*)(vm.shadow + DS_RNG_SEED) = seed;
+        { v2gs(vm.shadow).rng_seed_lo((uint16_t)seed); v2gs(vm.shadow).startup_cx((uint16_t)(seed >> 16)); }
         v2_gs_evac_mirror_span(vm.shadow, DS_RNG_SEED, 4);  // stage-4 bridge: hi word overlays startup_cx
         uint32_t result = (seed >> 16) | (seed << 16);     // ROR 16 = swap halves
         v2_vm_accumulator = (uint16_t)result;
@@ -16107,13 +16126,13 @@ static uint16_t v2_vm_read_random(V2VM& vm) {
         return rotated; // Original returns ax (the rotated value), NOT the XOR'd memory
     }
     // Path 1: LCG — eax = eax * 0x15A4E35 + 1; return ROR(eax, 16)
-    uint32_t seed = *(uint32_t*)(vm.shadow + DS_RNG_SEED); // dword_30B19
+    uint32_t seed = (uint32_t)v2gs(vm.shadow).rng_seed_lo() | ((uint32_t)v2gs(vm.shadow).startup_cx() /* LCG hi overlays the startup probe word @863B */ << 16); // dword_30B19
     // MUL edx (0x2324) clobbers EDX = high32(seed*0x15A4E35) — №40 model,
     // consumed by opcode bodies that carry a value in DX across this fetch.
     vm.ch4_mul_dx = (uint16_t)(((uint64_t)seed * 0x15A4E35ull) >> 32);
     vm.ch4_mul_clobber = true;
     seed = seed * 0x15A4E35 + 1;
-    *(uint32_t*)(vm.shadow + DS_RNG_SEED) = seed;
+    { v2gs(vm.shadow).rng_seed_lo((uint16_t)seed); v2gs(vm.shadow).startup_cx((uint16_t)(seed >> 16)); }
     v2_gs_evac_mirror_span(vm.shadow, DS_RNG_SEED, 4);  // stage-4 bridge: hi word overlays startup_cx
     uint32_t rot = (seed >> 16) | (seed << 16); // ROR eax, 16
     return (uint16_t)rot;
@@ -17253,10 +17272,10 @@ static void v2_vm_op_B6(V2VM& vm) {
         // PRNG path: dword at ds:0x8639 (dword_30B19)
         // mov eax, dword_30B19; mov edx, 15A4E35h; mul edx → edx:eax
         // add eax, 1; mov dword_30B19, eax; ror eax, 10h
-        uint32_t val = *(uint32_t*)(vm.shadow + DS_RNG_SEED);
+        uint32_t val = (uint32_t)v2gs(vm.shadow).rng_seed_lo() | ((uint32_t)v2gs(vm.shadow).startup_cx() /* LCG hi overlays the startup probe word @863B */ << 16);
         uint64_t product = (uint64_t)val * 0x15A4E35ULL;
         val = (uint32_t)(product & 0xFFFFFFFF) + 1;
-        *(uint32_t*)(vm.shadow + DS_RNG_SEED) = val;
+        { v2gs(vm.shadow).rng_seed_lo((uint16_t)val); v2gs(vm.shadow).startup_cx((uint16_t)(val >> 16)); }
         v2_gs_evac_mirror_span(vm.shadow, DS_RNG_SEED, 4);  // stage-4 bridge
         // ror eax, 16 = swap high/low words; ax = high word of stored value
         ax = (uint16_t)(val >> 16);
@@ -19964,7 +19983,7 @@ void v2_phase_post_flip1(uint16_t ds_val) {
     {
         uint16_t si = v2_viking_pick_next_12e2d(s, v2gs(s).active_viking());
         v2gs(s).active_viking(si);                     // 6051
-        if (si == 0xFFFF) v2gs(s).frame_flags_ref() |= 2;     // 6052-6054
+        if (si == 0xFFFF) v2gs(s).frame_flags(v2gs(s).frame_flags() | (2));     // 6052-6054
     }
     // sub_15530: collision pass 2
     v2_coll_sweep_15530(s);
@@ -20398,7 +20417,7 @@ void v2_phase_frame_end(uint16_t ds_val) {
                 v2gs(s).spec_key_f5_b(sdl_spec_get(0x91AB));  // SDL F5 — exact orig INT9
                 if (v2gs(s).spec_key_f5_b() == 1) { // byte_3168B == 1 (F5: prev level)
                     v2gs(s).spec_key_f5_b(0); // SDL port: clear byte (no INT 9 KEYUP path)
-                    v2gs(s).frame_flags_ref() |= 1; // OR word_28814, 1
+                    v2gs(s).frame_flags(v2gs(s).frame_flags() | (1)); // OR word_28814, 1
                     int16_t ax = level;
                     ax -= 1; // DEC ax
                     if (ax < 0) ax = 0;
@@ -20408,7 +20427,7 @@ void v2_phase_frame_end(uint16_t ds_val) {
                     v2gs(s).spec_key_f6_b(sdl_spec_get(0x91AC));  // SDL F6 — exact orig INT9
                     if (v2gs(s).spec_key_f6_b() == 1) { // byte_3168C == 1 (F6: next level)
                         v2gs(s).spec_key_f6_b(0); // SDL port: clear byte (no INT 9 KEYUP path)
-                        v2gs(s).frame_flags_ref() |= 1; // OR word_28814, 1
+                        v2gs(s).frame_flags(v2gs(s).frame_flags() | (1)); // OR word_28814, 1
                         // word_2AAA9 already set by VM (next level destination)
                     }
                 }
@@ -20485,7 +20504,7 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
         new_kd = g_last_sub12352_new_keydowns;
 #endif
         if (new_kd) {
-            v2gs(shadow).input_prev_ref() &= (uint16_t)~new_kd;
+            v2gs(shadow).input_prev(v2gs(shadow).input_prev() & ((uint16_t)~new_kd));
         }
     }
 #ifdef V2_ONLY
@@ -20588,7 +20607,7 @@ static inline void v2_blocking_loop_tick() {
 bool v2_run_viking_switch_loop(uint8_t* shadow) {
     v2_blocking_loop_tick();
     // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
-    v2gs(shadow).frame_flags_ref() &= 0xFFFB;
+    v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() & (0xFFFB));
 
     // sub_12352 (input): default mode → INPUT_UPDATE signal already updated.
     // V2_ONLY → drive ourselves.
@@ -20755,7 +20774,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         v2_gs_evac_mirror_span(s, DS_GLYPH_BUF, 0x1B8 * 2);
         bx_read += 2;                                          // 01A2:27D7 add bx, 2
     } else if (cmd_type == 4) {
-        v2gs(s).frame_flags_ref() |= 4;
+        v2gs(s).frame_flags(v2gs(s).frame_flags() | (4));
         bx_read += 2;
     } else {
         bx_read += 2;
@@ -20836,7 +20855,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
     {
         uint16_t btns = v2gs(s).frame_flags();
         if (btns & 4) {
-            v2gs(s).frame_flags_ref() &= 0xFFFB;
+            v2gs(s).frame_flags(v2gs(s).frame_flags() & (0xFFFB));
 #ifdef V2_ONLY
             extern bool need_quit;
             // Mirror orig loc_10169 inner loop (eips 0x169..0x18F): loops calling
@@ -21005,7 +21024,7 @@ static void v2_transition_kick_102ad(uint8_t* s) {
         v2gs(s).game_mode_ac(0x8002);
         v2gs(s).level_load(v2gs(s).level());
     }
-    v2gs(s).frame_flags_ref() |= 1;
+    v2gs(s).frame_flags(v2gs(s).frame_flags() | (1));
 }
 
 // sub_12250: probe ONE inventory category di (0..3). Returns true with
@@ -21710,7 +21729,7 @@ static void v2_pw_post_loop(uint8_t* shadow) {
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
 #endif
-    if (exit_ax == 0) v2gs(shadow).frame_flags_ref() |= 2;   // OR word_28814, 2
+    if (exit_ax == 0) v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() | (2));   // OR word_28814, 2
     // loc_104FF: cleanup renders (orig lines 2779-2807, two iterations of full render block)
     v2gs(shadow).text_fullscreen(1);            // word_31A49 = 1
     v2gs(shadow).ui_throttle(0);            // word_31DBC = 0

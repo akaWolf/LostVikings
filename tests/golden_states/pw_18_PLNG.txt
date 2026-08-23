@@ -240,6 +240,16 @@ obj_sub_slot           @1A85 [20]: 0030 0032 0034 0000 0048 004A 004C 0050 0052 
 obj_sub_end            @1AAD [20]: 0032 0034 0036 0000 004A 004C 0050 0052 0054 005C 0000 006C 0000 0000 0000 0000 0000 0000 0000 0000
 obj_sub_count          @1AD5 [20]: 0001 0001 0001 0000 0001 0001 0002 0001 0001 0004 0000 0008 0000 0000 0000 0000 0000 0000 0000 0000
 obj_sub_anim_ptr       @1AFD [20]: 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+accumulator            @008A = 0000
+music_mute             @0302 = 0000
+sfx_mute               @0304 = 0000
+frame_flags            @0334 = 0000
+rng_seed_lo            @8639 = 5678
+pal_chunk_addr_tbl     @854A [11]: 2E7D 317D 347D 377D 3A7D 3D7D 407D 437D 467D 066D 067F
+obj_count              @0372 = 001A
+input_keys             @03B6 = 0000
+input_edges            @03B8 = 0000
+input_prev             @03BA = 0000
 startup_cx             @863B = 1234
 int24_vector           @86AC = 0000
 int24_vector_hi        @86AE = 0000
@@ -276,16 +286,6 @@ music_track_chunk_tbl  @A384 [11]: 01EE 01E9 01D0 01D5 01DA 01DF 01F3 01E4 01F8 
 vsync_count            @A39C = 0000
 vsync_calib            @A39E = 0010
 pit_latch              @A3A0 = E3FF
-accumulator            @008A = 0000
-music_mute             @0302 = 0000
-sfx_mute               @0304 = 0000
-frame_flags            @0334 = 0000
-rng_seed_lo            @8639 = 5678
-pal_chunk_addr_tbl     @854A [11]: 2E7D 317D 347D 377D 3A7D 3D7D 407D 437D 467D 066D 067F
-obj_count              @0372 = 001A
-input_keys             @03B6 = 0000
-input_edges            @03B8 = 0000
-input_prev             @03BA = 0000
 spawn_pool0            @25C3 = 0000
 chunk_cur              @25E1 = 0075
 chunk_tile             @25E3 = 005D

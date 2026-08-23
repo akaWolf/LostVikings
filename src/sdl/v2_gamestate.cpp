@@ -215,17 +215,27 @@ V2GsEvac g_gs_evac;
 extern "C" void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val) {
     if (!v2_gs_evac_on(ds)) return;
 #define V2_GS_EM1(name, off) \
-    if (addr == (off)) { g_gs_evac.name = val; return; }
+    if (addr == (off)) { g_gs_evac.name = val; return; } \
+    /* word write one byte above our base: its lo lands in our hi */ \
+    if (addr == (uint16_t)((off) + 1)) \
+        g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0x00FF) | ((uint16_t)val << 8)); \
+    /* word write one byte below our base: its hi lands in our lo */ \
+    if ((uint16_t)(addr + 1) == (off)) \
+        g_gs_evac.name = (uint16_t)((g_gs_evac.name & 0xFF00) | (val >> 8));
 #define V2_GS_EMN(name, off, n) \
+    /* word write one byte below the array: its hi lands in [0].lo */ \
+    if ((uint16_t)(addr + 1) == (off)) \
+        g_gs_evac.name[0] = (uint16_t)((g_gs_evac.name[0] & 0xFF00) | (val >> 8)); \
     if ((uint16_t)(addr - (off)) < 2u * (n)) { \
         uint16_t _d = (uint16_t)(addr - (off)); \
-        if ((_d & 1u) == 0) g_gs_evac.name[_d >> 1] = val; \
-        else { /* odd straddle: two members share the word */ \
-            g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | (val << 8)); \
-            if ((uint32_t)(_d >> 1) + 1 < (n)) \
-                g_gs_evac.name[(_d >> 1) + 1] = (uint16_t)((g_gs_evac.name[(_d >> 1) + 1] & 0xFF00) | (val >> 8)); \
-        } \
-        return; }
+        if ((_d & 1u) == 0) { g_gs_evac.name[_d >> 1] = val; return; } \
+        /* odd straddle: two members share the word */ \
+        g_gs_evac.name[_d >> 1] = (uint16_t)((g_gs_evac.name[_d >> 1] & 0x00FF) | (val << 8)); \
+        if ((uint32_t)(_d >> 1) + 1 < (n)) { \
+            g_gs_evac.name[(_d >> 1) + 1] = (uint16_t)((g_gs_evac.name[(_d >> 1) + 1] & 0xFF00) | (val >> 8)); \
+            return; } \
+        /* last byte of the array: the write's hi belongs to a neighbour — fall through */ \
+    }
     V2_GS_FIELDS_EVAC(V2_GS_EM1, V2_GS_EMN)
     V2_GS_FIELDS_EVAC_BRIDGE(V2_GS_EM1, V2_GS_EMN)
 #undef V2_GS_EM1

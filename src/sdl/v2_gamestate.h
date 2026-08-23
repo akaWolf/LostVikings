@@ -51,6 +51,16 @@
 // the same commit as the evacuation turns every missed write channel into
 // a behavior change instead of a check report.
 #define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN) \
+  F1(accumulator,        DS_ACCUMULATOR) \
+  F1(music_mute,         DS_MUSIC_MUTE) \
+  F1(sfx_mute,           DS_SFX_MUTE) \
+  F1(frame_flags,        DS_FRAME_FLAGS) \
+  F1(rng_seed_lo,        DS_RNG_SEED) \
+  FN(pal_chunk_addr_tbl, 0x854A, 11) \
+  F1(obj_count,          DS_OBJ_COUNT) \
+  F1(input_keys,         DS_INPUT_KEYS) \
+  F1(input_edges,        DS_INPUT_EDGES) \
+  F1(input_prev,         DS_INPUT_PREV) \
   F1(startup_cx,         DS_STARTUP_CX)         \
   F1(int24_vector,       DS_INT24_VECTOR)       \
   F1(int24_vector_hi,    DS_INT24_VECTOR_HI)    \
@@ -326,17 +336,7 @@
 // the view (deserialize-based level load); until then they stay flat.
 
 // Core globals + input + scroll + collision scratch
-#define V2_GS_FIELDS_CORE(F1, FN) \
-  F1(accumulator,        DS_ACCUMULATOR) \
-  F1(music_mute,         DS_MUSIC_MUTE) \
-  F1(sfx_mute,           DS_SFX_MUTE) \
-  F1(frame_flags,        DS_FRAME_FLAGS) \
-  F1(rng_seed_lo,        DS_RNG_SEED) \
-  FN(pal_chunk_addr_tbl, 0x854A, 11) \
-  F1(obj_count,          DS_OBJ_COUNT) \
-  F1(input_keys,         DS_INPUT_KEYS) \
-  F1(input_edges,        DS_INPUT_EDGES) \
-  F1(input_prev,         DS_INPUT_PREV)
+#define V2_GS_FIELDS_CORE(F1, FN)
 
 // HUD / vikings / quit prompt
 #define V2_GS_FIELDS_HUD(F1, FN) \

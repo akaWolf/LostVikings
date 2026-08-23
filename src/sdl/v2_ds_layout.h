@@ -212,6 +212,7 @@ constexpr uint16_t DS_FS_PAGE_STRIDE = 0x8F6C; // FS page stride word = ELEMENT 
 // ---------------------------------------------------------------------------
 constexpr uint16_t DS_RNG_TIMER      = 0x0352; // word_28832: timer-path RNG word — xchg ah,al; store; rcl ax,3 (CF=0 entry); xor into stored
 constexpr uint16_t DS_RNG_SEED       = 0x8639; // dword_30B19: 32-bit LCG state — seed = seed*0x15A4E35 + 1; result = high word
+constexpr uint16_t DS_RNG_SEED_HI    = 0x863B; // high word of the 32-bit LCG state — SAME WORD as DS_STARTUP_CX (the LCG overlays the startup probe field; the carrier member is startup_cx)
 
 // ---------------------------------------------------------------------------
 // Palette pipeline (source -> shaded output -> DAC)
