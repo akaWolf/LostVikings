@@ -2147,8 +2147,102 @@ static uint32_t v2_lzss_decompress(const uint8_t* src, uint8_t* dest, uint16_t d
 // ds_ctx: the DS image receiving the orig side effects (header at 0x2BB4,
 // plane size at 0x2BBC — orig sub_10982 freads them straight into DS).
 // Defaults to the live shadow; isolated units pass their test image.
+// Stage 5.2 open-asset reader (bodies in v2_assets.cpp).
+extern "C" int v2_assets_on();
+extern "C" uint32_t v2_assets_read(uint16_t chunk_id, uint8_t* hdr8,
+                                   uint16_t* dsize, uint8_t* payload,
+                                   uint32_t max_size);
+
+// Stage 5.0 trace channel body (shared by both readers and the 5.2 asset
+// path): V2_CHUNK_TRACE=<path> appends id, dest class+offset, size, caller.
+static void v2_chunk_trace_note(char kind, uint16_t chunk_id,
+                                const uint8_t* dest, uint32_t size,
+                                void* ra) {
+    static FILE* _ct = nullptr; static int _cts = -1;
+    if (_cts < 0) { const char* e = getenv("V2_CHUNK_TRACE");
+        _cts = (e && *e) ? 1 : 0; if (_cts) _ct = fopen(e, "a"); }
+    if (!_cts || !_ct) return;
+    const char* cls = "ext"; long off = -1;
+    if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical && dest < v2_gs_evac_canonical + 0x10000)
+        { cls = "ds"; off = dest - v2_gs_evac_canonical; }
+    else if (dest >= v2_sprite_shadow && dest < v2_sprite_shadow + V2_SPRITE_SHADOW_SIZE)
+        { cls = "sprite"; off = dest - v2_sprite_shadow; }
+    else if (dest >= v2_vm_shadow_chunk && dest < v2_vm_shadow_chunk + V2_CHUNK_SHADOW_SIZE)
+        { cls = "chunk"; off = dest - v2_vm_shadow_chunk; }
+    else if (dest >= v2_vm_shadow_animdata && dest < v2_vm_shadow_animdata + V2_ANIMDATA_SHADOW_SIZE)
+        { cls = "animdata"; off = dest - v2_vm_shadow_animdata; }
+    else if (dest >= v2_vm_shadow_sound && dest < v2_vm_shadow_sound + V2_SOUND_SHADOW_SIZE)
+        { cls = "sound"; off = dest - v2_vm_shadow_sound; }
+    else if (dest >= v2_vm_shadow_tilegfx && dest < v2_vm_shadow_tilegfx + V2_TILEGFX_SHADOW_SIZE)
+        { cls = "tilegfx"; off = dest - v2_vm_shadow_tilegfx; }
+    else if (dest >= v2_vm_shadow_tilemap && dest < v2_vm_shadow_tilemap + V2_TILEMAP_SHADOW_SIZE)
+        { cls = "tilemap"; off = dest - v2_vm_shadow_tilemap; }
+    else if (dest >= v2_vm_shadow_gs && dest < v2_vm_shadow_gs + V2_GS_SHADOW_SIZE)
+        { cls = "gsmask"; off = dest - v2_vm_shadow_gs; }
+    else if (dest >= v2_vm_shadow_gs_tiledata && dest < v2_vm_shadow_gs_tiledata + V2_GS_TILEDATA_SIZE)
+        { cls = "gstiledata"; off = dest - v2_vm_shadow_gs_tiledata; }
+    fprintf(_ct, "%c %04X %s %ld %u %p\n", kind, chunk_id, cls, off, size, ra);
+    fflush(_ct);
+}
+
+static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
+                                      uint8_t* ds_ctx = nullptr);
 static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
                               uint8_t* ds_ctx = nullptr) {
+    uint8_t* dctx = ds_ctx ? ds_ctx : v2_vm_shadow_ds;
+    if (chunk_id == 0xFFFA) return 0; // special: no-op
+    // (the archive handle opens inside v2_read_chunk_archive — the asset
+    // path below must work with DATA.DAT absent entirely)
+
+    // Stage 5.2: open-asset path (V2_ASSETS_DIR). Reproduces every DS side
+    // effect of the archive loader: the 8B table header @2BB4, the u16
+    // decomp size @2BBC, the FS ring image of the LZSS output window, and
+    // the payload itself (round-trip-judged equal to the DATA.DAT stream).
+    {
+        if (v2_assets_on()) {
+            // The record carries the chunk's COMP BLOCK exactly as the
+            // archive stores it — run the SAME decompression path over it
+            // (header mirror, FS+0x1000 comp copy, ring scratch, LZSS),
+            // so every side effect matches the archive loader by
+            // construction. Record layout: [8B header][comp block].
+            static uint8_t rec[0x10000 + 16];
+            uint8_t hdr8[8]; uint16_t first2 = 0;
+            uint32_t clen = v2_assets_read(chunk_id, hdr8, &first2,
+                                           rec, sizeof(rec));
+            if (clen >= 2) {
+                memcpy(dctx + DS_CHUNK_HDR, hdr8, 8);
+                v2_gs_evac_mirror_span(dctx, DS_CHUNK_HDR, 8);
+                uint16_t decompressed_size = first2;   // u16 lead of the block
+                v2gs(dctx).decomp_size(decompressed_size);
+                // fs_read_size = low 16 bits of (comp_size incl. the u16),
+                // mirrors the archive's CX read into FS:0x1000.
+                uint32_t comp_size = clen;   // rec = [u16][stream]
+                uint32_t fs_read_size = (uint16_t)comp_size;
+                uint32_t avail = (clen >= 2) ? clen - 2 : 0;
+                uint32_t copy = fs_read_size < avail ? fs_read_size : avail;
+                memcpy(v2_vm_shadow_fs + 0x1000, rec + 2, copy);
+                memset(v2_vm_shadow_fs, 0, 0x1000);
+                static uint8_t comp_buf2[0x10000];
+                memcpy(comp_buf2, v2_vm_shadow_fs + 0x1000, copy);
+                uint32_t result = v2_lzss_decompress(comp_buf2, dest,
+                                                     decompressed_size,
+                                                     v2_vm_shadow_fs);
+                v2_chunk_trace_note('C', chunk_id, dest, result,
+                                    __builtin_return_address(0));
+                if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical
+                    && dest < v2_gs_evac_canonical + 0x10000)
+                    v2_gs_evac_mirror_span(v2_gs_evac_canonical,
+                                           (uint32_t)(dest - v2_gs_evac_canonical), result);
+                return result;
+            }
+            // fall through to DATA.DAT on a miss (loud note already printed)
+        }
+    }
+    return v2_read_chunk_archive(chunk_id, dest, max_size, ds_ctx);
+}
+
+static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
+                                      uint8_t* ds_ctx) {
     uint8_t* dctx = ds_ctx ? ds_ctx : v2_vm_shadow_ds;
     if (!v2_data_handle) {
         v2_data_handle = fopen("DATA.DAT", "rb");
@@ -2229,38 +2323,7 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
             }
         }
     }
-    // Stage 5.0: chunk-usage trace. V2_CHUNK_TRACE=<path> appends one line
-    // per read: id, destination class+offset, size, caller RA (resolved
-    // offline via addr2line) — builds the fact-based chunk role map.
-    {
-        static FILE* _ct = nullptr; static int _cts = -1;
-        if (_cts < 0) { const char* e = getenv("V2_CHUNK_TRACE");
-            _cts = (e && *e) ? 1 : 0; if (_cts) _ct = fopen(e, "a"); }
-        if (_cts && _ct) {
-            const char* cls = "ext"; long off = -1;
-            if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical && dest < v2_gs_evac_canonical + 0x10000)
-                { cls = "ds"; off = dest - v2_gs_evac_canonical; }
-            else if (dest >= v2_sprite_shadow && dest < v2_sprite_shadow + V2_SPRITE_SHADOW_SIZE)
-                { cls = "sprite"; off = dest - v2_sprite_shadow; }
-            else if (dest >= v2_vm_shadow_chunk && dest < v2_vm_shadow_chunk + V2_CHUNK_SHADOW_SIZE)
-                { cls = "chunk"; off = dest - v2_vm_shadow_chunk; }
-            else if (dest >= v2_vm_shadow_animdata && dest < v2_vm_shadow_animdata + V2_ANIMDATA_SHADOW_SIZE)
-                { cls = "animdata"; off = dest - v2_vm_shadow_animdata; }
-            else if (dest >= v2_vm_shadow_sound && dest < v2_vm_shadow_sound + V2_SOUND_SHADOW_SIZE)
-                { cls = "sound"; off = dest - v2_vm_shadow_sound; }
-            else if (dest >= v2_vm_shadow_tilegfx && dest < v2_vm_shadow_tilegfx + V2_TILEGFX_SHADOW_SIZE)
-                { cls = "tilegfx"; off = dest - v2_vm_shadow_tilegfx; }
-            else if (dest >= v2_vm_shadow_tilemap && dest < v2_vm_shadow_tilemap + V2_TILEMAP_SHADOW_SIZE)
-                { cls = "tilemap"; off = dest - v2_vm_shadow_tilemap; }
-            else if (dest >= v2_vm_shadow_gs && dest < v2_vm_shadow_gs + V2_GS_SHADOW_SIZE)
-                { cls = "gsmask"; off = dest - v2_vm_shadow_gs; }
-            else if (dest >= v2_vm_shadow_gs_tiledata && dest < v2_vm_shadow_gs_tiledata + V2_GS_TILEDATA_SIZE)
-                { cls = "gstiledata"; off = dest - v2_vm_shadow_gs_tiledata; }
-            fprintf(_ct, "C %04X %s %ld %u %p\n", chunk_id, cls, off,
-                    result, __builtin_return_address(0));
-            fflush(_ct);
-        }
-    }
+    v2_chunk_trace_note('C', chunk_id, dest, result, __builtin_return_address(0));
     // stage-4 bridge: chunk payloads land straight in a DS image (fread +
     // LZSS write dest directly). When dest is inside the canonical shadow,
     // refresh the members it covers — closes EVERY read_chunk call site at
@@ -2306,8 +2369,38 @@ extern "C" uint32_t v2_fntest_call_read_chunk(uint16_t chunk_id, uint8_t* dest,
 // sub_10cd8: read raw chunk (no LZSS decompression).
 // Reads plane_size (2 bytes) + raw data (plane_size * 4 bytes) from DATA.DAT.
 // Returns plane_size. dest receives raw plane data (plane_size * 4 bytes).
+static uint16_t v2_read_raw_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
+                                          uint8_t* hdr8_out);
 static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
                                   uint8_t* hdr8_out = nullptr) {
+    // Stage 5.2: open-asset path (see v2_read_chunk). Raw records store the
+    // u16 plane_size in the same slot the LZSS records keep decomp_size.
+    {
+        if (v2_assets_on()) {
+            static uint8_t rrec[0x20000];
+            uint8_t hdr8[8]; uint16_t psz = 0;
+            uint32_t clen = v2_assets_read(chunk_id, hdr8, &psz, rrec, sizeof(rrec));
+            if (clen >= 2) {
+                if (hdr8_out) memcpy(hdr8_out, hdr8, 8);
+                uint32_t data_size = (uint32_t)psz * 4;
+                if (data_size > max_size) data_size = max_size;
+                uint32_t avail = clen - 2;
+                if (data_size > avail) data_size = avail;
+                memcpy(dest, rrec + 2, data_size);
+                v2_chunk_trace_note('R', chunk_id, dest, data_size, __builtin_return_address(0));
+                if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical
+                    && dest < v2_gs_evac_canonical + 0x10000)
+                    v2_gs_evac_mirror_span(v2_gs_evac_canonical,
+                                           (uint32_t)(dest - v2_gs_evac_canonical), data_size);
+                return psz;
+            }
+        }
+    }
+    return v2_read_raw_chunk_archive(chunk_id, dest, max_size, hdr8_out);
+}
+
+static uint16_t v2_read_raw_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
+                                          uint8_t* hdr8_out) {
     if (!v2_data_handle) {
         v2_data_handle = fopen("DATA.DAT", "rb");
         if (!v2_data_handle) return 0;
@@ -2335,24 +2428,7 @@ static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max
     if (data_size > max_size) data_size = max_size;
     if (fread(dest, 1, data_size, v2_data_handle) != data_size) return 0;
 
-    // Stage 5.0: same trace channel for the raw reader.
-    {
-        static FILE* _ct = nullptr; static int _cts = -1;
-        if (_cts < 0) { const char* e = getenv("V2_CHUNK_TRACE");
-            _cts = (e && *e) ? 1 : 0; if (_cts) _ct = fopen(e, "a"); }
-        if (_cts && _ct) {
-            const char* cls = "ext"; long off = -1;
-            if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical && dest < v2_gs_evac_canonical + 0x10000)
-                { cls = "ds"; off = dest - v2_gs_evac_canonical; }
-            else if (dest >= v2_sprite_shadow && dest < v2_sprite_shadow + V2_SPRITE_SHADOW_SIZE)
-                { cls = "sprite"; off = dest - v2_sprite_shadow; }
-            else if (dest >= v2_vm_shadow_chunk && dest < v2_vm_shadow_chunk + V2_CHUNK_SHADOW_SIZE)
-                { cls = "chunk"; off = dest - v2_vm_shadow_chunk; }
-            fprintf(_ct, "R %04X %s %ld %u %p\n", chunk_id, cls, off,
-                    (unsigned)data_size, __builtin_return_address(0));
-            fflush(_ct);
-        }
-    }
+    v2_chunk_trace_note('R', chunk_id, dest, data_size, __builtin_return_address(0));
     // stage-4 bridge: same as v2_read_chunk — raw payloads into the DS image.
     if (v2_gs_evac_canonical && dest >= v2_gs_evac_canonical
         && dest < v2_gs_evac_canonical + 0x10000)
@@ -2659,7 +2735,7 @@ static void v2_vsync_wait_10130(uint8_t* s) {
 #ifdef V2_ONLY
         v2_nopl_pump();
 #endif
-#ifdef V2_ONLY
+#if defined(V2_ONLY) && !defined(HEADLESS)
         SDL_Delay(16);                // vsync 60Hz pacing for interactive
 #elif defined(HEADLESS)
         // headless: no display → spin without pacing (render thread decrements
@@ -6255,26 +6331,49 @@ static void v2_dos_init_12948(uint8_t* s) {
 static void v2_open_data_dat_12989(uint8_t* s) {
     // INT 21h/3Dh: open "DATA.DAT" for reading
     // Original stores handle in ds:0x2BB2
-    if (!v2_data_handle) {
-        v2_data_handle = fopen("DATA.DAT", "rb");
-    }
-    if (!v2_data_handle) {
-        printf("V2-STARTUP: failed to open DATA.DAT\n");
-        return;
+    // Stage 5.2: the asset branch must run BEFORE the archive-open gate —
+    // the whole point is booting with DATA.DAT absent.
+    if (!v2_assets_on()) {
+        if (!v2_data_handle) {
+            v2_data_handle = fopen("DATA.DAT", "rb");
+        }
+        if (!v2_data_handle) {
+            printf("V2-STARTUP: failed to open DATA.DAT\n");
+            return;
+        }
     }
 
     // fread 8 bytes → ds:0x2BB4..0x2BBB (chunk table header)
     // Original: INT 21h/3Fh, cx=8, dx=0x2BB4
-    fseek(v2_data_handle, 0, SEEK_SET);
-    fread(s + DS_CHUNK_HDR, 8, 1, v2_data_handle);
-    v2_gs_evac_mirror_span(s, DS_CHUNK_HDR, 8);  // stage-4 bridge
+    // Stage 5.2: with the open-asset tree the same bytes come from record 0
+    // — its 8B header IS the first 8 bytes of the archive table, and its
+    // comp block starts exactly at offset[0] where the 0x20 game header
+    // lives (structural fact: the game header is chunk 0's comp block).
+    bool hdr_from_assets = false;
+    if (v2_assets_on()) {
+        static uint8_t rec0[64];
+        uint8_t hdr8[8]; uint16_t lead = 0;
+        uint32_t n = v2_assets_read(0, hdr8, &lead, rec0, sizeof(rec0));
+        if (n >= 0x20) {
+            memcpy(s + DS_CHUNK_HDR, hdr8, 8);
+            v2_gs_evac_mirror_span(s, DS_CHUNK_HDR, 8);
+            memcpy(s + 0x86B0, rec0, 0x20);
+            v2_gs_evac_mirror_span(s, 0x86B0, 0x20);
+            hdr_from_assets = true;
+        }
+    }
+    if (!hdr_from_assets) {
+        fseek(v2_data_handle, 0, SEEK_SET);
+        fread(s + DS_CHUNK_HDR, 8, 1, v2_data_handle);
+        v2_gs_evac_mirror_span(s, DS_CHUNK_HDR, 8);  // stage-4 bridge
 
-    // fseek to offset from header, fread 0x20 bytes → ds:0x86B0..0x86CF (game header)
-    // Original: INT 21h/42h (seek), INT 21h/3Fh (read 0x20 bytes)
-    uint32_t header_offset = *(uint32_t*)(s + DS_CHUNK_HDR);
-    fseek(v2_data_handle, header_offset, SEEK_SET);
-    fread(s + 0x86B0, 0x20, 1, v2_data_handle);
-    v2_gs_evac_mirror_span(s, 0x86B0, 0x20);  // stage-4 bridge: mute_src/sound_card/music_card/magic
+        // fseek to offset from header, fread 0x20 bytes → ds:0x86B0..0x86CF (game header)
+        // Original: INT 21h/42h (seek), INT 21h/3Fh (read 0x20 bytes)
+        uint32_t header_offset = *(uint32_t*)(s + DS_CHUNK_HDR);
+        fseek(v2_data_handle, header_offset, SEEK_SET);
+        fread(s + 0x86B0, 0x20, 1, v2_data_handle);
+        v2_gs_evac_mirror_span(s, 0x86B0, 0x20);  // stage-4 bridge: mute_src/sound_card/music_card/magic
+    }
 
     // Validate magic: ds:0x86C4 == 0x6969
     if (v2gs(s).datadat_magic() != 0x6969) {
@@ -7888,7 +7987,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             if (need_quit) break;                 // Ctrl-C / SIGTERM exits dialog
             if (v2_pw_iter_body(shadow)) break;
             v2_do_render();
+#ifndef HEADLESS
             SDL_Delay(16);  // pacing for V2_ONLY interactive
+#endif
         }
         v2_pw_post_loop(shadow);
         if (need_save) {
@@ -8034,7 +8135,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             if (need_quit) break;                       // Ctrl-C / SIGTERM exits pause
             if (v2_run_pause_loop_iter_exit(shadow)) break;
             v2_do_render();
+#ifndef HEADLESS
             SDL_Delay(16);  // V2_ONLY pacing — interactive
+#endif
         }
     }
 #endif
@@ -19190,7 +19293,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         if (v2_pw_iter_body(s)) break;
                         v2_do_render();
 #ifdef V2_ONLY
-                        SDL_Delay(16);  // pacing for V2_ONLY interactive
+            #ifndef HEADLESS
+            SDL_Delay(16);  // pacing for V2_ONLY interactive
+#endif
 #endif
                     }
                     v2_pw_post_loop(s);

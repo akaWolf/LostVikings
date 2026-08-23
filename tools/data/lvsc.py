@@ -207,7 +207,9 @@ def cmd_locate(path, addr):
 
 def main():
     if sys.argv[1] == 'build':
-        cmd_build(sys.argv[2], int(sys.argv[3], 16))
+        img = cmd_build(sys.argv[2], int(sys.argv[3], 16))
+        if '--emit-bin' in sys.argv:
+            open(sys.argv[2] + '.bin', 'wb').write(img)
         return 0
     if sys.argv[1] == 'locate':
         return cmd_locate(sys.argv[2], int(sys.argv[3], 16))

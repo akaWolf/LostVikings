@@ -153,6 +153,10 @@ CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 # verify hash kernels were ~77% of CPU at the project-wide -O0.
 # gcc takes the LAST -O flag, so appending wins over the -O0 in $(DBG).
 $(OBJDIR)/src/sdl/v2_hash_hot.o: CXXFLAGS += -O2
+# v2_vm.cpp peaks >13G under -ggdb3 var-tracking in the V2_ONLY+HEADLESS
+# combo (gen includes + the asset facade) — cap the debug detail for this
+# one unit; everything else keeps full -ggdb3.
+$(OBJDIR)/src/sdl/v2_vm.o: CXXFLAGS += -g1 -fno-var-tracking-assignments
 
 # (#85) The m2c world is NOT -O2-clean: at -O2 the translated goto-labyrinth
 # miscompiles (attract: a stray stack word inside seg002 sub_1c155 shifts the
@@ -190,6 +194,7 @@ CXX_SRCS := \
   src/sdl/v2_ail_interp.cpp \
   src/sdl/v2_ail.cpp \
   src/sdl/v2_gamestate.cpp \
+  src/sdl/v2_assets.cpp \
   src/sdl/v2_keymap.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
@@ -218,7 +223,8 @@ CXX_SRCS := \
   src/sdl/v2_native_opl.cpp \
   src/sdl/v2_ail_interp.cpp \
   src/sdl/v2_ail.cpp \
-  src/sdl/v2_gamestate.cpp
+  src/sdl/v2_gamestate.cpp \
+  src/sdl/v2_assets.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
 CXX_SRCS += src/sdl/play.cpp

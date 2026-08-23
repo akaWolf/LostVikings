@@ -48,11 +48,16 @@ def role_of(caller, cls, off, kind):
     if cls == "sprite":
         return "sprite_gfx"                    # sprite loader 5320
     if cls == "chunk":
-        return "screen_gfx"                    # intro/title screens (10cd8 raw + 5354 banks)
+        # kind R = sub_10cd8 raw screens; kind C = LZSS anim/tile banks
+        if kind == "R":
+            return "screen_gfx"
+        return "anim_bank"
     if cls == "tilegfx":
         return "tileset"                       # level tile graphics (11204 step 1)
     if cls == "gsmask":
-        return "collision_masks"               # tile_chunk+1 (11204 step 2)
+        # 8 bytes per 64B tile (off>>3): per-pixel transparency bits for the
+        # masked-tile pass (v2_render_tile_masked) — NOT collision data.
+        return "tile_masks"
     if cls == "tilemap":
         return "tilemap"                       # level map (11204 step 3)
     if cls == "gstiledata":
@@ -100,6 +105,14 @@ for mc in range(5):
 # screens hard-referenced by v2_load_level_data (flag paths not hit by the canon)
 STATIC_ROLES[0x211] = "screen_hud_only"
 STATIC_ROLES[0x213] = "screen_intro2"
+# signature facts for canon-unreachable content (verified structurally):
+# 0x212: comp == [u16 ps][ps*4] EXACTLY -> raw 344x176 screen (the 211/213 pair's sibling)
+# 0x215: FORM/XDIR header -> an XMID sequence outside the music table (jingle)
+# 48-byte chunks with every byte <= 0x3F -> 16-color palettes
+STATIC_ROLES[0x212] = "screen_by_sig"
+STATIC_ROLES[0x215] = "xmid_extra"
+for pc in (0x0AD, 0x0F1, 0x1B8, 0x1BE):
+    STATIC_ROLES[pc] = "palette16_by_sig"
 
 man = json.load(open(os.path.join(ROOT, "assets_raw/manifest.json")))
 entries = {e["id"]: e for e in man["entries"]}
@@ -118,11 +131,33 @@ for cid in sorted(entries):
             roles = [STATIC_ROLES[cid] if r == 'sound_driver_or_bank' else r for r in roles]
     if not roles:
         roles = ["unreferenced"]
+    kinds = {k for k, _, _, _ in m["readers"]} if m else set()
+    container = "raw" if kinds == {"R"} else ("lzss" if kinds else "lzss?")
+    if cid in (0x211, 0x212, 0x213):
+        container = "raw"   # static screens: the 10cd8 (raw) path / exact-fit signature
     out_map[f"{cid:04X}"] = {
         "comp_size": e["comp_size"], "decomp_size": e["decomp_size"],
+        "container": container,
         "roles": roles,
         "readers": [f"{k} {fn} {cls}@{off}" for k, fn, cls, off in m["readers"]] if m else [],
     }
+# --- enrichment: level_header stripes carry width/height and the three
+# resource chunk ids (verified offsets 0x29/0x2B/0x2E/0x30/0x32 = DS
+# 25DC/25DE/25E1/25E3/25E5 minus the 25B3 stripe base; 8/8 spot-check OK).
+def _w16(b, o): return b[o] | (b[o+1] << 8)
+for cid_hex, v in out_map.items():
+    if v["roles"][0] != "level_header_stripe": continue
+    d = open(os.path.join(ROOT, f"assets_raw/chunks/dec/{int(cid_hex,16):04d}.bin"), "rb").read()
+    if len(d) < 0x34: continue
+    W, H = _w16(d, 0x29), _w16(d, 0x2B)
+    cur, tile, bg = _w16(d, 0x2E), _w16(d, 0x30), _w16(d, 0x32)
+    v["level"] = {"width": W, "height": H,
+                  "tilemap": f"{cur:04X}", "tileset": f"{tile:04X}",
+                  "bg_tileset": f"{bg:04X}"}
+    tm = out_map.get(f"{cur:04X}")
+    if tm is not None:
+        tm["width"] = W; tm["height"] = H; tm["header"] = cid_hex
+
 seen = sum(1 for v in out_map.values() if v["roles"] != ["unreferenced"])
 print(f"referenced: {seen}/{len(out_map)}")
 json.dump(out_map, open(os.path.join(ROOT, "assets_raw/chunk_map.json"), "w"), indent=1)
