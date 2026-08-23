@@ -205,7 +205,72 @@
   F1(map_bp,             DS_MAP_BP) \
   F1(map_height,         DS_MAP_HEIGHT) \
   F1(level_var_25c5,     0x25C5) \
-  F1(level_var_25c7,     0x25C7)
+  F1(level_var_25c7,     0x25C7) \
+  FN(spr_flags,     OBJ_SPRITE_FLAGS, 128) \
+  FN(spr_class,     OBJ_SUB_CLASS,    128) \
+  FN(spr_x,         OBJ_SPRITE_X,     128) \
+  FN(spr_y,         OBJ_SPRITE_Y,     128) \
+  FN(spr_off,       OBJ_SPRITE_OFF,   128) \
+  FN(spr_seg,       OBJ_SPRITE_SEG,   128) \
+  FN(spr_src_base,  OBJ_SUB_SRC_BASE, 128) \
+  FN(spr_src_seg,   OBJ_SUB_SRC_SEG,  128) \
+  FN(spr_strips,    OBJ_STRIP_COUNT,  128) \
+  FN(spr_cur_x,     OBJ_SPRITE_CUR_X, 128) \
+  FN(spr_cur_y,     OBJ_SPRITE_CUR_Y, 128) \
+  FN(spr_old_x,     OBJ_SPRITE_OLD_X, 128) \
+  FN(spr_old_y,     OBJ_SPRITE_OLD_Y, 128) \
+  FN(spr_dirty,     OBJ_DIRTY_MODE,   128) \
+  FN(obj_pc,          OBJ_PC,          20) \
+  FN(obj_code_seg,    OBJ_CODE_SEG,    20) \
+  FN(obj_alt_pc,      OBJ_ALT_PC,      20) \
+  FN(obj_x_prev,      OBJ_X_PREV,      20) \
+  FN(obj_y_prev,      OBJ_Y_PREV,      20) \
+  FN(obj_coll_bits,   OBJ_COLL_BITS,   20) \
+  FN(obj_anim_table,  OBJ_ANIM_TABLE,  20) \
+  FN(obj_width,       OBJ_WIDTH,       20) \
+  FN(obj_height,      OBJ_HEIGHT,      20) \
+  FN(obj_half_h,      OBJ_HALF_H,      20) \
+  FN(obj_half_w,      OBJ_HALF_W,      20) \
+  FN(obj_bbox_y0,     OBJ_BBOX_Y0,     20) \
+  FN(obj_bbox_y1,     OBJ_BBOX_Y1,     20) \
+  FN(obj_bbox_x0,     OBJ_BBOX_X0,     20) \
+  FN(obj_bbox_x1,     OBJ_BBOX_X1,     20) \
+  FN(obj_flags,       OBJ_FLAGS,       20) \
+  FN(obj_res_handle,  OBJ_RES_HANDLE,  20) \
+  FN(obj_res_cost,    OBJ_RES_COST,    20) \
+  FN(obj_state_idx,   OBJ_STATE_IDX,   20) \
+  FN(obj_class_bits,  OBJ_CLASS_BITS,  20) \
+  FN(obj_anim_dx,     OBJ_ANIM_DX,     20) \
+  FN(obj_anim_dy,     OBJ_ANIM_DY,     20) \
+  FN(obj_spawn_pool,  OBJ_SPAWN_POOL,  20) \
+  FN(obj_anim_sub,    OBJ_ANIM_SUB,    20) \
+  FN(obj_anim_idx,    OBJ_ANIM_IDX,    20) \
+  FN(obj_timer,       OBJ_TIMER,       20) \
+  FN(obj_world_x,     OBJ_WORLD_X,     20) \
+  FN(obj_world_y,     OBJ_WORLD_Y,     20) \
+  FN(obj_vel_x_max,   OBJ_VEL_X_MAX,   20) \
+  FN(obj_vel_y_max,   OBJ_VEL_Y_MAX,   20) \
+  FN(obj_type_id,     OBJ_TYPE_ID,     20) \
+  FN(obj_parent,      OBJ_PARENT,      20) \
+  FN(obj_child,       OBJ_CHILD,       20) \
+  FN(obj_sprite_base, OBJ_SPRITE_BASE, 20) \
+  FN(obj_state_187d,  OBJ_STATE_187D,  20) \
+  FN(obj_state_18a5,  OBJ_STATE_18A5,  20) \
+  FN(obj_state_18cd,  OBJ_STATE_18CD,  20) \
+  FN(obj_state_18f5,  OBJ_STATE_18F5,  20) \
+  FN(obj_cur_sprite,  OBJ_CUR_SPRITE_IDX, 20) \
+  FN(obj_vel_x,       OBJ_VEL_X,       20) \
+  FN(obj_vel_y,       OBJ_VEL_Y,       20) \
+  FN(obj_partner,     OBJ_PARTNER,     20) \
+  FN(obj_frac_x,      OBJ_FRAC_X,      20) \
+  FN(obj_frac_y,      OBJ_FRAC_Y,      20) \
+  FN(obj_anim_pc,     OBJ_ANIM_PC,     20) \
+  FN(obj_anim_timer,  OBJ_ANIM_TIMER,  20) \
+  FN(obj_anim_cont,   OBJ_ANIM_CONT,   20) \
+  FN(obj_sub_slot,    OBJ_SUB_SLOT,    20) \
+  FN(obj_sub_end,     OBJ_SUB_END,     20) \
+  FN(obj_sub_count,   OBJ_SUB_COUNT,   20) \
+  FN(obj_sub_anim_ptr,OBJ_SUB_ANIM_PTR,20)
 // bulk-copies on level switch — the evac check caught the desync on the
 // level-3→4 transition. They evacuate only after that copy goes through
 // the view (deserialize-based level load); until then they stay flat.
@@ -292,79 +357,13 @@
   F1(pit_latch,          DS_PIT_LATCH)
 
 // Spec-key init bit-mask words (INT9 cluster)
-#define V2_GS_FIELDS_SPEC(F1, FN) \
-
+#define V2_GS_FIELDS_SPEC(F1, FN)
 // Sprite table columns — 128 contiguous words each (slot addressing obj=slot*2)
-#define V2_GS_FIELDS_SPRITE(F1, FN) \
-  FN(spr_flags,     OBJ_SPRITE_FLAGS, 128) \
-  FN(spr_class,     OBJ_SUB_CLASS,    128) \
-  FN(spr_x,         OBJ_SPRITE_X,     128) \
-  FN(spr_y,         OBJ_SPRITE_Y,     128) \
-  FN(spr_off,       OBJ_SPRITE_OFF,   128) \
-  FN(spr_seg,       OBJ_SPRITE_SEG,   128) \
-  FN(spr_src_base,  OBJ_SUB_SRC_BASE, 128) \
-  FN(spr_src_seg,   OBJ_SUB_SRC_SEG,  128) \
-  FN(spr_strips,    OBJ_STRIP_COUNT,  128) \
-  FN(spr_cur_x,     OBJ_SPRITE_CUR_X, 128) \
-  FN(spr_cur_y,     OBJ_SPRITE_CUR_Y, 128) \
-  FN(spr_old_x,     OBJ_SPRITE_OLD_X, 128) \
-  FN(spr_old_y,     OBJ_SPRITE_OLD_Y, 128) \
-  FN(spr_dirty,     OBJ_DIRTY_MODE,   128)
+#define V2_GS_FIELDS_SPRITE(F1, FN)
 
 // VM object table columns — 20 contiguous words each (stride 0x28 between
 // column bases; the region is a dense run of 20-word columns)
-#define V2_GS_FIELDS_OBJ(F1, FN) \
-  FN(obj_pc,          OBJ_PC,          20) \
-  FN(obj_code_seg,    OBJ_CODE_SEG,    20) \
-  FN(obj_alt_pc,      OBJ_ALT_PC,      20) \
-  FN(obj_x_prev,      OBJ_X_PREV,      20) \
-  FN(obj_y_prev,      OBJ_Y_PREV,      20) \
-  FN(obj_coll_bits,   OBJ_COLL_BITS,   20) \
-  FN(obj_anim_table,  OBJ_ANIM_TABLE,  20) \
-  FN(obj_width,       OBJ_WIDTH,       20) \
-  FN(obj_height,      OBJ_HEIGHT,      20) \
-  FN(obj_half_h,      OBJ_HALF_H,      20) \
-  FN(obj_half_w,      OBJ_HALF_W,      20) \
-  FN(obj_bbox_y0,     OBJ_BBOX_Y0,     20) \
-  FN(obj_bbox_y1,     OBJ_BBOX_Y1,     20) \
-  FN(obj_bbox_x0,     OBJ_BBOX_X0,     20) \
-  FN(obj_bbox_x1,     OBJ_BBOX_X1,     20) \
-  FN(obj_flags,       OBJ_FLAGS,       20) \
-  FN(obj_res_handle,  OBJ_RES_HANDLE,  20) \
-  FN(obj_res_cost,    OBJ_RES_COST,    20) \
-  FN(obj_state_idx,   OBJ_STATE_IDX,   20) \
-  FN(obj_class_bits,  OBJ_CLASS_BITS,  20) \
-  FN(obj_anim_dx,     OBJ_ANIM_DX,     20) \
-  FN(obj_anim_dy,     OBJ_ANIM_DY,     20) \
-  FN(obj_spawn_pool,  OBJ_SPAWN_POOL,  20) \
-  FN(obj_anim_sub,    OBJ_ANIM_SUB,    20) \
-  FN(obj_anim_idx,    OBJ_ANIM_IDX,    20) \
-  FN(obj_timer,       OBJ_TIMER,       20) \
-  FN(obj_world_x,     OBJ_WORLD_X,     20) \
-  FN(obj_world_y,     OBJ_WORLD_Y,     20) \
-  FN(obj_vel_x_max,   OBJ_VEL_X_MAX,   20) \
-  FN(obj_vel_y_max,   OBJ_VEL_Y_MAX,   20) \
-  FN(obj_type_id,     OBJ_TYPE_ID,     20) \
-  FN(obj_parent,      OBJ_PARENT,      20) \
-  FN(obj_child,       OBJ_CHILD,       20) \
-  FN(obj_sprite_base, OBJ_SPRITE_BASE, 20) \
-  FN(obj_state_187d,  OBJ_STATE_187D,  20) \
-  FN(obj_state_18a5,  OBJ_STATE_18A5,  20) \
-  FN(obj_state_18cd,  OBJ_STATE_18CD,  20) \
-  FN(obj_state_18f5,  OBJ_STATE_18F5,  20) \
-  FN(obj_cur_sprite,  OBJ_CUR_SPRITE_IDX, 20) \
-  FN(obj_vel_x,       OBJ_VEL_X,       20) \
-  FN(obj_vel_y,       OBJ_VEL_Y,       20) \
-  FN(obj_partner,     OBJ_PARTNER,     20) \
-  FN(obj_frac_x,      OBJ_FRAC_X,      20) \
-  FN(obj_frac_y,      OBJ_FRAC_Y,      20) \
-  FN(obj_anim_pc,     OBJ_ANIM_PC,     20) \
-  FN(obj_anim_timer,  OBJ_ANIM_TIMER,  20) \
-  FN(obj_anim_cont,   OBJ_ANIM_CONT,   20) \
-  FN(obj_sub_slot,    OBJ_SUB_SLOT,    20) \
-  FN(obj_sub_end,     OBJ_SUB_END,     20) \
-  FN(obj_sub_count,   OBJ_SUB_COUNT,   20) \
-  FN(obj_sub_anim_ptr,OBJ_SUB_ANIM_PTR,20)
+#define V2_GS_FIELDS_OBJ(F1, FN)
 
 // Word aggregate WITHOUT the evacuated fields — the views generate flat
 // accessors from this and EVAC-backed accessors from V2_GS_FIELDS_EVAC.

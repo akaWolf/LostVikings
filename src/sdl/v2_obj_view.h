@@ -17,6 +17,13 @@
 
 #include <cstdint>
 #include "v2_ds_layout.h"
+#include "v2_gamestate.h"   // stage-4 II.c: evac mirror on the raw write path
+
+// stage-4 II.c: byte write into an object column with the evac mirror.
+static inline void v2_objmem_w8(uint8_t* s, uint16_t addr, uint8_t v) {
+    v2_gs_evac_mirror_b(s, addr, v);
+    s[addr] = v;
+}
 
 struct ObjMem {
     uint8_t* s;
@@ -24,7 +31,9 @@ struct ObjMem {
 
     uint16_t u16(uint16_t col) const { return *(uint16_t*)(s + (uint16_t)(slot + col)); }
     int16_t  i16(uint16_t col) const { return (int16_t)u16(col); }
-    void     w16(uint16_t col, uint16_t v) const { *(uint16_t*)(s + (uint16_t)(slot + col)) = v; }
+    void     w16(uint16_t col, uint16_t v) const {
+        v2_gs_evac_mirror_w(s, (uint16_t)(slot + col), v);   // stage-4 II.c
+        *(uint16_t*)(s + (uint16_t)(slot + col)) = v; }
 
     uint16_t flags()      const { return u16(OBJ_FLAGS); }
     uint16_t code_seg()   const { return u16(OBJ_CODE_SEG); }

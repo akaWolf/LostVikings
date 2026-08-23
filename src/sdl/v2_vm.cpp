@@ -2981,8 +2981,8 @@ static void v2_viking_cycle_12e84(uint8_t* s) {
     }
     if (si_v >= 0) {
         uint16_t di_v = ObjMem{s, (uint16_t)si_v}.sub_slot();
-        *(uint16_t*)(s + di_v + OBJ_SPRITE_FLAGS) &= 0xDFFF;
-        s[di_v + OBJ_DIRTY_MODE] = 2;
+        ObjMem{s, (uint16_t)(di_v)}.w16(OBJ_SPRITE_FLAGS, (uint16_t)(ObjMem{s, (uint16_t)(di_v)}.u16(OBJ_SPRITE_FLAGS) & (0xDFFF)));
+        v2_objmem_w8(s, (uint16_t)((di_v) + OBJ_DIRTY_MODE), (uint8_t)(2));
         v2gs(s).active_viking((uint16_t)si_v);
         v2gs(s).scroll_delta_x(5);
         v2gs(s).scroll_delta_y(5);
@@ -3935,7 +3935,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
         // (orig 38056-38061: bp forced to 5 on the large path).
         uint16_t size = (*(uint16_t*)(s + slot + OBJ_STRIP_COUNT) >> 3) + 1;
         int16_t clamped = (size > 5) ? 5 : (int16_t)size;
-        s[slot + OBJ_DIRTY_CNT]--;                           // 38064/38076 dec byte [di+114Eh]
+        v2_objmem_w8(s, (uint16_t)(slot + OBJ_DIRTY_CNT), (uint8_t)(s[slot + OBJ_DIRTY_CNT] - 1)); // 38064/38076 dec byte [di+114Eh]
         // Restore background at the OLD sprite position (orig 38062-38065 /
         // 38074-38077: cx=[di+0F4Dh], dx=[di+104Dh], call 1CD7D/1CD7B —
         // sub_1CD7D sets fs dirty bits + VGA render, commented in orig).
@@ -3944,8 +3944,8 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
         v2_sprite_draw_1CD7D(s, old_x, old_y, (int16_t)size, clamped);
         // Latch current sprite position → OLD (orig 38066-38069 / 38078-38081:
         // [0F4Dh]←[0D4Dh], [104Dh]←[0E4Dh]).
-        *(uint16_t*)(s + slot + OBJ_SPRITE_OLD_X) = *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_X);
-        *(uint16_t*)(s + slot + OBJ_SPRITE_OLD_Y) = *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_Y);
+        ObjMem{s, slot}.w16(OBJ_SPRITE_OLD_X, ObjMem{s, slot}.u16(OBJ_SPRITE_CUR_X));
+        ObjMem{s, slot}.w16(OBJ_SPRITE_OLD_Y, ObjMem{s, slot}.u16(OBJ_SPRITE_CUR_Y));
     }
 
     // ---- Pass 2: dirty-tile scan over the visible window (orig 38087-38208) ----
@@ -4123,13 +4123,13 @@ static void v2_draw_type1_1CE78(uint8_t* s, int16_t slot) {
     // Viewport gates (orig 36436-36449): fully out → loc_1D154:
     // set mode=2 (orig 36722), done.
     int16_t edge = (int16_t)v2gs(s).viewport_x() + 0x140;   // 36436-36437
-    if (px >= edge)        { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36439
+    if (px >= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36439
     edge -= 0x147;                                                     // 36440
-    if (px <= edge)        { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36442
+    if (px <= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36442
     edge = (int16_t)v2gs(s).viewport_y() + 0xB0;            // 36443-36444
-    if (py >= edge)        { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36446
+    if (py >= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36446
     edge -= 0xB7;                                                      // 36447
-    if (py < edge)         { s[slot + OBJ_DIRTY_MODE] = 2; return; }   // 36449
+    if (py < edge)         { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36449
     // In viewport → sub_1CD7B(si=2)
     v2_sprite_draw_1CD7D(s, px, py, 2, 2);                         // 36450-36451
     // shadow-VGA: exact type-1 VGA render (seg003 eips 0x698..0x704 +
@@ -4172,11 +4172,11 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
     // X right edge: viewport_X + 0x140 (orig 37495-37508).
     edge = (int16_t)v2gs(s).viewport_x() + 0x140;
     if (px >= edge) {                                              // 37498 jge loc_1DB98
-        s[slot + OBJ_DIRTY_MODE] = 2; return;                      // 37777
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;                      // 37777
     }
     edge -= 0x1F;                                                  // 37499
     if (px >= edge) {                                              // 37501 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37502
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 37502
         uint16_t idx = (uint16_t)((uint16_t)(px - edge) >> 2) << 1; // 37503-37506
         if (v2_m2c_base)
             col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x1379 + idx); // 37507-37508
@@ -4184,11 +4184,11 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
     // X left edge: −0x140 (orig 37511-37523).
     edge -= 0x140;                                                 // 37511
     if (px <= edge) {                                              // 37513 jle loc_1DB98
-        s[slot + OBJ_DIRTY_MODE] = 2; return;
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
     edge += 0x1F;                                                  // 37514
     if (px < edge) {                                               // 37516 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37517
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 37517
         uint16_t idx = (uint16_t)((uint16_t)(edge - px) >> 2) << 1; // 37518-37521
         if (v2_m2c_base)
             col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x138B + idx); // 37522-37523
@@ -4196,21 +4196,21 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
     // Y bottom edge: viewport_Y + 0xB0 (orig 37526-37535).
     edge = (int16_t)v2gs(s).viewport_y() + 0xB0;
     if (py >= edge) {                                              // 37529 jge loc_1DB98
-        s[slot + OBJ_DIRTY_MODE] = 2; return;
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
     edge -= 0x1F;                                                  // 37530
     if (py >= edge) {                                              // 37532 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37533
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 37533
         clip_bot = (uint16_t)(py - edge);                          // 37534-37535 bottom rows clipped
     }
     // Y top edge: −0xB0 (orig 37538-37546).
     edge -= 0xB0;                                                  // 37538
     if (py < edge) {                                               // 37540 jl loc_1DB98
-        s[slot + OBJ_DIRTY_MODE] = 2; return;
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
     edge += 0x1F;                                                  // 37541
     if (py <= edge) {                                              // 37543 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37544
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 37544
         clip_top = (uint16_t)(edge - py);                          // 37545-37546 top rows clipped
     }
 
@@ -4268,43 +4268,43 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
     // X right edge (orig 36973-36986).
     edge = (int16_t)v2gs(s).viewport_x() + 0x140;
     if (px >= edge) {                                              // 36976 jge loc_1D6B1
-        s[slot + OBJ_DIRTY_MODE] = 2; return;                      // 37267
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;                      // 37267
     }
     edge -= 0x0F;                                                  // 36977
     if (px >= edge) {                                              // 36979 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 36980
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 36980
         uint16_t idx = (uint16_t)((uint16_t)(px - edge) >> 2) << 1; // 36981-36984
         if (v2_m2c_base) col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E92 + idx); // 36985-36986
     }
     // X left edge (orig 36989-37001).
     edge -= 0x140;                                                 // 36989
     if (px <= edge) {                                              // 36991 jle loc_1D6B1
-        s[slot + OBJ_DIRTY_MODE] = 2; return;
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
     edge += 0x0F;                                                  // 36992
     if (px < edge) {                                               // 36994 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 36995
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 36995
         uint16_t idx = (uint16_t)((uint16_t)(edge - px) >> 2) << 1; // 36996-36999
         if (v2_m2c_base) col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E9A + idx); // 37000-37001
     }
     // Y bottom edge (orig 37004-37014).
     edge = (int16_t)v2gs(s).viewport_y() + 0xB0;
     if (py >= edge) {                                              // 37007 jge loc_1D6B1
-        s[slot + OBJ_DIRTY_MODE] = 2; return;
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
     edge -= 0x0F;                                                  // 37008
     if (py >= edge) {                                              // 37010 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37011
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 37011
         clip_bot = (uint16_t)((uint16_t)(py - edge) >> 1);         // 37012-37014 rows→units
     }
     // Y top edge (orig 37017-37026).
     edge -= 0xB0;                                                  // 37017
     if (py < edge) {                                               // 37019 jl loc_1D6B1
-        s[slot + OBJ_DIRTY_MODE] = 2; return;
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
     edge += 0x0F;                                                  // 37020
     if (py <= edge) {                                              // 37022 (margin zone)
-        s[slot + OBJ_DIRTY_MODE] = 2;                              // 37023
+        v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2));                              // 37023
         clip_top = (uint16_t)((uint16_t)(edge - py) & 0xFFFE);     // 37024-37026 even ROWS here
     }
 
@@ -4366,13 +4366,13 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         bool mode_pending = (s[slot + OBJ_DIRTY_MODE] != 0);       // 38008-38009 test [di+114Dh]
         if (!force_render && !mode_pending) {
             if (!v2_sprite_visible_1CDEF(s, slot)) continue;       // 38010-38011 call sub_1CDEF; jz
-            s[slot + OBJ_DIRTY_MODE] = 3;                          // 38012 mov byte [di+114Dh], 3
+            v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(3));                          // 38012 mov byte [di+114Dh], 3
         }
 
         // loc_1DDC7 (orig 38016-38018): DEC mode, clamp negative to 0.
-        s[slot + OBJ_DIRTY_MODE]--;
+        v2_objmem_w8(s, (uint16_t)(slot + OBJ_DIRTY_MODE), (uint8_t)(s[slot + OBJ_DIRTY_MODE] - 1));
         if ((int8_t)s[slot + OBJ_DIRTY_MODE] < 0)
-            s[slot + OBJ_DIRTY_MODE] = 0;
+            v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(0));
 
         // loc_1DDD2 (orig 38021-38024): dispatch cs:[(flags&7)*2 + 15CBh].
         {
@@ -4394,8 +4394,8 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         }
 
         // Save current position as "last rendered" (orig 38025-38028).
-        *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_X) = *(uint16_t*)(s + slot + OBJ_SPRITE_X);
-        *(uint16_t*)(s + slot + OBJ_SPRITE_CUR_Y) = *(uint16_t*)(s + slot + OBJ_SPRITE_Y);
+        ObjMem{s, slot}.w16(OBJ_SPRITE_CUR_X, ObjMem{s, slot}.u16(OBJ_SPRITE_X));
+        ObjMem{s, slot}.w16(OBJ_SPRITE_CUR_Y, ObjMem{s, slot}.u16(OBJ_SPRITE_Y));
     }
     v2gs(s).sprite_force_b(0);                                        // 38034 mov byte ds:9568h, 0
 }
@@ -4419,8 +4419,8 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
             v2_sprite_draw_1CD7D(s, cx_v, dx_v, (int16_t)si, bp_v);        // set fs dirty + VGA render (commented)
         }
         // Position copy: "last rendered" ← "current" (both paths)
-        *(uint16_t*)(s + di + OBJ_SPRITE_OLD_X) = *(uint16_t*)(s + di + OBJ_SPRITE_CUR_X);  // MOV [0F4Dh], cx
-        *(uint16_t*)(s + di + OBJ_SPRITE_OLD_Y) = *(uint16_t*)(s + di + OBJ_SPRITE_CUR_Y);  // MOV [104Dh], dx
+        ObjMem{s, (uint16_t)(di)}.w16(OBJ_SPRITE_OLD_X, *(uint16_t*)(s + di + OBJ_SPRITE_CUR_X));  // MOV [0F4Dh], cx
+        ObjMem{s, (uint16_t)(di)}.w16(OBJ_SPRITE_OLD_Y, *(uint16_t*)(s + di + OBJ_SPRITE_CUR_Y));  // MOV [104Dh], dx
     }
     // Part 2: tile redraw from dirty page flags — VGA rendering only.
     // shadow-VGA: exact replica of seg003 eips 0x17A0..0x1875 (loc_1DFF0..): scan the
@@ -4682,6 +4682,7 @@ static void v2_text_box_124A9(uint8_t* s, uint16_t si, uint16_t di) {
 // sub_111a1: clear sprite table — 0xE00 words at ds:0x44D
 static void v2_clear_sprite_table_111a1(uint8_t* s) {
     memset(s + OBJ_SPRITE_FLAGS, 0, 0xE00 * 2);
+    v2_gs_evac_mirror_span(s, OBJ_SPRITE_FLAGS, 0xE00 * 2);
 }
 
 // sub_11192: clear bit flags — 16 bytes at ds:0x356
@@ -4737,16 +4738,17 @@ static uint16_t v2_hud_init_1133a(uint8_t* s, uint16_t di) {
 // [si+0x1A0D]=0xFFFF (anim frame ptr none)
 static void v2_clear_obj_slots_137f1(uint8_t* s) {
     for (uint16_t si = 0; si != 0x28; si += 2) {
-        *(uint16_t*)(s + si + OBJ_CODE_SEG) = 0;      // code_seg = 0 (inactive)
-        *(uint16_t*)(s + si + OBJ_ANIM_PC) = 0xFFFF;  // anim frame ptr = none
+        ObjMem{s, (uint16_t)(si)}.w16(OBJ_CODE_SEG, 0);      // code_seg = 0 (inactive)
+        ObjMem{s, (uint16_t)(si)}.w16(OBJ_ANIM_PC, 0xFFFF);  // anim frame ptr = none
     }
 }
 
-// sub_12fb3: clear sprite resource table (ds:0x12AD and ds:0x12ED)
+// sub_12fb3: clear the FIRST 0x80 sprite-flag slots (ds:0x44D..0x54D)
 static void v2_clear_sprite_res_12fb3(uint8_t* s) {
     for (uint16_t si = 0; si < 0x100; si += 2) {
-        *(uint16_t*)(s + si + OBJ_SPRITE_FLAGS) = 0; // clear sprite flags
+        ObjMem{s, (uint16_t)(si)}.w16(OBJ_SPRITE_FLAGS, 0); // clear sprite flags
     }
+    v2_gs_evac_mirror_span(s, OBJ_SPRITE_FLAGS, 0x100);
 }
 
 // sub_113b0: init scroll limits from map dimensions (word_2AABC/word_2AABE = ds:0x25DC/0x25DE).
@@ -5142,7 +5144,7 @@ static void v2_despawn_bounds_13c0c(uint8_t* s) {
         else if ((int16_t)(uint16_t)(x - hw) >= (int16_t)v2gs(s).scratch_36()) outside = true;
         else if ((int16_t)(uint16_t)(y + hh) <  (int16_t)v2gs(s).scratch_38()) outside = true;
         else if ((int16_t)(uint16_t)(y - hh) >= (int16_t)v2gs(s).scratch_3a()) outside = true;
-        if (outside) *(uint16_t*)(s + si + OBJ_FLAGS) |= 0x200;        // mark for despawn
+        if (outside) ObjMem{s, (uint16_t)(si)}.w16(OBJ_FLAGS, (uint16_t)(ObjMem{s, (uint16_t)(si)}.u16(OBJ_FLAGS) | (0x200)));        // mark for despawn
     }
 }
 
@@ -6061,7 +6063,7 @@ static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t
     uint16_t bx = (uint16_t)(code_seg_idx * 0x15);     // 0x381e..0x3826 ax*15h -> bx
     if (v2_obj_template_init_13e52(s, new_si, bx)) {   // 0x3828 call sub_13E52
         // 0x382b JC loc_13860: free the slot, creation fails.
-        *(uint16_t*)(s + (uint16_t)(new_si + OBJ_CODE_SEG)) = 0;       // [si+1355] = 0
+        ObjMem{s, (uint16_t)(new_si)}.w16(OBJ_CODE_SEG, 0);       // [si+1355] = 0
         return -1;                                     // loc_13866: DI=0, STC
     }
     ObjMem obj{s, new_si};
@@ -6842,8 +6844,8 @@ static uint16_t v2_vm_di_track = 0;
 static void v2_clear_velocities_15517(uint8_t* ds) {
     uint16_t si = (uint16_t)(v2gs(ds).obj_count() - 2);
     do {
-        *(uint16_t*)(ds + (uint16_t)(si + OBJ_VEL_X)) = 0;
-        *(uint16_t*)(ds + (uint16_t)(si + OBJ_VEL_Y)) = 0;
+        ObjMem{ds, (uint16_t)(si)}.w16(OBJ_VEL_X, 0);
+        ObjMem{ds, (uint16_t)(si)}.w16(OBJ_VEL_Y, 0);
         si = (uint16_t)(si - 2);
     } while (!(si & 0x8000));   // JNS: repeat while the new si has bit 15 clear
 }
@@ -8724,8 +8726,8 @@ static void v2_apply_velocity_1386b(uint8_t* shadow) {
         for (uint16_t di = 0; di == 0 || (int16_t)di < (int16_t)table_end; di += 2) {   // orig do-while (ADD di,2; CMP di,[372]; JL)
             if (*(uint16_t*)(shadow + di + OBJ_CODE_SEG) == 0) continue;
             // Backup current X/Y
-            *(uint16_t*)(shadow + di + OBJ_X_PREV) = *(uint16_t*)(shadow + di + OBJ_WORLD_X);
-            *(uint16_t*)(shadow + di + OBJ_Y_PREV) = *(uint16_t*)(shadow + di + OBJ_WORLD_Y);
+            ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_X_PREV, *(uint16_t*)(shadow + di + OBJ_WORLD_X));
+            ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_Y_PREV, *(uint16_t*)(shadow + di + OBJ_WORLD_Y));
             // If collision state == 0xFFFF → apply velocity
             if (*(uint16_t*)(shadow + di + OBJ_ANIM_TABLE) != 0xFFFF) continue;
 
@@ -8745,14 +8747,14 @@ static void v2_apply_velocity_1386b(uint8_t* shadow) {
                 uint8_t al = ax & 0xFF;
                 uint8_t ah = (ax >> 8) & 0xFF;
                 uint16_t add_result = (uint16_t)shadow[di + OBJ_FRAC_X] + al;
-                shadow[di + OBJ_FRAC_X] = (uint8_t)add_result;
+                v2_objmem_w8(shadow, (uint16_t)((di) + OBJ_FRAC_X), (uint8_t)((uint8_t)add_result));
                 uint8_t cf = (add_result >> 8) & 1;
                 ah += cf;
                 ax = (int16_t)(int8_t)ah; // SAR ax, 8
-                *(uint16_t*)(shadow + di + OBJ_VEL_X) = (uint16_t)ax;
-                *(uint16_t*)(shadow + di + OBJ_WORLD_X) += (uint16_t)ax; // X world
-                *(uint16_t*)(shadow + di + OBJ_BBOX_X0) += (uint16_t)ax; // X start
-                *(uint16_t*)(shadow + di + OBJ_BBOX_X1) += (uint16_t)ax; // X end
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_VEL_X, (uint16_t)ax);
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_WORLD_X, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_WORLD_X) + ((uint16_t)ax))); // X world
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_BBOX_X0, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_BBOX_X0) + ((uint16_t)ax))); // X start
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_BBOX_X1, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_BBOX_X1) + ((uint16_t)ax))); // X end
             }
 
             // Y velocity: same pattern
@@ -8770,14 +8772,14 @@ static void v2_apply_velocity_1386b(uint8_t* shadow) {
                 uint8_t al = ax & 0xFF;
                 uint8_t ah = (ax >> 8) & 0xFF;
                 uint16_t add_result = (uint16_t)shadow[di + OBJ_FRAC_Y] + al;
-                shadow[di + OBJ_FRAC_Y] = (uint8_t)add_result;
+                v2_objmem_w8(shadow, (uint16_t)((di) + OBJ_FRAC_Y), (uint8_t)((uint8_t)add_result));
                 uint8_t cf = (add_result >> 8) & 1;
                 ah += cf;
                 ax = (int16_t)(int8_t)ah; // SAR ax, 8
-                *(uint16_t*)(shadow + di + OBJ_VEL_Y) = (uint16_t)ax;
-                *(uint16_t*)(shadow + di + OBJ_WORLD_Y) += (uint16_t)ax; // Y world
-                *(uint16_t*)(shadow + di + OBJ_BBOX_Y0) += (uint16_t)ax; // Y start
-                *(uint16_t*)(shadow + di + OBJ_BBOX_Y1) += (uint16_t)ax; // Y end
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_VEL_Y, (uint16_t)ax);
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_WORLD_Y, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_WORLD_Y) + ((uint16_t)ax))); // Y world
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_BBOX_Y0, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_BBOX_Y0) + ((uint16_t)ax))); // Y start
+                ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_BBOX_Y1, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_BBOX_Y1) + ((uint16_t)ax))); // Y end
             }
         }
 }
@@ -8806,7 +8808,7 @@ static void v2_ground_snap_1625d(uint8_t* shadow) {
             v2gs(shadow).cur_obj(di);
             if (*(uint16_t*)(shadow + di + OBJ_CODE_SEG) == 0) continue;       // loc_16260
             if (!(*(uint16_t*)(shadow + di + OBJ_FLAGS) & 0x2000)) continue; // loc_1626e
-            *(uint16_t*)(shadow + di + OBJ_FLAGS) &= 0xDFFF;                // loc_16279: clear 0x2000
+            ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_FLAGS, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_FLAGS) & (0xDFFF)));                // loc_16279: clear 0x2000
             if ((int16_t)*(uint16_t*)(shadow + di + OBJ_ANIM_DY) < 0) continue; // JNS check
 
             // loc_16289: tile type at (obj_X, obj_Y_end)
@@ -8870,10 +8872,10 @@ static void v2_ground_snap_1625d(uint8_t* shadow) {
 
             // loc_1636d: apply Y adjustment
             di = v2gs(shadow).cur_obj(); // reload di from ds:42h
-            *(uint16_t*)(shadow + di + OBJ_BBOX_Y0) -= (uint16_t)y_adjust;
-            *(uint16_t*)(shadow + di + OBJ_WORLD_Y) -= (uint16_t)y_adjust;
-            *(uint16_t*)(shadow + di + OBJ_BBOX_Y1) -= (uint16_t)y_adjust;
-            *(uint16_t*)(shadow + di + OBJ_VEL_Y) = 0;
+            ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_BBOX_Y0, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_BBOX_Y0) - ((uint16_t)y_adjust)));
+            ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_WORLD_Y, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_WORLD_Y) - ((uint16_t)y_adjust)));
+            ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_BBOX_Y1, (uint16_t)(ObjMem{shadow, (uint16_t)(di)}.u16(OBJ_BBOX_Y1) - ((uint16_t)y_adjust)));
+            ObjMem{shadow, (uint16_t)(di)}.w16(OBJ_VEL_Y, 0);
         }
 }
 
@@ -8886,7 +8888,7 @@ static void v2_coll_pass_15569(uint8_t* shadow, uint16_t si) {
 // sub_1555c (seg000 eip 0x555C): [si+13F5]=0; [141D]==FFFF gate; falls into
 // the sub_15569 body.
 static void v2_coll_pass_1555c(uint8_t* shadow, uint16_t si) {
-    *(uint16_t*)(shadow + si + OBJ_COLL_BITS) = 0;               // 0x555C
+    ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_COLL_BITS, 0);               // 0x555C
     if (*(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) != 0xFFFF) return; // 0x5562 JNZ
     v2_coll_pass_15569(shadow, si);
 }
@@ -8919,14 +8921,14 @@ static void v2_collision_resolve_13916(uint8_t* shadow) {
             if ((int16_t)coll_state >= 0x100) {
                 // Simple case: apply stored velocity to position
                 int16_t vx = (int16_t)*(uint16_t*)(shadow + si + OBJ_VEL_X);
-                *(uint16_t*)(shadow + si + OBJ_WORLD_X) += (uint16_t)vx;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_X0) += (uint16_t)vx;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_X1) += (uint16_t)vx;
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_WORLD_X, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_WORLD_X) + ((uint16_t)vx)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_X0, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_X0) + ((uint16_t)vx)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_X1, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_X1) + ((uint16_t)vx)));
                 int16_t vy = (int16_t)*(uint16_t*)(shadow + si + OBJ_VEL_Y);
-                *(uint16_t*)(shadow + si + OBJ_WORLD_Y) += (uint16_t)vy;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) += (uint16_t)vy;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) += (uint16_t)vy;
-                *(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) = 0xFFFF; // clear collision
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_WORLD_Y, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_WORLD_Y) + ((uint16_t)vy)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_Y0, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_Y0) + ((uint16_t)vy)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_Y1, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_Y1) + ((uint16_t)vy)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_ANIM_TABLE, 0xFFFF); // clear collision
             }
             else {
                 // Complex case (< 0x100): collision push with flip detection
@@ -8954,10 +8956,10 @@ static void v2_collision_resolve_13916(uint8_t* shadow) {
                 } else {
                     bx_delta += (int16_t)*(uint16_t*)(shadow + si + OBJ_VEL_X);
                 }
-                *(uint16_t*)(shadow + si + OBJ_VEL_X) = (uint16_t)bx_delta;
-                *(uint16_t*)(shadow + si + OBJ_WORLD_X) += (uint16_t)bx_delta;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_X0) += (uint16_t)bx_delta;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_X1) += (uint16_t)bx_delta;
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_VEL_X, (uint16_t)bx_delta);
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_WORLD_X, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_WORLD_X) + ((uint16_t)bx_delta)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_X0, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_X0) + ((uint16_t)bx_delta)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_X1, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_X1) + ((uint16_t)bx_delta)));
 
                 // Y: if flag 0x80 set → cx -= velocity, else cx += velocity
                 if (*(uint16_t*)(shadow + si + OBJ_FLAGS) & 0x80) {
@@ -8965,12 +8967,12 @@ static void v2_collision_resolve_13916(uint8_t* shadow) {
                 } else {
                     cx_delta += (int16_t)*(uint16_t*)(shadow + si + OBJ_VEL_Y);
                 }
-                *(uint16_t*)(shadow + si + OBJ_VEL_Y) = (uint16_t)cx_delta;
-                *(uint16_t*)(shadow + si + OBJ_WORLD_Y) += (uint16_t)cx_delta;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_Y0) += (uint16_t)cx_delta;
-                *(uint16_t*)(shadow + si + OBJ_BBOX_Y1) += (uint16_t)cx_delta;
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_VEL_Y, (uint16_t)cx_delta);
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_WORLD_Y, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_WORLD_Y) + ((uint16_t)cx_delta)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_Y0, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_Y0) + ((uint16_t)cx_delta)));
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_BBOX_Y1, (uint16_t)(ObjMem{shadow, (uint16_t)(si)}.u16(OBJ_BBOX_Y1) + ((uint16_t)cx_delta)));
 
-                *(uint16_t*)(shadow + si + OBJ_ANIM_TABLE) = 0xFFFF; // clear collision
+                ObjMem{shadow, (uint16_t)(si)}.w16(OBJ_ANIM_TABLE, 0xFFFF); // clear collision
             }
         }
 }
@@ -9165,7 +9167,7 @@ static void v2_mark_dirty_left_166e8(uint8_t* s) {
         if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;   // 0x66ef
         if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;      // 0x66f7
         if ((int16_t)dx_vp >= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_X)) continue; // 0x66ff JGE
-        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x6705 byte
+        v2_objmem_w8(s, (uint16_t)((di) + OBJ_DIRTY_MODE), (uint8_t)(2));                                   // 0x6705 byte
     }
 }
 // sub_16710 (eips 0x6710..0x673b): same, X right of viewport+0x121 (JLE skip).
@@ -9175,7 +9177,7 @@ static void v2_mark_dirty_right_16710(uint8_t* s) {
         if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
         if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
         if ((int16_t)dx_vp <= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y - 0x100)) continue; // 0x672b JLE, [di+64D]
-        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x6731
+        v2_objmem_w8(s, (uint16_t)((di) + OBJ_DIRTY_MODE), (uint8_t)(2));                                   // 0x6731
     }
 }
 // loc_16694 / loc_166bc (Y twins inside sub_16661): viewport_Y and
@@ -9186,7 +9188,7 @@ static void v2_mark_dirty_top_16694(uint8_t* s) {
         if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
         if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
         if ((int16_t)dx_vp >= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y)) continue; // 0x66ab JGE
-        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x66b1
+        v2_objmem_w8(s, (uint16_t)((di) + OBJ_DIRTY_MODE), (uint8_t)(2));                                   // 0x66b1
     }
 }
 static void v2_mark_dirty_bottom_166bc(uint8_t* s) {
@@ -9195,7 +9197,7 @@ static void v2_mark_dirty_bottom_166bc(uint8_t* s) {
         if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
         if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
         if ((int16_t)dx_vp <= (int16_t)*(uint16_t*)(s + di + OBJ_SPRITE_Y)) continue; // 0x66db JLE
-        s[di + OBJ_DIRTY_MODE] = 2;                                   // 0x66dd
+        v2_objmem_w8(s, (uint16_t)((di) + OBJ_DIRTY_MODE), (uint8_t)(2));                                   // 0x66dd
     }
 }
 
@@ -17841,7 +17843,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         if (timer != 0) {
             // Original: DEC [si+0x1715] then FALL THROUGH to loc_14266 (continue VM processing).
             // Does NOT skip execution — timer is just decremented.
-            *(uint16_t*)(shadow + obj_idx + OBJ_TIMER) = timer - 1;
+            ObjMem{shadow, (uint16_t)(obj_idx)}.w16(OBJ_TIMER, timer - 1);
         }
     }
 
@@ -17880,7 +17882,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         es_seg = anim_seg;
         uint8_t* anim_es = v2_resolve_segment(anim_seg, shadow);
         uint16_t new_pc = *(uint16_t*)(anim_es + bx_anim + 3);
-        *(uint16_t*)(shadow + obj_idx + OBJ_PC) = new_pc;
+        ObjMem{shadow, (uint16_t)(obj_idx)}.w16(OBJ_PC, new_pc);
     }
 
     // loc_142a2: bx = [si+0x132D]  — read PC from shadow (may have been updated above)
@@ -20580,8 +20582,8 @@ void v2_cmd_loop_1086f(uint8_t* s) {
     // Per-iter prelude: clear blink on viking sprite (orig eip 0x879..0x887)
     uint16_t si_v = v2gs(s).active_viking();
     uint16_t di_v = *(uint16_t*)(s + si_v + OBJ_SUB_SLOT);
-    *(uint16_t*)(s + di_v + OBJ_SPRITE_FLAGS) &= 0xDFFF;
-    s[di_v + OBJ_DIRTY_MODE] = 2;
+    ObjMem{s, (uint16_t)(di_v)}.w16(OBJ_SPRITE_FLAGS, (uint16_t)(ObjMem{s, (uint16_t)(di_v)}.u16(OBJ_SPRITE_FLAGS) & (0xDFFF)));
+    v2_objmem_w8(s, (uint16_t)((di_v) + OBJ_DIRTY_MODE), (uint8_t)(2));
 
     uint16_t cmd_type = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_BUF));
     // #88: also show the REAL-world queue pointers at this exact moment —
@@ -21299,8 +21301,8 @@ void v2_run_pause_entry(uint8_t* shadow) {
     {
         uint16_t di = v2gs(shadow).active_viking();                  // word_288A2
         uint16_t sprite_di = *(uint16_t*)(shadow + di + OBJ_SUB_SLOT);
-        *(uint16_t*)(shadow + sprite_di + OBJ_SPRITE_FLAGS) &= 0xDFFF;          // clear bit 13
-        *(uint16_t*)(shadow + sprite_di + OBJ_DIRTY_MODE) = 2;                // sprite mode = 2
+        ObjMem{shadow, (uint16_t)(sprite_di)}.w16(OBJ_SPRITE_FLAGS, (uint16_t)(ObjMem{shadow, (uint16_t)(sprite_di)}.u16(OBJ_SPRITE_FLAGS) & (0xDFFF)));          // clear bit 13
+        ObjMem{shadow, (uint16_t)(sprite_di)}.w16(OBJ_DIRTY_MODE, 2);                // sprite mode = 2
     }
     // Mirror orig pause-entry render block (eip 0x1bdd..0x1c00) — full set:
     //   sub_10130, [v2_draw_tiles + v2_draw_sprites + v2_draw_ui +] sub_1de05,
