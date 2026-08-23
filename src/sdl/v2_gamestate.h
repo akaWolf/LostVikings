@@ -867,6 +867,10 @@ static inline bool v2_gs_evac_on(const uint8_t* ds) {
 // (a carrier member byte for evacuated fields, the flat image byte
 // otherwise); rebuilt on every canonical change.
 extern uint8_t* v2_gs_route[0x10000];
+// wave 13: rebuild the image from the members (router-guided). The members
+// are the authoritative carrier; the flat image is a derived read cache —
+// V2_GS_IMAGE_REBUILD=1 proves it by rebuilding the image every frame.
+extern "C" void v2_gs_image_render(uint8_t* ds);
 extern "C" void v2_gs_evac_mirror_w(const uint8_t* ds, uint16_t addr, uint16_t val);
 extern "C" void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_t len);
 extern "C" void v2_gs_evac_mirror_b(const uint8_t* ds, uint16_t addr, uint8_t val);

@@ -9344,6 +9344,15 @@ static void v2_vm_frame_update(uint8_t* ds) {
 
     // Stage 4 II.c: evacuated members must equal their image bytes on every
     // frame boundary — any divergence means a writer bypassed the view.
+    // wave 13 proof mode: V2_GS_IMAGE_REBUILD=1 rewrites the image FROM the
+    // members first — a green full corpus in this mode proves the members
+    // are the authoritative carrier (no reader depends on an image byte the
+    // carrier cannot reproduce).
+    {
+        static int _irb = -1;
+        if (_irb < 0) _irb = getenv("V2_GS_IMAGE_REBUILD") ? 1 : 0;
+        if (_irb) v2_gs_image_render(v2_vm_shadow_ds);
+    }
     v2_gs_evac_check(v2_vm_shadow_ds);
 
 

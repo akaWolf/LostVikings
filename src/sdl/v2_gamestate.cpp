@@ -293,6 +293,16 @@ void v2_ail_interp_ds_mirror(const uint8_t* p, uint8_t v) {
         v2_gs_evac_mirror_b(base, (uint16_t)(p - base), v);
 }
 
+// stage-4 wave 13: rebuild the flat image FROM the carrier members. The
+// router knows which bytes are carrier-owned; everything else stays as-is.
+extern "C" void v2_gs_image_render(uint8_t* ds) {
+    if (!v2_gs_evac_on(ds)) return;
+    for (uint32_t a = 0; a < 0x10000; a++) {
+        const uint8_t* t = v2_gs_route[a];
+        if (t != ds + a) ds[a] = *t;
+    }
+}
+
 extern "C" void v2_gs_evac_set_canonical(const uint8_t* ds) {
     v2_gs_evac_canonical = ds;
     if (ds) {
