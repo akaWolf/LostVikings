@@ -44,6 +44,14 @@ PAGE = """<!doctype html>
 <div id="tip"></div>
 <script>
 const QW=%(qw)d, QH=%(qh)d, MAP=%(map)s, SPAWNS=%(spawns)s;
+// type labels — verified against the ground-snap physics (sub_1625d):
+// passable {0,3,0xC}, solid list {1,2,5,0x20}, platform 4 (one-way snap),
+// slopes >= 0x30 (profile via sub_16390). Others: unlabeled yet.
+function typeName(t){
+  if(t===0)return'air'; if(t===1)return'solid'; if(t===4)return'platform';
+  if(t===3||t===0xC)return'passable'; if(t===2||t===5||t===0x20)return'solid*';
+  if(t>=0x30)return'slope'; return'?';
+}
 const img=document.getElementById('lvl'), hl=document.getElementById('hl'),
       tip=document.getElementById('tip'), zsel=document.getElementById('z');
 let Z=2;
@@ -73,7 +81,7 @@ img.onmousemove=e=>{
   hl.style.display='block';
   hl.style.left=(qx*16*Z)+'px'; hl.style.top=(qy*16*Z)+'px';
   let t=`quad (${qx},${qy})  word ${w.toString(16).padStart(4,'0').toUpperCase()}`+
-        `\\n template ${(w&0x3FF).toString(16).toUpperCase()}  type ${(w>>10).toString(16).toUpperCase()} (sub_141A7)`;
+        `\\n template ${(w&0x3FF).toString(16).toUpperCase()}  type ${(w>>10).toString(16).toUpperCase()} ${typeName(w>>10)}`;
   for(const s of SPAWNS){
     if(s.x>=qx*16&&s.x<qx*16+16&&s.y>=qy*16&&s.y<qy*16+16)
       t+=`\\n spawn cls=${s.cls.toString(16).toUpperCase()} @(${s.x},${s.y})`+
