@@ -342,8 +342,14 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
         // MAP entry (who bypasses the view), not a behavior change. After
         // the bypass writers are routed, V2_GS_EVAC_STRICT=1 turns this
         // into the hard gate and the read flip closes stage 4.
+        // wave 12 (stage-4 II.c final): STRICT is the default — the carrier
+        // and the image must never diverge. V2_GS_EVAC_STRICT=0 downgrades
+        // to report-only for debugging hunts.
         static int strict = -1;
-        if (strict < 0) strict = getenv("V2_GS_EVAC_STRICT") ? 1 : 0;
+        if (strict < 0) {
+            const char* e = getenv("V2_GS_EVAC_STRICT");
+            strict = (e && e[0] == '0') ? 0 : 1;
+        }
         if (strict) {
             fprintf(stderr, "FATAL: stage-4 evac desync — %d words changed "
                     "behind the view accessors\n", diffs);

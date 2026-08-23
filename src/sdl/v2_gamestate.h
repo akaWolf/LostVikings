@@ -50,7 +50,9 @@
 // into V2_GS_FIELDS_EVAC (read flip). Lesson of wave 7: flipping reads in
 // the same commit as the evacuation turns every missed write channel into
 // a behavior change instead of a check report.
-#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN) \
+#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN)
+
+#define V2_GS_FIELDS_EVAC(F1, FN) \
   FN(obj_frac_x,      OBJ_FRAC_X,      20) \
   FN(obj_frac_y,      OBJ_FRAC_Y,      20) \
   FN(obj_anim_pc,     OBJ_ANIM_PC,     20) \
@@ -66,9 +68,7 @@
   FN(sprite_res_id,      DS_SPRITE_RES_ID, 32) \
   FN(sprite_res_base,    DS_SPRITE_RES_BASE, 32) \
   FN(seq_handle_slots,   DS_MUSIC_ID, 5)        \
-  FN(seq_seq_slots,      0x9916, 5)
-
-#define V2_GS_FIELDS_EVAC(F1, FN) \
+  FN(seq_seq_slots,      0x9916, 5) \
   F1(accumulator,        DS_ACCUMULATOR) \
   F1(music_mute,         DS_MUSIC_MUTE) \
   F1(sfx_mute,           DS_SFX_MUTE) \
