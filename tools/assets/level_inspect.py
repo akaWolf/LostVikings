@@ -49,7 +49,8 @@ const QW=%(qw)d, QH=%(qh)d, MAP=%(map)s, SPAWNS=%(spawns)s;
 // slopes >= 0x30 (profile via sub_16390). Others: unlabeled yet.
 function typeName(t){
   if(t===0)return'air'; if(t===1)return'solid'; if(t===4)return'platform';
-  if(t===3||t===0xC)return'passable'; if(t===2||t===5||t===0x20)return'solid*';
+  if(t===3)return'passable (obs: ladder)'; if(t===0xC)return'passable';
+  if(t===2||t===5||t===0x20)return'solid*';
   if(t>=0x30)return'slope'; return'?';
 }
 const img=document.getElementById('lvl'), hl=document.getElementById('hl'),
