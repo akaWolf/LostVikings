@@ -50,7 +50,9 @@
 // into V2_GS_FIELDS_EVAC (read flip). Lesson of wave 7: flipping reads in
 // the same commit as the evacuation turns every missed write channel into
 // a behavior change instead of a check report.
-#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN) \
+#define V2_GS_FIELDS_EVAC_BRIDGE(F1, FN)
+
+#define V2_GS_FIELDS_EVAC(F1, FN) \
   F1(accumulator,        DS_ACCUMULATOR) \
   F1(music_mute,         DS_MUSIC_MUTE) \
   F1(sfx_mute,           DS_SFX_MUTE) \
@@ -96,9 +98,7 @@
   FN(music_track_chunk_tbl, DS_SND_DESC_OFF_TBL, 11) \
   F1(vsync_count,        DS_VSYNC_COUNT)        \
   F1(vsync_calib,        DS_VSYNC_CALIB)        \
-  F1(pit_latch,          DS_PIT_LATCH)
-
-#define V2_GS_FIELDS_EVAC(F1, FN) \
+  F1(pit_latch,          DS_PIT_LATCH) \
   FN(script_vars,        0x0204, 68) \
   F1(script_var_28e,     0x028E) \
   F1(scratch_34,         DS_SCRATCH_34) \
@@ -910,7 +910,9 @@ struct V2StateView {
     V2_GS_FIELDS_EVAC(V2_GS_AE1, V2_GS_AEN)
 #undef V2_GS_AE1
 #undef V2_GS_AEN
-    // BRIDGE stage: reads flat (image is canon), writes member+image.
+    // (wave 9) the bridge group moved into V2_GS_FIELDS_EVAC above — this
+    // expansion is now empty and kept only as the landing pad for the next
+    // freshly evacuated group.
 #define V2_GS_AE1(name, off) \
     uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
     void     name(uint16_t v)          { if (v2_gs_evac_on(ds)) g_gs_evac.name = v; *(uint16_t*)(ds + (off)) = v; }
@@ -936,16 +938,20 @@ struct V2StateView {
     // byte reference would bypass the carrier; the compiler finds clients.
     // _bytes() stays image-backed (write-through keeps it live for readers);
     // WRITERS through _bytes() must use _bset()/spans instead.
-// BRIDGE stage (see V2_GS_FIELDS_EVAC_BRIDGE): byte reads stay FLAT until
-// the frame check is clean on the full corpus; writes go member+image.
+// FLIPPED stage (wave 9): byte reads come from the typed member — the
+// member IS the carrier. Write-through still keeps the image live for the
+// serializer/oracles and the remaining flat readers (_bytes()).
 #define V2_GS_ABE1(name, off) \
-    uint8_t  name##_b() const          { return ds[(off)]; } \
+    uint8_t  name##_b() const          { if (v2_gs_evac_on(ds)) { \
+        uint8_t _img = ds[(off)]; \
+        if (g_gs_evac.name != _img) v2_gs_evac_read_desync(#name, (off), g_gs_evac.name, _img); \
+        return g_gs_evac.name; } return ds[(off)]; } \
     void     name##_b(uint8_t v)       { if (v2_gs_evac_on(ds)) g_gs_evac.name = v; ds[(off)] = v; }
 #define V2_GS_ABEN(name, off, n) \
     uint8_t* name##_bytes()            { return ds + (off); } \
     const uint8_t* name##_bytes() const { return ds + (off); } \
     uint8_t  name##_bat(uint32_t i) const { V2_GS_BCHK(off, (uint32_t)(n), i) \
-        return ds[(off) + i]; } \
+        if (v2_gs_evac_on(ds)) return g_gs_evac.name[i]; return ds[(off) + i]; } \
     void     name##_bset(uint32_t i, uint8_t v) { V2_GS_BCHK(off, (uint32_t)(n), i) \
         if (v2_gs_evac_on(ds)) g_gs_evac.name[i] = v; ds[(off) + i] = v; }
     V2_GS_FIELDS_EVACB(V2_GS_ABE1, V2_GS_ABEN)

@@ -1561,10 +1561,17 @@ static uint8_t* v2_vm_acc_base = v2_vm_shadow_ds;
 // member+image (write-through) via the mirror. acc_base may point at a
 // fn-test shadow — evac_on() is false there and the flat path is used.
 struct V2AccProxy {
-    // BRIDGE stage: reads stay flat until the frame check is clean on the
-    // full corpus (wave-7 lesson) — the read flip is a separate later step.
+    // FLIPPED (wave 9): reads come from the carrier member; the fn-test
+    // shadows are not canonical and keep the flat path.
     operator uint16_t() const {
-        return *(const uint16_t*)(v2_vm_acc_base + DS_ACCUMULATOR);
+        const uint8_t* b = v2_vm_acc_base;
+        if (v2_gs_evac_on(b)) {
+            uint16_t img = *(const uint16_t*)(b + DS_ACCUMULATOR);
+            if (g_gs_evac.accumulator != img)
+                v2_gs_evac_read_desync("accumulator", DS_ACCUMULATOR, g_gs_evac.accumulator, img);
+            return g_gs_evac.accumulator;
+        }
+        return *(const uint16_t*)(b + DS_ACCUMULATOR);
     }
     V2AccProxy& operator=(uint16_t v) {
         uint8_t* b = v2_vm_acc_base;
