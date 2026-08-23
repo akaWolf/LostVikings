@@ -68,6 +68,14 @@ bool v2_chunk_bg_valid = false;
 uint8_t v2_vga[65536 * 4];
 uint8_t v2_vga_cov[65536 * 4];   // 1 = written by a migrated v2 writer
 static inline void v2_vga_w(uint32_t addr, uint32_t plane, uint8_t val) {
+#ifdef V2_ONLY
+    // Stage 6.2: the shadow-VGA page emulation is the DEFAULT-build verify
+    // oracle (A2 pixel parity vs the real CRTC scan-out). The target engine
+    // composes frames directly (v2_draw_* into the linear buffer) — no
+    // reader exists here, so the Mode-X pixel model dies in V2_ONLY.
+    (void)addr; (void)plane; (void)val;
+    return;
+#endif
     uint32_t lin = (addr & 0xFFFFu) * 4u + (plane & 3u);
     // diag (env V2_VGAW_TRAP=vgaaddr): backtrace writers of one VGA byte addr.
     {
