@@ -364,6 +364,22 @@ public:
 // per project rules an unimplemented path must never be silently skipped.
 // ---------------------------------------------------------------------------
 void AilInterp::step() {
+    // Stage 6.1 w3: execution trace of the blob (the native-sequencer
+    // reverse aid). V2_AIL_PCTRACE=<path> logs "ip op" per step; the
+    // stream over one fn67 tick IS the tick algorithm.
+    {
+        static FILE* _pt = nullptr; static long _ptn = -1;
+        if (_ptn < 0) {
+            const char* e = getenv("V2_AIL_PCTRACE");
+            _pt = (e && *e) ? fopen(e, "w") : nullptr;
+            _ptn = 0;
+        }
+        if (_pt && _ptn < 2000000) {
+            fprintf(_pt, "%04X %02X\n", r.ip, rd8(r.cs, r.ip));
+            _ptn++;
+            if (_ptn == 2000000) { fflush(_pt); }
+        }
+    }
     seg_override = -1;
     uint16_t ip0 = r.ip;
     uint8_t op;

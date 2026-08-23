@@ -2,3 +2,4 @@ vikings_keymap_editor
 .obj-keymap-editor/
 assets_raw/
 /assets/
+__pycache__/
