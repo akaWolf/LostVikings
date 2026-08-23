@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include "v2_timing.h"
 extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 #include <thread>
 #include <atomic>
@@ -231,7 +232,7 @@ void render_thread_proc_v2(void* _state)
               if (myWindow_v2) SDL_SetWindowTitle(myWindow_v2, t);
           }
       }
-      SDL_Delay(15);
+      v2_present_sleep();          // stage 6.3: single pacing source (v2_timing.h)
 
       loop_counter++;
     }

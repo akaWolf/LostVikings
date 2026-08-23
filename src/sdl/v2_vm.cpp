@@ -32,6 +32,7 @@
 #include "render_v2.h"
 #include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
+#include "v2_timing.h"
 #include "v2_gamestate.h"
 #include "v2_obj_view.h"
 
@@ -2736,10 +2737,10 @@ static void v2_vsync_wait_10130(uint8_t* s) {
         v2_nopl_pump();
 #endif
 #if defined(V2_ONLY) && !defined(HEADLESS)
-        SDL_Delay(16);                // vsync 60Hz pacing for interactive
+        v2_tick_sleep();              // stage 6.3: single pacing source (v2_timing.h)
 #elif defined(HEADLESS)
-        // headless: no display → spin without pacing (render thread decrements
-        // 0xA39C fast). Tiny yield to avoid starving the render thread.
+        // headless: no display → spin without pacing (the loop itself
+        // generates the ticks). Tiny yield keeps the box responsive.
         SDL_Delay(0);
 #else
         SDL_Delay(4);                 // default mode: faster verify
@@ -7997,9 +7998,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             if (need_quit) break;                 // Ctrl-C / SIGTERM exits dialog
             if (v2_pw_iter_body(shadow)) break;
             v2_do_render();
-#ifndef HEADLESS
-            SDL_Delay(16);  // pacing for V2_ONLY interactive
-#endif
+            v2_tick_sleep();  // stage 6.3: single pacing source
         }
         v2_pw_post_loop(shadow);
         if (need_save) {
@@ -8145,9 +8144,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             if (need_quit) break;                       // Ctrl-C / SIGTERM exits pause
             if (v2_run_pause_loop_iter_exit(shadow)) break;
             v2_do_render();
-#ifndef HEADLESS
-            SDL_Delay(16);  // V2_ONLY pacing — interactive
-#endif
+            v2_tick_sleep();  // stage 6.3: single pacing source
         }
     }
 #endif
@@ -19303,9 +19300,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         if (v2_pw_iter_body(s)) break;
                         v2_do_render();
 #ifdef V2_ONLY
-            #ifndef HEADLESS
-            SDL_Delay(16);  // pacing for V2_ONLY interactive
-#endif
+                        v2_tick_sleep();  // stage 6.3: single pacing source
 #endif
                     }
                     v2_pw_post_loop(s);

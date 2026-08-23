@@ -6,6 +6,7 @@
 // main so it dodges this — V2_ONLY must opt out explicitly.
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
+#include "v2_timing.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -163,7 +164,7 @@ int main(int argc, char* argv[]) {
     //    rounds SDL_Delay up to scheduler tick boundary).
     uint16_t ds = 0;
     uint32_t frame_target_ms = SDL_GetTicks();
-    const uint32_t FRAME_PERIOD_MS = 16;  // ~60 FPS interactive target
+    const uint32_t FRAME_PERIOD_MS = V2_FRAME_BUDGET_MS;  // stage 6.3: v2_timing.h
     // FPS instrumentation: track work time per frame (excluding sleep). Print
     // running stats every N frames + warn when individual frame exceeds budget.
     uint32_t fps_window_start_ms = SDL_GetTicks();
