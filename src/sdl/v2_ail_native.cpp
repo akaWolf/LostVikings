@@ -1355,6 +1355,622 @@ extern "C" void v2_ailnat_midi_2629(uint16_t status, uint16_t d1, uint16_t d2) {
 }
 
 // ---------------------------------------------------------------------------
+// fn surface — the driver entry points the game calls (plus their helpers).
+// ---------------------------------------------------------------------------
+// The blob records its own code segment (fn64 stores cs at cs:0xD1 and
+// returns the descriptor as cs:0xC7). The native port carries that identity
+// as a configurable value so images stay byte-comparable with any executor.
+static uint16_t g_nat_self_seg = 0;
+static uint16_t g_nat_last_dx = 0;
+extern "C" void v2_ailnat_set_self_seg(uint16_t seg) { g_nat_self_seg = seg; }
+extern "C" uint16_t v2_ailnat_last_dx(void) { return g_nat_last_dx; }
+
+// 1383: latch the OPL port block from the io base ([bp+6]):
+// second pair (bank 1 probe) = io+4/io+5, primary = io/io+1.
+extern "C" void v2_ailnat_set_ports_1383(uint16_t io) {
+    wr16n(0x63F, (uint16_t)(io + 4));
+    wr16n(0x641, (uint16_t)(io + 5));
+    wr16n(0x645, io);
+    wr16n(0x643, (uint16_t)(io + 1));
+}
+
+// 1486: boot-time raw register write (long settle: 6 reads, then 0x2A).
+static void nat_boot_write_1486(uint8_t reg, uint8_t val) {
+    uint16_t dx = rd16n(0x645);
+    if (g_nat_out) g_nat_out(dx, reg);
+    for (int i = 0; i < 6; i++) if (g_nat_in) (void)g_nat_in(dx);
+    dx = rd16n(0x643);
+    if (g_nat_out) g_nat_out(dx, val);
+    dx = rd16n(0x645);
+    for (int i = 0; i < 0x2A; i++) if (g_nat_in) (void)g_nat_in(dx);
+}
+
+// 1405: read the status register.
+static uint8_t nat_status_1405(void) {
+    return g_nat_in ? g_nat_in(rd16n(0x645)) : 0;
+}
+
+// 14AE: classic AdLib detect via timer 1 (status bits 0xE0: 0 -> 0xC0).
+static uint16_t nat_detect_14AE(void) {
+    nat_boot_write_1486(0x4, 0x60);               // mask timers
+    nat_boot_write_1486(0x4, 0x80);               // reset IRQ
+    uint16_t di = nat_status_1405();              // 14E7
+    nat_boot_write_1486(0x2, 0xFF);               // timer 1 preset
+    nat_boot_write_1486(0x4, 0x21);               // start timer 1
+    uint16_t si = 0;
+    for (uint16_t n = 0xC8; n; n--) si = nat_status_1405();   // 1523 wait loop
+    nat_boot_write_1486(0x4, 0x60);
+    nat_boot_write_1486(0x4, 0x80);
+    si = (uint16_t)(si & 0xE0);                   // 1565
+    di = (uint16_t)(di & 0xE0);
+    return (di == 0 && si == 0xC0) ? 1 : 0;
+}
+
+// fn65 140E(drv, io): non-destructive device probe — detect on the primary
+// pair, then the OPL3 status-mirror test on the second pair.
+extern "C" uint16_t v2_ailnat_fn65_probe_140E(uint16_t io) {
+    uint16_t s63F = rd16n(0x63F), s641 = rd16n(0x641);   // 1416 save cells
+    uint16_t s645 = rd16n(0x645), s643 = rd16n(0x643);
+    v2_ailnat_set_ports_1383(io);
+    uint16_t ax = nat_detect_14AE();              // 1434
+    if (ax != 0) {
+        uint16_t dx = rd16n(0x63F);               // 143D second pair
+        if (g_nat_out) { g_nat_out(dx, 0x0A);     // out dx,ax (word: AL,AH)
+                         g_nat_out((uint16_t)(dx + 1), 0x00); }
+        dx = rd16n(0x641);
+        uint8_t st = g_nat_in ? g_nat_in(dx) : 0; // 144C
+        uint8_t ah = st;
+        uint8_t al = (uint8_t)(st ^ 0x6);
+        if (g_nat_out) g_nat_out(dx, al);         // 1453
+        al = g_nat_in ? g_nat_in(dx) : 0;         // 1456
+        al = (uint8_t)(al ^ 0x6);
+        int equal = (al == ah);                   // 1459 cmp; 145E..1463
+        if (g_nat_out) g_nat_out(dx, ah);         // 145D restore
+        ax = equal ? 1 : 0;                       // mirror still differs = OPL3
+    }
+    wr16n(0x63F, s63F); wr16n(0x641, s641);       // 1466 restore cells
+    wr16n(0x645, s645); wr16n(0x643, s643);
+    return ax;
+}
+
+// 1582: OPL3 register init — enable NEW (0x105=1), clear 4-op (0x104=0),
+// then the whole register file from the tables at cs:0x34D / cs:0x442.
+static void nat_opl3_init_1582(void) {
+    nat_out_tail_13DE(0x05, 0x01, 0x01);          // 1587 bx=0x105
+    nat_out_tail_13DE(0x04, 0x01, 0x00);          // 1590 bx=0x104
+    wr8n(0xD1C, 0);
+    for (uint16_t bx = 0x1; bx <= 0xF5; bx++)     // bank 0 from cs:[bx+0x34C]
+        nat_out_tail_13DE((uint8_t)bx, 0x00, rd8n((uint16_t)(bx + 0x34C)));
+    for (uint16_t bx = 0x101; bx <= 0x1F5; bx++)  // bank 1 from cs:[bx+0x341]
+        nat_out_tail_13DE((uint8_t)bx, 0x01, rd8n((uint16_t)(bx + 0x341)));
+}
+
+// 19BE: timbre system reset — LRU clock, slot tables, channel maps, rings.
+static void nat_timbre_reset_19BE(void) {
+    wr16n(0x647, 0); wr16n(0x649, 0);
+    for (uint16_t i = 0; i < 0xC0; i++) wr8n((uint16_t)(i + 0xC4B), 0);
+    for (uint16_t i = 0; i < 0x10; i++) {
+        wr8n((uint16_t)(i + 0x1289), 0xFF);
+        wr8n((uint16_t)(i + 0x1339), 0);
+        wr8n((uint16_t)(i + 0x12A9), 0xFF);
+        wr8n((uint16_t)(i + 0x1299), 0);
+    }
+    for (uint16_t i = 0; i < 0x14; i++) wr8n((uint16_t)(i + 0xD95), 0);
+    for (uint16_t i = 0; i < 0x12; i++) wr8n((uint16_t)(i + 0x1349), 0xFF);
+    for (uint16_t i = 0; i < 0x80; i++) wr8n((uint16_t)(i + 0x12B9), 0xFF);
+    wr16n(0xD13, 0); wr16n(0xD15, 0);
+    wr8n(0xD17, 0);
+    wr16n(0xD18, 0xFFFF);                         // 1A41 ring cursors = -1
+    wr16n(0xD1A, 0xFFFF);
+}
+
+// 37D4: clear the XMIDI trigger callback.
+extern "C" void v2_ailnat_clear_cb_37D4(void) {
+    wr16n(0x2957, 0);
+    wr16n(0x2959, 0);
+}
+
+// fn64 27C8: return the descriptor far pointer (cs:0xC7), recording cs.
+extern "C" uint16_t v2_ailnat_fn64_desc_27C8(void) {
+    wr16n(0xD1, g_nat_self_seg);                  // 27D2
+    g_nat_last_dx = g_nat_self_seg;
+    return 0xC7;                                  // 27D7
+}
+
+// fn66 35D8(drv, io, ...): install — clear sequencer state, build the
+// controller remap, set the ports, init the chip, reset timbres and push
+// the per-channel controller/program/pitch defaults.
+extern "C" void v2_ailnat_fn66_install_35D8(uint16_t io) {
+    wr16n(0x2953, 0);                             // 35E1
+    wr16n(0x294F, 0);
+    for (uint16_t i = 0; i < 0x60 * 2; i++) wr8n((uint16_t)(0x295B + i), 0xFF);
+    for (uint16_t i = 0; i < 0x80 * 2; i++) wr8n((uint16_t)(0x282F + i), 0xFF);
+    for (uint16_t i = 0; i < 0x10 * 2; i++) wr8n((uint16_t)(0x292F + i), 0x00);
+    for (uint16_t i = 0; i < 0x8 * 2; i++)  wr8n((uint16_t)(0x2A2B + i), 0x00);
+    for (uint16_t i = 0; i < 0x8 * 2; i++)  wr8n((uint16_t)(0x2A1B + i), 0x00);
+    {                                             // 361F controller remap rows
+        uint16_t ax = 0;
+        for (uint16_t si = 0; si < 9; si++) {
+            uint8_t ctl = rd8n((uint16_t)(si + 0x2814));
+            wr8n((uint16_t)(ctl + 0x282F), (uint8_t)ax);
+            ax = (uint16_t)(ax + 0x10);
+        }
+    }
+    v2_ailnat_set_ports_1383(io);                 // 3647 (extra args unused)
+    nat_opl3_init_1582();                         // 364E
+    nat_timbre_reset_19BE();                      // 3652
+    v2_ailnat_clear_cb_37D4();                    // 3656
+    for (uint16_t si = 0; si < 9; si++) {         // 3659 controller defaults
+        for (uint16_t di = 1; di <= 9; di++) {
+            uint16_t ax = (uint16_t)(di | 0xB0);
+            uint16_t bx = rd8n((uint16_t)(si + 0x2814));
+            uint8_t cl = rd8n((uint16_t)(si + 0x281D));
+            if (cl == 0xFF) break;                // 3670 je 3693 (next row)
+            uint16_t dxr = bx;                    // ctl id
+            bx = rd8n((uint16_t)(bx + 0x282F));   // 3677 row offset
+            bx = (uint16_t)(bx + di);
+            wr8n((uint16_t)(bx + 0x295B), cl);    // global image
+            v2_ailnat_midi_2629(ax, dxr, cl);     // 3687
+        }
+    }
+    for (uint16_t di = 1; di <= 9; di++) {        // 3699 pitch + program
+        wr8n((uint16_t)(di + 0x29FB), 0x00);
+        wr8n((uint16_t)(di + 0x2A0B), 0x40);
+        v2_ailnat_midi_2629((uint16_t)(di | 0xE0), 0x00, 0x40);   // 36C3
+        uint8_t pr = rd8n((uint16_t)(di + 0x2825));               // 36C9
+        if (pr != 0xFF) {
+            wr8n((uint16_t)(di + 0x29EB), pr);
+            v2_ailnat_midi_2629((uint16_t)(di | 0xC0), pr, 0);    // 36EA
+        }
+    }
+    wr16n(0x2A3B, 1);                             // 36F6 installed flag
+}
+
+// fn99 16D9: timbre cache size.
+extern "C" uint16_t v2_ailnat_fn99_cache_size_16D9(void) { return 0xE00; }
+
+// fn9A 16F0(drv, off, seg, size): assign the timbre cache.
+extern "C" void v2_ailnat_fn9A_set_cache_16F0(uint16_t off, uint16_t seg,
+                                              uint16_t size) {
+    uint16_t no = (uint16_t)(off & 0xF);          // 16FB normalize
+    uint16_t ns = (uint16_t)(seg + (off >> 4));
+    wr16n(0xD0B, no);
+    wr16n(0xD0D, ns);
+    wr16n(0xD0F, size);
+    wr16n(0xD11, 0);
+}
+
+// fn9B 1736(drv, handle): first timbre in the sequence's TIMB chunk that is
+// not loaded yet — returns bank<<8|patch, or 0xFFFF when satisfied.
+extern "C" uint16_t v2_ailnat_fn9B_timbre_request_1736(uint16_t handle) {
+    if (handle == 0xFFFF) return 0xFFFF;
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    if (fr16(sg, (uint16_t)(so + 0x2)) == 0) return 0xFFFF;   // 174B no TIMB
+    uint16_t to = fr16(sg, so);                   // 1751 lds si,[si]
+    uint16_t tg = fr16(sg, (uint16_t)(so + 0x2));
+    if (fr16(tg, to) != 0x4954) return 0xFFFF;    // 'TI'
+    if (fr16(tg, (uint16_t)(to + 0x2)) != 0x424D) return 0xFFFF;   // 'MB'
+    uint16_t si = (uint16_t)(to + 8);             // 1760
+    uint16_t di = fr16(tg, si);                   // count
+    for (;;) {
+        si = (uint16_t)(si + 2);                  // 1765
+        uint16_t key = fr16(tg, si);
+        if (v2_ailnat_find_slot_15E9(key) == 0xFFFF)
+            return key;                           // 177D not loaded yet
+        di = (uint16_t)(di - 1);
+        if (di == 0) return 0xFFFF;               // 1779
+    }
+}
+
+// 1790: evict the least-recently-used unlocked timbre and compact the cache.
+static void nat_timbre_evict_1790(void) {
+    uint16_t victim = 0xFFFF;                     // [bp-0x2]
+    uint16_t lo = 0xFFFF, hi = 0xFFFF;            // ax/dx running minimum
+    for (uint16_t si = 0; si < 0xC0; si++) {      // 17A8
+        uint8_t st = rd8n((uint16_t)(si + 0xC4B));
+        if (!(st & 0x80)) continue;
+        if (st & 0x40) continue;                  // locked
+        uint16_t h2 = rd16n((uint16_t)(si * 2 + 0x7CB));
+        uint16_t l2 = rd16n((uint16_t)(si * 2 + 0x64B));
+        if (h2 > hi) continue;                    // 17BB ja
+        if (h2 == hi && l2 > lo) continue;        // 17C4 ja
+        lo = l2; hi = h2; victim = si;            // 17CB
+    }
+    if (victim == 0xFFFF) return;                 // 17E2
+    uint16_t voff = rd16n((uint16_t)(victim * 2 + 0x94B));    // [bp-0x6]
+    uint16_t base_o = rd16n(0xD0B), base_s = rd16n(0xD0D);
+    uint16_t vlen = fr16(base_s, (uint16_t)(base_o + voff));  // [bp-0x4]
+    {   // 1805..181B compact: move the tail of the cache down over the victim
+        uint16_t dst = (uint16_t)(base_o + voff);
+        uint16_t src = (uint16_t)(dst + vlen);
+        uint16_t cnt = (uint16_t)((uint16_t)(base_o + rd16n(0xD11)) - src);
+        for (uint16_t i = 0; i < cnt; i++)
+            fw8(base_s, (uint16_t)(dst + i), fr8(base_s, (uint16_t)(src + i)));
+    }
+    wr8n((uint16_t)(victim + 0xC4B), 0);          // 1820
+    wr16n(0xD11, (uint16_t)(rd16n(0xD11) - vlen));
+    for (uint16_t di = 0; di < 0x10; di++) {      // 182E unlink patch maps
+        uint8_t t = rd8n((uint16_t)(di + 0x1289));
+        if (t != 0xFF && t == (uint8_t)victim)
+            wr8n((uint16_t)(di + 0x1289), 0xFF);
+    }
+    for (uint16_t di = 0; di < 0x80; di++)        // 184E drum maps
+        if (rd8n((uint16_t)(di + 0x12B9)) == (uint8_t)victim)
+            wr8n((uint16_t)(di + 0x12B9), 0xFF);
+    for (uint16_t si = 0; si < 0xC0; si++) {      // 1868 shift later offsets
+        if (!(rd8n((uint16_t)(si + 0xC4B)) & 0x80)) continue;
+        uint16_t o2 = rd16n((uint16_t)(si * 2 + 0x94B));
+        if (o2 > voff)
+            wr16n((uint16_t)(si * 2 + 0x94B), (uint16_t)(o2 - vlen));
+    }
+    uint16_t vabs = (uint16_t)(voff + base_o);    // 1892
+    for (uint16_t si = 0; si < 0x14; si++) {      // 189C live slot pointers
+        if (rd8n((uint16_t)(si + 0xD95)) == 0) continue;
+        uint16_t po = rd16n((uint16_t)(si * 2 + 0xD1D));
+        if (po < vabs) continue;
+        if (po == vabs) {                         // its timbre was evicted
+            v2_ailnat_voice_release_1B11(si);     // 18B5
+            wr8n((uint16_t)(si + 0xD95), 0);
+        } else {
+            wr16n((uint16_t)(si * 2 + 0xD1D), (uint16_t)(po - vlen));
+        }
+    }
+}
+
+// fn9C 18DB(drv, bank, patch, off, seg): install a timbre into the cache.
+extern "C" void v2_ailnat_fn9C_load_timbre_18DB(uint16_t bank, uint16_t patch,
+                                                uint16_t off, uint16_t seg) {
+    uint16_t slot = v2_ailnat_find_slot_15E9(
+        (uint16_t)(((bank & 0xFF) << 8) | (patch & 0xFF)));   // 18E7
+    if (slot == 0xFFFF) {
+        if ((off | seg) == 0) return;             // 1900 null source
+        uint16_t di;
+        for (;;) {
+            for (di = 0; di < 0xC0; di++)         // 190B free slot scan
+                if (!(rd8n((uint16_t)(di + 0xC4B)) & 0x80)) break;
+            if (di == 0xC0) { nat_timbre_evict_1790(); continue; }    // 1930
+            uint16_t len = fr16(seg, off);        // 191F word [src]
+            uint16_t end = (uint16_t)(len + rd16n(0xD11));    // 1924
+            if (end > rd16n(0xD0F)) { nat_timbre_evict_1790(); continue; }
+            uint16_t toff = rd16n(0xD11);         // 1936 xchg
+            wr16n(0xD11, end);
+            slot = di;
+            wr8n((uint16_t)(di + 0xB8B), (uint8_t)patch);     // 1944
+            wr8n((uint16_t)(di + 0xACB), (uint8_t)bank);
+            wr8n((uint16_t)(di + 0xC4B), 0x80);
+            uint32_t lru = (uint32_t)(rd16n(0x647) | ((uint32_t)rd16n(0x649) << 16));
+            wr16n(0x647, (uint16_t)(lru + 1));    // 195F (stamp = pre-inc)
+            wr16n(0x649, (uint16_t)((lru + 1) >> 16));
+            wr16n((uint16_t)(di * 2 + 0x64B), (uint16_t)lru);
+            wr16n((uint16_t)(di * 2 + 0x7CB), (uint16_t)(lru >> 16));
+            wr16n((uint16_t)(di * 2 + 0x94B), toff);
+            uint16_t dsto = (uint16_t)(rd16n(0xD0B) + toff);  // 197A
+            uint16_t dsts = rd16n(0xD0D);
+            for (uint16_t i = 0; i < len; i++)    // 1981 rep movs
+                fw8(dsts, (uint16_t)(dsto + i), fr8(seg, (uint16_t)(off + i)));
+            break;
+        }
+    }
+    for (uint16_t di = 0; di < 0x10; di++) {      // 198B relink channels
+        if (rd8n((uint16_t)(di + 0x12A9)) != (uint8_t)patch) continue;
+        if (rd8n((uint16_t)(di + 0x1299)) != (uint8_t)bank) continue;
+        wr8n((uint16_t)(di + 0x1289), (uint8_t)slot);
+    }
+}
+
+// 2A3D(far, count): find the count-th 'FORM XMID' inside a CAT/FORM file.
+// Returns the far pointer through *oseg:*ooff (0:0 = not found).
+static void nat_find_xmid_2A3D(uint16_t sg, uint16_t so, uint16_t count,
+                               uint16_t* oseg, uint16_t* ooff) {
+    uint16_t cx = (uint16_t)(count + 1);          // 2A46
+    for (;;) {                                    // 2A4D top-level scan
+        uint16_t t0 = fr16(sg, so), t1 = fr16(sg, (uint16_t)(so + 2));
+        if ((t0 == 0x4143 && t1 == 0x2054) ||     // 'CA','T '
+            (t0 == 0x4F46 && t1 == 0x4D52)) {     // 'FO','RM'
+            if (fr16(sg, (uint16_t)(so + 8)) == 0x4D58 &&     // 'XM'
+                fr16(sg, (uint16_t)(so + 0xA)) == 0x4449) {   // 'ID'
+                // 2AC5: walk the members
+                uint32_t rest = ((uint32_t)fr8(sg, (uint16_t)(so + 4)) << 24)
+                              | ((uint32_t)fr8(sg, (uint16_t)(so + 5)) << 16)
+                              | ((uint32_t)fr8(sg, (uint16_t)(so + 6)) << 8)
+                              |  fr8(sg, (uint16_t)(so + 7));
+                rest -= 5;                        // 2ACF
+                if (fr16(sg, so) == 0x4F46 && fr16(sg, (uint16_t)(so + 2)) == 0x4D52) {
+                    if (cx == 1) { *oseg = sg; *ooff = so; return; }  // 2AE8
+                    *oseg = 0; *ooff = 0; return;                     // 2AED
+                }
+                so = (uint16_t)(so + 0xC);        // 2AEF skip the CAT header
+                for (;;) {
+                    if (fr16(sg, (uint16_t)(so + 8)) == 0x4D58 &&
+                        fr16(sg, (uint16_t)(so + 0xA)) == 0x4449) {   // 2AF2
+                        cx = (uint16_t)(cx - 1);  // 2B52 loop
+                        if (cx == 0) { *oseg = sg; *ooff = so; return; }  // 2B54
+                    }
+                    uint32_t csz = ((uint32_t)fr8(sg, (uint16_t)(so + 4)) << 24)
+                                 | ((uint32_t)fr8(sg, (uint16_t)(so + 5)) << 16)
+                                 | ((uint32_t)fr8(sg, (uint16_t)(so + 6)) << 8)
+                                 |  fr8(sg, (uint16_t)(so + 7));
+                    csz += 8;                     // 2B0A
+                    if ((int32_t)(rest - csz) < 0) { *oseg = 0; *ooff = 0; return; }
+                    rest -= csz;                  // 2B10
+                    uint32_t lin = ((uint32_t)sg << 4) + so + csz;    // 2B18
+                    so = (uint16_t)(lin & 0xF);
+                    sg = (uint16_t)(lin >> 4);
+                }
+            }
+            // fall through: skip this whole chunk (e.g. FORM XDIR)
+        } else { *oseg = 0; *ooff = 0; return; }  // 2A60 unknown tag
+        uint32_t sz = ((uint32_t)fr8(sg, (uint16_t)(so + 4)) << 24)   // 2A7B
+                    | ((uint32_t)fr8(sg, (uint16_t)(so + 5)) << 16)
+                    | ((uint32_t)fr8(sg, (uint16_t)(so + 6)) << 8)
+                    |  fr8(sg, (uint16_t)(so + 7));
+        sz += 8;                                  // 2A85
+        uint32_t lin = ((uint32_t)sg << 4) + so + sz;                 // 2A8B
+        so = (uint16_t)(lin & 0xF);
+        sg = (uint16_t)(lin >> 4);
+    }
+}
+
+// 2B67(handle): reset the sequence state block to the XMID defaults.
+static void nat_seq_defaults_2B67(uint16_t handle) {
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    for (uint16_t l = 0; l < 4; l++)
+        fw16(sg, (uint16_t)(so + 0x60 + 2 * l), 0xFFFF);      // loop stack
+    for (int bx = 0xF; bx >= 0; bx--) {           // 2B85
+        fw8(sg, (uint16_t)(so + 0x68 + bx), (uint8_t)bx);     // identity map
+        fw8(sg, (uint16_t)(so + 0x78 + bx), 0xFF);
+        fw8(sg, (uint16_t)(so + 0x88 + bx), 0xFF);
+        fw8(sg, (uint16_t)(so + 0x98 + bx), 0xFF);
+        fw8(sg, (uint16_t)(so + 0xA8 + bx), 0xFF);
+    }
+    for (int bx = 0x8F; bx >= 0; bx--)            // 2BA1 controller rows
+        fw8(sg, (uint16_t)(so + 0xB8 + bx), 0xFF);
+    for (int bx = 0x1F; bx >= 0; bx--)            // 2BAC deferred notes
+        fw8(sg, (uint16_t)(so + 0x148 + bx), 0xFF);
+    fw16(sg, (uint16_t)(so + 0x10), 0xFFFF);      // 2BB7 callback value
+    fw16(sg, (uint16_t)(so + 0x1E), 0);
+    fw16(sg, (uint16_t)(so + 0x20), 0);
+    fw16(sg, (uint16_t)(so + 0x24), 0x64);        // volume 100
+    fw16(sg, (uint16_t)(so + 0x26), 0x64);
+    fw16(sg, (uint16_t)(so + 0x32), 0x64);        // tempo 100%
+    fw16(sg, (uint16_t)(so + 0x34), 0x64);
+    fw16(sg, (uint16_t)(so + 0x30), 0);
+    fw16(sg, (uint16_t)(so + 0x3E), 0);
+    fw16(sg, (uint16_t)(so + 0x40), 0);
+    fw16(sg, (uint16_t)(so + 0x48), 0x08D5);      // 2BE9 one beat interval
+    fw16(sg, (uint16_t)(so + 0x4A), 0x0002);
+    fw16(sg, (uint16_t)(so + 0x42), 4);           // 4/4
+    fw16(sg, (uint16_t)(so + 0x44), 0x08D5);
+    fw16(sg, (uint16_t)(so + 0x46), 0x0002);
+    fw16(sg, (uint16_t)(so + 0x4C), 0x1200);      // 500000us<<4 (120 bpm)
+    fw16(sg, (uint16_t)(so + 0x4E), 0x007A);
+}
+
+// fn97 37F6(drv, seq_off, seq_seg, index, state_off, state_seg, tbl_off,
+// tbl_seg): register a sequence — find the XMID, bind the state block,
+// locate TIMB/RBRN/EVNT and initialize. Returns the handle (0xFFFF = none).
+extern "C" uint16_t v2_ailnat_fn97_register_37F6(uint16_t seq_off, uint16_t seq_seg,
+                                                 uint16_t index,
+                                                 uint16_t st_off, uint16_t st_seg,
+                                                 uint16_t tbl_off, uint16_t tbl_seg) {
+    uint16_t handle = 0xFFFF;                     // 3801 free handle scan
+    for (uint16_t bx = 0, cx = 8; cx; bx += 4, cx--)
+        if (rd16n((uint16_t)(bx + 0x2931)) == 0) { handle = bx; break; }
+    if (handle == 0xFFFF) return 0xFFFF;          // 3814
+    uint16_t xg = 0, xo = 0;
+    nat_find_xmid_2A3D(seq_seg, seq_off, index, &xg, &xo);    // 3827
+    if (xg == 0) return 0xFFFF;                   // 382D
+    uint16_t si = st_off, sgm = st_seg;           // 3843 lds [bp+0xE]
+    wr16n((uint16_t)(handle + 0x292F), si);
+    wr16n((uint16_t)(handle + 0x2931), sgm);
+    fw16(sgm, (uint16_t)(si + 0x2), 0);           // 3850
+    fw16(sgm, (uint16_t)(si + 0x6), 0);
+    fw16(sgm, (uint16_t)(si + 0xA), 0);
+    uint32_t pos = 0xC;                           // [bp-0x4] first member
+    for (;;) {                                    // 385F chunk walk
+        uint32_t lin = ((uint32_t)xg << 4) + xo + pos;
+        uint16_t co = (uint16_t)(lin & 0xF);
+        uint16_t cg = (uint16_t)(lin >> 4);
+        uint16_t t0 = fr16(cg, co), t1 = fr16(cg, (uint16_t)(co + 2));
+        uint32_t csz = ((uint32_t)fr8(cg, (uint16_t)(co + 6)) << 8)   // 3899
+                     |  fr8(cg, (uint16_t)(co + 7))
+                     | ((uint32_t)fr8(cg, (uint16_t)(co + 5)) << 16)
+                     | ((uint32_t)fr8(cg, (uint16_t)(co + 4)) << 24);
+        pos += csz + 8;                           // 38A5 next member
+        if (t0 == 0x4954 && t1 == 0x424D) {       // 'TI','MB'
+            fw16(sgm, si, co);                    // 38C0
+            fw16(sgm, (uint16_t)(si + 0x2), cg);
+        } else if (t0 == 0x4252 && t1 == 0x4E52) {// 'RB','RN'
+            fw16(sgm, (uint16_t)(si + 0x4), co);  // 38D6
+            fw16(sgm, (uint16_t)(si + 0x6), cg);
+        } else if (t0 == 0x5645 && t1 == 0x544E) {// 'EV','NT'
+            fw16(sgm, (uint16_t)(si + 0x16), handle);         // 38F3
+            fw16(sgm, (uint16_t)(si + 0x8), co);
+            fw16(sgm, (uint16_t)(si + 0xA), cg);
+            fw16(sgm, (uint16_t)(si + 0x12), tbl_off);        // 38FF
+            fw16(sgm, (uint16_t)(si + 0x14), tbl_seg);
+            fw16(sgm, (uint16_t)(si + 0x1C), 0);
+            fw16(sgm, (uint16_t)(si + 0x18), 0);
+            fw16(sgm, (uint16_t)(si + 0x1A), 0);
+            wr16n(0x294F, (uint16_t)(rd16n(0x294F) + 1));     // 3917
+            nat_seq_defaults_2B67(handle);        // 3920
+            return handle;                        // 3926
+        }
+    }
+}
+
+// fn AA 3980(drv, handle): start — stop if playing, defaults, cursor to
+// EVNT data (+8, normalized), status = playing.
+extern "C" void v2_ailnat_fnAA_start_3980(uint16_t handle);
+extern "C" void v2_ailnat_fnAB_stop_3A15(uint16_t handle) {
+    if (handle == 0xFFFF) return;
+    if (rd16n((uint16_t)(handle + 0x2931)) == 0) return;      // 3A25
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    if (fr16(sg, (uint16_t)(so + 0x1A)) != 1) return;         // 3A32
+    v2_ailnat_seq_flush_notes_2CA0(sg, so);       // 3A3B
+    v2_ailnat_seq_cleanup_2CF4(sg, so);           // 3A44
+    fw16(sg, (uint16_t)(so + 0x1A), 0);           // 3A4A stopped
+}
+extern "C" void v2_ailnat_fnAA_start_3980(uint16_t handle) {
+    if (handle == 0xFFFF) return;
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    if (fr16(sg, (uint16_t)(so + 0x1A)) == 1)     // 3995 playing
+        v2_ailnat_fnAB_stop_3A15(handle);         // 39A9
+    nat_seq_defaults_2B67(handle);                // 39B3
+    uint32_t lin = ((uint32_t)fr16(sg, (uint16_t)(so + 0xA)) << 4)
+                 + fr16(sg, (uint16_t)(so + 0x8)) + 8;        // 39B9 EVNT+8
+    fw16(sg, (uint16_t)(so + 0xC), (uint16_t)(lin & 0xF));
+    fw16(sg, (uint16_t)(so + 0xE), (uint16_t)(lin >> 4));
+    fw16(sg, (uint16_t)(so + 0x1A), 1);           // 39FF playing
+    fw16(sg, (uint16_t)(so + 0x18), 1);           // was-started
+}
+
+// 2DA7(seq): resume support — re-lock remapped channels, replay the
+// per-sequence controller shadows and program/pitch images.
+static void nat_seq_reassert_2DA7(uint16_t sg, uint16_t so) {
+    for (uint16_t di = 0; di < 0x10; di++) {      // 2DB3 channel locks
+        uint8_t l = fr8(sg, (uint16_t)(so + 0x118 + di));
+        if (l == 0xFF) continue;
+        if ((int8_t)l < 0x40) continue;
+        uint16_t r = v2_ailnat_lock_channel_3E20();           // 2DCF
+        r = (uint16_t)(r - 1);
+        if (r == 0xFFFF) r = di;
+        fw8(sg, (uint16_t)(so + 0x68 + di), (uint8_t)r);
+    }
+    for (uint16_t row = 0; row < 9; row++) {      // 2DE8 controller replay
+        uint8_t ctl = rd8n((uint16_t)(row + 0x2814));
+        if (ctl == 0x6E) continue;                // 2DF5 remap done above
+        uint8_t roff = rd8n((uint16_t)(ctl + 0x282F));
+        for (uint16_t di = 0; di < 0x10; di++) {
+            uint8_t v = fr8(sg, (uint16_t)(so + 0xB8 + roff + di));
+            if (v == 0xFF) continue;
+            v2_ailnat_xmidi_ctl_2EE9(sg, so, di, ctl, v);     // 2E1D
+        }
+    }
+    for (uint16_t di = 0; di < 0x10; di++) {      // 2E32 pitch + program
+        uint8_t lo = fr8(sg, (uint16_t)(so + 0x88 + di));
+        if (lo != 0xFF) {
+            uint8_t hi = fr8(sg, (uint16_t)(so + 0x98 + di));
+            if (hi != 0xFF) {
+                uint16_t st = (uint16_t)(fr8(sg, (uint16_t)(so + 0x68 + di)) | 0xE0);
+                v2_ailnat_midi_2629(st, lo, hi);  // 2E53
+            }
+        }
+        uint8_t pr = fr8(sg, (uint16_t)(so + 0x78 + di));
+        if (pr != 0xFF) {
+            uint16_t st = (uint16_t)(fr8(sg, (uint16_t)(so + 0x68 + di)) | 0xC0);
+            v2_ailnat_midi_2629(st, pr, 0);       // 2E77
+        }
+    }
+}
+
+// fn AD 3A5B(drv, handle): resume a stopped-but-started sequence.
+extern "C" void v2_ailnat_fnAD_resume_3A5B(uint16_t handle) {
+    if (handle == 0xFFFF) return;
+    if (rd16n((uint16_t)(handle + 0x2931)) == 0) return;
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    if (fr16(sg, (uint16_t)(so + 0x1A)) != 0) return;         // 3A78
+    if (fr16(sg, (uint16_t)(so + 0x18)) == 0) return;         // 3A7E
+    nat_seq_reassert_2DA7(sg, so);                // 3A87
+    fw16(sg, (uint16_t)(so + 0x1A), 1);
+}
+
+// fn AE 3A9E(drv, handle): status word.
+extern "C" uint16_t v2_ailnat_fnAE_status_3A9E(uint16_t handle) {
+    if (handle == 0xFFFF) return 0xFFFF;          // ax unchanged in orig
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    return fr16(sg, (uint16_t)(so + 0x1A));
+}
+
+// fn B0 3C31 / fn AF 3C57: tempo percent / volume getters.
+extern "C" uint16_t v2_ailnat_fnB0_get_tempo_3C31(uint16_t handle) {
+    if (handle == 0xFFFF) return 0xFFFF;
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    return fr16(sg, (uint16_t)(so + 0x32));
+}
+extern "C" uint16_t v2_ailnat_fnAF_get_volume_3C57(uint16_t handle) {
+    if (handle == 0xFFFF) return 0xFFFF;
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    return fr16(sg, (uint16_t)(so + 0x24));
+}
+
+// 32D3(lo, hi, div_lo, div_hi): unsigned 32/32 divide (shift-subtract),
+// with the 16-bit DIV fast path of the original.
+static uint32_t nat_udiv32_32D3(uint32_t dividend, uint32_t divisor) {
+    uint16_t ax = (uint16_t)dividend, dx = (uint16_t)(dividend >> 16);
+    uint16_t bx = (uint16_t)divisor,  cx = (uint16_t)(divisor >> 16);
+    if (cx == 0 && (dx == 0 || bx == 0)) {        // 32E5..32EF
+        // div bx (16-bit): quotient must fit — in-domain dx < bx
+        uint32_t q = ((uint32_t)dx << 16 | ax) / bx;
+        return (uint16_t)q;                       // dx = 0
+    }
+    uint16_t si = 0, di = 0;                      // remainder
+    for (int i = 0; i < 0x20; i++) {              // 32F3
+        uint32_t acc = ((uint32_t)dx << 16) | ax;
+        uint32_t rem = ((uint32_t)di << 16) | si;
+        uint32_t nacc = (acc << 1) & 0xFFFFFFFFu;
+        rem = ((rem << 1) | (acc >> 31)) & 0xFFFFFFFFu;
+        ax = (uint16_t)nacc; dx = (uint16_t)(nacc >> 16);
+        si = (uint16_t)rem;  di = (uint16_t)(rem >> 16);
+        if (rem >= divisor) {                     // 3302..330A
+            rem -= divisor;
+            si = (uint16_t)rem; di = (uint16_t)(rem >> 16);
+            ax = (uint16_t)(ax + 1);              // 3310 quotient bit
+        }
+    }
+    return ((uint32_t)dx << 16) | ax;
+}
+
+// fn B2 3C7D / fn B1 3CF1: set tempo / volume target with a millisecond
+// ramp (step = 10*ms / |diff| through the shared divider).
+extern "C" void v2_ailnat_fnB2_set_tempo_3C7D(uint16_t handle, uint16_t target,
+                                              uint16_t ms) {
+    if (handle == 0xFFFF) return;
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    fw16(sg, (uint16_t)(so + 0x34), target);      // 3C95
+    if (ms == 0) { fw16(sg, (uint16_t)(so + 0x32), target); return; }   // 3CE2
+    int16_t diff = (int16_t)(target - fr16(sg, (uint16_t)(so + 0x32)));
+    if (diff == 0) return;                        // 3CA4
+    uint16_t ad = (uint16_t)(diff < 0 ? -diff : diff);        // cwd/xor/sub
+    uint32_t q = nat_udiv32_32D3((uint32_t)10 * ms, ad);      // 3CC1
+    if (q == 0) q = 1;                            // 3CCB
+    fw16(sg, (uint16_t)(so + 0x3A), (uint16_t)q);
+    fw16(sg, (uint16_t)(so + 0x3C), (uint16_t)(q >> 16));
+    fw16(sg, (uint16_t)(so + 0x36), 0);
+    fw16(sg, (uint16_t)(so + 0x38), 0);
+}
+extern "C" void v2_ailnat_fnB1_set_volume_3CF1(uint16_t handle, uint16_t target,
+                                               uint16_t ms) {
+    if (handle == 0xFFFF) return;
+    uint16_t so = rd16n((uint16_t)(handle + 0x292F));
+    uint16_t sg = rd16n((uint16_t)(handle + 0x2931));
+    fw16(sg, (uint16_t)(so + 0x26), target);      // 3D09
+    if (ms == 0) {                                // 3D56 instant
+        fw16(sg, (uint16_t)(so + 0x24), target);
+        v2_ailnat_seq_volume_2E8A(sg, so);
+        return;
+    }
+    int16_t diff = (int16_t)(target - fr16(sg, (uint16_t)(so + 0x24)));
+    if (diff == 0) return;
+    uint16_t ad = (uint16_t)(diff < 0 ? -diff : diff);
+    uint32_t q = nat_udiv32_32D3((uint32_t)10 * ms, ad);      // 3D35
+    if (q == 0) q = 1;
+    fw16(sg, (uint16_t)(so + 0x2C), (uint16_t)q);
+    fw16(sg, (uint16_t)(so + 0x2E), (uint16_t)(q >> 16));
+    fw16(sg, (uint16_t)(so + 0x28), 0);
+    fw16(sg, (uint16_t)(so + 0x2A), 0);
+}
+
+// ---------------------------------------------------------------------------
 // Self-test vs the interpreter (armed by V2_AILNAT_SELFTEST=1 after boot).
 // ---------------------------------------------------------------------------
 extern "C" uint16_t v2_ail_interp_call(uint16_t fn_off, const uint16_t* args, int argc);
@@ -1920,6 +2536,193 @@ extern "C" int v2_ailnat_selftest(void) {
                 fprintf(stderr, "AILNAT-DIFF tick t=%d ticks=%d outs i=%d n=%d blob@%04X seq@%04X\n",
                         t, ticks, g_capn[0], g_capn[1],
                         (unsigned)da, (unsigned)sa);
+            }
+        }
+    }
+    v2_ailnat_set_far_write(nullptr);
+
+    // --- fn surface: boot -> register -> load timbres -> play -> fade ------
+    // A full driver lifecycle on both executors: install (fn66), cache
+    // assign (fn9A), sequence registration over a generated XMID file
+    // (fn97), the fn9B/fn9C timbre load loop from bank-format records,
+    // start (fnAA), ticks, a volume fade (fnB1), more ticks, stop (fnAB),
+    // status reads — everything judged as one OUT stream + both images.
+    v2_ailnat_set_far_write(nat_far_fixture_wr);
+    v2_ailnat_set_self_seg(g_fix_seg);
+    for (int t = 0; t < 128; t++) {
+        memcpy(idata, isave, isave_n);
+        memset(g_seqfix_i, 0, sizeof(g_seqfix_i));
+        idata[0x2955] = idata[0x2956] = 0;
+        idata[0x2957] = idata[0x2958] = 0;
+        idata[0x2959] = idata[0x295A] = 0;
+        // ---- XMID file fixture at seqfix:0x1000 ----
+        uint8_t* q = g_seqfix_i;
+        uint32_t xf = 0x1000;
+        int use_cat = (int)(xrnd() & 1);
+        uint32_t form = use_cat ? xf + 0xC : xf;
+        // TIMB entries
+        int ntimb = 1 + (int)(xrnd() % 3);
+        uint32_t timb_len = 2 + 2 * (uint32_t)ntimb;
+        // EVNT stream (build first to know its length)
+        uint8_t ev[256]; uint32_t el = 0;
+        int nev = 2 + (int)(xrnd() % 5);
+        for (int e2 = 0; e2 < nev; e2++) {
+            ev[el++] = (uint8_t)(1 + (xrnd() & 0x1F));
+            uint8_t ch2 = (uint8_t)(1 + (xrnd() % 9));
+            uint32_t fpick = xrnd() % 8;
+            if (fpick < 4) {
+                ev[el++] = (uint8_t)(0x90 | ch2);
+                ev[el++] = (uint8_t)(xrnd() & 0x7F);
+                ev[el++] = (uint8_t)(1 + (xrnd() & 0x7E));
+                ev[el++] = (uint8_t)(1 + (xrnd() & 0x3F));   // short duration
+            } else if (fpick < 6) {
+                static const uint8_t cl7[8] = {0x01,0x07,0x0A,0x0B,0x40,0x74,0x75,0x76};
+                ev[el++] = (uint8_t)(0xB0 | ch2);
+                ev[el++] = cl7[xrnd() & 7];
+                ev[el++] = (uint8_t)(xrnd() & 0x7F);
+            } else if (fpick == 6) {
+                ev[el++] = (uint8_t)(0xC0 | ch2);
+                ev[el++] = (uint8_t)(xrnd() & 0x7F);
+            } else {
+                ev[el++] = (uint8_t)(0xE0 | ch2);
+                ev[el++] = (uint8_t)(xrnd() & 0x7F);
+                ev[el++] = (uint8_t)(xrnd() & 0x7F);
+            }
+        }
+        ev[el++] = (uint8_t)(1 + (xrnd() & 0x1F));
+        ev[el++] = 0xFF; ev[el++] = 0x2F; ev[el++] = 0x00;
+        uint32_t form_len = 4 + (8 + timb_len) + (8 + el);    // XMID + chunks
+        if (use_cat) {
+            uint32_t cat_len = 4 + 8 + form_len;              // XMID + FORM
+            q[xf+0]='C'; q[xf+1]='A'; q[xf+2]='T'; q[xf+3]=' ';
+            q[xf+4]=(uint8_t)(cat_len>>24); q[xf+5]=(uint8_t)(cat_len>>16);
+            q[xf+6]=(uint8_t)(cat_len>>8);  q[xf+7]=(uint8_t)cat_len;
+            q[xf+8]='X'; q[xf+9]='M'; q[xf+10]='I'; q[xf+11]='D';
+        }
+        q[form+0]='F'; q[form+1]='O'; q[form+2]='R'; q[form+3]='M';
+        q[form+4]=(uint8_t)(form_len>>24); q[form+5]=(uint8_t)(form_len>>16);
+        q[form+6]=(uint8_t)(form_len>>8);  q[form+7]=(uint8_t)form_len;
+        q[form+8]='X'; q[form+9]='M'; q[form+10]='I'; q[form+11]='D';
+        uint32_t w = form + 0xC;
+        q[w+0]='T'; q[w+1]='I'; q[w+2]='M'; q[w+3]='B';
+        q[w+4]=(uint8_t)(timb_len>>24); q[w+5]=(uint8_t)(timb_len>>16);
+        q[w+6]=(uint8_t)(timb_len>>8);  q[w+7]=(uint8_t)timb_len;
+        q[w+8]=(uint8_t)ntimb; q[w+9]=0;
+        uint8_t tp[3], tb[3];
+        for (int i = 0; i < ntimb; i++) {
+            tp[i] = (uint8_t)(xrnd() & 0x7F);
+            tb[i] = (xrnd() & 1) ? 0x7F : (uint8_t)(xrnd() & 0x3);
+            q[w + 10 + 2*i] = tp[i]; q[w + 11 + 2*i] = tb[i];
+        }
+        w += 8 + timb_len;
+        q[w+0]='E'; q[w+1]='V'; q[w+2]='N'; q[w+3]='T';
+        q[w+4]=(uint8_t)(el>>24); q[w+5]=(uint8_t)(el>>16);
+        q[w+6]=(uint8_t)(el>>8);  q[w+7]=(uint8_t)el;
+        memcpy(q + w + 8, ev, el);
+        // ---- bank-format timbre sources at seqfix:0x5000 ----
+        for (int i = 0; i < ntimb; i++) {
+            uint32_t b2 = 0x5000u + (uint32_t)i * 0x40;
+            uint16_t tl = (tb[i] == 0x7F) ? 0x19 : 0x0E;      // drums = perc
+            q[b2] = (uint8_t)tl; q[b2+1] = (uint8_t)(tl >> 8);
+            for (uint32_t o = 2; o < tl; o++) q[b2+o] = (uint8_t)(xrnd() & 0x7F);
+        }
+        memcpy(g_nat, idata, isave_n);
+        memcpy(g_seqfix_n, g_seqfix_i, sizeof(g_seqfix_i));
+        g_capn[0] = g_capn[1] = 0;
+        int ticks1 = 1 + (int)(xrnd() & 3);
+        int ticks2 = 1 + (int)(xrnd() & 3);
+        uint16_t fade_ms = (uint16_t)(xrnd() & 0x3FF);
+        uint16_t iax[4] = {0,0,0,0}, nax[4] = {0,0,0,0};
+        // ---- interpreter side ----
+        g_capw = 0;
+        v2_ail_interp_set_io_hooks(cap_out, cap_in);
+        { uint16_t a[2] = { 0 };
+          iax[0] = v2_ail_interp_call(0x27C8, a, 1); }        // fn64
+        { uint16_t a[2] = { 0, 0x388 };
+          iax[1] = v2_ail_interp_call(0x140E, a, 2); }        // fn65 probe
+        { uint16_t a[5] = { 0, 0x388, 0, 0, 0 };
+          v2_ail_interp_call(0x35D8, a, 5); }                 // fn66 install
+        { uint16_t a[4] = { 0, 0x4000, SEQFIX_PARA, 0xE00 };
+          v2_ail_interp_call(0x16F0, a, 4); }                 // fn9A cache
+        uint16_t ih;
+        { uint16_t a[8] = { 0, (uint16_t)0x1000, SEQFIX_PARA, 0,
+                            0x100, SEQFIX_PARA, 0x2000, SEQFIX_PARA };
+          ih = v2_ail_interp_call(0x37F6, a, 8); }            // fn97 register
+        for (int gu = 0; gu < 8 && ih != 0xFFFF; gu++) {      // fn9B/9C loop
+            uint16_t a[2] = { 0, ih };
+            uint16_t req = v2_ail_interp_call(0x1736, a, 2);
+            if (req == 0xFFFF) break;
+            int idx = 0;
+            for (int i = 0; i < ntimb; i++)
+                if (tp[i] == (uint8_t)req && tb[i] == (uint8_t)(req >> 8)) idx = i;
+            uint16_t a2[5] = { 0, (uint16_t)(req >> 8), (uint16_t)(req & 0xFF),
+                               (uint16_t)(0x5000 + idx * 0x40), SEQFIX_PARA };
+            v2_ail_interp_call(0x18DB, a2, 5);                // fn9C load
+        }
+        if (ih != 0xFFFF) {
+            uint16_t a[2] = { 0, ih };
+            v2_ail_interp_call(0x3980, a, 2);                 // fnAA start
+            for (int tk = 0; tk < ticks1; tk++)
+                v2_ail_interp_call(0x331E, (const uint16_t*)0, 0);
+            { uint16_t a3[4] = { 0, ih, 0, fade_ms };
+              v2_ail_interp_call(0x3CF1, a3, 4); }            // fnB1 fade
+            for (int tk = 0; tk < ticks2; tk++)
+                v2_ail_interp_call(0x331E, (const uint16_t*)0, 0);
+            iax[2] = v2_ail_interp_call(0x3A9E, a, 2);        // fnAE status
+            v2_ail_interp_call(0x3A15, a, 2);                 // fnAB stop
+            iax[3] = v2_ail_interp_call(0x3A9E, a, 2);
+        }
+        v2_ail_interp_set_io_hooks(old_o, old_i);
+        // ---- native side ----
+        g_capw = 1;
+        nat_out_fn so_ = g_nat_out; nat_in_fn si_ = g_nat_in;
+        g_nat_out = cap_out; g_nat_in = cap_in;
+        nax[0] = v2_ailnat_fn64_desc_27C8();
+        nax[1] = v2_ailnat_fn65_probe_140E(0x388);
+        v2_ailnat_fn66_install_35D8(0x388);
+        v2_ailnat_fn9A_set_cache_16F0(0x4000, SEQFIX_PARA, 0xE00);
+        uint16_t nh = v2_ailnat_fn97_register_37F6(0x1000, SEQFIX_PARA, 0,
+                                                   0x100, SEQFIX_PARA,
+                                                   0x2000, SEQFIX_PARA);
+        for (int gu = 0; gu < 8 && nh != 0xFFFF; gu++) {
+            uint16_t req = v2_ailnat_fn9B_timbre_request_1736(nh);
+            if (req == 0xFFFF) break;
+            int idx = 0;
+            for (int i = 0; i < ntimb; i++)
+                if (tp[i] == (uint8_t)req && tb[i] == (uint8_t)(req >> 8)) idx = i;
+            v2_ailnat_fn9C_load_timbre_18DB((uint16_t)(req >> 8),
+                                            (uint16_t)(req & 0xFF),
+                                            (uint16_t)(0x5000 + idx * 0x40),
+                                            SEQFIX_PARA);
+        }
+        if (nh != 0xFFFF) {
+            v2_ailnat_fnAA_start_3980(nh);
+            for (int tk = 0; tk < ticks1; tk++) v2_ailnat_timer_tick_331E();
+            v2_ailnat_fnB1_set_volume_3CF1(nh, 0, fade_ms);
+            for (int tk = 0; tk < ticks2; tk++) v2_ailnat_timer_tick_331E();
+            nax[2] = v2_ailnat_fnAE_status_3A9E(nh);
+            v2_ailnat_fnAB_stop_3A15(nh);
+            nax[3] = v2_ailnat_fnAE_status_3A9E(nh);
+        }
+        g_nat_out = so_; g_nat_in = si_;
+        cases++;
+        int bad = (ih != nh || memcmp(iax, nax, sizeof(iax)) != 0);
+        if (!bad) bad = (g_capn[0] != g_capn[1] ||
+                   memcmp(g_cap[0], g_cap[1], sizeof(g_cap[0][0]) * g_capn[0]) != 0);
+        if (!bad) bad = memcmp(g_nat, idata, isave_n) != 0;
+        if (!bad) bad = memcmp(g_seqfix_n, g_seqfix_i, sizeof(g_seqfix_i)) != 0;
+        if (bad) {
+            fails++;
+            if (fails <= 4) {
+                uint32_t da = 0xFFFFFFFFu, sa = 0xFFFFFFFFu;
+                for (uint32_t a = 0; a < isave_n; a++)
+                    if (g_nat[a] != idata[a]) { da = a; break; }
+                for (uint32_t a = 0; a < sizeof(g_seqfix_i); a++)
+                    if (g_seqfix_n[a] != g_seqfix_i[a]) { sa = a; break; }
+                fprintf(stderr, "AILNAT-DIFF fnsurf t=%d h i=%04X n=%04X ax %04X/%04X %04X/%04X %04X/%04X %04X/%04X outs i=%d n=%d blob@%04X seq@%04X\n",
+                        t, ih, nh, iax[0],nax[0], iax[1],nax[1],
+                        iax[2],nax[2], iax[3],nax[3],
+                        g_capn[0], g_capn[1], (unsigned)da, (unsigned)sa);
             }
         }
     }
