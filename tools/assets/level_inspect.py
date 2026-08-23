@@ -34,9 +34,11 @@ PAGE = """<!doctype html>
 </style>
 <div id="bar">level %(cid)s — %(qw)dx%(qh)d quads (%(pw)dx%(ph)dpx),
  spawns: %(nsp)d, zoom <select id="z"><option>1</option><option selected>2</option>
- <option>3</option><option>4</option></select></div>
+ <option>3</option><option>4</option></select>
+ <label><input type="checkbox" id="tt"> type tint</label></div>
 <div id="wrap">
  <img id="lvl" src="data:image/png;base64,%(png)s" width="%(zw)d">
+ <canvas id="ov" style="position:absolute;left:0;top:0;pointer-events:none"></canvas>
  <div id="hl"></div>
 </div>
 <div id="tip"></div>
@@ -45,9 +47,23 @@ const QW=%(qw)d, QH=%(qh)d, MAP=%(map)s, SPAWNS=%(spawns)s;
 const img=document.getElementById('lvl'), hl=document.getElementById('hl'),
       tip=document.getElementById('tip'), zsel=document.getElementById('z');
 let Z=2;
+const ov=document.getElementById('ov'), tt=document.getElementById('tt');
+function drawTint(){
+  ov.width=%(pw)d*Z; ov.height=%(ph)d*Z;
+  const c=ov.getContext('2d'); c.clearRect(0,0,ov.width,ov.height);
+  if(!tt.checked) return;
+  for(let qy=0;qy<QH;qy++) for(let qx=0;qx<QW;qx++){
+    const ty=MAP[qy*QW+qx]>>10;
+    if(!ty) continue;
+    c.fillStyle=`hsla(${(ty*47)%%360},90%%,55%%,0.42)`;
+    c.fillRect(qx*16*Z,qy*16*Z,16*Z,16*Z);
+    if(Z>=2){ c.fillStyle='#000'; c.font=(5*Z)+'px monospace';
+      c.fillText(ty.toString(16).toUpperCase(),qx*16*Z+2*Z,qy*16*Z+6*Z); }
+  }
+}
 function setz(){ Z=+zsel.value; img.width=%(pw)d*Z;
-  hl.style.width=hl.style.height=(16*Z)+'px'; }
-zsel.onchange=setz; setz();
+  hl.style.width=hl.style.height=(16*Z)+'px'; drawTint(); }
+zsel.onchange=setz; tt.onchange=drawTint; setz();
 img.onmousemove=e=>{
   const r=img.getBoundingClientRect();
   const px=(e.clientX-r.left)/Z, py=(e.clientY-r.top)/Z;
@@ -57,7 +73,7 @@ img.onmousemove=e=>{
   hl.style.display='block';
   hl.style.left=(qx*16*Z)+'px'; hl.style.top=(qy*16*Z)+'px';
   let t=`quad (${qx},${qy})  word ${w.toString(16).padStart(4,'0').toUpperCase()}`+
-        `\\n template ${(w&0x3FF).toString(16).toUpperCase()}  attr ${(w>>10).toString(2).padStart(6,'0')}`;
+        `\\n template ${(w&0x3FF).toString(16).toUpperCase()}  type ${(w>>10).toString(16).toUpperCase()} (sub_141A7)`;
   for(const s of SPAWNS){
     if(s.x>=qx*16&&s.x<qx*16+16&&s.y>=qy*16&&s.y<qy*16+16)
       t+=`\\n spawn cls=${s.cls.toString(16).toUpperCase()} @(${s.x},${s.y})`+
