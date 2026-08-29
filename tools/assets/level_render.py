@@ -32,6 +32,53 @@ from assetc import read_payload, tile_decode, png_write  # noqa: E402
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 HDR_DIR = os.path.join(ROOT, "assets", "level_headers")
 
+# --- level order + script (class-table) chunk tables from the static EXE ---
+# DS linear base inside exe_static.bin = 0x19F00 (proven: the level-order
+# word table ds:0x940C lands at file 0x2330C and matches the 42 known level
+# header ids). sub_111b1 reads: header chunk = ds:[level*2-0x6BF4]
+# (=0x940C wrapped), template chunk = ds:[level*2-0x6B94] (=0x946C) — the
+# "template" chunk IS the level_script (.lvs) chunk; its first bytes are
+# the CLASS TABLE (0x15-byte records, sub_13e52 layout).
+_EXE_DS = 0x19F00
+_LVL_TBL, _SCRIPT_TBL = 0x940C, 0x946C
+
+
+def level_tables():
+    """[(header_chunk, script_chunk)] in game level order (42 entries)."""
+    exe = os.path.join(ROOT, "exe_static.bin")
+    with open(exe, "rb") as f:
+        d = f.read()
+    def w(base, i):
+        o = _EXE_DS + base + i * 2
+        return d[o] | (d[o + 1] << 8)
+    return [(w(_LVL_TBL, i), w(_SCRIPT_TBL, i)) for i in range(42)]
+
+
+def script_for_header(hdr_cid):
+    for hc, sc in level_tables():
+        if hc == hdr_cid:
+            return sc if sc != 0xFFFF else None
+    return None
+
+
+def class_record(script_raw, cls):
+    """sub_13e52 template record (0x15 bytes at cls*0x15) — verified layout:
+    +0 sprite chunk id (0xFFFF none/invisible, 0xFFFE pool sprite),
+    +2 sub-sprite count (bit7: pool+2), +3 object PC (word, +3 applied at
+    spawn), +7 res handle, +9 width, +0xA height, +0xB res cost,
+    +0xD state idx, +0xF class bits, +0x11/+0x13 vel maxes."""
+    o = cls * 0x15
+    if o + 0x15 > len(script_raw):
+        return None
+    def w(off):
+        return script_raw[o + off] | (script_raw[o + off + 1] << 8)
+    return {
+        "spr": w(0), "sub": script_raw[o + 2] & 0x7F,
+        "pool_plus2": (script_raw[o + 2] >> 7) & 1,
+        "pc": w(3), "w": script_raw[o + 9], "h": script_raw[o + 0xA],
+        "state": w(0xD), "bits": w(0xF),
+    }
+
 
 def parse_header(raw):
     def w16(o):

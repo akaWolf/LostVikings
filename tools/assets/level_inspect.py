@@ -44,6 +44,7 @@ PAGE = """<!doctype html>
 <div id="tip"></div>
 <script>
 const QW=%(qw)d, QH=%(qh)d, MAP=%(map)s, SPAWNS=%(spawns)s;
+const CLASSES=%(classes)s; // cls -> sub_13e52 template record
 // type labels — verified against the ground-snap physics (sub_1625d):
 // passable {0,3,0xC}, solid list {1,2,5,0x20}, platform 4 (one-way snap),
 // slopes >= 0x30 (profile via sub_16390). Others: unlabeled yet.
@@ -69,9 +70,22 @@ const img=document.getElementById('lvl'), hl=document.getElementById('hl'),
       tip=document.getElementById('tip'), zsel=document.getElementById('z');
 let Z=2;
 const ov=document.getElementById('ov'), tt=document.getElementById('tt');
+function drawSpawnBoxes(c){
+  for(const s of SPAWNS){
+    const ci=CLASSES[s.cls]||null;
+    const w=ci?ci.w:8, h=ci?ci.h:8;
+    const x0=s.x-(w>>1), y0=s.y-(h>>1);   // sub_13e52 bbox math
+    c.strokeStyle=(s.anim&0x800)?'#6f6':(ci&&ci.spr===0xFFFF?'#888':'#f4f');
+    c.lineWidth=1;
+    c.strokeRect(x0*Z+0.5,y0*Z+0.5,w*Z-1,h*Z-1);
+    c.fillStyle='#fff'; c.font=(4*Z+3)+'px monospace';
+    c.fillText(s.cls.toString(16).toUpperCase(),x0*Z+Z,y0*Z-Z);
+  }
+}
 function drawTint(){
   ov.width=%(pw)d*Z; ov.height=%(ph)d*Z;
   const c=ov.getContext('2d'); c.clearRect(0,0,ov.width,ov.height);
+  drawSpawnBoxes(c);
   if(!tt.checked) return;
   for(let qy=0;qy<QH;qy++) for(let qx=0;qx<QW;qx++){
     const ty=MAP[qy*QW+qx]>>10;
@@ -106,10 +120,16 @@ img.onmousemove=e=>{
   let t=`quad (${qx},${qy})  word ${w.toString(16).padStart(4,'0').toUpperCase()}`+
         `\\n template ${(w&0x3FF).toString(16).toUpperCase()}  type ${(w>>10).toString(16).toUpperCase()} ${typeName(w>>10)}`;
   for(const s of SPAWNS){
-    if(s.x>=qx*16&&s.x<qx*16+16&&s.y>=qy*16&&s.y<qy*16+16)
+    if(s.x>=qx*16&&s.x<qx*16+16&&s.y>=qy*16&&s.y<qy*16+16){
       t+=`\\n spawn cls=${s.cls.toString(16).toUpperCase()} @(${s.x},${s.y})`+
          ` p=(${s.p1},${s.p2}) anim=${s.anim.toString(16).toUpperCase()}`+
          ((s.anim&0x800)?' PERM':'');
+      const ci=CLASSES[s.cls];
+      if(ci) t+=`\\n   class: ${ci.w}x${ci.h} sub=${ci.sub}`+
+        (ci.spr===0xFFFF?' INVISIBLE':(ci.spr===0xFFFE?' pool-sprite':
+         ` spr=${ci.spr.toString(16).padStart(4,'0').toUpperCase()}`))+
+        ` pc=${ci.pc.toString(16).toUpperCase()} bits=${ci.bits.toString(16).toUpperCase()}`;
+    }
   }
   tip.textContent=t; tip.style.display='block';
   tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY+14)+'px';
@@ -128,6 +148,15 @@ def main():
     with open(os.path.join(LR.HDR_DIR, f"{cid}.json")) as f:
         raw = bytes.fromhex(json.load(f)["raw"])
     qw, qh, tm_id, _, _, _, spawns = LR.parse_header(raw)
+    classes = {}
+    script_id = LR.script_for_header(int(cid, 16))
+    if script_id is not None:
+        script_raw, _ = read_payload(script_id, "lzss")
+        for sp in spawns:
+            if sp["cls"] not in classes:
+                rec = LR.class_record(script_raw, sp["cls"])
+                if rec:
+                    classes[sp["cls"]] = rec
     tmap, _ = read_payload(tm_id, "lzss")
     words = [tmap[i * 2] | (tmap[i * 2 + 1] << 8) for i in range(qw * qh)]
     png, w, h = LR.render(cid)
@@ -138,6 +167,7 @@ def main():
         "png": base64.b64encode(png).decode(),
         "map": json.dumps(words, separators=(",", ":")),
         "spawns": json.dumps(spawns, separators=(",", ":")),
+        "classes": json.dumps(classes, separators=(",", ":")),
     }
     out = args.out or f"/tmp/level_{cid}.html"
     with open(out, "w") as f:

@@ -109,6 +109,7 @@ PAGE = """<!doctype html>
    p1 <input id="sp_p1" size="4"> p2 <input id="sp_p2" size="4"><br>
    cls <input id="sp_cls" size="3"> anim <input id="sp_anim" size="4">
    pool <input id="sp_pool" size="3"> (hex)<br>
+   <span id="spinfo" style="color:#8bc"></span><br>
    <button id="spapply">apply</button>
   </div>
   templates (%(ntpl)d):<canvas id="pal"></canvas></div>
@@ -118,6 +119,7 @@ PAGE = """<!doctype html>
 const QW=%(qw)d, QH=%(qh)d, NT=%(ntpl)d, PCOLS=%(pcols)d, TM_ID="%(tmid)s";
 const MAP=%(map)s, TAIL="%(tail)s";
 const SPAWNS=%(spawns)s, SPOFFS=%(spoffs)s, HID="%(hid)s";
+const CLASSES=%(classes)s; // cls -> sub_13e52 template record
 const HDRRAW="%(hdrraw)s", HDRJSON=%(hdrjson)s;
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
@@ -148,6 +150,13 @@ function drawSpawns(){
   const c=sov.getContext('2d');
   SPAWNS.forEach((s,i)=>{
     const x=s.x*Z, y=s.y*Z;
+    const ci=CLASSES[s.cls]||null;
+    if(ci){  // sub_13e52 bbox: X0 = x-(w>>1)
+      const x0=(s.x-(ci.w>>1))*Z, y0=(s.y-(ci.h>>1))*Z;
+      c.strokeStyle=(i===SPSEL)?'#ff4':(ci.spr===0xFFFF?'#888':'#4cf');
+      c.lineWidth=1;
+      c.strokeRect(x0+0.5,y0+0.5,ci.w*Z-1,ci.h*Z-1);
+    }
     c.strokeStyle=(i===SPSEL)?'#ff4':((s.anim&0x800)?'#6f6':'#f6f');
     c.lineWidth=(i===SPSEL)?2:1;
     c.beginPath();
@@ -170,6 +179,12 @@ function spForm(){
   spCls.value=s.cls.toString(16).toUpperCase();
   spAnim.value=s.anim.toString(16).toUpperCase();
   spPool.value=s.pool.toString(16).toUpperCase();
+  const ci=CLASSES[s.cls];
+  document.getElementById('spinfo').textContent = ci ?
+    `class: ${ci.w}x${ci.h} sub=${ci.sub} `+
+    (ci.spr===0xFFFF?'INVISIBLE':(ci.spr===0xFFFE?'pool-sprite':
+     'spr='+ci.spr.toString(16).padStart(4,'0').toUpperCase()))+
+    ` bits=${ci.bits.toString(16).toUpperCase()}` : 'class: ?';
 }
 function spawnNear(e){
   const r=map.getBoundingClientRect();
@@ -309,6 +324,15 @@ def main():
     qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = LR.parse_header(raw)
     # byte offsets of the spawn records inside the stripe (in-place editing)
     sp_offsets = [0x43 + i * 0x0E for i in range(len(spawns))]
+    classes = {}
+    script_id = LR.script_for_header(int(cid, 16))
+    if script_id is not None:
+        script_raw, _ = read_payload(script_id, "lzss")
+        for sp in spawns:
+            if sp["cls"] not in classes:
+                rec = LR.class_record(script_raw, sp["cls"])
+                if rec:
+                    classes[sp["cls"]] = rec
     tmap, _ = read_payload(tm_id, "lzss")
     tgfx, _ = read_payload(ts_id, "lzss")
     gtld, _ = read_payload(gt_id, "lzss")
@@ -326,6 +350,7 @@ def main():
         "map": json.dumps(words, separators=(",", ":")),
         "tail": tail,
         "spawns": json.dumps(spawns, separators=(",", ":")),
+        "classes": json.dumps(classes, separators=(",", ":")),
         "spoffs": json.dumps(sp_offsets, separators=(",", ":")),
         "hdrraw": raw.hex().upper(),
         "hdrjson": json.dumps({k: v for k, v in json.load(
