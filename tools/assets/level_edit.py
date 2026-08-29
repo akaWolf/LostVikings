@@ -104,7 +104,8 @@ PAGE = """<!doctype html>
  level %(cid)s — %(qw)dx%(qh)d quads | tool:
  <select id="tool"><option value="stamp">stamp</option>
  <option value="type">set type</option><option value="pick">pick</option>
- <option value="spawn">spawn</option></select>
+ <option value="spawn">spawn</option><option value="select">select</option></select>
+ <span style="color:#888">[S/T/P/W/E, ^Z undo, ^C/^V copy/paste]</span>
  type <input id="tyval" size="2" value="0"> (hex)
  | sel tpl <span id="selt">0</span>
  <button id="undo">undo</button>
@@ -300,6 +301,18 @@ function drawSpawns(){
     c.strokeStyle='#4f4'; c.lineWidth=2;
     c.strokeRect(x0*16*Z+1,y0*16*Z+1,(x1-x0+1)*16*Z-2,(y1-y0+1)*16*Z-2);
   }
+  if(SELRECT){
+    c.strokeStyle='#48f'; c.lineWidth=2; c.setLineDash([6,4]);
+    c.strokeRect(SELRECT.x0*16*Z+1,SELRECT.y0*16*Z+1,
+                 (SELRECT.x1-SELRECT.x0+1)*16*Z-2,(SELRECT.y1-SELRECT.y0+1)*16*Z-2);
+    c.setLineDash([]);
+  }
+  if(pasteQ>=0&&CLIP){
+    const qx=pasteQ%%QW, qy=(pasteQ-qx)/QW;
+    c.strokeStyle='#fa0'; c.lineWidth=2; c.setLineDash([3,3]);
+    c.strokeRect(qx*16*Z+1,qy*16*Z+1,CLIP.w*16*Z-2,CLIP.h*16*Z-2);
+    c.setLineDash([]);
+  }
 }
 const spX=document.getElementById('sp_x'), spY=document.getElementById('sp_y'),
       spP1=document.getElementById('sp_p1'), spP2=document.getElementById('sp_p2'),
@@ -364,10 +377,20 @@ map.onmousedown=e=>{
     spForm(); drawSpawns();
     return;
   }
+  if(pasting&&CLIP){
+    const q=quadAt(e); if(q<0) return;
+    applyPaste(q); return;
+  }
   if(tool.value==='spawn'){
     const i=spawnNear(e); SPSEL=i;
     if(i>=0){ hist.push({t:'sp',i:i,rec:Object.assign({},SPAWNS[i])}); spDrag=true; }
     spForm(); drawSpawns();
+    return;
+  }
+  if(tool.value==='select'){
+    const q=quadAt(e); if(q<0) return;
+    selStart=q; SELRECT=null; rectStart=rectCur=-1;
+    selCur=q; updateSel(); drawSpawns();
     return;
   }
   if(tool.value==='stamp'||tool.value==='type'){
@@ -375,11 +398,74 @@ map.onmousedown=e=>{
     rectStart=rectCur=q; drawSpawns();
   }
 };
+let selStart=-1, selCur=-1, SELRECT=null, CLIP=null, pasting=false, pasteQ=-1;
+function updateSel(){
+  if(selStart<0||selCur<0) return;
+  const ax=selStart%%QW, ay=(selStart-ax)/QW, bx=selCur%%QW, by=(selCur-bx)/QW;
+  SELRECT={x0:Math.min(ax,bx),y0:Math.min(ay,by),
+           x1:Math.max(ax,bx),y1:Math.max(ay,by)};
+}
+function copySel(){
+  if(!SELRECT){ stat.textContent=' select a region first (E tool)'; return; }
+  const w=SELRECT.x1-SELRECT.x0+1, h=SELRECT.y1-SELRECT.y0+1;
+  const words=[];
+  for(let y=SELRECT.y0;y<=SELRECT.y1;y++)
+    for(let x=SELRECT.x0;x<=SELRECT.x1;x++) words.push(MAP[y*QW+x]);
+  CLIP={gt:GT_ID,w:w,h:h,words:words};
+  try{ localStorage.setItem('lv_clip', JSON.stringify(CLIP)); }catch(_e){}
+  stat.textContent=` copied ${w}x${h}`;
+}
+function startPaste(){
+  if(!CLIP){
+    try{ CLIP=JSON.parse(localStorage.getItem('lv_clip')||'null'); }catch(_e){}
+  }
+  if(!CLIP){ stat.textContent=' clipboard empty'; return; }
+  if(CLIP.gt!==GT_ID){
+    stat.textContent=` clip is from another world (gtld ${CLIP.gt}) — template indices would be garbage here`;
+    return;
+  }
+  pasting=true; pasteQ=-1;
+  stat.textContent=` pasting ${CLIP.w}x${CLIP.h} — click to place, Esc cancels`;
+}
+function applyPaste(q){
+  const qx=q%%QW, qy=(q-qx)/QW;
+  const ch=[];
+  for(let y=0;y<CLIP.h;y++) for(let x=0;x<CLIP.w;x++){
+    const dx=qx+x, dy=qy+y;
+    if(dx>=QW||dy>=QH) continue;
+    const dq=dy*QW+dx, nv=CLIP.words[y*CLIP.w+x];
+    if(MAP[dq]!==nv){ ch.push([dq,MAP[dq]]); MAP[dq]=nv; EDITED.add(dq); redrawQuad(dq); }
+  }
+  if(ch.length) hist.push({t:'rect',ch:ch});
+  pasting=false; pasteQ=-1; drawSpawns();
+  stat.textContent=` pasted (${ch.length} quads changed)`;
+}
 window.onmouseup=()=>{
   spDrag=false;
+  selStart=-1;
   if(rectStart>=0&&rectCur>=0){ applyRect(); rectStart=rectCur=-1; drawSpawns(); }
 };
-window.onkeydown=e=>{ if(e.key==='Escape'){ placing=false; rectStart=rectCur=-1; drawSpawns(); } };
+window.onkeydown=e=>{
+  if(e.key==='Escape'){
+    placing=false; pasting=false; pasteQ=-1;
+    rectStart=rectCur=-1; SELRECT=null; drawSpawns();
+    return;
+  }
+  const tag=(e.target&&e.target.tagName)||'';
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){
+    e.preventDefault(); document.getElementById('undo').click(); return;
+  }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){
+    e.preventDefault(); copySel(); return;
+  }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){
+    e.preventDefault(); startPaste(); return;
+  }
+  const tools={s:'stamp',t:'type',p:'pick',w:'spawn',e:'select'};
+  const k=e.key.toLowerCase();
+  if(tools[k]){ tool.value=tools[k]; }
+};
 document.getElementById('spadd').onclick=()=>{
   placing=true;
   stat.textContent=' click the map to place the new spawn (Esc cancels)';
@@ -445,6 +531,13 @@ map.onmousemove=e=>{
   if(rectStart>=0){
     const q=quadAt(e); if(q>=0){ rectCur=q; drawSpawns(); }
     return;
+  }
+  if(selStart>=0&&e.buttons&1){
+    const q=quadAt(e); if(q>=0){ selCur=q; updateSel(); drawSpawns(); }
+    return;
+  }
+  if(pasting){
+    const q=quadAt(e); if(q>=0&&q!==pasteQ){ pasteQ=q; drawSpawns(); }
   }
   const q=quadAt(e); if(q<0){tip.style.display='none';return;}
   const w=MAP[q];
