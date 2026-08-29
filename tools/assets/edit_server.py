@@ -42,6 +42,9 @@ SAVE_KINDS = {
     "tilemap": ("tilemaps", "tilemap_u16"),
     "header": ("level_headers", "level_header_stripe"),
 }
+# gtld ("bg_tileset" role — historical mislabel; the chunk is the quad
+# TEMPLATE TABLE, sub_173C7) is stored in the open tree as the TilesBase
+# png+json pair: rebuild both via the role converter (bijective codec).
 
 
 def scratch_init(fresh):
@@ -143,6 +146,8 @@ class H(BaseHTTPRequestHandler):
 
     def api_save(self, body):
         kind = body.get("kind")
+        if kind == "gtld":
+            return self.api_save_gtld(body)
         if kind not in SAVE_KINDS:
             return self._err(f"bad kind {kind!r}")
         sub, fmt = SAVE_KINDS[kind]
@@ -160,6 +165,31 @@ class H(BaseHTTPRequestHandler):
             json.dump(data, f, indent=1)
         os.replace(tmp, path)
         return self._json({"ok": True, "path": path})
+
+    def api_save_gtld(self, body):
+        chunk = str(body.get("chunk", "")).upper()
+        data = body.get("data") or {}
+        words = data.get("words")
+        rest = data.get("rest", "")
+        if len(chunk) != 4 or not isinstance(words, list) or len(words) % 4:
+            return self._err("gtld: need chunk + words (multiple of 4)")
+        if not os.path.exists(os.path.join(SCRATCH, "bg_tilesets",
+                                           f"{chunk}.json")):
+            return self._err(f"unknown gtld chunk {chunk}")
+        raw = bytearray()
+        for w in words:
+            w = int(w) & 0xFFFF
+            raw += bytes((w & 0xFF, w >> 8))
+        raw += bytes.fromhex(rest)
+        files = assetc.converter_for("bg_tileset").extract(int(chunk, 16),
+                                                           bytes(raw))
+        for rel, blob in files:
+            path = os.path.join(SCRATCH, rel)
+            tmp = path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(blob)
+            os.replace(tmp, path)
+        return self._json({"ok": True, "files": [r for r, _ in files]})
 
     def api_play(self):
         p = GAME[0]

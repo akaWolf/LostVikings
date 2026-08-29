@@ -11,9 +11,15 @@ Generates the HTML editor for one level:
     field (x/y/half_w/half_h/class/anim/pool — sub_13bbd layout),
     click-to-place ADD, DELETE (the stripe tail is terminator-scanned,
     parse_stripe grammar, so record count may change freely);
+  - TEMPLATE CONSTRUCTOR: compose a quad template from any 4 tileset
+    tiles with per-corner h/v flips (1689E draw-word model, bits 0-3
+    preserved), edit an existing template or append a NEW one (grows the
+    gtld chunk; proven in-game), map/palette redraw via overrides;
+  - palette-list and palette-anim forms (stripe grammar sections);
   - undo, EXPORT (tilemap .json/.bin, header .json — assetc-compatible);
   - SERVER mode (edit_server.py): save/pack/play buttons drive the
-    scratch assets tree end-to-end without downloads.
+    scratch assets tree end-to-end without downloads (gtld saves rebuild
+    the bg_tilesets png+json pair via the role converter).
 
 Usage:
   python3 tools/assets/level_edit.py 00CA [-o out.html]
@@ -27,6 +33,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from assetc import tile_decode, png_write  # noqa: E402
 import level_render as LR  # noqa: E402
+
+
+def render_tile_atlas(tgfx, pal, cols=16):
+    """All 8x8 tiles of the tileset as a PNG atlas (16/row), level palette."""
+    n = len(tgfx) // 64
+    rows = (n + cols - 1) // cols
+    stride = cols * 8
+    img = bytearray(stride * rows * 8)
+    for i in range(n):
+        px = tile_decode(tgfx[i * 64:(i + 1) * 64])
+        bx, by = (i % cols) * 8, (i // cols) * 8
+        for y in range(8):
+            img[(by + y) * stride + bx:(by + y) * stride + bx + 8] = \
+                px[y * 8:(y + 1) * 8]
+    return png_write(stride, rows * 8, bytes(img), pal), n, cols
 
 
 def render_template_atlas(gtld, tgfx, pal, cols=16):
@@ -119,6 +140,15 @@ PAGE = """<!doctype html>
    <button id="spadd">add (click map)</button>
    <button id="spdel">delete</button>
   </div>
+  <details style="margin-bottom:8px"><summary>template editor (tpl <span id="tesel">-</span>)</summary>
+   corners (click one, then click a tile below):<br>
+   <div id="tecorners"></div>
+   preview: <canvas id="tprev" style="display:inline-block;vertical-align:middle"></canvas>
+   <button id="teload">load sel tpl</button>
+   <button id="teapply">apply to sel</button>
+   <button id="teadd">add as new</button><br>
+   tiles (%(ntiles)d):<canvas id="tiles"></canvas>
+  </details>
   <details style="margin-bottom:8px"><summary>palette list (%(npal)d) — reload after save+pack</summary>
    <div id="plist"></div>
    <button id="pladd">add entry</button>
@@ -145,6 +175,11 @@ const ST_HEAD="%(sthead)s", ST_REST="%(strest)s", HDRRAW="%(hdrraw)s";
 let PAL_EN=%(palen)d;
 const PAL_LIST=%(pallist)s, PAL_ANIMS=%(palanims)s;
 const BANKS=%(banks)s, ACHUNKS=%(achunks)s;
+const GT_ID="%(gtid)s", NTILES=%(ntiles)d, TCOLS=%(tcols)d;
+let GTLD=%(gtld)s;   // draw words, 4 per template (1689E: bits 15..6 tile
+                     // byte offset, bit4 hflip, bit5 vflip, bits 0-3 kept)
+const GT_REST="%(gtrest)s", GTLDHEX="%(gtldhex)s";
+const tilesImg=new Image(); tilesImg.src="data:image/png;base64,%(tpng)s";
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
 const map=document.getElementById('map'), pal=document.getElementById('pal'),
@@ -157,7 +192,9 @@ const mc=map.getContext('2d'), pc=pal.getContext('2d');
 function redrawQuad(q){
   const qx=q%%QW, qy=(q-qx)/QW, t=MAP[q]&0x3FF;
   mc.imageSmoothingEnabled=false;
-  mc.drawImage(atlas,(t%%PCOLS)*16,((t/PCOLS)|0)*16,16,16,
+  const ov=OVERRIDE.get(t);
+  if(ov) mc.drawImage(ov,0,0,16,16,qx*16*Z,qy*16*Z,16*Z,16*Z);
+  else mc.drawImage(atlas,(t%%PCOLS)*16,((t/PCOLS)|0)*16,16,16,
                qx*16*Z,qy*16*Z,16*Z,16*Z);
 }
 function drawAll(){
@@ -328,8 +365,11 @@ document.getElementById('spapply').onclick=()=>{
 };
 const EDITED=new Set();
 function drawPal(){
-  pal.width=PCOLS*16; pal.height=Math.ceil(NT/PCOLS)*16+4;
+  const n=Math.max(NT,ntplNow());
+  pal.width=PCOLS*16; pal.height=Math.ceil(n/PCOLS)*16+4;
   pc.imageSmoothingEnabled=false; pc.drawImage(atlas,0,0);
+  for(const [t,cv] of OVERRIDE)
+    pc.drawImage(cv,(t%%PCOLS)*16,((t/PCOLS)|0)*16);
   pc.strokeStyle='#ff4';
   pc.strokeRect((SEL%%PCOLS)*16+0.5,((SEL/PCOLS)|0)*16+0.5,15,15);
 }
@@ -339,7 +379,8 @@ document.getElementById('z').onchange=e=>{ Z=+e.target.value; drawAll(); };
 pal.onclick=e=>{
   const r=pal.getBoundingClientRect();
   const tx=((e.clientX-r.left)/16)|0, ty=((e.clientY-r.top)/16)|0;
-  const t=ty*PCOLS+tx; if(t<NT){ SEL=t; selt.textContent=t.toString(16).toUpperCase(); drawPal(); }
+  const t=ty*PCOLS+tx;
+  if(t<ntplNow()){ SEL=t; selt.textContent=t.toString(16).toUpperCase(); drawPal(); teLoad(t); }
 };
 function quadAt(e){
   const r=map.getBoundingClientRect();
@@ -378,6 +419,11 @@ document.getElementById('undo').onclick=()=>{
   const h=hist.pop(); if(!h) return;
   if(h.t==='map'){ MAP[h.q]=h.w; redrawQuad(h.q); }
   else if(h.t==='rect'){ for(const [q,w] of h.ch){ MAP[q]=w; redrawQuad(q); } }
+  else if(h.t==='gtld'){ for(let k=0;k<4;k++) GTLD[h.i*4+k]=h.words[k];
+    OVERRIDE.set(h.i, renderTplCanvas(h.i)); drawPal();
+    for(let q=0;q<QW*QH;q++) if((MAP[q]&0x3FF)===h.i) redrawQuad(q); }
+  else if(h.t==='gtldadd'){ GTLD.length-=4; OVERRIDE.delete(ntplNow());
+    if(SEL>=ntplNow()) SEL=0; drawPal(); }
   else if(h.t==='spadd'){ SPAWNS.pop(); if(SPSEL>=SPAWNS.length)SPSEL=-1; spForm(); drawSpawns(); }
   else if(h.t==='spdel'){ SPAWNS.splice(h.i,0,h.rec); spForm(); drawSpawns(); }
   else { SPAWNS[h.i]=h.rec; if(SPSEL===h.i) spForm(); drawSpawns(); }
@@ -442,6 +488,126 @@ document.getElementById('expbin').onclick=()=>{
     b[MAP.length*2+i/2]=parseInt(TAIL.substr(i,2),16);
   dl(TM_ID+'.bin', new Blob([b],{type:'application/octet-stream'}));
 };
+// ---- template constructor ----
+const OVERRIDE=new Map();   // tpl -> 16x16 canvas (edited templates)
+function ntplNow(){ return GTLD.length/4; }
+function renderTplCanvas(t){
+  const c=document.createElement('canvas'); c.width=16; c.height=16;
+  const g=c.getContext('2d'); g.imageSmoothingEnabled=false;
+  for(let k=0;k<4;k++){
+    const dw=GTLD[t*4+k];
+    const idx=(dw&0xFFC0)>>6, hf=(dw>>4)&1, vf=(dw>>5)&1;
+    const sx=(idx%%TCOLS)*8, sy=((idx/TCOLS)|0)*8;
+    const dx=(k&1)*8, dy=(k>>1)*8;
+    g.save();
+    g.translate(dx+(hf?8:0), dy+(vf?8:0));
+    g.scale(hf?-1:1, vf?-1:1);
+    g.drawImage(tilesImg, sx,sy,8,8, 0,0,8,8);
+    g.restore();
+  }
+  return c;
+}
+// GTLD word order per template: e[0],e[2] = top row, e[4],e[6] = bottom
+// (sub_173C7) -> word index k: 0=TL 1=TR 2=BL 3=BR.
+const TE={cur:0, cells:[{},{},{},{}]};
+function teSync(){
+  for(let k=0;k<4;k++){
+    const dw=TE.cells[k].dw|0;
+    const el=document.getElementById('tec'+k);
+    el.style.outline=(k===TE.cur)?'2px solid #ff4':'1px solid #444';
+    el.querySelector('input.ti').value=((dw&0xFFC0)>>6).toString(16).toUpperCase();
+    el.querySelector('input.hf').checked=!!(dw&0x10);
+    el.querySelector('input.vf').checked=!!(dw&0x20);
+  }
+  const pv=document.getElementById('tprev');
+  pv.width=32; pv.height=32;
+  const g=pv.getContext('2d'); g.imageSmoothingEnabled=false;
+  for(let k=0;k<4;k++){
+    const dw=TE.cells[k].dw|0;
+    const idx=(dw&0xFFC0)>>6, hf=(dw>>4)&1, vf=(dw>>5)&1;
+    const sx=(idx%%TCOLS)*8, sy=((idx/TCOLS)|0)*8;
+    const dx=(k&1)*16, dy=(k>>1)*16;
+    g.save();
+    g.translate(dx+(hf?16:0), dy+(vf?16:0));
+    g.scale(hf?-2:2, vf?-2:2);
+    g.drawImage(tilesImg, sx,sy,8,8, 0,0,8,8);
+    g.restore();
+  }
+}
+function teInitCells(){
+  const box=document.getElementById('tecorners');
+  const names=['TL','TR','BL','BR'];
+  box.innerHTML='';
+  for(let k=0;k<4;k++){
+    const d=document.createElement('span');
+    d.id='tec'+k;
+    d.style.cssText='display:inline-block;margin:2px;padding:2px';
+    d.innerHTML=`${names[k]} <input class="ti" size="3">`+
+      `<label><input class="hf" type="checkbox">h</label>`+
+      `<label><input class="vf" type="checkbox">v</label>`;
+    d.onclick=()=>{ TE.cur=k; teSync(); };
+    const ti=d.querySelector('input.ti');
+    ti.onchange=()=>{ const idx=Math.min(NTILES-1,parseInt(ti.value,16)||0);
+      TE.cells[k].dw=(TE.cells[k].dw&0x3F)|(idx<<6); teSync(); };
+    d.querySelector('input.hf').onchange=e2=>{
+      TE.cells[k].dw=(TE.cells[k].dw&~0x10)|(e2.target.checked?0x10:0); teSync(); };
+    d.querySelector('input.vf').onchange=e2=>{
+      TE.cells[k].dw=(TE.cells[k].dw&~0x20)|(e2.target.checked?0x20:0); teSync(); };
+    box.appendChild(d);
+  }
+}
+teInitCells();
+function teLoad(t){
+  document.getElementById('tesel').textContent=t.toString(16).toUpperCase();
+  for(let k=0;k<4;k++) TE.cells[k].dw=GTLD[t*4+k];
+  teSync();
+}
+function teWrite(t){
+  for(let k=0;k<4;k++) GTLD[t*4+k]=TE.cells[k].dw&0xFFFF;
+  OVERRIDE.set(t, renderTplCanvas(t));
+  drawPal();
+  for(let q=0;q<QW*QH;q++) if((MAP[q]&0x3FF)===t) redrawQuad(q);
+  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size} tpl:${OVERRIDE.size}`;
+}
+document.getElementById('teload').onclick=()=>teLoad(SEL);
+document.getElementById('teapply').onclick=()=>{
+  hist.push({t:'gtld',i:SEL,words:GTLD.slice(SEL*4,SEL*4+4)});
+  teWrite(SEL);
+};
+document.getElementById('teadd').onclick=()=>{
+  if(ntplNow()>=1024){ stat.textContent=' template limit 1024 (10-bit index)'; return; }
+  const t=ntplNow();
+  GTLD.push(0,0,0,0);
+  hist.push({t:'gtldadd'});
+  teWrite(t); SEL=t;
+  selt.textContent=t.toString(16).toUpperCase();
+  document.getElementById('tesel').textContent=selt.textContent;
+  drawPal();
+};
+const tiles=document.getElementById('tiles');
+tilesImg.onload=()=>{
+  tiles.width=TCOLS*8*2; tiles.height=Math.ceil(NTILES/TCOLS)*8*2;
+  const g=tiles.getContext('2d'); g.imageSmoothingEnabled=false;
+  g.drawImage(tilesImg,0,0,tiles.width,tiles.height);
+};
+tiles.onclick=e=>{
+  const r=tiles.getBoundingClientRect();
+  const tx=((e.clientX-r.left)/16)|0, ty=((e.clientY-r.top)/16)|0;
+  const idx=ty*TCOLS+tx;
+  if(idx>=NTILES) return;
+  TE.cells[TE.cur].dw=(TE.cells[TE.cur].dw&0x3F)|(idx<<6);
+  TE.cur=(TE.cur+1)&3;  // convenience: advance to the next corner
+  teSync();
+};
+function buildGtldWords(){ return {chunk:GT_ID, words:GTLD, rest:GT_REST}; }
+// gtld self-check: untouched words must rebuild the chunk hex
+{
+  let hx='';
+  for(const w of GTLD) hx+=w2(w);
+  hx+=GT_REST.toLowerCase();
+  globalThis.__gtld_ok = (hx===GTLDHEX.toLowerCase());
+  if(!globalThis.__gtld_ok) console.error('gtld reserialize MISMATCH');
+}
 // ---- palette list / palette anims forms ----
 // (edits apply to PAL_LIST/PAL_ANIMS directly; the level PNG is baked at
 // page build time, so color changes show after save+pack+reload)
@@ -495,6 +661,7 @@ async function srvSave(){
   srvstat.textContent='saving...';
   await api('/api/save',{kind:'tilemap',chunk:TM_ID,data:buildTilemapJson()});
   await api('/api/save',{kind:'header',chunk:HID,data:buildHeaderJson()});
+  await api('/api/save',{kind:'gtld',chunk:GT_ID,data:buildGtldWords()});
   srvstat.textContent='saved';
 }
 async function srvPack(){
@@ -551,6 +718,10 @@ def render_page(cid, server=False, root=None):
     tail = tmap[qw * qh * 2:].hex().upper()
     png, _, _ = LR.render(cid, root)
     apng, ntpl, pcols = render_template_atlas(gtld, tgfx, pal)
+    tpng, ntiles, tcols = render_tile_atlas(tgfx, pal)
+    gtld_words = [gtld[i * 2] | (gtld[i * 2 + 1] << 8)
+                  for i in range(ntpl * 4)]
+    gt_rest = gtld[ntpl * 8:].hex()
     base = root if root is not None else os.path.join(LR.ROOT, "assets")
     with open(os.path.join(base, "level_headers", f"{cid}.json")) as f:
         hdr_named = {k: v for k, v in json.load(f).items() if k != "raw"}
@@ -575,6 +746,11 @@ def render_page(cid, server=False, root=None):
         "banks": json.dumps(st["sprite_banks"], separators=(",", ":")),
         "achunks": json.dumps(st["anim_chunks"], separators=(",", ":")),
         "hdrraw": raw.hex(),
+        "gtid": f"{gt_id:04X}",
+        "tpng": base64.b64encode(tpng).decode(),
+        "ntiles": ntiles, "tcols": tcols,
+        "gtld": json.dumps(gtld_words, separators=(",", ":")),
+        "gtrest": gt_rest, "gtldhex": gtld.hex(),
         "hdrjson": json.dumps(hdr_named, separators=(",", ":")),
         "hid": cid,
     }
