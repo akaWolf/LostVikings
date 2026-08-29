@@ -106,11 +106,13 @@ PAGE = """<!doctype html>
   <div id="spf" style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:6px">
    spawn <span id="spidx">-</span> / %(nsp)d<br>
    x <input id="sp_x" size="4"> y <input id="sp_y" size="4"><br>
-   p1 <input id="sp_p1" size="4"> p2 <input id="sp_p2" size="4"><br>
+   half_w <input id="sp_p1" size="3"> half_h <input id="sp_p2" size="3"><br>
    cls <input id="sp_cls" size="3"> anim <input id="sp_anim" size="4">
    pool <input id="sp_pool" size="3"> (hex)<br>
    <span id="spinfo" style="color:#8bc"></span><br>
    <button id="spapply">apply</button>
+   <button id="spadd">add</button>
+   <button id="spdel">delete</button>
   </div>
   templates (%(ntpl)d):<canvas id="pal"></canvas></div>
 </div>
@@ -124,6 +126,7 @@ const ICONS=%(icons)s; // engine-harvested sprites (class_icons.py)
 const IIMG={};
 for(const k in ICONS){const im=new Image();im.onload=()=>{if(typeof drawSpawns==='function')drawSpawns();};im.src='data:image/png;base64,'+ICONS[k].b64; IIMG[k]=im;}
 const HDRRAW="%(hdrraw)s", HDRJSON=%(hdrjson)s;
+const HDRPRE="%(hdrpre)s", HDRSUF="%(hdrsuf)s";
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
 const map=document.getElementById('map'), pal=document.getElementById('pal'),
@@ -183,7 +186,7 @@ function spForm(){
   document.getElementById('spidx').textContent=SPSEL<0?'-':SPSEL;
   if(SPSEL<0) return;
   const s=SPAWNS[SPSEL];
-  spX.value=s.x; spY.value=s.y; spP1.value=s.p1; spP2.value=s.p2;
+  spX.value=s.x; spY.value=s.y; spP1.value=s.half_w; spP2.value=s.half_h;
   spCls.value=s.cls.toString(16).toUpperCase();
   spAnim.value=s.anim.toString(16).toUpperCase();
   spPool.value=s.pool.toString(16).toUpperCase();
@@ -211,12 +214,28 @@ map.onmousedown=e=>{
   spForm(); drawSpawns();
 };
 window.onmouseup=()=>{ spDrag=false; };
+document.getElementById('spadd').onclick=()=>{
+  const base=(SPSEL>=0)?SPAWNS[SPSEL]:{x:32,y:32,half_w:8,half_h:8,cls:0x1D,anim:0x20,pool:0};
+  const s=Object.assign({},base);
+  if(SPSEL>=0){ s.x=Math.min(QW*16-1,s.x+16); s.y=Math.min(QH*16-1,s.y+16); }
+  SPAWNS.push(s); SPSEL=SPAWNS.length-1;
+  hist.push({t:'spadd'});
+  SPEDIT.add(SPSEL); spForm(); drawSpawns();
+  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size} n=${SPAWNS.length}`;
+};
+document.getElementById('spdel').onclick=()=>{
+  if(SPSEL<0) return;
+  hist.push({t:'spdel',i:SPSEL,rec:SPAWNS[SPSEL]});
+  SPAWNS.splice(SPSEL,1); SPSEL=-1;
+  spForm(); drawSpawns();
+  stat.textContent=` edits:${EDITED.size} sp:- n=${SPAWNS.length}`;
+};
 document.getElementById('spapply').onclick=()=>{
   if(SPSEL<0) return;
   const s=SPAWNS[SPSEL];
   hist.push({t:'sp',i:SPSEL,rec:Object.assign({},s)});
   s.x=(+spX.value)|0; s.y=(+spY.value)|0;
-  s.p1=(+spP1.value)|0; s.p2=(+spP2.value)|0;
+  s.half_w=(+spP1.value)|0; s.half_h=(+spP2.value)|0;
   s.cls=parseInt(spCls.value,16)||0; s.anim=parseInt(spAnim.value,16)||0;
   s.pool=parseInt(spPool.value,16)||0;
   SPEDIT.add(SPSEL); drawSpawns();
@@ -278,6 +297,8 @@ map.onmouseleave=()=>tip.style.display='none';
 document.getElementById('undo').onclick=()=>{
   const h=hist.pop(); if(!h) return;
   if(h.t==='map'){ MAP[h.q]=h.w; redrawQuad(h.q); }
+  else if(h.t==='spadd'){ SPAWNS.pop(); if(SPSEL>=SPAWNS.length)SPSEL=-1; spForm(); drawSpawns(); }
+  else if(h.t==='spdel'){ SPAWNS.splice(h.i,0,h.rec); spForm(); drawSpawns(); }
   else { SPAWNS[h.i]=h.rec; if(SPSEL===h.i) spForm(); drawSpawns(); }
 };
 function dl(name, blob){
@@ -296,17 +317,13 @@ document.getElementById('expjson').onclick=()=>{
   dl(TM_ID+'.json', new Blob([JSON.stringify(js,null,1)],{type:'application/json'}));
 };
 document.getElementById('exphdr').onclick=()=>{
-  const hx=HDRRAW.toLowerCase();
-  const arr=new Uint8Array(hx.length/2);
-  for(let i=0;i<arr.length;i++) arr[i]=parseInt(hx.substr(i*2,2),16);
-  SPAWNS.forEach((s,i)=>{
-    const o=SPOFFS[i];
-    const put=(off,v)=>{ arr[o+off]=v&0xFF; arr[o+off+1]=(v>>8)&0xFF; };
-    put(0,s.x); put(2,s.y); put(4,s.p1); put(6,s.p2);
-    put(8,s.cls); put(10,s.anim); put(12,s.pool);
-  });
-  let hex='';
-  arr.forEach(v=>{ hex+=v.toString(16).padStart(2,'0'); });
+  // rebuild: PRE + spawn records + FFFF + SUF (every tail section is
+  // terminator-scanned, so record count may change freely)
+  let hex=HDRPRE.toLowerCase();
+  const w2=v=>((v&0xFF).toString(16).padStart(2,'0')+((v>>8)&0xFF).toString(16).padStart(2,'0'));
+  for(const s of SPAWNS)
+    hex+=w2(s.x)+w2(s.y)+w2(s.half_w)+w2(s.half_h)+w2(s.cls)+w2(s.anim)+w2(s.pool);
+  hex+='ffff'+HDRSUF.toLowerCase();
   const js=Object.assign({},HDRJSON,{raw:hex});
   dl(HID+'.json', new Blob([JSON.stringify(js,null,1)],{type:'application/json'}));
 };
@@ -332,6 +349,14 @@ def main():
     qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = LR.parse_header(raw)
     # byte offsets of the spawn records inside the stripe (in-place editing)
     sp_offsets = [0x43 + i * 0x0E for i in range(len(spawns))]
+    # add/delete-safe header export: everything after the spawn terminator
+    # is terminator-scanned by the engine (parse_stripe grammar, 44/44
+    # byte-exact roundtrip) — so the page rebuilds raw as PRE+records+SUF
+    spawn_end = 0x43 + 0x0E * len(spawns) + 2
+    hdr_pre = raw[:0x43].hex().upper()
+    hdr_suf = raw[spawn_end:].hex().upper()
+    st_check = LR.parse_stripe(raw)
+    assert LR.serialize_stripe(st_check) == raw, "stripe grammar mismatch"
     classes = {}
     script_id = LR.script_for_header(int(cid, 16))
     if script_id is not None:
@@ -363,6 +388,7 @@ def main():
                             separators=(",", ":")),
         "spoffs": json.dumps(sp_offsets, separators=(",", ":")),
         "hdrraw": raw.hex().upper(),
+        "hdrpre": hdr_pre, "hdrsuf": hdr_suf,
         "hdrjson": json.dumps({k: v for k, v in json.load(
             open(os.path.join(LR.HDR_DIR, f"{cid}.json"))).items()
             if k != "raw"}, separators=(",", ":")),

@@ -64,6 +64,102 @@ def script_for_header(hdr_cid):
 ICON_DIR = os.path.join(ROOT, "build", "levels_atlas", "icons")
 
 
+def parse_stripe(raw):
+    """Full level-header stripe structure. Grammar = the engine's own
+    di-passthrough chain (verified v2 mirrors of sub_11080's readers):
+      +0x00..0x42  fixed head (dims @+0x29/2B, chunk ids @+0x2E/30/32,
+                   viking spawn @+0x08.., music @+0x04..)
+      +0x43        spawn records, 14B each, 0xFFFF-terminated (sub_11383)
+      palette list {chunk u16, start u8}*, 0xFFFF-terminated (sub_112ae)
+      pal-anim     [enable u16] then {reload u8, start u8, end u8,
+                   frame words ... 0xFFFF}* until a 0 lead byte (sub_1133a)
+      sprite banks {chunk u16, pad4}*, 0xFFFF-terminated (sub_1167a, +6)
+      anim chunks  {chunk u16, pad3}*, terminating 0xFFFF NOT consumed
+                   (sub_116ae returns di at the sentinel)
+      rest         bytes after the anim sentinel (engine never reads them)
+    All sections are terminator-scanned — inserting/deleting spawn
+    records is safe; serialize_stripe() rebuilds the exact byte image."""
+    def w16(o):
+        return raw[o] | (raw[o + 1] << 8)
+    st = {"head": raw[:0x43].hex()}
+    di = 0x43
+    spawns = []
+    while w16(di) != 0xFFFF:
+        spawns.append({
+            "x": w16(di), "y": w16(di + 2),
+            "half_w": w16(di + 4), "half_h": w16(di + 6),
+            "cls": w16(di + 8), "anim": w16(di + 10), "pool": w16(di + 12),
+        })
+        di += 0x0E
+    di += 2
+    st["spawns"] = spawns
+    pal = []
+    while w16(di) != 0xFFFF:
+        pal.append({"chunk": w16(di), "start": raw[di + 2]})
+        di += 3
+    di += 2
+    st["pal_list"] = pal
+    st["pal_anim_en"] = w16(di)
+    di += 2
+    anims = []
+    while True:
+        lead = w16(di) & 0xFF
+        if lead == 0:
+            di += 1
+            break
+        ent = {"reload": lead, "start": raw[di + 1], "end": raw[di + 2],
+               "frames": []}
+        di += 3
+        while w16(di) != 0xFFFF:
+            ent["frames"].append(w16(di))
+            di += 2
+        di += 2
+        anims.append(ent)
+    st["pal_anims"] = anims
+    banks = []
+    while w16(di) != 0xFFFF:
+        banks.append({"chunk": w16(di), "pad": raw[di + 2:di + 6].hex()})
+        di += 6
+    di += 2
+    st["sprite_banks"] = banks
+    achunks = []
+    while w16(di) != 0xFFFF:
+        achunks.append({"chunk": w16(di), "pad": raw[di + 2:di + 5].hex()})
+        di += 5
+    st["anim_chunks"] = achunks
+    st["rest"] = raw[di:].hex()          # includes the anim 0xFFFF sentinel
+    return st
+
+
+def serialize_stripe(st):
+    out = bytearray(bytes.fromhex(st["head"]))
+    for sp in st["spawns"]:
+        for v in (sp["x"], sp["y"], sp["half_w"], sp["half_h"],
+                  sp["cls"], sp["anim"], sp["pool"]):
+            out += bytes((v & 0xFF, (v >> 8) & 0xFF))
+    out += b"\xff\xff"
+    for e in st["pal_list"]:
+        out += bytes((e["chunk"] & 0xFF, (e["chunk"] >> 8) & 0xFF,
+                      e["start"]))
+    out += b"\xff\xff"
+    out += bytes((st["pal_anim_en"] & 0xFF, (st["pal_anim_en"] >> 8) & 0xFF))
+    for e in st["pal_anims"]:
+        out += bytes((e["reload"], e["start"], e["end"]))
+        for f in e["frames"]:
+            out += bytes((f & 0xFF, (f >> 8) & 0xFF))
+        out += b"\xff\xff"
+    out += b"\x00"
+    for e in st["sprite_banks"]:
+        out += bytes((e["chunk"] & 0xFF, (e["chunk"] >> 8) & 0xFF))
+        out += bytes.fromhex(e["pad"])
+    out += b"\xff\xff"
+    for e in st["anim_chunks"]:
+        out += bytes((e["chunk"] & 0xFF, (e["chunk"] >> 8) & 0xFF))
+        out += bytes.fromhex(e["pad"])
+    out += bytes.fromhex(st["rest"])
+    return bytes(out)
+
+
 def level_passwords():
     """37 4-letter passwords @ds:0x85A5 (bit7 stripped); password slot i =
     level table index i (op_D3 verified). Levels 37+ are scene stubs."""
@@ -132,7 +228,9 @@ def parse_header(raw):
     while w16(di) != 0xFFFF:
         spawns.append({
             "x": w16(di), "y": w16(di + 2),
-            "p1": w16(di + 4), "p2": w16(di + 6),
+            # +4/+6 land in ds:0x3E0/0x3E2 (sub_13bbd) = bbox half-width/
+            # half-height override (sub_13e52 uses them unless negative)
+            "half_w": w16(di + 4), "half_h": w16(di + 6),
             "cls": w16(di + 8), "anim": w16(di + 10),
             "pool": w16(di + 12),
         })

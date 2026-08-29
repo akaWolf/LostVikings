@@ -131,7 +131,7 @@ img.onmousemove=e=>{
   for(const s of SPAWNS){
     if(s.x>=qx*16&&s.x<qx*16+16&&s.y>=qy*16&&s.y<qy*16+16){
       t+=`\\n spawn cls=${s.cls.toString(16).toUpperCase()} @(${s.x},${s.y})`+
-         ` p=(${s.p1},${s.p2}) anim=${s.anim.toString(16).toUpperCase()}`+
+         ` half=(${s.half_w},${s.half_h}) anim=${s.anim.toString(16).toUpperCase()}`+
          ((s.anim&0x800)?' PERM':'');
       const ci=CLASSES[s.cls];
       if(ci) t+=`\\n   class: ${ci.w}x${ci.h} sub=${ci.sub}`+
