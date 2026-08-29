@@ -33,6 +33,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import assetc  # noqa: E402
 import level_render as LR  # noqa: E402
 import level_edit as LE  # noqa: E402
+import texts_exe as TX  # noqa: E402
+import anim_bank as AB  # noqa: E402
 
 SCRATCH = "/tmp/lv_edit_scratch"
 GAME = [None]          # Popen of the running game (windowed)
@@ -63,7 +65,316 @@ def do_pack():
     with LOCK:
         assetc.ASSETS = SCRATCH
         assetc.pack()
+        # dialog texts: if the scratch tree carries an edited texts json,
+        # bake a patched exe_static for the play env (V2_EXE_STATIC)
+        tj = os.path.join(SCRATCH, "texts_exe.json")
+        if os.path.exists(tj):
+            with open(tj) as f:
+                js = json.load(f)
+            img = TX.compile_texts(js, TX.load_image())
+            out = os.path.join(SCRATCH, "exe_static.bin")
+            with open(out + ".tmp", "wb") as f:
+                f.write(img)
+            os.replace(out + ".tmp", out)
     return len(os.listdir(os.path.join(SCRATCH, ".compiled")))
+
+
+def sprite_page(cid_hex):
+    """Editor for an UNCOMPRESSED sprite bank (sprite_banks/<cid>.bin):
+    a dense array of 72-byte units — 4 planes x 2 strips x (1 mask + 8
+    data) bytes, the verified glyph/type-1 pixel model. Frame layout per
+    class is anim-driven; the editor exposes the raw unit grid."""
+    import base64 as b64mod
+    cid = int(cid_hex, 16)
+    path = os.path.join(SCRATCH, "sprite_banks", f"{cid_hex}.bin")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"not an open sprite bank: {cid_hex}")
+    with open(path, "rb") as f:
+        data = f.read()
+    nunits = len(data) // 72
+    tail = data[nunits * 72:]
+    # palette: first level whose stripe lists this bank
+    pal = None
+    for fn in sorted(os.listdir(os.path.join(SCRATCH, "level_headers"))):
+        if not fn.endswith(".json"):
+            continue
+        try:
+            st = LR.parse_stripe(LR.header_raw(fn[:-5], SCRATCH))
+        except Exception:
+            continue
+        if any(b["chunk"] == cid for b in st["sprite_banks"]):
+            pal = LR.compose_palette([(e["chunk"], e["start"])
+                                      for e in st["pal_list"]], SCRATCH)
+            break
+    if pal is None:
+        pal = [(i, i, i) for i in range(256)]
+    return (SPRITE_PAGE
+            % {"cid": cid_hex, "n": nunits,
+               "b64": b64mod.b64encode(data[:nunits * 72]).decode(),
+               "tail": tail.hex(),
+               "pal": json.dumps([list(c) for c in pal],
+                                 separators=(",", ":"))})
+
+
+SPRITE_PAGE = """<!doctype html><meta charset="utf-8">
+<title>LV sprites %(cid)s</title>
+<style>
+ body{background:#111;color:#ddd;font:13px monospace}
+ canvas{image-rendering:pixelated;border:1px solid #333}
+ #grid{cursor:crosshair}
+</style>
+<h3>sprite bank %(cid)s — %(n)d units (72B strips, glyph model)</h3>
+<button id="save">save</button> <span id="st"></span>
+<span style="color:#888">LMB paint, RMB erase (clears the mask bit), M pick</span><br>
+<canvas id="grid"></canvas>
+<canvas id="units"></canvas>
+<canvas id="sw"></canvas> color <span id="col">15</span>
+<script>
+const N=%(n)d, TAIL="%(tail)s", PAL=%(pal)s, CID="%(cid)s";
+const U=Uint8Array.from(atob("%(b64)s"),c=>c.charCodeAt(0));
+let SEL=0, COL=15;
+// unit pixel model: plane-major 4x(2 strips x 9B); pixel(x,y):
+// p=x&3, col=(x>>2)&1, st=y>>2, r=y&3, b=r*2+col, off=p*18+st*9
+function upix(u,x,y){
+  const p=x&3, c2=(x>>2)&1, st=y>>2, r=y&3, b=r*2+c2, off=u*72+p*18+st*9;
+  return (U[off]>>(7-b))&1 ? U[off+1+b] : -1;
+}
+function upixw(u,x,y,v){
+  const p=x&3, c2=(x>>2)&1, st=y>>2, r=y&3, b=r*2+c2, off=u*72+p*18+st*9;
+  if(v<0){ U[off]&=~(1<<(7-b)); U[off+1+b]=0; }
+  else { U[off]|=(1<<(7-b)); U[off+1+b]=v; }
+}
+const units=document.getElementById('units');
+const grid=document.getElementById('grid');
+const UC=32;
+function drawUnit(u,g,x0,y0,z){
+  for(let y=0;y<8;y++) for(let x=0;x<8;x++){
+    const v=upix(u,x,y);
+    if(v<0){ g.fillStyle=((x^y)&1)?'#222':'#2a2a2a'; }
+    else { const[r,gg,b]=PAL[v]; g.fillStyle=`rgb(${r},${gg},${b})`; }
+    g.fillRect(x0+x*z,y0+y*z,z,z);
+  }
+}
+function drawUnits(){
+  const rows=Math.ceil(N/UC);
+  units.width=UC*18; units.height=rows*18;
+  const g=units.getContext('2d');
+  g.fillStyle='#181818'; g.fillRect(0,0,units.width,units.height);
+  for(let u=0;u<N;u++)
+    drawUnit(u,g,(u%%UC)*18+1,((u/UC)|0)*18+1,2);
+  g.strokeStyle='#ff4';
+  g.strokeRect((SEL%%UC)*18+0.5,((SEL/UC)|0)*18+0.5,17,17);
+}
+function drawGrid(){
+  grid.width=8*24; grid.height=8*24;
+  const g=grid.getContext('2d');
+  drawUnit(SEL,g,0,0,24);
+  g.strokeStyle='#333';
+  for(let i=0;i<=8;i++){
+    g.beginPath();g.moveTo(i*24,0);g.lineTo(i*24,192);g.stroke();
+    g.beginPath();g.moveTo(0,i*24);g.lineTo(192,i*24);g.stroke();
+  }
+}
+function drawSw(){
+  const sw=document.getElementById('sw');
+  sw.width=16*8; sw.height=16*8;
+  const g=sw.getContext('2d');
+  for(let i=0;i<256;i++){
+    const[r,gg,b]=PAL[i];
+    g.fillStyle=`rgb(${r},${gg},${b})`;
+    g.fillRect((i%%16)*8,((i/16)|0)*8,8,8);
+  }
+  g.strokeStyle='#fff';
+  g.strokeRect((COL%%16)*8+.5,((COL/16)|0)*8+.5,7,7);
+  document.getElementById('col').textContent=COL.toString(16).toUpperCase();
+}
+units.onclick=e=>{
+  const r=units.getBoundingClientRect();
+  const u=(((e.clientY-r.top)/18)|0)*UC+(((e.clientX-r.left)/18)|0);
+  if(u<N){ SEL=u; drawUnits(); drawGrid(); }
+};
+document.getElementById('sw').onclick=e=>{
+  const r=e.target.getBoundingClientRect();
+  COL=((((e.clientY-r.top)/8)|0)*16+(((e.clientX-r.left)/8)|0))&0xFF;
+  drawSw();
+};
+let paint=false;
+function gpaint(e){
+  const r=grid.getBoundingClientRect();
+  const x=((e.clientX-r.left)/24)|0, y=((e.clientY-r.top)/24)|0;
+  if(x<0||y<0||x>7||y>7) return;
+  upixw(SEL,x,y,(e.buttons&2)?-1:COL);
+  drawGrid();
+  const g=units.getContext('2d');
+  drawUnit(SEL,g,(SEL%%UC)*18+1,((SEL/UC)|0)*18+1,2);
+}
+grid.onmousedown=e=>{paint=true;gpaint(e);e.preventDefault();};
+grid.onmousemove=e=>{if(paint)gpaint(e);};
+grid.oncontextmenu=e=>e.preventDefault();
+window.addEventListener('mouseup',()=>{paint=false;});
+document.getElementById('save').onclick=async()=>{
+  let bin=''; U.forEach(v=>{bin+=String.fromCharCode(v);});
+  const r=await fetch('/api/save',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({kind:'sprite_bank',chunk:CID,
+                         data:{b64:btoa(bin),tail:TAIL}})});
+  const js=await r.json();
+  document.getElementById('st').textContent=js.ok?'saved (pack to bake)':('ERR '+js.error);
+};
+drawUnits(); drawGrid(); drawSw();
+</script>"""
+
+
+ANIM_PAGE = """<!doctype html><meta charset="utf-8">
+<title>LV anim %(cid)s</title>
+<style>body{background:#111;color:#ddd;font:13px monospace}
+canvas{image-rendering:pixelated;border:1px solid #333}
+#grid{cursor:crosshair}</style>
+<h3>anim bank %(cid)s — %(n)d frames (32x32, 4-bit + layer at draw)</h3>
+<button id="save">save</button> <span id="st"></span>
+<span style="color:#888">LMB paint, RMB erase; colors are the LOW nibble
+(the engine ORs the palette layer per object)</span><br>
+frame <span id="fsel">0</span>: <canvas id="grid"></canvas>
+<canvas id="frames"></canvas><br>
+nibble: <span id="col">F</span> <canvas id="sw"></canvas>
+<script>
+const CID="%(cid)s", JS=%(js)s;
+let SEL=0, COL=15;
+// frame pixel model (op 0x34DC target = plane-major 4 x 32 strips x 9B):
+// pixel(x,y): p=x&3, col=x>>2 (0..7), strip index = p*32+y, bit=col
+function fpix(f,x,y){
+  const st=JS.frames[f].strips[(x&3)*32+y];
+  return (st[0]>>(7-(x>>2)))&1 ? st[1][x>>2] : -1;
+}
+function fpixw(f,x,y,v){
+  const st=JS.frames[f].strips[(x&3)*32+y];
+  const b=x>>2;
+  if(v<0){ st[0]&=~(1<<(7-b)); st[1][b]=-1; }
+  else { st[0]|=(1<<(7-b)); st[1][b]=v; }
+}
+const GREY=i=>{const g=i<0?0:32+i*13; return i<0?null:[g,g,g];};
+function drawFrame(f,g,x0,y0,z){
+  for(let y=0;y<32;y++) for(let x=0;x<32;x++){
+    const v=fpix(f,x,y);
+    if(v<0){ g.fillStyle=((x^y)&1)?'#1c1c2c':'#242434'; }
+    else { const c=GREY(v); g.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; }
+    g.fillRect(x0+x*z,y0+y*z,z,z);
+  }
+}
+const frames=document.getElementById('frames'), grid=document.getElementById('grid');
+const FC=16;
+function drawFrames(){
+  const rows=Math.ceil(JS.frames.length/FC);
+  frames.width=FC*34; frames.height=rows*34;
+  const g=frames.getContext('2d');
+  g.fillStyle='#181818'; g.fillRect(0,0,frames.width,frames.height);
+  for(let f=0;f<JS.frames.length;f++)
+    drawFrame(f,g,(f%%FC)*34+1,((f/FC)|0)*34+1,1);
+  g.strokeStyle='#ff4';
+  g.strokeRect((SEL%%FC)*34+.5,((SEL/FC)|0)*34+.5,33,33);
+}
+function drawGrid(){
+  document.getElementById('fsel').textContent=SEL;
+  grid.width=32*10; grid.height=32*10;
+  drawFrame(SEL,grid.getContext('2d'),0,0,10);
+}
+function drawSw(){
+  const sw=document.getElementById('sw');
+  sw.width=16*14; sw.height=14;
+  const g=sw.getContext('2d');
+  for(let i=0;i<16;i++){
+    const c=GREY(i); g.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;
+    g.fillRect(i*14,0,14,14);
+  }
+  g.strokeStyle='#ff4'; g.strokeRect(COL*14+.5,.5,13,13);
+  document.getElementById('col').textContent=COL.toString(16).toUpperCase();
+}
+frames.onclick=e=>{
+  const r=frames.getBoundingClientRect();
+  const f=(((e.clientY-r.top)/34)|0)*FC+(((e.clientX-r.left)/34)|0);
+  if(f<JS.frames.length){ SEL=f; drawFrames(); drawGrid(); }
+};
+document.getElementById('sw').onclick=e=>{
+  const r=e.target.getBoundingClientRect();
+  COL=Math.min(15,((e.clientX-r.left)/14)|0); drawSw();
+};
+let paint=false;
+function gp(e){
+  const r=grid.getBoundingClientRect();
+  const x=((e.clientX-r.left)/10)|0, y=((e.clientY-r.top)/10)|0;
+  if(x<0||y<0||x>31||y>31) return;
+  fpixw(SEL,x,y,(e.buttons&2)?-1:COL);
+  drawGrid();
+  drawFrame(SEL,frames.getContext('2d'),(SEL%%FC)*34+1,((SEL/FC)|0)*34+1,1);
+}
+grid.onmousedown=e=>{paint=true;gp(e);e.preventDefault();};
+grid.onmousemove=e=>{if(paint)gp(e);};
+grid.oncontextmenu=e=>e.preventDefault();
+window.addEventListener('mouseup',()=>{paint=false;});
+document.getElementById('save').onclick=async()=>{
+  const r=await fetch('/api/save',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({kind:'anim_bank',chunk:CID,data:JS})});
+  const js2=await r.json();
+  document.getElementById('st').textContent=js2.ok?'saved (pack to bake)':('ERR '+js2.error);
+};
+drawFrames(); drawGrid(); drawSw();
+</script>"""
+
+
+def anim_page(cid_hex):
+    path = os.path.join(SCRATCH, "misc", "anim_bank", f"{cid_hex}.bin")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"not an open anim bank: {cid_hex}")
+    with open(path, "rb") as f:
+        data = f.read()
+    js = AB.chunk_to_frames(data)
+    return ANIM_PAGE % {"cid": cid_hex, "n": len(js["frames"]),
+                        "js": json.dumps(js, separators=(",", ":"))}
+
+
+def texts_page():
+    tj = os.path.join(SCRATCH, "texts_exe.json")
+    if not os.path.exists(tj):
+        js = TX.extract(TX.load_image())
+    else:
+        with open(tj) as f:
+            js = json.load(f)
+    rows = []
+    for e in js["entries"]:
+        t = (e["text"].replace("&", "&amp;").replace("<", "&lt;")
+             .replace('"', "&quot;").replace("\n", "&#10;"))
+        rows.append(
+            f"<tr><td>{e['i']}</td><td>{e['w']}x{e['h']}</td>"
+            f"<td><textarea data-i='{e['i']}' rows='2' cols='42'>{t}</textarea>"
+            f"</td></tr>")
+    return ("<!doctype html><meta charset='utf-8'><title>LV texts</title>"
+            "<style>body{background:#111;color:#ddd;font:13px monospace}"
+            "textarea{background:#222;color:#ddd;border:1px solid #444}"
+            "td{padding:2px 6px;vertical-align:top}</style>"
+            "<h2>dialog texts (seg001) — budget <span id='bud'></span></h2>"
+            "<button onclick='saveTexts()'>save</button> <span id='st'></span>"
+            "<table>" + "".join(rows) + "</table>"
+            "<script>"
+            "const ZONE=" + str(TX.BUDGET_END) + ";"
+            "function budget(){let n=" + str(js["table_end"]) + ";"
+            " const seen=new Map();"
+            " document.querySelectorAll('textarea').forEach(t=>{"
+            "  const k=t.value; if(!seen.has(k)) seen.set(k, 3+k.length);});"
+            " seen.forEach(v=>{n+=v;});"
+            " document.getElementById('bud').textContent=n+'/'+ZONE;"
+            " return n;}"
+            "budget();"
+            "document.addEventListener('input',budget);"
+            "async function saveTexts(){"
+            " const texts={};"
+            " document.querySelectorAll('textarea').forEach(t=>{texts[t.dataset.i]=t.value;});"
+            " const r=await fetch('/api/save',{method:'POST',"
+            "  headers:{'Content-Type':'application/json'},"
+            "  body:JSON.stringify({kind:'texts',texts:texts})});"
+            " const js2=await r.json();"
+            " document.getElementById('st').textContent=js2.ok?'saved (pack to bake)':('ERR '+js2.error);}"
+            "</script>")
 
 
 MOD_DIRS = ("tilemaps", "level_headers", "tilesets", "bg_tilesets",
@@ -178,6 +489,14 @@ class H(BaseHTTPRequestHandler):
                 cid = self.path[6:].split("?")[0].upper()
                 html = LE.render_page(cid, server=True, root=SCRATCH)
                 return self._send(200, html, "text/html")
+            if self.path.startswith("/anim/"):
+                cid_hex = self.path[6:].split("?")[0].upper()
+                return self._send(200, anim_page(cid_hex), "text/html")
+            if self.path.startswith("/sprites/"):
+                cid_hex = self.path[9:].split("?")[0].upper()
+                return self._send(200, sprite_page(cid_hex), "text/html")
+            if self.path == "/texts":
+                return self._send(200, texts_page(), "text/html")
             if self.path.startswith("/png/"):
                 cid = self.path[5:].split("?")[0].upper()
                 png, _, _ = LR.render(cid, root=SCRATCH)
@@ -221,6 +540,12 @@ class H(BaseHTTPRequestHandler):
             return self.api_save_tileset(body)
         if kind == "tilemask":
             return self.api_save_tilemask(body)
+        if kind == "texts":
+            return self.api_save_texts(body)
+        if kind == "sprite_bank":
+            return self.api_save_sprite_bank(body)
+        if kind == "anim_bank":
+            return self.api_save_anim_bank(body)
         if kind not in SAVE_KINDS:
             return self._err(f"bad kind {kind!r}")
         sub, fmt = SAVE_KINDS[kind]
@@ -371,12 +696,74 @@ class H(BaseHTTPRequestHandler):
             written.append(rel)
         return self._json({"ok": True, "written": len(written)})
 
+    def api_save_texts(self, body):
+        texts = body.get("texts") or {}
+        tj = os.path.join(SCRATCH, "texts_exe.json")
+        if os.path.exists(tj):
+            with open(tj) as f:
+                js = json.load(f)
+        else:
+            js = TX.extract(TX.load_image())
+        by_i = {str(e["i"]): e for e in js["entries"]}
+        n = 0
+        for k, v in texts.items():
+            e = by_i.get(str(k))
+            if e is None:
+                return self._err(f"bad text index {k}")
+            if not all(c == "\n" or 0x20 <= ord(c) < 0x7F for c in v):
+                return self._err(f"text {k}: ASCII + newline only")
+            if e["text"] != v:
+                e["text"] = v
+                n += 1
+        # budget check via the compiler itself
+        try:
+            TX.compile_texts(js, TX.load_image())
+        except ValueError as ve:
+            return self._err(str(ve))
+        with open(tj + ".tmp", "w") as f:
+            json.dump(js, f, indent=1)
+        os.replace(tj + ".tmp", tj)
+        return self._json({"ok": True, "changed": n})
+
+    def api_save_sprite_bank(self, body):
+        import base64 as b64mod
+        chunk = str(body.get("chunk", "")).upper()
+        data = body.get("data") or {}
+        path = os.path.join(SCRATCH, "sprite_banks", f"{chunk}.bin")
+        if len(chunk) != 4 or "b64" not in data or not os.path.exists(path):
+            return self._err(f"bad sprite bank {chunk}")
+        raw = b64mod.b64decode(data["b64"])
+        if len(raw) % 72:
+            return self._err("bank bytes must be a multiple of 72")
+        raw += bytes.fromhex(data.get("tail", ""))
+        tmp = path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(raw)
+        os.replace(tmp, path)
+        return self._json({"ok": True, "path": path})
+
+    def api_save_anim_bank(self, body):
+        chunk = str(body.get("chunk", "")).upper()
+        js = body.get("data") or {}
+        path = os.path.join(SCRATCH, "misc", "anim_bank", f"{chunk}.bin")
+        if len(chunk) != 4 or "frames" not in js or not os.path.exists(path):
+            return self._err(f"bad anim bank {chunk}")
+        raw = AB.frames_to_chunk(js)
+        tmp = path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(raw)
+        os.replace(tmp, path)
+        return self._json({"ok": True, "bytes": len(raw)})
+
     def api_play(self):
         p = GAME[0]
         if p is not None and p.poll() is None:
             return self._err(f"game already running (pid {p.pid})", 409)
         env = dict(os.environ)
         env["V2_ASSETS_DIR"] = os.path.join(SCRATCH, ".compiled")
+        exe_img = os.path.join(SCRATCH, "exe_static.bin")
+        if os.path.exists(exe_img):
+            env["V2_EXE_STATIC"] = exe_img
         GAME[0] = subprocess.Popen([os.path.join(LR.ROOT, "vikings")],
                                    cwd=LR.ROOT, env=env)
         return self._json({"ok": True, "pid": GAME[0].pid})
@@ -389,16 +776,24 @@ class H(BaseHTTPRequestHandler):
         env.update({"SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy",
                     "V2_NOVSYNC": "1", "V2_AIL_FRAME_TICKS": "1",
                     "V2_ASSETS_DIR": os.path.join(SCRATCH, ".compiled")})
+        exe_img = os.path.join(SCRATCH, "exe_static.bin")
+        if os.path.exists(exe_img):
+            env["V2_EXE_STATIC"] = exe_img
         if snap:
             env["V2_LADDER_SNAP"] = str(snap)
             for f in (snap, snap + 1):
                 p = f"/tmp/ladder_f{f}.ppm"
                 if os.path.exists(p):
                     os.unlink(p)
-        r = subprocess.run([os.path.join(LR.ROOT, "vikings"),
-                            "--replay", os.path.join(LR.ROOT, replay),
-                            f"--max-frames={frames}"],
-                           cwd=LR.ROOT, env=env, timeout=600,
+        if body.get("headless"):
+            cmd = [os.path.join(LR.ROOT, "vikings_headless"),
+                   f"--replay-input={os.path.join(LR.ROOT, replay)}",
+                   f"--max-frames={frames}"]
+        else:
+            cmd = [os.path.join(LR.ROOT, "vikings"),
+                   "--replay", os.path.join(LR.ROOT, replay),
+                   f"--max-frames={frames}"]
+        r = subprocess.run(cmd, cwd=LR.ROOT, env=env, timeout=600,
                            capture_output=True)
         out = {"ok": True, "exit": r.returncode}
         if snap:
