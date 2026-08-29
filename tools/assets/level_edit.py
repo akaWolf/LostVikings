@@ -119,6 +119,15 @@ PAGE = """<!doctype html>
    <button id="spadd">add (click map)</button>
    <button id="spdel">delete</button>
   </div>
+  <details style="margin-bottom:8px"><summary>palette list (%(npal)d) — reload after save+pack</summary>
+   <div id="plist"></div>
+   <button id="pladd">add entry</button>
+  </details>
+  <details style="margin-bottom:8px"><summary>palette anims (%(npanim)d)</summary>
+   en <input id="pen" size="4"><br>
+   <div id="panims"></div>
+   <button id="paadd">add anim</button>
+  </details>
   templates (%(ntpl)d):<canvas id="pal"></canvas></div>
 </div>
 <div id="tip"></div>
@@ -132,7 +141,10 @@ const ICONS=%(icons)s; // engine-harvested sprites (class_icons.py)
 const IIMG={};
 for(const k in ICONS){const im=new Image();im.onload=()=>{if(typeof drawSpawns==='function')drawSpawns();};im.src='data:image/png;base64,'+ICONS[k].b64; IIMG[k]=im;}
 const HDRJSON=%(hdrjson)s;
-const HDRPRE="%(hdrpre)s", HDRSUF="%(hdrsuf)s";
+const ST_HEAD="%(sthead)s", ST_REST="%(strest)s", HDRRAW="%(hdrraw)s";
+let PAL_EN=%(palen)d;
+const PAL_LIST=%(pallist)s, PAL_ANIMS=%(palanims)s;
+const BANKS=%(banks)s, ACHUNKS=%(achunks)s;
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
 const map=document.getElementById('map'), pal=document.getElementById('pal'),
@@ -384,15 +396,38 @@ function buildTilemapJson(){
   return {format:"tilemap_u16", chunk:TM_ID, width:QW, height:QH,
           tail:TAIL, rows:rows};
 }
-function buildHeaderJson(){
-  // rebuild: PRE + spawn records + FFFF + SUF (every tail section is
-  // terminator-scanned, so record count may change freely)
-  let hex=HDRPRE.toLowerCase();
-  const w2=v=>((v&0xFF).toString(16).padStart(2,'0')+((v>>8)&0xFF).toString(16).padStart(2,'0'));
+const w2=v=>((v&0xFF).toString(16).padStart(2,'0')+((v>>8)&0xFF).toString(16).padStart(2,'0'));
+const b2=v=>(v&0xFF).toString(16).padStart(2,'0');
+function serializeStripe(){
+  // JS mirror of level_render.serialize_stripe — every tail section is
+  // terminator-scanned by the engine, so counts may change freely
+  let hex=ST_HEAD.toLowerCase();
   for(const s of SPAWNS)
     hex+=w2(s.x)+w2(s.y)+w2(s.half_w)+w2(s.half_h)+w2(s.cls)+w2(s.anim)+w2(s.pool);
-  hex+='ffff'+HDRSUF.toLowerCase();
-  return Object.assign({},HDRJSON,{raw:hex});
+  hex+='ffff';
+  for(const e of PAL_LIST) hex+=w2(e.chunk)+b2(e.start);
+  hex+='ffff';
+  hex+=w2(PAL_EN);
+  for(const e of PAL_ANIMS){
+    hex+=b2(e.reload)+b2(e.start)+b2(e.end);
+    for(const f of e.frames) hex+=w2(f);
+    hex+='ffff';
+  }
+  hex+='00';
+  for(const e of BANKS) hex+=w2(e.chunk)+e.pad.toLowerCase();
+  hex+='ffff';
+  for(const e of ACHUNKS) hex+=w2(e.chunk)+e.pad.toLowerCase();
+  hex+=ST_REST.toLowerCase();
+  return hex;
+}
+function buildHeaderJson(){
+  return Object.assign({},HDRJSON,{raw:serializeStripe()});
+}
+// live grammar invariant: the untouched page must reserialize byte-exact
+globalThis.__stripe_ok = (serializeStripe()===HDRRAW.toLowerCase());
+if(!globalThis.__stripe_ok){
+  console.error('stripe reserialize MISMATCH — export disabled');
+  document.title='!! STRIPE MISMATCH !! '+document.title;
 }
 document.getElementById('expjson').onclick=()=>{
   dl(TM_ID+'.json', new Blob([JSON.stringify(buildTilemapJson(),null,1)],{type:'application/json'}));
@@ -407,6 +442,45 @@ document.getElementById('expbin').onclick=()=>{
     b[MAP.length*2+i/2]=parseInt(TAIL.substr(i,2),16);
   dl(TM_ID+'.bin', new Blob([b],{type:'application/octet-stream'}));
 };
+// ---- palette list / palette anims forms ----
+// (edits apply to PAL_LIST/PAL_ANIMS directly; the level PNG is baked at
+// page build time, so color changes show after save+pack+reload)
+const plist=document.getElementById('plist'), panims=document.getElementById('panims');
+const penInp=document.getElementById('pen');
+penInp.value=PAL_EN.toString(16).toUpperCase();
+penInp.onchange=()=>{ PAL_EN=parseInt(penInp.value,16)||0; };
+function drawPalForms(){
+  plist.innerHTML='';
+  PAL_LIST.forEach((e,i)=>{
+    const d=document.createElement('div');
+    d.innerHTML=`chunk <input size="4" value="${e.chunk.toString(16).padStart(4,'0').toUpperCase()}">`+
+      ` start <input size="3" value="${e.start}"> <button>del</button>`;
+    const [ci,si]=d.querySelectorAll('input');
+    ci.onchange=()=>{ e.chunk=parseInt(ci.value,16)||0; };
+    si.onchange=()=>{ e.start=(+si.value)&0xFF; };
+    d.querySelector('button').onclick=()=>{ PAL_LIST.splice(i,1); drawPalForms(); };
+    plist.appendChild(d);
+  });
+  panims.innerHTML='';
+  PAL_ANIMS.forEach((e,i)=>{
+    const d=document.createElement('div');
+    d.style.borderTop='1px solid #333';
+    d.innerHTML=`reload <input size="2" value="${e.reload}">`+
+      ` colors <input size="3" value="${e.start}">-<input size="3" value="${e.end}"><br>`+
+      `frames(hex) <input size="18" value="${e.frames.map(f=>f.toString(16).toUpperCase()).join(' ')}">`+
+      ` <button>del</button>`;
+    const [ri,si,ei,fi]=d.querySelectorAll('input');
+    ri.onchange=()=>{ e.reload=(+ri.value)&0xFF; if(!e.reload){e.reload=1;ri.value=1;} };
+    si.onchange=()=>{ e.start=(+si.value)&0xFF; };
+    ei.onchange=()=>{ e.end=(+ei.value)&0xFF; };
+    fi.onchange=()=>{ e.frames=fi.value.trim()?fi.value.trim().split(/\\s+/).map(v=>parseInt(v,16)&0xFFFF):[]; };
+    d.querySelector('button').onclick=()=>{ PAL_ANIMS.splice(i,1); drawPalForms(); };
+    panims.appendChild(d);
+  });
+}
+document.getElementById('pladd').onclick=()=>{ PAL_LIST.push({chunk:0,start:0}); drawPalForms(); };
+document.getElementById('paadd').onclick=()=>{ PAL_ANIMS.push({reload:8,start:0,end:0,frames:[]}); drawPalForms(); };
+drawPalForms();
 // ---- server mode ----
 const srvstat=document.getElementById('srvstat');
 async function api(path, body){
@@ -454,14 +528,12 @@ def render_page(cid, server=False, root=None):
     assetc.pack. None = pristine archive content."""
     raw = LR.header_raw(cid, root)
     qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = LR.parse_header(raw)
-    # add/delete-safe header export: everything after the spawn terminator
-    # is terminator-scanned by the engine (parse_stripe grammar, 44/44
-    # byte-exact roundtrip) — so the page rebuilds raw as PRE+records+SUF
-    spawn_end = 0x43 + 0x0E * len(spawns) + 2
-    hdr_pre = raw[:0x43].hex().upper()
-    hdr_suf = raw[spawn_end:].hex().upper()
-    st_check = LR.parse_stripe(raw)
-    assert LR.serialize_stripe(st_check) == raw, "stripe grammar mismatch"
+    # the page holds the FULL stripe structure (parse_stripe grammar,
+    # 44/44 byte-exact roundtrip) and reserializes it on export — spawn
+    # count, palette list and palette animations may all change freely
+    st = LR.parse_stripe(raw)
+    assert LR.serialize_stripe(st) == raw, "stripe grammar mismatch"
+    spawns = st["spawns"]
     classes = {}
     script_id = LR.script_for_header(int(cid, 16))
     if script_id is not None:
@@ -485,6 +557,7 @@ def render_page(cid, server=False, root=None):
     return PAGE % {
         "cid": cid, "qw": qw, "qh": qh, "ntpl": ntpl, "pcols": pcols,
         "nsp": len(spawns),
+        "npal": len(st["pal_list"]), "npanim": len(st["pal_anims"]),
         "server": 1 if server else 0,
         "tmid": f"{tm_id:04X}",
         "png": base64.b64encode(png).decode(),
@@ -495,7 +568,13 @@ def render_page(cid, server=False, root=None):
         "classes": json.dumps(classes, separators=(",", ":")),
         "icons": json.dumps(LR.load_class_icons(script_id),
                             separators=(",", ":")),
-        "hdrpre": hdr_pre, "hdrsuf": hdr_suf,
+        "sthead": st["head"], "strest": st["rest"],
+        "palen": st["pal_anim_en"],
+        "pallist": json.dumps(st["pal_list"], separators=(",", ":")),
+        "palanims": json.dumps(st["pal_anims"], separators=(",", ":")),
+        "banks": json.dumps(st["sprite_banks"], separators=(",", ":")),
+        "achunks": json.dumps(st["anim_chunks"], separators=(",", ":")),
+        "hdrraw": raw.hex(),
         "hdrjson": json.dumps(hdr_named, separators=(",", ":")),
         "hid": cid,
     }
