@@ -48,8 +48,11 @@ const QW=%(qw)d, QH=%(qh)d, MAP=%(map)s, SPAWNS=%(spawns)s;
 // passable {0,3,0xC}, solid list {1,2,5,0x20}, platform 4 (one-way snap),
 // slopes >= 0x30 (profile via sub_16390). Others: unlabeled yet.
 function typeName(t){
-  if(t===0)return'air'; if(t===1)return'solid'; if(t===4)return'platform';
-  if(t===3)return'passable (obs: ladder)'; if(t===0xC)return'passable';
+  // climbable family {3,4,0xD} — the level bytecode checks them together
+  // (18-54 uses across all lvs); 4 is also the one-way platform snap.
+  if(t===0)return'air'; if(t===1)return'solid';
+  if(t===3)return'climbable (ladder)'; if(t===4)return'climbable+platform';
+  if(t===0xD)return'climbable (rope?)'; if(t===0xC)return'passable';
   if(t===2||t===5||t===0x20)return'solid*';
   if(t>=0x30)return'slope'; return'?';
 }
