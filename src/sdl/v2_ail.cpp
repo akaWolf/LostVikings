@@ -129,8 +129,11 @@ extern "C" uint16_t v2_ail_interp_drv_para(void);
 // interpreter pair as the oracle).
 static int v2_ailnat_mode(void) {
 #ifdef V2_ONLY
+    // Native is the DEFAULT sound engine since the full-corpus OPL A/B
+    // (58/58 byte-identical streams). V2_AIL_NATIVE=0 is the emergency
+    // fallback to the interpreted driver.
     static int m = -1;
-    if (m < 0) { const char* e = getenv("V2_AIL_NATIVE"); m = (e && atoi(e) != 0) ? 1 : 0; }
+    if (m < 0) { const char* e = getenv("V2_AIL_NATIVE"); m = (e && atoi(e) == 0) ? 0 : 1; }
     return m;
 #else
     return 0;
