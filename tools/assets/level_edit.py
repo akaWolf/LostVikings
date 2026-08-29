@@ -140,6 +140,14 @@ PAGE = """<!doctype html>
    <button id="spadd">add (click map)</button>
    <button id="spdel">delete</button>
   </div>
+  <details style="margin-bottom:8px"><summary>tile pixels (tile <span id="txsel">-</span>)</summary>
+   <canvas id="tgrid" style="display:inline-block;vertical-align:top"></canvas>
+   <canvas id="tsw" style="display:inline-block;margin-left:6px"></canvas><br>
+   color <span id="txcol">0</span>
+   <button id="txload">load sel tile</button>
+   <button id="txnew">add new tile</button>
+   <span style="color:#888">(LMB paint, RMB pick)</span>
+  </details>
   <details style="margin-bottom:8px"><summary>template editor (tpl <span id="tesel">-</span>)</summary>
    corners (click one, then click a tile below):<br>
    <div id="tecorners"></div>
@@ -180,6 +188,12 @@ let GTLD=%(gtld)s;   // draw words, 4 per template (1689E: bits 15..6 tile
                      // byte offset, bit4 hflip, bit5 vflip, bits 0-3 kept)
 const GT_REST="%(gtrest)s", GTLDHEX="%(gtldhex)s";
 const tilesImg=new Image(); tilesImg.src="data:image/png;base64,%(tpng)s";
+const TS_ID="%(tsid)s", TGFX_TAIL="%(tgfxtail)s", PALRGB=%(palrgb)s;
+const TGFX=Uint8Array.from(atob("%(tgfxb64)s"), c=>c.charCodeAt(0));
+let TILES=Array.from({length:NTILES},(_,i)=>TGFX.slice(i*64,(i+1)*64));
+// pixel(x,y) = t[(x&3)*16 + y*2 + (x>>2)]  (verified sub_1689e model)
+const tpix=(t,x,y)=>TILES[t][(x&3)*16+y*2+(x>>2)];
+const tpixw=(t,x,y,v)=>{ TILES[t][(x&3)*16+y*2+(x>>2)]=v; };
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
 const map=document.getElementById('map'), pal=document.getElementById('pal'),
@@ -488,25 +502,135 @@ document.getElementById('expbin').onclick=()=>{
     b[MAP.length*2+i/2]=parseInt(TAIL.substr(i,2),16);
   dl(TM_ID+'.bin', new Blob([b],{type:'application/octet-stream'}));
 };
-// ---- template constructor ----
-const OVERRIDE=new Map();   // tpl -> 16x16 canvas (edited templates)
-function ntplNow(){ return GTLD.length/4; }
-function renderTplCanvas(t){
-  const c=document.createElement('canvas'); c.width=16; c.height=16;
-  const g=c.getContext('2d'); g.imageSmoothingEnabled=false;
-  for(let k=0;k<4;k++){
-    const dw=GTLD[t*4+k];
-    const idx=(dw&0xFFC0)>>6, hf=(dw>>4)&1, vf=(dw>>5)&1;
-    const sx=(idx%%TCOLS)*8, sy=((idx/TCOLS)|0)*8;
-    const dx=(k&1)*8, dy=(k>>1)*8;
-    g.save();
-    g.translate(dx+(hf?8:0), dy+(vf?8:0));
-    g.scale(hf?-1:1, vf?-1:1);
-    g.drawImage(tilesImg, sx,sy,8,8, 0,0,8,8);
-    g.restore();
+// ---- tile pixel editor ----
+const TILE_DIRTY=new Set();
+let TXSEL=0, TXCOL=0;
+const tgrid=document.getElementById('tgrid'), tsw=document.getElementById('tsw');
+function tileToCanvas(t, scale){
+  const c=document.createElement('canvas'); c.width=8*scale; c.height=8*scale;
+  const g=c.getContext('2d');
+  for(let y=0;y<8;y++) for(let x=0;x<8;x++){
+    const [r,gg,b]=PALRGB[tpix(t,x,y)];
+    g.fillStyle=`rgb(${r},${gg},${b})`;
+    g.fillRect(x*scale,y*scale,scale,scale);
   }
   return c;
 }
+function drawTgrid(){
+  document.getElementById('txsel').textContent=TXSEL.toString(16).toUpperCase();
+  tgrid.width=8*16; tgrid.height=8*16;
+  const g=tgrid.getContext('2d');
+  g.drawImage(tileToCanvas(TXSEL,16),0,0);
+  g.strokeStyle='#333';
+  for(let i=0;i<=8;i++){
+    g.beginPath(); g.moveTo(i*16,0); g.lineTo(i*16,128); g.stroke();
+    g.beginPath(); g.moveTo(0,i*16); g.lineTo(128,i*16); g.stroke();
+  }
+}
+function drawSwatch(){
+  tsw.width=16*8; tsw.height=16*8;
+  const g=tsw.getContext('2d');
+  for(let i=0;i<256;i++){
+    const [r,gg,b]=PALRGB[i];
+    g.fillStyle=`rgb(${r},${gg},${b})`;
+    g.fillRect((i%%16)*8,((i/16)|0)*8,8,8);
+  }
+  g.strokeStyle='#fff';
+  g.strokeRect((TXCOL%%16)*8+0.5,((TXCOL/16)|0)*8+0.5,7,7);
+  document.getElementById('txcol').textContent=TXCOL.toString(16).toUpperCase();
+}
+tsw.onclick=e=>{
+  const r=tsw.getBoundingClientRect();
+  TXCOL=(((e.clientY-r.top)/8)|0)*16+(((e.clientX-r.left)/8)|0)&0xFF;
+  drawSwatch();
+};
+function tileTouched(t){
+  TILE_DIRTY.add(t);
+  // refresh the tile atlas cell + every template using this tile + map quads
+  const g=tiles.getContext('2d');
+  g.drawImage(tileToCanvas(t,2),(t%%TCOLS)*16,((t/TCOLS)|0)*16);
+  const touched=[];
+  for(let tp=0;tp<ntplNow();tp++)
+    for(let k=0;k<4;k++)
+      if(((GTLD[tp*4+k]&0xFFC0)>>6)===t){ touched.push(tp); break; }
+  for(const tp of touched){
+    OVERRIDE.set(tp, renderTplCanvasPix(tp));
+    for(let q=0;q<QW*QH;q++) if((MAP[q]&0x3FF)===tp) redrawQuad(q);
+  }
+  if(touched.length) drawPal();
+  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size} tiles:${TILE_DIRTY.size}`;
+}
+let painting=false;
+function tgridPaint(e){
+  const r=tgrid.getBoundingClientRect();
+  const x=((e.clientX-r.left)/16)|0, y=((e.clientY-r.top)/16)|0;
+  if(x<0||y<0||x>7||y>7) return;
+  if(e.buttons&2){ TXCOL=tpix(TXSEL,x,y); drawSwatch(); return; }
+  if(tpix(TXSEL,x,y)===TXCOL) return;
+  tpixw(TXSEL,x,y,TXCOL);
+  drawTgrid(); tileTouched(TXSEL);
+}
+tgrid.onmousedown=e=>{ painting=true; tgridPaint(e); e.preventDefault(); };
+tgrid.onmousemove=e=>{ if(painting) tgridPaint(e); };
+tgrid.oncontextmenu=e=>e.preventDefault();
+window.addEventListener('mouseup',()=>{ painting=false; });
+document.getElementById('txload').onclick=()=>{
+  // load the tile of the current TE corner (template editor selection)
+  TXSEL=((TE.cells[TE.cur].dw|0)&0xFFC0)>>6;
+  drawTgrid();
+};
+document.getElementById('txnew').onclick=()=>{
+  if(TILES.length>=1023){ stat.textContent=' tile limit 1023 (10-bit offset)'; return; }
+  TILES.push(new Uint8Array(64));
+  TXSEL=TILES.length-1;
+  const rows=Math.ceil(TILES.length/TCOLS);
+  if(tiles.height<rows*16){
+    const old=document.createElement('canvas');
+    old.width=tiles.width; old.height=tiles.height;
+    old.getContext('2d').drawImage(tiles,0,0);
+    tiles.height=rows*16;
+    const g=tiles.getContext('2d'); g.imageSmoothingEnabled=false;
+    g.drawImage(old,0,0);
+  }
+  TILE_DIRTY.add(TXSEL);
+  drawTgrid(); tileTouched(TXSEL);
+};
+function buildTilesetB64(){
+  const out=new Uint8Array(TILES.length*64);
+  TILES.forEach((t,i)=>out.set(t,i*64));
+  let bin=''; out.forEach(v=>{bin+=String.fromCharCode(v);});
+  return {chunk:TS_ID, b64:btoa(bin), tail:TGFX_TAIL};
+}
+// tileset self-check: untouched tiles must equal the source bytes
+{
+  let ok=(TILES.length*64===TGFX.length);
+  if(ok) for(let i=0;i<TGFX.length;i++)
+    if(TILES[i>>6][i&63]!==TGFX[i]){ ok=false; break; }
+  globalThis.__tiles_ok=ok;
+  if(!ok) console.error('tileset mirror MISMATCH');
+}
+// ---- template constructor ----
+const OVERRIDE=new Map();   // tpl -> 16x16 canvas (edited templates)
+function ntplNow(){ return GTLD.length/4; }
+function renderTplCanvasPix(t){
+  // from LIVE tile bytes (edited tiles included), not the baked PNG atlas
+  const c=document.createElement('canvas'); c.width=16; c.height=16;
+  const g=c.getContext('2d');
+  for(let k=0;k<4;k++){
+    const dw=GTLD[t*4+k];
+    const idx=(dw&0xFFC0)>>6, hf=(dw>>4)&1, vf=(dw>>5)&1;
+    const dx=(k&1)*8, dy=(k>>1)*8;
+    if(idx>=TILES.length) continue;
+    for(let y=0;y<8;y++) for(let x=0;x<8;x++){
+      const sx=hf?7-x:x, sy=vf?7-y:y;
+      const [r,gg,b]=PALRGB[tpix(idx,sx,sy)];
+      g.fillStyle=`rgb(${r},${gg},${b})`;
+      g.fillRect(dx+x,dy+y,1,1);
+    }
+  }
+  return c;
+}
+const renderTplCanvas=renderTplCanvasPix;
 // GTLD word order per template: e[0],e[2] = top row, e[4],e[6] = bottom
 // (sub_173C7) -> word index k: 0=TL 1=TR 2=BL 3=BR.
 const TE={cur:0, cells:[{},{},{},{}]};
@@ -556,7 +680,7 @@ function teInitCells(){
     box.appendChild(d);
   }
 }
-teInitCells();
+teInitCells(); drawTgrid(); drawSwatch();
 function teLoad(t){
   document.getElementById('tesel').textContent=t.toString(16).toUpperCase();
   for(let k=0;k<4;k++) TE.cells[k].dw=GTLD[t*4+k];
@@ -662,6 +786,7 @@ async function srvSave(){
   await api('/api/save',{kind:'tilemap',chunk:TM_ID,data:buildTilemapJson()});
   await api('/api/save',{kind:'header',chunk:HID,data:buildHeaderJson()});
   await api('/api/save',{kind:'gtld',chunk:GT_ID,data:buildGtldWords()});
+  await api('/api/save',{kind:'tileset',chunk:TS_ID,data:buildTilesetB64()});
   srvstat.textContent='saved';
 }
 async function srvPack(){
@@ -719,6 +844,7 @@ def render_page(cid, server=False, root=None):
     png, _, _ = LR.render(cid, root)
     apng, ntpl, pcols = render_template_atlas(gtld, tgfx, pal)
     tpng, ntiles, tcols = render_tile_atlas(tgfx, pal)
+    tgfx_tail = tgfx[ntiles * 64:]
     gtld_words = [gtld[i * 2] | (gtld[i * 2 + 1] << 8)
                   for i in range(ntpl * 4)]
     gt_rest = gtld[ntpl * 8:].hex()
@@ -751,6 +877,11 @@ def render_page(cid, server=False, root=None):
         "ntiles": ntiles, "tcols": tcols,
         "gtld": json.dumps(gtld_words, separators=(",", ":")),
         "gtrest": gt_rest, "gtldhex": gtld.hex(),
+        "tsid": f"{ts_id:04X}",
+        "tgfxb64": base64.b64encode(tgfx[:ntiles * 64]).decode(),
+        "tgfxtail": tgfx_tail.hex(),
+        "palrgb": json.dumps([list(c) for c in pal],
+                             separators=(",", ":")),
         "hdrjson": json.dumps(hdr_named, separators=(",", ":")),
         "hid": cid,
     }

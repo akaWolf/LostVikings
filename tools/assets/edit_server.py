@@ -148,6 +148,8 @@ class H(BaseHTTPRequestHandler):
         kind = body.get("kind")
         if kind == "gtld":
             return self.api_save_gtld(body)
+        if kind == "tileset":
+            return self.api_save_tileset(body)
         if kind not in SAVE_KINDS:
             return self._err(f"bad kind {kind!r}")
         sub, fmt = SAVE_KINDS[kind]
@@ -183,6 +185,28 @@ class H(BaseHTTPRequestHandler):
         raw += bytes.fromhex(rest)
         files = assetc.converter_for("bg_tileset").extract(int(chunk, 16),
                                                            bytes(raw))
+        for rel, blob in files:
+            path = os.path.join(SCRATCH, rel)
+            tmp = path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(blob)
+            os.replace(tmp, path)
+        return self._json({"ok": True, "files": [r for r, _ in files]})
+
+    def api_save_tileset(self, body):
+        import base64 as b64mod
+        chunk = str(body.get("chunk", "")).upper()
+        data = body.get("data") or {}
+        if len(chunk) != 4 or "b64" not in data:
+            return self._err("tileset: need chunk + b64")
+        if not os.path.exists(os.path.join(SCRATCH, "tilesets",
+                                           f"{chunk}.json")):
+            return self._err(f"unknown tileset chunk {chunk}")
+        raw = b64mod.b64decode(data["b64"])
+        if len(raw) % 64:
+            return self._err("tileset bytes must be a multiple of 64")
+        raw += bytes.fromhex(data.get("tail", ""))
+        files = assetc.converter_for("tileset").extract(int(chunk, 16), raw)
         for rel, blob in files:
             path = os.path.join(SCRATCH, rel)
             tmp = path + ".tmp"
