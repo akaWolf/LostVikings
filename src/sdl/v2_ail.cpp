@@ -73,6 +73,118 @@ void headless_dump_divergence(const char*, int, const char*);  // C++ linkage
 #endif
 extern "C" void     v2_nopl_sink_out(uint16_t, uint8_t);
 extern "C" uint8_t  v2_nopl_sink_in(uint16_t);
+
+// stage 6.1 w3 increment 7: the NATIVE sequencer surface (v2_ail_native.cpp).
+// V2_AIL_NATIVE=1 in a V2_ONLY build routes every driver call through the
+// line-by-line C port instead of the interpreter (same blob image, same io
+// hooks, far memory through the same segment map) — the OPL stream must
+// stay byte-identical, judged by the opl_ref trace corpus.
+extern "C" void     v2_ailnat_load(const uint8_t*, uint32_t);
+extern "C" void     v2_ailnat_set_io(void (*)(uint16_t, uint8_t), uint8_t (*)(uint16_t));
+extern "C" void     v2_ailnat_map_segment(uint16_t, uint8_t*, uint32_t);
+extern "C" void     v2_ailnat_set_self_seg(uint16_t);
+extern "C" uint16_t v2_ailnat_last_dx(void);
+extern "C" uint16_t v2_ailnat_fn64_desc_27C8(void);
+extern "C" uint16_t v2_ailnat_fn65_probe_140E(uint16_t);
+extern "C" void     v2_ailnat_fn66_install_35D8(uint16_t);
+extern "C" void     v2_ailnat_timer_tick_331E(void);
+extern "C" uint16_t v2_ailnat_fn97_register_37F6(uint16_t, uint16_t, uint16_t,
+                                                 uint16_t, uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ailnat_release_handle_393C(uint16_t);
+extern "C" uint16_t v2_ailnat_fn99_cache_size_16D9(void);
+extern "C" void     v2_ailnat_fn9A_set_cache_16F0(uint16_t, uint16_t, uint16_t);
+extern "C" uint16_t v2_ailnat_fn9B_timbre_request_1736(uint16_t);
+extern "C" void     v2_ailnat_fn9C_load_timbre_18DB(uint16_t, uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ailnat_fnAA_start_3980(uint16_t);
+extern "C" void     v2_ailnat_fnAB_stop_3A15(uint16_t);
+extern "C" void     v2_ailnat_fnAD_resume_3A5B(uint16_t);
+extern "C" uint16_t v2_ailnat_fnAE_status_3A9E(uint16_t);
+extern "C" uint16_t v2_ailnat_fnAF_get_volume_3C57(uint16_t);
+extern "C" uint16_t v2_ailnat_fnB0_get_tempo_3C31(uint16_t);
+extern "C" void     v2_ailnat_fnB1_set_volume_3CF1(uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ailnat_fnB2_set_tempo_3C7D(uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ailnat_fn68_uninstall_3709(uint16_t, uint16_t);
+extern "C" uint16_t v2_ailnat_fn96_state_size_3797(void);
+extern "C" void     v2_ailnat_fn9D_lock_161C(uint16_t, uint16_t);
+extern "C" void     v2_ailnat_fn9E_unlock_1662(uint16_t, uint16_t);
+extern "C" uint16_t v2_ailnat_fn9F_cache_off_16A8(uint16_t, uint16_t);
+extern "C" uint16_t v2_ailnat_fnB3_get_beat_3AC4(uint16_t);
+extern "C" uint16_t v2_ailnat_fnB4_get_measure_3AEA(uint16_t);
+extern "C" void     v2_ailnat_fnB5_branch_3B69(uint16_t, uint16_t);
+extern "C" uint16_t v2_ailnat_fnB6_get_ctl_3D6E(uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ailnat_fnB7_set_ctl_3DB1(uint16_t, uint16_t, uint16_t, uint16_t);
+extern "C" uint16_t v2_ailnat_fnB9_note_count_3DE6(uint16_t, uint16_t);
+extern "C" void     v2_ailnat_midi_2629(uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ailnat_fnBB_stub_280A(void);
+extern "C" void     v2_ailnat_fnBC_stub_280F(void);
+extern "C" void     v2_ailnat_fnBD_set_cb_37AE(uint16_t, uint16_t, uint16_t);
+extern "C" void     v2_ailnat_clear_cb_37D4(void);
+extern "C" uint16_t v2_ailnat_lock_channel_3E20(void);
+extern "C" void     v2_ailnat_release_channel_3EA3(uint16_t);
+extern "C" void     v2_ailnat_fnC0_set_map_3B10(uint16_t, uint16_t, uint16_t);
+extern "C" uint16_t v2_ailnat_fnC2_get_map_3B3C(uint16_t, uint16_t);
+extern "C" uint16_t v2_ail_interp_drv_para(void);
+
+// V2_AIL_NATIVE=1 gate (V2_ONLY only — the verify build keeps the
+// interpreter pair as the oracle).
+static int v2_ailnat_mode(void) {
+#ifdef V2_ONLY
+    static int m = -1;
+    if (m < 0) { const char* e = getenv("V2_AIL_NATIVE"); m = (e && atoi(e) != 0) ? 1 : 0; }
+    return m;
+#else
+    return 0;
+#endif
+}
+
+// Dispatch an AIL fn code to the native surface. args[0] is the driver id
+// (single-blob model, ignored); the tail mirrors each fn's stack shape.
+static uint16_t v2_ailnat_dispatch(uint16_t fn, const uint16_t* a, int argc) {
+    (void)argc;
+    switch (fn) {
+    case 0x64: return v2_ailnat_fn64_desc_27C8();
+    case 0x65: return v2_ailnat_fn65_probe_140E(a[1]);
+    case 0x66: v2_ailnat_fn66_install_35D8(a[1]); return 0;
+    case 0x67: v2_ailnat_timer_tick_331E(); return 0;
+    case 0x97: return v2_ailnat_fn97_register_37F6(a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+    case 0x98: v2_ailnat_release_handle_393C(a[1]); return 0;
+    case 0x99: return v2_ailnat_fn99_cache_size_16D9();
+    case 0x9A: v2_ailnat_fn9A_set_cache_16F0(a[1], a[2], a[3]); return 0;
+    case 0x9B: return v2_ailnat_fn9B_timbre_request_1736(a[1]);
+    case 0x9C: v2_ailnat_fn9C_load_timbre_18DB(a[1], a[2], a[3], a[4]); return 0;
+    case 0xAA: v2_ailnat_fnAA_start_3980(a[1]); return 0;
+    case 0xAB: v2_ailnat_fnAB_stop_3A15(a[1]); return 0;
+    case 0xAD: v2_ailnat_fnAD_resume_3A5B(a[1]); return 0;
+    case 0xAE: return v2_ailnat_fnAE_status_3A9E(a[1]);
+    case 0xAF: return v2_ailnat_fnAF_get_volume_3C57(a[1]);
+    case 0xB0: return v2_ailnat_fnB0_get_tempo_3C31(a[1]);
+    case 0xB1: v2_ailnat_fnB1_set_volume_3CF1(a[1], a[2], a[3]); return 0;
+    case 0xB2: v2_ailnat_fnB2_set_tempo_3C7D(a[1], a[2], a[3]); return 0;
+    case 0x68: v2_ailnat_fn68_uninstall_3709(a[1], a[2]); return 0;
+    case 0x96: return v2_ailnat_fn96_state_size_3797();
+    case 0x9D: v2_ailnat_fn9D_lock_161C(a[1], a[2]); return 0;
+    case 0x9E: v2_ailnat_fn9E_unlock_1662(a[1], a[2]); return 0;
+    case 0x9F: return v2_ailnat_fn9F_cache_off_16A8(a[1], a[2]);
+    case 0xB3: return v2_ailnat_fnB3_get_beat_3AC4(a[1]);
+    case 0xB4: return v2_ailnat_fnB4_get_measure_3AEA(a[1]);
+    case 0xB5: v2_ailnat_fnB5_branch_3B69(a[1], a[2]); return 0;
+    case 0xB6: return v2_ailnat_fnB6_get_ctl_3D6E(a[1], a[2], a[3]);
+    case 0xB7: v2_ailnat_fnB7_set_ctl_3DB1(a[1], a[2], a[3], a[4]); return 0;
+    case 0xB9: return v2_ailnat_fnB9_note_count_3DE6(a[1], a[2]);
+    case 0xBA: v2_ailnat_midi_2629(a[1], a[2], a[3]); return 0;
+    case 0xBB: v2_ailnat_fnBB_stub_280A(); return 0;
+    case 0xBC: v2_ailnat_fnBC_stub_280F(); return 0;
+    case 0xBD: v2_ailnat_fnBD_set_cb_37AE(a[1], a[2], v2_ail_interp_drv_para()); return 0;
+    case 0xBE: v2_ailnat_clear_cb_37D4(); return 0;
+    case 0xBF: return v2_ailnat_lock_channel_3E20();
+    case 0xC0: v2_ailnat_fnC0_set_map_3B10(a[1], a[2], a[3]); return 0;
+    case 0xC1: v2_ailnat_release_channel_3EA3(a[1]); return 0;
+    case 0xC2: return v2_ailnat_fnC2_get_map_3B3C(a[1], a[2]);
+    default:
+        fprintf(stderr, "V2-AILNAT: fn %02X not natively ported (task #102)\n", fn);
+        return 0;
+    }
+}
 extern "C" double   v2_nopl_get_tick_hz(void);
 extern "C" uint32_t v2_nopl_get_rate(void);
 extern "C" uint16_t v2_ail_call_fn_code(uint16_t, const uint16_t*, int);
@@ -183,7 +295,9 @@ static uint16_t sh_call(uint16_t fn_code, const uint16_t* args, int argc) {
     v2_ail_interp_lock();
     v2_ail_interp_use(0);
     v2_ailpar_note(0, v2_ail_fn_lookup(fn_code));   // (#85) call parity, shadow leg
-    uint16_t ax = v2_ail_call_fn_code(fn_code, args, argc);
+    uint16_t ax = v2_ailnat_mode()
+        ? v2_ailnat_dispatch(fn_code, args, argc)   // increment 7: native surface
+        : v2_ail_call_fn_code(fn_code, args, argc);
     v2_ail_interp_unlock();
     return ax;
 }
@@ -270,6 +384,18 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     v2_ail_interp_map_segment(snd_base, snd, snd_size);       // whole sound arena
     v2_ail_interp_map_segment(ds_val, s, 0x10000);            // the game DS (state blocks!)
     v2_ail_interp_map_segment(CACHE_PARA, g_cache, sizeof(g_cache));
+    if (v2_ailnat_mode()) {
+        // Native surface boots on the same world: same blob image, the same
+        // audible io hooks, the identical segment map, and the interp's fake
+        // blob paragraph as the self-segment so DS cells stay byte-equal.
+        v2_ailnat_load(snd, blob_size);
+        v2_ailnat_set_io(v2_nopl_sbpro_out, v2_nopl_sbpro_in);
+        v2_ailnat_map_segment(snd_base, snd, snd_size);
+        v2_ailnat_map_segment(ds_val, s, 0x10000);
+        v2_ailnat_map_segment(CACHE_PARA, g_cache, sizeof(g_cache));
+        v2_ailnat_set_self_seg(v2_ail_interp_drv_para());
+        fprintf(stderr, "V2-AILNAT: native sequencer surface armed\n");
+    }
 
     // --- sub_17561 tail, DS effects included --------------------------------
     wrw(s, DS_A39A_INIT, 0);                     // eip 0x7561
@@ -285,7 +411,8 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     {
         uint16_t a[3] = { drv, 0x0A53, 0x0D4F };
         uint16_t ax = sh_call(0x64, a, 3);
-        uint16_t dx = v2_ail_interp_last_dx();
+        uint16_t dx = v2_ailnat_mode() ? v2_ailnat_last_dx()
+                                       : v2_ail_interp_last_dx();
         wrw(s, (uint16_t)(DS_98E8_DESC + 2), dx);   // eip 0x75A5 [98EA]=seg
         wrw(s, DS_98E8_DESC, ax);                    // eip 0x75A9 [98E8]=off
     }

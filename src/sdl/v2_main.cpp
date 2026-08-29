@@ -70,7 +70,7 @@ bool g_debug_mode = false;
 
 // №59: --max-frames limit for plain V2_ONLY builds (0 = unlimited). The
 // HEADLESS hook keeps its own enforcement; this one stops the main loop.
-static int g_v2only_max_frames = 0;
+int g_v2only_max_frames = 0;   // read by the v2_nopl_pump quit choke too
 
 extern "C" int v2_state_save(const char*);   // v2_vm.cpp (direction V step 2)
 extern "C" void headless_golden_dump(void);  // v2_gamestate.cpp (all builds)

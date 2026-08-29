@@ -112,6 +112,15 @@ EXE_NAME := vikings_headless
 OBJDIR := .obj-headless
 endif
 
+# V2_ONLY objects live in their own objdir so switching default<->V2_ONLY
+# never mixes configurations (multiple-definition trap) and never forces a
+# clean rebuild. Suffix applied AFTER the HEADLESS assignment so the combo
+# builds compose (.obj-v2only / .obj-headless-v2only); -nogen/-bounds
+# suffixes below compose on top as before. The binary name stays `vikings`.
+ifdef V2_ONLY
+OBJDIR := $(OBJDIR)-v2only
+endif
+
 # Stage-3A transpiled executors (src/sdl/gen/*.gen.inc) are the DEFAULT in
 # every build: the VM fetch-decode loop survives only as the unknown-pc
 # fallback (its removal is scheduled for the end of stage B, together with

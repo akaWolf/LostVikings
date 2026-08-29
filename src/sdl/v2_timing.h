@@ -12,6 +12,7 @@
 //     implemented; the presenter shows the last completed frame as-is.
 #pragma once
 #include <SDL2/SDL.h>
+#include <cstdlib>
 
 // Logical tick pacing (interactive builds only; headless never sleeps).
 static const uint32_t V2_TICK_MS = 16;      // vsync-wait iteration pacing
@@ -23,12 +24,24 @@ static const uint32_t V2_FRAME_BUDGET_MS = 16;
 
 static inline void v2_tick_sleep(void) {
 #if defined(V2_ONLY) && !defined(HEADLESS)
-    SDL_Delay(V2_TICK_MS);
+    // V2_NOVSYNC=1 drops the game-thread tick pacing too (the presenter
+    // loop honors the same env in v2_main.cpp) — a windowed V2_ONLY replay
+    // then runs at CPU speed for benchmarking/A-B trace runs. Frame-based
+    // determinism (tick counters, V2_AIL_FRAME_TICKS) is pacing-independent.
+    static int novsync = -1;
+    if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
+    if (!novsync) SDL_Delay(V2_TICK_MS);
 #endif
 }
 
 static inline void v2_present_sleep(void) {
-    SDL_Delay(V2_PRESENT_MS);
+    // Same V2_NOVSYNC gate as the tick pacing: the presenter drives
+    // vsync_count, so every blocking wait-loop iteration is bounded by this
+    // sleep — a CPU-speed replay needs the presenter spinning too.
+    static int novsync = -1;
+    if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
+    if (!novsync) SDL_Delay(V2_PRESENT_MS);
+    else SDL_Delay(1);   // fast pacing, not a spin (shutdown races, contention)
 }
 
 // Interpolation extension point (roadmap 6.3: optional, OFF by default).

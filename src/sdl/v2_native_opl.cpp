@@ -44,6 +44,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <unistd.h>
 #include <cstring>
 
 extern "C" {
@@ -272,12 +273,58 @@ static int nopl_frame_mode(void);
 extern "C" void v2_ail_sink_pump(uint64_t);   // (#83) audible sink driver (v2_ail.cpp)
 
 extern "C" void v2_nopl_pump(void) {
+#if defined(V2_ONLY) && !defined(HEADLESS)
+    // №59 windowed enforcement: when the presenter loop has already left on
+    // need_quit (max-frames / window close), the game thread can sit inside
+    // a blocking wait loop forever — every such loop pumps, so this is the
+    // single choke point. Mirror the headless clean exit.
+    {
+        extern bool need_quit;
+        extern int g_v2only_max_frames;
+        extern int v2_dbg_pre_vm_iter;
+        if (need_quit ||
+            (g_v2only_max_frames > 0 && v2_dbg_pre_vm_iter >= g_v2only_max_frames)) {
+            fprintf(stderr, "V2_ONLY: max-frames/quit reached in the game "
+                    "thread (frame %d), exiting cleanly\n", v2_dbg_pre_vm_iter);
+            extern void headless_golden_dump(void);
+            headless_golden_dump();
+            fflush(stdout); fflush(stderr);
+            _exit(0);
+        }
+    }
+#endif
     if (g_tick_hz <= 0.0) return;
     double spt = (double)g_rate / g_tick_hz;   // samples per tick (queue ts)
     int frame_mode = nopl_frame_mode();
     int guard = 0;
     if (frame_mode) {
-        g_tick_acc += g_tick_hz / NOPL_FRAME_HZ;
+        // Deterministic invariant: ticks accrue per FRAME COUNTER delta,
+        // not per pump call — wait loops pump once per iteration and the
+        // iteration count depends on pacing/scheduling (a NOVSYNC spin ran
+        // thousands of iterations per frame and multiplied the ticks).
+        // Counter-based accrual keeps the tick schedule a pure function of
+        // the frame number on every pacing mode.
+        // v2_render_frame (#32) is the DETERMINISTIC per-game-frame index;
+        // v2_dbg_pre_vm_iter is documented-inflated by the blocking-loop
+        // wall-clock spins and multiplied the ticks ~600x under NOVSYNC.
+        extern int v2_render_frame;
+        static int last_frame = -1;
+        int cur = v2_render_frame;
+        {   // V2_TICKDBG=1: pump/counter forensics (one line per 1000 pumps)
+            static int dbg = -1; static long pumps = 0;
+            if (dbg < 0) dbg = getenv("V2_TICKDBG") ? 1 : 0;
+            if (dbg && (++pumps % 1000) == 1) {
+                extern int v2_dbg_pre_vm_iter;
+                fprintf(stderr, "TICKDBG pumps=%ld rframe=%d pvi=%d ticks=%llu acc=%.2f hz=%.1f\n",
+                        pumps, cur, v2_dbg_pre_vm_iter,
+                        (unsigned long long)g_ticks_done, g_tick_acc, g_tick_hz);
+            }
+        }
+        if (last_frame < 0) last_frame = cur;
+        if (cur != last_frame) {
+            g_tick_acc += (double)(cur - last_frame) * g_tick_hz / NOPL_FRAME_HZ;
+            last_frame = cur;
+        }
         while (g_tick_acc >= 1.0 && guard++ < 64) {
             g_tick_acc -= 1.0;
             g_cur_ts = (uint64_t)((double)g_ticks_done * spt);

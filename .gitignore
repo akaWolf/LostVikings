@@ -3,3 +3,7 @@ vikings_keymap_editor
 assets_raw/
 /assets/
 __pycache__/
+
+# Nix GC-root symlinks (toolchain pins)
+/.nix-sdl2-dev-root
+/.nix-tc-*
