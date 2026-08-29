@@ -140,6 +140,18 @@ PAGE = """<!doctype html>
    <button id="spadd">add (click map)</button>
    <button id="spdel">delete</button>
   </div>
+  <details style="margin-bottom:8px"><summary>level header fields</summary>
+   viking spawn x <input id="hd_vx" size="4"> y <input id="hd_vy" size="4"><br>
+   spawn code <input id="hd_code" size="3"> anim <input id="hd_anim" size="4">
+   pool0 <input id="hd_pool" size="3"> (hex)<br>
+   active vk <input id="hd_avk" size="2">
+   music type <input id="hd_mt" size="2"> track <input id="hd_trk" size="4"> flag <input id="hd_mf" size="2"><br>
+   anim scroll dx <input id="hd_adx" size="4"> dy <input id="hd_ady" size="4"><br>
+   level flags <input id="hd_fl" size="2"> (hex; bit0 HUD)<br>
+   chunks: map <input id="hd_tm" size="4"> tiles <input id="hd_ts" size="4">
+   tpls <input id="hd_gt" size="4"> (hex; applies after save+reload)<br>
+   dims: %(qw)dx%(qh)d quads (resize: level resize section)
+  </details>
   <details style="margin-bottom:8px"><summary>tile pixels (tile <span id="txsel">-</span>)</summary>
    <canvas id="tgrid" style="display:inline-block;vertical-align:top"></canvas>
    <canvas id="tsw" style="display:inline-block;margin-left:6px"></canvas><br>
@@ -180,7 +192,9 @@ const ICONS=%(icons)s; // engine-harvested sprites (class_icons.py)
 const IIMG={};
 for(const k in ICONS){const im=new Image();im.onload=()=>{if(typeof drawSpawns==='function')drawSpawns();};im.src='data:image/png;base64,'+ICONS[k].b64; IIMG[k]=im;}
 const HDRJSON=%(hdrjson)s;
-const ST_HEAD="%(sthead)s", ST_REST="%(strest)s", HDRRAW="%(hdrraw)s";
+const ST_REST="%(strest)s", HDRRAW="%(hdrraw)s";
+const HEADB=Uint8Array.from("%(sthead)s".match(/../g)||[], h=>parseInt(h,16));
+const PALCHUNKS=%(palchunks)s; // palette chunk payloads (hex), all levels
 let PAL_EN=%(palen)d;
 const PAL_LIST=%(pallist)s, PAL_ANIMS=%(palanims)s;
 const BANKS=%(banks)s, ACHUNKS=%(achunks)s;
@@ -448,7 +462,9 @@ document.getElementById('undo').onclick=()=>{
     if(TXSEL===h.i) drawTgrid(); tileTouched(h.i); }
   else if(h.t==='pal'){ PAL_LIST.length=0; PAL_LIST.push(...h.pl);
     PAL_ANIMS.length=0; PAL_ANIMS.push(...h.pa); PAL_EN=h.en;
-    penInp.value=PAL_EN.toString(16).toUpperCase(); drawPalForms(); }
+    penInp.value=PAL_EN.toString(16).toUpperCase(); drawPalForms();
+    if(LIVE_PAL) palLive(); }
+  else if(h.t==='head'){ HEADB.set(h.bytes); headForm(); }
   else if(h.t==='gtld'){ for(let k=0;k<4;k++) GTLD[h.i*4+k]=h.words[k];
     OVERRIDE.set(h.i, renderTplCanvas(h.i)); drawPal();
     for(let q=0;q<QW*QH;q++) if((MAP[q]&0x3FF)===h.i) redrawQuad(q); }
@@ -477,7 +493,8 @@ const b2=v=>(v&0xFF).toString(16).padStart(2,'0');
 function serializeStripe(){
   // JS mirror of level_render.serialize_stripe — every tail section is
   // terminator-scanned by the engine, so counts may change freely
-  let hex=ST_HEAD.toLowerCase();
+  let hex='';
+  HEADB.forEach(v=>{hex+=b2(v);});
   for(const s of SPAWNS)
     hex+=w2(s.x)+w2(s.y)+w2(s.half_w)+w2(s.half_h)+w2(s.cls)+w2(s.anim)+w2(s.pool);
   hex+='ffff';
@@ -800,9 +817,9 @@ function drawPalForms(){
     d.innerHTML=`chunk <input size="4" value="${e.chunk.toString(16).padStart(4,'0').toUpperCase()}">`+
       ` start <input size="3" value="${e.start}"> <button>del</button>`;
     const [ci,si]=d.querySelectorAll('input');
-    ci.onchange=()=>{ pushPalUndo(); e.chunk=parseInt(ci.value,16)||0; };
-    si.onchange=()=>{ pushPalUndo(); e.start=(+si.value)&0xFF; };
-    d.querySelector('button').onclick=()=>{ pushPalUndo(); PAL_LIST.splice(i,1); drawPalForms(); };
+    ci.onchange=()=>{ pushPalUndo(); e.chunk=parseInt(ci.value,16)||0; palLive(); };
+    si.onchange=()=>{ pushPalUndo(); e.start=(+si.value)&0xFF; palLive(); };
+    d.querySelector('button').onclick=()=>{ pushPalUndo(); PAL_LIST.splice(i,1); drawPalForms(); palLive(); };
     plist.appendChild(d);
   });
   panims.innerHTML='';
@@ -825,6 +842,76 @@ function drawPalForms(){
 document.getElementById('pladd').onclick=()=>{ pushPalUndo(); PAL_LIST.push({chunk:0,start:0}); drawPalForms(); };
 document.getElementById('paadd').onclick=()=>{ pushPalUndo(); PAL_ANIMS.push({reload:8,start:0,end:0,frames:[]}); drawPalForms(); };
 drawPalForms();
+// ---- level header (stripe head) form ----
+// stripe offsets = DS offset - 0x25B3 (v2_ds_layout names):
+// +0/2 anim scroll dx/dy, +4 music type (b), +5 track (w), +6 flag (b,
+// overlaps track hi), +7 active vk (b), +8/A viking spawn X/Y, +C code,
+// +E anim, +10 pool0, +1C level flags (b), +2E/30/32 chunk ids.
+const hg16=o=>HEADB[o]|(HEADB[o+1]<<8);
+const hp16=(o,v)=>{HEADB[o]=v&0xFF;HEADB[o+1]=(v>>8)&0xFF;};
+const HDF=[
+  ['hd_vx',0x08,2,10],['hd_vy',0x0A,2,10],['hd_code',0x0C,2,16],
+  ['hd_anim',0x0E,2,16],['hd_pool',0x10,2,16],['hd_avk',0x07,1,16],
+  ['hd_mt',0x04,1,16],['hd_trk',0x05,2,16],['hd_mf',0x06,1,16],
+  ['hd_adx',0x00,2,10],['hd_ady',0x02,2,10],['hd_fl',0x1C,1,16],
+  ['hd_tm',0x2E,2,16],['hd_ts',0x30,2,16],['hd_gt',0x32,2,16]];
+function headForm(){
+  for(const [id,o,w,base] of HDF){
+    const v=(w===2)?hg16(o):HEADB[o];
+    document.getElementById(id).value=(base===16)?v.toString(16).toUpperCase():v;
+  }
+}
+for(const [id,o,w,base] of HDF){
+  document.getElementById(id).onchange=e2=>{
+    hist.push({t:'head',bytes:HEADB.slice()});
+    const v=(base===16)?(parseInt(e2.target.value,16)||0):((+e2.target.value)|0);
+    if(w===2) hp16(o,v&0xFFFF); else HEADB[o]=v&0xFF;
+  };
+}
+headForm();
+// ---- live palette (JS mirror of compose_palette: entries into a 768B
+// buffer at start*3, then black out colors 16k, 6-bit <<2|>>4) ----
+let LIVE_PAL=false;
+function composePalJS(){
+  const buf=new Uint8Array(768);
+  let missing=null;
+  for(const e of PAL_LIST){
+    const hx=PALCHUNKS[e.chunk.toString(16).padStart(4,'0').toUpperCase()];
+    if(hx===undefined){ missing=e.chunk; continue; }
+    for(let i=0;i<hx.length/2;i++){
+      const o=e.start*3+i;
+      if(o<768) buf[o]=parseInt(hx.substr(i*2,2),16);
+    }
+  }
+  for(let k=1;k<16;k++){ buf[k*48]=0; buf[k*48+1]=0; buf[k*48+2]=0; }
+  for(let i=0;i<256;i++)
+    PALRGB[i]=[(buf[i*3]<<2)|(buf[i*3]>>4),
+               (buf[i*3+1]<<2)|(buf[i*3+1]>>4),
+               (buf[i*3+2]<<2)|(buf[i*3+2]>>4)];
+  return missing;
+}
+// self-check: recomposing the UNTOUCHED palette list must reproduce the
+// python-baked PALRGB exactly (compose_palette mirror proof)
+{
+  const baked=PALRGB.map(c=>c.slice());
+  const miss=composePalJS();
+  let ok=(miss===null);
+  if(ok) for(let i=0;i<256;i++)
+    for(let k=0;k<3;k++) if(PALRGB[i][k]!==baked[i][k]){ ok=false; break; }
+  globalThis.__pal_ok=ok;
+  if(!ok) console.error('live palette compose MISMATCH vs baked');
+  for(let i=0;i<256;i++) PALRGB[i]=baked[i];
+}
+function palLive(){
+  const missing=composePalJS();
+  LIVE_PAL=true;
+  for(let t=0;t<ntplNow();t++) OVERRIDE.set(t, renderTplCanvasPix(t));
+  for(let q=0;q<QW*QH;q++) redrawQuad(q);
+  drawPal(); drawSpawns(); drawSwatch(); drawTgrid();
+  stat.textContent=missing!==null
+    ? ` palette: chunk ${missing.toString(16).toUpperCase()} not in the page set — save+reload to see it`
+    : ' palette recomposed live';
+}
 // ---- server mode ----
 const srvstat=document.getElementById('srvstat');
 async function api(path, body){
@@ -943,6 +1030,9 @@ def render_page(cid, server=False, root=None):
         "tgfxtail": tgfx_tail.hex(),
         "palrgb": json.dumps([list(c) for c in pal],
                              separators=(",", ":")),
+        "palchunks": json.dumps(
+            {f"{c:04X}": d.hex() for c, d in LR.pal_chunk_union().items()},
+            separators=(",", ":")),
         "hdrjson": json.dumps(hdr_named, separators=(",", ":")),
         "hid": cid,
     }

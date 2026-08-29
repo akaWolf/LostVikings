@@ -201,6 +201,37 @@ def serialize_stripe(st):
     return bytes(out)
 
 
+_PAL_UNION = None
+
+
+def pal_chunk_union():
+    """{chunk_id: payload} for every palette chunk referenced by any level's
+    palette list (the union across all 42 headers) — the live-palette data
+    set for the editor page. Cached per process."""
+    global _PAL_UNION
+    if _PAL_UNION is not None:
+        return _PAL_UNION
+    import assetc as AC
+    ids = set()
+    for fn in sorted(os.listdir(HDR_DIR)):
+        if not fn.endswith(".json"):
+            continue
+        try:
+            st = parse_stripe(header_raw(fn[:-5]))
+        except Exception:
+            continue
+        for e in st["pal_list"]:
+            if e["chunk"] != 0xFFFF:
+                ids.add(e["chunk"])
+    _PAL_UNION = {}
+    for cid in sorted(ids):
+        try:
+            _PAL_UNION[cid], _ = AC.read_payload(cid, "lzss")
+        except Exception:
+            pass
+    return _PAL_UNION
+
+
 def level_passwords():
     """37 4-letter passwords @ds:0x85A5 (bit7 stripped); password slot i =
     level table index i (op_D3 verified). Levels 37+ are scene stubs."""
