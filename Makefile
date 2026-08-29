@@ -313,6 +313,6 @@ $(OBJDIR)/%.o: %.c
 	$(CC) -c $(CFLAGS) $(ADL_DEFINES) -MMD -MP -o $@ $<
 
 clean:
-	rm -rf .obj .obj-win .obj-headless .obj-keymap-editor vikings vikings.exe vikings_headless vikings_keymap_editor vikings_keymap_editor.exe
+	rm -rf .obj .obj-* vikings vikings.exe vikings_headless vikings_keymap_editor vikings_keymap_editor.exe
 
 -include $(DEPS)

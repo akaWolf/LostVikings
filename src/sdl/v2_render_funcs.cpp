@@ -344,6 +344,18 @@ void v2_swap_render_buf() {
     // internal composition sources for some mirrors, but what the USER sees
     // is the verified VGA state.
     {
+#ifdef V2_ONLY
+        // Stage 6.2 gated the shadow-VGA writers out of V2_ONLY ("the
+        // Mode-X pixel model dies in the target engine") but this reader
+        // kept scanning the now-empty v2_vga — the user window went black
+        // while the game ran (2026-08-28 report). The target engine's
+        // frame lives in the linear composition buffers: viewport in
+        // v2_render_buf, HUD in v2_hud_buf — present those.
+        extern uint8_t v2_hud_buf[320 * 64];
+        memcpy(v2_display_buf, v2_render_buf, 320 * 176);
+        extern uint8_t v2_display_hud_buf[];
+        memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
+#else
         extern int v2_vga_fetch_page(uint8_t* out, uint32_t count);
         extern uint8_t v2_vga[65536 * 4];
         if (!v2_vga_fetch_page(v2_display_buf, 320 * 176))
@@ -351,6 +363,7 @@ void v2_swap_render_buf() {
         extern uint8_t v2_display_hud_buf[];
         for (int y = 0; y < 64; y++)
             memcpy(v2_display_hud_buf + y * 320, v2_vga + (uint32_t)(y * 0x56) * 4u, 320);
+#endif
     }
     extern uint8_t* v2_vm_get_shadow_ds();
     uint8_t* shad = v2_vm_get_shadow_ds();

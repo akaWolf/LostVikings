@@ -52,6 +52,39 @@ void updateDraw_v2()
   // stableBuffer is now linear (y*344+x), no page offset needed.
   uint8_t* buf = myDrawInfo_v2->stableBuffer;
 
+  // Black-screen forensics (2026-08-28 user report: sound+gameplay alive,
+  // window black): once a second sum the presented pixel bytes and the
+  // palette — tells WHICH stage is dark (pixels vs palette vs blit).
+  {
+    static int diag = -1;
+    if (diag < 0) diag = getenv("V2_PRESENT_DIAG") ? 1 : 0;
+    static uint32_t last_ms = 0;
+    uint32_t now = SDL_GetTicks();
+    if (diag && now - last_ms >= 1000) {
+      last_ms = now;
+      uint32_t psum = 0, palsum = 0;
+      for (int i = 0; i < RENDER_HEIGHT_V2 * RENDER_WIDTH_V2; i += 7) psum += buf[i];
+      for (int i = 0; i < 256; i++) {
+        auto& c = myDrawInfo_v2->drawPalette[i];
+        palsum += c.r + c.g + c.b;
+      }
+      extern SDL_Color v2_display_palette[256];
+      extern bool v2_display_palette_valid;
+      extern uint8_t v2_vga[65536 * 4];
+      extern uint8_t v2_render_buf[320 * 200];
+      extern uint8_t v2_display_buf[];
+      extern uint16_t v2_vga_crtc, v2_vga_pan;
+      uint32_t vsum = 0, rsum = 0, dsum = 0;
+      for (int i = 0; i < 65536 * 4; i += 97) vsum += v2_vga[i];
+      for (int i = 0; i < 320 * 200; i += 7) rsum += v2_render_buf[i];
+      for (int i = 0; i < 320 * 176; i += 7) dsum += v2_display_buf[i];
+      fprintf(stderr, "V2-PRESENT: calls=%d stable_sum=%u pal_sum=%u pubvalid=%d "
+              "vga_sum=%u rbuf_sum=%u dbuf_sum=%u crtc=%04X pan=%u\n",
+              call_count, psum, palsum, (int)v2_display_palette_valid,
+              vsum, rsum, dsum, v2_vga_crtc, v2_vga_pan);
+    }
+  }
+
   for (int i = 0; i < RENDER_HEIGHT_V2 * RENDER_WIDTH_V2; i++)
   {
     auto color = buf[i];
