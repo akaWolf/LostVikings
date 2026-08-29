@@ -49,7 +49,10 @@ namespace m2c {
 static uint8_t v2_m2c_buf[0x100000] = {0};
 
 static void v2_load_static_data() {
-    FILE* f = fopen("exe_static.bin", "rb");
+    // V2_EXE_STATIC: alternate image path (task #108 — the dialog texts
+    // live in seg001 of this image; the editor plays patched copies).
+    const char* p = getenv("V2_EXE_STATIC");
+    FILE* f = fopen((p && *p) ? p : "exe_static.bin", "rb");
     if (!f) {
         fprintf(stderr,
             "V2_ONLY: exe_static.bin not found — text/menu rendering will hang.\n"
