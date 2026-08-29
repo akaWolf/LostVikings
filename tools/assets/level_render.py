@@ -64,6 +64,47 @@ def script_for_header(hdr_cid):
 ICON_DIR = os.path.join(ROOT, "build", "levels_atlas", "icons")
 
 
+_CHUNK_MAP = None
+
+
+def open_payload(cid, container="lzss", root=None):
+    """Chunk payload by the assetc.pack rule: if the OPEN tree at `root`
+    holds this chunk's file(s), compile them (hand edits win); otherwise
+    the archive payload. root=None -> archive only."""
+    import assetc as AC
+    data, _ = AC.read_payload(cid, container)
+    if root is None:
+        return data
+    global _CHUNK_MAP
+    if _CHUNK_MAP is None:
+        with open(os.path.join(AC.RAW, "chunk_map.json")) as f:
+            _CHUNK_MAP = json.load(f)
+    info = _CHUNK_MAP.get(f"{cid:04X}")
+    if info is None:
+        return data
+    conv = AC.converter_for(info["roles"][0])
+    files = conv.extract(cid, data)
+    loaded = []
+    hit = False
+    for rel, blob in files:
+        pth = os.path.join(root, rel)
+        if os.path.exists(pth):
+            with open(pth, "rb") as f:
+                loaded.append((rel, f.read()))
+            hit = True
+        else:
+            loaded.append((rel, blob))
+    return conv.compile(loaded) if hit else data
+
+
+def header_raw(hdr_cid_hex, root=None):
+    """Level-header stripe bytes from the open tree at root (or assets/)."""
+    base = root if root is not None else os.path.join(ROOT, "assets")
+    with open(os.path.join(base, "level_headers",
+                           f"{hdr_cid_hex}.json")) as f:
+        return bytes.fromhex(json.load(f)["raw"])
+
+
 def parse_stripe(raw):
     """Full level-header stripe structure. Grammar = the engine's own
     di-passthrough chain (verified v2 mirrors of sub_11080's readers):
@@ -294,10 +335,10 @@ def draw_overlay(img, stride, hpx, spawns, grid, marker, marker2):
         draw_text(img, stride, hpx, x + 2, y - 7, f"{sp['cls']:X}", marker)
 
 
-def compose_palette(entries):
+def compose_palette(entries, root=None):
     pal = bytearray(768)
     for cid, start in entries:
-        data, _ = read_payload(cid, "lzss")
+        data = open_payload(cid, "lzss", root)
         pal[start * 3:start * 3 + len(data)] = data
     for k in range(1, 16):                        # sub_112ae blackouts
         pal[k * 16 * 3:k * 16 * 3 + 3] = b"\x00\x00\x00"
@@ -306,14 +347,13 @@ def compose_palette(entries):
              (pal[i * 3 + 2] << 2) | (pal[i * 3 + 2] >> 4)) for i in range(256)]
 
 
-def render(hdr_cid_hex):
-    with open(os.path.join(HDR_DIR, f"{hdr_cid_hex}.json")) as f:
-        raw = bytes.fromhex(json.load(f)["raw"])
+def render(hdr_cid_hex, root=None):
+    raw = header_raw(hdr_cid_hex, root)
     qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = parse_header(raw)
-    tmap, _ = read_payload(tm_id, "lzss")
-    tgfx, _ = read_payload(ts_id, "lzss")
-    gtld, _ = read_payload(gt_id, "lzss")
-    pal = compose_palette(pal_entries)
+    tmap = open_payload(tm_id, "lzss", root)
+    tgfx = open_payload(ts_id, "lzss", root)
+    gtld = open_payload(gt_id, "lzss", root)
+    pal = compose_palette(pal_entries, root)
     width, height = qw * 2, qh * 2
     stride = width * 8
     img = bytearray(stride * height * 8)

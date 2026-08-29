@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
-"""level_edit.py — quad-map editor page (task #103, editor v1).
+"""level_edit.py — quad-map editor page (task #103 v1-v2, #106 v3).
 
-Generates a self-contained HTML editor for one level:
-  - the level rendered on a canvas (from the same verified pipeline as
-    level_render.py), 16px quad grid;
+Generates the HTML editor for one level:
+  - the level rendered on a canvas (same verified pipeline as
+    level_render.py), 16px quad grid, minimap navigation;
   - a template palette (every 8-byte gs_tiledata entry rendered as its
-    16x16 quad) — click to select, click the map to stamp;
-  - per-quad TYPE (map word bits 10-15) editing;
-  - SPAWN editing (v2): drag markers to move, edit all record fields
-    (x/y/p1/p2/class/anim/pool — sub_13bbd layout) in a side form;
-    in-place only (no add/delete: the stripe tail after the table is
-    not fully mapped yet, so record count stays fixed);
-  - undo, and EXPORT of the edited tilemap as assetc-compatible JSON
-    (assets/tilemaps/<id>.json replacement), a raw .bin, or the level
-    HEADER json (assets/level_headers/<id>.json replacement) with the
-    edited spawn records spliced back into the raw stripe.
-
-The written JSON drops into the Stage-5 asset pipeline unchanged:
-  cp <download> assets/tilemaps/<id>.json && assetc pack
-and the game plays the edit (V2_ASSETS_DIR path).
+    16x16 quad) — click to select; stamp / set-TYPE apply by click OR by
+    dragging a rectangle (single undo entry per rectangle);
+  - SPAWN editing: drag markers to move, side form for every record
+    field (x/y/half_w/half_h/class/anim/pool — sub_13bbd layout),
+    click-to-place ADD, DELETE (the stripe tail is terminator-scanned,
+    parse_stripe grammar, so record count may change freely);
+  - undo, EXPORT (tilemap .json/.bin, header .json — assetc-compatible);
+  - SERVER mode (edit_server.py): save/pack/play buttons drive the
+    scratch assets tree end-to-end without downloads.
 
 Usage:
   python3 tools/assets/level_edit.py 00CA [-o out.html]
@@ -30,7 +25,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from assetc import read_payload, tile_decode, png_write  # noqa: E402
+from assetc import tile_decode, png_write  # noqa: E402
 import level_render as LR  # noqa: E402
 
 
@@ -69,8 +64,9 @@ PAGE = """<!doctype html>
  body { margin:0; background:#111; color:#ddd; font:13px monospace;
         display:flex; flex-direction:column; height:100vh; }
  #bar { padding:6px 8px; background:#222; flex:none; }
- #bar button, #bar input, #bar select { font:inherit; background:#333;
-        color:#ddd; border:1px solid #555; }
+ #bar button, #bar input, #bar select, #right button, #right input {
+        font:inherit; background:#333; color:#ddd; border:1px solid #555; }
+ #srv button { background:#264; }
  #main { display:flex; flex:1; min-height:0; }
  #left { overflow:auto; flex:1; }
  #right { width:300px; flex:none; overflow:auto; background:#181818;
@@ -78,6 +74,7 @@ PAGE = """<!doctype html>
  canvas { image-rendering: pixelated; display:block; }
  #pal { cursor:crosshair; }
  #map { cursor:crosshair; }
+ #mini { border:1px solid #333; cursor:pointer; margin-bottom:8px; }
  #tip { position:fixed; background:#000c; border:1px solid #555;
         padding:4px 6px; pointer-events:none; display:none;
         white-space:pre; z-index:9; }
@@ -95,6 +92,13 @@ PAGE = """<!doctype html>
  <button id="exphdr">export header .json</button>
  zoom <select id="z"><option>1</option><option selected>2</option>
  <option>3</option></select>
+ <span id="srv" style="display:none">
+  | <button id="srvsave">save</button>
+  <button id="srvpack">pack</button>
+  <button id="srvplay">play</button>
+  <button id="srvall">save+pack+play</button>
+  <span id="srvstat"></span>
+ </span>
  <span id="stat"></span>
 </div>
 <div id="main">
@@ -103,36 +107,39 @@ PAGE = """<!doctype html>
   <canvas id="sov" style="position:absolute;left:0;top:0;pointer-events:none"></canvas>
  </div></div>
  <div id="right">
+  <canvas id="mini"></canvas>
   <div id="spf" style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:6px">
-   spawn <span id="spidx">-</span> / %(nsp)d<br>
+   spawn <span id="spidx">-</span> / <span id="spn">%(nsp)d</span><br>
    x <input id="sp_x" size="4"> y <input id="sp_y" size="4"><br>
    half_w <input id="sp_p1" size="3"> half_h <input id="sp_p2" size="3"><br>
    cls <input id="sp_cls" size="3"> anim <input id="sp_anim" size="4">
    pool <input id="sp_pool" size="3"> (hex)<br>
    <span id="spinfo" style="color:#8bc"></span><br>
    <button id="spapply">apply</button>
-   <button id="spadd">add</button>
+   <button id="spadd">add (click map)</button>
    <button id="spdel">delete</button>
   </div>
   templates (%(ntpl)d):<canvas id="pal"></canvas></div>
 </div>
 <div id="tip"></div>
 <script>
+const SERVER=%(server)d;
 const QW=%(qw)d, QH=%(qh)d, NT=%(ntpl)d, PCOLS=%(pcols)d, TM_ID="%(tmid)s";
 const MAP=%(map)s, TAIL="%(tail)s";
-const SPAWNS=%(spawns)s, SPOFFS=%(spoffs)s, HID="%(hid)s";
+const SPAWNS=%(spawns)s, HID="%(hid)s";
 const CLASSES=%(classes)s; // cls -> sub_13e52 template record
 const ICONS=%(icons)s; // engine-harvested sprites (class_icons.py)
 const IIMG={};
 for(const k in ICONS){const im=new Image();im.onload=()=>{if(typeof drawSpawns==='function')drawSpawns();};im.src='data:image/png;base64,'+ICONS[k].b64; IIMG[k]=im;}
-const HDRRAW="%(hdrraw)s", HDRJSON=%(hdrjson)s;
+const HDRJSON=%(hdrjson)s;
 const HDRPRE="%(hdrpre)s", HDRSUF="%(hdrsuf)s";
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
 const map=document.getElementById('map'), pal=document.getElementById('pal'),
       tip=document.getElementById('tip'), tool=document.getElementById('tool'),
       tyval=document.getElementById('tyval'), selt=document.getElementById('selt'),
-      stat=document.getElementById('stat');
+      stat=document.getElementById('stat'), left=document.getElementById('left'),
+      mini=document.getElementById('mini');
 let Z=2, SEL=0, hist=[];
 const mc=map.getContext('2d'), pc=pal.getContext('2d');
 function redrawQuad(q){
@@ -146,10 +153,30 @@ function drawAll(){
   mc.imageSmoothingEnabled=false;
   mc.drawImage(lvl,0,0,QW*16*Z,QH*16*Z);
   for(let q=0;q<QW*QH;q++) if(EDITED.has(q)) redrawQuad(q);
-  drawSpawns();
+  drawSpawns(); drawMini();
 }
+// ---- minimap ----
+const MW=280, MK=MW/(QW*16), MH=Math.max(24,Math.round(QH*16*MK));
+function drawMini(){
+  mini.width=MW; mini.height=MH;
+  const c=mini.getContext('2d');
+  c.imageSmoothingEnabled=false;
+  c.drawImage(lvl,0,0,MW,MH);
+  c.strokeStyle='#ff4'; c.lineWidth=1;
+  const vx=left.scrollLeft/(16*Z)*16*MK, vy=left.scrollTop/(16*Z)*16*MK;
+  const vw=left.clientWidth/(16*Z)*16*MK, vh=left.clientHeight/(16*Z)*16*MK;
+  c.strokeRect(vx+0.5,vy+0.5,Math.min(vw,MW-1),Math.min(vh,MH-1));
+}
+left.onscroll=()=>drawMini();
+mini.onmousedown=e=>{
+  const r=mini.getBoundingClientRect();
+  const px=(e.clientX-r.left)/MK, py=(e.clientY-r.top)/MK;
+  left.scrollLeft=px*Z-left.clientWidth/2;
+  left.scrollTop=py*Z-left.clientHeight/2;
+};
+// ---- spawn layer ----
 const sov=document.getElementById('sov');
-let SPSEL=-1, spDrag=false;
+let SPSEL=-1, spDrag=false, placing=false;
 const SPEDIT=new Set();
 function drawSpawns(){
   sov.width=QW*16*Z; sov.height=QH*16*Z;
@@ -177,13 +204,23 @@ function drawSpawns(){
     c.fillStyle='#fff'; c.font=(4*Z+4)+'px monospace';
     c.fillText(s.cls.toString(16).toUpperCase(),x+2*Z,y-2*Z);
   });
+  if(rectStart>=0&&rectCur>=0){
+    const a=rectStart, b=rectCur;
+    const ax=a%%QW, ay=(a-ax)/QW, bx=b%%QW, by=(b-bx)/QW;
+    const x0=Math.min(ax,bx), y0=Math.min(ay,by);
+    const x1=Math.max(ax,bx), y1=Math.max(ay,by);
+    c.strokeStyle='#4f4'; c.lineWidth=2;
+    c.strokeRect(x0*16*Z+1,y0*16*Z+1,(x1-x0+1)*16*Z-2,(y1-y0+1)*16*Z-2);
+  }
 }
 const spX=document.getElementById('sp_x'), spY=document.getElementById('sp_y'),
       spP1=document.getElementById('sp_p1'), spP2=document.getElementById('sp_p2'),
       spCls=document.getElementById('sp_cls'), spAnim=document.getElementById('sp_anim'),
       spPool=document.getElementById('sp_pool');
+function spCount(){ document.getElementById('spn').textContent=SPAWNS.length; }
 function spForm(){
   document.getElementById('spidx').textContent=SPSEL<0?'-':SPSEL;
+  spCount();
   if(SPSEL<0) return;
   const s=SPAWNS[SPSEL];
   spX.value=s.x; spY.value=s.y; spP1.value=s.half_w; spP2.value=s.half_h;
@@ -207,21 +244,57 @@ function spawnNear(e){
   });
   return best;
 }
+// ---- rectangle stamp/type ----
+let rectStart=-1, rectCur=-1;
+function applyRect(){
+  const a=rectStart, b=rectCur;
+  const ax=a%%QW, ay=(a-ax)/QW, bx=b%%QW, by=(b-bx)/QW;
+  const x0=Math.min(ax,bx), y0=Math.min(ay,by);
+  const x1=Math.max(ax,bx), y1=Math.max(ay,by);
+  const ch=[];
+  const ty=parseInt(tyval.value,16)||0;
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const q=y*QW+x, old=MAP[q];
+    MAP[q]=(tool.value==='stamp') ? (old&0xFC00)|SEL
+                                  : (old&0x3FF)|((ty&0x3F)<<10);
+    if(MAP[q]!==old){ ch.push([q,old]); EDITED.add(q); redrawQuad(q); }
+  }
+  if(ch.length) hist.push({t:'rect',ch:ch});
+  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size}`;
+}
 map.onmousedown=e=>{
-  if(tool.value!=='spawn') return;
-  const i=spawnNear(e); SPSEL=i;
-  if(i>=0){ hist.push({t:'sp',i:i,rec:Object.assign({},SPAWNS[i])}); spDrag=true; }
-  spForm(); drawSpawns();
+  if(placing){
+    const r=map.getBoundingClientRect();
+    const px=Math.max(0,Math.min(QW*16-1,((e.clientX-r.left)/Z)|0));
+    const py=Math.max(0,Math.min(QH*16-1,((e.clientY-r.top)/Z)|0));
+    const base=(SPSEL>=0)?SPAWNS[SPSEL]:{half_w:8,half_h:8,cls:0x1D,anim:0x20,pool:0};
+    const s=Object.assign({},base,{x:px,y:py});
+    SPAWNS.push(s); SPSEL=SPAWNS.length-1;
+    hist.push({t:'spadd'});
+    SPEDIT.add(SPSEL); placing=false;
+    stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size} n=${SPAWNS.length}`;
+    spForm(); drawSpawns();
+    return;
+  }
+  if(tool.value==='spawn'){
+    const i=spawnNear(e); SPSEL=i;
+    if(i>=0){ hist.push({t:'sp',i:i,rec:Object.assign({},SPAWNS[i])}); spDrag=true; }
+    spForm(); drawSpawns();
+    return;
+  }
+  if(tool.value==='stamp'||tool.value==='type'){
+    const q=quadAt(e); if(q<0) return;
+    rectStart=rectCur=q; drawSpawns();
+  }
 };
-window.onmouseup=()=>{ spDrag=false; };
+window.onmouseup=()=>{
+  spDrag=false;
+  if(rectStart>=0&&rectCur>=0){ applyRect(); rectStart=rectCur=-1; drawSpawns(); }
+};
+window.onkeydown=e=>{ if(e.key==='Escape'){ placing=false; rectStart=rectCur=-1; drawSpawns(); } };
 document.getElementById('spadd').onclick=()=>{
-  const base=(SPSEL>=0)?SPAWNS[SPSEL]:{x:32,y:32,half_w:8,half_h:8,cls:0x1D,anim:0x20,pool:0};
-  const s=Object.assign({},base);
-  if(SPSEL>=0){ s.x=Math.min(QW*16-1,s.x+16); s.y=Math.min(QH*16-1,s.y+16); }
-  SPAWNS.push(s); SPSEL=SPAWNS.length-1;
-  hist.push({t:'spadd'});
-  SPEDIT.add(SPSEL); spForm(); drawSpawns();
-  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size} n=${SPAWNS.length}`;
+  placing=true;
+  stat.textContent=' click the map to place the new spawn (Esc cancels)';
 };
 document.getElementById('spdel').onclick=()=>{
   if(SPSEL<0) return;
@@ -262,20 +335,11 @@ function quadAt(e){
   return (qx<0||qy<0||qx>=QW||qy>=QH)?-1:qy*QW+qx;
 }
 map.onclick=e=>{
-  if(tool.value==='spawn') return;
+  if(tool.value!=='pick') return;
   const q=quadAt(e); if(q<0) return;
-  if(tool.value==='pick'){ SEL=MAP[q]&0x3FF;
-    selt.textContent=SEL.toString(16).toUpperCase();
-    tyval.value=(MAP[q]>>10).toString(16).toUpperCase(); drawPal(); return; }
-  hist.push({t:'map',q:q,w:MAP[q]});
-  if(tool.value==='stamp'){
-    MAP[q]=(MAP[q]&0xFC00)|SEL;
-  } else {
-    const ty=parseInt(tyval.value,16)||0;
-    MAP[q]=(MAP[q]&0x3FF)|((ty&0x3F)<<10);
-  }
-  EDITED.add(q); redrawQuad(q);
-  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size}`;
+  SEL=MAP[q]&0x3FF;
+  selt.textContent=SEL.toString(16).toUpperCase();
+  tyval.value=(MAP[q]>>10).toString(16).toUpperCase(); drawPal();
 };
 map.onmousemove=e=>{
   if(spDrag&&SPSEL>=0){
@@ -284,6 +348,10 @@ map.onmousemove=e=>{
     SPAWNS[SPSEL].y=Math.max(0,Math.min(QH*16-1,((e.clientY-r.top)/Z)|0));
     SPEDIT.add(SPSEL); spForm(); drawSpawns();
     stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size}`;
+    return;
+  }
+  if(rectStart>=0){
+    const q=quadAt(e); if(q>=0){ rectCur=q; drawSpawns(); }
     return;
   }
   const q=quadAt(e); if(q<0){tip.style.display='none';return;}
@@ -297,6 +365,7 @@ map.onmouseleave=()=>tip.style.display='none';
 document.getElementById('undo').onclick=()=>{
   const h=hist.pop(); if(!h) return;
   if(h.t==='map'){ MAP[h.q]=h.w; redrawQuad(h.q); }
+  else if(h.t==='rect'){ for(const [q,w] of h.ch){ MAP[q]=w; redrawQuad(q); } }
   else if(h.t==='spadd'){ SPAWNS.pop(); if(SPSEL>=SPAWNS.length)SPSEL=-1; spForm(); drawSpawns(); }
   else if(h.t==='spdel'){ SPAWNS.splice(h.i,0,h.rec); spForm(); drawSpawns(); }
   else { SPAWNS[h.i]=h.rec; if(SPSEL===h.i) spForm(); drawSpawns(); }
@@ -305,18 +374,17 @@ function dl(name, blob){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download=name; a.click();
 }
-document.getElementById('expjson').onclick=()=>{
+function buildTilemapJson(){
   const rows=[];
   for(let y=0;y<QH;y++){
     const r=[];
     for(let x=0;x<QW;x++) r.push(MAP[y*QW+x].toString(16).padStart(4,'0').toUpperCase());
     rows.push(r.join(' '));
   }
-  const js={format:"tilemap_u16", chunk:TM_ID, width:QW, height:QH,
-            tail:TAIL, rows:rows};
-  dl(TM_ID+'.json', new Blob([JSON.stringify(js,null,1)],{type:'application/json'}));
-};
-document.getElementById('exphdr').onclick=()=>{
+  return {format:"tilemap_u16", chunk:TM_ID, width:QW, height:QH,
+          tail:TAIL, rows:rows};
+}
+function buildHeaderJson(){
   // rebuild: PRE + spawn records + FFFF + SUF (every tail section is
   // terminator-scanned, so record count may change freely)
   let hex=HDRPRE.toLowerCase();
@@ -324,8 +392,13 @@ document.getElementById('exphdr').onclick=()=>{
   for(const s of SPAWNS)
     hex+=w2(s.x)+w2(s.y)+w2(s.half_w)+w2(s.half_h)+w2(s.cls)+w2(s.anim)+w2(s.pool);
   hex+='ffff'+HDRSUF.toLowerCase();
-  const js=Object.assign({},HDRJSON,{raw:hex});
-  dl(HID+'.json', new Blob([JSON.stringify(js,null,1)],{type:'application/json'}));
+  return Object.assign({},HDRJSON,{raw:hex});
+}
+document.getElementById('expjson').onclick=()=>{
+  dl(TM_ID+'.json', new Blob([JSON.stringify(buildTilemapJson(),null,1)],{type:'application/json'}));
+};
+document.getElementById('exphdr').onclick=()=>{
+  dl(HID+'.json', new Blob([JSON.stringify(buildHeaderJson(),null,1)],{type:'application/json'}));
 };
 document.getElementById('expbin').onclick=()=>{
   const b=new Uint8Array(MAP.length*2+TAIL.length/2);
@@ -334,21 +407,53 @@ document.getElementById('expbin').onclick=()=>{
     b[MAP.length*2+i/2]=parseInt(TAIL.substr(i,2),16);
   dl(TM_ID+'.bin', new Blob([b],{type:'application/octet-stream'}));
 };
+// ---- server mode ----
+const srvstat=document.getElementById('srvstat');
+async function api(path, body){
+  const r=await fetch(path,{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body||{})});
+  const js=await r.json().catch(()=>({}));
+  if(!r.ok||js.ok===false) throw new Error(js.error||r.status);
+  return js;
+}
+async function srvSave(){
+  srvstat.textContent='saving...';
+  await api('/api/save',{kind:'tilemap',chunk:TM_ID,data:buildTilemapJson()});
+  await api('/api/save',{kind:'header',chunk:HID,data:buildHeaderJson()});
+  srvstat.textContent='saved';
+}
+async function srvPack(){
+  srvstat.textContent='packing...';
+  const js=await api('/api/pack');
+  srvstat.textContent='packed '+js.packed;
+}
+async function srvPlay(){
+  srvstat.textContent='launching...';
+  const js=await api('/api/play');
+  srvstat.textContent='game pid '+js.pid;
+}
+function wrap(f){ return ()=>f().catch(e=>{srvstat.textContent='ERR '+e.message;}); }
+if(SERVER){
+  document.getElementById('srv').style.display='';
+  document.getElementById('srvsave').onclick=wrap(srvSave);
+  document.getElementById('srvpack').onclick=wrap(srvPack);
+  document.getElementById('srvplay').onclick=wrap(srvPlay);
+  document.getElementById('srvall').onclick=wrap(async()=>{
+    await srvSave(); await srvPack(); await srvPlay();
+  });
+}
 </script>
 """
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("header")
-    ap.add_argument("-o", "--out")
-    args = ap.parse_args()
-    cid = args.header
-    with open(os.path.join(LR.HDR_DIR, f"{cid}.json")) as f:
-        raw = bytes.fromhex(json.load(f)["raw"])
+def render_page(cid, server=False, root=None):
+    """Build the editor HTML for level header chunk `cid`.
+    root: open assets tree to read the CURRENT content from (the server's
+    scratch copy) — hand edits win over the archive, same rule as
+    assetc.pack. None = pristine archive content."""
+    raw = LR.header_raw(cid, root)
     qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = LR.parse_header(raw)
-    # byte offsets of the spawn records inside the stripe (in-place editing)
-    sp_offsets = [0x43 + i * 0x0E for i in range(len(spawns))]
     # add/delete-safe header export: everything after the spawn terminator
     # is terminator-scanned by the engine (parse_stripe grammar, 44/44
     # byte-exact roundtrip) — so the page rebuilds raw as PRE+records+SUF
@@ -360,23 +465,27 @@ def main():
     classes = {}
     script_id = LR.script_for_header(int(cid, 16))
     if script_id is not None:
-        script_raw, _ = read_payload(script_id, "lzss")
+        script_raw = LR.open_payload(script_id, "lzss", root)
         for sp in spawns:
             if sp["cls"] not in classes:
                 rec = LR.class_record(script_raw, sp["cls"])
                 if rec:
                     classes[sp["cls"]] = rec
-    tmap, _ = read_payload(tm_id, "lzss")
-    tgfx, _ = read_payload(ts_id, "lzss")
-    gtld, _ = read_payload(gt_id, "lzss")
-    pal = LR.compose_palette(pal_entries)
+    tmap = LR.open_payload(tm_id, "lzss", root)
+    tgfx = LR.open_payload(ts_id, "lzss", root)
+    gtld = LR.open_payload(gt_id, "lzss", root)
+    pal = LR.compose_palette(pal_entries, root)
     words = [tmap[i * 2] | (tmap[i * 2 + 1] << 8) for i in range(qw * qh)]
     tail = tmap[qw * qh * 2:].hex().upper()
-    png, _, _ = LR.render(cid)
+    png, _, _ = LR.render(cid, root)
     apng, ntpl, pcols = render_template_atlas(gtld, tgfx, pal)
-    html = PAGE % {
+    base = root if root is not None else os.path.join(LR.ROOT, "assets")
+    with open(os.path.join(base, "level_headers", f"{cid}.json")) as f:
+        hdr_named = {k: v for k, v in json.load(f).items() if k != "raw"}
+    return PAGE % {
         "cid": cid, "qw": qw, "qh": qh, "ntpl": ntpl, "pcols": pcols,
         "nsp": len(spawns),
+        "server": 1 if server else 0,
         "tmid": f"{tm_id:04X}",
         "png": base64.b64encode(png).decode(),
         "apng": base64.b64encode(apng).decode(),
@@ -386,18 +495,23 @@ def main():
         "classes": json.dumps(classes, separators=(",", ":")),
         "icons": json.dumps(LR.load_class_icons(script_id),
                             separators=(",", ":")),
-        "spoffs": json.dumps(sp_offsets, separators=(",", ":")),
-        "hdrraw": raw.hex().upper(),
         "hdrpre": hdr_pre, "hdrsuf": hdr_suf,
-        "hdrjson": json.dumps({k: v for k, v in json.load(
-            open(os.path.join(LR.HDR_DIR, f"{cid}.json"))).items()
-            if k != "raw"}, separators=(",", ":")),
+        "hdrjson": json.dumps(hdr_named, separators=(",", ":")),
         "hid": cid,
     }
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("header")
+    ap.add_argument("-o", "--out")
+    args = ap.parse_args()
+    cid = args.header
+    html = render_page(cid)
     out = args.out or f"/tmp/edit_{cid}.html"
     with open(out, "w") as f:
         f.write(html)
-    print(f"{cid}: {qw}x{qh} quads, {ntpl} templates -> {out}")
+    print(f"{cid}: -> {out}")
 
 
 if __name__ == "__main__":
