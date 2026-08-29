@@ -7,8 +7,14 @@ Generates a self-contained HTML editor for one level:
   - a template palette (every 8-byte gs_tiledata entry rendered as its
     16x16 quad) — click to select, click the map to stamp;
   - per-quad TYPE (map word bits 10-15) editing;
+  - SPAWN editing (v2): drag markers to move, edit all record fields
+    (x/y/p1/p2/class/anim/pool — sub_13bbd layout) in a side form;
+    in-place only (no add/delete: the stripe tail after the table is
+    not fully mapped yet, so record count stays fixed);
   - undo, and EXPORT of the edited tilemap as assetc-compatible JSON
-    (assets/tilemaps/<id>.json replacement) or a raw .bin.
+    (assets/tilemaps/<id>.json replacement), a raw .bin, or the level
+    HEADER json (assets/level_headers/<id>.json replacement) with the
+    edited spawn records spliced back into the raw stripe.
 
 The written JSON drops into the Stage-5 asset pipeline unchanged:
   cp <download> assets/tilemaps/<id>.json && assetc pack
@@ -79,24 +85,40 @@ PAGE = """<!doctype html>
 <div id="bar">
  level %(cid)s — %(qw)dx%(qh)d quads | tool:
  <select id="tool"><option value="stamp">stamp</option>
- <option value="type">set type</option><option value="pick">pick</option></select>
+ <option value="type">set type</option><option value="pick">pick</option>
+ <option value="spawn">spawn</option></select>
  type <input id="tyval" size="2" value="0"> (hex)
  | sel tpl <span id="selt">0</span>
  <button id="undo">undo</button>
  <button id="expjson">export .json</button>
  <button id="expbin">export .bin</button>
+ <button id="exphdr">export header .json</button>
  zoom <select id="z"><option>1</option><option selected>2</option>
  <option>3</option></select>
  <span id="stat"></span>
 </div>
 <div id="main">
- <div id="left"><canvas id="map"></canvas></div>
- <div id="right">templates (%(ntpl)d):<canvas id="pal"></canvas></div>
+ <div id="left"><div style="position:relative">
+  <canvas id="map"></canvas>
+  <canvas id="sov" style="position:absolute;left:0;top:0;pointer-events:none"></canvas>
+ </div></div>
+ <div id="right">
+  <div id="spf" style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:6px">
+   spawn <span id="spidx">-</span> / %(nsp)d<br>
+   x <input id="sp_x" size="4"> y <input id="sp_y" size="4"><br>
+   p1 <input id="sp_p1" size="4"> p2 <input id="sp_p2" size="4"><br>
+   cls <input id="sp_cls" size="3"> anim <input id="sp_anim" size="4">
+   pool <input id="sp_pool" size="3"> (hex)<br>
+   <button id="spapply">apply</button>
+  </div>
+  templates (%(ntpl)d):<canvas id="pal"></canvas></div>
 </div>
 <div id="tip"></div>
 <script>
 const QW=%(qw)d, QH=%(qh)d, NT=%(ntpl)d, PCOLS=%(pcols)d, TM_ID="%(tmid)s";
 const MAP=%(map)s, TAIL="%(tail)s";
+const SPAWNS=%(spawns)s, SPOFFS=%(spoffs)s, HID="%(hid)s";
+const HDRRAW="%(hdrraw)s", HDRJSON=%(hdrjson)s;
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
 const map=document.getElementById('map'), pal=document.getElementById('pal'),
@@ -116,7 +138,67 @@ function drawAll(){
   mc.imageSmoothingEnabled=false;
   mc.drawImage(lvl,0,0,QW*16*Z,QH*16*Z);
   for(let q=0;q<QW*QH;q++) if(EDITED.has(q)) redrawQuad(q);
+  drawSpawns();
 }
+const sov=document.getElementById('sov');
+let SPSEL=-1, spDrag=false;
+const SPEDIT=new Set();
+function drawSpawns(){
+  sov.width=QW*16*Z; sov.height=QH*16*Z;
+  const c=sov.getContext('2d');
+  SPAWNS.forEach((s,i)=>{
+    const x=s.x*Z, y=s.y*Z;
+    c.strokeStyle=(i===SPSEL)?'#ff4':((s.anim&0x800)?'#6f6':'#f6f');
+    c.lineWidth=(i===SPSEL)?2:1;
+    c.beginPath();
+    c.moveTo(x-4*Z,y); c.lineTo(x+4*Z,y);
+    c.moveTo(x,y-4*Z); c.lineTo(x,y+4*Z);
+    c.stroke();
+    c.fillStyle='#fff'; c.font=(4*Z+4)+'px monospace';
+    c.fillText(s.cls.toString(16).toUpperCase(),x+2*Z,y-2*Z);
+  });
+}
+const spX=document.getElementById('sp_x'), spY=document.getElementById('sp_y'),
+      spP1=document.getElementById('sp_p1'), spP2=document.getElementById('sp_p2'),
+      spCls=document.getElementById('sp_cls'), spAnim=document.getElementById('sp_anim'),
+      spPool=document.getElementById('sp_pool');
+function spForm(){
+  document.getElementById('spidx').textContent=SPSEL<0?'-':SPSEL;
+  if(SPSEL<0) return;
+  const s=SPAWNS[SPSEL];
+  spX.value=s.x; spY.value=s.y; spP1.value=s.p1; spP2.value=s.p2;
+  spCls.value=s.cls.toString(16).toUpperCase();
+  spAnim.value=s.anim.toString(16).toUpperCase();
+  spPool.value=s.pool.toString(16).toUpperCase();
+}
+function spawnNear(e){
+  const r=map.getBoundingClientRect();
+  const px=(e.clientX-r.left)/Z, py=(e.clientY-r.top)/Z;
+  let best=-1, bd=100;
+  SPAWNS.forEach((s,i)=>{
+    const d=(s.x-px)*(s.x-px)+(s.y-py)*(s.y-py);
+    if(d<bd){bd=d;best=i;}
+  });
+  return best;
+}
+map.onmousedown=e=>{
+  if(tool.value!=='spawn') return;
+  const i=spawnNear(e); SPSEL=i;
+  if(i>=0){ hist.push({t:'sp',i:i,rec:Object.assign({},SPAWNS[i])}); spDrag=true; }
+  spForm(); drawSpawns();
+};
+window.onmouseup=()=>{ spDrag=false; };
+document.getElementById('spapply').onclick=()=>{
+  if(SPSEL<0) return;
+  const s=SPAWNS[SPSEL];
+  hist.push({t:'sp',i:SPSEL,rec:Object.assign({},s)});
+  s.x=(+spX.value)|0; s.y=(+spY.value)|0;
+  s.p1=(+spP1.value)|0; s.p2=(+spP2.value)|0;
+  s.cls=parseInt(spCls.value,16)||0; s.anim=parseInt(spAnim.value,16)||0;
+  s.pool=parseInt(spPool.value,16)||0;
+  SPEDIT.add(SPSEL); drawSpawns();
+  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size}`;
+};
 const EDITED=new Set();
 function drawPal(){
   pal.width=PCOLS*16; pal.height=Math.ceil(NT/PCOLS)*16+4;
@@ -138,11 +220,12 @@ function quadAt(e){
   return (qx<0||qy<0||qx>=QW||qy>=QH)?-1:qy*QW+qx;
 }
 map.onclick=e=>{
+  if(tool.value==='spawn') return;
   const q=quadAt(e); if(q<0) return;
   if(tool.value==='pick'){ SEL=MAP[q]&0x3FF;
     selt.textContent=SEL.toString(16).toUpperCase();
     tyval.value=(MAP[q]>>10).toString(16).toUpperCase(); drawPal(); return; }
-  hist.push([q,MAP[q]]);
+  hist.push({t:'map',q:q,w:MAP[q]});
   if(tool.value==='stamp'){
     MAP[q]=(MAP[q]&0xFC00)|SEL;
   } else {
@@ -150,9 +233,17 @@ map.onclick=e=>{
     MAP[q]=(MAP[q]&0x3FF)|((ty&0x3F)<<10);
   }
   EDITED.add(q); redrawQuad(q);
-  stat.textContent=` edits:${EDITED.size}`;
+  stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size}`;
 };
 map.onmousemove=e=>{
+  if(spDrag&&SPSEL>=0){
+    const r=map.getBoundingClientRect();
+    SPAWNS[SPSEL].x=Math.max(0,Math.min(QW*16-1,((e.clientX-r.left)/Z)|0));
+    SPAWNS[SPSEL].y=Math.max(0,Math.min(QH*16-1,((e.clientY-r.top)/Z)|0));
+    SPEDIT.add(SPSEL); spForm(); drawSpawns();
+    stat.textContent=` edits:${EDITED.size} sp:${SPEDIT.size}`;
+    return;
+  }
   const q=quadAt(e); if(q<0){tip.style.display='none';return;}
   const w=MAP[q];
   tip.textContent=`(${q%%QW},${(q/QW)|0}) word ${w.toString(16).padStart(4,'0').toUpperCase()}`+
@@ -163,7 +254,8 @@ map.onmousemove=e=>{
 map.onmouseleave=()=>tip.style.display='none';
 document.getElementById('undo').onclick=()=>{
   const h=hist.pop(); if(!h) return;
-  MAP[h[0]]=h[1]; redrawQuad(h[0]);
+  if(h.t==='map'){ MAP[h.q]=h.w; redrawQuad(h.q); }
+  else { SPAWNS[h.i]=h.rec; if(SPSEL===h.i) spForm(); drawSpawns(); }
 };
 function dl(name, blob){
   const a=document.createElement('a');
@@ -179,6 +271,21 @@ document.getElementById('expjson').onclick=()=>{
   const js={format:"tilemap_u16", chunk:TM_ID, width:QW, height:QH,
             tail:TAIL, rows:rows};
   dl(TM_ID+'.json', new Blob([JSON.stringify(js,null,1)],{type:'application/json'}));
+};
+document.getElementById('exphdr').onclick=()=>{
+  const hx=HDRRAW.toLowerCase();
+  const arr=new Uint8Array(hx.length/2);
+  for(let i=0;i<arr.length;i++) arr[i]=parseInt(hx.substr(i*2,2),16);
+  SPAWNS.forEach((s,i)=>{
+    const o=SPOFFS[i];
+    const put=(off,v)=>{ arr[o+off]=v&0xFF; arr[o+off+1]=(v>>8)&0xFF; };
+    put(0,s.x); put(2,s.y); put(4,s.p1); put(6,s.p2);
+    put(8,s.cls); put(10,s.anim); put(12,s.pool);
+  });
+  let hex='';
+  arr.forEach(v=>{ hex+=v.toString(16).padStart(2,'0'); });
+  const js=Object.assign({},HDRJSON,{raw:hex});
+  dl(HID+'.json', new Blob([JSON.stringify(js,null,1)],{type:'application/json'}));
 };
 document.getElementById('expbin').onclick=()=>{
   const b=new Uint8Array(MAP.length*2+TAIL.length/2);
@@ -199,7 +306,9 @@ def main():
     cid = args.header
     with open(os.path.join(LR.HDR_DIR, f"{cid}.json")) as f:
         raw = bytes.fromhex(json.load(f)["raw"])
-    qw, qh, tm_id, ts_id, gt_id, pal_entries, _sp = LR.parse_header(raw)
+    qw, qh, tm_id, ts_id, gt_id, pal_entries, spawns = LR.parse_header(raw)
+    # byte offsets of the spawn records inside the stripe (in-place editing)
+    sp_offsets = [0x43 + i * 0x0E for i in range(len(spawns))]
     tmap, _ = read_payload(tm_id, "lzss")
     tgfx, _ = read_payload(ts_id, "lzss")
     gtld, _ = read_payload(gt_id, "lzss")
@@ -210,11 +319,19 @@ def main():
     apng, ntpl, pcols = render_template_atlas(gtld, tgfx, pal)
     html = PAGE % {
         "cid": cid, "qw": qw, "qh": qh, "ntpl": ntpl, "pcols": pcols,
+        "nsp": len(spawns),
         "tmid": f"{tm_id:04X}",
         "png": base64.b64encode(png).decode(),
         "apng": base64.b64encode(apng).decode(),
         "map": json.dumps(words, separators=(",", ":")),
         "tail": tail,
+        "spawns": json.dumps(spawns, separators=(",", ":")),
+        "spoffs": json.dumps(sp_offsets, separators=(",", ":")),
+        "hdrraw": raw.hex().upper(),
+        "hdrjson": json.dumps({k: v for k, v in json.load(
+            open(os.path.join(LR.HDR_DIR, f"{cid}.json"))).items()
+            if k != "raw"}, separators=(",", ":")),
+        "hid": cid,
     }
     out = args.out or f"/tmp/edit_{cid}.html"
     with open(out, "w") as f:
