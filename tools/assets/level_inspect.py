@@ -61,12 +61,21 @@ const SLOPES={
  0x34:[7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0],
  0x35:[15,15,14,14,13,13,12,12,11,11,10,10,9,9,8,8]};
 function typeName(t){
-  // climbable family {3,4,0xD} — the level bytecode checks them together
-  // (18-54 uses across all lvs); 4 is also the one-way platform snap.
+  // Sources: ground physics sub_1625d; the engine's own FILTER LISTS at
+  // ds:0x94CC (FF-terminated type sets walked by the tile-probe family) —
+  // climbable = set {3,4,D} (si=0x29), ground-solid = {1,2,5,20} (si=0x2F),
+  // hazard family = {10..17} (si=0x5C, also each individually);
+  // obs: 10 = lava floor (BBLS), 15 = ship lift-beam base, 14 = large
+  // pooled areas on 20 levels (water?).
   if(t===0)return'air'; if(t===1)return'solid';
   if(t===3)return'climbable (ladder)'; if(t===4)return'climbable+platform';
   if(t===0xD)return'climbable (rope?)'; if(t===0xC)return'passable';
   if(t===2||t===5||t===0x20)return'solid*';
+  if(t===6)return'solid variant (standable sets {1,2,6,20}/{1,5,6})';
+  if(t===7)return'type 7 (filter-only)';
+  if(t===0xA)return'solid-ish (sets {1,A}/{1,A,14}/{0,1,5,A,C})';
+  if(t===0xB)return'script-checked (?)';
+  if(t>=0x10&&t<=0x17)return'hazard/liquid '+(t-0x10)+' (family 10-17)';
   if(t>=0x30&&t<=0x35)return'slope'; return'?';
 }
 const img=document.getElementById('lvl'), hl=document.getElementById('hl'),
