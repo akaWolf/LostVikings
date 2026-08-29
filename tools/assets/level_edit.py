@@ -144,9 +144,10 @@ PAGE = """<!doctype html>
    <canvas id="tgrid" style="display:inline-block;vertical-align:top"></canvas>
    <canvas id="tsw" style="display:inline-block;margin-left:6px"></canvas><br>
    color <span id="txcol">0</span>
+   <label><input type="checkbox" id="txmask"> mask layer</label>
    <button id="txload">load sel tile</button>
    <button id="txnew">add new tile</button>
-   <span style="color:#888">(LMB paint, RMB pick)</span>
+   <span style="color:#888">(LMB paint, RMB pick; mask: LMB opaque, RMB clear)</span>
   </details>
   <details style="margin-bottom:8px"><summary>template editor (tpl <span id="tesel">-</span>)</summary>
    corners (click one, then click a tile below):<br>
@@ -190,6 +191,16 @@ const GT_REST="%(gtrest)s", GTLDHEX="%(gtldhex)s";
 const tilesImg=new Image(); tilesImg.src="data:image/png;base64,%(tpng)s";
 const TS_ID="%(tsid)s", TGFX_TAIL="%(tgfxtail)s", PALRGB=%(palrgb)s;
 const TGFX=Uint8Array.from(atob("%(tgfxb64)s"), c=>c.charCodeAt(0));
+const TMASK_ID="%(tmid_mask)s", TMASK_TAIL="%(tmasktail)s";
+const TMASK_SRC=Uint8Array.from(atob("%(tmaskb64)s"), c=>c.charCodeAt(0));
+let MASKS=Array.from({length:NTILES},(_,i)=>TMASK_SRC.slice(i*8,(i+1)*8));
+// mask bit(tx,ty) = byte (tx&3)*2+(ty>>2), bit 7-((ty&3)*2+(tx>>2));
+// 1 = opaque (assetc TileMasks, v2_render_tile_masked model)
+const mbit=(t,x,y)=>(MASKS[t][(x&3)*2+(y>>2)]>>(7-((y&3)*2+(x>>2))))&1;
+const mbitw=(t,x,y,v)=>{
+  const mb=(x&3)*2+(y>>2), bit=7-((y&3)*2+(x>>2));
+  if(v) MASKS[t][mb]|=(1<<bit); else MASKS[t][mb]&=~(1<<bit);
+};
 let TILES=Array.from({length:NTILES},(_,i)=>TGFX.slice(i*64,(i+1)*64));
 // pixel(x,y) = t[(x&3)*16 + y*2 + (x>>2)]  (verified sub_1689e model)
 const tpix=(t,x,y)=>TILES[t][(x&3)*16+y*2+(x>>2)];
@@ -433,6 +444,11 @@ document.getElementById('undo').onclick=()=>{
   const h=hist.pop(); if(!h) return;
   if(h.t==='map'){ MAP[h.q]=h.w; redrawQuad(h.q); }
   else if(h.t==='rect'){ for(const [q,w] of h.ch){ MAP[q]=w; redrawQuad(q); } }
+  else if(h.t==='tile'){ TILES[h.i]=h.px; MASKS[h.i]=h.mk;
+    if(TXSEL===h.i) drawTgrid(); tileTouched(h.i); }
+  else if(h.t==='pal'){ PAL_LIST.length=0; PAL_LIST.push(...h.pl);
+    PAL_ANIMS.length=0; PAL_ANIMS.push(...h.pa); PAL_EN=h.en;
+    penInp.value=PAL_EN.toString(16).toUpperCase(); drawPalForms(); }
   else if(h.t==='gtld'){ for(let k=0;k<4;k++) GTLD[h.i*4+k]=h.words[k];
     OVERRIDE.set(h.i, renderTplCanvas(h.i)); drawPal();
     for(let q=0;q<QW*QH;q++) if((MAP[q]&0x3FF)===h.i) redrawQuad(q); }
@@ -521,12 +537,19 @@ function drawTgrid(){
   tgrid.width=8*16; tgrid.height=8*16;
   const g=tgrid.getContext('2d');
   g.drawImage(tileToCanvas(TXSEL,16),0,0);
+  if(document.getElementById('txmask').checked){
+    // mask overlay: transparent pixels hatched magenta
+    g.fillStyle='rgba(255,0,255,0.55)';
+    for(let y=0;y<8;y++) for(let x=0;x<8;x++)
+      if(!mbit(TXSEL,x,y)) g.fillRect(x*16,y*16,16,16);
+  }
   g.strokeStyle='#333';
   for(let i=0;i<=8;i++){
     g.beginPath(); g.moveTo(i*16,0); g.lineTo(i*16,128); g.stroke();
     g.beginPath(); g.moveTo(0,i*16); g.lineTo(128,i*16); g.stroke();
   }
 }
+document.getElementById('txmask').onchange=()=>drawTgrid();
 function drawSwatch(){
   tsw.width=16*8; tsw.height=16*8;
   const g=tsw.getContext('2d');
@@ -565,12 +588,25 @@ function tgridPaint(e){
   const r=tgrid.getBoundingClientRect();
   const x=((e.clientX-r.left)/16)|0, y=((e.clientY-r.top)/16)|0;
   if(x<0||y<0||x>7||y>7) return;
+  if(document.getElementById('txmask').checked){
+    const v=(e.buttons&2)?0:1;
+    if(mbit(TXSEL,x,y)===v) return;
+    mbitw(TXSEL,x,y,v);
+    TILE_DIRTY.add(TXSEL); drawTgrid();
+    return;
+  }
   if(e.buttons&2){ TXCOL=tpix(TXSEL,x,y); drawSwatch(); return; }
   if(tpix(TXSEL,x,y)===TXCOL) return;
   tpixw(TXSEL,x,y,TXCOL);
   drawTgrid(); tileTouched(TXSEL);
 }
-tgrid.onmousedown=e=>{ painting=true; tgridPaint(e); e.preventDefault(); };
+tgrid.onmousedown=e=>{
+  painting=true;
+  // one undo entry per stroke (pixels + mask snapshot of this tile)
+  hist.push({t:'tile',i:TXSEL,
+             px:TILES[TXSEL].slice(),mk:MASKS[TXSEL].slice()});
+  tgridPaint(e); e.preventDefault();
+};
 tgrid.onmousemove=e=>{ if(painting) tgridPaint(e); };
 tgrid.oncontextmenu=e=>e.preventDefault();
 window.addEventListener('mouseup',()=>{ painting=false; });
@@ -582,6 +618,7 @@ document.getElementById('txload').onclick=()=>{
 document.getElementById('txnew').onclick=()=>{
   if(TILES.length>=1023){ stat.textContent=' tile limit 1023 (10-bit offset)'; return; }
   TILES.push(new Uint8Array(64));
+  MASKS.push(new Uint8Array(8).fill(0xFF));   // new tile: fully opaque
   TXSEL=TILES.length-1;
   const rows=Math.ceil(TILES.length/TCOLS);
   if(tiles.height<rows*16){
@@ -601,6 +638,12 @@ function buildTilesetB64(){
   let bin=''; out.forEach(v=>{bin+=String.fromCharCode(v);});
   return {chunk:TS_ID, b64:btoa(bin), tail:TGFX_TAIL};
 }
+function buildMasksB64(){
+  const out=new Uint8Array(MASKS.length*8);
+  MASKS.forEach((m,i)=>out.set(m,i*8));
+  let bin=''; out.forEach(v=>{bin+=String.fromCharCode(v);});
+  return {chunk:TMASK_ID, b64:btoa(bin), tail:TMASK_TAIL};
+}
 // tileset self-check: untouched tiles must equal the source bytes
 {
   let ok=(TILES.length*64===TGFX.length);
@@ -608,6 +651,11 @@ function buildTilesetB64(){
     if(TILES[i>>6][i&63]!==TGFX[i]){ ok=false; break; }
   globalThis.__tiles_ok=ok;
   if(!ok) console.error('tileset mirror MISMATCH');
+  let mok=(MASKS.length*8===TMASK_SRC.length);
+  if(mok) for(let i=0;i<TMASK_SRC.length;i++)
+    if(MASKS[i>>3][i&7]!==TMASK_SRC[i]){ mok=false; break; }
+  globalThis.__tmask_ok=mok;
+  if(!mok) console.error('tile masks mirror MISMATCH');
 }
 // ---- template constructor ----
 const OVERRIDE=new Map();   // tpl -> 16x16 canvas (edited templates)
@@ -738,7 +786,13 @@ function buildGtldWords(){ return {chunk:GT_ID, words:GTLD, rest:GT_REST}; }
 const plist=document.getElementById('plist'), panims=document.getElementById('panims');
 const penInp=document.getElementById('pen');
 penInp.value=PAL_EN.toString(16).toUpperCase();
-penInp.onchange=()=>{ PAL_EN=parseInt(penInp.value,16)||0; };
+function pushPalUndo(){
+  hist.push({t:'pal',
+    pl:PAL_LIST.map(e=>Object.assign({},e)),
+    pa:PAL_ANIMS.map(e=>Object.assign({},e,{frames:e.frames.slice()})),
+    en:PAL_EN});
+}
+penInp.onchange=()=>{ pushPalUndo(); PAL_EN=parseInt(penInp.value,16)||0; };
 function drawPalForms(){
   plist.innerHTML='';
   PAL_LIST.forEach((e,i)=>{
@@ -746,9 +800,9 @@ function drawPalForms(){
     d.innerHTML=`chunk <input size="4" value="${e.chunk.toString(16).padStart(4,'0').toUpperCase()}">`+
       ` start <input size="3" value="${e.start}"> <button>del</button>`;
     const [ci,si]=d.querySelectorAll('input');
-    ci.onchange=()=>{ e.chunk=parseInt(ci.value,16)||0; };
-    si.onchange=()=>{ e.start=(+si.value)&0xFF; };
-    d.querySelector('button').onclick=()=>{ PAL_LIST.splice(i,1); drawPalForms(); };
+    ci.onchange=()=>{ pushPalUndo(); e.chunk=parseInt(ci.value,16)||0; };
+    si.onchange=()=>{ pushPalUndo(); e.start=(+si.value)&0xFF; };
+    d.querySelector('button').onclick=()=>{ pushPalUndo(); PAL_LIST.splice(i,1); drawPalForms(); };
     plist.appendChild(d);
   });
   panims.innerHTML='';
@@ -760,16 +814,16 @@ function drawPalForms(){
       `frames(hex) <input size="18" value="${e.frames.map(f=>f.toString(16).toUpperCase()).join(' ')}">`+
       ` <button>del</button>`;
     const [ri,si,ei,fi]=d.querySelectorAll('input');
-    ri.onchange=()=>{ e.reload=(+ri.value)&0xFF; if(!e.reload){e.reload=1;ri.value=1;} };
-    si.onchange=()=>{ e.start=(+si.value)&0xFF; };
-    ei.onchange=()=>{ e.end=(+ei.value)&0xFF; };
-    fi.onchange=()=>{ e.frames=fi.value.trim()?fi.value.trim().split(/\\s+/).map(v=>parseInt(v,16)&0xFFFF):[]; };
-    d.querySelector('button').onclick=()=>{ PAL_ANIMS.splice(i,1); drawPalForms(); };
+    ri.onchange=()=>{ pushPalUndo(); e.reload=(+ri.value)&0xFF; if(!e.reload){e.reload=1;ri.value=1;} };
+    si.onchange=()=>{ pushPalUndo(); e.start=(+si.value)&0xFF; };
+    ei.onchange=()=>{ pushPalUndo(); e.end=(+ei.value)&0xFF; };
+    fi.onchange=()=>{ pushPalUndo(); e.frames=fi.value.trim()?fi.value.trim().split(/\\s+/).map(v=>parseInt(v,16)&0xFFFF):[]; };
+    d.querySelector('button').onclick=()=>{ pushPalUndo(); PAL_ANIMS.splice(i,1); drawPalForms(); };
     panims.appendChild(d);
   });
 }
-document.getElementById('pladd').onclick=()=>{ PAL_LIST.push({chunk:0,start:0}); drawPalForms(); };
-document.getElementById('paadd').onclick=()=>{ PAL_ANIMS.push({reload:8,start:0,end:0,frames:[]}); drawPalForms(); };
+document.getElementById('pladd').onclick=()=>{ pushPalUndo(); PAL_LIST.push({chunk:0,start:0}); drawPalForms(); };
+document.getElementById('paadd').onclick=()=>{ pushPalUndo(); PAL_ANIMS.push({reload:8,start:0,end:0,frames:[]}); drawPalForms(); };
 drawPalForms();
 // ---- server mode ----
 const srvstat=document.getElementById('srvstat');
@@ -787,6 +841,7 @@ async function srvSave(){
   await api('/api/save',{kind:'header',chunk:HID,data:buildHeaderJson()});
   await api('/api/save',{kind:'gtld',chunk:GT_ID,data:buildGtldWords()});
   await api('/api/save',{kind:'tileset',chunk:TS_ID,data:buildTilesetB64()});
+  await api('/api/save',{kind:'tilemask',chunk:TMASK_ID,data:buildMasksB64()});
   srvstat.textContent='saved';
 }
 async function srvPack(){
@@ -845,6 +900,10 @@ def render_page(cid, server=False, root=None):
     apng, ntpl, pcols = render_template_atlas(gtld, tgfx, pal)
     tpng, ntiles, tcols = render_tile_atlas(tgfx, pal)
     tgfx_tail = tgfx[ntiles * 64:]
+    # masks chunk = tileset chunk + 1 (engine formula: v2_load_level_data
+    # loads word_2AAC3+1 into the GS mask segment)
+    tmask = LR.open_payload(ts_id + 1, "lzss", root)
+    tmask_tail = tmask[ntiles * 8:]
     gtld_words = [gtld[i * 2] | (gtld[i * 2 + 1] << 8)
                   for i in range(ntpl * 4)]
     gt_rest = gtld[ntpl * 8:].hex()
@@ -877,7 +936,9 @@ def render_page(cid, server=False, root=None):
         "ntiles": ntiles, "tcols": tcols,
         "gtld": json.dumps(gtld_words, separators=(",", ":")),
         "gtrest": gt_rest, "gtldhex": gtld.hex(),
-        "tsid": f"{ts_id:04X}",
+        "tsid": f"{ts_id:04X}", "tmid_mask": f"{ts_id + 1:04X}",
+        "tmaskb64": base64.b64encode(tmask[:ntiles * 8]).decode(),
+        "tmasktail": tmask_tail.hex(),
         "tgfxb64": base64.b64encode(tgfx[:ntiles * 64]).decode(),
         "tgfxtail": tgfx_tail.hex(),
         "palrgb": json.dumps([list(c) for c in pal],
