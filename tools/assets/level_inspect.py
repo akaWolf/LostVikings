@@ -47,6 +47,15 @@ const QW=%(qw)d, QH=%(qh)d, MAP=%(map)s, SPAWNS=%(spawns)s;
 // type labels — verified against the ground-snap physics (sub_1625d):
 // passable {0,3,0xC}, solid list {1,2,5,0x20}, platform 4 (one-way snap),
 // slopes >= 0x30 (profile via sub_16390). Others: unlabeled yet.
+// slope height LUT (DS@0x897C, sub_16390: surface y-in-quad per x&0xF;
+// only 0x30..0x35 hold real profiles — 45deg pair + 22.5deg half pairs)
+const SLOPES={
+ 0x30:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+ 0x31:[15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0],
+ 0x32:[0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7],
+ 0x33:[8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15],
+ 0x34:[7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0],
+ 0x35:[15,15,14,14,13,13,12,12,11,11,10,10,9,9,8,8]};
 function typeName(t){
   // climbable family {3,4,0xD} — the level bytecode checks them together
   // (18-54 uses across all lvs); 4 is also the one-way platform snap.
@@ -54,7 +63,7 @@ function typeName(t){
   if(t===3)return'climbable (ladder)'; if(t===4)return'climbable+platform';
   if(t===0xD)return'climbable (rope?)'; if(t===0xC)return'passable';
   if(t===2||t===5||t===0x20)return'solid*';
-  if(t>=0x30)return'slope'; return'?';
+  if(t>=0x30&&t<=0x35)return'slope'; return'?';
 }
 const img=document.getElementById('lvl'), hl=document.getElementById('hl'),
       tip=document.getElementById('tip'), zsel=document.getElementById('z');
@@ -67,8 +76,18 @@ function drawTint(){
   for(let qy=0;qy<QH;qy++) for(let qx=0;qx<QW;qx++){
     const ty=MAP[qy*QW+qx]>>10;
     if(!ty) continue;
-    c.fillStyle=`hsla(${(ty*47)%%360},90%%,55%%,0.42)`;
-    c.fillRect(qx*16*Z,qy*16*Z,16*Z,16*Z);
+    if(SLOPES[ty]){
+      // slope: draw the actual surface profile instead of a flat tint
+      c.fillStyle='hsla(20,100%%,60%%,0.85)';
+      const h=SLOPES[ty];
+      for(let x=0;x<16;x++)
+        c.fillRect((qx*16+x)*Z,(qy*16+h[x])*Z,Z,Z);
+      c.fillStyle='hsla(20,100%%,60%%,0.2)';
+      c.fillRect(qx*16*Z,qy*16*Z,16*Z,16*Z);
+    } else {
+      c.fillStyle=`hsla(${(ty*47)%%360},90%%,55%%,0.42)`;
+      c.fillRect(qx*16*Z,qy*16*Z,16*Z,16*Z);
+    }
     if(Z>=2){ c.fillStyle='#000'; c.font=(5*Z)+'px monospace';
       c.fillText(ty.toString(16).toUpperCase(),qx*16*Z+2*Z,qy*16*Z+6*Z); }
   }
