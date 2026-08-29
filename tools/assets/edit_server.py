@@ -378,7 +378,72 @@ def texts_page():
 
 
 MOD_DIRS = ("tilemaps", "level_headers", "tilesets", "bg_tilesets",
-            "tile_masks", "palettes", "level_scripts", "sprite_banks")
+            "tile_masks", "palettes", "level_scripts", "sprite_banks",
+            "unreferenced")
+
+
+# task #104: the five console-exclusive levels of the extended SNES build.
+# Every field verified against the ROM (chunk table @0x58000, stripe grammar,
+# per-class configs @0x010000); the donor is a PC slot of the SAME world, so
+# the port reuses PC-native classes/banks/anims. pal = an unreferenced
+# archive id that takes the converted BG palette (one per level so all five
+# can live in one tree at once).
+SNES_LEVELS = [
+    {"id": 0x16C, "name": "TR33", "world": "Caves",   "donor": "002A",
+     "pal": "0155", "dims": "66x43"},
+    {"id": 0x171, "name": "SNDS", "world": "Egypt",   "donor": "0053",
+     "pal": "0156", "dims": "108x32"},
+    {"id": 0x176, "name": "TMPL", "world": "Egypt",   "donor": "0055",
+     "pal": "015C", "dims": "140x50"},
+    {"id": 0x17B, "name": "RVTS", "world": "Factory", "donor": "007A",
+     "pal": "00DB", "dims": "70x40"},
+    {"id": 0x180, "name": "PDDY", "world": "Candy",   "donor": "00A6",
+     "pal": "00D9", "dims": "80x45"},
+]
+
+
+def snes_page():
+    import snes2pc as SP
+    have_rom = os.path.exists(SP.ROM_PATH)
+    rows = []
+    for e in SNES_LEVELS:
+        rows.append(
+            f"<tr><td>{e['id']:04X}</td><td>{e['name']}</td>"
+            f"<td>{e['world']}</td><td>{e['dims']}</td>"
+            f"<td><input size='4' value='{e['donor']}' "
+            f"id='d{e['id']:X}'></td>"
+            f"<td><input size='4' value='{e['pal']}' id='p{e['id']:X}'></td>"
+            f"<td><button onclick=\"conv('{e['id']:X}')\">convert</button></td>"
+            f"<td id='s{e['id']:X}'></td>"
+            f"<td><a href='/edit/{e['donor']}'>edit slot</a></td></tr>")
+    warn = ("" if have_rom else
+            "<p style='color:#f88'>ROM not found at " + SP.ROM_PATH +
+            " — conversion will fail.</p>")
+    return ("<!doctype html><meta charset='utf-8'><title>SNES exclusives</title>"
+            "<style>body{background:#111;color:#ddd;font:14px monospace}"
+            "a{color:#8cf}td{padding:3px 8px;border-bottom:1px solid #222}"
+            "input{background:#222;color:#ddd;border:1px solid #444}"
+            "</style><h2>SNES DE exclusives &rarr; scratch tree</h2>" + warn +
+            "<p>Converting writes the donor slot's header, tilemap, tileset, "
+            "templates and a BG palette chunk. The donor's PC level is "
+            "REPLACED in the scratch tree (canonical assets/ untouched); play "
+            "it with its own password or V2_START_LEVEL.</p>"
+            "<table><tr><th>snes</th><th>name</th><th>world</th><th>dims</th>"
+            "<th>donor</th><th>pal chunk</th><th></th><th></th><th></th></tr>"
+            + "".join(rows) + "</table>"
+            "<p><a href='/'>&larr; level list</a></p>"
+            "<script>"
+            "async function conv(id){"
+            " const st=document.getElementById('s'+id); st.textContent='...';"
+            " const r=await fetch('/api/snes/convert',{method:'POST',"
+            "  headers:{'Content-Type':'application/json'},"
+            "  body:JSON.stringify({snes:parseInt(id,16),"
+            "   donor:document.getElementById('d'+id).value,"
+            "   pal:document.getElementById('p'+id).value})});"
+            " const js=await r.json();"
+            " st.textContent=js.ok?('ok: '+js.tiles+' tiles, '+js.spawns+"
+            "  ' spawns, prio dropped '+js.prio):('ERR '+js.error);}"
+            "</script>")
 
 
 def mod_rel_ok(rel):
@@ -432,6 +497,8 @@ def level_listing():
             "</style><h2>LV editor — scratch tree: " + SCRATCH + "</h2>"
             "<table><tr><th>lvl</th><th>pw</th><th>header</th><th>lvs</th>"
             "<th></th></tr>" + "".join(rows) + "</table>"
+            "<p><a href='/texts'>dialog texts</a> &middot; "
+            "<a href='/snes'>SNES exclusives</a></p>"
             "<h3>clone level (same world)</h3>"
             "src <input id='c_src' size='4'> → dst <input id='c_dst' size='4'> "
             "<button onclick='doClone()'>clone</button> <span id='c_st'></span>"
@@ -497,6 +564,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, sprite_page(cid_hex), "text/html")
             if self.path == "/texts":
                 return self._send(200, texts_page(), "text/html")
+            if self.path == "/snes":
+                return self._send(200, snes_page(), "text/html")
             if self.path.startswith("/png/"):
                 cid = self.path[5:].split("?")[0].upper()
                 png, _, _ = LR.render(cid, root=SCRATCH)
@@ -528,6 +597,8 @@ class H(BaseHTTPRequestHandler):
                 return self.api_clone(body)
             if self.path == "/api/mod/import":
                 return self.api_mod_import(body)
+            if self.path == "/api/snes/convert":
+                return self.api_snes_convert(body)
             self._err("not found", 404)
         except Exception as e:                                  # noqa: BLE001
             self._err(f"{type(e).__name__}: {e}", 500)
@@ -679,6 +750,29 @@ class H(BaseHTTPRequestHandler):
             os.replace(tmp, path)
         return self._json({"ok": True, "dst_header": dst,
                            "dst_tilemap": f"{dst_tm:04X}"})
+
+    def api_snes_convert(self, body):
+        """Convert one SNES-exclusive level into the scratch tree over a
+        donor PC slot of the same world (task #104)."""
+        import snes2pc as SP
+        snes = int(body.get("snes", 0))
+        donor = str(body.get("donor", "")).upper()
+        pal = str(body.get("pal", "")).upper()
+        if not any(e["id"] == snes for e in SNES_LEVELS):
+            return self._err(f"unknown SNES level 0x{snes:X}")
+        if len(donor) != 4 or not os.path.exists(
+                os.path.join(SCRATCH, "level_headers", f"{donor}.json")):
+            return self._err(f"unknown donor slot {donor}")
+        if len(pal) != 4:
+            return self._err("pal chunk must be 4 hex digits")
+        if not os.path.exists(SP.ROM_PATH):
+            return self._err(f"ROM not found: {SP.ROM_PATH}")
+        with LOCK:
+            info = SP.convert_level(snes, donor, SCRATCH, int(pal, 16))
+        return self._json({"ok": True, "tiles": info["tiles"],
+                           "spawns": info["spawns"],
+                           "prio": info["prio_dropped"],
+                           "dims": info["dims"], "donor": donor})
 
     def api_mod_import(self, body):
         files = body.get("files") or {}

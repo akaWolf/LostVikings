@@ -280,7 +280,11 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
     print(f"written into {scratch}: header {donor_cid}, map {tm_id:04X}, "
           f"tiles {ts_id:04X} ({len(pc_tiles)}B), prefabs {gt_id:04X}, "
           f"BG palette -> {pal_chunk:04X}")
-    return donor_cid
+    return {"donor": donor_cid, "tilemap": f"{tm_id:04X}",
+            "tileset": f"{ts_id:04X}", "prefabs": f"{gt_id:04X}",
+            "pal_chunk": f"{pal_chunk:04X}", "tiles": len(pairs),
+            "spawns": len(st["spawns"]), "prio_dropped": prio_dropped,
+            "dims": list(dims)}
 
 
 def main():
