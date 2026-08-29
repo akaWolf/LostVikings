@@ -442,7 +442,7 @@ def snes_page():
             "   pal:document.getElementById('p'+id).value})});"
             " const js=await r.json();"
             " st.textContent=js.ok?('ok: '+js.tiles+' tiles, '+js.spawns+"
-            "  ' spawns, prio dropped '+js.prio):('ERR '+js.error);}"
+            "  ' spawns, prio->bit3 '+js.prio):('ERR '+js.error);}"
             "</script>")
 
 
@@ -771,7 +771,7 @@ class H(BaseHTTPRequestHandler):
             info = SP.convert_level(snes, donor, SCRATCH, int(pal, 16))
         return self._json({"ok": True, "tiles": info["tiles"],
                            "spawns": info["spawns"],
-                           "prio": info["prio_dropped"],
+                           "prio": info["prio_ported"],
                            "dims": info["dims"], "donor": donor})
 
     def api_mod_import(self, body):

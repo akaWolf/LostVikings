@@ -28,9 +28,10 @@ Conversion model (level -> a donor PC slot, same world):
     with pixel = nibble ? nibble + pal*16 : pal*16 (backdrop slot; the
     PC engine blacks out colors 16k exactly like the SNES transparent-0
     convention shows the dark backdrop);
-  - prefabs: PC draw words (pair<<6 | vf<<5 | hf<<4); the SNES priority
-    bit is DROPPED for now (PC foreground pass wiring is a separate
-    step) — the converter logs how many entries carried it;
+  - prefabs: PC draw words (pair<<6 | vf<<5 | hf<<4 | prio<<3); the
+    SNES priority bit maps onto PC bit 3 (masked foreground overdraw,
+    sub_1c8f1) with a generated tile-mask chunk (tileset id + 1):
+    mask bit set iff the SNES nibble != 0 — same cover semantics;
   - map: unchanged (prefab numbering preserved; type bits already
     PC-semantics);
   - palettes: the level's SNES palette list composes a CGRAM image;
@@ -184,30 +185,48 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
             f"SNES {srec[9]}x{srec[10]}"
 
     # ---- (tile, palette) pairs -> baked PC tiles ----
+    # The SNES priority bit maps 1:1 onto the PC foreground model: bit 3 of
+    # the draw word flags the cell for the masked overdraw pass (sub_1c8f1 /
+    # v2_draw_flagged_tiles, runs AFTER sprites), and the tile-mask chunk
+    # (engine rule: tileset id + 1, 8B/tile) says which pixels overdraw.
+    # SNES: a priority BG pixel covers the sprite iff its nibble != 0 —
+    # exactly the mask bit we emit. Flips only move the screen position on
+    # PC (mask indexed unflipped), same as the PPU.
     pairs = []
     pair_idx = {}
-    prio_dropped = 0
+    prio_ported = 0
     pc_gtld = bytearray()
     for p in range(nprefab):
         for k in range(4):
             v = w16(sgt, p * 8 + k * 2)
             t, pal = v & 0x3FF, (v >> 10) & 7
             hf, vf, prio = (v >> 14) & 1, (v >> 15) & 1, (v >> 13) & 1
-            prio_dropped += prio
+            prio_ported += prio
             key = (t, pal)
             if key not in pair_idx:
                 pair_idx[key] = len(pairs)
                 pairs.append(key)
-            pcv = (pair_idx[key] << 6) | (vf << 5) | (hf << 4)
+            pcv = (pair_idx[key] << 6) | (vf << 5) | (hf << 4) | (prio << 3)
             pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
     assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
-    print(f"baked tiles: {len(pairs)}; priority bits dropped: {prio_dropped}")
+    print(f"baked tiles: {len(pairs)}; priority bits ported to bit3: "
+          f"{prio_ported}")
 
     pc_tiles = bytearray()
+    pc_masks = bytearray()
     for (t, pal) in pairs:
         px = snes_tile_decode(stset[t * 32:(t + 1) * 32])
         baked = bytes((v + pal * 16) if v else (pal * 16) for v in px)
         pc_tiles += AC.tile_encode(baked)
+        # mask: bit layout of v2_render_tile_masked — pixel (tx,ty) lives at
+        # byte (tx&3)*2+(ty>>2), bit 7-((ty&3)*2+(tx>>2)); set iff nibble!=0
+        m = bytearray(8)
+        for ty in range(8):
+            for tx in range(8):
+                if px[ty * 8 + tx]:
+                    m[(tx & 3) * 2 + (ty >> 2)] |= \
+                        1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
+        pc_masks += m
 
     # ---- palettes: BG 0..127 from SNES, sprites 128+ from the donor ----
     cg = compose_cgram(rom, st["pal_list"])
@@ -263,6 +282,7 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
            "width": dims[0], "height": dims[1], "tail": "", "rows": rows})
 
     for role, cid, payload in (("tileset", ts_id, bytes(pc_tiles)),
+                               ("tile_masks", ts_id + 1, bytes(pc_masks)),
                                ("bg_tileset", gt_id, bytes(pc_gtld))):
         for rel, blob in AC.converter_for(role).extract(cid, payload):
             path = os.path.join(scratch, rel)
@@ -278,12 +298,13 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
     os.replace(tmp, pal_path)
 
     print(f"written into {scratch}: header {donor_cid}, map {tm_id:04X}, "
-          f"tiles {ts_id:04X} ({len(pc_tiles)}B), prefabs {gt_id:04X}, "
+          f"tiles {ts_id:04X} ({len(pc_tiles)}B), masks {ts_id+1:04X} "
+          f"({len(pc_masks)}B), prefabs {gt_id:04X}, "
           f"BG palette -> {pal_chunk:04X}")
     return {"donor": donor_cid, "tilemap": f"{tm_id:04X}",
             "tileset": f"{ts_id:04X}", "prefabs": f"{gt_id:04X}",
             "pal_chunk": f"{pal_chunk:04X}", "tiles": len(pairs),
-            "spawns": len(st["spawns"]), "prio_dropped": prio_dropped,
+            "spawns": len(st["spawns"]), "prio_ported": prio_ported,
             "dims": list(dims)}
 
 
