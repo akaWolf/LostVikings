@@ -488,6 +488,9 @@ void v2_dump_opcode_coverage() {
                 (unsigned long long)v2_ch30c98_count[4], (unsigned long long)v2_ch30c98_count[5],
                 (unsigned long long)v2_ch30c98_count[6], (unsigned long long)v2_ch30c98_count[7]);
     }
+#ifndef V2_ONLY
+    // Task #105: the probe is compiled out in V2_ONLY (no orig-DAC producer);
+    // printing "frames=0 diverged=0" there would read as a passed check.
     {
         extern uint64_t v2_pal_probe_frames, v2_pal_probe_diverged, v2_pal_probe_colors;
         fprintf(stderr, "PAL-PROBE (class C, task #12): frames=%llu diverged=%llu "
@@ -496,6 +499,7 @@ void v2_dump_opcode_coverage() {
                 (unsigned long long)v2_pal_probe_diverged,
                 (unsigned long long)v2_pal_probe_colors);
     }
+#endif
     // Main VM
     {
         int never = 0, executed = 0;
@@ -20312,6 +20316,8 @@ extern "C" int  v2_fetch_orig_page(uint8_t* out, uint32_t count);
 // v2_verify_render_buf at the END of render3 — after both sides painted the
 // frame's final page. An extra POST_FLIP2-entry probe here was a duplicate at
 // the wrong point and was removed; classification aids live in A2 now.)
+#ifndef V2_ONLY
+// Task #105: compiled out in V2_ONLY — no orig-DAC producer (see call site).
 static void v2_palette_probe(uint8_t* s) {
     uint8_t dac[768];
     v2_fetch_orig_dac(dac);
@@ -20346,12 +20352,20 @@ static void v2_palette_probe(uint8_t* s) {
         }
     }
 }
+#endif  // !V2_ONLY (task #105)
 
 void v2_phase_render3(uint16_t ds_val) {
     if (!v2_frame_active) return;
     // PSNAP compare: catches divergence in post_flip2 (10753/13c0c/12fd0/11792/101be).
     v2_compare_phase_snap(V2_PSNAP_POST_FLIP2_END, "v2_phase_render3");
+#ifndef V2_ONLY
+    // Task #105: the probe compares against the orig-DAC shadow (drawPalette,
+    // fed by the m2c OUT 3C8/3C9 mirror sites). In V2_ONLY those sites are
+    // not compiled, the orig DAC stays zeros, and every set color reported
+    // as "diverged" — structural noise, not a verify signal. Verify builds
+    // keep the probe unchanged.
     v2_palette_probe(v2_vm_shadow_ds);
+#endif
     // Mirrors orig pass 3 (eip 0x00BB..0x00D8).
     // sub_1DE05 (render 3)
     v2_bg_latch_1DE05(v2_vm_shadow_ds);
