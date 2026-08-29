@@ -7977,6 +7977,27 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // sub_12d72: demo input record/replay tick (extracted, see the helper zone).
     v2_demo_input_12d72(shadow);
 
+    // Task #104: V2_START_LEVEL=<n> — jump straight to level n (playtest/
+    // dev hook). One-shot, a few frames in: does exactly what the game's
+    // own transition sites do (op_D3 password verify writes DS_LEVEL_LOAD;
+    // sub_102ad arms frame_flags bit 0) — the regular buttons&3 path below
+    // then runs v2_run_transition_chain -> sub_11080.
+    {
+        static int want = -2;
+        if (want == -2) {
+            const char* e = getenv("V2_START_LEVEL");
+            want = (e && *e) ? atoi(e) : -1;
+        }
+        extern int v2_dbg_pre_vm_iter;
+        if (want >= 0 && v2_dbg_pre_vm_iter >= 2) {
+            v2gs(shadow).level_load((uint16_t)want);
+            v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() | 1);
+            fprintf(stderr, "V2: START_LEVEL hook -> level_load=%d (f%d)\n",
+                    want, v2_dbg_pre_vm_iter);
+            want = -1;
+        }
+    }
+
     // sub_102ad: level transition trigger (extracted, see the helper zone).
     v2_transition_kick_102ad(shadow);
 
