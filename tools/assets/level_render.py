@@ -64,6 +64,16 @@ def script_for_header(hdr_cid):
 ICON_DIR = os.path.join(ROOT, "build", "levels_atlas", "icons")
 
 
+def level_passwords():
+    """37 4-letter passwords @ds:0x85A5 (bit7 stripped); password slot i =
+    level table index i (op_D3 verified). Levels 37+ are scene stubs."""
+    with open(os.path.join(ROOT, "ds_static.bin"), "rb") as f:
+        f.seek(0x85A5)
+        raw = f.read(37 * 4)
+    return [bytes(b & 0x7F for b in raw[i * 4:(i + 1) * 4]).decode("ascii")
+            for i in range(37)]
+
+
 def load_class_icons(script_id):
     """{cls_int: {"w","h","b64"}} harvested by class_icons.py (may be empty)."""
     import base64

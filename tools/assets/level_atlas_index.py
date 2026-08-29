@@ -25,6 +25,7 @@ HEAD = ("<!doctype html><meta charset=\"utf-8\"><title>LV levels atlas</title>"
 def main():
     cards = []
     seen = set()
+    pws = LR.level_passwords()
     order = LR.level_tables()
     listing = {fn[:-5] for fn in os.listdir(LR.HDR_DIR) if fn.endswith(".json")}
     seq = [(i, f"{hc:04X}", f"{sc:04X}" if sc != 0xFFFF else "-")
@@ -44,6 +45,8 @@ def main():
         has_ins = os.path.exists(os.path.join(OUT, f"inspect_{cid}.html"))
         has_edt = os.path.exists(os.path.join(OUT, f"edit_{cid}.html"))
         lvl = f"lvl {idx}" if idx is not None else "—"
+        if idx is not None and idx < len(pws):
+            lvl += f" [{pws[idx]}]"
         img = (f'<img loading="lazy" src="{png}">' if has_png
                else '<div style="width:320px;height:60px;border:1px solid #333">no render</div>')
         links = []
