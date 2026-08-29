@@ -61,6 +61,34 @@ def script_for_header(hdr_cid):
     return None
 
 
+ICON_DIR = os.path.join(ROOT, "build", "levels_atlas", "icons")
+
+
+def load_class_icons(script_id):
+    """{cls_int: {"w","h","b64"}} harvested by class_icons.py (may be empty)."""
+    import base64
+    import json as _json
+    man_path = os.path.join(ICON_DIR, "icons.json")
+    if script_id is None or not os.path.exists(man_path):
+        return {}
+    with open(man_path) as f:
+        man = _json.load(f)
+    entries = man.get(f"{script_id:04X}", {})
+    out = {}
+    for key, e in entries.items():
+        try:
+            cls = int(key, 16)
+        except ValueError:
+            continue                       # vikN pseudo-keys: not spawn classes
+        fp = os.path.join(ICON_DIR, e["file"])
+        if not os.path.exists(fp):
+            continue
+        with open(fp, "rb") as f:
+            out[cls] = {"w": e["w"], "h": e["h"],
+                        "b64": base64.b64encode(f.read()).decode()}
+    return out
+
+
 def class_record(script_raw, cls):
     """sub_13e52 template record (0x15 bytes at cls*0x15) — verified layout:
     +0 sprite chunk id (0xFFFF none/invisible, 0xFFFE pool sprite),

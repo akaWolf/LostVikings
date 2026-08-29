@@ -45,6 +45,9 @@ PAGE = """<!doctype html>
 <script>
 const QW=%(qw)d, QH=%(qh)d, MAP=%(map)s, SPAWNS=%(spawns)s;
 const CLASSES=%(classes)s; // cls -> sub_13e52 template record
+const ICONS=%(icons)s; // engine-harvested sprites (class_icons.py)
+const IIMG={};
+for(const k in ICONS){const im=new Image();im.onload=()=>{if(typeof drawTint==='function')drawTint();};im.src='data:image/png;base64,'+ICONS[k].b64; IIMG[k]=im;}
 // type labels — verified against the ground-snap physics (sub_1625d):
 // passable {0,3,0xC}, solid list {1,2,5,0x20}, platform 4 (one-way snap),
 // slopes >= 0x30 (profile via sub_16390). Others: unlabeled yet.
@@ -71,10 +74,16 @@ const img=document.getElementById('lvl'), hl=document.getElementById('hl'),
 let Z=2;
 const ov=document.getElementById('ov'), tt=document.getElementById('tt');
 function drawSpawnBoxes(c){
+  c.imageSmoothingEnabled=false;
   for(const s of SPAWNS){
     const ci=CLASSES[s.cls]||null;
     const w=ci?ci.w:8, h=ci?ci.h:8;
     const x0=s.x-(w>>1), y0=s.y-(h>>1);   // sub_13e52 bbox math
+    const ic=ICONS[s.cls], im=IIMG[s.cls];
+    if(ic&&im&&im.complete){
+      const ix0=s.x-(ic.w>>1), iy0=s.y-(ic.h>>1);
+      c.drawImage(im,ix0*Z,iy0*Z,ic.w*Z,ic.h*Z);
+    }
     c.strokeStyle=(s.anim&0x800)?'#6f6':(ci&&ci.spr===0xFFFF?'#888':'#f4f');
     c.lineWidth=1;
     c.strokeRect(x0*Z+0.5,y0*Z+0.5,w*Z-1,h*Z-1);
@@ -168,6 +177,8 @@ def main():
         "map": json.dumps(words, separators=(",", ":")),
         "spawns": json.dumps(spawns, separators=(",", ":")),
         "classes": json.dumps(classes, separators=(",", ":")),
+        "icons": json.dumps(LR.load_class_icons(script_id),
+                            separators=(",", ":")),
     }
     out = args.out or f"/tmp/level_{cid}.html"
     with open(out, "w") as f:

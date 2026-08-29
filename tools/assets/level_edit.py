@@ -120,6 +120,9 @@ const QW=%(qw)d, QH=%(qh)d, NT=%(ntpl)d, PCOLS=%(pcols)d, TM_ID="%(tmid)s";
 const MAP=%(map)s, TAIL="%(tail)s";
 const SPAWNS=%(spawns)s, SPOFFS=%(spoffs)s, HID="%(hid)s";
 const CLASSES=%(classes)s; // cls -> sub_13e52 template record
+const ICONS=%(icons)s; // engine-harvested sprites (class_icons.py)
+const IIMG={};
+for(const k in ICONS){const im=new Image();im.onload=()=>{if(typeof drawSpawns==='function')drawSpawns();};im.src='data:image/png;base64,'+ICONS[k].b64; IIMG[k]=im;}
 const HDRRAW="%(hdrraw)s", HDRJSON=%(hdrjson)s;
 const lvl=new Image(); lvl.src="data:image/png;base64,%(png)s";
 const atlas=new Image(); atlas.src="data:image/png;base64,%(apng)s";
@@ -148,9 +151,14 @@ const SPEDIT=new Set();
 function drawSpawns(){
   sov.width=QW*16*Z; sov.height=QH*16*Z;
   const c=sov.getContext('2d');
+  c.imageSmoothingEnabled=false;
   SPAWNS.forEach((s,i)=>{
     const x=s.x*Z, y=s.y*Z;
     const ci=CLASSES[s.cls]||null;
+    const ic=ICONS[s.cls], im=IIMG[s.cls];
+    if(ic&&im&&im.complete){
+      c.drawImage(im,(s.x-(ic.w>>1))*Z,(s.y-(ic.h>>1))*Z,ic.w*Z,ic.h*Z);
+    }
     if(ci){  // sub_13e52 bbox: X0 = x-(w>>1)
       const x0=(s.x-(ci.w>>1))*Z, y0=(s.y-(ci.h>>1))*Z;
       c.strokeStyle=(i===SPSEL)?'#ff4':(ci.spr===0xFFFF?'#888':'#4cf');
@@ -351,6 +359,8 @@ def main():
         "tail": tail,
         "spawns": json.dumps(spawns, separators=(",", ":")),
         "classes": json.dumps(classes, separators=(",", ":")),
+        "icons": json.dumps(LR.load_class_icons(script_id),
+                            separators=(",", ":")),
         "spoffs": json.dumps(sp_offsets, separators=(",", ":")),
         "hdrraw": raw.hex().upper(),
         "hdrjson": json.dumps({k: v for k, v in json.load(
