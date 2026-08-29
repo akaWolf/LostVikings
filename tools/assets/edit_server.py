@@ -66,6 +66,40 @@ def do_pack():
     return len(os.listdir(os.path.join(SCRATCH, ".compiled")))
 
 
+MOD_DIRS = ("tilemaps", "level_headers", "tilesets", "bg_tilesets",
+            "tile_masks", "palettes", "level_scripts", "sprite_banks")
+
+
+def mod_rel_ok(rel):
+    parts = rel.split("/")
+    return (len(parts) == 2 and parts[0] in MOD_DIRS
+            and ".." not in rel and not rel.startswith("/"))
+
+
+def mod_export():
+    """Files under the mod dirs that differ from the canonical assets/."""
+    import base64 as b64mod
+    canon = os.path.join(LR.ROOT, "assets")
+    out = {}
+    for sub in MOD_DIRS:
+        sdir = os.path.join(SCRATCH, sub)
+        if not os.path.isdir(sdir):
+            continue
+        for fn in sorted(os.listdir(sdir)):
+            sp = os.path.join(sdir, fn)
+            if not os.path.isfile(sp):
+                continue
+            with open(sp, "rb") as f:
+                sdata = f.read()
+            cp = os.path.join(canon, sub, fn)
+            if os.path.exists(cp):
+                with open(cp, "rb") as f:
+                    if f.read() == sdata:
+                        continue
+            out[f"{sub}/{fn}"] = b64mod.b64encode(sdata).decode()
+    return out
+
+
 def level_listing():
     pws = LR.level_passwords()
     rows = []
@@ -86,7 +120,36 @@ def level_listing():
             "a{color:#8cf}td{padding:2px 10px;border-bottom:1px solid #222}"
             "</style><h2>LV editor — scratch tree: " + SCRATCH + "</h2>"
             "<table><tr><th>lvl</th><th>pw</th><th>header</th><th>lvs</th>"
-            "<th></th></tr>" + "".join(rows) + "</table>")
+            "<th></th></tr>" + "".join(rows) + "</table>"
+            "<h3>clone level (same world)</h3>"
+            "src <input id='c_src' size='4'> → dst <input id='c_dst' size='4'> "
+            "<button onclick='doClone()'>clone</button> <span id='c_st'></span>"
+            "<h3>mod package</h3>"
+            "<button onclick='modExport()'>export mod.json</button> "
+            "<input type='file' id='modf' accept='.json'>"
+            "<button onclick='modImport()'>import</button> <span id='m_st'></span>"
+            "<script>"
+            "async function doClone(){"
+            " const r=await fetch('/api/clone',{method:'POST',headers:{'Content-Type':'application/json'},"
+            "  body:JSON.stringify({src:document.getElementById('c_src').value,"
+            "                       dst:document.getElementById('c_dst').value})});"
+            " const js=await r.json();"
+            " document.getElementById('c_st').textContent=js.ok?('ok -> '+js.dst_header):('ERR '+js.error);}"
+            "async function modExport(){"
+            " const r=await fetch('/api/mod/export'); const js=await r.json();"
+            " const a=document.createElement('a');"
+            " a.href=URL.createObjectURL(new Blob([JSON.stringify(js.mod,null,1)],{type:'application/json'}));"
+            " a.download='mod.json'; a.click();"
+            " document.getElementById('m_st').textContent=Object.keys(js.mod).length+' files';}"
+            "async function modImport(){"
+            " const f=document.getElementById('modf').files[0];"
+            " if(!f){document.getElementById('m_st').textContent='pick a file';return;}"
+            " const files=JSON.parse(await f.text());"
+            " const r=await fetch('/api/mod/import',{method:'POST',headers:{'Content-Type':'application/json'},"
+            "  body:JSON.stringify({files:files})});"
+            " const js=await r.json();"
+            " document.getElementById('m_st').textContent=js.ok?('written '+js.written):('ERR '+js.error);}"
+            "</script>")
 
 
 class H(BaseHTTPRequestHandler):
@@ -119,6 +182,8 @@ class H(BaseHTTPRequestHandler):
                 cid = self.path[5:].split("?")[0].upper()
                 png, _, _ = LR.render(cid, root=SCRATCH)
                 return self._send(200, png, "image/png")
+            if self.path == "/api/mod/export":
+                return self._json({"ok": True, "mod": mod_export()})
             if self.path == "/api/status":
                 p = GAME[0]
                 running = p is not None and p.poll() is None
@@ -140,6 +205,10 @@ class H(BaseHTTPRequestHandler):
                 return self.api_play()
             if self.path == "/api/play_replay":
                 return self.api_play_replay(body)
+            if self.path == "/api/clone":
+                return self.api_clone(body)
+            if self.path == "/api/mod/import":
+                return self.api_mod_import(body)
             self._err("not found", 404)
         except Exception as e:                                  # noqa: BLE001
             self._err(f"{type(e).__name__}: {e}", 500)
@@ -238,6 +307,69 @@ class H(BaseHTTPRequestHandler):
                 f.write(blob)
             os.replace(tmp, path)
         return self._json({"ok": True, "files": [r for r, _ in files]})
+
+    def api_clone(self, body):
+        """Play level SRC in slot DST (same world): DST header = SRC stripe
+        with the tilemap reference retargeted to DST's own tilemap chunk
+        (so the copy is independently editable); tileset/templates stay
+        shared (same world). The .lvs script comes from the LEVEL TABLE
+        (exe_static), not the stripe — hence the same-world restriction."""
+        src = str(body.get("src", "")).upper()
+        dst = str(body.get("dst", "")).upper()
+        if src == dst or len(src) != 4 or len(dst) != 4:
+            return self._err("need distinct src/dst")
+        sp = os.path.join(SCRATCH, "level_headers", f"{src}.json")
+        dp = os.path.join(SCRATCH, "level_headers", f"{dst}.json")
+        if not (os.path.exists(sp) and os.path.exists(dp)):
+            return self._err("unknown src/dst header")
+        if LR.script_for_header(int(src, 16)) !=            LR.script_for_header(int(dst, 16)):
+            return self._err("src and dst are in different worlds "
+                             "(.lvs class tables differ)")
+        with open(sp) as f:
+            src_named = json.load(f)
+        with open(dp) as f:
+            dst_named = json.load(f)
+        src_raw = bytes.fromhex(src_named["raw"])
+        st = LR.parse_stripe(src_raw)
+        head = bytearray(bytes.fromhex(st["head"]))
+        dst_tm = int(dst_named["tilemap"], 16)
+        head[0x2E] = dst_tm & 0xFF
+        head[0x2F] = dst_tm >> 8
+        st["head"] = bytes(head).hex()
+        out = dict(src_named)
+        out["chunk"] = dst
+        out["tilemap"] = f"{dst_tm:04X}"
+        out["raw"] = LR.serialize_stripe(st).hex()
+        # copy the tilemap content into dst's own chunk
+        with open(os.path.join(SCRATCH, "tilemaps",
+                               f"{src_named['tilemap'].upper()}.json")) as f:
+            tmj = json.load(f)
+        tmj["chunk"] = f"{dst_tm:04X}"
+        for path, obj in ((dp, out),
+                          (os.path.join(SCRATCH, "tilemaps",
+                                        f"{dst_tm:04X}.json"), tmj)):
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(obj, f, indent=1)
+            os.replace(tmp, path)
+        return self._json({"ok": True, "dst_header": dst,
+                           "dst_tilemap": f"{dst_tm:04X}"})
+
+    def api_mod_import(self, body):
+        files = body.get("files") or {}
+        import base64 as b64mod
+        written = []
+        for rel, b64 in files.items():
+            if not mod_rel_ok(rel):
+                return self._err(f"bad path {rel!r}")
+            path = os.path.join(SCRATCH, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(b64mod.b64decode(b64))
+            os.replace(tmp, path)
+            written.append(rel)
+        return self._json({"ok": True, "written": len(written)})
 
     def api_play(self):
         p = GAME[0]

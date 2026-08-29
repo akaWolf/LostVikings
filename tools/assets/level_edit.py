@@ -137,6 +137,8 @@ PAGE = """<!doctype html>
    cls <input id="sp_cls" size="3"> anim <input id="sp_anim" size="4">
    pool <input id="sp_pool" size="3"> (hex)<br>
    <span id="spinfo" style="color:#8bc"></span><br>
+   <span id="spbank" style="color:#fa4"></span>
+   <button id="spaddbank" style="display:none">add bank</button><br>
    <button id="spapply">apply</button>
    <button id="spadd">add (click map)</button>
    <button id="spdel">delete</button>
@@ -151,7 +153,10 @@ PAGE = """<!doctype html>
    level flags <input id="hd_fl" size="2"> (hex; bit0 HUD)<br>
    chunks: map <input id="hd_tm" size="4"> tiles <input id="hd_ts" size="4">
    tpls <input id="hd_gt" size="4"> (hex; applies after save+reload)<br>
-   dims: %(qw)dx%(qh)d quads (resize: level resize section)
+   dims: %(qw)dx%(qh)d quads | resize to
+   w <input id="rz_w" size="3" value="%(qw)d"> h <input id="rz_h" size="3" value="%(qh)d">
+   <button id="rz_go">resize+save+reload</button><br>
+   <span style="color:#888">new quads filled with word 0000; needs server mode</span>
   </details>
   <details style="margin-bottom:8px"><summary>tile pixels (tile <span id="txsel">-</span>)</summary>
    <canvas id="tgrid" style="display:inline-block;vertical-align:top"></canvas>
@@ -188,7 +193,8 @@ const SERVER=%(server)d;
 const QW=%(qw)d, QH=%(qh)d, NT=%(ntpl)d, PCOLS=%(pcols)d, TM_ID="%(tmid)s";
 const MAP=%(map)s, TAIL="%(tail)s";
 const SPAWNS=%(spawns)s, HID="%(hid)s";
-const CLASSES=%(classes)s; // cls -> sub_13e52 template record
+const CLASSES=%(classes)s; // cls -> sub_13e52 template record (whole world)
+const BANKPAD=%(bankpad)s; // sprite-bank pad bytes seen on any level
 const ICONS=%(icons)s; // engine-harvested sprites (class_icons.py)
 const IIMG={};
 for(const k in ICONS){const im=new Image();im.onload=()=>{if(typeof drawSpawns==='function')drawSpawns();};im.src='data:image/png;base64,'+ICONS[k].b64; IIMG[k]=im;}
@@ -334,6 +340,17 @@ function spForm(){
     (ci.spr===0xFFFF?'INVISIBLE':(ci.spr===0xFFFE?'pool-sprite':
      'spr='+ci.spr.toString(16).padStart(4,'0').toUpperCase()))+
     ` bits=${ci.bits.toString(16).toUpperCase()}` : 'class: ?';
+  const bwarn=document.getElementById('spbank');
+  const bbtn=document.getElementById('spaddbank');
+  const need=ci&&ci.spr<0xFFFE&&!BANKS.some(b=>b.chunk===ci.spr);
+  bwarn.textContent=need?`bank ${ci.spr.toString(16).padStart(4,'0').toUpperCase()} NOT loaded on this level`:'';
+  bbtn.style.display=need?'':'none';
+  bbtn.onclick=()=>{
+    const key=ci.spr.toString(16).padStart(4,'0').toUpperCase();
+    BANKS.push({chunk:ci.spr, pad:(BANKPAD[key]||'00000000')});
+    stat.textContent=` bank ${key} added (${BANKS.length} banks)`;
+    spForm();
+  };
 }
 function spawnNear(e){
   const r=map.getBoundingClientRect();
@@ -1005,6 +1022,35 @@ function palLive(){
     ? ` palette: chunk ${missing.toString(16).toUpperCase()} not in the page set — save+reload to see it`
     : ' palette recomposed live';
 }
+// ---- level resize (p6): rebuild the tilemap rows + dims in the head,
+// save both and reload — the engine derives FS stride, scroll limits and
+// clip from the header dims (sub_173C7 / sub_113b0). v2 arenas are full
+// 64K segments; FS needs w*h*8 bytes -> w*h <= 8192 quads.
+document.getElementById('rz_go').onclick=async()=>{
+  if(!SERVER){ stat.textContent=' resize needs server mode'; return; }
+  const w=(+document.getElementById('rz_w').value)|0;
+  const h=(+document.getElementById('rz_h').value)|0;
+  if(w<20||h<13){ stat.textContent=' min 20x13 (one screen)'; return; }
+  if(w*h>8192){ stat.textContent=` ${w}x${h}=${w*h} quads > 8192 (FS segment limit)`; return; }
+  const rows=[];
+  for(let y=0;y<h;y++){
+    const r=[];
+    for(let x=0;x<w;x++){
+      const v=(x<QW&&y<QH)?MAP[y*QW+x]:0;
+      r.push(v.toString(16).padStart(4,'0').toUpperCase());
+    }
+    rows.push(r.join(' '));
+  }
+  hp16(0x29,w); hp16(0x2B,h);
+  const tmj={format:"tilemap_u16", chunk:TM_ID, width:w, height:h,
+             tail:TAIL, rows:rows};
+  try{
+    srvstat.textContent='resizing...';
+    await api('/api/save',{kind:'tilemap',chunk:TM_ID,data:tmj});
+    await api('/api/save',{kind:'header',chunk:HID,data:buildHeaderJson()});
+    location.reload();
+  }catch(err){ srvstat.textContent='ERR '+err.message; }
+};
 // ---- server mode ----
 const srvstat=document.getElementById('srvstat');
 async function api(path, body){
@@ -1065,11 +1111,28 @@ def render_page(cid, server=False, root=None):
     script_id = LR.script_for_header(int(cid, 16))
     if script_id is not None:
         script_raw = LR.open_payload(script_id, "lzss", root)
-        for sp in spawns:
-            if sp["cls"] not in classes:
-                rec = LR.class_record(script_raw, sp["cls"])
-                if rec:
-                    classes[sp["cls"]] = rec
+        # the whole world's class table (not just this level's spawns) —
+        # the editor may place any same-world class; a record is listed
+        # when its PC lands inside the chunk and the sprite field is
+        # FFFF/FFFE or a real chunk id
+        for cls in range(0x100):
+            rec = LR.class_record(script_raw, cls)
+            if rec and 0 < rec["pc"] < len(script_raw)                and (rec["spr"] >= 0xFFFE or rec["spr"] < 0x400):
+                classes[cls] = rec
+    # sprite-bank pad reference: the engine never reads the 4 pad bytes
+    # (sub_1167a consumes the chunk word and steps +6), kept for hygiene
+    bankpad = {}
+    for hdr_fn in sorted(os.listdir(os.path.join(
+            root if root else os.path.join(LR.ROOT, "assets"),
+            "level_headers"))):
+        if not hdr_fn.endswith(".json"):
+            continue
+        try:
+            st2 = LR.parse_stripe(LR.header_raw(hdr_fn[:-5], root))
+        except Exception:
+            continue
+        for b in st2["sprite_banks"]:
+            bankpad.setdefault(f"{b['chunk']:04X}", b["pad"])
     tmap = LR.open_payload(tm_id, "lzss", root)
     tgfx = LR.open_payload(ts_id, "lzss", root)
     gtld = LR.open_payload(gt_id, "lzss", root)
@@ -1102,6 +1165,7 @@ def render_page(cid, server=False, root=None):
         "tail": tail,
         "spawns": json.dumps(spawns, separators=(",", ":")),
         "classes": json.dumps(classes, separators=(",", ":")),
+        "bankpad": json.dumps(bankpad, separators=(",", ":")),
         "icons": json.dumps(LR.load_class_icons(script_id),
                             separators=(",", ":")),
         "sthead": st["head"], "strest": st["rest"],
