@@ -1,0 +1,3103 @@
+[
+ {
+  "i": 0,
+  "ptr": 886,
+  "w": 15,
+  "h": 3,
+  "text": "WHERE ARE WE?"
+ },
+ {
+  "i": 1,
+  "ptr": 902,
+  "w": 9,
+  "h": 3,
+  "text": "KANSAS?"
+ },
+ {
+  "i": 2,
+  "ptr": 912,
+  "w": 10,
+  "h": 5,
+  "text": "GIVE UP?\n\nYES   NO"
+ },
+ {
+  "i": 3,
+  "ptr": 933,
+  "w": null,
+  "h": null,
+  "text": "NO "
+ },
+ {
+  "i": 4,
+  "ptr": 937,
+  "w": null,
+  "h": null,
+  "text": "YES"
+ },
+ {
+  "i": 5,
+  "ptr": 941,
+  "w": null,
+  "h": null,
+  "text": "   "
+ },
+ {
+  "i": 6,
+  "ptr": 945,
+  "w": 14,
+  "h": 3,
+  "text": "HELLO THERE."
+ },
+ {
+  "i": 7,
+  "ptr": 960,
+  "w": 19,
+  "h": 4,
+  "text": "THANK YOU SO MUCH\nFOR SAVING ME."
+ },
+ {
+  "i": 8,
+  "ptr": 995,
+  "w": 21,
+  "h": 6,
+  "text": "TO ESCAPE FROM THIS\nPLACE YOU MUST FIND\nTHE KEY AND DRAIN\nTHE VOLCANO."
+ },
+ {
+  "i": 9,
+  "ptr": 1068,
+  "w": 18,
+  "h": 3,
+  "text": "WHERE'S THE KEY?"
+ },
+ {
+  "i": 10,
+  "ptr": 1087,
+  "w": 18,
+  "h": 6,
+  "text": "YOU MUST GO BACK\nDOWN AND BASH\nYOUR WAY INTO\nTHE MOUNTAIN."
+ },
+ {
+  "i": 11,
+  "ptr": 1148,
+  "w": 23,
+  "h": 4,
+  "text": "COULD YOU BE A LITTLE\nMORE SPECIFIC?"
+ },
+ {
+  "i": 12,
+  "ptr": 1187,
+  "w": 23,
+  "h": 6,
+  "text": "I WILL USE MY PSYCHIC\nPOWERS TO DESTROY THE\nFIREBALLS INSIDE THE\nMOUNTAIN."
+ },
+ {
+  "i": 13,
+  "ptr": 1264,
+  "w": 15,
+  "h": 4,
+  "text": "THANK YOU FOR\nYOUR HELP."
+ },
+ {
+  "i": 14,
+  "ptr": 1291,
+  "w": 15,
+  "h": 4,
+  "text": "THAT'S WHAT\nI'M HERE FOR."
+ },
+ {
+  "i": 15,
+  "ptr": 1319,
+  "w": 19,
+  "h": 5,
+  "text": "WHAT DO YOU THINK\nYOU ARE DOING IN\nMY TREE!"
+ },
+ {
+  "i": 16,
+  "ptr": 1319,
+  "w": 19,
+  "h": 5,
+  "text": "WHAT DO YOU THINK\nYOU ARE DOING IN\nMY TREE!"
+ },
+ {
+  "i": 17,
+  "ptr": 1365,
+  "w": 19,
+  "h": 4,
+  "text": "IDENTIFY YOURSELF\nINTRUDER."
+ },
+ {
+  "i": 18,
+  "ptr": 1395,
+  "w": 15,
+  "h": 5,
+  "text": "BALEOG THE\nFIERCE AT\nYOUR SERVICE."
+ },
+ {
+  "i": 19,
+  "ptr": 1432,
+  "w": 18,
+  "h": 4,
+  "text": "ERIK THE SWIFT\nAT YOUR SERVICE."
+ },
+ {
+  "i": 20,
+  "ptr": 1466,
+  "w": 18,
+  "h": 4,
+  "text": "OLAF THE STOUT\nAT YOUR SERVICE."
+ },
+ {
+  "i": 21,
+  "ptr": 1500,
+  "w": 18,
+  "h": 6,
+  "text": "I SEE...AND WHY\nDO YOU WEAR SUCH\nA FUNNY LOOKING\nCOSTUME?"
+ },
+ {
+  "i": 22,
+  "ptr": 1560,
+  "w": 16,
+  "h": 3,
+  "text": "I AM A VIKING!"
+ },
+ {
+  "i": 23,
+  "ptr": 1577,
+  "w": 20,
+  "h": 3,
+  "text": "OF COURSE YOU ARE."
+ },
+ {
+  "i": 24,
+  "ptr": 1598,
+  "w": 20,
+  "h": 6,
+  "text": "WELL, YOU ARE ON\nPRIVATE PROPERTY,\nVIKING. YOU MUST\nLEAVE AT ONCE!"
+ },
+ {
+  "i": 25,
+  "ptr": 1667,
+  "w": 21,
+  "h": 4,
+  "text": "TELL ME THE WAY,\nAND I WILL BE GONE."
+ },
+ {
+  "i": 26,
+  "ptr": 1706,
+  "w": 19,
+  "h": 7,
+  "text": "YOU WILL FIND A\nKEY TO THE BRIDGE\nIN THE TREE ON\nTHE OTHER SIDE\nOF THE WATERFALL."
+ },
+ {
+  "i": 27,
+  "ptr": 1790,
+  "w": 9,
+  "h": 3,
+  "text": "NOW GO!"
+ },
+ {
+  "i": 28,
+  "ptr": 1800,
+  "w": 19,
+  "h": 5,
+  "text": "I HAVE WARNED YOU\nTO LEAVE AND YET\nYOU RETURN."
+ },
+ {
+  "i": 29,
+  "ptr": 1849,
+  "w": 18,
+  "h": 5,
+  "text": "YOU HAVE ALL THE\nINFORMATION YOU\nNEED."
+ },
+ {
+  "i": 30,
+  "ptr": 1890,
+  "w": 19,
+  "h": 5,
+  "text": "PLEASE TELL ME\nAGAIN. I WON'T\nFORGET THIS TIME."
+ },
+ {
+  "i": 31,
+  "ptr": 1940,
+  "w": 17,
+  "h": 5,
+  "text": "ONCE AGAIN, THE\nKEY TO LOWER\nTHE BRIDGE..."
+ },
+ {
+  "i": 32,
+  "ptr": 1985,
+  "w": 16,
+  "h": 6,
+  "text": "...IS IN THE\nTREE ON THE\nOTHER SIDE OF\nTHE WATERFALL."
+ },
+ {
+  "i": 33,
+  "ptr": 2041,
+  "w": 15,
+  "h": 4,
+  "text": "BZZDT...HELP!\nHELP..BZZT!"
+ },
+ {
+  "i": 34,
+  "ptr": 2041,
+  "w": 15,
+  "h": 4,
+  "text": "BZZDT...HELP!\nHELP..BZZT!"
+ },
+ {
+  "i": 35,
+  "ptr": 2041,
+  "w": 15,
+  "h": 4,
+  "text": "BZZDT...HELP!\nHELP..BZZT!"
+ },
+ {
+  "i": 36,
+  "ptr": 2041,
+  "w": 15,
+  "h": 4,
+  "text": "BZZDT...HELP!\nHELP..BZZT!"
+ },
+ {
+  "i": 37,
+  "ptr": 2069,
+  "w": 22,
+  "h": 4,
+  "text": "YOU LOOK AWFULLY\nHAPPY! WHAT ARE YOU?"
+ },
+ {
+  "i": 38,
+  "ptr": 2109,
+  "w": 18,
+  "h": 4,
+  "text": "I AM AFTIEK. ARE\nYOU THE JANITOR?"
+ },
+ {
+  "i": 39,
+  "ptr": 2145,
+  "w": 19,
+  "h": 5,
+  "text": "WHAT'S A JANITOR?\nAND HOW DO I GET\nOUT OF HERE?"
+ },
+ {
+  "i": 40,
+  "ptr": 2195,
+  "w": 22,
+  "h": 4,
+  "text": "YOU MUST DESTROY THE\nSHIP'S COMPUTER."
+ },
+ {
+  "i": 41,
+  "ptr": 2235,
+  "w": 24,
+  "h": 3,
+  "text": "THIS IS NOT A SHIP..."
+ },
+ {
+  "i": 42,
+  "ptr": 2259,
+  "w": 16,
+  "h": 4,
+  "text": "...AND WHAT IS\nA COMPUTER?"
+ },
+ {
+  "i": 43,
+  "ptr": 2288,
+  "w": 22,
+  "h": 5,
+  "text": "NEVER MIND, YOU MUST\nFIND BOMBS TO BLOW\nIT UP."
+ },
+ {
+  "i": 44,
+  "ptr": 2337,
+  "w": 19,
+  "h": 5,
+  "text": "HEY, AFTIEK. WHAT\nWERE YOU SAYING\nABOUT A COMPUTER?"
+ },
+ {
+  "i": 45,
+  "ptr": 2391,
+  "w": 21,
+  "h": 4,
+  "text": "YOU MUST FIND BOMBS\nTO BLOW IT UP."
+ },
+ {
+  "i": 46,
+  "ptr": 2428,
+  "w": 21,
+  "h": 4,
+  "text": "BZZDT...BOMB!\nUSE..ON..COMPUTER!"
+ },
+ {
+  "i": 47,
+  "ptr": 2463,
+  "w": 21,
+  "h": 7,
+  "text": "CROUTONIAN SECURITY\nWILL BE LOOKING\nFOR YOU. YOU WILL\nONLY SURVIVE IF YOU\nWORK AS A TEAM."
+ },
+ {
+  "i": 48,
+  "ptr": 2555,
+  "w": 22,
+  "h": 6,
+  "text": "YOU MUST BE ONE OF\nTHE ALIENS THAT THE\nCROUTONIANS HAVE ALL\nBEEN TALKING ABOUT."
+ },
+ {
+  "i": 49,
+  "ptr": 2637,
+  "w": 18,
+  "h": 6,
+  "text": "WHO ARE THESE\nCROUTONIANS, AND\nWHY DID THEY\nBRING US HERE?"
+ },
+ {
+  "i": 50,
+  "ptr": 2698,
+  "w": 19,
+  "h": 5,
+  "text": "TOMATOR, THE EVIL\nCROUTONIAN RULER,\nIS COLLECTING..."
+ },
+ {
+  "i": 51,
+  "ptr": 2753,
+  "w": 22,
+  "h": 5,
+  "text": "...UNIQUE LIFE FORMS\nTO DISPLAY IN HIS\nGALLERY."
+ },
+ {
+  "i": 52,
+  "ptr": 2803,
+  "w": 15,
+  "h": 4,
+  "text": "SOUNDS LIKE A\nGREAT GUY."
+ },
+ {
+  "i": 53,
+  "ptr": 2830,
+  "w": 18,
+  "h": 5,
+  "text": "DO NOT EXPECT AN\nINVITATION TO\nDINNER."
+ },
+ {
+  "i": 54,
+  "ptr": 2871,
+  "w": 22,
+  "h": 4,
+  "text": "YOU CLEARLY DO NOT\nBELONG HERE, FRIEND."
+ },
+ {
+  "i": 55,
+  "ptr": 2913,
+  "w": 16,
+  "h": 4,
+  "text": "THANKS FOR THE\nNEWS FLASH."
+ },
+ {
+  "i": 56,
+  "ptr": 2942,
+  "w": 20,
+  "h": 5,
+  "text": "I SEE THAT TOMATOR\nIS UP TO HIS OLD\nGAMES."
+ },
+ {
+  "i": 57,
+  "ptr": 2987,
+  "w": 13,
+  "h": 4,
+  "text": "YOU KNOW OF\nTOMATOR?"
+ },
+ {
+  "i": 58,
+  "ptr": 3010,
+  "w": 19,
+  "h": 3,
+  "text": "REGRETFULLY, YES."
+ },
+ {
+  "i": 59,
+  "ptr": 3030,
+  "w": 19,
+  "h": 4,
+  "text": "YOU MUST FIND HIM\nAND DESTROY HIM."
+ },
+ {
+  "i": 60,
+  "ptr": 3067,
+  "w": 20,
+  "h": 6,
+  "text": "AS LONG AS TOMATOR\nLIVES, YOU WILL\nNEVER RETURN TO\nYOUR OWN TIME."
+ },
+ {
+  "i": 61,
+  "ptr": 3135,
+  "w": 18,
+  "h": 5,
+  "text": "WHERE IS THIS\nTOMATOR, AND HOW\nDO WE FIND HIM?"
+ },
+ {
+  "i": 62,
+  "ptr": 3184,
+  "w": 23,
+  "h": 5,
+  "text": "YOU MUST KEEP MOVING.\nWHEN YOU FIND HIM,\nYOU WILL KNOW."
+ },
+ {
+  "i": 63,
+  "ptr": 3242,
+  "w": 25,
+  "h": 5,
+  "text": "YOU CAN GET HINTS IF\nYOU STAND NEXT TO THESE\nBUTTONS AND PRESS 'C'."
+ },
+ {
+  "i": 64,
+  "ptr": 3312,
+  "w": 25,
+  "h": 6,
+  "text": "PRESS 'C' TO PUSH\nBUTTONS, FLIP SWITCHES,\nAND TALK TO OTHER\nCHARACTERS."
+ },
+ {
+  "i": 65,
+  "ptr": 3386,
+  "w": 20,
+  "h": 6,
+  "text": "OLAF CAN HELP ERIK\nTO JUMP HIGHER BY\nLETTING HIM STAND\nON HIS SHIELD."
+ },
+ {
+  "i": 66,
+  "ptr": 3386,
+  "w": 20,
+  "h": 6,
+  "text": "OLAF CAN HELP ERIK\nTO JUMP HIGHER BY\nLETTING HIM STAND\nON HIS SHIELD."
+ },
+ {
+  "i": 67,
+  "ptr": 3582,
+  "w": 27,
+  "h": 8,
+  "text": "TO TRADE AN ITEM, PRESS\n'START' AND THEN PRESS\n'B' OVER THE ITEM. NOW\nGIVE THE ITEM TO A NEARBY\nVIKING. PRESS 'B'\nTO EXIT."
+ },
+ {
+  "i": 68,
+  "ptr": 3707,
+  "w": 22,
+  "h": 5,
+  "text": "PRESS 'C' TO OPERATE\nA PUMP.  TO MANUALLY\nDEFLATE, PRESS 'B'."
+ },
+ {
+  "i": 69,
+  "ptr": 3873,
+  "w": 26,
+  "h": 7,
+  "text": "TO SELECT AN ITEM, PRESS\n'START' AND THEN MOVE\nTHE FLASHING BOX OVER\nTHE ITEM. PRESS 'START'\nTO EXIT."
+ },
+ {
+  "i": 70,
+  "ptr": 4024,
+  "w": 24,
+  "h": 5,
+  "text": "TO USE A SELECTED ITEM\nPRESS 'C' AND 'START'\nSIMULTANEOUSLY."
+ },
+ {
+  "i": 71,
+  "ptr": 4087,
+  "w": 23,
+  "h": 4,
+  "text": "STAND ON THE ELEVATOR\nAND MOVE UP OR DOWN."
+ },
+ {
+  "i": 72,
+  "ptr": 4132,
+  "w": 29,
+  "h": 7,
+  "text": "TO OPERATE A CRANE, PRESS\n'C' TO ENTER OR EXIT,\nTHEN MOVE THE MAGNET LEFT\nOR RIGHT.  PRESS 'B' TO\nTURN THE MAGNET ON AND OFF."
+ },
+ {
+  "i": 73,
+  "ptr": 4260,
+  "w": 28,
+  "h": 4,
+  "text": "TO OPERATE A TELEPORTER,\nSTAND IN IT AND PRESS 'C'."
+ },
+ {
+  "i": 74,
+  "ptr": 4314,
+  "w": 28,
+  "h": 7,
+  "text": "OLAF THE STOUT CAN USE HIS\nSHIELD AS A HANG GLIDER.\nWHILE FALLING, POSITION\nTHE SHIELD ABOVE HIS HEAD\nBY PRESSING 'A' OR 'B'"
+ },
+ {
+  "i": 75,
+  "ptr": 4441,
+  "w": 28,
+  "h": 7,
+  "text": "ERIK THE SWIFT HAS A TOUGH\nHEAD.  HE CAN BASH ENEMIES\nAND KNOCK DOWN CERTAIN\nBARRIERS BY PRESSING 'A'\nWHILE RUNNING."
+ },
+ {
+  "i": 76,
+  "ptr": 4560,
+  "w": 28,
+  "h": 8,
+  "text": "BALEOG THE FIERCE IS A\nSTUD. HE CAN USE HIS\nARROWS TO TOGGLE SWITCHES,\nAS WELL AS TO DEFEAT\nMONSTERS. TO SHOOT AN\nARROW, PRESS 'A'."
+ },
+ {
+  "i": 77,
+  "ptr": 4833,
+  "w": 28,
+  "h": 8,
+  "text": "TO UNLOCK A KEYHOLE, THE\nCORRECT KEY MUST BE USED.\nSTAND NEXT TO THE KEYHOLE,\nSELECT THE CORRECT KEY\nFROM YOUR INVENTORY, AND\nPRESS 'C' AND 'START'."
+ },
+ {
+  "i": 78,
+  "ptr": 4984,
+  "w": 22,
+  "h": 4,
+  "text": "ALL OF US MUST REACH\nTHE EXIT TO ESCAPE."
+ },
+ {
+  "i": 79,
+  "ptr": 5071,
+  "w": 23,
+  "h": 5,
+  "text": "PRESS 'START' AND\n'LEFT' OR 'RIGHT' TO\nSWITCH TO MY BUDDIES."
+ },
+ {
+  "i": 80,
+  "ptr": 5134,
+  "w": 11,
+  "h": 3,
+  "text": "UH, GUYS?"
+ },
+ {
+  "i": 81,
+  "ptr": 5146,
+  "w": 22,
+  "h": 4,
+  "text": "I HAVE A BAD FEELING\nABOUT THIS..."
+ },
+ {
+  "i": 82,
+  "ptr": 5183,
+  "w": 13,
+  "h": 4,
+  "text": "WHAT ARE WE\nDOING HERE?"
+ },
+ {
+  "i": 83,
+  "ptr": 5209,
+  "w": 10,
+  "h": 3,
+  "text": "I DUNNO."
+ },
+ {
+  "i": 84,
+  "ptr": 5220,
+  "w": 16,
+  "h": 5,
+  "text": "WILL YOU GUYS\nJUST SHUT UP\nAND FOLLOW ME!"
+ },
+ {
+  "i": 85,
+  "ptr": 5264,
+  "w": 17,
+  "h": 5,
+  "text": "STICK CLOSE TO\nME, I WILL LEAD\nTHE WAY."
+ },
+ {
+  "i": 86,
+  "ptr": 5306,
+  "w": 19,
+  "h": 5,
+  "text": "YOU WOULDN'T KNOW\nWHICH WAY TO LEAD\nIF YOU HAD A MAP."
+ },
+ {
+  "i": 87,
+  "ptr": 5362,
+  "w": 21,
+  "h": 6,
+  "text": "IF YOU TWO DON'T\nSTOP FIGHTING, I AM\nGOING TO HAVE TO\nBRAIN YOU BOTH!"
+ },
+ {
+  "i": 88,
+  "ptr": 5434,
+  "w": 20,
+  "h": 5,
+  "text": "IF I BASH ONE MORE\nWALL RIGHT NOW, MY\nHEAD WILL EXPLODE!"
+ },
+ {
+  "i": 89,
+  "ptr": 5493,
+  "w": 15,
+  "h": 4,
+  "text": "I GOT DIBS ON\nHIS HELMET."
+ },
+ {
+  "i": 90,
+  "ptr": 5521,
+  "w": 17,
+  "h": 4,
+  "text": "OKAY, BUT I GET\nHIS BOOTS."
+ },
+ {
+  "i": 91,
+  "ptr": 5550,
+  "w": 20,
+  "h": 4,
+  "text": "IT'S GREAT TO HAVE\nSUCH GOOD FRIENDS."
+ },
+ {
+  "i": 92,
+  "ptr": 5590,
+  "w": 19,
+  "h": 5,
+  "text": "ARE YOU GUYS SURE\nWE WANT TO GO IN\nTHERE?"
+ },
+ {
+  "i": 93,
+  "ptr": 5634,
+  "w": 16,
+  "h": 4,
+  "text": "MAYBE IT LEADS\nBACK HOME!"
+ },
+ {
+  "i": 94,
+  "ptr": 5662,
+  "w": 18,
+  "h": 4,
+  "text": "THERE'S ONLY ONE\nWAY TO FIND OUT."
+ },
+ {
+  "i": 95,
+  "ptr": 5698,
+  "w": 11,
+  "h": 3,
+  "text": "LET'S GO!"
+ },
+ {
+  "i": 96,
+  "ptr": 5710,
+  "w": 19,
+  "h": 3,
+  "text": "THAT WAS INTENSE."
+ },
+ {
+  "i": 97,
+  "ptr": 5730,
+  "w": 20,
+  "h": 3,
+  "text": "YEAH! WHAT A RIDE!"
+ },
+ {
+  "i": 98,
+  "ptr": 5751,
+  "w": 19,
+  "h": 4,
+  "text": "I THINK I'M GOING\nTO BE SICK."
+ },
+ {
+  "i": 99,
+  "ptr": 5783,
+  "w": 17,
+  "h": 4,
+  "text": "IT'S NICE TO BE\nOUTSIDE AGAIN."
+ },
+ {
+  "i": 100,
+  "ptr": 5816,
+  "w": 20,
+  "h": 4,
+  "text": "THOSE RED LIZARDS\nWERE KIND OF CUTE."
+ },
+ {
+  "i": 101,
+  "ptr": 5855,
+  "w": 17,
+  "h": 5,
+  "text": "YEAH, WHEN THEY\nWEREN'T TRYING\nTO EAT US!"
+ },
+ {
+  "i": 102,
+  "ptr": 5899,
+  "w": 21,
+  "h": 4,
+  "text": "WHO WERE THOSE\nWEIRD LOOKING GUYS?"
+ },
+ {
+  "i": 103,
+  "ptr": 5936,
+  "w": 19,
+  "h": 5,
+  "text": "I DON'T KNOW, BUT\nDID YOU CHECK OUT\nTHEIR HAIRDOS?"
+ },
+ {
+  "i": 104,
+  "ptr": 5989,
+  "w": 19,
+  "h": 4,
+  "text": "AND PEOPLE SAY WE\nNEED HAIRCUTS?"
+ },
+ {
+  "i": 105,
+  "ptr": 6024,
+  "w": 19,
+  "h": 5,
+  "text": "WHEN WE GET HOME,\nWE NEED TO GET\nONE OF THOSE."
+ },
+ {
+  "i": 106,
+  "ptr": 6073,
+  "w": 15,
+  "h": 3,
+  "text": "GIANT SNAILS?"
+ },
+ {
+  "i": 107,
+  "ptr": 6089,
+  "w": 13,
+  "h": 3,
+  "text": "TREEHOUSES?"
+ },
+ {
+  "i": 108,
+  "ptr": 6103,
+  "w": 19,
+  "h": 5,
+  "text": "NO, THOSE COOL\nWATERFALLS THAT\nHOVER IN MID AIR!"
+ },
+ {
+  "i": 109,
+  "ptr": 6154,
+  "w": 22,
+  "h": 4,
+  "text": "ARE YOU GUYS HOLDING\nUP OKAY?"
+ },
+ {
+  "i": 110,
+  "ptr": 6186,
+  "w": 14,
+  "h": 5,
+  "text": "I'M HAVING A\nTERRIBLE\nTIME."
+ },
+ {
+  "i": 111,
+  "ptr": 6216,
+  "w": 24,
+  "h": 5,
+  "text": "NOT ME...I HAVEN'T\nEVER GOT TO CLOBBER\nSO MANY COOL MONSTERS."
+ },
+ {
+  "i": 112,
+  "ptr": 6280,
+  "w": 19,
+  "h": 5,
+  "text": "I'M SURPRISED\nTHAT BUBBLE\nHELD YOU UP OLAF."
+ },
+ {
+  "i": 113,
+  "ptr": 6326,
+  "w": 18,
+  "h": 5,
+  "text": "WATCH IT. I'M\nVERY SENSITIVE\nABOUT MY WEIGHT."
+ },
+ {
+  "i": 114,
+  "ptr": 6374,
+  "w": 19,
+  "h": 5,
+  "text": "HOW DID I MANAGE\nTO GET STUCK WITH\nTHESE TWO?"
+ },
+ {
+  "i": 115,
+  "ptr": 6422,
+  "w": 18,
+  "h": 4,
+  "text": "NOW WE ALL SMELL\nLIKE SWAMP."
+ },
+ {
+  "i": 116,
+  "ptr": 6453,
+  "w": 13,
+  "h": 4,
+  "text": "BOY, DO WE\nNEED BATHS!"
+ },
+ {
+  "i": 117,
+  "ptr": 6478,
+  "w": 17,
+  "h": 5,
+  "text": "BATHS! VIKINGS\nDON'T NEED NO\nSTINKING BATHS!"
+ },
+ {
+  "i": 118,
+  "ptr": 6525,
+  "w": 18,
+  "h": 5,
+  "text": "WE DON'T NEED NO\nSTINKING VIKINGS\nEITHER!"
+ },
+ {
+  "i": 119,
+  "ptr": 6569,
+  "w": 19,
+  "h": 5,
+  "text": "MAYBE THERE'S\nA DIFFERENT WAY\nTO GET BACK HOME."
+ },
+ {
+  "i": 120,
+  "ptr": 6619,
+  "w": 16,
+  "h": 4,
+  "text": "GOT ANY IDEAS,\nOLAF?"
+ },
+ {
+  "i": 121,
+  "ptr": 6642,
+  "w": 13,
+  "h": 3,
+  "text": "UH, WELL..."
+ },
+ {
+  "i": 122,
+  "ptr": 6656,
+  "w": 12,
+  "h": 3,
+  "text": "TIME'S UP."
+ },
+ {
+  "i": 123,
+  "ptr": 6669,
+  "w": 19,
+  "h": 3,
+  "text": "NOW WHERE ARE WE?"
+ },
+ {
+  "i": 124,
+  "ptr": 6689,
+  "w": 16,
+  "h": 4,
+  "text": "LOOKS LIKE THE\nDESERT."
+ },
+ {
+  "i": 125,
+  "ptr": 6714,
+  "w": 17,
+  "h": 4,
+  "text": "I CAN SEE THAT,\nSHERLOCK."
+ },
+ {
+  "i": 126,
+  "ptr": 6742,
+  "w": 19,
+  "h": 4,
+  "text": "I THINK I'M GOING\nTO BE SICK."
+ },
+ {
+  "i": 127,
+  "ptr": 6774,
+  "w": 20,
+  "h": 4,
+  "text": "BOY THESE MONSTERS\nARE GETTING TOUGH."
+ },
+ {
+  "i": 128,
+  "ptr": 6814,
+  "w": 19,
+  "h": 4,
+  "text": "DON'T WORRY GUYS,\nI'LL PROTECT YOU."
+ },
+ {
+  "i": 129,
+  "ptr": 6852,
+  "w": 17,
+  "h": 3,
+  "text": "WE'RE DOOMED..."
+ },
+ {
+  "i": 130,
+  "ptr": 6870,
+  "w": 16,
+  "h": 3,
+  "text": "GAME OVER MAN!"
+ },
+ {
+  "i": 131,
+  "ptr": 6887,
+  "w": 20,
+  "h": 4,
+  "text": "WHAT IS IT WITH\nTHESE EGYPTIANS..."
+ },
+ {
+  "i": 132,
+  "ptr": 6924,
+  "w": 17,
+  "h": 4,
+  "text": "THEIR TOMBS ARE\nFULL OF TRAPS."
+ },
+ {
+  "i": 133,
+  "ptr": 6957,
+  "w": 17,
+  "h": 5,
+  "text": "WHY CAN'T THEY\nJUST KEEP THEIR\nBIG TRAPS SHUT!"
+ },
+ {
+  "i": 134,
+  "ptr": 7006,
+  "w": 21,
+  "h": 4,
+  "text": "I WONDER IF THIS\nIS KING TUT'S TOMB."
+ },
+ {
+  "i": 135,
+  "ptr": 7045,
+  "w": 17,
+  "h": 3,
+  "text": "WHO'S KING TUT?"
+ },
+ {
+  "i": 136,
+  "ptr": 7063,
+  "w": 16,
+  "h": 5,
+  "text": "SOME GUY STEVE\nMARTIN WROTE\nA SONG ABOUT."
+ },
+ {
+  "i": 137,
+  "ptr": 7107,
+  "w": 19,
+  "h": 3,
+  "text": "OH, THAT'S RIGHT."
+ },
+ {
+  "i": 138,
+  "ptr": 7127,
+  "w": 18,
+  "h": 3,
+  "text": "GREAT WORK GUYS."
+ },
+ {
+  "i": 139,
+  "ptr": 7146,
+  "w": 22,
+  "h": 3,
+  "text": "YEAH, WHAT TEAMWORK!"
+ },
+ {
+  "i": 140,
+  "ptr": 7169,
+  "w": 18,
+  "h": 5,
+  "text": "MAYBE WE'LL GET\nCALLED UP TO THE\nMAJORS..."
+ },
+ {
+  "i": 141,
+  "ptr": 7214,
+  "w": 16,
+  "h": 4,
+  "text": "DECENT FLYING,\nOLAF."
+ },
+ {
+  "i": 142,
+  "ptr": 7237,
+  "w": 17,
+  "h": 4,
+  "text": "GREAT FIGHTING,\nBALEOG."
+ },
+ {
+  "i": 143,
+  "ptr": 7263,
+  "w": 20,
+  "h": 5,
+  "text": "YEAH, AND NO\nONE MADE ANY\nDUMB MUMMY JOKES!"
+ },
+ {
+  "i": 144,
+  "ptr": 7309,
+  "w": 20,
+  "h": 5,
+  "text": "WELL, WHERE DO YOU\nTHINK WE'LL END UP\nTHIS TIME?"
+ },
+ {
+  "i": 145,
+  "ptr": 7360,
+  "w": 15,
+  "h": 5,
+  "text": "OH, SOMEWHERE\nSURROUNDED BY\nMONSTERS..."
+ },
+ {
+  "i": 146,
+  "ptr": 7402,
+  "w": 22,
+  "h": 4,
+  "text": "WITH NASTY TRAPS\nEVERY WHERE WE TURN."
+ },
+ {
+  "i": 147,
+  "ptr": 7442,
+  "w": 18,
+  "h": 4,
+  "text": "YEP, THAT SOUNDS\nABOUT RIGHT."
+ },
+ {
+  "i": 148,
+  "ptr": 7474,
+  "w": 20,
+  "h": 4,
+  "text": "WHAT DO YOU THINK\nTHOSE POUNDERS DO?"
+ },
+ {
+  "i": 149,
+  "ptr": 7513,
+  "w": 21,
+  "h": 5,
+  "text": "SMASH BIG FAT\nVIKINGS INTO LITTLE\nFLAT VIKINGS?"
+ },
+ {
+  "i": 150,
+  "ptr": 7563,
+  "w": 18,
+  "h": 4,
+  "text": "LET'S TRY NOT TO\nFIND OUT..."
+ },
+ {
+  "i": 151,
+  "ptr": 7594,
+  "w": 15,
+  "h": 5,
+  "text": "ERIK, WHY ARE\nYOU ALWAYS IN\nSUCH A HURRY?"
+ },
+ {
+  "i": 152,
+  "ptr": 7638,
+  "w": 16,
+  "h": 5,
+  "text": "YOU NEED TO\nRELAX A LITTLE\nSOMETIMES."
+ },
+ {
+  "i": 153,
+  "ptr": 7678,
+  "w": 17,
+  "h": 6,
+  "text": "MY FATHER WAS A\nRUNNER AND SO\nWAS HIS FATHER\nBEFORE HIM."
+ },
+ {
+  "i": 154,
+  "ptr": 7737,
+  "w": 17,
+  "h": 5,
+  "text": "I GUESS YOU\nCOULD SAY I WAS\nBORN TO RUN."
+ },
+ {
+  "i": 155,
+  "ptr": 7780,
+  "w": 15,
+  "h": 4,
+  "text": "OH ERIK, THAT\nWAS BAD."
+ },
+ {
+  "i": 156,
+  "ptr": 7805,
+  "w": 21,
+  "h": 5,
+  "text": "IF TOMATOR IS SO\nEVIL, THEN WHY DOES\nHE LEAVE THESE..."
+ },
+ {
+  "i": 157,
+  "ptr": 7862,
+  "w": 20,
+  "h": 4,
+  "text": "BOMBS AND MACHINES\nFOR US TO USE?"
+ },
+ {
+  "i": 158,
+  "ptr": 7898,
+  "w": 20,
+  "h": 5,
+  "text": "NO ONE ELSE IN\nVIDEOGAMES WONDERS\nABOUT THAT STUFF."
+ },
+ {
+  "i": 159,
+  "ptr": 7952,
+  "w": 21,
+  "h": 4,
+  "text": "YEAH, QUIT BEING A\nTROUBLEMAKER, OLAF."
+ },
+ {
+  "i": 160,
+  "ptr": 7993,
+  "w": 20,
+  "h": 5,
+  "text": "SOMETIMES I GET SO\nMAD, I WANT TO\nCLOBBER SOMETHING."
+ },
+ {
+  "i": 161,
+  "ptr": 8048,
+  "w": 15,
+  "h": 5,
+  "text": "BUT YOU DO\nTHAT ALL THE\nTIME, BALEOG."
+ },
+ {
+  "i": 162,
+  "ptr": 8088,
+  "w": 7,
+  "h": 3,
+  "text": "I DO?"
+ },
+ {
+  "i": 163,
+  "ptr": 8096,
+  "w": 15,
+  "h": 3,
+  "text": "ALL THE TIME."
+ },
+ {
+  "i": 164,
+  "ptr": 8112,
+  "w": 17,
+  "h": 3,
+  "text": "OH YEAH, RIGHT."
+ },
+ {
+  "i": 165,
+  "ptr": 8130,
+  "w": 23,
+  "h": 5,
+  "text": "DO YOU GUYS HAVE\nTHE FEELING THAT\nWE ARE BEING WATCHED?"
+ },
+ {
+  "i": 166,
+  "ptr": 8188,
+  "w": 24,
+  "h": 5,
+  "text": "YEAH, ALMOST LIKE\nSOMEONE IS CONTROLLING\nOUR EVERY MOVE."
+ },
+ {
+  "i": 167,
+  "ptr": 8247,
+  "w": 18,
+  "h": 4,
+  "text": "YOU TWO ARE JUST\nPARANOID."
+ },
+ {
+  "i": 168,
+  "ptr": 8276,
+  "w": 22,
+  "h": 5,
+  "text": "OH YEAH, WELL WHO IS\nTHAT PERSON STARING\nAT US RIGHT NOW?"
+ },
+ {
+  "i": 169,
+  "ptr": 8336,
+  "w": 19,
+  "h": 4,
+  "text": "HE'S RIGHT! LET'S\nGET OUT OF HERE!"
+ },
+ {
+  "i": 170,
+  "ptr": 8373,
+  "w": 18,
+  "h": 4,
+  "text": "CAN'T YOU GUYS\nWALK ANY FASTER?"
+ },
+ {
+  "i": 171,
+  "ptr": 8407,
+  "w": 21,
+  "h": 5,
+  "text": "I'D LIKE TO SEE\nYOU LUG THIS SHIELD\nAROUND FOR AWHILE."
+ },
+ {
+  "i": 172,
+  "ptr": 8464,
+  "w": 23,
+  "h": 5,
+  "text": "YEAH, OR A BROADSWORD\nAND A LIFETIME SUPPLY\nOF ARROWS."
+ },
+ {
+  "i": 173,
+  "ptr": 8521,
+  "w": 16,
+  "h": 4,
+  "text": "WE'LL SEE HOW\nFAST YOU WALK."
+ },
+ {
+  "i": 174,
+  "ptr": 8552,
+  "w": 16,
+  "h": 4,
+  "text": "UH OH. I THINK\nI HIT A NERVE."
+ },
+ {
+  "i": 175,
+  "ptr": 8584,
+  "w": 17,
+  "h": 4,
+  "text": "YOU GUYS JUST\nTAKE YOUR TIME."
+ },
+ {
+  "i": 176,
+  "ptr": 8616,
+  "w": 17,
+  "h": 3,
+  "text": "THAT'S BETTER."
+ },
+ {
+  "i": 177,
+  "ptr": 8633,
+  "w": 19,
+  "h": 3,
+  "text": "WHAT A CHALLENGE!"
+ },
+ {
+  "i": 178,
+  "ptr": 8653,
+  "w": 18,
+  "h": 4,
+  "text": "HOW ON EARTH DID\nWE SURVIVE THAT?"
+ },
+ {
+  "i": 179,
+  "ptr": 8689,
+  "w": 18,
+  "h": 5,
+  "text": "WE HAVE GUTS AND\nCOURAGE. WE'RE\nVIKING HEROES!"
+ },
+ {
+  "i": 180,
+  "ptr": 8738,
+  "w": 13,
+  "h": 4,
+  "text": "AND THEN WE\nWOKE UP."
+ },
+ {
+  "i": 181,
+  "ptr": 8761,
+  "w": 18,
+  "h": 5,
+  "text": "MONSTERS! TRAPS!\nIS ANY REWARD\nWORTH THIS?"
+ },
+ {
+  "i": 182,
+  "ptr": 8806,
+  "w": 21,
+  "h": 6,
+  "text": "IF WE MAKE IT BACK,\nMAYBE THEY'LL MAKE\nUS INTO A SATURDAY\nMORNING CARTOON."
+ },
+ {
+  "i": 183,
+  "ptr": 8883,
+  "w": 19,
+  "h": 4,
+  "text": "WOW, I WONDER HOW\nI'D LOOK ON TV..."
+ },
+ {
+  "i": 184,
+  "ptr": 8921,
+  "w": 22,
+  "h": 4,
+  "text": "I WONDER WHERE WE'LL\nEND UP THIS TIME."
+ },
+ {
+  "i": 185,
+  "ptr": 8962,
+  "w": 18,
+  "h": 4,
+  "text": "MAYBE IT'LL TAKE\nUS HOME."
+ },
+ {
+  "i": 186,
+  "ptr": 8990,
+  "w": 18,
+  "h": 5,
+  "text": "OR MAYBE IT WILL\nDROP US IN A\nBLACK ABYSS..."
+ },
+ {
+  "i": 187,
+  "ptr": 9037,
+  "w": 22,
+  "h": 6,
+  "text": "WHERE WE WILL FALL\nENDLESSLY AND NO ONE\nWILL HEAR US CALLING\nOUT FOR HELP..."
+ },
+ {
+  "i": 188,
+  "ptr": 9116,
+  "w": 13,
+  "h": 3,
+  "text": "...FOREVER."
+ },
+ {
+  "i": 189,
+  "ptr": 9130,
+  "w": 15,
+  "h": 4,
+  "text": "OLAF. ALWAYS\nTHE OPTIMIST."
+ },
+ {
+  "i": 190,
+  "ptr": 9159,
+  "w": 17,
+  "h": 5,
+  "text": "I DON'T THINK\nWE'RE IN KANSAS\nANYMORE, TOTO."
+ },
+ {
+  "i": 191,
+  "ptr": 9206,
+  "w": 17,
+  "h": 3,
+  "text": "WHERE'S KANSAS?"
+ },
+ {
+  "i": 192,
+  "ptr": 9224,
+  "w": 17,
+  "h": 3,
+  "text": "AND WHO'S TOTO?"
+ },
+ {
+  "i": 193,
+  "ptr": 9242,
+  "w": 18,
+  "h": 4,
+  "text": "THOSE PUMPS MAKE\nME DIZZY."
+ },
+ {
+  "i": 194,
+  "ptr": 9271,
+  "w": 17,
+  "h": 4,
+  "text": "THEY MAKE YOU\nLOOK LIKE OLAF."
+ },
+ {
+  "i": 195,
+  "ptr": 9303,
+  "w": 18,
+  "h": 5,
+  "text": "AND THEY MAKE\nYOUR VOICE SOUND\nFUNNY TOO."
+ },
+ {
+  "i": 196,
+  "ptr": 9347,
+  "w": 18,
+  "h": 4,
+  "text": "WOW! LOOK AT ALL\nTHIS CANDY!"
+ },
+ {
+  "i": 197,
+  "ptr": 9378,
+  "w": 16,
+  "h": 4,
+  "text": "OLAF, PUT THAT\nCANDY BACK."
+ },
+ {
+  "i": 198,
+  "ptr": 9407,
+  "w": 19,
+  "h": 4,
+  "text": "COME ON GUYS,\nIT'S FOR MY KIDS."
+ },
+ {
+  "i": 199,
+  "ptr": 9441,
+  "w": 14,
+  "h": 3,
+  "text": "YEAH, RIGHT."
+ },
+ {
+  "i": 200,
+  "ptr": 9456,
+  "w": 21,
+  "h": 5,
+  "text": "OH NO, I JUST\nTHOUGHT OF\nSOMETHING TERRIBLE."
+ },
+ {
+  "i": 201,
+  "ptr": 9503,
+  "w": 23,
+  "h": 5,
+  "text": "HOW CAN YOU THINK\nOF SOMETHING TERRIBLE\nIN A PLACE LIKE THIS?"
+ },
+ {
+  "i": 202,
+  "ptr": 9567,
+  "w": 21,
+  "h": 5,
+  "text": "IF WE DON'T GET\nHOME SOON, WE WILL\nBE LATE FOR SUPPER!"
+ },
+ {
+  "i": 203,
+  "ptr": 9624,
+  "w": 18,
+  "h": 5,
+  "text": "THE WALLPAPER IN\nHERE IS AWFULLY\nSTRANGE."
+ },
+ {
+  "i": 204,
+  "ptr": 9668,
+  "w": 13,
+  "h": 4,
+  "text": "WHAT DO YOU\nTHINK OLAF?"
+ },
+ {
+  "i": 205,
+  "ptr": 9694,
+  "w": 20,
+  "h": 4,
+  "text": "ANYONE FOR A QUICK\nGAME OF CHECKERS?"
+ },
+ {
+  "i": 206,
+  "ptr": 9733,
+  "w": 17,
+  "h": 5,
+  "text": "I DON'T KNOW IF\nWE CAN MAKE IT\nMUCH FURTHER."
+ },
+ {
+  "i": 207,
+  "ptr": 9780,
+  "w": 19,
+  "h": 4,
+  "text": "OF COURSE WE CAN.\nWE'RE VIKINGS!"
+ },
+ {
+  "i": 208,
+  "ptr": 9815,
+  "w": 16,
+  "h": 4,
+  "text": "THANKS, I FEEL\nBETTER NOW."
+ },
+ {
+  "i": 209,
+  "ptr": 9844,
+  "w": 23,
+  "h": 4,
+  "text": "WAIT, LET'S JUST REST\nHERE FOR A WHILE."
+ },
+ {
+  "i": 210,
+  "ptr": 9886,
+  "w": 18,
+  "h": 5,
+  "text": "HE JUST WANTS TO\nSTUFF HIS FACE\nWITH CANDY."
+ },
+ {
+  "i": 211,
+  "ptr": 9932,
+  "w": 21,
+  "h": 5,
+  "text": "LET'S NOT SLOW DOWN\nNOW. I KNOW WE'RE\nGETTING CLOSE."
+ },
+ {
+  "i": 212,
+  "ptr": 9987,
+  "w": 20,
+  "h": 4,
+  "text": "WELL, WE'RE MAKING\nPROGRESS..."
+ },
+ {
+  "i": 213,
+  "ptr": 10020,
+  "w": 21,
+  "h": 5,
+  "text": "I'M SICK OF SPIKES,\nI WANT MONSTERS! I\nWANT MONSTERS!"
+ },
+ {
+  "i": 214,
+  "ptr": 10076,
+  "w": 15,
+  "h": 3,
+  "text": "STOP WHINING!"
+ },
+ {
+  "i": 215,
+  "ptr": 10092,
+  "w": 21,
+  "h": 5,
+  "text": "AND I THOUGHT THOSE\nWALLS WERE GIVING\nME A HEADACHE!"
+ },
+ {
+  "i": 216,
+  "ptr": 10147,
+  "w": 12,
+  "h": 4,
+  "text": "WHEW, THAT\nWAS CLOSE!"
+ },
+ {
+  "i": 217,
+  "ptr": 10171,
+  "w": 17,
+  "h": 5,
+  "text": "YEAH, BUT WE'RE\nSAFE NOW. NICE\nWORK MEN!"
+ },
+ {
+  "i": 218,
+  "ptr": 10214,
+  "w": 15,
+  "h": 4,
+  "text": "WELL, HERE WE\nGO AGAIN..."
+ },
+ {
+  "i": 219,
+  "ptr": 10242,
+  "w": 22,
+  "h": 3,
+  "text": "WE'RE BACK IN SPACE!"
+ },
+ {
+  "i": 220,
+  "ptr": 10265,
+  "w": 25,
+  "h": 4,
+  "text": "GOOD, NOW LET'S FIND\nTHIS TOMATOR CHARACTER."
+ },
+ {
+  "i": 221,
+  "ptr": 10312,
+  "w": 21,
+  "h": 4,
+  "text": "YEAH, IF HE DOESN'T\nFIND US FIRST."
+ },
+ {
+  "i": 222,
+  "ptr": 10349,
+  "w": 17,
+  "h": 4,
+  "text": "SO YOU'RE BACK\nABOARD MY SHIP."
+ },
+ {
+  "i": 223,
+  "ptr": 10382,
+  "w": 16,
+  "h": 5,
+  "text": "WHY DON'T YOU\nLET US GO BACK\nHOME, TOMATOR?"
+ },
+ {
+  "i": 224,
+  "ptr": 10428,
+  "w": 16,
+  "h": 5,
+  "text": "SILLY VIKINGS,\nDON'T YOU KNOW\nTHAT..."
+ },
+ {
+  "i": 225,
+  "ptr": 10468,
+  "w": 21,
+  "h": 5,
+  "text": "ALL EVIL SPACE\nALIENS NEED\nINNOCENT PRISONERS!"
+ },
+ {
+  "i": 226,
+  "ptr": 10517,
+  "w": 16,
+  "h": 5,
+  "text": "NOW I HAVE YOU\nRIGHT WHERE I\nWANT YOU!"
+ },
+ {
+  "i": 227,
+  "ptr": 10558,
+  "w": 15,
+  "h": 4,
+  "text": "STANDING NEXT\nTO THE EXIT?"
+ },
+ {
+  "i": 228,
+  "ptr": 10587,
+  "w": 18,
+  "h": 4,
+  "text": "QUICK, LET'S\nGET OUT OF HERE."
+ },
+ {
+  "i": 229,
+  "ptr": 10619,
+  "w": 19,
+  "h": 5,
+  "text": "WAIT, THAT'S\nEXACTLY WHAT HE\nEXPECTS US TO DO."
+ },
+ {
+  "i": 230,
+  "ptr": 10668,
+  "w": 20,
+  "h": 5,
+  "text": "..OR MAYBE THAT'S\nWHAT HE WANTS US\nTO THINK HE WANTS."
+ },
+ {
+  "i": 231,
+  "ptr": 10724,
+  "w": 21,
+  "h": 4,
+  "text": "NOW I'M CONFUSED...\nLET'S JUST GO."
+ },
+ {
+  "i": 232,
+  "ptr": 10761,
+  "w": 23,
+  "h": 3,
+  "text": "WELCOME TO THE ARENA!"
+ },
+ {
+  "i": 233,
+  "ptr": 10785,
+  "w": 25,
+  "h": 6,
+  "text": "YOU THREE HAVE SURVIVED\nLONGER THAN I EXPECTED,\nBUT PERSISTENCE ALONE\nWILL NOT SAVE YOU NOW."
+ },
+ {
+  "i": 234,
+  "ptr": 10880,
+  "w": 24,
+  "h": 4,
+  "text": "FAREWELL MY FRIENDS...\n...HA HA HA!!!"
+ },
+ {
+  "i": 235,
+  "ptr": 10920,
+  "w": 20,
+  "h": 5,
+  "text": "HEY, TOMATOR, WHY\nDON'T YOU COME OUT\nAND SHOW YOURSELF?"
+ },
+ {
+  "i": 236,
+  "ptr": 10978,
+  "w": 18,
+  "h": 3,
+  "text": "SHUT UP, BALEOG!"
+ },
+ {
+  "i": 237,
+  "ptr": 10997,
+  "w": 24,
+  "h": 5,
+  "text": "WHAT ARE YOU TRYING\nTO DO, GET US CAPTURED\nRIGHT THIS SECOND?"
+ },
+ {
+  "i": 238,
+  "ptr": 11061,
+  "w": 19,
+  "h": 5,
+  "text": "NO, BUT THIS GUY\nIS REALLY GETTING\nON MY NERVES."
+ },
+ {
+  "i": 239,
+  "ptr": 11112,
+  "w": 17,
+  "h": 4,
+  "text": "ENOUGH CHATTER,\nLET'S MOVE OUT!"
+ },
+ {
+  "i": 240,
+  "ptr": 11146,
+  "w": 23,
+  "h": 3,
+  "text": "NOT SO FAST, VIKINGS."
+ },
+ {
+  "i": 241,
+  "ptr": 11170,
+  "w": 17,
+  "h": 4,
+  "text": "WE'RE READY FOR\nYOU, TOMATOR."
+ },
+ {
+  "i": 242,
+  "ptr": 11202,
+  "w": 20,
+  "h": 4,
+  "text": "WHAT'S THE MATTER?\nARE YOU AFRAID?"
+ },
+ {
+  "i": 243,
+  "ptr": 11239,
+  "w": 24,
+  "h": 5,
+  "text": "BALEOG, I REALLY THINK\nYOU NEED TO RETHINK\nYOUR STRATEGY."
+ },
+ {
+  "i": 244,
+  "ptr": 11299,
+  "w": 24,
+  "h": 4,
+  "text": "COME ON OLAF, WHO DOES\nTHIS GUY THINK HE IS?"
+ },
+ {
+  "i": 245,
+  "ptr": 11346,
+  "w": 23,
+  "h": 5,
+  "text": "I AM TOMATOR, SUPREME\nRULER OF CROUTON, AND\nYOU ARE MY PRISONERS!"
+ },
+ {
+  "i": 246,
+  "ptr": 11414,
+  "w": 22,
+  "h": 3,
+  "text": "YOU WILL NOT ESCAPE."
+ },
+ {
+  "i": 247,
+  "ptr": 11437,
+  "w": 24,
+  "h": 4,
+  "text": "AND WHERE DO YOU THINK\nYOU ARE GOING?"
+ },
+ {
+  "i": 248,
+  "ptr": 11477,
+  "w": 15,
+  "h": 4,
+  "text": "OUT THE EXIT,\nTOMATO HEAD!"
+ },
+ {
+  "i": 249,
+  "ptr": 11506,
+  "w": 15,
+  "h": 5,
+  "text": "PLEASE LET US\nGO BACK HOME,\nMR. TOMATOR."
+ },
+ {
+  "i": 250,
+  "ptr": 11549,
+  "w": 17,
+  "h": 5,
+  "text": "BUT YOU HAVEN'T\nEVEN SEEN THE\nBALLROOM YET!"
+ },
+ {
+  "i": 251,
+  "ptr": 11595,
+  "w": 18,
+  "h": 4,
+  "text": "YOU TWO OUGHT TO\nBE DIPLOMATS."
+ },
+ {
+  "i": 252,
+  "ptr": 11628,
+  "w": 13,
+  "h": 3,
+  "text": "VERY FUNNY."
+ },
+ {
+  "i": 253,
+  "ptr": 11642,
+  "w": 21,
+  "h": 5,
+  "text": "SHHH. QUICK, LET'S\nHURRY OUT THE EXIT\nBEFORE HE FINDS US."
+ },
+ {
+  "i": 254,
+  "ptr": 11702,
+  "w": null,
+  "h": null,
+  "text": "NEW GAME"
+ },
+ {
+  "i": 255,
+  "ptr": 11711,
+  "w": null,
+  "h": null,
+  "text": "PASSWORD"
+ },
+ {
+  "i": 256,
+  "ptr": 11720,
+  "w": null,
+  "h": null,
+  "text": "                "
+ },
+ {
+  "i": 257,
+  "ptr": 11737,
+  "w": null,
+  "h": null,
+  "text": "GAME OVER"
+ },
+ {
+  "i": 258,
+  "ptr": 11747,
+  "w": null,
+  "h": null,
+  "text": "OPTIONS"
+ },
+ {
+  "i": 259,
+  "ptr": 11755,
+  "w": null,
+  "h": null,
+  "text": "PLAYERS "
+ },
+ {
+  "i": 260,
+  "ptr": 11809,
+  "w": null,
+  "h": null,
+  "text": "ONE     "
+ },
+ {
+  "i": 261,
+  "ptr": 11818,
+  "w": null,
+  "h": null,
+  "text": "TWO     "
+ },
+ {
+  "i": 262,
+  "ptr": 11764,
+  "w": null,
+  "h": null,
+  "text": "MUSIC   "
+ },
+ {
+  "i": 263,
+  "ptr": 11773,
+  "w": null,
+  "h": null,
+  "text": "SOUND   "
+ },
+ {
+  "i": 264,
+  "ptr": 11782,
+  "w": null,
+  "h": null,
+  "text": "STEREO  "
+ },
+ {
+  "i": 265,
+  "ptr": 11836,
+  "w": null,
+  "h": null,
+  "text": "ON      "
+ },
+ {
+  "i": 266,
+  "ptr": 11845,
+  "w": null,
+  "h": null,
+  "text": "OFF     "
+ },
+ {
+  "i": 267,
+  "ptr": 11800,
+  "w": null,
+  "h": null,
+  "text": "EXIT    "
+ },
+ {
+  "i": 268,
+  "ptr": 11863,
+  "w": 10,
+  "h": 4,
+  "text": "PASSWORD\n        "
+ },
+ {
+  "i": 269,
+  "ptr": 11883,
+  "w": null,
+  "h": null,
+  "text": "INVALID PASSWORD"
+ },
+ {
+  "i": 270,
+  "ptr": 11900,
+  "w": 12,
+  "h": 5,
+  "text": "TRY AGAIN?\n          \n          "
+ },
+ {
+  "i": 271,
+  "ptr": 11935,
+  "w": 25,
+  "h": 4,
+  "text": "GRRR...THE THREE OF YOU\nHAVE BEEN A CONSTANT..."
+ },
+ {
+  "i": 272,
+  "ptr": 11985,
+  "w": 23,
+  "h": 4,
+  "text": "HEADACHE EVER SINCE I\nBROUGHT YOU ABOARD!"
+ },
+ {
+  "i": 273,
+  "ptr": 12029,
+  "w": 19,
+  "h": 4,
+  "text": "DOES THAT MEAN WE\nCAN GO HOME NOW?"
+ },
+ {
+  "i": 274,
+  "ptr": 12066,
+  "w": 15,
+  "h": 3,
+  "text": "UMMM....OKAY."
+ },
+ {
+  "i": 275,
+  "ptr": 12082,
+  "w": 8,
+  "h": 3,
+  "text": "NOT!!!"
+ },
+ {
+  "i": 276,
+  "ptr": 12091,
+  "w": 20,
+  "h": 5,
+  "text": "NOW THIS IS AN\nALIEN THAT I CAN'T\nWAIT TO BASH!!!"
+ },
+ {
+  "i": 277,
+  "ptr": 12143,
+  "w": 19,
+  "h": 6,
+  "text": "WELL, I'D LOVE\nTO CHAT, BUT I'VE\nGOT MEAN AND EVIL\nTHINGS TO DO..."
+ },
+ {
+  "i": 278,
+  "ptr": 12212,
+  "w": 13,
+  "h": 4,
+  "text": "HAVE FUN.\nHA HA HA!!!"
+ },
+ {
+  "i": 279,
+  "ptr": 12236,
+  "w": 16,
+  "h": 4,
+  "text": "NOT THIS LEVEL\nAGAIN!"
+ },
+ {
+  "i": 280,
+  "ptr": 12260,
+  "w": 16,
+  "h": 6,
+  "text": "NOW LOOK HERE,\nPLAYER, WE'RE\nTIRED OF THIS\nLEVEL."
+ },
+ {
+  "i": 281,
+  "ptr": 12312,
+  "w": 19,
+  "h": 4,
+  "text": "NO MORE MISTAKES,\nOKAY!"
+ },
+ {
+  "i": 282,
+  "ptr": 12338,
+  "w": 21,
+  "h": 6,
+  "text": "DON'T BE SO HARD ON\nTHE PLAYER, BALEOG.\nHUMAN BEINGS ARE\nVERY SENSITIVE."
+ },
+ {
+  "i": 283,
+  "ptr": 12413,
+  "w": 22,
+  "h": 4,
+  "text": "WELL, IF AT FIRST\nYOU DON'T SUCCEED..."
+ },
+ {
+  "i": 284,
+  "ptr": 12454,
+  "w": 19,
+  "h": 4,
+  "text": "BE HAPPY YOU HAVE\nANOTHER CHANCE?"
+ },
+ {
+  "i": 285,
+  "ptr": 12490,
+  "w": 15,
+  "h": 4,
+  "text": "BALEOG, THAT\nWAS PROFOUND."
+ },
+ {
+  "i": 286,
+  "ptr": 12519,
+  "w": 23,
+  "h": 5,
+  "text": "WE'RE BACK WHERE WE\nSTARTED!  WE'VE BEEN\nGIVEN ANOTHER CHANCE!"
+ },
+ {
+  "i": 287,
+  "ptr": 12584,
+  "w": 15,
+  "h": 4,
+  "text": "MORE MONSTERS\nTO FIGHT!"
+ },
+ {
+  "i": 288,
+  "ptr": 12610,
+  "w": 16,
+  "h": 4,
+  "text": "MORE TREASURES\nTO FIND!"
+ },
+ {
+  "i": 289,
+  "ptr": 12636,
+  "w": 22,
+  "h": 5,
+  "text": "MORE FOOD!  I'M\nSTARVING, LET'S FIND\nSOMETHING TO EAT!"
+ },
+ {
+  "i": 290,
+  "ptr": 12693,
+  "w": 20,
+  "h": 5,
+  "text": "NOT THIS PLACE\nAGAIN?  FAILURE IS\nSO DISCOURAGING!"
+ },
+ {
+  "i": 291,
+  "ptr": 12746,
+  "w": 17,
+  "h": 5,
+  "text": "CHEER UP, ERIK.\nMAYBE THIS TIME\nWE WON'T FAIL."
+ },
+ {
+  "i": 292,
+  "ptr": 12795,
+  "w": 19,
+  "h": 5,
+  "text": "MAYBE WE CAN JUST\nSETTLE FOR SOME\nMINOR SETBACKS."
+ },
+ {
+  "i": 293,
+  "ptr": 12847,
+  "w": 14,
+  "h": 3,
+  "text": "WHAT A DEAL."
+ },
+ {
+  "i": 294,
+  "ptr": 12862,
+  "w": 19,
+  "h": 4,
+  "text": "HEY!  HAVEN'T WE\nBEEN HERE BEFORE?"
+ },
+ {
+  "i": 295,
+  "ptr": 12899,
+  "w": 25,
+  "h": 6,
+  "text": "OF COURSE WE HAVE!\nAND WE'D BETTER IMPROVE\nOR WE'RE NOT GOING\nTO GET OUT OF HERE."
+ },
+ {
+  "i": 296,
+  "ptr": 12983,
+  "w": 21,
+  "h": 7,
+  "text": "IF THEY'D HAVE MORE\nMONSTERS FOR ME\nTO CLOBBER, THINGS\nWOULD BE GOING A\nLOT BETTER!"
+ },
+ {
+  "i": 297,
+  "ptr": 13069,
+  "w": 16,
+  "h": 3,
+  "text": "WHAT HAPPENED?"
+ },
+ {
+  "i": 298,
+  "ptr": 13086,
+  "w": 18,
+  "h": 3,
+  "text": "WE FAILED AGAIN."
+ },
+ {
+  "i": 299,
+  "ptr": 13105,
+  "w": 16,
+  "h": 4,
+  "text": "I HATE IT WHEN\nTHAT HAPPENS."
+ },
+ {
+  "i": 300,
+  "ptr": 13136,
+  "w": 23,
+  "h": 5,
+  "text": "IS IT MY IMAGINATION,\nOR HAVE WE BEEN\nHERE BEFORE?"
+ },
+ {
+  "i": 301,
+  "ptr": 13189,
+  "w": 25,
+  "h": 4,
+  "text": "I'M GETTING RATHER\nATTACHED TO THIS PLACE."
+ },
+ {
+  "i": 302,
+  "ptr": 13234,
+  "w": 18,
+  "h": 4,
+  "text": "THIS PLACE LOOKS\nFAMILIAR."
+ },
+ {
+  "i": 303,
+  "ptr": 13263,
+  "w": 16,
+  "h": 5,
+  "text": "YEAH, ITS LIKE\nWE'VE ALREADY\nBEEN HERE."
+ },
+ {
+  "i": 304,
+  "ptr": 13305,
+  "w": 18,
+  "h": 5,
+  "text": "REPETITION CAN\nMAKE YOUR MEMORY\nA LITTLE FUZZY."
+ },
+ {
+  "i": 305,
+  "ptr": 13355,
+  "w": 21,
+  "h": 5,
+  "text": "WE'VE COME BACK\nHERE SO MANY TIMES!\nTHIS IS A DISGRACE."
+ },
+ {
+  "i": 306,
+  "ptr": 13413,
+  "w": 21,
+  "h": 5,
+  "text": "BUT WE'VE CLOBBERED\nLOTS OF MONSTERS,\nHAVEN'T WE?"
+ },
+ {
+  "i": 307,
+  "ptr": 13465,
+  "w": 24,
+  "h": 4,
+  "text": "GIVE US A BREAK, ERIK.\nTHIS IS A TOUGH LEVEL!"
+ },
+ {
+  "i": 308,
+  "ptr": 13513,
+  "w": 18,
+  "h": 5,
+  "text": "I HAVE A STRANGE\nFEELING OF\nDEJA VU."
+ },
+ {
+  "i": 309,
+  "ptr": 13552,
+  "w": 10,
+  "h": 3,
+  "text": "DEJA VU?"
+ },
+ {
+  "i": 310,
+  "ptr": 13563,
+  "w": 18,
+  "h": 5,
+  "text": "THAT I'VE BEEN\nHERE BEFORE IN\nA PREVIOUS LIFE."
+ },
+ {
+  "i": 311,
+  "ptr": 13612,
+  "w": 17,
+  "h": 5,
+  "text": "ACTUALLY, WE'VE\nBEEN HERE LOTS\nOF TIMES."
+ },
+ {
+  "i": 312,
+  "ptr": 13655,
+  "w": 13,
+  "h": 4,
+  "text": "THAT WOULD\nEXPLAIN IT."
+ },
+ {
+  "i": 313,
+  "ptr": 13680,
+  "w": 18,
+  "h": 6,
+  "text": "NO, NOT AGAIN!\nDO YOU REALIZE\nHOW LONG WE'VE\nBEEN STUCK HERE?"
+ },
+ {
+  "i": 314,
+  "ptr": 13744,
+  "w": 18,
+  "h": 4,
+  "text": "MAYBE WE SHOULD\nBUY A HOME HERE."
+ },
+ {
+  "i": 315,
+  "ptr": 13779,
+  "w": 20,
+  "h": 5,
+  "text": "THIS DOESN'T LOOK\nLIKE A PLACE WHERE\nI'D WANT TO LIVE!"
+ },
+ {
+  "i": 316,
+  "ptr": 13836,
+  "w": 15,
+  "h": 4,
+  "text": "IT WAS ONLY A\nSUGGESTION."
+ },
+ {
+  "i": 317,
+  "ptr": 13864,
+  "w": 25,
+  "h": 6,
+  "text": "I'M TIRED, ERIK. WE'VE\nBEEN THROUGH THIS LEVEL\nTOO MANY TIMES!  WAKE\nME WHEN WE FINISH IT."
+ },
+ {
+  "i": 318,
+  "ptr": 13957,
+  "w": 19,
+  "h": 6,
+  "text": "GOOD NIGHT, OLAF.\nHAVE NICE DREAMS\nOF GLIDING OVER\nMONSTERS."
+ },
+ {
+  "i": 319,
+  "ptr": 14020,
+  "w": 21,
+  "h": 3,
+  "text": "GOOD NIGHT, OLAF..."
+ },
+ {
+  "i": 320,
+  "ptr": 14042,
+  "w": 19,
+  "h": 5,
+  "text": "WAIT A MINUTE,\nWE NEED YOU TO\nFINISH THE LEVEL!"
+ },
+ {
+  "i": 321,
+  "ptr": 14092,
+  "w": 12,
+  "h": 3,
+  "text": "OH, SORRY."
+ },
+ {
+  "i": 322,
+  "ptr": 14105,
+  "w": 14,
+  "h": 4,
+  "text": "WE'VE BEEN\nHERE BEFORE."
+ },
+ {
+  "i": 323,
+  "ptr": 14131,
+  "w": 15,
+  "h": 6,
+  "text": "YES, WE HAVE.\nWILL YOU TWO\nPLEASE BE\nMORE CAREFUL?"
+ },
+ {
+  "i": 324,
+  "ptr": 14184,
+  "w": 22,
+  "h": 4,
+  "text": "YOU'VE MADE MISTAKES\nTOO, ERIK."
+ },
+ {
+  "i": 325,
+  "ptr": 14218,
+  "w": 19,
+  "h": 3,
+  "text": "OH, THAT WAS LOW."
+ },
+ {
+  "i": 326,
+  "ptr": 14238,
+  "w": 28,
+  "h": 4,
+  "text": "THIS IS THE VOICE OF THOR,\nVIKING LORD OF THUNDER."
+ },
+ {
+  "i": 327,
+  "ptr": 14291,
+  "w": 17,
+  "h": 4,
+  "text": "I AM REAL ANGRY\nWITH YOU GUYS."
+ },
+ {
+  "i": 328,
+  "ptr": 14324,
+  "w": 24,
+  "h": 5,
+  "text": "HOW HAVE WE DISPLEASED\nYOU, OH MIGHTY VOICE\nOF THOR?"
+ },
+ {
+  "i": 329,
+  "ptr": 14379,
+  "w": 23,
+  "h": 3,
+  "text": "WHY CAN'T WE SEE YOU?"
+ },
+ {
+  "i": 330,
+  "ptr": 14403,
+  "w": 25,
+  "h": 6,
+  "text": "WOULD YOU WANT TO BE\nSEEN WITH VIKINGS THAT\nHAVE FAILED 15 TIMES TO\nGET THROUGH A LEVEL?"
+ },
+ {
+  "i": 331,
+  "ptr": 14494,
+  "w": 8,
+  "h": 3,
+  "text": "BUT..."
+ },
+ {
+  "i": 332,
+  "ptr": 14503,
+  "w": 29,
+  "h": 6,
+  "text": "IN MY DAY, VIKINGS WERE\nFACED WITH MUCH TOUGHER\nLEVELS, AND WE ALWAYS GOT\nPAST THEM ON THE FIRST TRY!"
+ },
+ {
+  "i": 333,
+  "ptr": 14607,
+  "w": 9,
+  "h": 3,
+  "text": "ALWAYS?"
+ },
+ {
+  "i": 334,
+  "ptr": 14617,
+  "w": 24,
+  "h": 5,
+  "text": "DO YOU DOUBT THOR? NOW\nGO OUT THERE AND FIND\nTHAT EXIT!!!"
+ },
+ {
+  "i": 335,
+  "ptr": 14677,
+  "w": 21,
+  "h": 6,
+  "text": "CONGRATULATIONS!\nYOU'VE JUST WON THE\n'TOO MUCH TIME ON\nYOUR HANDS AWARD'."
+ },
+ {
+  "i": 336,
+  "ptr": 14753,
+  "w": 20,
+  "h": 5,
+  "text": "AND YOU HAVE WAAAY\nTOO MUCH TIME ON\nYOUR HANDS."
+ },
+ {
+  "i": 337,
+  "ptr": 14803,
+  "w": 20,
+  "h": 6,
+  "text": "YOU'VE GIVEN UP 50\nTIMES JUST TO SEE\nIF THERE ARE ANY\nMORE MESSAGES!"
+ },
+ {
+  "i": 338,
+  "ptr": 14874,
+  "w": 21,
+  "h": 4,
+  "text": "WELL, I'LL SAVE YOU\nA LITTLE TIME..."
+ },
+ {
+  "i": 339,
+  "ptr": 14913,
+  "w": 21,
+  "h": 4,
+  "text": "THIS IS THE LAST\nMESSAGE YOU'LL GET."
+ },
+ {
+  "i": 340,
+  "ptr": 14952,
+  "w": 20,
+  "h": 5,
+  "text": "YEAH, SO YOU MIGHT\nAS WELL JUST PLAY\nTHE GAME."
+ },
+ {
+  "i": 341,
+  "ptr": 15001,
+  "w": 22,
+  "h": 4,
+  "text": "IT'S ACTUALLY PRETTY\nFUN, YOU KNOW."
+ },
+ {
+  "i": 342,
+  "ptr": 15039,
+  "w": 16,
+  "h": 6,
+  "text": "NOW, DIDN'T I\nJUST SAY THAT\nTHERE WERE NO\nMORE MESSAGES?"
+ },
+ {
+  "i": 343,
+  "ptr": 15098,
+  "w": 18,
+  "h": 5,
+  "text": "YOU DON'T FOLLOW\nDIRECTIONS VERY\nWELL, DO YOU."
+ },
+ {
+  "i": 344,
+  "ptr": 15147,
+  "w": 18,
+  "h": 5,
+  "text": "THIS TIME WE'RE\nSERIOUS.  STOP\nGIVING UP, OKAY?"
+ },
+ {
+  "i": 345,
+  "ptr": 15197,
+  "w": 28,
+  "h": 6,
+  "text": "MY NAME IS ERIK THE SWIFT.\nI CAN RUN LIKE THE WIND\nAND LEAP TALL HUTS IN A\nSINGLE BOUND."
+ },
+ {
+  "i": 346,
+  "ptr": 15288,
+  "w": 28,
+  "h": 4,
+  "text": "IT IS TIME FOR ME, BALEOG,\nAND OLAF TO GO HUNTING."
+ },
+ {
+  "i": 347,
+  "ptr": 15341,
+  "w": 26,
+  "h": 6,
+  "text": "I AM BALEOG THE FIERCE.\nI AM THE TOUGHEST VIKING\nIN THE LAND. NO ONE CAN\nDEFEAT ME."
+ },
+ {
+  "i": 348,
+  "ptr": 15427,
+  "w": 22,
+  "h": 3,
+  "text": "I AM OLAF THE STOUT."
+ },
+ {
+  "i": 349,
+  "ptr": 15450,
+  "w": 22,
+  "h": 4,
+  "text": "I CAN BLOCK ANYTHING\nWITH MY SHIELD."
+ },
+ {
+  "i": 350,
+  "ptr": 15489,
+  "w": 20,
+  "h": 4,
+  "text": "ANOTHER SUCCESSFUL\nDAY OF HUNTING."
+ },
+ {
+  "i": 351,
+  "ptr": 15526,
+  "w": 25,
+  "h": 5,
+  "text": "LIFE IS GOOD.  I HOPE I\nNEVER HAVE TO LEAVE MY\nBELOVED VILLAGE."
+ },
+ {
+  "i": 352,
+  "ptr": 15592,
+  "w": 21,
+  "h": 3,
+  "text": "LATER THAT NIGHT..."
+ },
+ {
+  "i": 353,
+  "ptr": 15614,
+  "w": 19,
+  "h": 3,
+  "text": "THEY'VE RETURNED!"
+ },
+ {
+  "i": 354,
+  "ptr": 15634,
+  "w": 9,
+  "h": 3,
+  "text": "HOORAY!"
+ },
+ {
+  "i": 355,
+  "ptr": 15644,
+  "w": 7,
+  "h": 3,
+  "text": "YEA!"
+ },
+ {
+  "i": 356,
+  "ptr": 15651,
+  "w": 8,
+  "h": 3,
+  "text": "DA DA!"
+ },
+ {
+  "i": 357,
+  "ptr": 15660,
+  "w": 22,
+  "h": 5,
+  "text": "WE'VE BEEN TO MANY\nSTRANGE AND EXCITING\nPLACES."
+ },
+ {
+  "i": 358,
+  "ptr": 15710,
+  "w": 20,
+  "h": 4,
+  "text": "BUT NOWHERE SO\nWONDERFUL AS HOME!"
+ },
+ {
+  "i": 359,
+  "ptr": 15746,
+  "w": 23,
+  "h": 4,
+  "text": "LOOK WHAT WE BROUGHT\nBACK FROM THE FUTURE!"
+ },
+ {
+  "i": 360,
+  "ptr": 15791,
+  "w": 17,
+  "h": 4,
+  "text": "THIS FOREST\nLOOKS FAMILIAR."
+ },
+ {
+  "i": 361,
+  "ptr": 15821,
+  "w": 21,
+  "h": 5,
+  "text": "GAME DESIGN BY\n\nSILICON AND SYNAPSE"
+ },
+ {
+  "i": 362,
+  "ptr": 15859,
+  "w": 14,
+  "h": 6,
+  "text": "PRODUCERS\n\nALLEN ADHAM\nALAN PAVLISH"
+ },
+ {
+  "i": 363,
+  "ptr": 15897,
+  "w": 20,
+  "h": 5,
+  "text": "EXECUTIVE PRODUCER\n\nBRIAN FARGO"
+ },
+ {
+  "i": 364,
+  "ptr": 15931,
+  "w": 15,
+  "h": 5,
+  "text": "LEVEL DESIGN\n\nRONALD MILLAR"
+ },
+ {
+  "i": 365,
+  "ptr": 15961,
+  "w": 22,
+  "h": 6,
+  "text": "GENESIS PROGRAMMING\n\nPATRICK WYATT\nJAMES E. ANHALT, III"
+ },
+ {
+  "i": 366,
+  "ptr": 16019,
+  "w": 22,
+  "h": 7,
+  "text": "ORIGINAL PROGRAMMING\n\nMICHAEL MORHAIME\nFRANK PEARCE\nALLEN ADHAM"
+ },
+ {
+  "i": 367,
+  "ptr": 16085,
+  "w": 16,
+  "h": 9,
+  "text": "ARTWORK\n\nJOEYRAY HALL\nRONALD MILLAR\nSAMWISE DIDIER\nJASON MAGNESS\nSTU ROSE"
+ },
+ {
+  "i": 368,
+  "ptr": 16161,
+  "w": 20,
+  "h": 8,
+  "text": "ADDITIONAL ARTWORK\n\nCLYDE MATSUMOTO\nTODD CAMASTA\nCHERYL AUSTIN\nSPENCER KIPE"
+ },
+ {
+  "i": 369,
+  "ptr": 16239,
+  "w": 33,
+  "h": 6,
+  "text": "AUDIO BY KRISALIS SOFTWARE LTD.\n\nMUSIC BY MATT FURNISS\nMUSIC DRIVER BY S. HOLLINGWORTH"
+ },
+ {
+  "i": 370,
+  "ptr": 16328,
+  "w": 19,
+  "h": 7,
+  "text": "QUALITY ASSURANCE\n\nFLOYD GRUBB\nRICHARD SIMPSON\nDEAN SCHULTE"
+ },
+ {
+  "i": 371,
+  "ptr": 16390,
+  "w": 16,
+  "h": 5,
+  "text": "Q/A DIRECTOR\n\nKERRY GARRISON"
+ },
+ {
+  "i": 372,
+  "ptr": 16421,
+  "w": 24,
+  "h": 5,
+  "text": "ASSISTANT Q/A DIRECTOR\n\nRODNEY RELOSA"
+ },
+ {
+  "i": 373,
+  "ptr": 16461,
+  "w": 14,
+  "h": 6,
+  "text": "THANKS TO\n\nSCOTT BENNIE\nSCOTT MILLS"
+ },
+ {
+  "i": 374,
+  "ptr": 16499,
+  "w": 21,
+  "h": 5,
+  "text": "     WATCH FOR\n\nTHE LOST VIKINGS II"
+ },
+ {
+  "i": 375,
+  "ptr": 16537,
+  "w": 13,
+  "h": 4,
+  "text": "HAVE A NICE\nDAY, HONEY."
+ },
+ {
+  "i": 376,
+  "ptr": 16563,
+  "w": 10,
+  "h": 3,
+  "text": "MY HERO!"
+ },
+ {
+  "i": 377,
+  "ptr": 16574,
+  "w": 23,
+  "h": 3,
+  "text": "WHEW! THAT WAS CLOSE!"
+ },
+ {
+  "i": 378,
+  "ptr": 16598,
+  "w": 24,
+  "h": 5,
+  "text": "NOW LET'S JUMP IN THAT\nTIME DOOR AND GET THE\nHECK OUT OF HERE."
+ },
+ {
+  "i": 379,
+  "ptr": 16663,
+  "w": 22,
+  "h": 4,
+  "text": "WAIT.  I THINK I CAN\nFLY THIS SHIP."
+ },
+ {
+  "i": 380,
+  "ptr": 16701,
+  "w": 25,
+  "h": 4,
+  "text": "NO WAY, OLAF!  YOU CAN\nBARELY FLY YOUR SHIELD."
+ },
+ {
+  "i": 381,
+  "ptr": 16750,
+  "w": 11,
+  "h": 3,
+  "text": "TRUST ME."
+ },
+ {
+  "i": 382,
+  "ptr": 16762,
+  "w": 16,
+  "h": 4,
+  "text": "I'LL JUST TURN\nTHIS KNOB..."
+ },
+ {
+  "i": 383,
+  "ptr": 16792,
+  "w": 21,
+  "h": 3,
+  "text": "FLIP THIS SWITCH..."
+ },
+ {
+  "i": 384,
+  "ptr": 16814,
+  "w": 24,
+  "h": 3,
+  "text": "AND PRESS THIS BUTTON."
+ },
+ {
+  "i": 385,
+  "ptr": 16839,
+  "w": 24,
+  "h": 4,
+  "text": "SELF DESTRUCT SEQUENCE\nHAS BEEN INITIATED."
+ },
+ {
+  "i": 386,
+  "ptr": 16884,
+  "w": 18,
+  "h": 4,
+  "text": "5 SECONDS TILL\nSELF DESTRUCT..."
+ },
+ {
+  "i": 387,
+  "ptr": 16918,
+  "w": 25,
+  "h": 4,
+  "text": "GUYS, I THINK WE SHOULD\nTAKE THE TIME DOOR."
+ },
+ {
+  "i": 388,
+  "ptr": 16964,
+  "w": 23,
+  "h": 3,
+  "text": "GOOD IDEA.  LET'S GO!"
+ },
+ {
+  "i": 389,
+  "ptr": 16988,
+  "w": 23,
+  "h": 3,
+  "text": "HEY ERIC, WATCH THIS."
+ },
+ {
+  "i": 390,
+  "ptr": 17032,
+  "w": 22,
+  "h": 4,
+  "text": "YEAH, GOOD AND SLOW!\nWATCH THIS!"
+ },
+ {
+  "i": 391,
+  "ptr": 17012,
+  "w": 19,
+  "h": 3,
+  "text": "PRETTY GOOD, HUH?"
+ },
+ {
+  "i": 392,
+  "ptr": 17083,
+  "w": 26,
+  "h": 5,
+  "text": "WHY DON'T YOU HAVE OLAF\nGO FIRST AND PROTECT YOU\nWITH HIS SHIELD?"
+ },
+ {
+  "i": 393,
+  "ptr": 17203,
+  "w": 25,
+  "h": 3,
+  "text": "NICE CATCH, TRAPMASTER."
+ },
+ {
+  "i": 394,
+  "ptr": 17067,
+  "w": 15,
+  "h": 3,
+  "text": "I'LL GO FIRST"
+ },
+ {
+  "i": 395,
+  "ptr": 17151,
+  "w": 18,
+  "h": 5,
+  "text": "ARE YOU KIDDING?\nI AM A MASTER AT\nAVOIDING TRAPS."
+ },
+ {
+  "i": 396,
+  "ptr": 17229,
+  "w": 21,
+  "h": 3,
+  "text": "COME ON OVER, OLAF."
+ },
+ {
+  "i": 397,
+  "ptr": 17292,
+  "w": 26,
+  "h": 4,
+  "text": "I THINK I SEE SOME CREAM\nPIES OVER THIS WAY."
+ },
+ {
+  "i": 398,
+  "ptr": 17251,
+  "w": 22,
+  "h": 4,
+  "text": "NO WAY. I LIKE IT\nOVER HERE JUST FINE."
+ },
+ {
+  "i": 399,
+  "ptr": 17339,
+  "w": 30,
+  "h": 4,
+  "text": "WAIT! YOU KNOW YOU GUYS WILL\nNEVER SURVIVE WITHOUT ME."
+ },
+ {
+  "i": 400,
+  "ptr": 17396,
+  "w": 27,
+  "h": 4,
+  "text": "THIS SWEET CHOCLATE SCENT\nIS GOOD FOR MY SINUSES."
+ },
+ {
+  "i": 401,
+  "ptr": 17489,
+  "w": 22,
+  "h": 3,
+  "text": "SOME FRIEND YOU ARE."
+ },
+ {
+  "i": 402,
+  "ptr": 17448,
+  "w": 22,
+  "h": 4,
+  "text": "YEAH, I NOTICED YOUR\nFINGER WAS CLEAN."
+ },
+ {
+  "i": 403,
+  "ptr": 17512,
+  "w": 27,
+  "h": 6,
+  "text": "YOU KNOW WHAT THEY SAY...\nYOU CAN PICK YOUR NOSE, \nBUT YOU CAN'T PICK YOUR \nFRIENDS."
+ },
+ {
+  "i": 404,
+  "ptr": 17599,
+  "w": 24,
+  "h": 5,
+  "text": "ONWARD MIGHTY VIKINGS!\nTHERE'S VICTORY IN THE\nAIR. I CAN SMELL IT."
+ },
+ {
+  "i": 405,
+  "ptr": 17738,
+  "w": 25,
+  "h": 3,
+  "text": "I'M GETTING OUTTA HERE!"
+ },
+ {
+  "i": 406,
+  "ptr": 17668,
+  "w": 28,
+  "h": 5,
+  "text": "UH, ACTUALLY, THAT WAS ME.\nMUST HAVE BEEN ALL THAT\nCHOCOLATE I ATE."
+ },
+ {
+  "i": 407,
+  "ptr": 11827,
+  "w": null,
+  "h": null,
+  "text": "THREE   "
+ },
+ {
+  "i": 408,
+  "ptr": 3242,
+  "w": 25,
+  "h": 5,
+  "text": "YOU CAN GET HINTS IF\nYOU STAND NEXT TO THESE\nBUTTONS AND PRESS 'C'."
+ },
+ {
+  "i": 409,
+  "ptr": 3312,
+  "w": 25,
+  "h": 6,
+  "text": "PRESS 'C' TO PUSH\nBUTTONS, FLIP SWITCHES,\nAND TALK TO OTHER\nCHARACTERS."
+ },
+ {
+  "i": 410,
+  "ptr": 3386,
+  "w": 20,
+  "h": 6,
+  "text": "OLAF CAN HELP ERIK\nTO JUMP HIGHER BY\nLETTING HIM STAND\nON HIS SHIELD."
+ },
+ {
+  "i": 411,
+  "ptr": 3386,
+  "w": 20,
+  "h": 6,
+  "text": "OLAF CAN HELP ERIK\nTO JUMP HIGHER BY\nLETTING HIM STAND\nON HIS SHIELD."
+ },
+ {
+  "i": 412,
+  "ptr": 3458,
+  "w": 27,
+  "h": 8,
+  "text": "TO TRADE AN ITEM, PRESS\n'MODE' AND THEN PRESS\n'B' OVER THE ITEM. NOW\nGIVE THE ITEM TO A NEARBY\nVIKING. PRESS 'B'\nTO EXIT."
+ },
+ {
+  "i": 413,
+  "ptr": 3707,
+  "w": 22,
+  "h": 5,
+  "text": "PRESS 'C' TO OPERATE\nA PUMP.  TO MANUALLY\nDEFLATE, PRESS 'B'."
+ },
+ {
+  "i": 414,
+  "ptr": 3771,
+  "w": 26,
+  "h": 7,
+  "text": "TO SELECT AN ITEM, PRESS\n'MODE' AND THEN MOVE\nTHE FLASHING BOX OVER\nTHE ITEM. PRESS 'MODE'\nTO EXIT."
+ },
+ {
+  "i": 415,
+  "ptr": 3977,
+  "w": 24,
+  "h": 4,
+  "text": "TO USE A SELECTED ITEM\nPRESS THE 'Y' BUTTON."
+ },
+ {
+  "i": 416,
+  "ptr": 4087,
+  "w": 23,
+  "h": 4,
+  "text": "STAND ON THE ELEVATOR\nAND MOVE UP OR DOWN."
+ },
+ {
+  "i": 417,
+  "ptr": 4132,
+  "w": 29,
+  "h": 7,
+  "text": "TO OPERATE A CRANE, PRESS\n'C' TO ENTER OR EXIT,\nTHEN MOVE THE MAGNET LEFT\nOR RIGHT.  PRESS 'B' TO\nTURN THE MAGNET ON AND OFF."
+ },
+ {
+  "i": 418,
+  "ptr": 4260,
+  "w": 28,
+  "h": 4,
+  "text": "TO OPERATE A TELEPORTER,\nSTAND IN IT AND PRESS 'C'."
+ },
+ {
+  "i": 419,
+  "ptr": 4314,
+  "w": 28,
+  "h": 7,
+  "text": "OLAF THE STOUT CAN USE HIS\nSHIELD AS A HANG GLIDER.\nWHILE FALLING, POSITION\nTHE SHIELD ABOVE HIS HEAD\nBY PRESSING 'A' OR 'B'"
+ },
+ {
+  "i": 420,
+  "ptr": 4441,
+  "w": 28,
+  "h": 7,
+  "text": "ERIK THE SWIFT HAS A TOUGH\nHEAD.  HE CAN BASH ENEMIES\nAND KNOCK DOWN CERTAIN\nBARRIERS BY PRESSING 'A'\nWHILE RUNNING."
+ },
+ {
+  "i": 421,
+  "ptr": 4560,
+  "w": 28,
+  "h": 8,
+  "text": "BALEOG THE FIERCE IS A\nSTUD. HE CAN USE HIS\nARROWS TO TOGGLE SWITCHES,\nAS WELL AS TO DEFEAT\nMONSTERS. TO SHOOT AN\nARROW, PRESS 'A'."
+ },
+ {
+  "i": 422,
+  "ptr": 4694,
+  "w": 28,
+  "h": 8,
+  "text": "TO UNLOCK A KEYHOLE, THE\nCORRECT KEY MUST BE USED.\nSTAND NEXT TO THE KEYHOLE,\nSELECT THE CORRECT KEY\nFROM YOUR INVENTORY, AND\nPRESS 'X'."
+ },
+ {
+  "i": 423,
+  "ptr": 4984,
+  "w": 22,
+  "h": 4,
+  "text": "ALL OF US MUST REACH\nTHE EXIT TO ESCAPE."
+ },
+ {
+  "i": 424,
+  "ptr": 5027,
+  "w": 23,
+  "h": 4,
+  "text": "PRESS 'X' OR 'Z' TO\nSWITCH TO MY BUDDIES."
+ },
+ {
+  "i": 425,
+  "ptr": 17764,
+  "w": 30,
+  "h": 5,
+  "text": "DO YOU THINK ANYONE WOULD\nMIND IF WE TOOK ONE OF THOSE\nRED LIZARDS HOME AS A PET?"
+ },
+ {
+  "i": 426,
+  "ptr": 17848,
+  "w": 28,
+  "h": 5,
+  "text": "THEN I WOULDN'T GET TO\nCLOBBER IT. WHAT FUN WOULD\nTHAT BE?"
+ },
+ {
+  "i": 427,
+  "ptr": 17909,
+  "w": 29,
+  "h": 4,
+  "text": "THIS WOULD BE A GREAT PLACE\nFOR A BEACH RESORT."
+ },
+ {
+  "i": 428,
+  "ptr": 17959,
+  "w": 31,
+  "h": 3,
+  "text": "EXCEPT THAT THERE'S NO WATER."
+ },
+ {
+  "i": 429,
+  "ptr": 17991,
+  "w": 27,
+  "h": 4,
+  "text": "OH YEAH, I KNEW SOMETHING\nWAS MISSING"
+ },
+ {
+  "i": 430,
+  "ptr": 18031,
+  "w": 30,
+  "h": 4,
+  "text": "IT'S A GOOD THING YOUR SWORD\nIS SHARPER THAN YOUR WIT."
+ },
+ {
+  "i": 431,
+  "ptr": 18088,
+  "w": 20,
+  "h": 3,
+  "text": "WELL, WHAT'S NEXT?"
+ },
+ {
+  "i": 432,
+  "ptr": 18109,
+  "w": 23,
+  "h": 4,
+  "text": "WE NEED TO FIND A WAY\nBACK TO THE FUTURE."
+ },
+ {
+  "i": 433,
+  "ptr": 18153,
+  "w": 18,
+  "h": 3,
+  "text": "CAN WE SAY THAT?"
+ },
+ {
+  "i": 434,
+  "ptr": 18172,
+  "w": 23,
+  "h": 4,
+  "text": "SURE, COPYRIGHT RULES\nDON'T EXIST YET."
+ },
+ {
+  "i": 435,
+  "ptr": 18213,
+  "w": 28,
+  "h": 4,
+  "text": "DO YOU GUYS KNOW WHAT THEY\nMAKE IN THIS FACTORY?"
+ },
+ {
+  "i": 436,
+  "ptr": 18264,
+  "w": 15,
+  "h": 3,
+  "text": "CREAM PIES!!!"
+ },
+ {
+  "i": 437,
+  "ptr": 18280,
+  "w": 25,
+  "h": 4,
+  "text": "THE SAD THING IS THAT I\nTHINK HE'S SERIOUS."
+ },
+ {
+  "i": 438,
+  "ptr": 18326,
+  "w": 23,
+  "h": 5,
+  "text": "IS IT MY IMAGINATION,\nOR ARE THINGS GETTING\nWEIRDER?"
+ },
+ {
+  "i": 439,
+  "ptr": 18381,
+  "w": 19,
+  "h": 4,
+  "text": "YOU DON'T HAVE AN\nIMAGINATION OLAF."
+ },
+ {
+  "i": 440,
+  "ptr": 18419,
+  "w": 23,
+  "h": 5,
+  "text": "THAT'S FUNNY, I COULD\nHAVE SWORN I HAD IT\nWHEN WE LEFT..."
+ },
+ {
+  "i": 441,
+  "ptr": 11791,
+  "w": null,
+  "h": null,
+  "text": "LANGUAGE"
+ },
+ {
+  "i": 442,
+  "ptr": 11854,
+  "w": null,
+  "h": null,
+  "text": "ENGLISH "
+ }
+]

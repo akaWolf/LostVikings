@@ -315,10 +315,13 @@ def write_demo_chunks(scratch, steps=None):
 #     also RAISES the sprite — canonical A_9F25 pattern), idle loop.
 LETTER_BASE = 0x9F53
 
-def letterfall_blob(nblk, base=LETTER_BASE):
+def letterfall_blob(nblk, base=LETTER_BASE, frame0=1):
     """(blob_bytes, dispatcher_addr) — dispatcher first, then 8 anims.
     `base` = the absolute address the blob lands at (the D9 record's code
-    points at base-3: spawn enters at record pc + 3)."""
+    points at base-3: spawn enters at record pc + 3). `frame0` = the pool
+    frame of block 0: 1 when the banner bank stands alone at sprite base 0
+    (the 1C6 scenes), 65 when it rides behind the world's pool bank 0x12F
+    (route B: 4608 B = 64 units, then the 71-byte prefix — smd2pc)."""
     LETTER_BASE = base
     # pass 1: measure the dispatcher: 3 (prolog jmp is NOT used: the 13DB
     # prolog calls the shared setup; D9 objects need none of it — start
@@ -355,7 +358,8 @@ def letterfall_blob(nblk, base=LETTER_BASE):
         # masks exactly on the encoded stream (block K at 71+K*1152).
         # ('15 05' was NOT the fix: its reset also rewrites SPRITE_SEG
         # from the sub's SRC_SEG — killed the draw, seen live.)
-        a += bytes((0x01, (1 + k * 16) & 0xFF))  # frame = block K
+        assert frame0 + k * 16 < 256, (frame0, k)
+        a += bytes((0x01, (frame0 + k * 16) & 0xFF))  # frame = block K
         a += bytes((0x08, 0x00, 0x00))           # X = WORLD_X
         y = -(88 + k * 4)
         while y < 0:
@@ -421,6 +425,81 @@ def d8_timer_blob(base, ticks):
     return bytes(b)
 
 
+def bubble_blob(base, rows, frame0, rise=168, step=4, ticks=3, period=170):
+    """Class DA for the Preh scene: the Genesis bubbles (frames frame0 =
+    bubble, +16 = wobble, +32 = pop, from the SMD scene bank 0x0C0 riding
+    the scene bank behind the letters). Dispatcher on the spawn row (the
+    same `51 k / 73 16` ladder as the letters; unknown row -> 10 destroy),
+    per row a phase wait on the object timer (flags |= 0x1000, field[1C] =
+    phase, yield until 0 — the D8 idiom), then the shared anim: type-2 32
+    strips, X = WORLD_X, and a loop of `0A y` steps up from the spawn point
+    (y = -step*i, `ticks` apart -> rise/ticks*step px per tick: 4 px per 3
+    ticks = 1.33 px/tick, the DE video's 80 px per 3.5 s) with a +-3 px `08`
+    wobble and the wobble frame every other step, the pop frame at the
+    top, then parked 300 px below the spawn point for the rest of the
+    `period`, and around again. Lanes stagger by period/len(rows)."""
+    n = len(rows)
+    disp = bytearray()
+    branches = []
+    for r in rows:
+        disp += bytes((0x51, r & 0xFF, (r >> 8) & 0xFF))
+        branches.append(len(disp) + 2)
+        disp += bytes((0x73, 0x16, 0x00, 0x00))
+    disp += bytes((0x10,))                       # foreign row: destroy
+    bodies = []
+    go_refs = []
+    for k in range(n):
+        bodies.append(len(disp))
+        phase = (period * k) // n
+        disp += bytes((0x51, 0x00, 0x10, 0x62, 0x08))            # flags |= 0x1000 (timer runs)
+        disp += bytes((0x51, phase & 0xFF, phase >> 8, 0x56, 0x1C))
+        wait = len(disp)
+        disp += bytes((0x00, 0x01, 0x51, 0x00, 0x00, 0x73, 0x1C, 0x00, 0x00))
+        go_refs.append(len(disp) - 2)
+        disp += bytes((0x03,)) + (base + wait).to_bytes(2, "little")
+    go = len(disp)
+    disp += bytes((0x19, 0x00, 0x00))            # anim (patched below)
+    idle = len(disp)
+    disp += bytes((0x2F, 0x00, 0x01, 0x03)) + (base + idle).to_bytes(2, "little")
+    for k in range(n):
+        tgt = base + bodies[k]
+        disp[branches[k]] = tgt & 0xFF
+        disp[branches[k] + 1] = tgt >> 8
+        disp[go_refs[k]] = (base + go) & 0xFF
+        disp[go_refs[k] + 1] = (base + go) >> 8
+    anim_at = base + len(disp)
+    disp[go + 1] = anim_at & 0xFF
+    disp[go + 2] = anim_at >> 8
+    a = bytearray()
+    a += bytes((0x15, 0x01))                     # type-2, 32 strips
+    a += bytes((0x01, frame0 & 0xFF))            # bubble frame
+    a += bytes((0x08, 0x00, 0x00))               # X = WORLD_X
+    loop_at = anim_at + len(a)
+    y = 0
+    i = 0
+    spent = 0
+    while y > -rise:
+        y -= step
+        a += bytes((0x0A,)) + int(y).to_bytes(2, "little", signed=True)
+        dx = 3 if (i // 4) % 2 == 0 else -3
+        a += bytes((0x08,)) + int(dx).to_bytes(2, "little", signed=True)
+        a += bytes((0x01, (frame0 + (16 if i % 2 else 0)) & 0xFF))
+        a += bytes((0x0F, ticks))
+        spent += ticks
+        i += 1
+    a += bytes((0x01, (frame0 + 32) & 0xFF, 0x0F, 0x04))    # pop
+    spent += 4
+    a += bytes((0x0A,)) + int(300).to_bytes(2, "little", signed=True)  # park out of sight
+    a += bytes((0x01, frame0 & 0xFF))
+    rest = max(2, period - spent)
+    while rest > 0:
+        d = min(rest, 250)
+        a += bytes((0x0F, d))
+        rest -= d
+    a += bytes((0x03,)) + loop_at.to_bytes(2, "little")
+    return bytes(disp) + bytes(a)
+
+
 D8_REST = "04000000101000000500000000000000"   # 1C6's D8 record body
 D9_REST = "04000000202000000500000000000010"   # the D7-shaped 32x32 body
 SCENE_TICKS = 300
@@ -436,7 +515,7 @@ TMPL_BUF = 0xC00 * 16    # the template lives in the animdata segment: 0xC00 par
 FREE_REGION = {0x1C1: (0x3311, 0x3694, "D2")}
 
 
-def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS):
+def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None):
     """One template per scene slot: the canonical world template text
     (assets_raw/lvs/<src>.lvsf) under a new chunk id, its orphan D8/D9
     records retargeted at the two blocks — appended past the payload when
@@ -450,8 +529,17 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS):
         if not m:
             raise SystemExit(f"template {src:X}: size header not found")
         n = int(m.group(1))
+        # the banner blocks ride behind the world's pool bank 0x12F in the
+        # scene's bank 0 (smd2pc.convert_scene, gen_bg): block K = pool
+        # frame len(0x12F)/72 + 1 + 16K
+        pool_len = len(LR.read_payload(0x12F, "lzss")[0])
+        assert pool_len % 72 == 0, pool_len
+        frame0 = pool_len // 72 + 1
+        dec = (decor or {}).get(slot)                # (rows, frame0) of the DA decor class
         timer = d8_timer_blob(0, ticks)              # sized only; rebuilt below
-        need = len(timer) + len(letterfall_blob(nblk, base=0))
+        need = len(timer) + len(letterfall_blob(nblk, base=0, frame0=frame0))
+        if dec:
+            need += len(bubble_blob(0, dec[0], dec[1]))
         if n + need <= TMPL_BUF:
             base, new_n, where = n, n + need, "appended"
         else:
@@ -459,10 +547,15 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS):
             assert need <= end - base, (src, need, end - base)
             new_n, where = n, f"overlaid on {victim} {base:04X}-{end:04X}"
         timer = d8_timer_blob(base, ticks)
-        letters = letterfall_blob(nblk, base=base + len(timer))
+        letters = letterfall_blob(nblk, base=base + len(timer), frame0=frame0)
         blob = timer + letters
-        for cls, new in (("D8", "record D8 sprite=FFFF flags=00 code==%04X rest=%s" % (base, D8_REST)),
-                         ("D9", "record D9 sprite=FFFE flags=01 code==%04X rest=%s" % (base + len(timer) - 3, D9_REST))):
+        recs = [("D8", "record D8 sprite=FFFF flags=00 code==%04X rest=%s" % (base, D8_REST)),
+                ("D9", "record D9 sprite=FFFE flags=01 code==%04X rest=%s" % (base + len(timer) - 3, D9_REST))]
+        if dec:
+            bub = bubble_blob(base + len(blob), dec[0], dec[1])
+            recs.append(("DA", "record DA sprite=FFFE flags=01 code==%04X rest=%s" % (base + len(blob) - 3, D9_REST)))
+            blob += bub
+        for cls, new in recs:
             txt, k = re.subn(r"^record %s .*$" % cls, new, txt, count=1, flags=re.M)
             if k != 1:
                 raise SystemExit(f"template {src:X}: record {cls} not found")
@@ -505,7 +598,9 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS):
             os.replace(p + ".tmp", p)
         extras[f"{dst:04X}"] = {"role": "level_script"}
         print(f"  scene template {dst:04X} = {src:04X} ({n}B): D8 timer @{base:04X} "
-              f"({ticks} ticks) + {nblk} letters @{base + len(timer):04X}, {len(blob)}B {where}")
+              f"({ticks} ticks) + {nblk} letters @{base + len(timer):04X}"
+              + (f" + DA decor rows {dec[0]} frame {dec[1]}" if dec else "")
+              + f", {len(blob)}B {where}")
     with open(ex_path + ".tmp", "w") as f:
         json.dump(extras, f, indent=1)
     os.replace(ex_path + ".tmp", ex_path)
@@ -606,6 +701,7 @@ def do_integrate(scratch, music=None):
     # SMD scenes (D8 timed cutscenes on the 1C6 scene script)
     import smd2pc as SMD
     demo_steps = {}
+    decor = {}
     for e in PLAN_SMD:
         b = e["base"]
         print(f"slot {e['slot']} ({e['pw'].decode()}, SMD scene):")
@@ -621,6 +717,8 @@ def do_integrate(scratch, music=None):
             # strides, <176px -> 6, else the full v4 8-tick stroll
             w = info["ledge"][1] - info["ledge"][0]
             demo_steps[e["slot"]] = 4 if w < 112 else (6 if w < 176 else 8)
+        if info.get("decor_rows"):
+            decor[e["slot"]] = (info["decor_rows"], info["decor_frame0"])
         # UX stage 0/1: scenes play full-screen with the camera parked at
         # the map's (pin_x, pin_y) = EXT_L room columns + the Genesis camera
         # mod 16 (genesis_scene.layout); bits 4-11 / 12-15 of the flags
@@ -641,7 +739,7 @@ def do_integrate(scratch, music=None):
     # (build_scene_templates); 1C6 keeps only the world-ladder retarget
     restore_1c6(scratch)
     patch_1c6_ladder(scratch)
-    build_scene_templates(scratch)
+    build_scene_templates(scratch, decor=decor)
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)

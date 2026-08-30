@@ -315,7 +315,29 @@ WORLD_CAMERA = {
     # Olaf on the right shelf (row 17); the bottom grass (row 18) is 0x10
     "preh":    dict(cam=(132, 120), spots=[(28, 120), (156, 168), (296, 152)],
                     drop=(44, 120), walk=(0, 56),
-                    banner=dict(x0=32, y0=11, prow=3)),
+                    banner=dict(x0=32, y0=11, prow=3),
+                    # The floating bubbles. The SMD scene makes them with its
+                    # 4A row (pool 70 — a branch the SMD's own 4A has for
+                    # the scene); the PC 4A is a per-level spawner keyed by
+                    # its spawn row (branches with absolute BBLS/CVRN/VLCN
+                    # positions) and the PC bubble class 61 is a WATER
+                    # bubble — in air it drops at 8 px/tick (measured on a
+                    # DS dump). So the scene draws them itself: the SMD's
+                    # own bubble frames (scene bank 0x0C0: bubble, wobble,
+                    # pop — the tiles the console's sprite table shows as
+                    # tile 1387+) ride the scene bank behind the letters and
+                    # an appended class DA (integrate_snes.bubble_blob) plays
+                    # them: rise ~1.3 px/tick from under the raster band,
+                    # pop near screen row 72, ~170-tick lane period — all
+                    # measured on the DE video (2 fps bubble tracking:
+                    # 80 px per 3.5 s, lanes x~104/136/184/248, one bubble
+                    # per lane every ~9 s). Rows = lanes (screen x centre,
+                    # spawn y under the band); the port sets pool = row.
+                    decor=dict(bank=0x0C0, blocks=3),
+                    extra=[dict(cls=0xDA, x=104, y=240, half_w=16, half_h=16, anim=0x0800, pool=0),
+                           dict(cls=0xDA, x=136, y=240, half_w=16, half_h=16, anim=0x0800, pool=0),
+                           dict(cls=0xDA, x=184, y=240, half_w=16, half_h=16, anim=0x0800, pool=0),
+                           dict(cls=0xDA, x=248, y=240, half_w=16, half_h=16, anim=0x0800, pool=0)]),
     # the left ledge, room row 17 (x -80..159); the pit with the spikes lies
     # at x 160..223
     "egypt":   dict(cam=(80, 144), spots=[(40, 128), (76, 128), (128, 128)],

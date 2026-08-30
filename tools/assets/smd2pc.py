@@ -491,6 +491,16 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
                 sp["x"] = (sp["x"] - _cx + _px) & 0xFFFF
                 sp["y"] = (sp["y"] - _cy + _py) & 0xFFFF
             kept.append(sp)
+        # world-class rows the port adds itself (genesis_scene.WORLD_CAMERA
+        # 'extra', SCREEN px): PC classes already — they skip the bijection
+        # below by carrying the marker key
+        from genesis_scene import WORLD_CAMERA as _WC
+        for ex in _WC[gen_bg["world"]].get("extra", []):
+            sp = dict(ex)
+            sp["x"] = (sp["x"] + _px) & 0xFFFF
+            sp["y"] = (sp["y"] + _py) & 0xFFFF
+            sp["_pc"] = True
+            kept.append(sp)
         spawns = kept
         de_bg = gen_bg       # downstream: the 'shipped in PC shapes' path
     elif scene_mode and de_bg:
@@ -565,6 +575,14 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             if not gen_bg:
                 continue
         if not keep_vikings and sp["cls"] in (0, 1, 2):
+            continue
+        if sp.get("_pc"):
+            # a PC-class row the port added itself (WORLD_CAMERA 'extra'):
+            # no recoding
+            sp = dict(sp)
+            sp.pop("_pc")
+            out_spawns.append(sp)
+            passed += 1
             continue
         k_cls = f"{world}:{sp['cls']:02X}"
         k_anim = f"{world}:{sp['cls']:02X}:{sp['anim']:04X}"
@@ -697,6 +715,8 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     title_anim = None
     banner_bank = None
     banner_cols = []
+    banner_frame0 = 1
+    decor_rows = []
     if scene_mode and smd_banks:
         banner = rom.chunk(smd_banks[0]["chunk"])
         nblk = len(banner) // 512
@@ -759,6 +779,49 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # only produce off = frm*72 from base 0 — with the prefix, frame
         # 1+K*16 lands mask-aligned on block K (at 71 + K*1152).
         banner_bank = bytes(71) + bytes(enc)
+        banner_frame0 = 1
+        if gen_bg:
+            # Route B: the scene's bank 0 must stay the world's POOL bank
+            # 0x12F (4608 B = 64 x 72 B units, bank 0 of every world level):
+            # every pool-sprite class (record sprite FFFE — the Preh bubbles
+            # 61 among them) addresses its frames from sprite base 0, so a
+            # banner-first list fed them banner bytes (seen live: garbage
+            # where a bubble should be). Bank 0 = 0x12F + the 71-byte
+            # prefix + the letter stream: the pool frames keep their
+            # indices, block K becomes frame 65 + 16K (4608 + 71 = 72*65 - 1,
+            # mask-aligned exactly like the 71-prefix at base 0 was).
+            pool = LR.read_payload(0x12F, "lzss")[0]
+            assert len(pool) % 72 == 0, len(pool)
+            # scene decor blocks (WORLD_CAMERA 'decor': an SMD sprite bank
+            # of 32x32 blocks, e.g. the Preh bubble frames) follow the
+            # letters in the same stream: block nblk+K = frame
+            # frame0 + 16*(nblk+K); pixels = the tile nibbles as they are
+            # (CRAM row 0 = DAC 0..15, the row the console draws them with)
+            from genesis_scene import WORLD_CAMERA as _WC2
+            _decor = _WC2[gen_bg["world"]].get("decor")
+            if _decor:
+                dbank = rom.chunk(_decor["bank"])
+                assert len(dbank) >= _decor["blocks"] * 512, (len(dbank), _decor)
+                for blk in range(_decor["blocks"]):
+                    px = [[0] * 32 for _ in range(32)]
+                    for t in range(16):
+                        tx, ty = t // 4, t % 4
+                        nib = smd_tile_nibs(dbank, blk * 16 + t) or [0] * 64
+                        for y in range(8):
+                            for x in range(8):
+                                px[ty * 8 + y][tx * 8 + x] = nib[y * 8 + x]
+                    for plane in range(4):
+                        for strip in range(32):
+                            mask = 0
+                            d = bytearray(8)
+                            for j in range(8):
+                                v = px[strip][j * 4 + plane]
+                                if v:
+                                    mask |= 0x80 >> j
+                                    d[j] = v
+                            enc += bytes((mask,)) + bytes(d)
+            banner_bank = bytes(pool) + bytes(71) + bytes(enc)
+            banner_frame0 = len(pool) // 72 + 1
         banner_y = 0
         banner_prow = 1
         if gen_bg:
@@ -951,9 +1014,13 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # the banner bank ships FIRST: pool sprites (class spr FFFE) address
         # frames from sprite base 0, so block K = anim frame K*16. The pad
         # bytes are dead at load time (1167a reads only the chunk id).
+        rest_banks = list(out["sprite_banks"])
+        if gen_bg:
+            # the pool bank rides inside our bank 0 now — drop the donor's
+            # own 0x12F entry so it is not loaded twice
+            rest_banks = [b for b in rest_banks if b["chunk"] != 0x12F]
         out["sprite_banks"] = ([{"chunk": new_cids["banner"],
-                                 "pad": "c0000000"}]
-                               + list(out["sprite_banks"]))
+                                 "pad": "c0000000"}] + rest_banks)
         # letter spawn rows: AFTER the D8 controller (row 0 keeps the
         # timer's ANIM_SUB=0 default), rows 1..N — the row index IS the
         # dispatcher key (OBJ_ANIM_SUB = spawn row index)
@@ -964,6 +1031,14 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             # pool -> ds:374 -> OBJ_SPAWN_POOL = the dispatcher key:
             # field[16] resolves through the runtime LUT to column 0x1B8
             # (OBJ_SPAWN_POOL) — diagnosed live via the op_73 probe
+        # scene decor rows (class DA, WORLD_CAMERA 'extra' with cls DA):
+        # same convention — the row index keys the DA dispatcher that
+        # integrate_snes.bubble_blob appends to the scene template
+        decor_rows = []
+        for i, sp in enumerate(out_spawns):
+            if sp["cls"] == 0xDA:
+                sp["pool"] = i
+                decor_rows.append(i)
         out["spawns"] = out_spawns
     new_raw = LR.serialize_stripe(out)
 
@@ -1023,7 +1098,11 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     return {"header": f"{hdr_id:04X}", "dims": [W, H],
             "tiles": len(pairs), "spawns": len(out_spawns),
             "prio_ported": prio_ported, "pal_anims": len(pal_anims),
-            "ledge": de_ledge if de_bg else None}
+            "ledge": de_ledge if de_bg else None,
+            # route B: the DA decor rows' indices + the pool frame of the
+            # first decor block (integrate_snes.build_scene_templates)
+            "decor_rows": decor_rows if scene_mode else [],
+            "decor_frame0": (banner_frame0 + 16 * len(banner_cols)) if scene_mode and banner_bank is not None else None}
 
 
 def main():
