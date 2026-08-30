@@ -44,6 +44,10 @@ extern uint8_t  v2_render_buf[320*200];
 // Display buffer — game copies completed frame here under lock,
 // render thread reads it under the same lock. No race.
 extern uint8_t  v2_display_buf[320*200];
+// UX stage 0: published with v2_display_buf under v2_display_mutex — 1 when the
+// running slot is an LVX full-screen scene: the presenter shows display rows
+// 176..199 (map) instead of the HUD band.
+extern int      v2_display_fullscreen;
 extern std::mutex v2_display_mutex;
 
 // HUD buffer — rendered independently from game data, 320x64

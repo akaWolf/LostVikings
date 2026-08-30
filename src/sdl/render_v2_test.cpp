@@ -57,8 +57,9 @@ void render_callback_v2(void* state)
         if (g_dump_pgm_request.load(std::memory_order_acquire)) {
             FILE* f = fopen("/tmp/v2_ladder.ppm", "wb");
             if (f) {
-                fprintf(f, "P6\n320 176\n255\n");
-                for (int y = 0; y < 176; y++) {
+                const int H = v2_display_fullscreen ? 200 : 176;   // UX stage 0
+                fprintf(f, "P6\n320 %d\n255\n", H);
+                for (int y = 0; y < H; y++) {
                     for (int x = 0; x < 320; x++) {
                         uint8_t c = v2_display_buf[y * 320 + x];
                         fputc(myDrawInfo_v2->drawPalette[c].r, f);
@@ -80,9 +81,20 @@ void render_callback_v2(void* state)
     extern uint8_t v2_display_hud_buf[];
     {
         std::lock_guard<std::mutex> lock(v2_display_mutex);
-        for (int y = 0; y < 64; y++) {
-            memcpy(sbuf + (176 + y) * 344, v2_display_hud_buf + y * 320, 320);
-            memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+        if (v2_display_fullscreen) {
+            // UX stage 0: LVX full-screen scene — rows 176..199 come from the
+            // map render (v2_display_buf is 320x200), rows 200..239 stay black.
+            // The HUD band is never painted on these slots ([25CF] bit0 = 0).
+            for (int y = 0; y < 64; y++) {
+                if (y < 24) memcpy(sbuf + (176 + y) * 344, v2_display_buf + (176 + y) * 320, 320);
+                else        memset(sbuf + (176 + y) * 344, 0, 320);
+                memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+            }
+        } else {
+            for (int y = 0; y < 64; y++) {
+                memcpy(sbuf + (176 + y) * 344, v2_display_hud_buf + y * 320, 320);
+                memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+            }
         }
     }
 }

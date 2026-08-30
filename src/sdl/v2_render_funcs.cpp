@@ -42,6 +42,13 @@ uint8_t  v2_render_buf[320*200];
 uint8_t  v2_display_buf[320*200];
 std::mutex v2_display_mutex;
 uint8_t  v2_hud_buf[320*64];
+// UX stage 0 (full-screen LVX scenes): published with v2_display_buf under
+// v2_display_mutex; the presenter shows map rows 176..199 instead of the HUD
+// band when set. v2_clip_h is the per-frame sprite/pixel clip height of the
+// composition buffer: 176 (orig VGA split) or 200 on a full-screen scene.
+int v2_display_fullscreen = 0;
+extern "C" int v2_scene_fullscreen(void);   // v2_vm.cpp: LVX_FULLSCREEN of ds:0x25AD
+static int v2_clip_h = 176;
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 
 // Static intro/menu chunk pixels backup. Orig keeps static chunk pixels in VGA
@@ -352,10 +359,13 @@ void v2_swap_render_buf() {
         // frame lives in the linear composition buffers: viewport in
         // v2_render_buf, HUD in v2_hud_buf — present those.
         extern uint8_t v2_hud_buf[320 * 64];
-        memcpy(v2_display_buf, v2_render_buf, 320 * 176);
+        // all 200 rows: rows 176..199 matter only on full-screen LVX scenes
+        memcpy(v2_display_buf, v2_render_buf, 320 * 200);
+        v2_display_fullscreen = v2_scene_fullscreen();
         extern uint8_t v2_display_hud_buf[];
         memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
 #else
+        v2_display_fullscreen = 0;   // verification build presents the shadow-VGA window only
         extern int v2_vga_fetch_page(uint8_t* out, uint32_t count);
         extern uint8_t v2_vga[65536 * 4];
         if (!v2_vga_fetch_page(v2_display_buf, 320 * 176))
@@ -474,6 +484,9 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint8_t* ds_base = v2_get_ds_base(ds_val);
     V2StateViewC st(ds_base);   // phase D: typed field access
     uint8_t* buf = v2_render_buf;
+    // UX stage 0: clip height for this frame's sprites/UI (200 on a
+    // full-screen LVX scene, else the orig 176-row viewport).
+    v2_clip_h = v2_scene_fullscreen() ? 200 : 176;
 
     // Tile map segment (FS)
     uint16_t fs_seg = st.seg_fs();
@@ -510,8 +523,10 @@ void v2_draw_tiles(uint16_t ds_val) {
     }
     v2_chunk_bg_valid = false; // tile-based level; static backup no longer relevant
 
-    // Normal: clear and draw tiles
-    memset(buf, 0, 320*176);
+    // Normal: clear and draw tiles (all 200 buffer rows: the tile loop below
+    // already renders 25 tile rows; rows 176..199 are shown only on
+    // full-screen LVX scenes, otherwise the HUD band covers them)
+    memset(buf, 0, 320*200);
 
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
@@ -717,7 +732,7 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 // Writes ALL colors including 0 (matching original VGA behavior where mask
 // controls which bytes are written, not the color value).
 static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
-    if (sx >= 0 && sx < 320 && sy >= 0 && sy < 176)
+    if (sx >= 0 && sx < 320 && sy >= 0 && sy < v2_clip_h)   // 176, or 200 on full-screen scenes
         buf[sy * 320 + sx] = color;
 }
 
@@ -960,7 +975,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         // byte-exact page channel is the shadow VGA in v2_vm.cpp.)
         int sprite_h = num_strips * rows_per_strip;
         int sprite_w = bytes_per_row * 4;  // 4 planes
-        if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= 176 || sy0 < -sprite_h) continue;
+        if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= v2_clip_h || sy0 < -sprite_h) continue;
 
         // Sprite data: resolve segment to shadow buffer, add offset.
         // sprite_off = 1-based offset to first data byte; mask at offset-1.

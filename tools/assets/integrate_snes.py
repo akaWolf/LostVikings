@@ -97,20 +97,29 @@ PLAN_SMD = [
     # (pyramids), Factory 040/03F (brick wall strip, tiled), Wacky
     # 058/057 (checkered candy — the pair of DE 059 = our NFL8),
     # Ship 06B/06D (starfield, tiled; DE 077 = our TFFF).
+    # gen_bg (UX plan stage 1): the scene composed from the Genesis data
+    # exactly as the Genesis VDP (and thus the BAC Definitive Edition)
+    # shows it — camera/spots per world in genesis_scene.WORLD_CAMERA.
+    # Worlds without a fitted camera yet fall back to the de_bg bake.
     dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
          prev_hdr=None, base=0x235,    # vortex(prev=GRND) -> scene -> LLM0
+         gen_bg=dict(world="preh"),
          de_bg=dict(lvl=0x01A, map=0x12, gt=0x17, world="preh")),
     dict(slot=54, smd=0x13E, donor="0053", pw=b"CUT2", next=11,
          prev_hdr=None, base=0x23B,    # vortex(prev=VLCN) -> scene -> QCKS
+         gen_bg=dict(world="egypt"),
          de_bg=dict(lvl=0x02F, map=0x28, gt=0x2E, world="egypt")),
     dict(slot=55, smd=0x13F, donor="007A", pw=b"CUT3", next=17,
          prev_hdr=None, base=0x241,    # vortex(prev=TTRS) -> scene -> JLLY
+         gen_bg=dict(world="factory"),
          de_bg=dict(lvl=0x041, map=0x40, gt=0x3F, world="factory")),
     dict(slot=56, smd=0x140, donor="00A6", pw=b"CUT4", next=25,
          prev_hdr=None, base=0x247,    # vortex(prev=V8TR) -> scene -> NFL8
+         gen_bg=dict(world="wacky"),
          de_bg=dict(lvl=0x05B, map=0x55, gt=0x54, world="wacky")),
     dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
          prev_hdr=None, base=0x24D,    # vortex(prev=TRPD) -> scene -> TFFF
+         gen_bg=dict(world="ship"),
          de_bg=dict(lvl=0x077, map=0x6B, gt=0x6D, world="ship")),
     # NO slot for SMD 0x08C: that is the game-completion scene, and the
     # PC has its OWN version at slot 46 (00DA forest — vikings + the
@@ -174,31 +183,42 @@ def patch_next(scratch, hdr_cid_hex, next_level):
     print(f"  next({hdr_cid_hex}): {old} -> {next_level}")
 
 
+LVX_FULLSCREEN = 0x0001   # slot is presented on all 200 rows (no HUD band)
+LVX_CAMLOCK = 0x0002      # camera parked at (pin_x, pin_y) + both scroll axes
+                          # locked (v2_lvx_pin_camera); the pin = flags bits
+                          # 4-11 (x, 0..255) / 12-15 (y, 0..15) = the scene
+                          # map's off-screen left columns + the Genesis
+                          # camera mod 16 (genesis_scene.layout, UX stage 1)
+
+
 def build_lvx(scratch, entries):
-    """exe_static.bin + LVX2 trailer: [magic][u16 n][12B records:
-    level u16, hdr_cid u16, tmpl_cid u16, pw 4B, demo_cid u16].
+    """exe_static.bin + LVX3 trailer: [magic][u16 n][14B records:
+    level u16, hdr_cid u16, tmpl_cid u16, pw 4B, demo_cid u16, flags u16].
     demo_cid != 0 arms the canonical attract-demo machinery on the slot
-    (sub_12d72 RLE input replay, ac=0x8000) — the scene choreography."""
+    (sub_12d72 RLE input replay, ac=0x8000) — the scene choreography.
+    flags (UX plan stage 0): LVX_FULLSCREEN | LVX_CAMLOCK on the interlude
+    scene slots; 0 on the gameplay inserts (the engine reads them via
+    v2_lvx_flags; LVX1/LVX2 images decode with flags = 0)."""
     src = os.path.join(scratch, "exe_static.bin")
     if not os.path.exists(src):
         src = os.path.join(LR.ROOT, "exe_static.bin")
     img = open(src, "rb").read()
-    # strip a previous trailer of either version (idempotent rebuilds)
-    for magic in (b"LVX2", b"LVX1"):
+    # strip a previous trailer of any version (idempotent rebuilds)
+    for magic in (b"LVX3", b"LVX2", b"LVX1"):
         m = img.rfind(magic)
-        if m >= 0 and m >= len(img) - 4 - 2 - 12 * 64:
+        if m >= 0 and m >= len(img) - 4 - 2 - 14 * 64:
             img = img[:m]
-    tr = b"LVX2" + struct.pack("<H", len(entries))
+    tr = b"LVX3" + struct.pack("<H", len(entries))
     for e in entries:
         tr += struct.pack("<HHH", e["slot"], e["hdr"], TMPL_CHUNK[e["slot"]])
         tr += e["pw"]
-        tr += struct.pack("<H", e.get("demo", 0))
+        tr += struct.pack("<HH", e.get("demo", 0), e.get("flags", 0))
     out = os.path.join(scratch, "exe_static.bin")
     tmp = out + ".tmp"
     with open(tmp, "wb") as f:
         f.write(img + tr)
     os.replace(tmp, out)
-    print(f"  exe_static: {len(img)}B + LVX2 trailer {len(tr)}B -> {out}")
+    print(f"  exe_static: {len(img)}B + LVX3 trailer {len(tr)}B -> {out}")
 
 
 # ---------------------------------------------------------------------------
@@ -435,14 +455,23 @@ def do_integrate(scratch, music=None):
                                   "gtld": b + 4, "pal": b + 5,
                                   "banner": 0x258 + (e["slot"] - 53)},
                                  next_level=e["next"], scene_mode=True,
-                                 de_bg=e.get("de_bg"))
+                                 de_bg=e.get("de_bg"),
+                                 gen_bg=e.get("gen_bg"))
         if info.get("ledge"):
             # walk amplitude scaled to the ledge: <112px -> gentle 4-tick
             # strides, <176px -> 6, else the full v4 8-tick stroll
             w = info["ledge"][1] - info["ledge"][0]
             demo_steps[e["slot"]] = 4 if w < 112 else (6 if w < 176 else 8)
+        # UX stage 0/1: scenes play full-screen with the camera parked at
+        # the map's (pin_x, pin_y) = EXT_L room columns + the Genesis camera
+        # mod 16 (genesis_scene.layout); bits 4-11 / 12-15 of the flags
+        pin_x = pin_y = 0
+        if e.get("gen_bg"):
+            import genesis_scene as GS
+            pin_x, pin_y = GS.layout(e["gen_bg"]["world"], e["gen_bg"])["pin"]
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"],
-                    "demo": DEMO_CID.get(e["slot"], 0)})
+                    "demo": DEMO_CID.get(e["slot"], 0),
+                    "flags": LVX_FULLSCREEN | LVX_CAMLOCK | (pin_x << 4) | (pin_y << 12)})
     write_demo_chunks(scratch, demo_steps)
     # canonical predecessors point into the insert chains
     print("progression patch:")

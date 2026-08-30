@@ -288,8 +288,119 @@ def build_de_backdrop(de_bg, CW, CH):
             (a, b))
 
 
+def build_genesis_backdrop(gen_bg, CW, CH):
+    """Genesis inter-world scene -> the scene map, composed EXACTLY the way
+    the Genesis VDP shows it (UX plan stage 1; docs2/VERSIONS_DIFF_ANALYSIS
+    §7): plane B = the world parallax quad map (scene head +0x40) at 1/4 of
+    the camera, plane A = the scene room at the camera, the window band
+    (black, yellow line at rows 45-46), the raster-split lower band (yellow
+    line at rows 187-188, black below), palette = the scene CRAM. The BAC
+    'Definitive Edition' plays these very frames through its Genesis core,
+    so this IS the reference look. Pixels become straight 8x8 tiles (dedup),
+    CRAM 0..63 -> DAC 0..63, 65..79 the banner letters (convert_scene),
+    128+ the donor viking rows. Type bits are the room's own (cell under
+    each screen quad's center): the trio stands and walks on the Genesis
+    ledge/floor/shelf geometry. The map is CW x CH quads (20 x 13 = 320 x
+    208; rows 200..207 ride below the 200-row full-screen scene viewport).
+
+    Camera pin (genesis_scene.layout): the map carries EXT_L quad columns of
+    room LEFT of the screen (the off-screen part of the platform the SMD
+    scene spawns the trio on — real room cells under the leftmost viking)
+    and, because the state cameras sit at a half-quad offset in two worlds
+    (Preh 132,120 / Wacky 144,216), cam_x % 16 padding px on the left and
+    cam_y % 16 padding rows on top so the room quads stay 16-aligned with
+    their type bits; the engine parks the viewport at (pin_x, pin_y) (LVX3
+    flags bits 4-11 / 12-15, v2_lvx_pin_camera) — screen pixel (sx, sy) is
+    map pixel (sx + pin_x, sy + pin_y). Pixels outside the screen are black
+    (never shown); type bits everywhere are the room's own.
+
+    Returns (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, vik_pos,
+    walk, drop) — vik_pos = [(x, y)] x3 for Erik/Baleog/Olaf in MAP px (x
+    center, the row above the floor top), walk = (x0, x1) map-px span of the
+    floor for the demo stroll, drop = (x, y) map px of the trio's head spawn
+    (x center, the row above the platform top)."""
+    from genesis_scene import GenesisScene, WORLD_CAMERA, layout
+    world = gen_bg["world"]
+    wc = WORLD_CAMERA[world]
+    lay = layout(world, gen_bg)
+    cam_x, cam_y = lay["cam"]
+    pin_x, pin_y = lay["pin"]
+    spots = gen_bg.get("spots") or wc["spots"]
+    walk = gen_bg.get("walk") or wc["walk"]
+    drop = gen_bg.get("drop") or wc["drop"]
+    assert (CW, CH) == (lay["cw"], lay["ch"]), (CW, CH, lay)
+    sc = GenesisScene(world)
+    bg_x, bg_y = sc.parallax(cam_x, cam_y, gen_bg.get("bg_x", wc.get("bg_x")))
+    canvas = sc.render_indices(cam_x, cam_y, bg_x, bg_y, rows=200)
+
+    def gpx(gx, gy):
+        """Genesis screen pixel -> CRAM index; off the frame = the window's
+        black (index 15) — the padding rows/cols never reach the screen."""
+        return canvas[gy][gx] if (0 <= gy < 200 and 0 <= gx < 320) else 15
+
+    tiles, tile_idx, prefabs, prefab_idx = [], {}, [], {}
+    mmap = bytearray()
+    for y in range(CH):
+        for x in range(CW):
+            cell = [gpx(x * 16 + xx - pin_x, y * 16 + yy - pin_y)
+                    for yy in range(16) for xx in range(16)]
+            # room cell under this (16-aligned) map quad; the window band
+            # (Genesis rows 0..47 — the console's window plane, priority
+            # over sprites: a viking can never be seen standing there) and
+            # the lower band (rows 187+) are presentation, not room — no
+            # type bits on the map rows that lie entirely inside them
+            # (seen live: a dropped viking parked on a room ledge hidden
+            # behind the black band of the Factory scene)
+            ltype = (sc.type_bits(cam_x - pin_x, cam_y - pin_y, x, y) << 10) & 0xFC00
+            if y * 16 - pin_y >= 187 or y * 16 - pin_y + 16 <= 48:
+                ltype = 0
+            pcvs = []
+            for dy, dx in ((0, 0), (0, 1), (1, 0), (1, 1)):
+                tp = bytes(cell[(dy * 8 + yy) * 16 + dx * 8 + xx]
+                           for yy in range(8) for xx in range(8))
+                if tp not in tile_idx:
+                    tile_idx[tp] = len(tiles)
+                    tiles.append(tp)
+                pcvs.append(tile_idx[tp] << 6)
+            pk = tuple(pcvs)
+            if pk not in prefab_idx:
+                prefab_idx[pk] = len(prefabs)
+                prefabs.append(pk)
+            v = prefab_idx[pk] | ltype
+            mmap.extend((v & 0xFF, v >> 8))
+    assert len(tiles) <= 1023, f"{len(tiles)} baked tiles > 10-bit offset"
+    pc_gtld = bytearray()
+    for pk in prefabs:
+        for pcv in pk:
+            pc_gtld.extend((pcv & 0xFF, pcv >> 8))
+    pc_tiles = bytearray()
+    pc_masks = bytearray()
+    for tp in tiles:
+        pc_tiles += AC.tile_encode(tp)
+        m = bytearray(8)
+        for ty in range(8):
+            for tx in range(8):
+                if tp[ty * 8 + tx]:
+                    m[(tx & 3) * 2 + (ty >> 2)] |= \
+                        1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
+        pc_masks += m
+    pal128 = [(0, 0, 0)] * 128
+    for i, w in enumerate(sc.cram):
+        pal128[i] = smd_color_to_vga6(w)
+    vik_pos = [(x + pin_x, y + pin_y - 1) for (x, y) in spots]
+    walk = (walk[0] + pin_x, walk[1] + pin_x)
+    drop = (drop[0] + pin_x, drop[1] + pin_y - 1)
+    print(f"  Genesis scene: world '{world}' room {sc.cid:03X} cam ({cam_x},{cam_y}) "
+          f"pin ({pin_x},{pin_y}) map {CW}x{CH}, parallax ({bg_x},{bg_y}); "
+          f"{len(tiles)} tiles / {len(prefabs)} prefabs, "
+          f"CRAM {sum(1 for w in sc.cram if w)} colors; trio head {drop}")
+    return (mmap, pc_tiles, pc_masks, pc_gtld,
+            [("T", i) for i in range(len(tiles))], pal128, vik_pos, walk, drop)
+
+
 def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
-                  keep_vikings=True, scene_mode=False, de_bg=None):
+                  keep_vikings=True, scene_mode=False, de_bg=None,
+                  gen_bg=None):
     """scene_mode: shape the head like the PC logo/intro scenes (0186/
     018C/017D on the 1C6 script): sel=0, head spawn = class 0xD8 — the
     timed-scene controller that shows the screen for `arg` ticks and
@@ -342,7 +453,24 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # exactly on the map's bottom edge (seen live), and the vikings park
         # at the TOP of this layout so the camera stays clamped at y=0.
         CW, CH = 20, 11
-    if scene_mode and de_bg:
+        if gen_bg:
+            # UX stage 1: the Genesis composition fills the 200-row
+            # full-screen scene viewport (LVX_FULLSCREEN); the map geometry
+            # (EXT_L room columns left of the screen + pin padding) comes
+            # from genesis_scene.layout — see build_genesis_backdrop
+            from genesis_scene import layout as _gs_layout
+            _lay = _gs_layout(gen_bg["world"], gen_bg)
+            CW, CH = _lay["cw"], _lay["ch"]
+    gen_drop = None
+    if scene_mode and gen_bg:
+        # UX stage 1: the scene as the Genesis VDP composes it (what the
+        # BAC Definitive Edition shows) — see build_genesis_backdrop
+        de_map, de_tiles, de_masks, de_gtld, de_pairs, de_pal128, \
+            vik_pos_de, de_ledge, gen_drop = build_genesis_backdrop(gen_bg, CW, CH)
+        smap, W, H = bytes(de_map), CW, CH
+        spawns = []          # actors are ours (scene script), not the room's
+        de_bg = gen_bg       # downstream: the 'shipped in PC shapes' path
+    elif scene_mode and de_bg:
         # DE world-entry scenes (task #114): the field is the START AREA
         # of the world's first DE level composited over its backdrop
         # pair; the SMD room is dropped whole (only the banner bank +
@@ -548,24 +676,29 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         nblk = len(banner) // 512
         # the top TWO quad rows become the black title band (the SNES look:
         # the name floats on black above the field) — blank them
-        blk_tile = len(pairs)
-        pc_tiles += AC.tile_encode(bytes(64))
-        pc_masks += bytes(8)
-        pairs.append(("BLACK", 0))
-        for t in (0, 1, 2, 3):
-            pcv = blk_tile << 6
-            pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
-        black_prefab = len(pc_gtld) // 8 - 1
-        for cell in range(W * 2):
-            mmap[cell * 2] = black_prefab & 0xFF
-            mmap[cell * 2 + 1] = black_prefab >> 8
-        # the hidden support row (11) goes black too: the renderer leaks
-        # the map's bottom edge into the 24px HUD-less band below the
-        # viewport (seen live) — keep whatever it smears black
-        for x in range(W):
-            cell = (CH - 1) * W + x
-            mmap[cell * 2] = black_prefab & 0xFF
-            mmap[cell * 2 + 1] = black_prefab >> 8
+        if not gen_bg:
+            # (DE-bake path only: the Genesis composition already carries
+            # the console's black window band on top and the raster band
+            # at the bottom — blanking its last map row would cut the
+            # field's lowest rows and the yellow line on the pinned worlds)
+            blk_tile = len(pairs)
+            pc_tiles += AC.tile_encode(bytes(64))
+            pc_masks += bytes(8)
+            pairs.append(("BLACK", 0))
+            for t in (0, 1, 2, 3):
+                pcv = blk_tile << 6
+                pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
+            black_prefab = len(pc_gtld) // 8 - 1
+            for cell in range(W * 2):
+                mmap[cell * 2] = black_prefab & 0xFF
+                mmap[cell * 2 + 1] = black_prefab >> 8
+            # the hidden support row (11) goes black too: the renderer leaks
+            # the map's bottom edge into the 24px HUD-less band below the
+            # viewport (seen live) — keep whatever it smears black
+            for x in range(W):
+                cell = (CH - 1) * W + x
+                mmap[cell * 2] = black_prefab & 0xFF
+                mmap[cell * 2 + 1] = black_prefab >> 8
         # The letters themselves are SPRITES that FALL into the band (the
         # video shows the name dropping in; the SMD E0 rows do the same,
         # pool = phase): encode each 32x32 block as a type-2 strip sprite
@@ -600,20 +733,37 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # only produce off = frm*72 from base 0 — with the prefix, frame
         # 1+K*16 lands mask-aligned on block K (at 71 + K*1152).
         banner_bank = bytes(71) + bytes(enc)
-        col0 = max(0, (W - nblk * 2) // 2)
-        banner_cols = [col0 * 16 + blk * 32 for blk in range(nblk)]
-        # DAC slots 64..79 = CRAM row 1 of the scene palette. The letters
+        banner_y = 0
+        banner_prow = 1
+        if gen_bg:
+            # UX stage 1: the blocks sit where the console's sprite table
+            # puts them (bac_state.py: x0 + 32k at y0, palette row prow —
+            # WORLD_CAMERA[world]["banner"]), shifted by the map's camera
+            # pin like everything else on the map
+            from genesis_scene import WORLD_CAMERA, layout as _gs_layout
+            _wc = WORLD_CAMERA[gen_bg["world"]]
+            _bn = gen_bg.get("banner") or _wc["banner"]
+            _pin_x, _pin_y = _gs_layout(gen_bg["world"], gen_bg)["pin"]
+            banner_cols = [_bn["x0"] + _pin_x + blk * 32 for blk in range(nblk)]
+            banner_y = _bn["y0"] + _pin_y
+            banner_prow = _bn["prow"]
+        else:
+            col0 = max(0, (W - nblk * 2) // 2)
+            banner_cols = [col0 * 16 + blk * 32 for blk in range(nblk)]
+        # DAC slots 64..79 = a CRAM row of the scene palette. The letters
         # are SPRITES on the SMD; rows 0/1 share the first 8 colors (the
         # PREHISTORIA nibbles), but the >7 nibbles of FACTORY/STARSHIP/
         # EGYPT/WACKY only look right on row 1 (row 0 paints FACTORY a
         # striped beige, row 1 the yellow neon sign / orange gloss —
-        # render-compared across all four rows). NO rotate: a [65..70]
-        # rotate recolored the lettering white for most of the cycle
-        # (seen live); the video shows a steady banner (the SMD shine is
-        # a separate sprite overlay, chunk 0x142 — not ported).
+        # render-compared across all four rows). The console's own sprite
+        # attributes (BAC states) say row 3 for PREHISTORIA and row 2 for
+        # the other four — the Genesis-composition path uses those. NO
+        # rotate: a [65..70] rotate recolored the lettering white for most
+        # of the cycle (seen live); the video shows a steady banner (the
+        # SMD shine is a separate sprite overlay, chunk 0x142 — not ported).
         cram_pd = rom.chunk(pal_list[0]["chunk"])
         for i in range(16):
-            o2 = 32 + i * 2                      # CRAM row 1
+            o2 = banner_prow * 32 + i * 2        # CRAM row banner_prow
             v = be16(cram_pd, o2) if o2 + 1 < len(cram_pd) else 0
             title_pal_tail.append(smd_color_to_vga6(v))
         title_anim = None
@@ -710,6 +860,13 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # "horned" pile = lying vikings with the dizzy-stars loop — user
         # spotted it), keep the fall under the fall-damage threshold
         syv = max(0x20, min(vys) - 48)
+        if gen_drop:
+            # UX stage 1: the head point chosen per world so that all three
+            # land on PC-standable room cells of the platform the SMD scene
+            # spawns the trio on (genesis_scene.WORLD_CAMERA['drop']); the
+            # drop starts below the window band (Genesis row 48), where the
+            # console would hide a sprite behind the window plane
+            sxv, syv = gen_drop[0], max(0x30, gen_drop[1] - 48)
         head[0x08], head[0x09] = sxv & 0xFF, (sxv >> 8) & 0xFF
         head[0x0A], head[0x0B] = syv & 0xFF, (syv >> 8) & 0xFF
         # head+0x1C -> ds:25CF (byte_2AAAF level flags): the donor is a
@@ -766,7 +923,7 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # dispatcher key (OBJ_ANIM_SUB = spawn row index)
         for blk in range(len(banner_cols)):
             out_spawns.insert(1 + blk, dict(
-                x=banner_cols[blk], y=0, half_w=16, half_h=16,
+                x=banner_cols[blk], y=banner_y, half_w=16, half_h=16,
                 cls=0xD9, anim=0x0800, pool=1 + blk))
             # pool -> ds:374 -> OBJ_SPAWN_POOL = the dispatcher key:
             # field[16] resolves through the runtime LUT to column 0x1B8

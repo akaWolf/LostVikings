@@ -43,6 +43,17 @@ extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_game
 extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-field state snapshot
 #include "v2_hash_hot.h"   // (IV) -O2 island for the replay-verify hash kernels
 extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits (all builds; v2_gamestate.cpp)
+// UX plan stage 0: LVX trailer flags (defined with the LVX loader below;
+// used by the scroll-limit mirror above it).
+enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002 };
+// LVX3 flags bits 4-11 / 12-15: the camera pin (viewport x 0..255 / y 0..15
+// in px) of a CAMLOCK slot — the scene map's off-screen left room columns
+// plus the padding that keeps the Genesis composition's room quads
+// 16-aligned (tools/assets/genesis_scene.py layout(); smd2pc.py
+// build_genesis_backdrop writes the map, integrate_snes.py the flags).
+static inline uint16_t LVX_PIN_X(uint16_t fl) { return (fl >> 4) & 0xFF; }
+static inline uint16_t LVX_PIN_Y(uint16_t fl) { return (fl >> 12) & 0xF; }
+extern "C" uint16_t v2_lvx_flags(uint16_t level);
 extern uint8_t* v2_m2c_base;
 
 // SDL spec-key state (defined in sdl/render.cpp). Game logic ORs this in
@@ -4973,6 +4984,25 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
     uint16_t height = v2gs(s).map_height();   // word_2AABE (map height in tiles)
     v2gs(s).clip_limit_y(height * 2);        // word_3164A
     v2gs(s).scroll_limit_y(height * 16 - 0xB0); // word_2AA86 (scroll Y limit)
+    // UX stage 0/1 (LVX_CAMLOCK): full-screen scene slots pin the camera at
+    // the trailer's (pin_x, pin_y) — v2_lvx_pin_camera parks it there right
+    // after sub_113d8 and locks both axes; the limits collapse to the same
+    // point so nothing can ever clamp the viewport elsewhere. Key = the
+    // CURRENT level ([25AD]): by now the header unpack has already dropped
+    // the scene's next-level byte into [25C9] (level_load) — measured live:
+    // level_load=4 level=53 at this point on slot 53 — so that one is stale.
+    // Only LVX slots carry the flag; canonical levels keep the orig limits.
+    {
+        const uint16_t fl = v2_lvx_flags(v2gs(s).level());
+        if (fl & LVX_CAMLOCK) {
+            v2gs(s).scroll_limit_x(LVX_PIN_X(fl));
+            v2gs(s).scroll_limit_y(LVX_PIN_Y(fl));
+        }
+        if (getenv("V2_LVX_TRACE"))
+            fprintf(stderr, "LVX-TRACE scroll_limits: level=%u (level_load=%u) flags=%04X map %ux%u -> limits %u,%u\n",
+                    v2gs(s).level(), v2gs(s).level_load(), fl,
+                    width, height, v2gs(s).scroll_limit_x(), v2gs(s).scroll_limit_y());
+    }
     // jmp loc_16595: build row lookup table at ds:0x8F68 (256 entries).
     // ax = ds:0x25DC (from above), shl 1 = row stride in tilemap words.
     // ds:[0x8F68 + i*2] = i * stride for i=0..255.
@@ -5013,6 +5043,42 @@ static void v2_viewport_init_113d8(uint8_t* s) {
     v2gs(s).scroll_row(scroll_y);        // word_2AA61
     v2gs(s).scroll_disp_y(scroll_y);        // word_317D1
     v2gs(s).scroll_disp_y2(scroll_y >> 1);   // word_317D5
+}
+
+// UX stage 1 (LVX_CAMLOCK): park the camera of a full-screen scene slot at
+// the trailer's (pin_x, pin_y) and lock both scroll axes. The Genesis scene
+// camera is static (the DE video shows no camera motion through any of the
+// five scenes; the BAC states 30 s in give the exact HScroll/VSRAM values,
+// tools/assets/bac_state.py). The scene map carries EXT_L room columns left
+// of the screen (the off-screen part of the platform the SMD scene spawns
+// the trio on) and, where the camera sits at a half-quad offset (Preh
+// 132,120 / Wacky 144,216), pin padding so the room quads stay 16-aligned
+// with their type bits; the viewport parks at (pin_x, pin_y) = exactly the
+// screen's top-left in map px (genesis_scene.py layout()). Field set =
+// exactly what sub_113d8 writes per axis (viewport, saved viewport, scroll
+// col/row, the two display scroll copies); the locks are word_28874/6 —
+// the early return of the four movers (17496/1746c/174e9/174bf) and of the
+// VM scroll op — which sub_11080 clears at the top of every level load,
+// i.e. before this runs. Canonical levels: no LVX record, nothing happens.
+static void v2_lvx_pin_camera(uint8_t* s) {
+    const uint16_t fl = v2_lvx_flags(v2gs(s).level());
+    if (!(fl & LVX_CAMLOCK)) return;
+    const uint16_t px = LVX_PIN_X(fl), py = LVX_PIN_Y(fl);
+    v2gs(s).viewport_x(px);            // word_28524
+    v2gs(s).saved_vp_x(px);            // word_2AA5B
+    v2gs(s).scroll_col(px >> 3);       // word_2AA5F
+    v2gs(s).scroll_disp_x(px >> 3);    // word_317CF
+    v2gs(s).scroll_disp_x2(px >> 4);   // word_317D3 (= scroll_col >> 1)
+    v2gs(s).viewport_y(py);            // word_28526
+    v2gs(s).saved_vp_y(py);            // word_2AA5D
+    v2gs(s).scroll_row(py >> 3);       // word_2AA61
+    v2gs(s).scroll_disp_y(py >> 3);    // word_317D1
+    v2gs(s).scroll_disp_y2(py >> 4);   // word_317D5
+    v2gs(s).scroll_lock_x(1);          // word_28874
+    v2gs(s).scroll_lock_y(1);          // word_28876
+    if (getenv("V2_LVX_TRACE"))
+        fprintf(stderr, "LVX-TRACE pin_camera: level=%u flags=%04X -> viewport (%u,%u), scroll locked\n",
+                v2gs(s).level(), fl, px, py);
 }
 
 // sub_173c7: build FS (render tilemap) from ES (game tilemap) + GS (tile graphics).
@@ -7541,6 +7607,9 @@ static void v2_load_level_11080(uint8_t* s) {
     v2_scroll_limits_113b0(s);
     // sub_113d8: init viewport + scroll from viking position
     v2_viewport_init_113d8(s);
+    // UX stage 1 (LVX_CAMLOCK): park + lock the camera of a full-screen
+    // scene slot (no-op for every other level)
+    v2_lvx_pin_camera(s);
     // sub_17749: music/sound init at level enter. Dispatches via off_3285A[ds:0x25B7 & 0xFF].
     v2_music_dispatch(s, 0x25B7);
     // sub_173c7: init scroll tracking
@@ -7671,11 +7740,19 @@ static uint16_t v2_current_level = 0xFFFF;
 //   the canonical transition machinery on that slot: the chunk is an RLE
 //   (keys u16, count u16) input stream played by sub_12d72 (ac=0x8000), the
 //   same mechanism the attract demo (1BB) and the ending (1BC) ride on.
+//   "LVX3" u16 n, n × 14B records {... + flags u16} — UX plan stage 0:
+//   bit0 LVX_FULLSCREEN: the slot is presented on all 200 screen rows (the
+//   VGA split-screen HUD band 176..199 shows map rows instead of the HUD —
+//   the PC original has no such mode, its line compare is programmed once);
+//   bit1 LVX_CAMLOCK: scroll limits forced to (0,0) so the camera stays
+//   pinned on the scene field (a 13-row map would otherwise leave 32px of
+//   vertical travel for the viking-follow camera).
 // No trailer (canonical image) -> count 0 -> every branch below is dead and
 // behavior is bit-identical to the original.
 // ---------------------------------------------------------------------------
+// (LVX_FULLSCREEN / LVX_CAMLOCK enum: file top, next to the forward decl.)
 struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
-                    uint16_t demo_cid; };
+                    uint16_t demo_cid; uint16_t flags; };
 static V2LvxEntry v2_lvx[16];
 static int v2_lvx_count = 0;
 
@@ -7691,18 +7768,35 @@ static uint16_t v2_lvx_demo_cid(uint16_t level) {
     return lx ? lx->demo_cid : 0;
 }
 
+// UX stage 0: LVX flags of a slot (0 = canonical slot / no trailer).
+extern "C" uint16_t v2_lvx_flags(uint16_t level) {
+    const V2LvxEntry* lx = v2_lvx_find(level);
+    return lx ? lx->flags : 0;
+}
+
+// UX stage 0: is the slot currently in the game state (ds:0x25AD, the
+// running level id) an LVX full-screen scene? Read from the shadow DS, the
+// same source every v2 mirror renders from; 0 on canonical slots and before
+// the VM has a shadow at all, so canonical behavior never changes.
+extern "C" int v2_scene_fullscreen(void) {
+    uint8_t* s = v2_vm_get_shadow_ds();
+    if (!s) return 0;
+    return (v2_lvx_flags(v2gs(s).level()) & LVX_FULLSCREEN) ? 1 : 0;
+}
+
 // Parse the trailer from a loaded exe_static image (V2_ONLY main calls it).
 extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
     v2_lvx_count = 0;
     if (size < 6) return;
-    // the trailer sits at the very end: scan the last 4+2+12*16 bytes
-    uint32_t from = size > 4 + 2 + 12 * 16 ? size - (4 + 2 + 12 * 16) : 0;
+    // the trailer sits at the very end: scan the last 4+2+14*16 bytes
+    uint32_t from = size > 4 + 2 + 14 * 16 ? size - (4 + 2 + 14 * 16) : 0;
     int32_t at = -1;
     int rec = 10;
     for (uint32_t i = from; i + 6 <= size; i++)
-        if (!memcmp(img + i, "LVX1", 4) || !memcmp(img + i, "LVX2", 4)) {
+        if (!memcmp(img + i, "LVX1", 4) || !memcmp(img + i, "LVX2", 4) ||
+            !memcmp(img + i, "LVX3", 4)) {
             at = (int32_t)i;
-            rec = (img[i + 3] == '2') ? 12 : 10;
+            rec = (img[i + 3] == '3') ? 14 : (img[i + 3] == '2') ? 12 : 10;
         }
     if (at < 0) return;
     uint16_t n = (uint16_t)(img[at + 4] | (img[at + 5] << 8));
@@ -7713,14 +7807,15 @@ extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
         v2_lvx[i].hdr_cid  = (uint16_t)(p[2] | (p[3] << 8));
         v2_lvx[i].tmpl_cid = (uint16_t)(p[4] | (p[5] << 8));
         memcpy(v2_lvx[i].pw, p + 6, 4);
-        v2_lvx[i].demo_cid = (rec == 12) ? (uint16_t)(p[10] | (p[11] << 8)) : 0;
+        v2_lvx[i].demo_cid = (rec >= 12) ? (uint16_t)(p[10] | (p[11] << 8)) : 0;
+        v2_lvx[i].flags    = (rec >= 14) ? (uint16_t)(p[12] | (p[13] << 8)) : 0;
     }
     v2_lvx_count = n;
     fprintf(stderr, "V2-LVX: %d extra level slots:", n);
     for (int i = 0; i < n; i++)
-        fprintf(stderr, " %d='%c%c%c%c'(hdr %04X)", v2_lvx[i].level,
+        fprintf(stderr, " %d='%c%c%c%c'(hdr %04X fl %02X)", v2_lvx[i].level,
                 v2_lvx[i].pw[0], v2_lvx[i].pw[1], v2_lvx[i].pw[2],
-                v2_lvx[i].pw[3], v2_lvx[i].hdr_cid);
+                v2_lvx[i].pw[3], v2_lvx[i].hdr_cid, v2_lvx[i].flags);
     fprintf(stderr, "\n");
 }
 
@@ -19746,8 +19841,11 @@ void v2_phase_frame_begin(uint16_t ds_val) {
                 // scratch the user never sees — dumping them faked a
                 // "garbage band" during the interlude work)
                 extern uint8_t v2_hud_buf[320 * 64];
+                // UX stage 0: on a full-screen LVX scene the display shows
+                // map rows 176..199 (no HUD band) — dump what is shown.
+                const int fs = v2_scene_fullscreen();
                 for (int i = 0; i < 320 * 200; i++) {
-                    uint8_t c = (i < 320 * 176)
+                    uint8_t c = (i < 320 * 176 || fs)
                         ? v2_render_buf[i]
                         : v2_hud_buf[i - 320 * 176];
                     fputc(v2_dac_shadow[c*3+0] << 2, f);
