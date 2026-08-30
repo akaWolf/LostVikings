@@ -150,7 +150,14 @@ def compose_cgram(rom, pal_list):
     return cg
 
 
-def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
+def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
+                  new_cids=None, next_level=None):
+    """new_cids: dict(hdr, map, tiles, gtld, pal) of NEW archive ids —
+    progression-integration mode (task #104): the donor slot stays
+    untouched, the level lands in its own chunks (masks id = tiles+1 by
+    the engine rule word_2AAC3+1) and its header carries next_level in
+    the +0x16 field (the verified in-stripe progression pointer: the
+    level-load decompression writes it straight into DS_LEVEL_LOAD)."""
     rom = SnesRom()
     tr = rom.chunk(snes_hdr_id)
     st = LR.parse_stripe(tr)
@@ -168,9 +175,15 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
     donor_raw = LR.header_raw(donor_cid, scratch)
     dst = LR.parse_stripe(donor_raw)
     dhead = bytearray(bytes.fromhex(dst["head"]))
-    tm_id = w16(dhead, 0x2E)
-    ts_id = w16(dhead, 0x30)
-    gt_id = w16(dhead, 0x32)
+    if new_cids:
+        hdr_id = new_cids["hdr"]
+        tm_id, ts_id, gt_id = new_cids["map"], new_cids["tiles"], new_cids["gtld"]
+        pal_chunk = new_cids["pal"]
+    else:
+        hdr_id = int(donor_cid, 16)
+        tm_id = w16(dhead, 0x2E)
+        ts_id = w16(dhead, 0x30)
+        gt_id = w16(dhead, 0x32)
 
     # sanity: every spawn class must exist in the donor world's .lvs with
     # the same dimensions as the SNES per-type config @ROM 0x010000
@@ -244,6 +257,15 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
     for o in range(0x07, 0x12):          # viking start block (sel/X/Y/flags/arg)
         head[o] = tr[o]
     head[0x29:0x2D] = tr[0x29:0x2D]      # dims (+0x2D byte kept from SNES)
+    if new_cids:
+        # own chunk refs (the donor head carried the donor's)
+        head[0x2E], head[0x2F] = tm_id & 0xFF, tm_id >> 8
+        head[0x30], head[0x31] = ts_id & 0xFF, ts_id >> 8
+        head[0x32], head[0x33] = gt_id & 0xFF, gt_id >> 8
+    if next_level is not None:
+        # +0x16 = next level (verified: the stripe decompresses over
+        # DS 0x25B3 and this word lands on DS_LEVEL_LOAD 0x25C9)
+        head[0x16], head[0x17] = next_level & 0xFF, next_level >> 8
     # SNES-only refs @+0x39/+0x3D -> 0xFFFF exactly like PC levels
     for o in (0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40):
         head[o] = donor_raw[o]
@@ -263,12 +285,28 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
             json.dump(obj, f, indent=1)
         os.replace(tmp, path)
 
-    hdr_path = os.path.join(scratch, "level_headers", f"{donor_cid}.json")
-    with open(hdr_path) as f:
-        hj = json.load(f)
-    hj["raw"] = new_raw.hex()
-    hj["width"], hj["height"] = dims
+    hdr_path = os.path.join(scratch, "level_headers", f"{hdr_id:04X}.json")
+    hj = {"format": "level_header_stripe", "chunk": f"{hdr_id:04X}",
+          "width": dims[0], "height": dims[1],
+          "tilemap": f"{tm_id:04X}", "tileset": f"{ts_id:04X}",
+          "bg_tileset": f"{gt_id:04X}", "raw": new_raw.hex()}
     wjson(hdr_path, hj)
+
+    if new_cids:
+        # register the fresh archive ids so assetc.pack picks them up
+        ex_path = os.path.join(scratch, "extras.json")
+        extras = {}
+        if os.path.exists(ex_path):
+            with open(ex_path) as f:
+                extras = json.load(f)
+        for cid2, role2 in ((hdr_id, "level_header_stripe"),
+                            (tm_id, "tilemap"),
+                            (ts_id, "tileset"),
+                            (ts_id + 1, "tile_masks"),
+                            (gt_id, "bg_tileset"),
+                            (pal_chunk, "unreferenced")):
+            extras[f"{cid2:04X}"] = {"role": role2}
+        wjson(ex_path, extras)
 
     rows = []
     for y in range(dims[1]):
@@ -297,11 +335,13 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT):
         f.write(bytes(bg))
     os.replace(tmp, pal_path)
 
-    print(f"written into {scratch}: header {donor_cid}, map {tm_id:04X}, "
+    print(f"written into {scratch}: header {hdr_id:04X}, map {tm_id:04X}, "
           f"tiles {ts_id:04X} ({len(pc_tiles)}B), masks {ts_id+1:04X} "
           f"({len(pc_masks)}B), prefabs {gt_id:04X}, "
-          f"BG palette -> {pal_chunk:04X}")
-    return {"donor": donor_cid, "tilemap": f"{tm_id:04X}",
+          f"BG palette -> {pal_chunk:04X}"
+          + (f", next={next_level}" if next_level is not None else ""))
+    return {"donor": donor_cid, "header": f"{hdr_id:04X}",
+            "tilemap": f"{tm_id:04X}",
             "tileset": f"{ts_id:04X}", "prefabs": f"{gt_id:04X}",
             "pal_chunk": f"{pal_chunk:04X}", "tiles": len(pairs),
             "spawns": len(st["spawns"]), "prio_ported": prio_ported,

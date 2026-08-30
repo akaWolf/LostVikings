@@ -48,6 +48,10 @@ namespace m2c {
 // V2_ONLY fallback classifier).
 static uint8_t v2_m2c_buf[0x100000] = {0};
 
+// #104: LVX1 trailer parser lives in v2_vm.cpp (file-scope extern "C" —
+// a block-scope extern would mangle as C++ and fail to link).
+extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size);
+
 static void v2_load_static_data() {
     // V2_EXE_STATIC: alternate image path (task #108 — the dialog texts
     // live in seg001 of this image; the editor plays patched copies).
@@ -61,7 +65,14 @@ static void v2_load_static_data() {
         return;
     }
     size_t n = fread(v2_m2c_buf, 1, V2_EXE_STATIC_SIZE, f);
+    // #104: LVX1 trailer (extra level slots + their passwords) — it sits
+    // PAST the 0x29F00 image, so it must be read separately (the fread
+    // above stops exactly at the image size). Absent -> tn == 0 -> no-op.
+    uint8_t lvx_tail[4096];
+    size_t tn = fread(lvx_tail, 1, sizeof(lvx_tail), f);
     fclose(f);
+    if (tn) v2_lvx_load(lvx_tail, (uint32_t)tn);
+    else    v2_lvx_load(v2_m2c_buf, (uint32_t)n);
     printf("V2_ONLY: loaded %zu bytes from exe_static.bin (seg001 sample @0x9480: "
            "%02X %02X %02X %02X)\n",
            n, v2_m2c_buf[0x9480], v2_m2c_buf[0x9481], v2_m2c_buf[0x9482], v2_m2c_buf[0x9483]);

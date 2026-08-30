@@ -73,8 +73,17 @@ def do_pack():
                 js = json.load(f)
             img = TX.compile_texts(js, TX.load_image())
             out = os.path.join(SCRATCH, "exe_static.bin")
+            # keep whatever trailer the image carries past the 0x29F00
+            # static image (task #104 LVX1 extra-level records) — the text
+            # compiler only rebuilds the image itself.
+            tail = b""
+            if os.path.exists(out):
+                with open(out, "rb") as f:
+                    cur = f.read()
+                if len(cur) > len(img):
+                    tail = cur[len(img):]
             with open(out + ".tmp", "wb") as f:
-                f.write(img)
+                f.write(img + tail)
             os.replace(out + ".tmp", out)
     return len(os.listdir(os.path.join(SCRATCH, ".compiled")))
 
@@ -431,8 +440,23 @@ def snes_page():
             "<table><tr><th>snes</th><th>name</th><th>world</th><th>dims</th>"
             "<th>donor</th><th>pal chunk</th><th></th><th></th><th></th></tr>"
             + "".join(rows) + "</table>"
+            "<h3>progression integration (SNES order)</h3>"
+            "<p>Adds all five as NEW slots 48-52 with their console "
+            "passwords (TR33/SNDS/TMPL/RVTS/PDDY) — the donor levels stay "
+            "in the game. Inserts: BBLS&rarr;TR33&rarr;VLCN, "
+            "JMNN&rarr;SNDS&rarr;TMPL&rarr;TTRS, JNKR&rarr;RVTS&rarr;CBLT, "
+            "WRLR&rarr;PDDY&rarr;TRPD. Needs the LVX-aware engine build.</p>"
+            "<button onclick='integrate()'>integrate + pack</button> "
+            "<span id='i_st'></span>"
             "<p><a href='/'>&larr; level list</a></p>"
             "<script>"
+            "async function integrate(){"
+            " const st=document.getElementById('i_st'); st.textContent='...';"
+            " const r=await fetch('/api/snes/integrate',{method:'POST',"
+            "  headers:{'Content-Type':'application/json'},body:'{}'});"
+            " const js=await r.json();"
+            " st.textContent=js.ok?('ok: slots '+js.slots.join(',')+"
+            "  ' — packed '+js.packed):('ERR '+js.error);}"
             "async function conv(id){"
             " const st=document.getElementById('s'+id); st.textContent='...';"
             " const r=await fetch('/api/snes/convert',{method:'POST',"
@@ -599,6 +623,8 @@ class H(BaseHTTPRequestHandler):
                 return self.api_mod_import(body)
             if self.path == "/api/snes/convert":
                 return self.api_snes_convert(body)
+            if self.path == "/api/snes/integrate":
+                return self.api_snes_integrate(body)
             self._err("not found", 404)
         except Exception as e:                                  # noqa: BLE001
             self._err(f"{type(e).__name__}: {e}", 500)
@@ -773,6 +799,32 @@ class H(BaseHTTPRequestHandler):
                            "spawns": info["spawns"],
                            "prio": info["prio_ported"],
                            "dims": info["dims"], "donor": donor})
+
+    def api_snes_integrate(self, body):
+        """Put all five exclusives into the progression as NEW slots 48-52
+        (task #104): own chunk ids, +0x16 next-level chain, LVX1 trailer
+        with the console passwords. The donors keep their levels."""
+        import integrate_snes as IS
+        import snes2pc as SP
+        if not os.path.exists(SP.ROM_PATH):
+            return self._err(f"ROM not found: {SP.ROM_PATH}")
+        with LOCK:
+            lvx = []
+            for e in IS.PLAN:
+                b = e["base"]
+                SP.convert_level(e["snes"], e["donor"], SCRATCH,
+                                 new_cids={"hdr": b, "map": b + 1,
+                                           "tiles": b + 2, "gtld": b + 4,
+                                           "pal": b + 5},
+                                 next_level=e["next"])
+                lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
+            for e in IS.PLAN:
+                if e["prev_hdr"]:
+                    IS.patch_next(SCRATCH, e["prev_hdr"], e["slot"])
+            IS.build_lvx(SCRATCH, lvx)
+        return self._json({"ok": True,
+                           "slots": [e["slot"] for e in IS.PLAN],
+                           "packed": do_pack()})
 
     def api_mod_import(self, body):
         files = body.get("files") or {}

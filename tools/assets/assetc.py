@@ -645,7 +645,49 @@ def pack():
             else:
                 comp_block = _st.pack("<H", (len(payload) - 1) & 0xFFFF) + lzss_store(payload)
         open(os.path.join(outdir, f"{cid:04d}.bin"), "wb").write(hdr + comp_block)
-    print(f"packed: {len(cmap)} -> {outdir}")
+    # task #104 progression: EXTRA chunks beyond the 535-entry archive —
+    # fresh ids registered in ASSETS/extras.json ({"CID": {"role": ...}}).
+    # They have no archive record: the payload compiles from the open tree
+    # only and ships as a store-mode stream with a synthetic 8B header
+    # (the header mirror @2BB4 is state the engine stores, not reads).
+    n_extra = 0
+    ex_path = os.path.join(ASSETS, "extras.json")
+    if os.path.exists(ex_path):
+        extras = json.load(open(ex_path))
+        for cid_hex, info in sorted(extras.items()):
+            cid = int(cid_hex, 16)
+            conv = converter_for(info["role"])
+            # converters address files by deterministic relpaths — every
+            # file must already exist (the converter wrote them):
+            role = info["role"]
+            if role == "level_header_stripe":
+                rels = [f"level_headers/{cid:04X}.json"]
+            elif role == "tilemap":
+                rels = [f"tilemaps/{cid:04X}.json"]
+            elif role == "tileset":
+                rels = [f"tilesets/{cid:04X}.png", f"tilesets/{cid:04X}.json"]
+            elif role == "tile_masks":
+                rels = [f"tile_masks/{cid:04X}.png", f"tile_masks/{cid:04X}.json"]
+            elif role == "bg_tileset":
+                rels = [f"bg_tilesets/{cid:04X}.png", f"bg_tilesets/{cid:04X}.json"]
+            elif role == "unreferenced":
+                rels = [f"unreferenced/{cid:04X}.bin"]
+            else:
+                raise SystemExit(f"extras: unsupported role {role} for {cid_hex}")
+            loaded = []
+            for rel in rels:
+                pth = os.path.join(ASSETS, rel)
+                if not os.path.exists(pth):
+                    raise SystemExit(f"extras: missing open file {rel}")
+                loaded.append((rel, open(pth, "rb").read()))
+            payload = conv.compile(loaded)
+            import struct as _st2
+            hdr = _st2.pack("<II", 0, 0)   # synthetic table header
+            comp_block = _st2.pack("<H", (len(payload) - 1) & 0xFFFF) \
+                + lzss_store(payload)
+            open(os.path.join(outdir, f"{cid:04d}.bin"), "wb").write(hdr + comp_block)
+            n_extra += 1
+    print(f"packed: {len(cmap)}+{n_extra} -> {outdir}")
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--pack":

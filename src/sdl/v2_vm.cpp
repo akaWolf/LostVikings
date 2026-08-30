@@ -7573,6 +7573,52 @@ static void v2_load_level_11080(uint8_t* s) {
 // Original order in sub_11080: sub_111b1 → sub_111df → sub_12ce4 → sub_117ad → sub_11204
 static uint16_t v2_current_level = 0xFFFF;
 
+// ---------------------------------------------------------------------------
+// Task #104 progression: LVX1 exe_static trailer — extra level slots beyond
+// the 48-entry header/template tables (SNES DE exclusives at slots 48-52).
+// Format (appended to exe_static.bin): "LVX1" u16 n, then n × 10B records
+// {level u16, hdr_cid u16, tmpl_cid u16, pw[4]}. No trailer (canonical
+// image) -> count 0 -> every branch below is dead and behavior is
+// bit-identical to the original.
+// ---------------------------------------------------------------------------
+struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4]; };
+static V2LvxEntry v2_lvx[16];
+static int v2_lvx_count = 0;
+
+static const V2LvxEntry* v2_lvx_find(uint16_t level) {
+    for (int i = 0; i < v2_lvx_count; i++)
+        if (v2_lvx[i].level == level) return &v2_lvx[i];
+    return nullptr;
+}
+
+// Parse the trailer from a loaded exe_static image (V2_ONLY main calls it).
+extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
+    v2_lvx_count = 0;
+    if (size < 6) return;
+    // the trailer sits at the very end: scan the last 4+2+10*16 bytes
+    uint32_t from = size > 4 + 2 + 10 * 16 ? size - (4 + 2 + 10 * 16) : 0;
+    int32_t at = -1;
+    for (uint32_t i = from; i + 6 <= size; i++)
+        if (!memcmp(img + i, "LVX1", 4)) at = (int32_t)i;
+    if (at < 0) return;
+    uint16_t n = (uint16_t)(img[at + 4] | (img[at + 5] << 8));
+    if (n > 16 || (uint32_t)at + 6 + n * 10u > size) return;
+    const uint8_t* p = img + at + 6;
+    for (uint16_t i = 0; i < n; i++, p += 10) {
+        v2_lvx[i].level    = (uint16_t)(p[0] | (p[1] << 8));
+        v2_lvx[i].hdr_cid  = (uint16_t)(p[2] | (p[3] << 8));
+        v2_lvx[i].tmpl_cid = (uint16_t)(p[4] | (p[5] << 8));
+        memcpy(v2_lvx[i].pw, p + 6, 4);
+    }
+    v2_lvx_count = n;
+    fprintf(stderr, "V2-LVX: %d extra level slots:", n);
+    for (int i = 0; i < n; i++)
+        fprintf(stderr, " %d='%c%c%c%c'(hdr %04X)", v2_lvx[i].level,
+                v2_lvx[i].pw[0], v2_lvx[i].pw[1], v2_lvx[i].pw[2],
+                v2_lvx[i].pw[3], v2_lvx[i].hdr_cid);
+    fprintf(stderr, "\n");
+}
+
 // sub_111b1: load template chunk + level header chunk
 static void v2_load_template(uint8_t* shadow) {
     uint16_t level = v2gs(shadow).level_load(); // word_2AAA9
@@ -7580,6 +7626,12 @@ static void v2_load_template(uint8_t* shadow) {
     uint16_t di_idx = level * 2;
     uint16_t level_chunk = *(uint16_t*)(shadow + (uint16_t)(di_idx - 0x6BF4));
     uint16_t template_chunk = *(uint16_t*)(shadow + (uint16_t)(di_idx - 0x6B94));
+    // #104: LVX slots live past the 48-entry tables — their chunk ids come
+    // from the trailer instead of the (out-of-range) table read above.
+    if (const V2LvxEntry* lx = v2_lvx_find(level)) {
+        level_chunk = lx->hdr_cid;
+        template_chunk = lx->tmpl_cid;
+    }
 
     // Load template → shadow animation data (ds:0x2E67)
     // Exact replica of sub_111b1: CMP ax, word_2B351; JZ skip
@@ -9613,6 +9665,19 @@ struct V2VM {
     // DS write: write to shadow if within range (never write to real DS)
     void ds_write(uint16_t addr, uint16_t val) {
         if (addr < V2_VM_SHADOW_SIZE - 1) {
+            // V2_NEXTLVL_TRACE=1 (#104 progression): log every VM write into
+            // DS_LEVEL_LOAD with the executing object + bytecode pc — the
+            // "who sets the next level" forensics channel.
+            if (addr == DS_LEVEL_LOAD) {
+                static int trace = -1;
+                if (trace < 0) { const char* e = getenv("V2_NEXTLVL_TRACE"); trace = (e && e[0]=='1') ? 1 : 0; }
+                if (trace) {
+                    extern int v2_dbg_pre_vm_iter;
+                    fprintf(stderr, "V2-NEXTLVL: f%d obj=%02X pc=%04X val=%04X (level=%04X)\n",
+                            v2_dbg_pre_vm_iter, obj, pc,
+                            val, *(uint16_t*)(shadow + DS_LEVEL));
+                }
+            }
             // stage-4 II.c: the operand write path mirrors evacuated fields
             // (interpreter bodies/helpers reach them with computed addresses).
             v2_gs_evac_mirror_w(shadow, addr, val);
@@ -14423,6 +14488,18 @@ static void v2_vm_op_D3(V2VM& vm) {
         fprintf(stderr, "V2-PW: f%d op_D3 verify '%c%c%c%c'\n", v2_dbg_pre_vm_iter,
             (char)(pw0 & 0x7F), (char)(pw1 & 0x7F), (char)(pw2 & 0x7F), (char)(pw3 & 0x7F));
 
+    // #104: LVX passwords first (they are NOT in the ds:0x85A5 table —
+    // that table is exactly 0x94/4 = 37 entries and the loop below is
+    // bounded by the original's CMP si,94h).
+    for (int i = 0; i < v2_lvx_count; i++) {
+        const V2LvxEntry& lx = v2_lvx[i];
+        if ((lx.pw[0] & 0x7F) == (pw0 & 0xFF) && (lx.pw[1] & 0x7F) == (pw1 & 0xFF) &&
+            (lx.pw[2] & 0x7F) == (pw2 & 0xFF) && (lx.pw[3] & 0x7F) == (pw3 & 0xFF)) {
+            vm.ds_write(DS_LEVEL_LOAD, lx.level);
+            vm.ds_write_b(DS_CMD_ACTIVE, 0);
+            return;
+        }
+    }
     for (uint16_t si = 0; (int16_t)si < 0x94; si += 4) {
         uint16_t addr_base = (uint16_t)(si - 0x7A5B);
         uint8_t c0 = *(vm.shadow + addr_base) & 0x7F;
@@ -15150,6 +15227,15 @@ static void v2_vm_op_42(V2VM& vm) {
 static void v2_vm_op_D2(V2VM& vm) {
     // si = word_2AA8D (current level index) = DS:0x25AD
     uint16_t si = vm.ds_read(DS_LEVEL);
+    // #104: LVX slots carry their password in the trailer (the ds:0x85A5
+    // table has no row for them).
+    if (const V2LvxEntry* lx = v2_lvx_find(si)) {
+        vm.ds_write(DS_PW_CHAR0, lx->pw[0] & 0x7F);
+        vm.ds_write(DS_PW_CHAR1, lx->pw[1] & 0x7F);
+        vm.ds_write(DS_PW_CHAR2, lx->pw[2] & 0x7F);
+        vm.ds_write(DS_PW_CHAR3, lx->pw[3] & 0x7F);
+        return;
+    }
     si <<= 2; // * 4 (4 bytes per password entry)
     // Read 4 password characters from table at ds:[(uint16_t)(si - 0x7A5B + N)]
     uint8_t c0 = *(vm.shadow + (uint16_t)(si - 0x7A5B)) & 0x7F;
