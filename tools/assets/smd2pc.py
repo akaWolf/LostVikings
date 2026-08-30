@@ -309,6 +309,83 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         v = used_idx[v & 0x3FF] | (v & 0xFC00)
         mmap += bytes((v & 0xFF, v >> 8))
 
+    # ---- world-title banner (the SNES/SMD interludes print the world name
+    # over the scene — the SMD does it via its E0 letter-block class whose
+    # code has no PC counterpart, so build the banner from DATA: chunk-2
+    # glyphs (72B each, ch-0x10; the dialog font) upscaled 2x into 16x16
+    # letter prefabs on map row 1, letter BODIES on consecutive DAC slots
+    # 64..64+N-1 and a pal-anim ROTATE over that range — bright pulses run
+    # through the letters, the SNES-style shimmering title. Shadow pixels
+    # sit on the static slot 64+N. ----
+    title_pal_tail = []
+    title_anim = None
+    if scene_mode and scene_title:
+        f2 = LR.open_payload(2, "lzss", scratch)
+        def glyph_px(ch):
+            px2 = [[0] * 8 for _ in range(8)]
+            b2 = f2[(ch - 0x10) * 72:(ch - 0x10) * 72 + 72]
+            if len(b2) < 72:
+                return px2
+            i2 = 0
+            for plane in range(4):
+                for strip in range(2):
+                    data = b2[i2 + 1:i2 + 9]
+                    i2 += 9
+                    for row in range(4):
+                        for col in range(2):
+                            px2[strip * 4 + row][col * 4 + plane] = \
+                                data[row * 2 + col]
+            return px2
+        letters = list(scene_title)
+        N = len(letters)
+        shadow_slot = 64 + N
+        assert shadow_slot <= 127, "title too long for DAC slots 64..127"
+        # place the banner INSIDE the camera window: the viewport parks on
+        # the vikings (~y-88..y+88 around the drop floor), so hang the
+        # letters ~5 quads above the SMD viking row, not at the map top
+        _vys = [p[1] for p in vik_pos] or [224]
+        _vxs = [p[0] for p in vik_pos] or [80]
+        row_q = max(1, (min(_vys) - 72) // 16)
+        # center on the CAMERA window, not the map: the viewport parks on
+        # the vikings (left-clamped on these rooms), so center around the
+        # spawn column
+        _cx = min(_vxs) + 0x40
+        col0 = max(1, min(_cx // 16 - N // 2, W - 1 - N))
+        for k, chL in enumerate(letters):
+            if chL == ' ':
+                continue
+            g = glyph_px(ord(chL))
+            body = 64 + k
+            tiles16 = [bytearray(64) for _ in range(4)]
+            for y in range(16):
+                for x in range(16):
+                    v = g[y // 2][x // 2]
+                    if not v:
+                        continue
+                    cc = body if v == 1 else shadow_slot
+                    tiles16[(y // 8) * 2 + (x // 8)][(y % 8) * 8 + (x % 8)] = cc
+            base_idx = len(pairs)
+            for t in range(4):
+                pc_tiles += AC.tile_encode(bytes(tiles16[t]))
+                pc_masks += bytes(8)         # no priority overdraw
+                pairs.append(("TITLE", k * 4 + t))
+            # prefab: TL,TR,BL,BR sub-words (idx<<6, no flips, no bit3)
+            for t in (0, 1, 2, 3):
+                pcv = (base_idx + t) << 6
+                pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
+            prefab_idx = len(pc_gtld) // 8 - 1
+            cell = row_q * W + col0 + k
+            mmap[cell * 2] = prefab_idx & 0xFF
+            mmap[cell * 2 + 1] = prefab_idx >> 8   # type bits 0: pure decor
+        assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
+        # letter body colors: warm base + two bright pulses the rotation
+        # sweeps across the letters; shadow = near-black
+        for k in range(N):
+            title_pal_tail.append((63, 62, 46) if k < 2 else (52, 42, 16))
+        title_pal_tail.append((8, 8, 10))          # shadow slot
+        title_anim = {"reload": 4, "start": 64, "end": 64 + N - 1,
+                      "frames": []}
+
     # ---- palette: CRAM 64 colors -> VGA6 into colors 0..63; the donor's
     # sprite entries (128+) stay ----
     cram = [0] * 64
@@ -320,6 +397,9 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     bg = bytearray()
     for v in cram:
         r, g, b = smd_color_to_vga6(v)
+        bg += bytes((r, g, b))
+    # title banner colors ride the same BG pal chunk: slots 64..64+N
+    for (r, g, b) in title_pal_tail:
         bg += bytes((r, g, b))
     new_pal_list = [{"chunk": pal_chunk, "start": 0}]
     import os as _os
@@ -414,6 +494,10 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     out["pal_list"] = new_pal_list
     out["pal_anim_en"] = pal_en
     out["pal_anims"] = pal_anims
+    if title_anim is not None:
+        # rotate the title body slots — en gains the next record's bit
+        out["pal_anims"] = list(pal_anims) + [title_anim]
+        out["pal_anim_en"] = pal_en | (1 << len(pal_anims))
     # resource sections: the DONOR level's banks/anims stay (out = dict(dst)).
     # The gameplay trio resolves its pool sprites through the stripe banks —
     # the donor world set carries the viking frames on the right pool slots

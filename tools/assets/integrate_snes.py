@@ -85,16 +85,23 @@ TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5,
 # keep next=0x29); the hop vortex->scene comes from the 1C6 ladder
 # patch (S_8C00 branch constants), scene->level from the scene heads.
 PLAN_SMD = [
+    # title = the world name shown over the scene (SNES/SMD interlude
+    # banner; drawn from chunk-2 glyphs + a DAC-rotate shimmer)
     dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
-         prev_hdr=None, base=0x235),   # vortex(prev=GRND) -> scene -> LLM0
+         prev_hdr=None, base=0x235,    # vortex(prev=GRND) -> scene -> LLM0
+         title="PREHISTORIA"),
     dict(slot=54, smd=0x13E, donor="0053", pw=b"CUT2", next=11,
-         prev_hdr=None, base=0x23B),   # vortex(prev=VLCN) -> scene -> QCKS
+         prev_hdr=None, base=0x23B,    # vortex(prev=VLCN) -> scene -> QCKS
+         title="EGYPT"),
     dict(slot=55, smd=0x13F, donor="007A", pw=b"CUT3", next=17,
-         prev_hdr=None, base=0x241),   # vortex(prev=TTRS) -> scene -> JLLY
+         prev_hdr=None, base=0x241,    # vortex(prev=TTRS) -> scene -> JLLY
+         title="FACTORY"),
     dict(slot=56, smd=0x140, donor="00A6", pw=b"CUT4", next=25,
-         prev_hdr=None, base=0x247),   # vortex(prev=V8TR) -> scene -> NFL8
+         prev_hdr=None, base=0x247,    # vortex(prev=V8TR) -> scene -> NFL8
+         title="WACKY WORLD"),
     dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
-         prev_hdr=None, base=0x24D),   # vortex(prev=TRPD) -> scene -> TFFF
+         prev_hdr=None, base=0x24D,    # vortex(prev=TRPD) -> scene -> TFFF
+         title="SPACESHIP"),
     # NO slot for SMD 0x08C: that is the game-completion scene, and the
     # PC has its OWN version at slot 46 (00DA forest — vikings + the
     # 4B/4C props + music track 8; the SNES version is 0x082 with track
@@ -202,7 +209,8 @@ def do_integrate(scratch, music=None):
         SMD.convert_scene(e["smd"], e["donor"], scratch,
                           {"hdr": b, "map": b + 1, "tiles": b + 2,
                            "gtld": b + 4, "pal": b + 5},
-                          next_level=e["next"], scene_mode=True)
+                          next_level=e["next"], scene_mode=True,
+                          scene_title=e.get("title"))
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
     # canonical predecessors point into the insert chains
     print("progression patch:")
