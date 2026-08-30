@@ -155,155 +155,35 @@ def parse_tail(c, spawn_end):
 def build_de_backdrop(de_bg, CW, CH):
     """DE (SNES Definitive Edition) world-entry field -> the scene map.
 
-    Task #114 reverse: the DE levels carry a parallax backdrop pair in
-    header fields +0x39 (quad map, 32xN LE PPU-shaped words: quad 0-9,
-    palette row 10-12, prio 13, hflip 14, vflip 15) / +0x3D (quad table,
-    8B entries of tile words in the same shape) on the SAME tileset as
-    the level — the purple mountains of the world-entry shot are the
-    Prehistoria pair 012/017, drawn BEHIND the world's first level.
+    Task #114 final: the DE builds these fields PROCEDURALLY (no field
+    map chunk exists anywhere in the ROM — full scans) out of the
+    world's unified quad table, so the ground truth for the composition
+    is the game's own output. tools/assets/scene_bake.py grabs the
+    field between the yellow frame lines of the walkthrough video at
+    the measured scale (794px span / 256 = 3.1016; a guessed scale
+    drifted half a cell by the right edge — the user-visible tile
+    errors), suppresses the overlays (speech bubbles, floating bubbles,
+    idle vikings) via a multi-frame least-saturated composite plus
+    rectangle inpaint, and quantizes to a 48-color palette. Here the
+    baked pixels become tiles directly: DAC 0..47 carries the bake
+    palette, 64 the yellow frame lines, 65..79 the SMD banner letters,
+    128+ the donor's viking rows — no remapping at all.
 
-    The scene field reproduces the DE world-entry interlude layout (an
-    empty reference frame grabbed from the DE walkthrough video at the
-    Prehistoria entry; the DE engine builds it as a template scene —
-    the only spawn-carrying scene stripe in the ROM is 11C, world
-    graphics swapped in by code): the world backdrop fills the frame, a
-    thin grass floor runs along the bottom, a floating ledge sits at
-    the left over a rock support, a raised shelf at the right. Grass/
-    rock cells come from the world's own first level (the start-ledge
-    top cell and the cell under it), composited per pixel over the
-    backdrop (the engine has one tile layer — the SNES BG1-over-BG2
-    stack is baked into the tiles). SNES bit-13 tile priority is NOT
-    ported (BG-vs-OAM layering; PC bit3 would pull the field over the
-    sprites).
+    Layout: rows 0-2 title band (banner code repaints 0-1), rows 3..9
+    the 112px field centered on black letterbox (SNES look), yellow
+    lines over row 3 and on row 10, floor = the field's last row
+    (solid 0x0400 on the field columns).
 
     Returns (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, floor_y,
-    vik_xs) in the exact shapes convert_scene ships downstream; vik_xs
-    are the three viking spot x's on the spawn ledge, demo-walk span
-    checked against the ledge's solid run.
+    vik_xs, ledge) in the exact shapes convert_scene ships downstream.
     """
-    import snes2pc as S2
-    srom = S2.SnesRom()
-    st = LR.parse_stripe(srom.chunk(de_bg["lvl"]))
-    h = bytes.fromhex(st["head"])
-    w16 = lambda o: h[o] | (h[o + 1] << 8)
-    ts = srom.chunk(w16(0x30))
-    bmap, bgt = srom.chunk(de_bg["map"]), srom.chunk(de_bg["gt"])
-    lgt = srom.chunk(w16(0x32))
-    lmap = srom.chunk(w16(0x2E))
-    MW, MH = 32, len(bmap) // 2 // 32
-    W2, H2 = w16(0x29), w16(0x2B)
-
-    def lcell(r, c):
-        return lmap[(r * W2 + c) * 2] | (lmap[(r * W2 + c) * 2 + 1] << 8)
-
-
-    # ---- palette-row remap (16-color rows onto DAC bases; 64..79 is
-    # reserved for the SMD banner letters). Rows are keyed by CONTENT:
-    # worlds with 8 live CGRAM rows fit because duplicate rows merge
-    # (Factory carries identical rows — seen on the restored grids) ----
-    PALSLOT = (0, 16, 32, 48, 80, 96, 112)
-    cg_early = S2.compose_cgram(srom, st["pal_list"])
-    prow_map = {}
-    _row_slot = {}
-
-    def _row_rgb(prow):
-        return [S2.bgr555_to_vga6(c)
-                for c in cg_early[prow * 16:(prow + 1) * 16]]
-
-    def palbase(prow):
-        if prow not in prow_map:
-            key = tuple(cg_early[prow * 16:(prow + 1) * 16])
-            if key in _row_slot:
-                prow_map[prow] = _row_slot[key]
-            elif len(_row_slot) < len(PALSLOT):
-                _row_slot[key] = len(_row_slot)
-                prow_map[prow] = _row_slot[key]
-            else:
-                # all 7 DAC rows taken (the letters own 64..79): merge
-                # this CGRAM row into the closest one already mapped —
-                # Factory uses all 8 rows but the overflow row paints a
-                # single sub-tile (usage counted on the restored grids)
-                me = _row_rgb(prow)
-                best = None
-                for okey, slot in _row_slot.items():
-                    orgb = [S2.bgr555_to_vga6(c) for c in okey]
-                    d = sum(abs(a[i]-b[i]) for a, b in zip(me, orgb)
-                            for i in range(3))
-                    if best is None or d < best[0]:
-                        best = (d, slot)
-                prow_map[prow] = best[1]
-                print(f"  palette row {prow} merged into slot "
-                      f"{best[1]} (dist {best[0]})")
-        return PALSLOT[prow_map[prow]]
-
-    # ---- quad -> 16x16 DAC pixels (0 = transparent nibble) ----
-    def expand_quad(gt, q):
-        cell = [0] * 256
-        e = gt[q * 8:q * 8 + 8]
-        if len(e) < 8:
-            return cell
-        for k, (dy, dx) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
-            dw = e[k * 2] | (e[k * 2 + 1] << 8)
-            t, prow = dw & 0x3FF, (dw >> 10) & 7
-            hf, vf = (dw >> 14) & 1, (dw >> 15) & 1
-            base = palbase(prow)
-            px = S2.snes_tile_decode(
-                ts[t * 32:(t + 1) * 32].ljust(32, b"\x00"))
-            for yy in range(8):
-                sy = 7 - yy if vf else yy
-                for xx in range(8):
-                    sx = 7 - xx if hf else xx
-                    v = px[sy * 8 + sx]
-                    cell[(dy * 8 + yy) * 16 + dx * 8 + xx] = \
-                        (v + base) if v else 0
-        return cell
-
-    bg_cache = {}
-    lv_cache = {}
-
-    def bg_pixels(q):
-        if q not in bg_cache:
-            bg_cache[q] = expand_quad(bgt, q)
-        return bg_cache[q]
-
-    def lv_pixels(q):
-        if q not in lv_cache:
-            lv_cache[q] = expand_quad(lgt, q)
-        return lv_cache[q]
-
-    # ---- the scene field: the RESTORED DE interlude grid (task #114
-    # deep pass). The DE builds the field procedurally out of the
-    # world's unified quad table (gt == level gt == bg gt — one chunk
-    # per world: 017/02E/03F/057/06D) — no field map chunk exists (full
-    # ROM scan); the grids in de_scene_fields.json are recovered from
-    # the walkthrough video by per-cell quad matching (the floor row
-    # matched quad 168 across the whole line, sky/clouds/ledge matched
-    # cleanly; residual black cells in the dark mountain band were
-    # continuity-filled). Layout: rows 0-2 title band, rows 3..3+R-1
-    # the 16-quad grid centered with edge-column flanks (our window is
-    # 20 quads wide vs the SNES 16), yellow frame lines above and below
-    # the field (the video look), leftover bottom rows black. The floor
-    # is the grid's last row (solid 0x0400). ----
     import json as _json
-    fields_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "de_scene_fields.json")
-    fld = _json.load(open(fields_path))[de_bg["world"]]
-    R = fld["rows"]
-    grid = fld["grid"]
-    # pre-seed the palette-row slots most-used-first so the overflow
-    # merge (7 DAC rows for up to 8 CGRAM rows) sacrifices the RAREST
-    # row (Factory: the first-come order merged a 130-cell row and
-    # tinted the bricks pink — seen on the snap)
-    _freq = {}
-    for _row in grid:
-        for _q in _row:
-            _e = lgt[_q * 8:_q * 8 + 8]
-            for _k in range(4):
-                _dw = _e[_k * 2] | (_e[_k * 2 + 1] << 8)
-                _p = (_dw >> 10) & 7
-                _freq[_p] = _freq.get(_p, 0) + 1
-    for _p in sorted(_freq, key=_freq.get, reverse=True):
-        palbase(_p)
+    bakes_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "de_scene_bakes.json")
+    bake = _json.load(open(bakes_path))[de_bg["world"]]
+    FWB, FHB = bake["w"], bake["h"]          # 256 x 112
+    pix = bytes.fromhex(bake["pix"])
+    R = FHB // 16                            # 7 field rows
     FLOOR = 3 + R - 1
     YROW = FLOOR + 1                 # yellow bottom line rides this row
     YELLOW = 64                      # DAC 64: banner nib-0 slot, unused
@@ -326,8 +206,9 @@ def build_de_backdrop(de_bg, CW, CH):
                 cell = [YELLOW if yy < 2 else 0
                         for yy in range(16) for xx in range(16)]
             else:
-                q = grid[y - 3][x - 2]
-                cell = list(lv_pixels(q))
+                fy0, fx0 = (y - 3) * 16, (x - 2) * 16
+                cell = [pix[(fy0 + yy) * FWB + fx0 + xx]
+                        for yy in range(16) for xx in range(16)]
                 if y == 3:
                     # yellow top frame line over the field's first row
                     for xx in range(16):
@@ -368,28 +249,23 @@ def build_de_backdrop(de_bg, CW, CH):
                         1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
         pc_masks += m
 
-    # ---- 128-color palette image: rows land on their remap bases;
-    # slot 0 = CGRAM 0; 65..79 left for the banner letters (nibbles are
-    # nonzero, so slot 64 is free — it carries the yellow frame color) ----
-    cg = S2.compose_cgram(srom, st["pal_list"])
+    # ---- 128-color palette image: 0..47 = the bake palette (VGA6),
+    # 64 = frame yellow, 65..79 = the banner letters (convert_scene),
+    # 128+ = the donor sprite rows ----
     pal128 = [(0, 0, 0)] * 128
-    for prow, j in prow_map.items():
-        base = PALSLOT[j]
-        for i in range(16):
-            pal128[base + i] = S2.bgr555_to_vga6(cg[prow * 16 + i])
-    pal128[0] = S2.bgr555_to_vga6(cg[0])
+    for i, (r, g, b) in enumerate(bake["pal"][:48]):
+        pal128[i] = (r >> 2, g >> 2, b >> 2)
     pal128[YELLOW] = (63, 55, 0)     # the frame lines (VGA6 yellow)
 
     # ---- viking spots: on the walk floor, centered (the floor spans
-    # the whole frame — no fall-off risk, full demo stride) ----
+    # the whole field — no fall-off risk, full demo stride) ----
     floor_y = FLOOR * 16
-    a, b = 0, CW * 16
+    a, b = 2 * 16, 18 * 16
     center = (a + b) // 2
     vik_xs = (center - 0x20, center, center + 0x20)
-    print(f"  DE field: lvl {de_bg['lvl']:03X} world '{de_bg['world']}' "
-          f"restored grid 16x{R}, {len(tiles)} tiles / {len(prefabs)} "
-          f"prefabs, pal rows {sorted(prow_map)} -> "
-          f"{[PALSLOT[prow_map[p]] for p in sorted(prow_map)]}")
+    print(f"  DE field: world '{de_bg['world']}' baked {FWB}x{FHB}, "
+          f"{len(tiles)} tiles / {len(prefabs)} prefabs, "
+          f"{len(bake['pal'])} colors")
     return (mmap, pc_tiles, pc_masks, pc_gtld,
             [("T", i) for i in range(len(tiles))], pal128, floor_y, vik_xs,
             (a, b))
