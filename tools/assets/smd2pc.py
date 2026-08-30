@@ -184,8 +184,21 @@ def build_de_backdrop(de_bg, CW, CH):
     FWB, FHB = bake["w"], bake["h"]          # 256 x 112
     pix = bytes.fromhex(bake["pix"])
     R = FHB // 16                            # 7 field rows
-    FLOOR = 3 + R - 1
-    YROW = FLOOR + 1                 # yellow bottom line rides this row
+    # per-world viking placement, read off the video (the trio must
+    # stand WHERE the DE scene stands it — Egypt on the masonry ledge,
+    # Factory on the beam, Ship on the left step; a centered bottom-row
+    # trio sat on the inpaint scars and off the reference spots, user
+    # report): scene row whose TOP edge carries the feet, trio center
+    # x, demo half-span (feeds the stride scaling)
+    WORLD_SPOTS = {
+        "preh":    (9, 128, 88),
+        "egypt":   (8, 104, 52),
+        "factory": (6, 96, 52),
+        "wacky":   (9, 88, 88),
+        "ship":    (7, 64, 52),
+    }
+    FLOOR, VCENTER, VSPAN = WORLD_SPOTS[de_bg["world"]]
+    YROW = 3 + R                     # yellow bottom line rides this row
     YELLOW = 64                      # DAC 64: banner nib-0 slot, unused
     #                                  by the letters -> frame color
 
@@ -257,11 +270,10 @@ def build_de_backdrop(de_bg, CW, CH):
         pal128[i] = (r >> 2, g >> 2, b >> 2)
     pal128[YELLOW] = (63, 55, 0)     # the frame lines (VGA6 yellow)
 
-    # ---- viking spots: on the walk floor, centered (the floor spans
-    # the whole field — no fall-off risk, full demo stride) ----
+    # ---- viking spots: the video positions (WORLD_SPOTS) ----
     floor_y = FLOOR * 16
-    a, b = 2 * 16, 18 * 16
-    center = (a + b) // 2
+    center = VCENTER
+    a, b = center - VSPAN, center + VSPAN
     vik_xs = (center - 0x20, center, center + 0x20)
     print(f"  DE field: world '{de_bg['world']}' baked {FWB}x{FHB}, "
           f"{len(tiles)} tiles / {len(prefabs)} prefabs, "
