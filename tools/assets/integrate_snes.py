@@ -161,26 +161,107 @@ def patch_next(scratch, hdr_cid_hex, next_level):
 
 
 def build_lvx(scratch, entries):
-    """exe_static.bin + LVX1 trailer: [magic][u16 n][10B records:
-    level u16, hdr_cid u16, tmpl_cid u16, pw 4B]."""
+    """exe_static.bin + LVX2 trailer: [magic][u16 n][12B records:
+    level u16, hdr_cid u16, tmpl_cid u16, pw 4B, demo_cid u16].
+    demo_cid != 0 arms the canonical attract-demo machinery on the slot
+    (sub_12d72 RLE input replay, ac=0x8000) — the scene choreography."""
     src = os.path.join(scratch, "exe_static.bin")
     if not os.path.exists(src):
         src = os.path.join(LR.ROOT, "exe_static.bin")
     img = open(src, "rb").read()
-    # strip a previous trailer (idempotent rebuilds)
-    m = img.rfind(b"LVX1")
-    if m >= 0 and m >= len(img) - 4 - 2 - 10 * 64:
-        img = img[:m]
-    tr = b"LVX1" + struct.pack("<H", len(entries))
+    # strip a previous trailer of either version (idempotent rebuilds)
+    for magic in (b"LVX2", b"LVX1"):
+        m = img.rfind(magic)
+        if m >= 0 and m >= len(img) - 4 - 2 - 12 * 64:
+            img = img[:m]
+    tr = b"LVX2" + struct.pack("<H", len(entries))
     for e in entries:
         tr += struct.pack("<HHH", e["slot"], e["hdr"], TMPL_CHUNK[e["slot"]])
         tr += e["pw"]
+        tr += struct.pack("<H", e.get("demo", 0))
     out = os.path.join(scratch, "exe_static.bin")
     tmp = out + ".tmp"
     with open(tmp, "wb") as f:
         f.write(img + tr)
     os.replace(tmp, out)
-    print(f"  exe_static: {len(img)}B + LVX1 trailer {len(tr)}B -> {out}")
+    print(f"  exe_static: {len(img)}B + LVX2 trailer {len(tr)}B -> {out}")
+
+
+# ---------------------------------------------------------------------------
+# #113 scene choreography: the vikings on the SNES/SMD interludes MOVE on a
+# scripted demo (the video: Olaf rides his shield past, Erik answers and
+# shows his sprint). PC plays it through the canonical attract machinery:
+# ac=0x8000 -> sub_12d72 pops RLE (keys u16, count u16) pairs from the chunk
+# loaded at ds:2193 and ORs them into the input word — so the choreography
+# is DATA: one small chunk per scene. Key bits: RIGHT 0x100, LEFT 0x200,
+# UP(jump) 0x800, DOWN 0x400, TAB(switch) 0x2000. No ACTION 0x8000 bit —
+# that is the D8 skip button. The tail (0, 0x7FFF) parks the input silent
+# until the D8 timer ends the scene.
+DEMO_CID = {53: 0x253, 54: 0x254, 55: 0x255, 56: 0x256, 57: 0x257}
+
+R, L, U, TAB = 0x100, 0x200, 0x800, 0x2000
+
+def demo_script():
+    """One shared v4 choreography (~279 ticks), active viking only (TAB
+    does not cycle vikings inside the interludes — seen live; the video
+    also moves one viking at a time). Erik ACCELERATES: 6 ticks walk
+    ~2.7px/t but 14 ticks hit run speed ~5.8px/t and threw him off the
+    ledge (seen live twice) — every stride stays <= 8 ticks and net-zero,
+    hops between strides."""
+    s = [(0, 44),                                  # drop in + settle
+         (R, 8), (0, 14), (L, 8), (0, 16),         # stroll right and back
+         (U, 3), (0, 30),                          # hop
+         (R, 7), (0, 12), (L, 7), (0, 16),         # short steps
+         (U, 3), (0, 30),
+         (L, 7), (0, 12), (R, 7), (0, 16),         # the other way
+         (U, 3), (0, 36),
+         (0, 0x7FFF)]                              # silence till the timer
+    return s
+
+def write_demo_chunks(scratch):
+    import json as _json
+    ex_path = os.path.join(scratch, "extras.json")
+    extras = _json.load(open(ex_path)) if os.path.exists(ex_path) else {}
+    for slot, cid in DEMO_CID.items():
+        blob = b"".join(struct.pack("<HH", k, n) for k, n in demo_script())
+        d = os.path.join(scratch, "unreferenced")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, f"{cid:04X}.bin")
+        tmp = p + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(blob)
+        os.replace(tmp, p)
+        extras[f"{cid:04X}"] = {"role": "unreferenced"}
+    tmp = ex_path + ".tmp"
+    with open(tmp, "w") as f:
+        _json.dump(extras, f, indent=1)
+    os.replace(tmp, ex_path)
+    print(f"  demo chunks: {len(DEMO_CID)} x {len(demo_script())*4}B "
+          f"(ids {min(DEMO_CID.values()):04X}..{max(DEMO_CID.values()):04X})")
+
+
+def patch_1c6_d8_timer(scratch):
+    """S_8A90 (the D8 timed-scene controller): default duration 0x3C ticks
+    is too short for the choreography — retarget the DEFAULT branch constant
+    to 300 ticks. Text edit of the .lvsf (same literal width); idempotent.
+    The logo screens (39/40) spawn D8 through the HEAD path whose ANIM_SUB
+    is nonzero, so they ride the field[16] branch, not this default —
+    verified by the logo pageflip timing staying identical after the patch."""
+    p = os.path.join(scratch, "level_scripts", "1C6.lvsf")
+    txt = open(p).read()
+    old = "o 78 16 S_8AAB\no 51 3c00\no 56 1c"
+    new = "o 78 16 S_8AAB\no 51 2c01\no 56 1c"
+    if new in txt:
+        return                       # already patched (idempotent rerun)
+    if old not in txt:
+        raise SystemExit("S_8A90 default-timer sequence not found")
+    assert txt.count(old) == 1
+    txt = txt.replace(old, new)
+    tmp = p + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(txt)
+    os.replace(tmp, p)
+    print("  1C6 S_8A90: D8 default timer 60 -> 300 ticks")
 
 
 def do_integrate(scratch, music=None):
@@ -206,13 +287,16 @@ def do_integrate(scratch, music=None):
                           {"hdr": b, "map": b + 1, "tiles": b + 2,
                            "gtld": b + 4, "pal": b + 5},
                           next_level=e["next"], scene_mode=True)
-        lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
+        lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"],
+                    "demo": DEMO_CID.get(e["slot"], 0)})
+    write_demo_chunks(scratch)
     # canonical predecessors point into the insert chains
     print("progression patch:")
     for e in PLAN + PLAN_SMD:
         if e["prev_hdr"]:
             patch_next(scratch, e["prev_hdr"], e["slot"])
     patch_1c6_ladder(scratch)
+    patch_1c6_d8_timer(scratch)
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)

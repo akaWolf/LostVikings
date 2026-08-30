@@ -434,7 +434,7 @@ void v2_audit_dump_final() {
 // #96: the interpreter loops survive ONLY for fn-test units (bytecode in a
 // test segment outside the gen's domain). The unit runner raises this flag;
 // battle builds keep it 0 and FATAL on any loop entry / gen miss.
-extern "C" int v2_fntest_loop_allowed = 0;
+extern "C" { int v2_fntest_loop_allowed = 0; }
 static int v2_gencode_enabled();   // defined with the gencode includes below
 
 // #96 probe: count every op/cmd the INTERPRETER loops still execute when the
@@ -608,7 +608,7 @@ extern "C" int v2_vga_fetch_page(uint8_t* out, uint32_t count);
 // fn-test infrastructure lives in v2_fn_test.cpp + the m2c seg files, which
 // are not part of the V2_ONLY build. The referencing paths are all gated by
 // the oracle/verify context (never taken standalone) — link-level stubs.
-extern "C" int v2_fntest_vm_soft = 0;
+extern "C" { int v2_fntest_vm_soft = 0; }
 extern "C" uint32_t v2_fntest_game_ds_linear(void) { return 0; }
 #endif
 extern "C" void v2_draw_one_sprite_late(uint16_t ds_val, int obj);
@@ -623,7 +623,7 @@ struct V2ObjTrace { uint32_t seq; char tag[12]; int16_t a, b, c, d; };
 static V2ObjTrace v2_objtrace_ring[256];
 static uint32_t v2_objtrace_n = 0;
 // Traced object index (env V2_OBJTRACE_DI, default 0x48).
-extern "C" int v2_objtrace_di = 0xFFFF;  // #40 flag: default OFF (was 0x48); env V2_OBJTRACE_DI re-enables the per-object diagnostic trace
+extern "C" { int v2_objtrace_di = 0xFFFF; }  // #40 flag: default OFF (was 0x48); env V2_OBJTRACE_DI re-enables the per-object diagnostic trace
 extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d) {
     static int _init = 0;
     if (!_init) {
@@ -2008,8 +2008,8 @@ static void v2_vm_init_table();
 // DS segment, the oracle writes into its own DS image (compared byte-for-
 // byte), and v2 must write into ITS scratch DS — not the m2c fallback zone
 // (which is the oracle's restored image). Zero = off.
-extern "C" uint16_t v2_fntest_ds_seg_override = 0;
-extern "C" uint8_t* v2_fntest_ds_seg_ptr = nullptr;
+extern "C" { uint16_t v2_fntest_ds_seg_override = 0; }
+extern "C" { uint8_t* v2_fntest_ds_seg_ptr = nullptr; }
 
 uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds) {
     if (v2_fntest_ds_seg_override && seg == v2_fntest_ds_seg_override && v2_fntest_ds_seg_ptr)
@@ -4157,8 +4157,8 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
         v2_sprite_draw_1CD7D(s, old_x, old_y, (int16_t)size, clamped);
         // Latch current sprite position → OLD (orig 38066-38069 / 38078-38081:
         // [0F4Dh]←[0D4Dh], [104Dh]←[0E4Dh]).
-        ObjMem{s, slot}.w16(OBJ_SPRITE_OLD_X, ObjMem{s, slot}.u16(OBJ_SPRITE_CUR_X));
-        ObjMem{s, slot}.w16(OBJ_SPRITE_OLD_Y, ObjMem{s, slot}.u16(OBJ_SPRITE_CUR_Y));
+        ObjMem{s, (uint16_t)slot}.w16(OBJ_SPRITE_OLD_X, ObjMem{s, (uint16_t)slot}.u16(OBJ_SPRITE_CUR_X));
+        ObjMem{s, (uint16_t)slot}.w16(OBJ_SPRITE_OLD_Y, ObjMem{s, (uint16_t)slot}.u16(OBJ_SPRITE_CUR_Y));
     }
 
     // ---- Pass 2: dirty-tile scan over the visible window (orig 38087-38208) ----
@@ -4607,8 +4607,8 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
         }
 
         // Save current position as "last rendered" (orig 38025-38028).
-        ObjMem{s, slot}.w16(OBJ_SPRITE_CUR_X, ObjMem{s, slot}.u16(OBJ_SPRITE_X));
-        ObjMem{s, slot}.w16(OBJ_SPRITE_CUR_Y, ObjMem{s, slot}.u16(OBJ_SPRITE_Y));
+        ObjMem{s, (uint16_t)slot}.w16(OBJ_SPRITE_CUR_X, ObjMem{s, (uint16_t)slot}.u16(OBJ_SPRITE_X));
+        ObjMem{s, (uint16_t)slot}.w16(OBJ_SPRITE_CUR_Y, ObjMem{s, (uint16_t)slot}.u16(OBJ_SPRITE_Y));
     }
     v2gs(s).sprite_force_b(0);                                        // 38034 mov byte ds:9568h, 0
 }
@@ -6020,6 +6020,8 @@ static void v2_viking_health_init_12ce4(uint8_t* s) {
 // chunk (0x2B → 0x1BB; 0x2C-0x2F → 0x1BC; else the [si+2B66]/[si+2B74]
 // transition tables also retarget the level), load it at ds:2193 and
 // tail-jump into sub_12CE4.
+static uint16_t v2_lvx_demo_cid(uint16_t level);   // #113 demo interludes (fwd)
+
 static void v2_level_desc_init_116e3(uint8_t* s) {
     v2gs(s).rng_timer(0x1E);    // 3005 word_28832
     v2gs(s).scratch_3ce(0);     // 3006 word_288AE
@@ -6040,6 +6042,21 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
                 v2gs(s).obj_queue_head_at((uint16_t)(di), 0);
             return;
         } else {
+            // #113 demo interludes: an LVX slot carrying a demo stream arms
+            // the CANONICAL transition machinery with its own chunk — the
+            // exact attract-demo path below (398=1, ac=0x8000, queue head 2,
+            // RLE stream at ds:2193, 12ce4 tail), only the chunk id differs.
+            // Canonical slots never reach here with a demo_cid (count 0).
+            uint16_t dc = v2_lvx_demo_cid(level);
+            if (dc) {
+                v2gs(s).coll_state_398(1);
+                v2gs(s).game_mode_ac(0x8000);
+                v2gs(s).obj_queue_head(2);
+                { uint32_t _lsz = v2_read_chunk(dc, s + 0x2193, 0x10000 - 0x2193, s);
+                  v2_gs_evac_mirror_span(s, 0x2193, _lsz); }
+                v2_viking_health_init_12ce4(s);
+                return;
+            }
             v2gs(s).game_mode_ac(0);                 // 3022-3023
             return;
         }
@@ -7641,14 +7658,20 @@ static void v2_load_level_11080(uint8_t* s) {
 static uint16_t v2_current_level = 0xFFFF;
 
 // ---------------------------------------------------------------------------
-// Task #104 progression: LVX1 exe_static trailer — extra level slots beyond
-// the 48-entry header/template tables (SNES DE exclusives at slots 48-52).
-// Format (appended to exe_static.bin): "LVX1" u16 n, then n × 10B records
-// {level u16, hdr_cid u16, tmpl_cid u16, pw[4]}. No trailer (canonical
-// image) -> count 0 -> every branch below is dead and behavior is
-// bit-identical to the original.
+// Task #104 progression: LVX exe_static trailer — extra level slots beyond
+// the 48-entry header/template tables (SNES DE exclusives at slots 48-52,
+// SMD interlude scenes at 53-57).
+// Format (appended to exe_static.bin):
+//   "LVX1" u16 n, n × 10B records {level u16, hdr_cid u16, tmpl_cid u16, pw[4]}
+//   "LVX2" u16 n, n × 12B records {... + demo_cid u16} — demo_cid != 0 arms
+//   the canonical transition machinery on that slot: the chunk is an RLE
+//   (keys u16, count u16) input stream played by sub_12d72 (ac=0x8000), the
+//   same mechanism the attract demo (1BB) and the ending (1BC) ride on.
+// No trailer (canonical image) -> count 0 -> every branch below is dead and
+// behavior is bit-identical to the original.
 // ---------------------------------------------------------------------------
-struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4]; };
+struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
+                    uint16_t demo_cid; };
 static V2LvxEntry v2_lvx[16];
 static int v2_lvx_count = 0;
 
@@ -7658,24 +7681,35 @@ static const V2LvxEntry* v2_lvx_find(uint16_t level) {
     return nullptr;
 }
 
+// #113: demo stream chunk of an LVX slot (0 = none / not an LVX slot).
+static uint16_t v2_lvx_demo_cid(uint16_t level) {
+    const V2LvxEntry* lx = v2_lvx_find(level);
+    return lx ? lx->demo_cid : 0;
+}
+
 // Parse the trailer from a loaded exe_static image (V2_ONLY main calls it).
 extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
     v2_lvx_count = 0;
     if (size < 6) return;
-    // the trailer sits at the very end: scan the last 4+2+10*16 bytes
-    uint32_t from = size > 4 + 2 + 10 * 16 ? size - (4 + 2 + 10 * 16) : 0;
+    // the trailer sits at the very end: scan the last 4+2+12*16 bytes
+    uint32_t from = size > 4 + 2 + 12 * 16 ? size - (4 + 2 + 12 * 16) : 0;
     int32_t at = -1;
+    int rec = 10;
     for (uint32_t i = from; i + 6 <= size; i++)
-        if (!memcmp(img + i, "LVX1", 4)) at = (int32_t)i;
+        if (!memcmp(img + i, "LVX1", 4) || !memcmp(img + i, "LVX2", 4)) {
+            at = (int32_t)i;
+            rec = (img[i + 3] == '2') ? 12 : 10;
+        }
     if (at < 0) return;
     uint16_t n = (uint16_t)(img[at + 4] | (img[at + 5] << 8));
-    if (n > 16 || (uint32_t)at + 6 + n * 10u > size) return;
+    if (n > 16 || (uint32_t)at + 6 + (uint32_t)n * rec > size) return;
     const uint8_t* p = img + at + 6;
-    for (uint16_t i = 0; i < n; i++, p += 10) {
+    for (uint16_t i = 0; i < n; i++, p += rec) {
         v2_lvx[i].level    = (uint16_t)(p[0] | (p[1] << 8));
         v2_lvx[i].hdr_cid  = (uint16_t)(p[2] | (p[3] << 8));
         v2_lvx[i].tmpl_cid = (uint16_t)(p[4] | (p[5] << 8));
         memcpy(v2_lvx[i].pw, p + 6, 4);
+        v2_lvx[i].demo_cid = (rec == 12) ? (uint16_t)(p[10] | (p[11] << 8)) : 0;
     }
     v2_lvx_count = n;
     fprintf(stderr, "V2-LVX: %d extra level slots:", n);
@@ -21391,7 +21425,13 @@ static void v2_transition_kick_102ad(uint8_t* s) {
     uint16_t ac_u = (uint16_t)ac;
     if (ac_u == 0x8000) {
         uint16_t level = v2gs(s).level();
-        if (level == 0x2B) {
+        // #113 demo interludes: ESC during the scene demo = skip the scene.
+        // DS_LEVEL_LOAD already carries the scene head's next level (the
+        // stripe decompression wrote it), so stopping the demo and falling
+        // into the shared frame_flags|=1 tail transitions straight there.
+        if (v2_lvx_demo_cid(level)) {
+            v2gs(s).game_mode_ac(0);
+        } else if (level == 0x2B) {
             if (v2gs(s).input_keys() != 0xFFFF) {
                 v2gs(s).game_mode_ac(1);
             } else {

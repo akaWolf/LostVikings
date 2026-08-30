@@ -189,6 +189,38 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
           f"prefabs, {len(spawns)} spawns, {len(pal_list)} pal entries, "
           f"{len(pal_anims)} pal anims (en={pal_en:04X})")
 
+    if scene_mode:
+        # ---- FIXED-SCREEN crop (the SNES/SMD interludes play on a locked
+        # camera; on the video the field never scrolls). Cut the 33x33 room
+        # down to one 22x12-quad window around the viking floor: the map
+        # then barely exceeds the 344x176 viewport, the scroll limits pin
+        # the camera, and the top rows become the black title band. All the
+        # downstream code (used-prefab renumber, map, spawns, banner) works
+        # on the cropped map transparently. ----
+        # 20x11 quads = 320x176 px: the scroll limits collapse to (0,0)
+        # (the engine computes them against the 320x176 window — seen live:
+        # a 22x12 map let the camera drift to (32,16)), so the screen is
+        # HARD-locked like the SNES interlude.
+        CW, CH = 20, 11
+        _vx = [sp["x"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [80]
+        _vy = [sp["y"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [224]
+        floor_row = min(_vy) // 16
+        c0 = max(0, min(min(_vx) // 16 - 5, W - CW))
+        r0 = max(0, min(floor_row - 8, H - CH))
+        crop = bytearray()
+        for y in range(CH):
+            row_off = ((r0 + y) * W + c0) * 2
+            crop += smap[row_off:row_off + CW * 2]
+        smap = bytes(crop)
+        W, H = CW, CH
+        # shift every spawn into crop coordinates (the E0 banner rows are
+        # dropped later anyway; vikings/figures need the shift)
+        for sp in spawns:
+            sp["x"] = (sp["x"] - c0 * 16) & 0xFFFF
+            sp["y"] = (sp["y"] - r0 * 16) & 0xFFFF
+        print(f"  scene crop: {CW}x{CH} at quad ({c0},{r0}), "
+              f"floor row {floor_row}")
+
     # class/anim recode via the shared-level mapping (unknown ids pass
     # through — the scene actors exist on PC under the same numbers)
     world = c[5]   # the SMD world byte doubles as the track id
@@ -341,13 +373,22 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     if scene_mode and smd_banks:
         banner = rom.chunk(smd_banks[0]["chunk"])
         nblk = len(banner) // 512
-        _vys = [p[1] for p in vik_pos] or [224]
-        _vxs = [p[0] for p in vik_pos] or [80]
-        row_q = max(1, (min(_vys) - 88) // 16)
-        # center the N*2-quad strip on the camera window (viewport parks
-        # on the vikings, left-clamped on these rooms)
-        _cx = min(_vxs) + 0x40
-        col0 = max(1, min(_cx // 16 - nblk, W - 1 - nblk * 2))
+        # the top TWO quad rows become the black title band (the SNES look:
+        # the name floats on black above the field) — blank them first
+        blk_tile = len(pairs)
+        pc_tiles += AC.tile_encode(bytes(64))
+        pc_masks += bytes(8)
+        pairs.append(("BLACK", 0))
+        for t in (0, 1, 2, 3):
+            pcv = blk_tile << 6
+            pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
+        black_prefab = len(pc_gtld) // 8 - 1
+        for cell in range(W * 2):
+            mmap[cell * 2] = black_prefab & 0xFF
+            mmap[cell * 2 + 1] = black_prefab >> 8
+        # banner: one 32px block = 2x2 quads, centered on the fixed screen
+        row_q = 0
+        col0 = max(0, (W - nblk * 2) // 2)
         for blk in range(nblk):
             # one 32x32 block = 4 prefabs (2x2 quads), each 4 sub-tiles
             base_idx = len(pairs)
@@ -374,14 +415,21 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
                         mmap[cell * 2] = prefab_idx & 0xFF
                         mmap[cell * 2 + 1] = prefab_idx >> 8
         assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
-        # DAC slots 64..79 = CRAM row 0 of the scene palette (the letters'
-        # own row on the SMD); shimmer = slow rotate over the gold/white
-        # body slots 65..70 (nibbles 1,2,4,5,6 carry the letter pixels)
+        # DAC slots 64..79 = CRAM row 1 of the scene palette. The letters
+        # are SPRITES on the SMD; rows 0/1 share the first 8 colors (the
+        # PREHISTORIA nibbles), but the >7 nibbles of FACTORY/STARSHIP/
+        # EGYPT/WACKY only look right on row 1 (row 0 paints FACTORY a
+        # striped beige, row 1 the yellow neon sign / orange gloss —
+        # render-compared across all four rows). NO rotate: a [65..70]
+        # rotate recolored the lettering white for most of the cycle
+        # (seen live); the video shows a steady banner (the SMD shine is
+        # a separate sprite overlay, chunk 0x142 — not ported).
         cram_pd = rom.chunk(pal_list[0]["chunk"])
         for i in range(16):
-            v = be16(cram_pd, i * 2) if i * 2 + 1 < len(cram_pd) else 0
+            o2 = 32 + i * 2                      # CRAM row 1
+            v = be16(cram_pd, o2) if o2 + 1 < len(cram_pd) else 0
             title_pal_tail.append(smd_color_to_vga6(v))
-        title_anim = {"reload": 5, "start": 65, "end": 70, "frames": []}
+        title_anim = None
 
     # ---- palette: CRAM 64 colors -> VGA6 into colors 0..63; the donor's
     # sprite entries (128+) stay ----
