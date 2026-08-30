@@ -912,6 +912,10 @@ class H(BaseHTTPRequestHandler):
             return self._err(f"game already running (pid {p.pid})", 409)
         env = dict(os.environ)
         env["V2_ASSETS_DIR"] = os.path.join(SCRATCH, ".compiled")
+        # scratch trees may carry EDITED .lvs bytecode (the 1C6 scene
+        # ladder patch): the generated-code fast path bakes the canonical
+        # constants in, so mod playback must run the interpreter
+        env["V2_GENCODE"] = "0"
         exe_img = os.path.join(SCRATCH, "exe_static.bin")
         if os.path.exists(exe_img):
             env["V2_EXE_STATIC"] = exe_img
@@ -926,6 +930,7 @@ class H(BaseHTTPRequestHandler):
         env = dict(os.environ)
         env.update({"SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy",
                     "V2_NOVSYNC": "1", "V2_AIL_FRAME_TICKS": "1",
+                    "V2_GENCODE": "0",
                     "V2_ASSETS_DIR": os.path.join(SCRATCH, ".compiled")})
         exe_img = os.path.join(SCRATCH, "exe_static.bin")
         if os.path.exists(exe_img):

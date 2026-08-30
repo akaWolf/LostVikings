@@ -70,8 +70,7 @@ PLAN = [
 # world template (.lvs) chunks per world of each insert
 TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5,
               # SMD scenes run on the SCENE script (D8 timed controller)
-              53: 0x1C6, 54: 0x1C6, 55: 0x1C6, 56: 0x1C6, 57: 0x1C6,
-              58: 0x1C6}
+              53: 0x1C6, 54: 0x1C6, 55: 0x1C6, 56: 0x1C6, 57: 0x1C6}
 
 # The six SMD/Genesis-only scenes (task: embed into gameplay, as on SMD):
 # five between-world cutscenes replace the PC timewarp room (scene 0x29)
@@ -79,20 +78,67 @@ TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5,
 # before the PC ending scroller (45). All run as D8 timed scenes that
 # transition by their head's +0x16 next field; prev_hdr/prev_next say
 # which canonical header edge gets retargeted at the scene slot.
+# The chain follows the SNES shape the user pointed at (video refs in
+# memory): world end -> the TIMEWARP VORTEX (scene 41, canonical on
+# DOS/SNES) -> the SMD world cutscene -> the first level of the next
+# world. The vortex edge stays canonical (prev_hdr=None: world enders
+# keep next=0x29); the hop vortex->scene comes from the 1C6 ladder
+# patch (S_8C00 branch constants), scene->level from the scene heads.
 PLAN_SMD = [
     dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
-         prev_hdr="00CC", base=0x235),   # GRND -> scene -> LLM0
+         prev_hdr=None, base=0x235),   # vortex(prev=GRND) -> scene -> LLM0
     dict(slot=54, smd=0x13E, donor="0053", pw=b"CUT2", next=11,
-         prev_hdr="0034", base=0x23B),   # VLCN -> scene -> QCKS
+         prev_hdr=None, base=0x23B),   # vortex(prev=VLCN) -> scene -> QCKS
     dict(slot=55, smd=0x13F, donor="007A", pw=b"CUT3", next=17,
-         prev_hdr="0055", base=0x241),   # TTRS -> scene -> JLLY
+         prev_hdr=None, base=0x241),   # vortex(prev=TTRS) -> scene -> JLLY
     dict(slot=56, smd=0x140, donor="00A6", pw=b"CUT4", next=25,
-         prev_hdr="0080", base=0x247),   # V8TR -> scene -> NFL8
+         prev_hdr=None, base=0x247),   # vortex(prev=V8TR) -> scene -> NFL8
     dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
-         prev_hdr="00AA", base=0x24D),   # TRPD -> scene -> TFFF
-    dict(slot=58, smd=0x08C, donor="00A6", pw=b"END1", next=0x2D,
-         prev_hdr="00D4", base=0x253),   # MSTR -> finale -> scroller 45
+         prev_hdr=None, base=0x24D),   # vortex(prev=TRPD) -> scene -> TFFF
+    # NO slot for SMD 0x08C: that is the game-completion scene, and the
+    # PC has its OWN version at slot 46 (00DA forest — vikings + the
+    # 4B/4C props + music track 8; the SNES version is 0x082 with track
+    # 9, same class set). The canonical MSTR -> 45 -> 46 ending stays.
 ]
+
+# S_8C00 world ladder of the 1C6 scene script: branch constant -> our
+# scene slot (the ladder writes DS_LEVEL_LOAD after the vortex scene).
+LADDER_PATCH = {0x04: 53, 0x0B: 54, 0x11: 55, 0x19: 56, 0x21: 57}
+
+
+def patch_1c6_ladder(scratch):
+    """Retarget the five world-entry branches of the S_8C00 ladder at the
+    SMD scenes. Text edit of the .lvsf (same literal widths — the lvsc
+    build keeps every offset); idempotent."""
+    p = os.path.join(scratch, "level_scripts", "1C6.lvsf")
+    lines = open(p).read().split("\n")
+    # locate the ladder head: "o 51 0300" followed by "o 74 ab25 ..."
+    at = -1
+    for i in range(len(lines) - 1):
+        if lines[i] == "o 51 0300" and lines[i + 1].startswith("o 74 ab25"):
+            at = i
+            break
+    if at < 0:
+        raise SystemExit("1C6 ladder head not found")
+    patched = 0
+    for i in range(at, min(at + 40, len(lines))):
+        m = lines[i]
+        if m.startswith("o 51 ") and lines[i + 1] == "o 57 c925":
+            val = int(m[5:7], 16) | (int(m[7:9], 16) << 8)
+            if val in LADDER_PATCH:
+                nv = LADDER_PATCH[val]
+                lines[i] = "o 51 %02x%02x" % (nv & 0xFF, nv >> 8)
+                patched += 1
+            elif val in LADDER_PATCH.values():
+                patched += 1        # already retargeted (idempotent rerun)
+    if patched != len(LADDER_PATCH):
+        raise SystemExit(f"1C6 ladder: patched {patched} branches, "
+                         f"expected {len(LADDER_PATCH)}")
+    tmp = p + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines))
+    os.replace(tmp, p)
+    print(f"  1C6 ladder: {patched} world branches -> scene slots")
 
 
 def patch_next(scratch, hdr_cid_hex, next_level):
@@ -163,6 +209,7 @@ def do_integrate(scratch, music=None):
     for e in PLAN + PLAN_SMD:
         if e["prev_hdr"]:
             patch_next(scratch, e["prev_hdr"], e["slot"])
+    patch_1c6_ladder(scratch)
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)

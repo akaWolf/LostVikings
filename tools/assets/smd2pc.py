@@ -178,11 +178,33 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     world = c[5]   # the SMD world byte doubles as the track id
     mp = json.load(open(MAP_PATH)) if os.path.exists(MAP_PATH) else \
         {"cls": {}, "anim": {}}
+    # Scene viking figures: the PC forest finale (00DA, script 1C6) spawns
+    # the REAL viking classes 00/01/02 as talking scene actors. The anim id
+    # selects the FRAME SET (i.e. which viking is drawn), so the mapping is
+    # BY CLASS, straight from the 00DA rows: Erik 086F, Baleog 0827,
+    # Olaf 082F. (First take mapped by the SMD anim value and painted two
+    # Olafs — seen live.)
+    # NO 0x800 permanent bit: the permanent pass would spawn them with
+    # ANIM_SUB = the table index (0..2), which flips the 1C6 viking code
+    # into its intro waypoint choreography (markers absent here -> frozen
+    # green stand-ins, seen live). The finale's LIVE vikings sit with
+    # ANIM_SUB=FFFF — the scene controller code spawns them itself from
+    # the table rows.
+    SCENE_VIK_ANIM = {0: 0x086F, 1: 0x0827, 2: 0x082F}
     recoded = passed = 0
     out_spawns = []
+    vik_pos = []
     for sp in spawns:
         if scene_mode:
-            break        # logo-scene shape: zero spawns (see docstring)
+            if sp["cls"] in (0, 1, 2):
+                vik_pos.append((sp["x"], sp["y"]))
+                continue
+            # Dropped rows: 48/4A (level controller / 13DB stub), E0/E1 (the
+            # PC-side code draws wipe circles, bank 1B4 — not figures),
+            # 4B/4C/4E (finale props of the 08C scene — that scene itself is
+            # NOT ported: the PC finale 00DA already exists at slot 46).
+            if sp["cls"] in (0x48, 0x4A, 0xE0, 0xE1, 0x4B, 0x4C, 0x4E):
+                continue
         if not keep_vikings and sp["cls"] in (0, 1, 2):
             continue
         k_cls = f"{world}:{sp['cls']:02X}"
@@ -197,8 +219,25 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         else:
             passed += 1
         out_spawns.append(sp)
+    if scene_mode and vik_pos and os.environ.get("SMD_SCENE_FIGURES"):
+        # D3/D4/D5 statue figures (the respawn-screen recipe: 13DB stub +
+        # sprites 0x173-0x175 + anim 0x82F + the 0171 bank rows).
+        # OPT-IN while the figure work is unfinished: the figures render
+        # (wrong palette rows resolved), but the frame bytes still decode
+        # as the intro-machine look and the exit timer regressed in the
+        # same round — parked, see project memory.
+        xs = sorted(set(x for x, _ in vik_pos))
+        if len(xs) < 3:
+            bx, by = vik_pos[0]
+            vik_pos = [(bx, by), (bx + 56, by), (bx + 112, by)]
+        for i, (vx2, vy2) in enumerate(vik_pos[:3]):
+            out_spawns.append(dict(x=vx2, y=(vy2 + 28 - 96) & 0xFFFF,
+                                   half_w=16, half_h=16,
+                                   cls=0xD3 + i, anim=0x082F, pool=0))
     print(f"spawns: {len(out_spawns)} kept, {recoded} recoded via the "
-          f"mapping, {passed} passed through (scene actors/vikings)")
+          f"mapping, {passed} passed through"
+          + (f", figures D3-D5 at {vik_pos[:3]}"
+             if scene_mode and vik_pos else ""))
 
     # donor stripe (banks/anims/.lvs world context)
     donor_raw = LR.header_raw(donor_cid, scratch)
@@ -275,9 +314,29 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         r, g, b = smd_color_to_vga6(v)
         bg += bytes((r, g, b))
     new_pal_list = [{"chunk": pal_chunk, "start": 0}]
-    for e in dst["pal_list"]:
-        if e["start"] >= 128:
-            new_pal_list.append(dict(e))
+    import os as _os
+    if scene_mode and _os.environ.get("SMD_SCENE_PAL_DIAG"):
+        # diagnostic: full 00DA palette (backdrop turns forest-colored,
+        # vikings must turn correct if their pixels sit below 0x80)
+        new_pal_list = [{"chunk": 214, "start": 0}, {"chunk": 3, "start": 0},
+                        {"chunk": 3, "start": 128}, {"chunk": 291, "start": 144},
+                        {"chunk": 292, "start": 160}, {"chunk": 229, "start": 176},
+                        {"chunk": 383, "start": 208}, {"chunk": 220, "start": 240}]
+    elif scene_mode:
+        # sprite colors (128+) must match the scene viking frames — clone
+        # the 00DA finale's sprite palette rows (its 128+ entries carry
+        # the scene-viking coloring; the donor world's rows paint them
+        # green — seen live)
+        new_pal_list += [{"chunk": 3, "start": 128},
+                         {"chunk": 291, "start": 144},
+                         {"chunk": 292, "start": 160},
+                         {"chunk": 229, "start": 176},
+                         {"chunk": 383, "start": 208},
+                         {"chunk": 220, "start": 240}]
+    else:
+        for e in dst["pal_list"]:
+            if e["start"] >= 128:
+                new_pal_list.append(dict(e))
 
     # ---- head: donor base + SMD fields ----
     head = bytearray(dhead)
@@ -289,10 +348,21 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         v = be16(c, so)
         head[off2], head[off2 + 1] = v & 0xFF, v >> 8
     if scene_mode:
+        # head shaped EXACTLY like the PC forest finale 00DA — its scene
+        # (controller 48 + viking actor classes) is the proven live recipe:
+        # the class codes animate/voice the vikings; a D8 head instead
+        # leaves the scene globals cold and the viking frames decode wrong
+        # (three green look-alikes — seen live)
         head[0x07] = 0                                     # sel = 0
         head[0x0C], head[0x0D] = 0xD8, 0x00                # timed controller
         head[0x0E], head[0x0F] = 0x20, 0x00                # flags 0x0020
         head[0x10], head[0x11] = 0x78, 0x00                # arg = 120 ticks
+        # (live viking actors need the sel=6 head channel, which trips the
+        # stage-4 strict evac guard in the CURRENT engine build — parked;
+        # the scenes ship with the D3-D5 statue figures, the respawn-screen
+        # recipe, until that guard is taught the scene path)
+        # lvflags stay the donor's: 0x0C (the PC scenes' value) kills the
+        # D8 timer exit — bisect-proven
         # viewport anchor: the camera parks on the head spawn — aim it at
         # the SMD actors (the scene's action happens around its spawns;
         # skip the (0,0) controller row and the off-screen E0 banners),
@@ -331,6 +401,20 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     out["pal_list"] = new_pal_list
     out["pal_anim_en"] = pal_en
     out["pal_anims"] = pal_anims
+    if scene_mode:
+        # resource sections cloned wholesale from the PC ship finale 00DA —
+        # the proven "vikings as scene actors on the 1C6 script" recipe
+        # (its banks carry the scene viking sprites; FFFE pool resolution
+        # rides on them)
+        out["sprite_banks"] = [
+            {"chunk": 371, "pad": "c000080c"},
+            {"chunk": 373, "pad": "c800080c"},
+            {"chunk": 372, "pad": "80011008"},
+            {"chunk": 306, "pad": "c8010202"},
+        ]
+        out["anim_chunks"] = [
+            {"chunk": c, "pad": "040401"}
+            for c in (375, 376, 377, 378, 414, 415, 416, 417, 368)]
     new_raw = LR.serialize_stripe(out)
 
     # ---- write into the scratch tree + extras ----
