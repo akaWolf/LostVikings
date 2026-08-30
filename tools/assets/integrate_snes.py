@@ -68,7 +68,31 @@ PLAN = [
          prev_hdr="00A8", base=0x22F),   # WRLR -> PDDY -> TRPD
 ]
 # world template (.lvs) chunks per world of each insert
-TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5}
+TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5,
+              # SMD scenes run on the SCENE script (D8 timed controller)
+              53: 0x1C6, 54: 0x1C6, 55: 0x1C6, 56: 0x1C6, 57: 0x1C6,
+              58: 0x1C6}
+
+# The six SMD/Genesis-only scenes (task: embed into gameplay, as on SMD):
+# five between-world cutscenes replace the PC timewarp room (scene 0x29)
+# on the world edges, the sixth is the game-completion cutscene wedged
+# before the PC ending scroller (45). All run as D8 timed scenes that
+# transition by their head's +0x16 next field; prev_hdr/prev_next say
+# which canonical header edge gets retargeted at the scene slot.
+PLAN_SMD = [
+    dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
+         prev_hdr="00CC", base=0x235),   # GRND -> scene -> LLM0
+    dict(slot=54, smd=0x13E, donor="0053", pw=b"CUT2", next=11,
+         prev_hdr="0034", base=0x23B),   # VLCN -> scene -> QCKS
+    dict(slot=55, smd=0x13F, donor="007A", pw=b"CUT3", next=17,
+         prev_hdr="0055", base=0x241),   # TTRS -> scene -> JLLY
+    dict(slot=56, smd=0x140, donor="00A6", pw=b"CUT4", next=25,
+         prev_hdr="0080", base=0x247),   # V8TR -> scene -> NFL8
+    dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
+         prev_hdr="00AA", base=0x24D),   # TRPD -> scene -> TFFF
+    dict(slot=58, smd=0x08C, donor="00A6", pw=b"END1", next=0x2D,
+         prev_hdr="00D4", base=0x253),   # MSTR -> finale -> scroller 45
+]
 
 
 def patch_next(scratch, hdr_cid_hex, next_level):
@@ -110,24 +134,8 @@ def build_lvx(scratch, entries):
     print(f"  exe_static: {len(img)}B + LVX1 trailer {len(tr)}B -> {out}")
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--scratch", default="/tmp/lv_edit_scratch")
-    ap.add_argument("--pack", action="store_true")
-    ap.add_argument("--music", type=int, default=None,
-                    help="force this music track on all five (default: the "
-                         "SNES head's own = the world theme). Track 8 is the "
-                         "unused full theme, 9 the unused short piece.")
-    ap.add_argument("--list-music", action="store_true")
-    args = ap.parse_args()
-    scratch = args.scratch
-
-    if args.list_music:
-        print("track chunk  notes  secs  used  description")
-        for t, (c, d, n, s, u) in MUSIC_TRACKS.items():
-            print(f"  {t:2d}  {c}  {n:5d} {s:6.1f}  {u:4d}  {d}")
-        return
-
+def do_integrate(scratch, music=None):
+    """Full console-content integration: 5 SNES levels + 6 SMD scenes."""
     lvx = []
     for e in PLAN:
         b = e["base"]
@@ -136,20 +144,51 @@ def main():
         print(f"slot {e['slot']} ({e['pw'].decode()}):")
         info = SP.convert_level(e["snes"], e["donor"], scratch,
                                 new_cids=cids, next_level=e["next"],
-                                music=args.music)
+                                music=music)
         print(f"  music track {info['music']} "
               f"({MUSIC_TRACKS.get(info['music'], ('?', '?'))[1]})")
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
-    # canonical predecessors point into the insert chain
+    # SMD scenes (D8 timed cutscenes on the 1C6 scene script)
+    import smd2pc as SMD
+    for e in PLAN_SMD:
+        b = e["base"]
+        print(f"slot {e['slot']} ({e['pw'].decode()}, SMD scene):")
+        SMD.convert_scene(e["smd"], e["donor"], scratch,
+                          {"hdr": b, "map": b + 1, "tiles": b + 2,
+                           "gtld": b + 4, "pal": b + 5},
+                          next_level=e["next"], scene_mode=True)
+        lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
+    # canonical predecessors point into the insert chains
     print("progression patch:")
-    for e in PLAN:
+    for e in PLAN + PLAN_SMD:
         if e["prev_hdr"]:
             patch_next(scratch, e["prev_hdr"], e["slot"])
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)
+    return [e["slot"] for e in PLAN + PLAN_SMD]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--scratch", default="/tmp/lv_edit_scratch")
+    ap.add_argument("--pack", action="store_true")
+    ap.add_argument("--music", type=int, default=None,
+                    help="force this music track on the five levels "
+                         "(default: the SNES head's own = the world theme). "
+                         "Track 8 is the unused full theme, 9 the short one.")
+    ap.add_argument("--list-music", action="store_true")
+    args = ap.parse_args()
+
+    if args.list_music:
+        print("track chunk  notes  secs  used  description")
+        for t, (c, d, n, s, u) in MUSIC_TRACKS.items():
+            print(f"  {t:2d}  {c}  {n:5d} {s:6.1f}  {u:4d}  {d}")
+        return
+
+    do_integrate(args.scratch, music=args.music)
     if args.pack:
-        AC.ASSETS = scratch
+        AC.ASSETS = args.scratch
         AC.pack()
 
 

@@ -8043,6 +8043,15 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
         extern int v2_dbg_pre_vm_iter;
         if (want >= 0 && v2_dbg_pre_vm_iter >= 2) {
             v2gs(shadow).level_load((uint16_t)want);
+            // V2_START_PREV=<n>: also fake the CURRENT level so the loader
+            // records it as word_2AA8B (prev) — the scene scripts dispatch
+            // on prev (the S_8C00 world ladder), this hook lets a jump test
+            // any transition edge.
+            { const char* pe = getenv("V2_START_PREV");
+              if (pe && *pe) {
+                  v2gs(shadow).level((uint16_t)atoi(pe));
+                  fprintf(stderr, "V2: START_PREV hook -> level=%s\n", pe);
+              } }
             v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() | 1);
             fprintf(stderr, "V2: START_LEVEL hook -> level_load=%d (f%d)\n",
                     want, v2_dbg_pre_vm_iter);

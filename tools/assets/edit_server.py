@@ -826,22 +826,9 @@ class H(BaseHTTPRequestHandler):
         if music is not None and int(music) not in IS.MUSIC_TRACKS:
             return self._err(f"unknown music track {music}")
         with LOCK:
-            lvx = []
-            for e in IS.PLAN:
-                b = e["base"]
-                SP.convert_level(e["snes"], e["donor"], SCRATCH,
-                                 new_cids={"hdr": b, "map": b + 1,
-                                           "tiles": b + 2, "gtld": b + 4,
-                                           "pal": b + 5},
-                                 next_level=e["next"],
-                                 music=None if music is None else int(music))
-                lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
-            for e in IS.PLAN:
-                if e["prev_hdr"]:
-                    IS.patch_next(SCRATCH, e["prev_hdr"], e["slot"])
-            IS.build_lvx(SCRATCH, lvx)
-        return self._json({"ok": True,
-                           "slots": [e["slot"] for e in IS.PLAN],
+            slots = IS.do_integrate(
+                SCRATCH, music=None if music is None else int(music))
+        return self._json({"ok": True, "slots": slots,
                            "packed": do_pack()})
 
     def api_mod_import(self, body):
