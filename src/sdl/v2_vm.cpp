@@ -7822,6 +7822,17 @@ static void v2_load_level_data(uint8_t* shadow) {
         v2_read_chunk(bg_chunk, v2_vm_shadow_gs_tiledata, V2_GS_TILEDATA_SIZE, shadow);
         v2_gs_tiledata_valid = true;
 
+        // #113 interludes: a TILE level with HUD off ([25CF] bit0 = 0) never
+        // exists in the canon (every canonical tile level runs the HUD, the
+        // HUD-less screens are chunk-based intros that repaint the split
+        // band themselves via 10cd8 di=0). The LVX scenes are the first
+        // such combination, and the split-screen band (v2_hud_buf) kept
+        // showing the PREVIOUS intro chunk's bottom rows — seen live.
+        // Black the band; dead branch on canonical data.
+        if (!(v2gs(shadow).level_flags_b() & 1)) {
+            extern uint8_t v2_hud_buf[320 * 64];
+            memset(v2_hud_buf, 0, sizeof(uint8_t) * 320 * 64);
+        }
     }
 }
 
@@ -19716,8 +19727,16 @@ void v2_phase_frame_begin(uint16_t ds_val) {
             FILE* f = fopen(fn, "wb");
             if (f) {
                 fprintf(f, "P6\n320 200\n255\n");
+                // compose the frame the DISPLAY shows: 176 viewport rows
+                // from render_buf + 24 split-band rows from v2_hud_buf
+                // (the raw render_buf tail rows 176..199 are diagnostic
+                // scratch the user never sees — dumping them faked a
+                // "garbage band" during the interlude work)
+                extern uint8_t v2_hud_buf[320 * 64];
                 for (int i = 0; i < 320 * 200; i++) {
-                    uint8_t c = v2_render_buf[i];
+                    uint8_t c = (i < 320 * 176)
+                        ? v2_render_buf[i]
+                        : v2_hud_buf[i - 320 * 176];
                     fputc(v2_dac_shadow[c*3+0] << 2, f);
                     fputc(v2_dac_shadow[c*3+1] << 2, f);
                     fputc(v2_dac_shadow[c*3+2] << 2, f);

@@ -1385,6 +1385,15 @@ void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
 //   byte = col/4, color = data[section_off + row*8 + byte]
 // ============================================================================
 void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait_si) {
+    // #113 interludes: the LVX scenes spawn the viking trio with the HUD
+    // machinery off ([25CF] bit0 = 0) — a combination the canon never has
+    // (every canonical viking spawn runs with a live HUD). The spawn tail
+    // still calls the HUD painters, smearing portraits/icons into the
+    // split-screen band. Dead branch on canonical data.
+    { extern uint8_t* v2_vm_get_shadow_ds();
+      uint8_t* _sh = v2_vm_get_shadow_ds();
+      if (_sh && !(_sh[0x25CF] & 1)) return; }
+
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
@@ -1417,6 +1426,15 @@ void v2_draw_hud_portrait(uint16_t ds_val, uint16_t viking_di, uint16_t portrait
 }
 
 void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
+    // #113 interludes: the LVX scenes spawn the viking trio with the HUD
+    // machinery off ([25CF] bit0 = 0) — a combination the canon never has
+    // (every canonical viking spawn runs with a live HUD). The spawn tail
+    // still calls the HUD painters, smearing portraits/icons into the
+    // split-screen band. Dead branch on canonical data.
+    { extern uint8_t* v2_vm_get_shadow_ds();
+      uint8_t* _sh = v2_vm_get_shadow_ds();
+      if (_sh && !(_sh[0x25CF] & 1)) return; }
+
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
@@ -1471,6 +1489,12 @@ void v2_draw_hud_item(uint16_t ds_val, uint16_t slot_di, uint16_t item_ax) {
 // Word writes cover 2 adjacent VGA bytes in the same plane.
 // ============================================================================
 void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
+    // #113 interludes: same HUD-off gate as the portrait/item/healthbar
+    // painters (dead branch on canonical data — see the note there).
+    { extern uint8_t* v2_vm_get_shadow_ds();
+      uint8_t* _sh = v2_vm_get_shadow_ds();
+      if (_sh && !(_sh[0x25CF] & 1)) return; }
+
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
@@ -1532,6 +1556,15 @@ void v2_draw_hud_selector(uint16_t ds_val, uint16_t slot_di) {
 //   (first plane written is plane 1, not plane 3)
 // ============================================================================
 void v2_draw_hud_healthbar(uint16_t ds_val, uint16_t health_ax, uint16_t viking_bx, uint16_t pos_di) {
+    // #113 interludes: the LVX scenes spawn the viking trio with the HUD
+    // machinery off ([25CF] bit0 = 0) — a combination the canon never has
+    // (every canonical viking spawn runs with a live HUD). The spawn tail
+    // still calls the HUD painters, smearing portraits/icons into the
+    // split-screen band. Dead branch on canonical data.
+    { extern uint8_t* v2_vm_get_shadow_ds();
+      uint8_t* _sh = v2_vm_get_shadow_ds();
+      if (_sh && !(_sh[0x25CF] & 1)) return; }
+
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif

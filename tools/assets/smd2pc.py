@@ -201,12 +201,21 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # (the engine computes them against the 320x176 window — seen live:
         # a 22x12 map let the camera drift to (32,16)), so the screen is
         # HARD-locked like the SNES interlude.
-        CW, CH = 20, 11
+        # 12th row rides BELOW the visible window (11 rows = 176px): the
+        # renderer smears garbage into the last on-screen row when it sits
+        # exactly on the map's bottom edge (seen live), and the vikings park
+        # at the TOP of this layout so the camera stays clamped at y=0.
+        CW, CH = 20, 12
         _vx = [sp["x"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [80]
         _vy = [sp["y"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [224]
         floor_row = min(_vy) // 16
-        c0 = max(0, min(min(_vx) // 16 - 5, W - CW))
-        r0 = max(0, min(floor_row - 8, H - CH))
+        c0 = max(1, min(min(_vx) // 16 - 2, W - 1 - CW))
+        # window layout mirrors the video: 2 rows of black title band, the
+        # viking ledge RIGHT under it, and the room composition (the lake
+        # pit / lower floor) filling the rest of the frame downward. The
+        # old floor-8 crop showed only sky above the ledge and cut the
+        # whole scene body away (full-map render compared to the video).
+        r0 = max(0, min(floor_row - 3, H - CH))
         crop = bytearray()
         for y in range(CH):
             row_off = ((r0 + y) * W + c0) * 2
@@ -384,6 +393,13 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
         black_prefab = len(pc_gtld) // 8 - 1
         for cell in range(W * 2):
+            mmap[cell * 2] = black_prefab & 0xFF
+            mmap[cell * 2 + 1] = black_prefab >> 8
+        # the hidden support row (11) goes black too: the renderer leaks
+        # the map's bottom edge into the 24px HUD-less band below the
+        # viewport (seen live) — keep whatever it smears black
+        for x in range(W):
+            cell = (CH - 1) * W + x
             mmap[cell * 2] = black_prefab & 0xFF
             mmap[cell * 2 + 1] = black_prefab >> 8
         # banner: one 32px block = 2x2 quads, centered on the fixed screen
