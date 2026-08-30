@@ -134,11 +134,17 @@ def compile_file(path):
 
 def cmd_build(path, cid):
     img = compile_file(path)
-    orig = open(f'assets_raw/chunks/dec/{cid:04d}.bin', 'rb').read()
-    same = img == orig
-    nd = sum(1 for a, b in zip(img, orig) if a != b) + abs(len(img) - len(orig))
-    print(f'0x{cid:X}: compiled {len(img)} bytes; '
-          f'{"IDENTICAL to original" if same else f"changed ({nd} byte diffs)"}')
+    orig_path = f'assets_raw/chunks/dec/{cid:04d}.bin'
+    if os.path.exists(orig_path):
+        orig = open(orig_path, 'rb').read()
+        same = img == orig
+        nd = sum(1 for a, b in zip(img, orig) if a != b) + abs(len(img) - len(orig))
+        print(f'0x{cid:X}: compiled {len(img)} bytes; '
+              f'{"IDENTICAL to original" if same else f"changed ({nd} byte diffs)"}')
+    else:
+        # a fresh chunk id (extras.json, e.g. the UX stage 1 scene templates
+        # built by integrate_snes.build_scene_templates): nothing to judge
+        print(f'0x{cid:X}: compiled {len(img)} bytes; new chunk (no original)')
     # compressor self-check: decompress(compress(img)) == img.
     # NOTE the size+1 canon: the u16 field is len-1; the decompressor
     # stops on dx underflow after emitting field+1 bytes.

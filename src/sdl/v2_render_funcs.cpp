@@ -486,7 +486,13 @@ void v2_draw_tiles(uint16_t ds_val) {
     uint8_t* buf = v2_render_buf;
     // UX stage 0: clip height for this frame's sprites/UI (200 on a
     // full-screen LVX scene, else the orig 176-row viewport).
-    v2_clip_h = v2_scene_fullscreen() ? 200 : 176;
+    // UX stage 1: on a full-screen scene the console blanks every line from
+    // 187 down by a raster split (measured on the DE video and modelled in
+    // the scene map: yellow line 187-188, black below) — sprites never show
+    // there (the Ship consoles' lowest rows vanish under it on the Genesis),
+    // so the sprite/pixel clip stops at 187; the tile pass still paints all
+    // 200 rows (the band itself is map data).
+    v2_clip_h = v2_scene_fullscreen() ? 187 : 176;
 
     // Tile map segment (FS)
     uint16_t fs_seg = st.seg_fs();

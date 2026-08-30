@@ -468,7 +468,30 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         de_map, de_tiles, de_masks, de_gtld, de_pairs, de_pal128, \
             vik_pos_de, de_ledge, gen_drop = build_genesis_backdrop(gen_bg, CW, CH)
         smap, W, H = bytes(de_map), CW, CH
-        spawns = []          # actors are ours (scene script), not the room's
+        # route B (user decision 2026-09-02): the room's own objects ride
+        # along — recoded below through the SMD->PC class bijection, they
+        # run their native world code on the scene's world-template copy
+        # (integrate_snes.build_scene_templates). Room px -> map px = room
+        # - camera + pin (genesis_scene.layout); the level controller 48
+        # sits at (0,0) as in every PC level (its pool = the world index,
+        # same convention on both sides); the SMD scene classes E0 (the
+        # letters — ours are the D9 rows) and E1 (actor spots: the viking
+        # walks there and speaks the line in `pool` — not ported yet) drop.
+        from genesis_scene import layout as _gs_layout2
+        _lay2 = _gs_layout2(gen_bg["world"], gen_bg)
+        (_cx, _cy), (_px, _py) = _lay2["cam"], _lay2["pin"]
+        kept = []
+        for sp in spawns:
+            if sp["cls"] in (0xE0, 0xE1):
+                continue
+            sp = dict(sp)
+            if sp["cls"] == 0x48:
+                sp["x"], sp["y"] = 0, 0
+            elif sp["cls"] not in (0, 1, 2):
+                sp["x"] = (sp["x"] - _cx + _px) & 0xFFFF
+                sp["y"] = (sp["y"] - _cy + _py) & 0xFFFF
+            kept.append(sp)
+        spawns = kept
         de_bg = gen_bg       # downstream: the 'shipped in PC shapes' path
     elif scene_mode and de_bg:
         # DE world-entry scenes (task #114): the field is the START AREA
@@ -532,12 +555,15 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             if sp["cls"] in (0, 1, 2):
                 vik_pos.append((sp["x"], sp["y"]))
                 continue
-            # Nothing but the vikings survives on a scene: the 1C6 SCENE
-            # script resolves gameplay mob classes to unrelated machines
-            # (the Egypt scene's leftover rows wedged the VM pass and the
-            # D8 timer never fired — seen live); 48/4A/E0/E1/4B/4C/4E are
-            # controller/stub/wipe/prop rows with no figure role here.
-            continue
+            # Nothing but the vikings survives on a 1C6 scene: the 1C6
+            # SCENE script resolves gameplay mob classes to unrelated
+            # machines (the Egypt scene's leftover rows wedged the VM pass
+            # and the D8 timer never fired — seen live); 48/4A/E0/E1/4B/4C/
+            # 4E are controller/stub/wipe/prop rows with no figure role
+            # there. On a world-template copy (gen_bg, route B) the props
+            # are real: fall through to the class bijection.
+            if not gen_bg:
+                continue
         if not keep_vikings and sp["cls"] in (0, 1, 2):
             continue
         k_cls = f"{world}:{sp['cls']:02X}"

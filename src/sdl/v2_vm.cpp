@@ -6178,8 +6178,18 @@ static void v2_gen_tmpl_check(uint16_t chunk, const uint8_t* p, uint32_t n) {
                     chunk, n, h);
         return;
     }
-    // Non-world template (fn-test synthetic worlds): the gen dispatch never
-    // claims those chunk ids, the flag stays clean.
+    // Not one of the six canon templates: the gen dispatch never claims the
+    // chunk id, so the interpreter is the only executor there. Two cases
+    // share this path — the fn-test synthetic worlds (v2_fntest_loop_allowed
+    // opens the loop for them anyway) and, UX stage 1, the scene slots'
+    // template copies from the LVX trailer (integrate_snes.
+    // build_scene_templates: a world template + the D8/D9 scene blocks
+    // under a fresh id) — modded content by definition, exactly the #112
+    // "dirty template" case, so the loop gate opens for it.
+    v2_gen_tmpl_dirty = true;
+    if (!v2_fntest_loop_allowed)
+        fprintf(stderr, "V2-GEN: template 0x%X is not a canon world template "
+                "(len=%u) — interpreter takes this world\n", chunk, n);
 }
 
 static void v2_load_level(uint8_t* shadow); // forward decl

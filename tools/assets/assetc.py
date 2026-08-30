@@ -672,6 +672,13 @@ def pack():
                 rels = [f"bg_tilesets/{cid:04X}.png", f"bg_tilesets/{cid:04X}.json"]
             elif role == "unreferenced":
                 rels = [f"unreferenced/{cid:04X}.bin"]
+            elif role == "level_script":
+                # UX stage 1: the scene slots' templates — copies of the
+                # world templates with the scene classes appended
+                # (integrate_snes.build_scene_templates); same open form
+                # as the canonical scripts (.lvsf + size.json), same lvsc
+                rels = [f"level_scripts/{cid:X}.lvsf",
+                        f"level_scripts/{cid:04X}.size.json"]
             else:
                 raise SystemExit(f"extras: unsupported role {role} for {cid_hex}")
             loaded = []

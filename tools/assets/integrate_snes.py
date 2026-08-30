@@ -28,6 +28,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import struct
 import sys
 
@@ -67,10 +68,18 @@ PLAN = [
     dict(slot=52, snes=0x180, donor="00A6", pw=b"PDDY", next=32,
          prev_hdr="00A8", base=0x22F),   # WRLR -> PDDY -> TRPD
 ]
+# UX stage 1 (route B, user decision 2026-09-02): every scene slot runs on
+# a COPY of its world's template (new chunk ids) with the scene classes
+# appended — the D8 timed exit and the D9 letter blocks — so the room's
+# props (bubble geyser 4A, Egypt trap/pot/gem, Factory hook/button, Ship
+# chairs) run their native world code through the SMD->PC class bijection
+# exactly like the five console-exclusive levels do. The canonical world
+# templates 1C1-1C5 and the 1C6 scene script stay byte-identical.
+SCENE_TMPL = {53: (0x1C2, 0x25D), 54: (0x1C3, 0x25E), 55: (0x1C4, 0x25F),
+              56: (0x1C5, 0x260), 57: (0x1C1, 0x261)}
 # world template (.lvs) chunks per world of each insert
-TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5,
-              # SMD scenes run on the SCENE script (D8 timed controller)
-              53: 0x1C6, 54: 0x1C6, 55: 0x1C6, 56: 0x1C6, 57: 0x1C6}
+TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5}
+TMPL_CHUNK.update({slot: dst for slot, (src, dst) in SCENE_TMPL.items()})
 
 # The six SMD/Genesis-only scenes (task: embed into gameplay, as on SMD):
 # five between-world cutscenes replace the PC timewarp room (scene 0x29)
@@ -101,15 +110,21 @@ PLAN_SMD = [
     # exactly as the Genesis VDP (and thus the BAC Definitive Edition)
     # shows it — camera/spots per world in genesis_scene.WORLD_CAMERA.
     # Worlds without a fitted camera yet fall back to the de_bg bake.
-    dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
+    # donor = the PC level of the world whose stripe (sprite banks, anim
+    # chunks, viking palette rows) covers every prop class the SMD scene
+    # spawns (measured over the world's headers): Preh BBLS 0032 (4A geyser
+    # + 61 bubbles), Egypt 004F (6D trap, 0A trigger, 16 pot, 0B gem),
+    # Factory 007E (92 button, 9B hook), Ship TFFF 00CE (86 chairs); Wacky's
+    # scene carries no props (00A6 as before)
+    dict(slot=53, smd=0x13D, donor="0032", pw=b"CUT1", next=4,
          prev_hdr=None, base=0x235,    # vortex(prev=GRND) -> scene -> LLM0
          gen_bg=dict(world="preh"),
          de_bg=dict(lvl=0x01A, map=0x12, gt=0x17, world="preh")),
-    dict(slot=54, smd=0x13E, donor="0053", pw=b"CUT2", next=11,
+    dict(slot=54, smd=0x13E, donor="004F", pw=b"CUT2", next=11,
          prev_hdr=None, base=0x23B,    # vortex(prev=VLCN) -> scene -> QCKS
          gen_bg=dict(world="egypt"),
          de_bg=dict(lvl=0x02F, map=0x28, gt=0x2E, world="egypt")),
-    dict(slot=55, smd=0x13F, donor="007A", pw=b"CUT3", next=17,
+    dict(slot=55, smd=0x13F, donor="007E", pw=b"CUT3", next=17,
          prev_hdr=None, base=0x241,    # vortex(prev=TTRS) -> scene -> JLLY
          gen_bg=dict(world="factory"),
          de_bg=dict(lvl=0x041, map=0x40, gt=0x3F, world="factory")),
@@ -117,7 +132,7 @@ PLAN_SMD = [
          prev_hdr=None, base=0x247,    # vortex(prev=V8TR) -> scene -> NFL8
          gen_bg=dict(world="wacky"),
          de_bg=dict(lvl=0x05B, map=0x55, gt=0x54, world="wacky")),
-    dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
+    dict(slot=57, smd=0x141, donor="00CE", pw=b"CUT5", next=33,
          prev_hdr=None, base=0x24D,    # vortex(prev=TRPD) -> scene -> TFFF
          gen_bg=dict(world="ship"),
          de_bg=dict(lvl=0x077, map=0x6B, gt=0x6D, world="ship")),
@@ -300,8 +315,11 @@ def write_demo_chunks(scratch, steps=None):
 #     also RAISES the sprite — canonical A_9F25 pattern), idle loop.
 LETTER_BASE = 0x9F53
 
-def letterfall_blob(nblk):
-    """(blob_bytes, dispatcher_addr) — dispatcher first, then 8 anims."""
+def letterfall_blob(nblk, base=LETTER_BASE):
+    """(blob_bytes, dispatcher_addr) — dispatcher first, then 8 anims.
+    `base` = the absolute address the blob lands at (the D9 record's code
+    points at base-3: spawn enters at record pc + 3)."""
+    LETTER_BASE = base
     # pass 1: measure the dispatcher: 3 (prolog jmp is NOT used: the 13DB
     # prolog calls the shared setup; D9 objects need none of it — start
     # straight at the ladder) + per row: 3 (51 k) + 4 (73 16 addr) ... + 1
@@ -367,6 +385,147 @@ def letterfall_blob(nblk):
     disp[idle_off + 4] = io & 0xFF
     disp[idle_off + 5] = io >> 8
     return bytes(disp) + bytes(anims)
+
+
+# The 1C6 D8 timed-scene controller, byte for byte (S_8A90..S_8AD0 + its
+# one-byte anim "0E" at S_8AD0 — read off the canonical chunk 01C6 with
+# level_render.read_payload): prolog jmp (record pc; spawn enters at pc+3),
+# `19 anim / 2F / acc=0x1000 / 62 08 (OR field 08) / field[16]==0 ? default
+# duration : field[16] -> field[1C] / loop: yield, field[1C]==0 -> exit,
+# 97 / AA [03B8]&0x18 -> exit / 99 [03B8]&0x1E / A8 [0100] -> exit (the
+# button edges = early exit) / jmp loop / exit: 0F (VM exit + [334]|=1 =
+# level end -> the head's next)`. Six absolute operands relocate; the
+# default duration constant is ours (the scene length).
+D8_CANON = bytes.fromhex(
+    "03d79419d08a2f5100106208510000781 6ab8a513c00561c03af8a5216561c0001"
+    "510000731ccf8a97000100aa18b803cf8a991eb803a8000100cf8a03af8a0f0e"
+    .replace(" ", ""))
+D8_RELOC = [(1, 0x94D7, 3), (4, 0x8AD0, 0x40), (17, 0x8AAB, 0x1B),
+            (25, 0x8AAF, 0x1F), (38, 0x8ACF, 0x3F), (48, 0x8ACF, 0x3F),
+            (58, 0x8ACF, 0x3F), (61, 0x8AAF, 0x1F)]   # (offset, canon, rel)
+
+def d8_timer_blob(base, ticks):
+    """The D8 controller relocated to `base` with the default duration
+    `ticks` (1C6 ships 0x3C; our scenes ran 300 on the patched 1C6). The
+    prolog jmp (S_94D7 = 1C6's shared object setup, which the world
+    templates keep elsewhere) retargets to base+3: D8 needs none of it and
+    the spawn path enters at pc+3 anyway."""
+    b = bytearray(D8_CANON)
+    assert len(b) == 0x41, len(b)
+    for off, canon, rel in D8_RELOC:
+        assert b[off] | (b[off + 1] << 8) == canon, (off, b[off:off + 2].hex())
+        tgt = base + rel
+        b[off], b[off + 1] = tgt & 0xFF, tgt >> 8
+    assert b[19:22] == bytes((0x51, 0x3C, 0x00)), b[19:22].hex()
+    b[20], b[21] = ticks & 0xFF, ticks >> 8
+    return bytes(b)
+
+
+D8_REST = "04000000101000000500000000000000"   # 1C6's D8 record body
+D9_REST = "04000000202000000500000000000010"   # the D7-shaped 32x32 body
+SCENE_TICKS = 300
+TMPL_BUF = 0xC00 * 16    # the template lives in the animdata segment: 0xC00 paragraphs
+# Where the blocks go when the template has no room past its payload: the
+# Ship template 1C1 is 48972 B (180 B short of the buffer), so its scene
+# copy overlays the blocks onto a class region the scene never runs —
+# class D2 (S_3311..S_3694, 899 B): no Ship level spawns D2, no label in
+# the region is referenced from outside it (the .lvsf reference graph: 0
+# incoming; only its own `X = X+0` aliases), and the D2 record is pointed
+# at the 13DB stub like 1C6 does. The region keeps its exact length (the
+# blob is zero-padded), so nothing else in the template shifts.
+FREE_REGION = {0x1C1: (0x3311, 0x3694, "D2")}
+
+
+def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS):
+    """One template per scene slot: the canonical world template text
+    (assets_raw/lvs/<src>.lvsf) under a new chunk id, its orphan D8/D9
+    records retargeted at the two blocks — appended past the payload when
+    the 48K template buffer has room, else overlaid on FREE_REGION.
+    Registered in extras.json as role level_script."""
+    ex_path = os.path.join(scratch, "extras.json")
+    extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
+    for slot, (src, dst) in sorted(SCENE_TMPL.items()):
+        txt = open(os.path.join(AC.RAW, "lvs", f"{src:X}.lvsf")).read()
+        m = re.search(r"^chunk %04X size (\d+)$" % src, txt, re.M)
+        if not m:
+            raise SystemExit(f"template {src:X}: size header not found")
+        n = int(m.group(1))
+        timer = d8_timer_blob(0, ticks)              # sized only; rebuilt below
+        need = len(timer) + len(letterfall_blob(nblk, base=0))
+        if n + need <= TMPL_BUF:
+            base, new_n, where = n, n + need, "appended"
+        else:
+            base, end, victim = FREE_REGION[src]
+            assert need <= end - base, (src, need, end - base)
+            new_n, where = n, f"overlaid on {victim} {base:04X}-{end:04X}"
+        timer = d8_timer_blob(base, ticks)
+        letters = letterfall_blob(nblk, base=base + len(timer))
+        blob = timer + letters
+        for cls, new in (("D8", "record D8 sprite=FFFF flags=00 code==%04X rest=%s" % (base, D8_REST)),
+                         ("D9", "record D9 sprite=FFFE flags=01 code==%04X rest=%s" % (base + len(timer) - 3, D9_REST))):
+            txt, k = re.subn(r"^record %s .*$" % cls, new, txt, count=1, flags=re.M)
+            if k != 1:
+                raise SystemExit(f"template {src:X}: record {cls} not found")
+        txt = txt.replace(m.group(0), "chunk %04X size %d" % (dst, new_n), 1)
+        if where == "appended":
+            txt = txt.rstrip("\n") + "\nblob @%04X %s\n" % (base, blob.hex())
+        else:
+            lines = txt.split("\n")
+            i0 = lines.index("S_%04X:" % base)
+            i1 = lines.index("S_%04X:" % end)
+            inside = {ln[:-1] for ln in lines[i0:i1] if re.match(r"^[SA]_[0-9A-F]{4}:$", ln)}
+            for k in range(i0, i1):
+                for lab in re.findall(r"\b[SA]_[0-9A-F]{4}\b", lines[k]):
+                    if lab not in inside and lines[k].startswith("o ") is False and lab != "S_%04X" % end:
+                        pass
+            # outside the region only the region's own aliases mention its
+            # labels (verified when the region was chosen) — drop those
+            keep = [ln for k, ln in enumerate(lines)
+                    if not (i0 <= k < i1) and not (re.match(r"^[SA]_[0-9A-F]{4} = ", ln) and ln.split(" = ")[0] in inside)]
+            j = keep.index("S_%04X:" % end)
+            pad = bytes(end - base - len(blob))
+            keep.insert(j, "blob @%04X %s" % (base, (blob + pad).hex()))
+            txt = "\n".join(keep)
+            # the overlaid class must never resolve into our code
+            txt, k = re.subn(r"^record %s sprite=(\S+) flags=(\S+) code=\S+ rest=(\S+)$" % victim,
+                             r"record %s sprite=\1 flags=\2 code=S_13DB rest=\3" % victim, txt, count=1, flags=re.M)
+            if k != 1:
+                raise SystemExit(f"template {src:X}: record {victim} not found")
+            stray = [ln for ln in keep if not ln.startswith("record") and any(
+                     re.search(r"\b%s\b" % lab, ln) for lab in inside)]
+            if stray:
+                raise SystemExit(f"template {src:X}: {len(stray)} lines still reference the overlaid region: {stray[:3]}")
+        d = os.path.join(scratch, "level_scripts")
+        os.makedirs(d, exist_ok=True)
+        for name, body in ((f"{dst:X}.lvsf", txt),
+                           (f"{dst:04X}.size.json", json.dumps({"payload_len": new_n}))):
+            p = os.path.join(d, name)
+            with open(p + ".tmp", "w") as f:
+                f.write(body)
+            os.replace(p + ".tmp", p)
+        extras[f"{dst:04X}"] = {"role": "level_script"}
+        print(f"  scene template {dst:04X} = {src:04X} ({n}B): D8 timer @{base:04X} "
+              f"({ticks} ticks) + {nblk} letters @{base + len(timer):04X}, {len(blob)}B {where}")
+    with open(ex_path + ".tmp", "w") as f:
+        json.dump(extras, f, indent=1)
+    os.replace(ex_path + ".tmp", ex_path)
+
+
+def restore_1c6(scratch):
+    """The scene script 1C6 goes back to the canonical text (earlier runs
+    patched its D8 duration and appended the letter blob for the scenes,
+    which now live on their own templates); the world ladder patch is
+    reapplied by patch_1c6_ladder right after."""
+    src = os.path.join(AC.RAW, "lvs", "1C6.lvsf")
+    dst = os.path.join(scratch, "level_scripts", "1C6.lvsf")
+    txt = open(src).read()
+    with open(dst + ".tmp", "w") as f:
+        f.write(txt)
+    os.replace(dst + ".tmp", dst)
+    sj = os.path.join(scratch, "level_scripts", "01C6.size.json")
+    with open(sj + ".tmp", "w") as f:
+        json.dump({"payload_len": 40787}, f)
+    os.replace(sj + ".tmp", sj)
 
 
 def patch_1c6_letterfall(scratch, nblk=8):
@@ -478,9 +637,11 @@ def do_integrate(scratch, music=None):
     for e in PLAN + PLAN_SMD:
         if e["prev_hdr"]:
             patch_next(scratch, e["prev_hdr"], e["slot"])
+    # UX stage 1 route B: the scenes run on their own world-template copies
+    # (build_scene_templates); 1C6 keeps only the world-ladder retarget
+    restore_1c6(scratch)
     patch_1c6_ladder(scratch)
-    patch_1c6_d8_timer(scratch)
-    patch_1c6_letterfall(scratch)
+    build_scene_templates(scratch)
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)

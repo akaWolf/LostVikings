@@ -355,6 +355,16 @@ def layout(world, gen_bg=None):
     pin_y = cam_y % 16
     cw = EXT_L + 20 + (1 if cam_x % 16 else 0)
     ch = (200 + pin_y + 15) // 16
+    # the room's props that sit past the screen (the Preh bubble geyser 4A
+    # is parked 24 px below the bottom edge) need real map cells under
+    # them: grow the map to their boxes (never shown — the viewport is
+    # parked at the pin); vikings/controller/letters/actor spots excluded
+    for sp in GenesisScene(world).spawns:
+        if sp["cls"] in (0, 1, 2, 0x48, 0xE0, 0xE1):
+            continue
+        x, y = sp["x"] - cam_x + pin_x, sp["y"] - cam_y + pin_y
+        cw = max(cw, (x + sp["half_w"]) // 16 + 1)
+        ch = max(ch, (y + sp["half_h"]) // 16 + 1)
     assert pin_x < 256 and pin_y < 16
     return dict(cam=(cam_x, cam_y), pin=(pin_x, pin_y), cw=cw, ch=ch)
 
