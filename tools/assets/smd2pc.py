@@ -116,7 +116,11 @@ def smd_color_to_vga6(word):
 
 
 def parse_tail(c, spawn_end):
-    """Stripe tail: pal entries (4B) -> FFFF, then pal-anim grammar (BE)."""
+    """Stripe tail: pal entries (4B) -> FFFF, then pal-anim grammar (BE),
+    then TWO more sections mirroring the PC stripe grammar (found on the
+    scene chunks — the first sprite bank of an interlude IS its banner
+    letters chunk): sprite banks (6B: [chunk u16 BE][pad 4B]) -> FFFF,
+    anim chunks (6B) -> FFFF."""
     o = spawn_end
     pal_list = []
     while be16(c, o) != 0xFFFF:
@@ -133,11 +137,23 @@ def parse_tail(c, spawn_end):
             o += 2
         o += 2
         anims.append(e)
-    return pal_list, en, anims
+    o += 1
+    if o & 1:
+        o += 1            # FF pad: 68k word-aligns the bank section
+    banks = []
+    while o + 1 < len(c) and be16(c, o) != 0xFFFF:
+        banks.append({"chunk": be16(c, o), "pad": c[o + 2:o + 6].hex()})
+        o += 6
+    o += 2
+    achunks = []
+    while o + 1 < len(c) and be16(c, o) != 0xFFFF:
+        achunks.append({"chunk": be16(c, o), "pad": c[o + 2:o + 6].hex()})
+        o += 6
+    return pal_list, en, anims, banks, achunks
 
 
 def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
-                  keep_vikings=True, scene_mode=False, scene_title=None):
+                  keep_vikings=True, scene_mode=False):
     """scene_mode: shape the head like the PC logo/intro scenes (0186/
     018C/017D on the 1C6 script): sel=0, head spawn = class 0xD8 — the
     timed-scene controller that shows the screen for `arg` ticks and
@@ -168,7 +184,7 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
                            cls=be16(c, o + 8), anim=be16(c, o + 10),
                            pool=be16(c, o + 12)))
         o += 14
-    pal_list, pal_en, pal_anims = parse_tail(c, o + 2)
+    pal_list, pal_en, pal_anims, smd_banks, smd_anims = parse_tail(c, o + 2)
     print(f"SMD {smd_id:03X}: {W}x{H}, {len(sts)//32} tiles, {nprefab} "
           f"prefabs, {len(spawns)} spawns, {len(pal_list)} pal entries, "
           f"{len(pal_anims)} pal anims (en={pal_en:04X})")
@@ -309,82 +325,63 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         v = used_idx[v & 0x3FF] | (v & 0xFC00)
         mmap += bytes((v & 0xFF, v >> 8))
 
-    # ---- world-title banner (the SNES/SMD interludes print the world name
-    # over the scene — the SMD does it via its E0 letter-block class whose
-    # code has no PC counterpart, so build the banner from DATA: chunk-2
-    # glyphs (72B each, ch-0x10; the dialog font) upscaled 2x into 16x16
-    # letter prefabs on map row 1, letter BODIES on consecutive DAC slots
-    # 64..64+N-1 and a pal-anim ROTATE over that range — bright pulses run
-    # through the letters, the SNES-style shimmering title. Shadow pixels
-    # sit on the static slot 64+N. ----
+    # ---- world-title banner: the ORIGINAL SMD letters. The interlude's
+    # FIRST sprite bank in the stripe tail IS the banner chunk (0x144
+    # PREHISTORIA / 0x145 EGYPT / 0x146 FACTORY / 0x147 WACKY /
+    # 0x148 STARSHIP): N blocks of 32x32, 16 nibble tiles per block in
+    # COLUMN-major order (proven by render), drawn by the SMD E0 class at
+    # the spawn-table E0 rows. The letters use CRAM row 0 of the scene
+    # palette (gold 63,45,27 body + white highlights — the same chunk the
+    # BG rows come from). Port = data: bake the blocks into map prefabs
+    # (2x2 quads per block) above the vikings, letter pixels on DAC slots
+    # 64+nib (a private copy of CRAM row 0), plus a slow rotate over the
+    # body/highlight slots for the SNES-style shimmer. ----
     title_pal_tail = []
     title_anim = None
-    if scene_mode and scene_title:
-        f2 = LR.open_payload(2, "lzss", scratch)
-        def glyph_px(ch):
-            px2 = [[0] * 8 for _ in range(8)]
-            b2 = f2[(ch - 0x10) * 72:(ch - 0x10) * 72 + 72]
-            if len(b2) < 72:
-                return px2
-            i2 = 0
-            for plane in range(4):
-                for strip in range(2):
-                    data = b2[i2 + 1:i2 + 9]
-                    i2 += 9
-                    for row in range(4):
-                        for col in range(2):
-                            px2[strip * 4 + row][col * 4 + plane] = \
-                                data[row * 2 + col]
-            return px2
-        letters = list(scene_title)
-        N = len(letters)
-        shadow_slot = 64 + N
-        assert shadow_slot <= 127, "title too long for DAC slots 64..127"
-        # place the banner INSIDE the camera window: the viewport parks on
-        # the vikings (~y-88..y+88 around the drop floor), so hang the
-        # letters ~5 quads above the SMD viking row, not at the map top
+    if scene_mode and smd_banks:
+        banner = rom.chunk(smd_banks[0]["chunk"])
+        nblk = len(banner) // 512
         _vys = [p[1] for p in vik_pos] or [224]
         _vxs = [p[0] for p in vik_pos] or [80]
-        row_q = max(1, (min(_vys) - 72) // 16)
-        # center on the CAMERA window, not the map: the viewport parks on
-        # the vikings (left-clamped on these rooms), so center around the
-        # spawn column
+        row_q = max(1, (min(_vys) - 88) // 16)
+        # center the N*2-quad strip on the camera window (viewport parks
+        # on the vikings, left-clamped on these rooms)
         _cx = min(_vxs) + 0x40
-        col0 = max(1, min(_cx // 16 - N // 2, W - 1 - N))
-        for k, chL in enumerate(letters):
-            if chL == ' ':
-                continue
-            g = glyph_px(ord(chL))
-            body = 64 + k
-            tiles16 = [bytearray(64) for _ in range(4)]
-            for y in range(16):
-                for x in range(16):
-                    v = g[y // 2][x // 2]
-                    if not v:
-                        continue
-                    cc = body if v == 1 else shadow_slot
-                    tiles16[(y // 8) * 2 + (x // 8)][(y % 8) * 8 + (x % 8)] = cc
+        col0 = max(1, min(_cx // 16 - nblk, W - 1 - nblk * 2))
+        for blk in range(nblk):
+            # one 32x32 block = 4 prefabs (2x2 quads), each 4 sub-tiles
             base_idx = len(pairs)
-            for t in range(4):
-                pc_tiles += AC.tile_encode(bytes(tiles16[t]))
-                pc_masks += bytes(8)         # no priority overdraw
-                pairs.append(("TITLE", k * 4 + t))
-            # prefab: TL,TR,BL,BR sub-words (idx<<6, no flips, no bit3)
-            for t in (0, 1, 2, 3):
-                pcv = (base_idx + t) << 6
-                pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
-            prefab_idx = len(pc_gtld) // 8 - 1
-            cell = row_q * W + col0 + k
-            mmap[cell * 2] = prefab_idx & 0xFF
-            mmap[cell * 2 + 1] = prefab_idx >> 8   # type bits 0: pure decor
+            for t in range(16):
+                tx, ty = t // 4, t % 4          # column-major in the block
+                px = smd_tile_nibs(banner, blk * 16 + t) or [0] * 64
+                baked = bytes((64 + v) if v else 0 for v in px)
+                pc_tiles += AC.tile_encode(baked)
+                pc_masks += bytes(8)
+                pairs.append(("BANNER", blk * 16 + t))
+            for qy in range(2):
+                for qx in range(2):
+                    # prefab sub-order TL,TR,BL,BR; block tile at
+                    # (tx,ty) = (qx*1+sub_x, qy*... ) -> tile index t=tx*4+ty
+                    for (dy, dx) in ((0, 0), (0, 1), (1, 0), (1, 1)):
+                        tx = qx * 2 + dx
+                        ty = qy * 2 + dy
+                        idx = base_idx + tx * 4 + ty
+                        pcv = idx << 6
+                        pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
+                    prefab_idx = len(pc_gtld) // 8 - 1
+                    cell = (row_q + qy) * W + col0 + blk * 2 + qx
+                    if 0 <= cell * 2 + 1 < len(mmap):
+                        mmap[cell * 2] = prefab_idx & 0xFF
+                        mmap[cell * 2 + 1] = prefab_idx >> 8
         assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
-        # letter body colors: warm base + two bright pulses the rotation
-        # sweeps across the letters; shadow = near-black
-        for k in range(N):
-            title_pal_tail.append((63, 62, 46) if k < 2 else (52, 42, 16))
-        title_pal_tail.append((8, 8, 10))          # shadow slot
-        title_anim = {"reload": 4, "start": 64, "end": 64 + N - 1,
-                      "frames": []}
+        # DAC slots 64..79 = CRAM row 0 of the scene palette (the letters'
+        # own row on the SMD); shimmer = slow rotate over the gold/white
+        # body slots 65..70 (nibbles 1,2,4,5,6 carry the letter pixels)
+        cram_pd = rom.chunk(pal_list[0]["chunk"])
+        for i in range(16):
+            v = be16(cram_pd, i * 2) if i * 2 + 1 < len(cram_pd) else 0
+            title_pal_tail.append(smd_color_to_vga6(v))
+        title_anim = {"reload": 5, "start": 65, "end": 70, "frames": []}
 
     # ---- palette: CRAM 64 colors -> VGA6 into colors 0..63; the donor's
     # sprite entries (128+) stay ----
