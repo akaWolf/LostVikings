@@ -190,15 +190,20 @@ def build_de_backdrop(de_bg, CW, CH):
     # trio sat on the inpaint scars and off the reference spots, user
     # report): scene row whose TOP edge carries the feet, trio center
     # x, demo half-span (feeds the stride scaling)
+    # the map is exactly 11 rows = 176px: the scroll limits collapse to
+    # (0,0) and the camera is NAILED — a 12-row map parked the camera at
+    # y=0 on the high-floor worlds and the map's bottom edge sat exactly
+    # on the viewport edge, smearing the frame-line row into the HUD
+    # band (Factory 'plaques', DAC-64 pixels measured in the band)
     WORLD_SPOTS = {
-        "preh":    (9, 128, 88),
-        "egypt":   (8, 104, 52),
-        "factory": (6, 96, 52),
-        "wacky":   (9, 88, 88),
-        "ship":    (7, 64, 52),
+        "preh":    (8, 128, 88),
+        "egypt":   (7, 104, 52),
+        "factory": (5, 96, 52),
+        "wacky":   (8, 88, 88),
+        "ship":    (6, 64, 52),
     }
     FLOOR, VCENTER, VSPAN = WORLD_SPOTS[de_bg["world"]]
-    YROW = 3 + R                     # yellow bottom line rides this row
+    YROW = 2 + R                     # yellow bottom line rides this row
     YELLOW = 64                      # DAC 64: banner nib-0 slot, unused
     #                                  by the letters -> frame color
 
@@ -212,17 +217,17 @@ def build_de_backdrop(de_bg, CW, CH):
             ltype = 0
             in_field = 2 <= x <= 17          # the 256px SNES field sits
             #                                  centered on black letterbox
-            if y < 3 or y > YROW or not in_field:
+            if y < 2 or y > YROW or not in_field:
                 cell = [0] * 256
             elif y == YROW:
                 # black row with the yellow bottom frame line on top
                 cell = [YELLOW if yy < 2 else 0
                         for yy in range(16) for xx in range(16)]
             else:
-                fy0, fx0 = (y - 3) * 16, (x - 2) * 16
+                fy0, fx0 = (y - 2) * 16, (x - 2) * 16
                 cell = [pix[(fy0 + yy) * FWB + fx0 + xx]
                         for yy in range(16) for xx in range(16)]
-                if y == 3:
+                if y == 2:
                     # yellow top frame line over the field's first row
                     for xx in range(16):
                         cell[xx] = YELLOW
@@ -336,7 +341,7 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # renderer smears garbage into the last on-screen row when it sits
         # exactly on the map's bottom edge (seen live), and the vikings park
         # at the TOP of this layout so the camera stays clamped at y=0.
-        CW, CH = 20, 12
+        CW, CH = 20, 11
     if scene_mode and de_bg:
         # DE world-entry scenes (task #114): the field is the START AREA
         # of the world's first DE level composited over its backdrop
@@ -761,7 +766,7 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # dispatcher key (OBJ_ANIM_SUB = spawn row index)
         for blk in range(len(banner_cols)):
             out_spawns.insert(1 + blk, dict(
-                x=banner_cols[blk], y=16, half_w=16, half_h=16,
+                x=banner_cols[blk], y=0, half_w=16, half_h=16,
                 cls=0xD9, anim=0x0800, pool=1 + blk))
             # pool -> ds:374 -> OBJ_SPAWN_POOL = the dispatcher key:
             # field[16] resolves through the runtime LUT to column 0x1B8
