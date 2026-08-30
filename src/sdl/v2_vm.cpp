@@ -5784,6 +5784,17 @@ static void v2_spawn_vikings_11569(uint8_t* s, uint16_t di_table) {
 static void v2_game_mode_init_11446(uint8_t* s) {
     v2gs(s).obj_scan_start(0);                 // 2713 word_2881C = 0
     uint16_t mode = v2gs(s).active_vk_sel_b() & 0xFF;              // 2714-2715 byte_2AA9A
+    { // V2_VIK_DBG forensics (scene trio)
+        static int vd = -1;
+        if (vd < 0) { const char* e = getenv("V2_VIK_DBG"); vd = (e && *e=='1') ? 1 : 0; }
+        if (vd) {
+            extern int v2_dbg_pre_vm_iter;
+            fprintf(stderr, "VIKDBG f%d MODE-INIT level=%d mode=%02X spawn=(%d,%d) code=%04X anim=%04X pool0=%04X\n",
+                    v2_dbg_pre_vm_iter, v2gs(s).level(), mode,
+                    (int16_t)v2gs(s).spawn_x(), (int16_t)v2gs(s).spawn_y(),
+                    v2gs(s).spawn_code(), v2gs(s).spawn_anim(), v2gs(s).spawn_pool0());
+        }
+    }
     if (mode == 0) {
         // loc_1146A (2729-2741): normal gameplay — single spawn, early RETN.
         v2gs(s).spawn_pool_sel(v2gs(s).spawn_pool0());
@@ -6314,13 +6325,31 @@ static bool v2_obj_template_init_13e52(uint8_t* s, uint16_t si, uint16_t bx) {
 static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
                           uint16_t si_anim) {
     v2_cc_v2_hit(CC_13809);   // M1 wave-2 (#65)
+    // V2_VIK_DBG=1: scene-spawn forensics (viking trio disappearing after the
+    // vortex, user report) — log every spawn call with its args and outcome.
+    extern int v2_dbg_pre_vm_iter;
+    static int vik_dbg = -1;
+    if (vik_dbg < 0) { const char* e = getenv("V2_VIK_DBG"); vik_dbg = (e && *e=='1') ? 1 : 0; }
     v2gs(s).scratch_34(code_seg_idx);                    // 0x3809
     v2gs(s).scratch_36(di_spawn);                        // 0x380c
     v2gs(s).scratch_38(si_anim);                         // 0x3810
     // sub_13d30 gate + sub_13d52 slot probe (extracted, units 121-122).
-    if (v2_spawn_gate_13d30(s, di_spawn)) return -1;   // 0x3817 JC loc_13866 (denied)
+    if (v2_spawn_gate_13d30(s, di_spawn)) {
+        if (vik_dbg) fprintf(stderr, "VIKDBG f%d SPAWN code=%04X di=%04X anim=%04X x=%d y=%d -> GATE-DENY\n",
+                             v2_dbg_pre_vm_iter, code_seg_idx, di_spawn, si_anim,
+                             (int16_t)v2gs(s).text_col(), (int16_t)v2gs(s).text_row());
+        return -1;   // 0x3817 JC loc_13866 (denied)
+    }
     int32_t slot = v2_spawn_slot_13d52(s);             // 0x3819
-    if (slot < 0) return -1;                           // 0x381c JC loc_13866 (table full)
+    if (slot < 0) {
+        if (vik_dbg) fprintf(stderr, "VIKDBG f%d SPAWN code=%04X di=%04X anim=%04X x=%d y=%d -> TABLE-FULL\n",
+                             v2_dbg_pre_vm_iter, code_seg_idx, di_spawn, si_anim,
+                             (int16_t)v2gs(s).text_col(), (int16_t)v2gs(s).text_row());
+        return -1;                           // 0x381c JC loc_13866 (table full)
+    }
+    if (vik_dbg) fprintf(stderr, "VIKDBG f%d SPAWN code=%04X di=%04X anim=%04X x=%d y=%d -> slot=%04X\n",
+                         v2_dbg_pre_vm_iter, code_seg_idx, di_spawn, si_anim,
+                         (int16_t)v2gs(s).text_col(), (int16_t)v2gs(s).text_row(), (uint16_t)slot);
     uint16_t new_si = (uint16_t)slot;
     uint16_t bx = (uint16_t)(code_seg_idx * 0x15);     // 0x381e..0x3826 ax*15h -> bx
     if (v2_obj_template_init_13e52(s, new_si, bx)) {   // 0x3828 call sub_13E52
@@ -8073,6 +8102,28 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // own transition sites do (op_D3 password verify writes DS_LEVEL_LOAD;
     // sub_102ad arms frame_flags bit 0) — the regular buttons&3 path below
     // then runs v2_run_transition_chain -> sub_11080.
+    // V2_VIK_DBG=1: viking-slot forensics for the scene trio bug — every 16
+    // frames dump slots 0/2/4/6/8: flags/code_seg/pc/sprite_flags + mode.
+    {
+        static int vd = -1;
+        if (vd < 0) { const char* e = getenv("V2_VIK_DBG"); vd = (e && e[0]=='1') ? 1 : 0; }
+        extern int v2_dbg_pre_vm_iter;
+        if (vd && (v2_dbg_pre_vm_iter % 16) == 0) {
+            fprintf(stderr, "VIKDBG f%d SLOTS lvl=%d 25BA=%02X 3C2=%04X vp=(%d,%d) |",
+                    v2_dbg_pre_vm_iter, v2gs(shadow).level(), shadow[0x25BA],
+                    v2gs(shadow).active_viking(),
+                    (int16_t)*(uint16_t*)(shadow + DS_VIEWPORT_X),
+                    (int16_t)*(uint16_t*)(shadow + DS_VIEWPORT_X + 2));
+            for (uint16_t sl = 0; sl <= 8; sl += 2) {
+                ObjMem o{shadow, sl};
+                fprintf(stderr, " [%d]cs=%04X fl=%04X pc=%04X anim=%04X x=%d y=%d",
+                        sl, o.u16(OBJ_CODE_SEG), o.u16(OBJ_FLAGS),
+                        o.u16(OBJ_PC), o.u16(OBJ_ANIM_IDX),
+                        (int16_t)o.u16(OBJ_X_PREV), (int16_t)o.u16(OBJ_Y_PREV));
+            }
+            fprintf(stderr, "\n");
+        }
+    }
     {
         static int want = -2;
         if (want == -2) {

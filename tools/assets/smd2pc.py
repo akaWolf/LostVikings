@@ -361,39 +361,45 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # the class codes animate/voice the vikings; a D8 head instead
         # leaves the scene globals cold and the viking frames decode wrong
         # (three green look-alikes — seen live)
-        # SNES-shaped interlude: LIVE vikings via the gameplay head
-        # machinery (sel=6 -> the mode-6 trio around vx/vy; active_viking
-        # becomes a viking, so the 1C6 scene code runs its interactive
-        # branch). The timed exit controller (D8) rides in the spawn
-        # table as a permanent row.
-        head[0x07] = 6
+        # LIVE vikings: the mode-0x10 gameplay recipe (three vikings spread
+        # around the spawn point, Y offsets -0x10/-0x08, ANIM_SUB=FFFF ->
+        # the interactive 1C6 viking branch). This is the state the LIVE
+        # walking-viking proofs were captured in (walkviks/insc4 states:
+        # 25BA=10, spawn=(80,-176), anim=2F — the 0028/LLM0 header shape).
+        # The later sel=6 form (copied from the SMD heads, which DO carry
+        # sel=6 + anim=0) only works on the SMD engine: on the PC 1C6 the
+        # mode-6 spawn anim never raises the viking sprites — invisible
+        # "ghost" vikings (user report, reproduced via the vortex chain).
+        # Spawn point: from the SMD vik rows (the SMD placed its vikings
+        # where the scene floor is). The trio spreads x, x-0x20, x-0x40
+        # (anim 0x2F has bit6 clear -> minus), so bias +0x40 keeps all
+        # three off the left frame wall; Y = above the SMD floor spot so
+        # they drop in — the SNES interlude look. A raw Y=-176 sky drop
+        # lands them on the scene's TOP frame wall (33x33 rooms are
+        # closed boxes — seen live), so stay inside the room.
+        head[0x07] = 0x10
         head[0x0C], head[0x0D] = 0x00, 0x00
-        head[0x0E], head[0x0F] = 0x20, 0x00                # flags 0x0020
-        head[0x10], head[0x11] = 0x2F, 0x00                # spawn anim 0x2F
+        head[0x0E], head[0x0F] = 0x2F, 0x00                # spawn anim 0x2F
+        head[0x10], head[0x11] = 0x00, 0x00                # spawn pool0 = 0
+        vxs = [p[0] for p in vik_pos] or [80]
+        vys = [p[1] for p in vik_pos] or [224]
+        sxv = max(0x60, min(min(vxs) + 0x40, W * 16 - 0x30))
+        syv = max(0x20, min(vys) - 128)
+        head[0x08], head[0x09] = sxv & 0xFF, (sxv >> 8) & 0xFF
+        head[0x0A], head[0x0B] = syv & 0xFF, (syv >> 8) & 0xFF
+        # head+0x1C -> ds:25CF (byte_2AAAF level flags): the donor is a
+        # GAMEPLAY level, its bit0 keeps the HUD machinery alive and the
+        # scene shows interface garbage in the bottom band (user report).
+        # Every PC interlude runs with bit0 clear (vortex 0x08, respawn
+        # 0x0C, menu 0x0A); take the vortex's 0x08 — bit3 also routes
+        # F10/Alt-X to DOS-quit there, same as the other interludes.
+        head[0x1C] = 0x08
         # lvflags stay the donor's: 0x0C (the PC scenes' value) kills the
         # D8 timer exit — bisect-proven
-        # viewport anchor: the camera parks on the head spawn — aim it at
-        # the SMD actors (the scene's action happens around its spawns;
-        # skip the (0,0) controller row and the off-screen E0 banners),
-        # falling back to the non-background map cells
-        sx = sy = n = 0
-        for sp in spawns:
-            if sp["cls"] == 0x48 or not (0 < sp["y"] < H * 16):
-                continue
-            sx += sp["x"]; sy += sp["y"]; n += 1
-        if not n:
-            bgp = be16(smap, 0) & 0x3FF
-            for i in range(W * H):
-                if (be16(smap, i * 2) & 0x3FF) != bgp:
-                    sx += (i % W) * 16 + 8
-                    sy += (i // W) * 16 + 8
-                    n += 1
-        if n:
-            cx, cy = sx // n, sy // n
-            vx = max(0x90, min(cx, W * 16 - 344 + 0x90))
-            vy = max(0x58, min(cy, H * 16 - 176 - 64 + 0x58))
-            head[0x08], head[0x09] = vx & 0xFF, vx >> 8
-            head[0x0A], head[0x0B] = vy & 0xFF, vy >> 8
+        # NO viewport anchor: in mode 0x10 the head spawn IS the viking
+        # drop point and v2_viewport_init_113d8 parks the camera on the
+        # vikings itself (the old sel=6 anchor overwrote the spawn with a
+        # map-center average — that was part of the ghost-viking regress).
     head[0x29], head[0x2A] = W & 0xFF, W >> 8
     head[0x2B], head[0x2C] = H & 0xFF, H >> 8
     head[0x2E], head[0x2F] = tm_id & 0xFF, tm_id >> 8
