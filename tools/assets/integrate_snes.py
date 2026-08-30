@@ -88,14 +88,15 @@ PLAN_SMD = [
     # The world-name banner comes from the ROM itself: the scene stripe's
     # first sprite bank IS the letters chunk (0x144 PREHISTORIA, 0x145
     # EGYPT, 0x146 FACTORY, 0x147 WACKY, 0x148 STARSHIP).
-    # de_bg (task #114): the scene field is the DE world backdrop — the
-    # parallax pair from the SNES DE level headers (+0x39 quad map /
-    # +0x3D quad table on the level's own tileset), lvl = the DE level
-    # whose tileset/palette/floor the pair rides on. Pairs per world:
+    # de_bg (task #114): the scene field is the START AREA of the world's
+    # first DE level (lvl = the DE slot of our `next` level) composited
+    # over the DE parallax pair from that level's own header (+0x39 quad
+    # map / +0x3D quad table on the level's tileset). Pairs per world:
     # Prehistoria 012/017 (purple mountains + dino silhouettes, row0=1
     # skips the empty sky row of the 32x16 map), Egypt 028/02E
     # (pyramids), Factory 040/03F (brick wall strip, tiled), Wacky
-    # 055/054 (candy canes on purple), Ship 06B/06D (starfield, tiled).
+    # 058/057 (checkered candy — the pair of DE 059 = our NFL8),
+    # Ship 06B/06D (starfield, tiled; DE 077 = our TFFF).
     dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
          prev_hdr=None, base=0x235,    # vortex(prev=GRND) -> scene -> LLM0
          de_bg=dict(lvl=0x01A, map=0x12, gt=0x17, row0=1)),
@@ -107,10 +108,10 @@ PLAN_SMD = [
          de_bg=dict(lvl=0x041, map=0x40, gt=0x3F)),
     dict(slot=56, smd=0x140, donor="00A6", pw=b"CUT4", next=25,
          prev_hdr=None, base=0x247,    # vortex(prev=V8TR) -> scene -> NFL8
-         de_bg=dict(lvl=0x05B, map=0x55, gt=0x54)),
+         de_bg=dict(lvl=0x059, map=0x58, gt=0x57)),
     dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
          prev_hdr=None, base=0x24D,    # vortex(prev=TRPD) -> scene -> TFFF
-         de_bg=dict(lvl=0x06F, map=0x6B, gt=0x6D)),
+         de_bg=dict(lvl=0x077, map=0x6B, gt=0x6D)),
     # NO slot for SMD 0x08C: that is the game-completion scene, and the
     # PC has its OWN version at slot 46 (00DA forest — vikings + the
     # 4B/4C props + music track 8; the SNES version is 0x082 with track
@@ -214,29 +215,34 @@ DEMO_CID = {53: 0x253, 54: 0x254, 55: 0x255, 56: 0x256, 57: 0x257}
 
 R, L, U, TAB = 0x100, 0x200, 0x800, 0x2000
 
-def demo_script():
-    """One shared v4 choreography (~279 ticks), active viking only (TAB
-    does not cycle vikings inside the interludes — seen live; the video
-    also moves one viking at a time). Erik ACCELERATES: 6 ticks walk
+def demo_script(step=8):
+    """The v4 choreography (~279 ticks), active viking only (TAB does
+    not cycle vikings inside the interludes — seen live; the video also
+    moves one viking at a time). Erik ACCELERATES: 6 ticks walk
     ~2.7px/t but 14 ticks hit run speed ~5.8px/t and threw him off the
-    ledge (seen live twice) — every stride stays <= 8 ticks and net-zero,
-    hops between strides."""
+    ledge (seen live twice) — every stride stays <= `step` ticks and
+    net-zero, hops between strides. `step` scales the walk amplitude to
+    the scene's ledge width (the DE level-crop ledges are narrow: LLM0's
+    start ledge is 6 quads)."""
+    s2 = max(step - 1, 2)
     s = [(0, 44),                                  # drop in + settle
-         (R, 8), (0, 14), (L, 8), (0, 16),         # stroll right and back
+         (R, step), (0, 14), (L, step), (0, 16),   # stroll right and back
          (U, 3), (0, 30),                          # hop
-         (R, 7), (0, 12), (L, 7), (0, 16),         # short steps
+         (R, s2), (0, 12), (L, s2), (0, 16),       # short steps
          (U, 3), (0, 30),
-         (L, 7), (0, 12), (R, 7), (0, 16),         # the other way
+         (L, s2), (0, 12), (R, s2), (0, 16),       # the other way
          (U, 3), (0, 36),
          (0, 0x7FFF)]                              # silence till the timer
     return s
 
-def write_demo_chunks(scratch):
+def write_demo_chunks(scratch, steps=None):
     import json as _json
     ex_path = os.path.join(scratch, "extras.json")
     extras = _json.load(open(ex_path)) if os.path.exists(ex_path) else {}
     for slot, cid in DEMO_CID.items():
-        blob = b"".join(struct.pack("<HH", k, n) for k, n in demo_script())
+        step = (steps or {}).get(slot, 8)
+        blob = b"".join(struct.pack("<HH", k, n)
+                        for k, n in demo_script(step))
         d = os.path.join(scratch, "unreferenced")
         os.makedirs(d, exist_ok=True)
         p = os.path.join(d, f"{cid:04X}.bin")
@@ -420,18 +426,24 @@ def do_integrate(scratch, music=None):
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
     # SMD scenes (D8 timed cutscenes on the 1C6 scene script)
     import smd2pc as SMD
+    demo_steps = {}
     for e in PLAN_SMD:
         b = e["base"]
         print(f"slot {e['slot']} ({e['pw'].decode()}, SMD scene):")
-        SMD.convert_scene(e["smd"], e["donor"], scratch,
-                          {"hdr": b, "map": b + 1, "tiles": b + 2,
-                           "gtld": b + 4, "pal": b + 5,
-                           "banner": 0x258 + (e["slot"] - 53)},
-                          next_level=e["next"], scene_mode=True,
-                          de_bg=e.get("de_bg"))
+        info = SMD.convert_scene(e["smd"], e["donor"], scratch,
+                                 {"hdr": b, "map": b + 1, "tiles": b + 2,
+                                  "gtld": b + 4, "pal": b + 5,
+                                  "banner": 0x258 + (e["slot"] - 53)},
+                                 next_level=e["next"], scene_mode=True,
+                                 de_bg=e.get("de_bg"))
+        if info.get("ledge"):
+            # walk amplitude scaled to the ledge: <112px -> gentle 4-tick
+            # strides, <176px -> 6, else the full v4 8-tick stroll
+            w = info["ledge"][1] - info["ledge"][0]
+            demo_steps[e["slot"]] = 4 if w < 112 else (6 if w < 176 else 8)
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"],
                     "demo": DEMO_CID.get(e["slot"], 0)})
-    write_demo_chunks(scratch)
+    write_demo_chunks(scratch, demo_steps)
     # canonical predecessors point into the insert chains
     print("progression patch:")
     for e in PLAN + PLAN_SMD:

@@ -153,25 +153,33 @@ def parse_tail(c, spawn_end):
 
 
 def build_de_backdrop(de_bg, CW, CH):
-    """DE (SNES Definitive Edition) world backdrop -> the scene map.
+    """DE (SNES Definitive Edition) world-entry field -> the scene map.
 
     Task #114 reverse: the DE levels carry a parallax backdrop pair in
     header fields +0x39 (quad map, 32xN LE PPU-shaped words: quad 0-9,
     palette row 10-12, prio 13, hflip 14, vflip 15) / +0x3D (quad table,
     8B entries of tile words in the same shape) on the SAME tileset as
     the level — the purple mountains of the world-entry shot are the
-    Prehistoria pair 012/017. The scene layout: rows 0/1 stay for the
-    black title band (rewritten by the banner code), rows 2..CH-3 show
-    the backdrop crop (tiled vertically when the strip is short — the
-    Factory bricks / Ship stars repeat), row CH-2 is a walk floor built
-    from the DE level's most common solid quad (solid bit 0x0400), row
-    CH-1 is the hidden support row. SNES bit-13 tile priority is NOT
-    ported: it encodes the BG-vs-OAM layering of the SNES PPU, and both
-    backdrop and floor sit UNDER the figures here (PC bit3 would pull
-    them over the sprites).
+    Prehistoria pair 012/017, drawn BEHIND the world's first level.
 
-    Returns (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, floor_y)
-    in the exact shapes convert_scene ships downstream.
+    The scene field reproduces the DE world-entry interlude layout (an
+    empty reference frame grabbed from the DE walkthrough video at the
+    Prehistoria entry; the DE engine builds it as a template scene —
+    the only spawn-carrying scene stripe in the ROM is 11C, world
+    graphics swapped in by code): the world backdrop fills the frame, a
+    thin grass floor runs along the bottom, a floating ledge sits at
+    the left over a rock support, a raised shelf at the right. Grass/
+    rock cells come from the world's own first level (the start-ledge
+    top cell and the cell under it), composited per pixel over the
+    backdrop (the engine has one tile layer — the SNES BG1-over-BG2
+    stack is baked into the tiles). SNES bit-13 tile priority is NOT
+    ported (BG-vs-OAM layering; PC bit3 would pull the field over the
+    sprites).
+
+    Returns (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, floor_y,
+    vik_xs) in the exact shapes convert_scene ships downstream; vik_xs
+    are the three viking spot x's on the spawn ledge, demo-walk span
+    checked against the ledge's solid run.
     """
     import snes2pc as S2
     srom = S2.SnesRom()
@@ -181,99 +189,155 @@ def build_de_backdrop(de_bg, CW, CH):
     ts = srom.chunk(w16(0x30))
     bmap, bgt = srom.chunk(de_bg["map"]), srom.chunk(de_bg["gt"])
     lgt = srom.chunk(w16(0x32))
-    MW, MH = 32, len(bmap) // 2 // 32
-    # floor: the most common solid cell of the donor DE level's own map
     lmap = srom.chunk(w16(0x2E))
+    MW, MH = 32, len(bmap) // 2 // 32
     W2, H2 = w16(0x29), w16(0x2B)
-    cnt = {}
-    for i in range(W2 * H2):
-        v = lmap[i * 2] | (lmap[i * 2 + 1] << 8)
-        if v & 0xFC00:
-            cnt[v & 0x3FF] = cnt.get(v & 0x3FF, 0) + 1
-    floor_quad = max(cnt, key=cnt.get)
-    # DAC layout: palette rows remap onto these 16-color bases; 64..79
-    # is reserved for the SMD banner letters (sprites paint 64+nibble)
+
+    def lcell(r, c):
+        return lmap[(r * W2 + c) * 2] | (lmap[(r * W2 + c) * 2 + 1] << 8)
+
+    # ---- the level's own viking spawn -> the start ledge (its top and
+    # under-cell supply the scene's grass/rock quads) ----
+    sx_l = w16(0x08)
+    cx = min(max(sx_l // 16, 0), W2 - 1)
+    fr = next(r for r in range(H2) if lcell(r, cx) & 0x0400)
+
+    # ---- palette-row remap (16-color rows onto DAC bases; 64..79 is
+    # reserved for the SMD banner letters) ----
     PALSLOT = (0, 16, 32, 48, 80, 96, 112)
     prow_map = {}
-    pairs = []
-    pair_idx = {}
-    pc_gtld = bytearray()
-    quad_pref = {}
 
-    def bake_quad(words):
-        pcvs = []
-        for dw in words:
+    def palbase(prow):
+        if prow not in prow_map:
+            assert len(prow_map) < len(PALSLOT), "palette rows overflow"
+            prow_map[prow] = len(prow_map)
+        return PALSLOT[prow_map[prow]]
+
+    # ---- quad -> 16x16 DAC pixels (0 = transparent nibble) ----
+    def expand_quad(gt, q):
+        cell = [0] * 256
+        e = gt[q * 8:q * 8 + 8]
+        if len(e) < 8:
+            return cell
+        for k, (dy, dx) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
+            dw = e[k * 2] | (e[k * 2 + 1] << 8)
             t, prow = dw & 0x3FF, (dw >> 10) & 7
             hf, vf = (dw >> 14) & 1, (dw >> 15) & 1
-            if prow not in prow_map:
-                assert len(prow_map) < len(PALSLOT), "palette rows overflow"
-                prow_map[prow] = len(prow_map)
-            key = (t, prow)
-            if key not in pair_idx:
-                pair_idx[key] = len(pairs)
-                pairs.append(key)
-            pcvs.append((pair_idx[key] << 6) | (vf << 5) | (hf << 4))
-        return pcvs
+            base = palbase(prow)
+            px = S2.snes_tile_decode(
+                ts[t * 32:(t + 1) * 32].ljust(32, b"\x00"))
+            for yy in range(8):
+                sy = 7 - yy if vf else yy
+                for xx in range(8):
+                    sx = 7 - xx if hf else xx
+                    v = px[sy * 8 + sx]
+                    cell[(dy * 8 + yy) * 16 + dx * 8 + xx] = \
+                        (v + base) if v else 0
+        return cell
 
-    def prefab_of(src, q):
-        k = (src, q)
-        if k not in quad_pref:
-            if src == "zero":
-                if ("ZERO", 0) not in pair_idx:
-                    pair_idx[("ZERO", 0)] = len(pairs)
-                    pairs.append(("ZERO", 0))
-                pcvs = [pair_idx[("ZERO", 0)] << 6] * 4
-            else:
-                gt_src = bgt if src == "bg" else lgt
-                words = [gt_src[q * 8 + i * 2] |
-                         (gt_src[q * 8 + i * 2 + 1] << 8) for i in range(4)]
-                pcvs = bake_quad(words)
-            quad_pref[k] = len(pc_gtld) // 8
-            for pcv in pcvs:
-                pc_gtld.extend((pcv & 0xFF, pcv >> 8))
-        return quad_pref[k]
+    bg_cache = {}
+    lv_cache = {}
 
-    r0 = de_bg.get("row0", 0)
+    def bg_pixels(q):
+        if q not in bg_cache:
+            bg_cache[q] = expand_quad(bgt, q)
+        return bg_cache[q]
+
+    def lv_pixels(q):
+        if q not in lv_cache:
+            lv_cache[q] = expand_quad(lgt, q)
+        return lv_cache[q]
+
+    # ---- the scene-field layout (the DE world-entry interlude, empty
+    # reference frame grabbed from the walkthrough video at the
+    # Prehistoria entry): the world backdrop fills the frame, a thin
+    # GRASS FLOOR runs along the bottom, a small LEDGE floats at the
+    # left with a rock support under it, and a raised SHELF sits at the
+    # right; the vikings drop onto the floor. The grass/rock quads are
+    # the world's own: the top cell of the first level's start ledge
+    # and the cell right under it. ----
+    FLOOR = CH - 2                   # row 10: the walk floor
+    LEDGE_ROW, LEDGE_C = 6, (1, 3)   # left ledge rows/cols (inclusive)
+    SHELF_ROW, SHELF_C = FLOOR - 1, (CW - 4, CW - 1)   # right shelf
+    grass_q = lcell(fr, cx) & 0x3FF
+    rock_q = lcell(min(fr + 1, H2 - 1), cx) & 0x3FF
+
+    tiles = []
+    tile_idx = {}
+    prefabs = []
+    prefab_idx = {}
+    row0 = de_bg.get("row0", 0)
     mmap = bytearray()
     for y in range(CH):
         for x in range(CW):
-            if y < 2 or y == CH - 1:
-                v = prefab_of("zero", 0)
-            elif y == CH - 2:
-                v = prefab_of("lvl", floor_quad) | 0x0400
+            # cell selection: title band / layout piece / backdrop
+            lq = None
+            ltype = 0
+            if y < 3:
+                # 3 band rows: the 12-row map exceeds the 176px viewport
+                # by 16px and the camera clamps to y=16 parking on the
+                # vikings, so screen row 0 is MAP row 1 — the banner
+                # code blacks rows 0-1 only and map row 2 leaked under
+                # the band (Factory's decal plates, seen live)
+                cell = [0] * 256
             else:
-                bo = ((r0 + (y - 2) % MH) * MW + x) * 2
+                if y == FLOOR:
+                    lq, ltype = grass_q, 0x0400
+                elif y == CH - 1:
+                    lq = rock_q          # hidden support row (off-view)
+                elif y == LEDGE_ROW and LEDGE_C[0] <= x <= LEDGE_C[1]:
+                    lq, ltype = grass_q, 0x0400
+                elif LEDGE_ROW < y < FLOOR and \
+                        LEDGE_C[0] <= x <= LEDGE_C[1] - 1:
+                    lq = rock_q          # rock support under the ledge
+                elif y == SHELF_ROW and SHELF_C[0] <= x <= SHELF_C[1]:
+                    lq, ltype = grass_q, 0x0400
+                bo = (((row0 + y - 2) % MH) * MW + x) * 2
                 bq = bmap[bo] | (bmap[bo + 1] << 8)
                 # the DE backdrop maps carry bare quad indices (bits
                 # 10-15 all clear across the six world pairs — dumped)
                 assert (bq & 0xFC00) == 0, f"bg map cell {bq:04X}"
-                v = prefab_of("bg", bq)
-            mmap.extend((v & 0xFF, v >> 8))
-    assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
+                if lq is None:
+                    cell = bg_pixels(bq)
+                else:
+                    lpx = lv_pixels(lq)
+                    cell = lpx if all(lpx) else \
+                        [a if a else b for a, b in zip(lpx, bg_pixels(bq))]
+            # 4 straight 8x8 tiles out of the composited cell
+            pcvs = []
+            for dy, dx in ((0, 0), (0, 1), (1, 0), (1, 1)):
+                tp = bytes(cell[(dy * 8 + yy) * 16 + dx * 8 + xx]
+                           for yy in range(8) for xx in range(8))
+                if tp not in tile_idx:
+                    tile_idx[tp] = len(tiles)
+                    tiles.append(tp)
+                pcvs.append(tile_idx[tp] << 6)
+            pk = tuple(pcvs)
+            if pk not in prefab_idx:
+                prefab_idx[pk] = len(prefabs)
+                prefabs.append(pk)
+            mmap.extend(((prefab_idx[pk] | ltype) & 0xFF,
+                         (prefab_idx[pk] | ltype) >> 8))
+    assert len(tiles) <= 1023, f"{len(tiles)} baked tiles > 10-bit offset"
 
+    pc_gtld = bytearray()
+    for pk in prefabs:
+        for pcv in pk:
+            pc_gtld.extend((pcv & 0xFF, pcv >> 8))
     pc_tiles = bytearray()
     pc_masks = bytearray()
-    for key in pairs:
-        if key[0] == "ZERO":
-            pc_tiles += AC.tile_encode(bytes(64))
-            pc_masks += bytes(8)
-            continue
-        t, prow = key
-        px = S2.snes_tile_decode(ts[t * 32:(t + 1) * 32].ljust(32, b"\x00"))
-        base = PALSLOT[prow_map[prow]]
-        baked = bytes((v + base) if v else 0 for v in px)
-        pc_tiles += AC.tile_encode(baked)
+    for tp in tiles:
+        pc_tiles += AC.tile_encode(tp)
         m = bytearray(8)
         for ty in range(8):
             for tx in range(8):
-                if px[ty * 8 + tx]:
+                if tp[ty * 8 + tx]:
                     m[(tx & 3) * 2 + (ty >> 2)] |= \
                         1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
         pc_masks += m
 
-    # 128-color palette image: rows land on their remap bases; slot 0 =
-    # CGRAM 0 (the see-through/backdrop color); 64..79 left black for
-    # the banner letter colors (filled by convert_scene)
+    # ---- 128-color palette image: rows land on their remap bases;
+    # slot 0 = CGRAM 0; 64..79 left for the banner letters ----
     cg = S2.compose_cgram(srom, st["pal_list"])
     pal128 = [(0, 0, 0)] * 128
     for prow, j in prow_map.items():
@@ -281,12 +345,21 @@ def build_de_backdrop(de_bg, CW, CH):
         for i in range(16):
             pal128[base + i] = S2.bgr555_to_vga6(cg[prow * 16 + i])
     pal128[0] = S2.bgr555_to_vga6(cg[0])
-    floor_y = (CH - 2) * 16
-    print(f"  DE backdrop: pair {de_bg['map']:03X}/{de_bg['gt']:03X} "
-          f"({MW}x{MH}), floor quad {floor_quad:03X}, {len(pairs)} baked "
-          f"tiles, pal rows {sorted(prow_map)} -> "
+
+    # ---- viking spots: on the walk floor, centered (the floor spans
+    # the whole frame — no fall-off risk, full demo stride) ----
+    floor_y = FLOOR * 16
+    a, b = 0, CW * 16
+    center = (a + b) // 2
+    vik_xs = (center - 0x20, center, center + 0x20)
+    print(f"  DE field: lvl {de_bg['lvl']:03X} grass/rock quads "
+          f"{grass_q:03X}/{rock_q:03X} (start ledge row {fr}), "
+          f"{len(tiles)} tiles / {len(prefabs)} prefabs, pal rows "
+          f"{sorted(prow_map)} -> "
           f"{[PALSLOT[prow_map[p]] for p in sorted(prow_map)]}")
-    return (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, floor_y)
+    return (mmap, pc_tiles, pc_masks, pc_gtld,
+            [("T", i) for i in range(len(tiles))], pal128, floor_y, vik_xs,
+            (a, b))
 
 
 def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
@@ -344,15 +417,16 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # at the TOP of this layout so the camera stays clamped at y=0.
         CW, CH = 20, 12
     if scene_mode and de_bg:
-        # DE-backdrop scenes (task #114): the map is built from the DE
-        # world backdrop pair, the SMD room is dropped whole (only the
-        # banner bank + head music bytes survive from the SMD chunk)
+        # DE world-entry scenes (task #114): the field is the START AREA
+        # of the world's first DE level composited over its backdrop
+        # pair; the SMD room is dropped whole (only the banner bank +
+        # head music bytes survive from the SMD chunk)
         de_map, de_tiles, de_masks, de_gtld, de_pairs, de_pal128, \
-            de_floor_y = build_de_backdrop(de_bg, CW, CH)
+            de_floor_y, de_vik_xs, de_ledge = build_de_backdrop(
+                de_bg, CW, CH)
         smap, W, H = bytes(de_map), CW, CH
         spawns = []          # SMD room actors/vikings mean nothing here
-        vik_pos_de = [(96, de_floor_y), (136, de_floor_y),
-                      (176, de_floor_y)]
+        vik_pos_de = [(vx, de_floor_y) for vx in de_vik_xs]
     elif scene_mode:
         _vx = [sp["x"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [80]
         _vy = [sp["y"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [224]
@@ -826,7 +900,8 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
           + (f", next={next_level}" if next_level is not None else ""))
     return {"header": f"{hdr_id:04X}", "dims": [W, H],
             "tiles": len(pairs), "spawns": len(out_spawns),
-            "prio_ported": prio_ported, "pal_anims": len(pal_anims)}
+            "prio_ported": prio_ported, "pal_anims": len(pal_anims),
+            "ledge": de_ledge if de_bg else None}
 
 
 def main():
