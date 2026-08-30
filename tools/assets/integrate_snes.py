@@ -99,19 +99,19 @@ PLAN_SMD = [
     # Ship 06B/06D (starfield, tiled; DE 077 = our TFFF).
     dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
          prev_hdr=None, base=0x235,    # vortex(prev=GRND) -> scene -> LLM0
-         de_bg=dict(lvl=0x01A, map=0x12, gt=0x17, row0=1)),
+         de_bg=dict(lvl=0x01A, map=0x12, gt=0x17, world="preh")),
     dict(slot=54, smd=0x13E, donor="0053", pw=b"CUT2", next=11,
          prev_hdr=None, base=0x23B,    # vortex(prev=VLCN) -> scene -> QCKS
-         de_bg=dict(lvl=0x02F, map=0x28, gt=0x2E)),
+         de_bg=dict(lvl=0x02F, map=0x28, gt=0x2E, world="egypt")),
     dict(slot=55, smd=0x13F, donor="007A", pw=b"CUT3", next=17,
          prev_hdr=None, base=0x241,    # vortex(prev=TTRS) -> scene -> JLLY
-         de_bg=dict(lvl=0x041, map=0x40, gt=0x3F)),
+         de_bg=dict(lvl=0x041, map=0x40, gt=0x3F, world="factory")),
     dict(slot=56, smd=0x140, donor="00A6", pw=b"CUT4", next=25,
          prev_hdr=None, base=0x247,    # vortex(prev=V8TR) -> scene -> NFL8
-         de_bg=dict(lvl=0x059, map=0x58, gt=0x57)),
+         de_bg=dict(lvl=0x05B, map=0x55, gt=0x54, world="wacky")),
     dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
          prev_hdr=None, base=0x24D,    # vortex(prev=TRPD) -> scene -> TFFF
-         de_bg=dict(lvl=0x077, map=0x6B, gt=0x6D)),
+         de_bg=dict(lvl=0x077, map=0x6B, gt=0x6D, world="ship")),
     # NO slot for SMD 0x08C: that is the game-completion scene, and the
     # PC has its OWN version at slot 46 (00DA forest — vikings + the
     # 4B/4C props + music track 8; the SNES version is 0x082 with track
