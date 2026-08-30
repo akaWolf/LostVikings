@@ -296,25 +296,44 @@ class GenesisScene:
 # The SMD scene itself spawns the trio OFF-SCREEN on that platform (the
 # room's spawn rows: Preh screen x -68, Egypt -32, Wacky/Ship -64; Factory
 # Baleog/Olaf -32 and Erik +360 on the right) and walks them in one by one.
-# The PC port drops the trio at ONE head point (the mode-0x10 recipe spreads
-# it to x, x-32, x-64; only the active viking follows the demo input), so
-# `drop` = (head x, platform top y) is chosen so that every viking lands on
-# a PC-standable cell (engine landing types 1/2/4/5/0x20 and slopes >= 0x30
-# — sub_16260; the Preh bottom grass (0x10) and the Wacky candy floor (0x13)
-# are NOT ground on the PC engine), as many as possible on screen, and the
-# demo stroll (`walk` = the platform's standable x span) never leaves it.
+# The PC port places the trio the same way: `trio` = [(screen x, platform
+# top y[, anim bits])] for Erik, Baleog, Olaf — the engine's own mode-2
+# head recipe (sub_11446 -> sub_11569: three vikings from a DS position
+# table, code_seg order 1/0/2 = classes Erik/Baleog/Olaf, class 1 = Erik
+# = object slot 0; dormant in the DOS build, its table is
+# zero) fed per scene through the LVX4 record. Every viking must sit at
+# screen x >= -12: sub_10813 clears the input words while the ACTIVE
+# viking is outside vp_x-12 .. vp_x+332 (the camera-catch-up rule; the
+# scene camera is pinned, so a viking further out never becomes
+# controllable) — at -12 the 32-px body spans -28..4, out of sight behind
+# the sprite's transparent margin. Factory Erik enters from the RIGHT
+# (SMD spawn +360): screen 332 on the bottom floor, anim 0x40 = facing
+# left (the SMD row: class 0 = Baleog at +360). Each y = the platform top:
+# the spawn goes 48 px above it and the
+# viking drops onto a PC-standable cell (engine landing types 1/2/4/5/0x20
+# and slopes >= 0x30 — sub_16260; the Preh bottom grass (0x10) and the
+# Wacky candy floor (0x13) are NOT ground on the PC engine); `walk` = the
+# platform's standable x span.
 # The map carries EXT_L quad columns of the room LEFT of the screen (the
 # off-screen part of the platform, real room cells) so the leftmost viking
 # stands on real geometry — see layout().
 # `banner` = the world-name letter blocks as the console's sprite table has
 # them (32x32 sprites, tile 1217+, x0 + 32*k at y0, palette row prow).
-EXT_L = 5   # quad columns of room kept left of the screen (80 px)
+EXT_L = 5   # quad columns of room kept left of the screen (80 px): the trio
+            # waits there out of sight (screen x -12, body -28..4) and walks
+            # in one by one like the SMD scene's own spawn rows
 WORLD_CAMERA = {
     # Erik on the left ledge (room row 15, screen x -4..59 — 64 px: two
     # vikings on screen, the third off-screen left on the same ledge),
     # Olaf on the right shelf (row 17); the bottom grass (row 18) is 0x10
-    "preh":    dict(cam=(132, 120), spots=[(28, 120), (156, 168), (296, 152)],
-                    drop=(44, 120), walk=(0, 56),
+    # The room's 4A row (the SMD bubble geyser) is dropped: on the PC 4A is
+    # the per-level spawner, invisible, and its periodic spawns only fill
+    # the 20-slot object table (the scene held exactly 20 objects with it;
+    # a failed spawn on the level-end frame drained stale slots and re-fired
+    # the level-end flag — level 4 jumped to 5, seen live). The bubbles are
+    # the DA rows below.
+    "preh":    dict(cam=(132, 120), spots=[(28, 120), (156, 168), (296, 152)], drop_cls=[0x4A],
+                    trio=[(-12, 120), (-12, 120), (-12, 120)], walk=(0, 56),
                     banner=dict(x0=32, y0=11, prow=3),
                     # The floating bubbles. The SMD scene makes them with its
                     # 4A row (pool 70 — a branch the SMD's own 4A has for
@@ -340,36 +359,42 @@ WORLD_CAMERA = {
                            dict(cls=0xDA, x=248, y=240, half_w=16, half_h=16, anim=0x0800, pool=0)]),
     # the left ledge, room row 17 (x -80..159); the pit with the spikes lies
     # at x 160..223
-    "egypt":   dict(cam=(80, 144), spots=[(40, 128), (76, 128), (128, 128)],
-                    drop=(104, 128), walk=(24, 140),
+    # SMD class 0A (128,56, half 256x48) has NO PC counterpart in the #110
+    # bijection (no Egypt level uses it): identity-mapped it is a PC 0A
+    # that spawns a patrolling hazard (seen live: x 96..160 / y 83..120,
+    # knocks a standing viking back, kills Erik mid-jump) — nothing of the
+    # kind happens on the DE clip. Left out until the SMD class is
+    # identified (sprite match against the PC Egypt classes).
+    "egypt":   dict(cam=(80, 144), spots=[(40, 128), (76, 128), (128, 128)], drop_cls=[0x0A],
+                    trio=[(-12, 128), (-12, 128), (-12, 128)], walk=(24, 140),
                     banner=dict(x0=80, y0=12, prow=2)),
     # Olaf + Baleog on the left beam (row 17: flat x 48..79, slopes 0x35/0x34
     # at x 16..47), Erik on its right part (x 208..255) — the video shows him
     # climbing the right ladder later. Head at 64: 64 beam, 32 slope, 0 drops
     # onto the lower-left bricks (row 18, y 112)
     "factory": dict(cam=(112, 176), spots=[(232, 96), (76, 96), (57, 96)],
-                    drop=(64, 96), walk=(52, 76),
+                    trio=[(-12, 112), (332, 160, 0x40), (-12, 112)], walk=(52, 76),
                     banner=dict(x0=50, y0=10, prow=2)),
     # the candy floor, room row 23: x -144..79 type 01 (ground), 80..319 type
     # 0x13 (not ground on the PC) — the trio and the stroll stay left of 80
     "wacky":   dict(cam=(144, 216), spots=[(64, 152), (208, 152), (26, 152)],
-                    drop=(56, 152), walk=(24, 72),
+                    trio=[(-12, 152), (-12, 152), (-12, 152)], walk=(24, 72),
                     banner=dict(x0=80, y0=10, prow=2)),
     # the left console platform, row 21 (x -144..63) — the trio crowds on it
     "ship":    dict(cam=(144, 208), bg_x=242,
                     spots=[(40, 128), (56, 128), (20, 128)],
-                    drop=(44, 128), walk=(16, 48),
+                    trio=[(-12, 128), (-12, 128), (-12, 128)], walk=(16, 48),
                     banner=dict(x0=32, y0=10, prow=2)),
 }
 
 
 def layout(world, gen_bg=None):
     """The PC scene map geometry for a world (single source of truth for
-    smd2pc.build_genesis_backdrop / convert_scene and the LVX3 flags in
+    smd2pc.build_genesis_backdrop / convert_scene and the LVX4 flags in
     integrate_snes): the map holds EXT_L quad columns of room left of the
     screen plus the 320x200 screen, padded so the room quads stay 16-aligned
     with their type bits; the engine parks the viewport at (pin_x, pin_y)
-    (LVX3 flags bits 4-11 / 12-15, v2_lvx_pin_camera) — screen pixel (sx,
+    (LVX4 flags bits 4-11 / 12-15, v2_lvx_pin_camera) — screen pixel (sx,
     sy) is map pixel (sx + pin_x, sy + pin_y)."""
     wc = WORLD_CAMERA[world]
     cam_x, cam_y = (gen_bg or {}).get("cam") or wc["cam"]
@@ -387,6 +412,12 @@ def layout(world, gen_bg=None):
         x, y = sp["x"] - cam_x + pin_x, sp["y"] - cam_y + pin_y
         cw = max(cw, (x + sp["half_w"]) // 16 + 1)
         ch = max(ch, (y + sp["half_h"]) // 16 + 1)
+    # the trio's waiting spots too: Factory Erik waits PAST the right edge
+    # (screen 332) and needs the room's floor cells under him
+    for t in ((gen_bg or {}).get("trio") or wc["trio"]):
+        x, y = t[0] + pin_x, t[1] + pin_y
+        cw = max(cw, (x + 16) // 16 + 1)
+        ch = max(ch, (y + 16) // 16 + 1)
     assert pin_x < 256 and pin_y < 16
     return dict(cam=(cam_x, cam_y), pin=(pin_x, pin_y), cw=cw, ch=ch)
 

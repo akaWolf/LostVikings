@@ -45,7 +45,7 @@ extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-f
 extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits (all builds; v2_gamestate.cpp)
 // UX plan stage 0: LVX trailer flags (defined with the LVX loader below;
 // used by the scroll-limit mirror above it).
-enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002 };
+enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004 };
 // LVX3 flags bits 4-11 / 12-15: the camera pin (viewport x 0..255 / y 0..15
 // in px) of a CAMLOCK slot — the scene map's off-screen left room columns
 // plus the padding that keeps the Genesis composition's room quads
@@ -6096,6 +6096,22 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
     bool transition = (level == 0x2D || level == 0x2E || level == 0x2F); // 3009-3014
     if (!transition) {
         uint16_t ac = v2gs(s).game_mode_ac();           // 3015 word_288AC
+        // UX stage 1 (#113 interludes): an LVX demo scene that just ENDED
+        // (D8's 0F, or its own timer) still carries the attract mode word
+        // 0x8000 here; the canonical branch below would then chain it like
+        // the attract demo (mode stays 0x8000, the next level's "demo
+        // chunk" is picked from the transition tables — a world level has
+        // none, the queue turns to garbage: level 4 auto-advanced to 5,
+        // level 33 tripped a ch6/7 FATAL from stray "held" input — seen
+        // live). A finished world-entry scene hands over to NORMAL play:
+        // mode 0, then the else-branch decides for the incoming level
+        // (which re-arms only if IT is another LVX demo slot). ds:25AD is
+        // still the scene here (the reload updates it later); canonical
+        // slots have no demo_cid and never take this line.
+        if (ac == 0x8000 && v2_lvx_demo_cid(v2gs(s).level())) {
+            v2gs(s).game_mode_ac(0);
+            ac = 0;
+        }
         if (ac == 1) {                                             // 3016-3017
             transition = true;
         } else if (ac == 0x8002) {
@@ -7761,8 +7777,20 @@ static uint16_t v2_current_level = 0xFFFF;
 // behavior is bit-identical to the original.
 // ---------------------------------------------------------------------------
 // (LVX_FULLSCREEN / LVX_CAMLOCK enum: file top, next to the forward decl.)
+//   "LVX4" u16 n, n × 32B records {... + trio 18B} — UX plan stage 1: the
+//   scene's three vikings placed INDIVIDUALLY. The 18 bytes are the mode-2
+//   position table of sub_11446 → sub_11569 (3 × {x u16, y u16, anim u16},
+//   entries in code_seg order 1/0/2 = Erik/Baleog/Olaf — class 1 is Erik,
+//   the first spawn lands in object slot 0, the HUD's first portrait; the
+//   scene strips proved the colours live; anim is OR'd with
+//   the head's spawn anim). The DOS build ships that table (ds:0x8508)
+//   zeroed and no code path writes it — a dormant scripted-scene mechanism
+//   (the SNES intro placed its trio this way). A slot with bit2 LVX_TRIO
+//   gets the table filled from its record right after the level header
+//   lands in DS (the header's +0x07 mode byte = 2 selects the path); the
+//   canonical head modes (0x10 / 6 / 0) never read the table.
 struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
-                    uint16_t demo_cid; uint16_t flags; };
+                    uint16_t demo_cid; uint16_t flags; uint8_t trio[18]; };
 static V2LvxEntry v2_lvx[16];
 static int v2_lvx_count = 0;
 
@@ -7798,15 +7826,16 @@ extern "C" int v2_scene_fullscreen(void) {
 extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
     v2_lvx_count = 0;
     if (size < 6) return;
-    // the trailer sits at the very end: scan the last 4+2+14*16 bytes
-    uint32_t from = size > 4 + 2 + 14 * 16 ? size - (4 + 2 + 14 * 16) : 0;
+    // the trailer sits at the very end: scan the last 4+2+32*16 bytes
+    uint32_t from = size > 4 + 2 + 32 * 16 ? size - (4 + 2 + 32 * 16) : 0;
     int32_t at = -1;
     int rec = 10;
     for (uint32_t i = from; i + 6 <= size; i++)
         if (!memcmp(img + i, "LVX1", 4) || !memcmp(img + i, "LVX2", 4) ||
-            !memcmp(img + i, "LVX3", 4)) {
+            !memcmp(img + i, "LVX3", 4) || !memcmp(img + i, "LVX4", 4)) {
             at = (int32_t)i;
-            rec = (img[i + 3] == '3') ? 14 : (img[i + 3] == '2') ? 12 : 10;
+            rec = (img[i + 3] == '4') ? 32 : (img[i + 3] == '3') ? 14
+                : (img[i + 3] == '2') ? 12 : 10;
         }
     if (at < 0) return;
     uint16_t n = (uint16_t)(img[at + 4] | (img[at + 5] << 8));
@@ -7819,6 +7848,8 @@ extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
         memcpy(v2_lvx[i].pw, p + 6, 4);
         v2_lvx[i].demo_cid = (rec >= 12) ? (uint16_t)(p[10] | (p[11] << 8)) : 0;
         v2_lvx[i].flags    = (rec >= 14) ? (uint16_t)(p[12] | (p[13] << 8)) : 0;
+        memset(v2_lvx[i].trio, 0, sizeof v2_lvx[i].trio);
+        if (rec >= 32) memcpy(v2_lvx[i].trio, p + 14, 18);
     }
     v2_lvx_count = n;
     fprintf(stderr, "V2-LVX: %d extra level slots:", n);
@@ -7857,6 +7888,18 @@ static void v2_load_template(uint8_t* shadow) {
     // stage-4 II.c: the stripe is a bulk image write — refresh every
     // evacuated field it covers (this is what unfreezes the header fields).
     v2_gs_evac_mirror_span(shadow, 0x25B3, lsz);
+    // UX stage 1 (LVX4): an interlude slot places its three vikings
+    // individually — its record's 18 bytes ARE the mode-2 position table
+    // sub_11446 hands to sub_11569 (3 × {x, y, anim}); the scene header's
+    // +0x07 mode byte (just landed at ds:0x25BA above) is 2. Canonical
+    // slots: no entry / no bit -> the table keeps the image's zeros and no
+    // canonical head mode (0x10 / 6 / 0) ever reads it.
+    if (const V2LvxEntry* lx = v2_lvx_find(level)) {
+        if (lx->flags & LVX_TRIO) {
+            memcpy(shadow + DS_SCENE_TRIO_TBL, lx->trio, sizeof lx->trio);
+            v2_gs_evac_mirror_span(shadow, DS_SCENE_TRIO_TBL, sizeof lx->trio);
+        }
+    }
 }
 
 // sub_11204: load level data chunks (tile graphics, tilemap, etc.)
@@ -8258,11 +8301,13 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // then runs v2_run_transition_chain -> sub_11080.
     // V2_VIK_DBG=1: viking-slot forensics for the scene trio bug — every 16
     // frames dump slots 0/2/4/6/8: flags/code_seg/pc/sprite_flags + mode.
+    // V2_VIK_DBG=2: the same line EVERY frame (UX stage 1: the walk-in
+    // choreography is tuned on the per-tick trajectories of the trio).
     {
         static int vd = -1;
-        if (vd < 0) { const char* e = getenv("V2_VIK_DBG"); vd = (e && e[0]=='1') ? 1 : 0; }
+        if (vd < 0) { const char* e = getenv("V2_VIK_DBG"); vd = e ? atoi(e) : 0; }
         extern int v2_dbg_pre_vm_iter;
-        if (vd && (v2_dbg_pre_vm_iter % 16) == 0) {
+        if (vd && (vd >= 2 || (v2_dbg_pre_vm_iter % 16) == 0)) {
             fprintf(stderr, "VIKDBG f%d SLOTS lvl=%d 25BA=%02X 3C2=%04X vp=(%d,%d) |",
                     v2_dbg_pre_vm_iter, v2gs(shadow).level(), shadow[0x25BA],
                     v2gs(shadow).active_viking(),
@@ -19833,12 +19878,28 @@ void v2_phase_frame_begin(uint16_t ds_val) {
             }
         }
     }
-    // V2_LADDER_SNAP=<frame>: dump the v2 render buffer + DAC as a PPM at
-    // that frame (and frame+1) — visual check which pixels use 0x75-0x78.
+    // V2_LADDER_SNAP=<frame>[,<frame>...]: dump the v2 render buffer + DAC
+    // as a PPM at each listed frame (and frame+1) — visual check which
+    // pixels use 0x75-0x78; UX stage 1 uses the list form for the scene
+    // choreography strips (one run per scene instead of one per frame).
     {
-        static int snapf = -2;
-        if (snapf == -2) { const char* e = getenv("V2_LADDER_SNAP"); snapf = e ? atoi(e) : -1; }
-        if (snapf > 0 && (v2_dbg_pre_vm_iter == snapf || v2_dbg_pre_vm_iter == snapf + 1)) {
+        static int snapf[32];
+        static int nsnap = -1;
+        if (nsnap < 0) {
+            nsnap = 0;
+            if (const char* e = getenv("V2_LADDER_SNAP")) {
+                for (const char* p = e; *p && nsnap < 32; ) {
+                    int v = atoi(p);
+                    if (v > 0) snapf[nsnap++] = v;
+                    while (*p && *p != ',') p++;
+                    if (*p == ',') p++;
+                }
+            }
+        }
+        bool snap_now = false;
+        for (int i = 0; i < nsnap; i++)
+            if (v2_dbg_pre_vm_iter == snapf[i] || v2_dbg_pre_vm_iter == snapf[i] + 1) snap_now = true;
+        if (snap_now) {
             extern uint8_t v2_dac_shadow[768];
             extern uint8_t v2_render_buf[320*200];
             char fn[64]; snprintf(fn, sizeof(fn), "/tmp/ladder_f%d.ppm", v2_dbg_pre_vm_iter);

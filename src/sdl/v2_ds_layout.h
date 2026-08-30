@@ -506,6 +506,7 @@ constexpr uint16_t DS_AIL_INIT_DONE         = 0xA39A; // AIL sound-init complete
 constexpr uint16_t DS_BYTE_SAVE_0           = 0x8504; // word_309E4: 3-byte save/restore temp, byte 0 ([di] backup)
 constexpr uint16_t DS_BYTE_SAVE_1           = 0x8505; // word_309E5: 3-byte save/restore temp, byte 1 ([di+1] backup)
 constexpr uint16_t DS_BYTE_SAVE_2           = 0x8506; // word_309E6: 3-byte save/restore temp, byte 2 ([di+2] backup)
+constexpr uint16_t DS_SCENE_TRIO_TBL        = 0x8508; // sub_11446 mode-2 viking position table (3 x {x,y,anim} = 18B) -> sub_11569; 0x851A / 0x852C = modes 4 / 5. Zero in the DOS image, no writer: filled per LVX4 scene slot (UX stage 1)
 constexpr uint16_t DS_INPUT_JOY             = 0x86DC; // word_30BBC: joystick/input value (INT9 async; read gated by DS_JOYSTICK_PRESENT)
 constexpr uint16_t DS_INPUT_ACCUM           = 0x86DE; // word_30BBE: INT9 async input accumulator (atomic OR; input layer, 13 sites)
 constexpr uint16_t DS_COUNTER_8734          = 0x8734; // word_30C14: anim-quad queue cursor (WORD index into the

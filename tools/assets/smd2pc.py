@@ -288,6 +288,9 @@ def build_de_backdrop(de_bg, CW, CH):
             (a, b))
 
 
+GENESIS_FLOOR_TYPES = {0x13: 0x01}
+
+
 def build_genesis_backdrop(gen_bg, CW, CH):
     """Genesis inter-world scene -> the scene map, composed EXACTLY the way
     the Genesis VDP shows it (UX plan stage 1; docs2/VERSIONS_DIFF_ANALYSIS
@@ -315,10 +318,11 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     (never shown); type bits everywhere are the room's own.
 
     Returns (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, vik_pos,
-    walk, drop) — vik_pos = [(x, y)] x3 for Erik/Baleog/Olaf in MAP px (x
+    walk, trio) — vik_pos = [(x, y)] x3 for Erik/Baleog/Olaf in MAP px (x
     center, the row above the floor top), walk = (x0, x1) map-px span of the
-    floor for the demo stroll, drop = (x, y) map px of the trio's head spawn
-    (x center, the row above the platform top)."""
+    floor for the demo stroll, trio = [(x, y, anim)] x3 map px for Erik,
+    Baleog, Olaf = the mode-2 spawn table rows (sub_11569 code_seg 1/0/2):
+    x center, y 48 px above the platform top (drop-in)."""
     from genesis_scene import GenesisScene, WORLD_CAMERA, layout
     world = gen_bg["world"]
     wc = WORLD_CAMERA[world]
@@ -327,7 +331,7 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     pin_x, pin_y = lay["pin"]
     spots = gen_bg.get("spots") or wc["spots"]
     walk = gen_bg.get("walk") or wc["walk"]
-    drop = gen_bg.get("drop") or wc["drop"]
+    trio = gen_bg.get("trio") or wc["trio"]
     assert (CW, CH) == (lay["cw"], lay["ch"]), (CW, CH, lay)
     sc = GenesisScene(world)
     bg_x, bg_y = sc.parallax(cam_x, cam_y, gen_bg.get("bg_x", wc.get("bg_x")))
@@ -351,7 +355,15 @@ def build_genesis_backdrop(gen_bg, CW, CH):
             # type bits on the map rows that lie entirely inside them
             # (seen live: a dropped viking parked on a room ledge hidden
             # behind the black band of the Factory scene)
-            ltype = (sc.type_bits(cam_x - pin_x, cam_y - pin_y, x, y) << 10) & 0xFC00
+            tb = sc.type_bits(cam_x - pin_x, cam_y - pin_y, x, y)
+            # the interlude rooms use surface type 0x13 (the Wacky candy
+            # floor) as walkable ground — the DE clip shows Erik walking
+            # it from x 64 to the ladder at 125 — while the PC landing
+            # filters (LUT_SCAN_FILTER lists 23/68) know only 1/2/4/5/6/
+            # 0x20 and the slopes: the trio fell through it live. Plain
+            # ground for the scene map.
+            tb = GENESIS_FLOOR_TYPES.get(tb, tb)
+            ltype = (tb << 10) & 0xFC00
             if y * 16 - pin_y >= 187 or y * 16 - pin_y + 16 <= 48:
                 ltype = 0
             pcvs = []
@@ -389,13 +401,16 @@ def build_genesis_backdrop(gen_bg, CW, CH):
         pal128[i] = smd_color_to_vga6(w)
     vik_pos = [(x + pin_x, y + pin_y - 1) for (x, y) in spots]
     walk = (walk[0] + pin_x, walk[1] + pin_x)
-    drop = (drop[0] + pin_x, drop[1] + pin_y - 1)
+    # spawn 48 px above the platform top (the SNES-style drop-in, out of
+    # sight at screen x -12 / 332), clamped under the window band (0x30)
+    trio = [(t[0] + pin_x, max(0x30, t[1] + pin_y - 1 - 48),
+             (t[2] if len(t) > 2 else 0)) for t in trio]
     print(f"  Genesis scene: world '{world}' room {sc.cid:03X} cam ({cam_x},{cam_y}) "
           f"pin ({pin_x},{pin_y}) map {CW}x{CH}, parallax ({bg_x},{bg_y}); "
           f"{len(tiles)} tiles / {len(prefabs)} prefabs, "
-          f"CRAM {sum(1 for w in sc.cram if w)} colors; trio head {drop}")
+          f"CRAM {sum(1 for w in sc.cram if w)} colors; trio {trio}")
     return (mmap, pc_tiles, pc_masks, pc_gtld,
-            [("T", i) for i in range(len(tiles))], pal128, vik_pos, walk, drop)
+            [("T", i) for i in range(len(tiles))], pal128, vik_pos, walk, trio)
 
 
 def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
@@ -461,12 +476,12 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             from genesis_scene import layout as _gs_layout
             _lay = _gs_layout(gen_bg["world"], gen_bg)
             CW, CH = _lay["cw"], _lay["ch"]
-    gen_drop = None
+    gen_trio = None
     if scene_mode and gen_bg:
         # UX stage 1: the scene as the Genesis VDP composes it (what the
         # BAC Definitive Edition shows) — see build_genesis_backdrop
         de_map, de_tiles, de_masks, de_gtld, de_pairs, de_pal128, \
-            vik_pos_de, de_ledge, gen_drop = build_genesis_backdrop(gen_bg, CW, CH)
+            vik_pos_de, de_ledge, gen_trio = build_genesis_backdrop(gen_bg, CW, CH)
         smap, W, H = bytes(de_map), CW, CH
         # route B (user decision 2026-09-02): the room's own objects ride
         # along — recoded below through the SMD->PC class bijection, they
@@ -481,12 +496,16 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         _lay2 = _gs_layout2(gen_bg["world"], gen_bg)
         (_cx, _cy), (_px, _py) = _lay2["cam"], _lay2["pin"]
         kept = []
+        from genesis_scene import WORLD_CAMERA as _WC0g
+        _WC0 = _WC0g[gen_bg["world"]]
         for sp in spawns:
             if sp["cls"] in (0xE0, 0xE1):
                 continue
             sp = dict(sp)
             if sp["cls"] == 0x48:
                 sp["x"], sp["y"] = 0, 0
+            elif sp["cls"] in _WC0.get("drop_cls", []):
+                continue           # room prop without a PC counterpart (see WORLD_CAMERA)
             elif sp["cls"] not in (0, 1, 2):
                 sp["x"] = (sp["x"] - _cx + _px) & 0xFFFF
                 sp["y"] = (sp["y"] - _cy + _py) & 0xFFFF
@@ -501,6 +520,10 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             sp["y"] = (sp["y"] + _py) & 0xFFFF
             sp["_pc"] = True
             kept.append(sp)
+        # the scene's speaker (class DC, integrate_snes.dialogue_blob):
+        # a permanent controller row like D8, parked at the map origin
+        kept.append(dict(cls=0xDC, x=0, y=0, half_w=16, half_h=16,
+                         anim=0x0800, pool=0, _pc=True))
         spawns = kept
         de_bg = gen_bg       # downstream: the 'shipped in PC shapes' path
     elif scene_mode and de_bg:
@@ -948,7 +971,11 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # they drop in — the SNES interlude look. A raw Y=-176 sky drop
         # lands them on the scene's TOP frame wall (33x33 rooms are
         # closed boxes — seen live), so stay inside the room.
-        head[0x07] = 0x10
+        # UX stage 1 (Genesis scenes): mode 2 = the engine's table-driven
+        # trio (sub_11446 -> sub_11569, three vikings at INDIVIDUAL
+        # positions from ds:0x8508; the LVX4 record fills that table) —
+        # the SMD scene places its vikings one by one off-screen too
+        head[0x07] = 0x02 if gen_trio else 0x10
         head[0x0C], head[0x0D] = 0x00, 0x00
         head[0x0E], head[0x0F] = 0x2F, 0x00                # spawn anim 0x2F
         head[0x10], head[0x11] = 0x00, 0x00                # spawn pool0 = 0
@@ -959,13 +986,10 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # "horned" pile = lying vikings with the dizzy-stars loop — user
         # spotted it), keep the fall under the fall-damage threshold
         syv = max(0x20, min(vys) - 48)
-        if gen_drop:
-            # UX stage 1: the head point chosen per world so that all three
-            # land on PC-standable room cells of the platform the SMD scene
-            # spawns the trio on (genesis_scene.WORLD_CAMERA['drop']); the
-            # drop starts below the window band (Genesis row 48), where the
-            # console would hide a sprite behind the window plane
-            sxv, syv = gen_drop[0], max(0x30, gen_drop[1] - 48)
+        if gen_trio:
+            # UX stage 1: mode 2 spawns from the table, not from the head
+            # point; keep the head point on the first table row anyway
+            sxv, syv = gen_trio[0][0], gen_trio[0][1]
         head[0x08], head[0x09] = sxv & 0xFF, (sxv >> 8) & 0xFF
         head[0x0A], head[0x0B] = syv & 0xFF, (syv >> 8) & 0xFF
         # head+0x1C -> ds:25CF (byte_2AAAF level flags): the donor is a
@@ -1099,6 +1123,7 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             "tiles": len(pairs), "spawns": len(out_spawns),
             "prio_ported": prio_ported, "pal_anims": len(pal_anims),
             "ledge": de_ledge if de_bg else None,
+            "trio": gen_trio,
             # route B: the DA decor rows' indices + the pool frame of the
             # first decor block (integrate_snes.build_scene_templates)
             "decor_rows": decor_rows if scene_mode else [],
