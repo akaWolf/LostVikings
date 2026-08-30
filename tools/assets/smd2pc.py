@@ -821,6 +821,16 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     # ---- head: donor base + SMD fields ----
     head = bytearray(dhead)
     head[0x04], head[0x05], head[0x06] = c[4], c[5], c[6]  # music block
+    # +0x05 = the track id, and the SMD numbers its world themes
+    # differently from the PC: measured on every level head of both ROMs —
+    # SMD  02 Ship (079-087, scene 141)  03 Preh (01E-02C, 13D)  04 Egypt
+    # (034-042, 13E)  05 Factory (049-059, 13F)  06 Wacky (063-073, 140)
+    # 07 ending 08C;  PC  02 Ship (0C6-0D4)  03 Preh (028-034)  04 Egypt
+    # (04B-055)  05 Factory (072-080)  07 Wacky (09C-0AA)  06 = the
+    # Timewarp vortex 0192 only. Copying the SMD byte verbatim made the
+    # Wacky scene play the vortex tune; map through the world theme.
+    SMD_TO_PC_TRACK = {0x02: 0x02, 0x03: 0x03, 0x04: 0x04, 0x05: 0x05, 0x06: 0x07}
+    head[0x05] = SMD_TO_PC_TRACK.get(c[5], c[5])
     for off2, so in ((0x07, 0x07),):                       # start selector
         head[off2] = c[so]
     for off2, so in ((0x08, 0x08), (0x0A, 0x0A), (0x0C, 0x0C),
