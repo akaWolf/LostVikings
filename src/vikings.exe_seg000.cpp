@@ -475,14 +475,14 @@ extern "C" void v2_fntest_arm_signals(void) {
 // es = ds), and a data-file switcher so synthetic LZSS fixtures can replace
 // DATA.DAT for both the oracle and v2 (the oracle's file layer is the port's
 // SDL-inlined fread/fseek on the static `data_handle`).
-extern "C" uint16_t v2_fntest_es_override = 0;
+extern "C" { uint16_t v2_fntest_es_override = 0; }
 // FT_SS_TRACE=1: RETN/escape routing diagnostics (cached in fn-test main).
-extern "C" int v2_fntest_ss_trace = 0;
+extern "C" { int v2_fntest_ss_trace = 0; }
 // ES value after the isolated call (unit sub_10e85 compares the para-advance).
-extern "C" uint16_t v2_fntest_last_es = 0;
+extern "C" { uint16_t v2_fntest_last_es = 0; }
 // fs for orig functions that rely on a caller-loaded fs (e.g. sub_13fc2:
 // fs = ds:2E69 is loaded by the caller, not the function itself).
-extern "C" uint16_t v2_fntest_fs_override = 0;
+extern "C" { uint16_t v2_fntest_fs_override = 0; }
 extern "C" int v2_fntest_set_data_file(const char* path) {
     if (data_handle) { fclose(data_handle); data_handle = 0; }
     data_handle = fopen(path, "rb");
@@ -657,7 +657,7 @@ extern "C" void v2_fntest_fork_export_clear(void) { ft_fork_export_n = 0; }
 // sub_101ac's vsync spin: a helper thread must clear [A39C] mid-spin —
 // a thread created in the parent does not survive fork(), and the child's
 // m2c image is a private COW copy the parent cannot reach).
-extern "C" void (*v2_fntest_child_pre_hook)(void) = nullptr;
+extern "C" { void (*v2_fntest_child_pre_hook)(void) = nullptr; }
 
 struct FtForkShared {
     uint8_t  ds_image[0x10000];

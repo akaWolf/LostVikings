@@ -276,7 +276,7 @@ extern "C" int v2_vga_fetch_page(uint8_t* out, uint32_t count) {
 }
 // Parity check against the real drawBuffer — covered bytes only. Returns diff
 // count; logs the first few mismatches (env V2_VGAPARITY, called from verify).
-extern "C" int v2_vga_parity_hud = 0;   // diffs in the HUD region (addr < 0x1600)
+extern "C" { int v2_vga_parity_hud = 0; }   // diffs in the HUD region (addr < 0x1600)
 extern "C" int v2_vga_parity_check(const uint8_t* real_drawbuffer, int log_limit) {
     int diffs = 0;
     v2_vga_parity_hud = 0;

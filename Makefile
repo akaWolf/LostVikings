@@ -183,6 +183,14 @@ $(OBJDIR)/src/vikings.exe_seg003.o: CXXFLAGS += -O0
 $(OBJDIR)/src/_data.o: CXXFLAGS += -O0
 endif
 
+# The m2c-translated units carry hundreds of -Woverflow warnings by design:
+# the generated code assigns 16-bit-wrapped x86 constants through narrower
+# C types on purpose (exact 8086 semantics). Silence ONLY that category and
+# ONLY for the generated files — hand-written sources keep the warning.
+$(OBJDIR)/src/vikings.exe.o: CXXFLAGS += -Wno-overflow
+$(OBJDIR)/src/vikings.exe_seg002.o: CXXFLAGS += -Wno-overflow
+$(OBJDIR)/src/vikings.exe_seg003.o: CXXFLAGS += -Wno-overflow
+
 ifdef V2_ONLY
 # V2_ONLY: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.
 # Excluded: vikings.exe*.cpp, _data.cpp, asm.cpp, shadowstack.cpp, memmgr.cpp (all m2c-only).

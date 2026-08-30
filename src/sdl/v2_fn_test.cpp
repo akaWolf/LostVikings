@@ -7061,8 +7061,11 @@ int ft_selftest_spawn_gate(FtId id, uint32_t seed) {
     } else {
         run1(0, 0, 0, 0, 0x00000, "grid", grid);           // slot 0 free
         run1(0, 0, 0, 0, 0x00001, "grid", grid);           // slot 2 free
-        run1(0, 0, 0, 0, 0xFFFFF, "grid", grid);           // full → STC
-        run1(0, 0, 0, 0, 0x7FFFF, "grid", grid);           // only last free
+        // (the u16 mask param has truncated these 20-bit literals since the
+        // unit was written — the passing set rides the 16-bit values; keep
+        // the actually-executed constants explicit)
+        run1(0, 0, 0, 0, 0xFFFF, "grid", grid);            // full → STC
+        run1(0, 0, 0, 0, 0x7FFF, "grid", grid);            // only last free
         for (uint32_t m = 0; m < 0x100000; m += 41)
             run1(0, 0, 0, 0, (uint16_t)m, "exh", exh);
     }

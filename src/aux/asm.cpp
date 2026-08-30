@@ -231,7 +231,7 @@ static int v2_pit_lohi = 0;
 // (79F5 JL) are live on hardware. Off by default: the calibrated unit
 // expectations (12ef8 idle thresholds) ride on the constant step.
 extern "C" int v2_fntest_pit_jitter;
-extern "C" int v2_fntest_pit_jitter = 0;
+extern "C" { int v2_fntest_pit_jitter = 0; }
 static int v2_pit_jitter_phase = 0;
 // (#61) native AIL channel hooks — see src/sdl/v2_native_opl.cpp
 extern "C" int  v2_nopl_enabled(void);
@@ -402,7 +402,7 @@ static void fntest_trap_or_exit(int code) {
 // fn-test (#47): reproduce the orig IRQ0 audio-tick race — the real ISR
 // sets cs:byte_128A8=1 when it fires while DOS is busy; sub_128a9's defer
 // arm is unreachable without it under the deterministic INT models.
-extern "C" int v2_fntest_sim_int21_irq = 0;
+extern "C" { int v2_fntest_sim_int21_irq = 0; }
 // fn-test (#47): FNSELFTEST processes skip m2c::init, so first_mcb stays 0
 // and DosMemAlloc walks garbage MCBs from segment 0 (2s hang -> SIGALRM).
 // Same mcb_init call as m2c::init performs.

@@ -10,7 +10,9 @@
 // from v2 VM's shadow DS instead of real DS. This makes rendering independent
 // from the original VM — v2 VM's writes to shadow are what gets rendered.
 // Tile map and tile/sprite graphics segments remain shared (read-only level data).
+#ifndef V2_RENDER_FROM_SHADOW
 #define V2_RENDER_FROM_SHADOW
+#endif
 
 // ============================================================================
 // Заголовочный файл для второго окна (render_v2)

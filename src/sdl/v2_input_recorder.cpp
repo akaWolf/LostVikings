@@ -278,7 +278,7 @@ extern "C" int v2_replay_drain_to_state(void) { return v2_replay_drain_impl(); }
 // v2_input_tick_12352 at the single input-read point of the running world
 // (orig sub_12352 head in default/headless, the v2_read_input_12352_iter
 // V2_ONLY branch in standalone). Diagnostics (V2_12352_LOG) print it too.
-extern "C" long g_sub12352_seq = 0;
+extern "C" { long g_sub12352_seq = 0; }
 
 // One call = one sub_12352 read. Placed at the TOP of the read, BEFORE the
 // press_edges exchange, so that:

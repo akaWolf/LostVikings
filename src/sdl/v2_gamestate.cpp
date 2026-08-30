@@ -291,7 +291,7 @@ extern "C" void v2_gs_evac_mirror_span(const uint8_t* ds, uint32_t addr, uint32_
 }
 
 
-extern "C" const uint8_t* v2_gs_evac_canonical = nullptr;
+extern "C" { const uint8_t* v2_gs_evac_canonical = nullptr; }
 
 extern "C" void v2_gs_evac_refresh(const uint8_t* ds) {
 #define V2_GS_EV1(name, off) \
@@ -350,7 +350,7 @@ extern "C" void v2_gs_evac_set_canonical(const uint8_t* ds) {
 
 // Members vs image bytes. A diff means something wrote the image behind the
 // accessors (a bulk writer not yet routed through the view) — hard bug.
-extern "C" long v2_gs_evac_check_calls = 0;
+extern "C" { long v2_gs_evac_check_calls = 0; }
 extern "C" int v2_gs_evac_check(const uint8_t* ds) {
     if (!v2_gs_evac_on(ds)) return 0;
     v2_gs_evac_check_calls++;
