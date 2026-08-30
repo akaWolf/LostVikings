@@ -5832,7 +5832,11 @@ static void v2_game_mode_init_11446(uint8_t* s) {
         v2_spawn_object_13809(s, 2, 0xFFFF, v2gs(s).spawn_anim());
     }
     // loc_1154A: portrait/sound state → viking rows, mode 6.
-    *(uint16_t*)(s + VIK_PORTRAIT) = v2gs(s).portrait_prev(0); // word_29A8D = word_28903 (dst = viking-row object column)
+    // (VIK_PORTRAIT aliases the OBJ_RES_HANDLE column of viking row 0 —
+    // write through ObjMem so the stage-4 evac mirror stays in sync; the
+    // raw-pointer store here tripped the STRICT gate the first time a
+    // scene ran the sel=6 head path, hw-watchpoint-proven.)
+    ObjMem{s, 0}.w16(OBJ_RES_HANDLE, v2gs(s).portrait_prev(0)); // word_29A8D = word_28903 (dst = viking-row object column)
     v2gs(s).vk_portrait_snd_2(v2gs(s).portrait_snd_2()); // word_29A8F = word_28905
     v2gs(s).vk_portrait_snd_3(v2gs(s).portrait_snd_3()); // word_29A91 = word_28907
     v2gs(s).obj_scan_start(6);    // word_2881C

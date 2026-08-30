@@ -199,12 +199,12 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             if sp["cls"] in (0, 1, 2):
                 vik_pos.append((sp["x"], sp["y"]))
                 continue
-            # Dropped rows: 48/4A (level controller / 13DB stub), E0/E1 (the
-            # PC-side code draws wipe circles, bank 1B4 — not figures),
-            # 4B/4C/4E (finale props of the 08C scene — that scene itself is
-            # NOT ported: the PC finale 00DA already exists at slot 46).
-            if sp["cls"] in (0x48, 0x4A, 0xE0, 0xE1, 0x4B, 0x4C, 0x4E):
-                continue
+            # Nothing but the vikings survives on a scene: the 1C6 SCENE
+            # script resolves gameplay mob classes to unrelated machines
+            # (the Egypt scene's leftover rows wedged the VM pass and the
+            # D8 timer never fired — seen live); 48/4A/E0/E1/4B/4C/4E are
+            # controller/stub/wipe/prop rows with no figure role here.
+            continue
         if not keep_vikings and sp["cls"] in (0, 1, 2):
             continue
         k_cls = f"{world}:{sp['cls']:02X}"
@@ -219,6 +219,14 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         else:
             passed += 1
         out_spawns.append(sp)
+    if scene_mode:
+        # the timed exit controller as a PERMANENT spawn-table row (bit
+        # 0x800 in the anim word drives sub_13ba5)
+        # D8's duration = its own ANIM_SUB = ITS ROW INDEX in the spawn
+        # table (field[16] in the 8A93 code; 0 -> the 60-tick default,
+        # early exit by button edges). FIRST row => index 0 => 60 ticks.
+        out_spawns.insert(0, dict(x=0, y=0, half_w=16, half_h=16,
+                                  cls=0xD8, anim=0x0800, pool=0))
     if scene_mode and vik_pos and os.environ.get("SMD_SCENE_FIGURES"):
         # D3/D4/D5 statue figures (the respawn-screen recipe: 13DB stub +
         # sprites 0x173-0x175 + anim 0x82F + the 0171 bank rows).
@@ -353,14 +361,15 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # the class codes animate/voice the vikings; a D8 head instead
         # leaves the scene globals cold and the viking frames decode wrong
         # (three green look-alikes — seen live)
-        head[0x07] = 0                                     # sel = 0
-        head[0x0C], head[0x0D] = 0xD8, 0x00                # timed controller
+        # SNES-shaped interlude: LIVE vikings via the gameplay head
+        # machinery (sel=6 -> the mode-6 trio around vx/vy; active_viking
+        # becomes a viking, so the 1C6 scene code runs its interactive
+        # branch). The timed exit controller (D8) rides in the spawn
+        # table as a permanent row.
+        head[0x07] = 6
+        head[0x0C], head[0x0D] = 0x00, 0x00
         head[0x0E], head[0x0F] = 0x20, 0x00                # flags 0x0020
-        head[0x10], head[0x11] = 0x78, 0x00                # arg = 120 ticks
-        # (live viking actors need the sel=6 head channel, which trips the
-        # stage-4 strict evac guard in the CURRENT engine build — parked;
-        # the scenes ship with the D3-D5 statue figures, the respawn-screen
-        # recipe, until that guard is taught the scene path)
+        head[0x10], head[0x11] = 0x2F, 0x00                # spawn anim 0x2F
         # lvflags stay the donor's: 0x0C (the PC scenes' value) kills the
         # D8 timer exit — bisect-proven
         # viewport anchor: the camera parks on the head spawn — aim it at
