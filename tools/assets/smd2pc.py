@@ -379,11 +379,13 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     # body/highlight slots for the SNES-style shimmer. ----
     title_pal_tail = []
     title_anim = None
+    banner_bank = None
+    banner_cols = []
     if scene_mode and smd_banks:
         banner = rom.chunk(smd_banks[0]["chunk"])
         nblk = len(banner) // 512
         # the top TWO quad rows become the black title band (the SNES look:
-        # the name floats on black above the field) — blank them first
+        # the name floats on black above the field) — blank them
         blk_tile = len(pairs)
         pc_tiles += AC.tile_encode(bytes(64))
         pc_masks += bytes(8)
@@ -402,35 +404,42 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             cell = (CH - 1) * W + x
             mmap[cell * 2] = black_prefab & 0xFF
             mmap[cell * 2 + 1] = black_prefab >> 8
-        # banner: one 32px block = 2x2 quads, centered on the fixed screen
-        row_q = 0
-        col0 = max(0, (W - nblk * 2) // 2)
+        # The letters themselves are SPRITES that FALL into the band (the
+        # video shows the name dropping in; the SMD E0 rows do the same,
+        # pool = phase): encode each 32x32 block as a type-2 strip sprite
+        # (4 plane sections x 32 strips x [mask + 8 data]; pixel(x=j*4+p,
+        # y=strip)=data[j], mask bit 7-j gates the write) — one block is
+        # exactly 16 x 72B units, so anim cmd 01 addresses block K as
+        # frame K*16 from sprite base 0 (the bank ships FIRST in the
+        # scene's bank list). Letter pixels ride DAC 64+nib (CRAM row 1).
+        assert nblk <= 8
+        enc = bytearray()
         for blk in range(nblk):
-            # one 32x32 block = 4 prefabs (2x2 quads), each 4 sub-tiles
-            base_idx = len(pairs)
+            px = [[0] * 32 for _ in range(32)]
             for t in range(16):
                 tx, ty = t // 4, t % 4          # column-major in the block
-                px = smd_tile_nibs(banner, blk * 16 + t) or [0] * 64
-                baked = bytes((64 + v) if v else 0 for v in px)
-                pc_tiles += AC.tile_encode(baked)
-                pc_masks += bytes(8)
-                pairs.append(("BANNER", blk * 16 + t))
-            for qy in range(2):
-                for qx in range(2):
-                    # prefab sub-order TL,TR,BL,BR; block tile at
-                    # (tx,ty) = (qx*1+sub_x, qy*... ) -> tile index t=tx*4+ty
-                    for (dy, dx) in ((0, 0), (0, 1), (1, 0), (1, 1)):
-                        tx = qx * 2 + dx
-                        ty = qy * 2 + dy
-                        idx = base_idx + tx * 4 + ty
-                        pcv = idx << 6
-                        pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
-                    prefab_idx = len(pc_gtld) // 8 - 1
-                    cell = (row_q + qy) * W + col0 + blk * 2 + qx
-                    if 0 <= cell * 2 + 1 < len(mmap):
-                        mmap[cell * 2] = prefab_idx & 0xFF
-                        mmap[cell * 2 + 1] = prefab_idx >> 8
-        assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
+                nib = smd_tile_nibs(banner, blk * 16 + t) or [0] * 64
+                for y in range(8):
+                    for x in range(8):
+                        v = nib[y * 8 + x]
+                        px[ty * 8 + y][tx * 8 + x] = (64 + v) if v else 0
+            for plane in range(4):
+                for strip in range(32):
+                    mask = 0
+                    d = bytearray(8)
+                    for j in range(8):
+                        v = px[strip][j * 4 + plane]
+                        if v:
+                            mask |= 0x80 >> j
+                            d[j] = v
+                    enc += bytes((mask,)) + bytes(d)
+        # 71-byte zero prefix: the type-2 render reads mask@off-1/data@off
+        # (1-based, code-read in v2_render_funcs), and the pool anims can
+        # only produce off = frm*72 from base 0 — with the prefix, frame
+        # 1+K*16 lands mask-aligned on block K (at 71 + K*1152).
+        banner_bank = bytes(71) + bytes(enc)
+        col0 = max(0, (W - nblk * 2) // 2)
+        banner_cols = [col0 * 16 + blk * 32 for blk in range(nblk)]
         # DAC slots 64..79 = CRAM row 1 of the scene palette. The letters
         # are SPRITES on the SMD; rows 0/1 share the first 8 colors (the
         # PREHISTORIA nibbles), but the >7 nibbles of FACTORY/STARSHIP/
@@ -564,6 +573,24 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     # the donor world set carries the viking frames on the right pool slots
     # (the walkviks live proof ran on exactly this). The former 00DA/respawn
     # clone made the vikings render as portrait fragments.
+    if banner_bank is not None and "banner" in new_cids:
+        # the banner bank ships FIRST: pool sprites (class spr FFFE) address
+        # frames from sprite base 0, so block K = anim frame K*16. The pad
+        # bytes are dead at load time (1167a reads only the chunk id).
+        out["sprite_banks"] = ([{"chunk": new_cids["banner"],
+                                 "pad": "c0000000"}]
+                               + list(out["sprite_banks"]))
+        # letter spawn rows: AFTER the D8 controller (row 0 keeps the
+        # timer's ANIM_SUB=0 default), rows 1..N — the row index IS the
+        # dispatcher key (OBJ_ANIM_SUB = spawn row index)
+        for blk in range(len(banner_cols)):
+            out_spawns.insert(1 + blk, dict(
+                x=banner_cols[blk], y=16, half_w=16, half_h=16,
+                cls=0xD9, anim=0x0800, pool=1 + blk))
+            # pool -> ds:374 -> OBJ_SPAWN_POOL = the dispatcher key:
+            # field[16] resolves through the runtime LUT to column 0x1B8
+            # (OBJ_SPAWN_POOL) — diagnosed live via the op_73 probe
+        out["spawns"] = out_spawns
     new_raw = LR.serialize_stripe(out)
 
     # ---- write into the scratch tree + extras ----
@@ -598,12 +625,21 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         f.write(bytes(bg))
     os.replace(pal_path + ".tmp", pal_path)
 
+    if banner_bank is not None and "banner" in new_cids:
+        bp = os.path.join(scratch, "unreferenced",
+                          f"{new_cids['banner']:04X}.bin")
+        with open(bp + ".tmp", "wb") as f:
+            f.write(banner_bank)
+        os.replace(bp + ".tmp", bp)
+
     ex_path = os.path.join(scratch, "extras.json")
     extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
     for cid2, role2 in ((hdr_id, "level_header_stripe"), (tm_id, "tilemap"),
                         (ts_id, "tileset"), (ts_id + 1, "tile_masks"),
                         (gt_id, "bg_tileset"), (pal_chunk, "unreferenced")):
         extras[f"{cid2:04X}"] = {"role": role2}
+    if banner_bank is not None and "banner" in new_cids:
+        extras[f"{new_cids['banner']:04X}"] = {"role": "unreferenced"}
     wjson(ex_path, extras)
 
     print(f"written: header {hdr_id:04X}, map {tm_id:04X}, tiles {ts_id:04X} "

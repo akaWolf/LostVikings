@@ -6371,6 +6371,8 @@ static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t
     uint16_t bx = (uint16_t)(code_seg_idx * 0x15);     // 0x381e..0x3826 ax*15h -> bx
     if (v2_obj_template_init_13e52(s, new_si, bx)) {   // 0x3828 call sub_13E52
         // 0x382b JC loc_13860: free the slot, creation fails.
+        if (vik_dbg) fprintf(stderr, "VIKDBG f%d SPAWN code=%04X -> TEMPLATE-FAIL\n",
+                             v2_dbg_pre_vm_iter, code_seg_idx);
         ObjMem{s, (uint16_t)(new_si)}.w16(OBJ_CODE_SEG, 0);       // [si+1355] = 0
         return -1;                                     // loc_13866: DI=0, STC
     }
@@ -6382,6 +6384,8 @@ static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t
     if (obj.u16(OBJ_SUB_COUNT) != 0) {                 // 0x382d CMP [si+1AD5],0
         if (v2_slot_alloc_13d68(s, new_si)) {          // 0x3834 call sub_13D68
             // 0x3837 JC loc_13860: no space — clear slot, creation fails.
+            if (vik_dbg) fprintf(stderr, "VIKDBG f%d SPAWN code=%04X -> SUBALLOC-FAIL\n",
+                                 v2_dbg_pre_vm_iter, code_seg_idx);
             obj.w16(OBJ_CODE_SEG, 0);
             return -1;
         }
@@ -8159,12 +8163,21 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
                     v2gs(shadow).active_viking(),
                     (int16_t)*(uint16_t*)(shadow + DS_VIEWPORT_X),
                     (int16_t)*(uint16_t*)(shadow + DS_VIEWPORT_X + 2));
-            for (uint16_t sl = 0; sl <= 8; sl += 2) {
+            for (uint16_t sl = 0; sl <= 10; sl += 2) {
                 ObjMem o{shadow, sl};
-                fprintf(stderr, " [%d]cs=%04X fl=%04X pc=%04X anim=%04X x=%d y=%d",
+                fprintf(stderr, " [%d]cs=%04X fl=%04X pc=%04X anim=%04X as=%04X apc=%04X x=%d y=%d",
                         sl, o.u16(OBJ_CODE_SEG), o.u16(OBJ_FLAGS),
-                        o.u16(OBJ_PC), o.u16(OBJ_ANIM_IDX),
+                        o.u16(OBJ_PC), o.u16(OBJ_ANIM_IDX), o.u16(OBJ_ANIM_SUB),
+                        o.u16(OBJ_ANIM_PC),
                         (int16_t)o.u16(OBJ_X_PREV), (int16_t)o.u16(OBJ_Y_PREV));
+                uint16_t ss = o.u16(OBJ_SUB_SLOT);
+                if (ss && ss != 0xFFFF) {
+                    ObjMem sub{shadow, ss};
+                    fprintf(stderr, "{sub=%04X sf=%04X off=%04X strips=%d sx=%d sy=%d}",
+                            ss, sub.u16(OBJ_SPRITE_FLAGS), sub.u16(OBJ_SPRITE_OFF),
+                            sub.u16(OBJ_STRIP_COUNT),
+                            (int16_t)sub.u16(OBJ_SPRITE_X), (int16_t)sub.u16(OBJ_SPRITE_Y));
+                }
             }
             fprintf(stderr, "\n");
         }

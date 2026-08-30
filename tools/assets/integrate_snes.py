@@ -240,6 +240,133 @@ def write_demo_chunks(scratch):
           f"(ids {min(DEMO_CID.values()):04X}..{max(DEMO_CID.values()):04X})")
 
 
+
+# #113 letter-fall: the SMD/SNES interludes DROP the banner letters from the
+# sky (video ref; the SMD E0 rows carry per-letter phase in `pool`). Ours is
+# pure data appended PAST the canonical 1C6 payload (0x9F53; the template
+# buffer holds 48K, payload 40787 — room to spare, absolute addresses mean
+# nothing shifts):
+#   - class D9 is an ORPHAN on the PC (no canonical stripe spawns it — full
+#     scan) — its record is retargeted: spr FFFE (pool sprite, base 0),
+#     32x32 body (the D7 rest bytes), code -> the dispatcher below;
+#   - dispatcher: acc=field[16] (OBJ_ANIM_SUB = the spawn ROW INDEX) -> the
+#     canonical `51 k / 73 16 target` ladder (same grammar the S_8C61 row
+#     dispatcher uses) -> op 19 arms the letter's anim; rows 1..8 are the
+#     letters (row 0 stays the D8 timer: its index feeds its OWN duration);
+#   - anim per letter K: 0F phase-delay (the SMD pool cascade), 15 01
+#     (type-2, 32 strips — cs:32D7 table), 01 K*16 (frame = block K: the
+#     banner bank is the FIRST bank of the scene => sprite base 0, and a
+#     32x32 type-2 block is exactly 16 x 72B units), 08 0 (X=WORLD_X),
+#     then a ladder of 0A y-absolutes from -(drop) up to 0 (the first 0A
+#     also RAISES the sprite — canonical A_9F25 pattern), idle loop.
+LETTER_BASE = 0x9F53
+
+def letterfall_blob(nblk):
+    """(blob_bytes, dispatcher_addr) — dispatcher first, then 8 anims."""
+    # pass 1: measure the dispatcher: 3 (prolog jmp is NOT used: the 13DB
+    # prolog calls the shared setup; D9 objects need none of it — start
+    # straight at the ladder) + per row: 3 (51 k) + 4 (73 16 addr) ... + 1
+    # (10 destroy default) ; branch targets: 19 addr (3) + idle jmp (3).
+    disp = bytearray()
+    branches = []
+    for k in range(1, nblk + 1):
+        disp += bytes((0x51, k & 0xFF, 0x00))
+        branches.append(len(disp) + 2)           # patch spot for 73-target
+        disp += bytes((0x73, 0x16, 0x00, 0x00))
+    fall_through = len(disp) + 1
+    disp += bytes((0x03, 0x00, 0x00))            # foreign index: -> letter 1
+                                                 # (diagnosed live: never
+                                                 # destroy — see below)
+    # branch bodies: 19 <anim_k> ; 03 <idle>
+    body_off = []
+    for k in range(nblk):
+        body_off.append(len(disp))
+        disp += bytes((0x19, 0x00, 0x00, 0x03, 0x00, 0x00))
+    idle_off = len(disp)
+    disp += bytes((0x2F, 0x00, 0x01, 0x03, 0x00, 0x00))   # show/idle loop
+    # anims start after the dispatcher
+    anims = bytearray()
+    anim_off = []
+    for k in range(nblk):
+        anim_off.append(len(disp) + len(anims))
+        a = bytearray()
+        a += bytes((0x0F, 4 + k * 7))            # cascade phase (SMD pools)
+        a += bytes((0x15, 0x01))                 # type-2, 32 strips
+        # frame 1+K*16: the render fetches mask@off-1/data@off (1-based,
+        # code-read), the anim 01 gives off = frm*72 from pool base 0 —
+        # the bank ships with a 71-byte zero prefix so off=72 lands the
+        # masks exactly on the encoded stream (block K at 71+K*1152).
+        # ('15 05' was NOT the fix: its reset also rewrites SPRITE_SEG
+        # from the sub's SRC_SEG — killed the draw, seen live.)
+        a += bytes((0x01, (1 + k * 16) & 0xFF))  # frame = block K
+        a += bytes((0x08, 0x00, 0x00))           # X = WORLD_X
+        y = -(88 + k * 4)
+        while y < 0:
+            a += bytes((0x0A,)) + int(y).to_bytes(2, "little", signed=True)
+            a += bytes((0x0F, 0x02))
+            y += 8
+        a += bytes((0x0A, 0x00, 0x00))           # settle at WORLD_Y
+        loop_at = LETTER_BASE + len(disp) + len(anims) + len(a)
+        a += bytes((0x0F, 0x28))
+        a += bytes((0x03,)) + loop_at.to_bytes(2, "little")
+        anims += a
+    # pass 2: patch dispatcher targets (absolute addresses)
+    ft = LETTER_BASE + body_off[0]
+    disp[fall_through] = ft & 0xFF
+    disp[fall_through + 1] = ft >> 8
+    for k in range(nblk):
+        tgt = LETTER_BASE + body_off[k]
+        disp[branches[k]] = tgt & 0xFF
+        disp[branches[k] + 1] = tgt >> 8
+        ao = LETTER_BASE + anim_off[k]
+        disp[body_off[k] + 1] = ao & 0xFF
+        disp[body_off[k] + 2] = ao >> 8
+        io = LETTER_BASE + idle_off
+        disp[body_off[k] + 4] = io & 0xFF
+        disp[body_off[k] + 5] = io >> 8
+    io = LETTER_BASE + idle_off
+    disp[idle_off + 4] = io & 0xFF
+    disp[idle_off + 5] = io >> 8
+    return bytes(disp) + bytes(anims)
+
+
+def patch_1c6_letterfall(scratch, nblk=8):
+    p = os.path.join(scratch, "level_scripts", "1C6.lvsf")
+    txt = open(p).read()
+    if "blob @9F53" in txt:
+        return                                    # idempotent rerun
+    blob = letterfall_blob(nblk)
+    # retarget the orphan D9 record: FFFE pool sprite, D7's 32x32 body,
+    # code = our dispatcher (raw address form `code==`)
+    old_rec = ("record D9 sprite=0180 flags=0E code==8AD4 "
+               "rest=040000007f4000000500000000100010")
+    new_rec = ("record D9 sprite=FFFE flags=01 code==%04X "
+               "rest=04000000202000000500000000000010" % (LETTER_BASE - 3))
+    if old_rec not in txt:
+        if "record D9 sprite=FFFE" in txt:
+            return                                # already retargeted
+        raise SystemExit("1C6 D9 record not in the expected canonical form")
+    txt = txt.replace(old_rec, new_rec)
+    # the .lvsf header line carries the chunk size — grow it by the append
+    old_size = "chunk 01C6 size 40787"
+    if old_size not in txt:
+        raise SystemExit("1C6 size header not found")
+    txt = txt.replace(old_size, f"chunk 01C6 size {40787 + len(blob)}")
+    txt = txt.rstrip("\n") + "\nblob @9F53 " + blob.hex() + "\n"
+    tmp = p + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(txt)
+    os.replace(tmp, p)
+    sj = os.path.join(scratch, "level_scripts", "01C6.size.json")
+    meta = json.load(open(sj))
+    meta["payload_len"] = 0x9F53 + len(blob)
+    with open(sj + ".tmp", "w") as f:
+        json.dump(meta, f)
+    os.replace(sj + ".tmp", sj)
+    print(f"  1C6 letter-fall: D9 -> dispatcher @{LETTER_BASE:04X}, "
+          f"{nblk} anims, +{len(blob)}B payload")
+
+
 def patch_1c6_d8_timer(scratch):
     """S_8A90 (the D8 timed-scene controller): default duration 0x3C ticks
     is too short for the choreography — retarget the DEFAULT branch constant
@@ -285,7 +412,8 @@ def do_integrate(scratch, music=None):
         print(f"slot {e['slot']} ({e['pw'].decode()}, SMD scene):")
         SMD.convert_scene(e["smd"], e["donor"], scratch,
                           {"hdr": b, "map": b + 1, "tiles": b + 2,
-                           "gtld": b + 4, "pal": b + 5},
+                           "gtld": b + 4, "pal": b + 5,
+                           "banner": 0x258 + (e["slot"] - 53)},
                           next_level=e["next"], scene_mode=True)
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"],
                     "demo": DEMO_CID.get(e["slot"], 0)})
@@ -297,6 +425,7 @@ def do_integrate(scratch, music=None):
             patch_next(scratch, e["prev_hdr"], e["slot"])
     patch_1c6_ladder(scratch)
     patch_1c6_d8_timer(scratch)
+    patch_1c6_letterfall(scratch)
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)
