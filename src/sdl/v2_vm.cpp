@@ -20716,7 +20716,10 @@ void v2_phase_frame_end(uint16_t ds_val) {
         // (sub_11080 wipes it). Mirrors what orig startup did once at boot.
         extern bool g_debug_mode;
         if (g_debug_mode) v2gs(s).flag_202(1);
-        if (level < 0x25) {
+        // #104 dev: the F5/F6 cheats also work on LVX extra slots (48+) —
+        // they are regular gameplay levels past the 0x25 scene boundary.
+        // Debug-build behavior only (the whole block is word_286E2-gated).
+        if (level < 0x25 || v2_lvx_find((uint16_t)level)) {
             uint16_t w286e2 = v2gs(s).flag_202(); // word_286E2 (debug build flag)
             if (w286e2 != 0) {
                 // Match orig structure (seg000:2159-2183): F5 OR'd first, ONLY if
