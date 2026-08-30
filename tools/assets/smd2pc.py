@@ -137,7 +137,7 @@ def parse_tail(c, spawn_end):
 
 
 def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
-                  keep_vikings=True, scene_mode=False):
+                  keep_vikings=True, scene_mode=False, scene_title=None):
     """scene_mode: shape the head like the PC logo/intro scenes (0186/
     018C/017D on the 1C6 script): sel=0, head spawn = class 0xD8 — the
     timed-scene controller that shows the screen for `arg` ticks and
@@ -330,18 +330,13 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
                         {"chunk": 3, "start": 128}, {"chunk": 291, "start": 144},
                         {"chunk": 292, "start": 160}, {"chunk": 229, "start": 176},
                         {"chunk": 383, "start": 208}, {"chunk": 220, "start": 240}]
-    elif scene_mode:
-        # sprite colors (128+) must match the scene viking frames — clone
-        # the 00DA finale's sprite palette rows (its 128+ entries carry
-        # the scene-viking coloring; the donor world's rows paint them
-        # green — seen live)
-        new_pal_list += [{"chunk": 3, "start": 128},
-                         {"chunk": 291, "start": 144},
-                         {"chunk": 292, "start": 160},
-                         {"chunk": 229, "start": 176},
-                         {"chunk": 383, "start": 208},
-                         {"chunk": 220, "start": 240}]
     else:
+        # sprite palette rows (128+): the DONOR world's — the scene vikings
+        # are the plain gameplay trio now (mode 0x10), colored exactly as on
+        # the donor's levels. (The 00DA actor-row set belonged to the retired
+        # sel=6 actor experiment; with it + the respawn banks the "vikings"
+        # rendered as 64x64 portrait fragments — horned-helmet pile, user
+        # report.)
         for e in dst["pal_list"]:
             if e["start"] >= 128:
                 new_pal_list.append(dict(e))
@@ -384,7 +379,10 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         vxs = [p[0] for p in vik_pos] or [80]
         vys = [p[1] for p in vik_pos] or [224]
         sxv = max(0x60, min(min(vxs) + 0x40, W * 16 - 0x30))
-        syv = max(0x20, min(vys) - 128)
+        # short hop only: a 128px drop stuns the vikings on landing (the
+        # "horned" pile = lying vikings with the dizzy-stars loop — user
+        # spotted it), keep the fall under the fall-damage threshold
+        syv = max(0x20, min(vys) - 48)
         head[0x08], head[0x09] = sxv & 0xFF, (sxv >> 8) & 0xFF
         head[0x0A], head[0x0B] = syv & 0xFF, (syv >> 8) & 0xFF
         # head+0x1C -> ds:25CF (byte_2AAAF level flags): the donor is a
@@ -416,20 +414,11 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     out["pal_list"] = new_pal_list
     out["pal_anim_en"] = pal_en
     out["pal_anims"] = pal_anims
-    if scene_mode:
-        # resource sections cloned wholesale from the PC ship finale 00DA —
-        # the proven "vikings as scene actors on the 1C6 script" recipe
-        # (its banks carry the scene viking sprites; FFFE pool resolution
-        # rides on them)
-        out["sprite_banks"] = [
-            {"chunk": 371, "pad": "c000080c"},
-            {"chunk": 373, "pad": "c800080c"},
-            {"chunk": 372, "pad": "80011008"},
-            {"chunk": 306, "pad": "c8010202"},
-        ]
-        out["anim_chunks"] = [
-            {"chunk": c, "pad": "040401"}
-            for c in (375, 376, 377, 378, 414, 415, 416, 417, 368)]
+    # resource sections: the DONOR level's banks/anims stay (out = dict(dst)).
+    # The gameplay trio resolves its pool sprites through the stripe banks —
+    # the donor world set carries the viking frames on the right pool slots
+    # (the walkviks live proof ran on exactly this). The former 00DA/respawn
+    # clone made the vikings render as portrait fragments.
     new_raw = LR.serialize_stripe(out)
 
     # ---- write into the scratch tree + extras ----
