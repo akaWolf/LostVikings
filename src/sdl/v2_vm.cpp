@@ -6055,6 +6055,39 @@ static void v2_level_desc_init_116e3(uint8_t* s) {
     v2_viking_health_init_12ce4(s);                                // 3075 jmp sub_12CE4
 }
 
+// #112 tail: the transpiled gen-code (#96) bakes template bytecode constants
+// into C. A modded template chunk (e.g. the SMD-scene ladder patch in 1C6)
+// would silently execute canon constants — detect it when the template is
+// (re)loaded and route that world through the classic interpreter instead.
+// Canon FNV-1a over the six template chunks' decompressed payloads
+// (assets == DATA.DAT stream, round-trip-judged in stage 5).
+static bool v2_gen_tmpl_dirty = false;
+static uint32_t v2_tmpl_fnv1a(const uint8_t* p, uint32_t n) {
+    uint32_t h = 2166136261u;
+    for (uint32_t i = 0; i < n; i++) h = (h ^ p[i]) * 16777619u;
+    return h;
+}
+static void v2_gen_tmpl_check(uint16_t chunk, const uint8_t* p, uint32_t n) {
+    static const struct { uint16_t cid; uint32_t len, fnv; } CANON[6] = {
+        {0x1C1, 48972, 0xB52912B6u}, {0x1C2, 38998, 0x6970ED54u},
+        {0x1C3, 42441, 0x43DD1E36u}, {0x1C4, 45316, 0xD8FC7138u},
+        {0x1C5, 43864, 0x60B3E0F2u}, {0x1C6, 40787, 0x1C76B9B2u},
+    };
+    v2_gen_tmpl_dirty = false;
+    for (int i = 0; i < 6; i++) {
+        if (CANON[i].cid != chunk) continue;
+        uint32_t h = v2_tmpl_fnv1a(p, n);
+        v2_gen_tmpl_dirty = (CANON[i].len != n) || (CANON[i].fnv != h);
+        if (v2_gen_tmpl_dirty)
+            fprintf(stderr, "V2-GEN: template 0x%X differs from canon "
+                    "(len=%u fnv=%08X) — interpreter takes this world\n",
+                    chunk, n, h);
+        return;
+    }
+    // Non-world template (fn-test synthetic worlds): the gen dispatch never
+    // claims those chunk ids, the flag stays clean.
+}
+
 static void v2_load_level(uint8_t* shadow); // forward decl
 static void v2_load_template(uint8_t* shadow);
 static void v2_load_level_data(uint8_t* shadow);
@@ -6628,7 +6661,8 @@ static void v2_alloc_segments_12ab8(uint8_t* s) {
     // Decompress chunk 0x1C6 → animdata
     // ds:0x2E71 = 0x1C6 (current template chunk ID)
     v2gs(s).template_chunk(0x1C6);
-    v2_read_chunk(0x1C6, v2_vm_shadow_animdata, V2_ANIMDATA_SHADOW_SIZE);
+    { uint32_t tsz = v2_read_chunk(0x1C6, v2_vm_shadow_animdata, V2_ANIMDATA_SHADOW_SIZE);
+      v2_gen_tmpl_check(0x1C6, v2_vm_shadow_animdata, tsz); }
     v2_animdata_shadow_valid = true;
 
     // Decompress chunks 4..0xE → DS (level lookup tables)
@@ -7643,6 +7677,7 @@ static void v2_load_template(uint8_t* shadow) {
         v2gs(shadow).template_chunk(template_chunk);
         uint32_t sz = v2_read_chunk(template_chunk, v2_vm_shadow_animdata, V2_ANIMDATA_SHADOW_SIZE);
         if (sz > 0) { v2_animdata_shadow_valid = true; }
+        v2_gen_tmpl_check(template_chunk, v2_vm_shadow_animdata, sz);
     }
 
     // Load level chunk → DS at offset 0x25B3 (level header)
@@ -15365,8 +15400,9 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
     // the interpreter loop below (shared max budget).
     if (v2_gen_anim_dispatch(vm, anim_bx, max)) return;
     // #96: unknown anim bx — the generated model is total on live data;
-    // the loop below survives only for the fn-test units.
-    if (v2_gencode_enabled() && !v2_fntest_loop_allowed) {
+    // the loop below survives only for the fn-test units (and, #112 tail,
+    // for a modded template chunk the gen constants no longer describe).
+    if (v2_gencode_enabled() && !v2_fntest_loop_allowed && !v2_gen_tmpl_dirty) {
         fprintf(stderr, "FATAL: #96 anim bx 0x%04X outside the generated model "
                 "(obj=%d) — interpreter loop is retired\n", anim_bx, vm.obj);
         extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);
@@ -18165,7 +18201,7 @@ static int v2_gencode_enabled() {
 #include "gen/anim_01c6.gen.inc"
 
 static bool v2_gen_anim_dispatch(V2VM& vm, uint16_t& anim_bx, int& max) {
-    if (!v2_gencode_enabled()) return false;
+    if (!v2_gencode_enabled() || v2_gen_tmpl_dirty) return false;
     { static bool _logged = false;
       if (!_logged) { _logged = true;
           fprintf(stderr, "V2-GEN: anim dispatch active (chunk 0x%X, bx=%04X)\n",
@@ -18288,7 +18324,8 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
     // The generated model is TOTAL (rec_scan entries + anim continuations;
     // fallback counter 0/0 across canon 58 + monkey 37) — a false return
     // (pc outside the model) is a hard bug, not a fallback case.
-    if (v2_gencode_enabled() && es_seg != 0 && es_seg == v2gs(shadow).seg_anim()) {
+    if (v2_gencode_enabled() && !v2_gen_tmpl_dirty
+        && es_seg != 0 && es_seg == v2gs(shadow).seg_anim()) {
         bool g_ok = false, g_known = true;
         switch (v2gs(shadow).template_chunk()) {
         case 0x1C1: g_ok = v2_gen_exec_1c1(vm, max_ops); break;
@@ -18313,9 +18350,10 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         // unknown chunk: synthetic world — loop below (guarded).
     }
     // #96: the interpreter loop survives ONLY for the fn-test units (their
-    // bytecode lives in a test segment the gen cannot claim). Battle builds
-    // never reach it — guard against silent regressions.
-    if (v2_gencode_enabled() && !v2_fntest_loop_allowed) {
+    // bytecode lives in a test segment the gen cannot claim) and, #112 tail,
+    // for a modded template chunk (v2_gen_tmpl_dirty). Battle builds on canon
+    // data never reach it — guard against silent regressions.
+    if (v2_gencode_enabled() && !v2_fntest_loop_allowed && !v2_gen_tmpl_dirty) {
         fprintf(stderr, "FATAL: #96 interpreter loop entered outside fn-test "
                 "(obj=%d es=%04X pc=%04X)\n", obj_idx, es_seg, init_pc);
         extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(1);

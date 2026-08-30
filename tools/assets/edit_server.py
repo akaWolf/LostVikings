@@ -389,6 +389,11 @@ def texts_page():
 MOD_DIRS = ("tilemaps", "level_headers", "tilesets", "bg_tilesets",
             "tile_masks", "palettes", "level_scripts", "sprite_banks",
             "unreferenced")
+# #112 tail: scratch-root files a mod may legitimately carry. extras.json
+# registers fresh chunk ids (console levels/scenes), exe_static.bin carries
+# the LVX trailer (slots 48+ passwords/chunk ids), texts_exe.json carries
+# dialog edits (#108). Compared against their own canon counterparts.
+MOD_ROOT_FILES = ("extras.json", "exe_static.bin", "texts_exe.json")
 
 
 # task #104: the five console-exclusive levels of the extended SNES build.
@@ -486,6 +491,8 @@ def snes_page():
 
 def mod_rel_ok(rel):
     parts = rel.split("/")
+    if len(parts) == 1:
+        return parts[0] in MOD_ROOT_FILES
     return (len(parts) == 2 and parts[0] in MOD_DIRS
             and ".." not in rel and not rel.startswith("/"))
 
@@ -511,6 +518,24 @@ def mod_export():
                     if f.read() == sdata:
                         continue
             out[f"{sub}/{fn}"] = b64mod.b64encode(sdata).decode()
+    # #112 tail: scratch-root carriers. Canon counterparts: extras.json →
+    # assets/extras.json (usually absent), exe_static.bin → the repo-root
+    # image (no LVX trailer), texts_exe.json → none (its presence means the
+    # /texts page materialized it; exporting it is harmless and keeps any
+    # dialog edits).
+    for fn in MOD_ROOT_FILES:
+        sp = os.path.join(SCRATCH, fn)
+        if not os.path.isfile(sp):
+            continue
+        with open(sp, "rb") as f:
+            sdata = f.read()
+        cp = (os.path.join(LR.ROOT, fn) if fn == "exe_static.bin"
+              else os.path.join(canon, fn))
+        if os.path.exists(cp):
+            with open(cp, "rb") as f:
+                if f.read() == sdata:
+                    continue
+        out[fn] = b64mod.b64encode(sdata).decode()
     return out
 
 
@@ -913,9 +938,9 @@ class H(BaseHTTPRequestHandler):
         env = dict(os.environ)
         env["V2_ASSETS_DIR"] = os.path.join(SCRATCH, ".compiled")
         # scratch trees may carry EDITED .lvs bytecode (the 1C6 scene
-        # ladder patch): the generated-code fast path bakes the canonical
-        # constants in, so mod playback must run the interpreter
-        env["V2_GENCODE"] = "0"
+        # ladder patch): the engine now FNV-checks the loaded template
+        # against canon and falls back to the interpreter per-world
+        # (v2_gen_tmpl_check), so no V2_GENCODE=0 forcing is needed.
         exe_img = os.path.join(SCRATCH, "exe_static.bin")
         if os.path.exists(exe_img):
             env["V2_EXE_STATIC"] = exe_img
@@ -930,7 +955,8 @@ class H(BaseHTTPRequestHandler):
         env = dict(os.environ)
         env.update({"SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy",
                     "V2_NOVSYNC": "1", "V2_AIL_FRAME_TICKS": "1",
-                    "V2_GENCODE": "0",
+                    # V2_GENCODE=0 no longer forced: v2_gen_tmpl_check FNV-gates
+                    # modded template chunks into the interpreter per-world.
                     "V2_ASSETS_DIR": os.path.join(SCRATCH, ".compiled")})
         exe_img = os.path.join(SCRATCH, "exe_static.bin")
         if os.path.exists(exe_img):
@@ -971,8 +997,33 @@ def main():
     ap.add_argument("--scratch", default=SCRATCH)
     ap.add_argument("--fresh", action="store_true",
                     help="recreate the scratch tree from assets/")
+    # #112 tail: headless mod package I/O (same model as /api/mod/*).
+    ap.add_argument("--export-mod", metavar="OUT.json",
+                    help="write the scratch-vs-canon mod package and exit")
+    ap.add_argument("--import-mod", metavar="MOD.json",
+                    help="apply a mod package onto the scratch tree and exit")
     args = ap.parse_args()
     SCRATCH = os.path.abspath(args.scratch)
+    if args.export_mod:
+        mod = mod_export()
+        with open(args.export_mod, "w") as f:
+            json.dump(mod, f, indent=1)
+        print(f"mod package: {args.export_mod} ({len(mod)} files)")
+        return
+    if args.import_mod:
+        import base64 as b64mod
+        with open(args.import_mod) as f:
+            files = json.load(f)
+        for rel, b64 in files.items():
+            if not mod_rel_ok(rel):
+                raise SystemExit(f"bad path in mod: {rel!r}")
+            path = os.path.join(SCRATCH, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path + ".tmp", "wb") as f:
+                f.write(b64mod.b64decode(b64))
+            os.replace(path + ".tmp", path)
+        print(f"mod applied: {len(files)} files -> {SCRATCH} (run pack next)")
+        return
     scratch_init(args.fresh)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), H)
     print(f"editor server: http://127.0.0.1:{args.port}/")
