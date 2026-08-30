@@ -36,6 +36,23 @@ import assetc as AC  # noqa: E402
 import level_render as LR  # noqa: E402
 import snes2pc as SP  # noqa: E402
 
+# Music tracks (header +0x05 -> table @ds:0xA384 -> XMID chunk base, the
+# engine adds ds:0x86B8 = the sound-card offset; card 2 = AdLib/OPL).
+# Sizes/notes measured from the XMI EVNT streams of the card-2 chunks.
+MUSIC_TRACKS = {
+    0:  ("1EE", "menu/intro", 724, 27.0, 3),
+    1:  ("1E9", "UNUSED — byte-identical to track 5", 1356, 43.7, 0),
+    2:  ("1D0", "Spaceship", 1394, 57.3, 8),
+    3:  ("1D5", "Caves", 1254, 47.8, 7),
+    4:  ("1DA", "Egypt", 1024, 67.5, 6),
+    5:  ("1DF", "Factory", 1356, 43.7, 8),
+    6:  ("1F3", "short cue", 134, 17.7, 1),
+    7:  ("1E4", "Candy", 2267, 94.9, 8),
+    8:  ("1F8", "UNUSED — full unique theme", 1236, 57.0, 0),
+    9:  ("1FD", "UNUSED — short piece", 222, 23.6, 0),
+    10: ("202", "empty (0 notes)", 0, 0.0, 1),
+}
+
 # level slot, SNES hdr, donor (same world: head base/banks/anims/.lvs),
 # password, next slot, canonical predecessor (its header gets next=slot)
 PLAN = [
@@ -97,8 +114,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scratch", default="/tmp/lv_edit_scratch")
     ap.add_argument("--pack", action="store_true")
+    ap.add_argument("--music", type=int, default=None,
+                    help="force this music track on all five (default: the "
+                         "SNES head's own = the world theme). Track 8 is the "
+                         "unused full theme, 9 the unused short piece.")
+    ap.add_argument("--list-music", action="store_true")
     args = ap.parse_args()
     scratch = args.scratch
+
+    if args.list_music:
+        print("track chunk  notes  secs  used  description")
+        for t, (c, d, n, s, u) in MUSIC_TRACKS.items():
+            print(f"  {t:2d}  {c}  {n:5d} {s:6.1f}  {u:4d}  {d}")
+        return
 
     lvx = []
     for e in PLAN:
@@ -106,8 +134,11 @@ def main():
         cids = {"hdr": b, "map": b + 1, "tiles": b + 2,
                 "gtld": b + 4, "pal": b + 5}   # masks = tiles+1 = b+3
         print(f"slot {e['slot']} ({e['pw'].decode()}):")
-        SP.convert_level(e["snes"], e["donor"], scratch,
-                         new_cids=cids, next_level=e["next"])
+        info = SP.convert_level(e["snes"], e["donor"], scratch,
+                                new_cids=cids, next_level=e["next"],
+                                music=args.music)
+        print(f"  music track {info['music']} "
+              f"({MUSIC_TRACKS.get(info['music'], ('?', '?'))[1]})")
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
     # canonical predecessors point into the insert chain
     print("progression patch:")

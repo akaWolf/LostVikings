@@ -151,7 +151,7 @@ def compose_cgram(rom, pal_list):
 
 
 def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
-                  new_cids=None, next_level=None):
+                  new_cids=None, next_level=None, music=None):
     """new_cids: dict(hdr, map, tiles, gtld, pal) of NEW archive ids —
     progression-integration mode (task #104): the donor slot stays
     untouched, the level lands in its own chunks (masks id = tiles+1 by
@@ -254,6 +254,16 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
 
     # ---- assemble the converted stripe over the donor head ----
     head = bytearray(dhead)
+    # music block +0x04..+0x06 straight from the SNES head: +0x04 = the
+    # dispatch action byte (0 = load+play; ds:0x25B7), +0x05 = the TRACK id
+    # (ds:0x25B8 -> table @ds:0xA384 -> XMID chunk; the DE notes call this
+    # field "World" — it doubles as both, one theme per world), +0x06 = the
+    # exit-time action (ds:0x25B9). No level ever overrides these from
+    # bytecode (checked: zero writes to 25B7/25B8 in all six .lvs), so the
+    # header is the whole music story. `music` overrides the track id.
+    head[0x04], head[0x05], head[0x06] = tr[0x04], tr[0x05], tr[0x06]
+    if music is not None:
+        head[0x05] = music & 0xFF
     for o in range(0x07, 0x12):          # viking start block (sel/X/Y/flags/arg)
         head[o] = tr[o]
     head[0x29:0x2D] = tr[0x29:0x2D]      # dims (+0x2D byte kept from SNES)
@@ -345,7 +355,7 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
             "tileset": f"{ts_id:04X}", "prefabs": f"{gt_id:04X}",
             "pal_chunk": f"{pal_chunk:04X}", "tiles": len(pairs),
             "spawns": len(st["spawns"]), "prio_ported": prio_ported,
-            "dims": list(dims)}
+            "music": head[0x05], "dims": list(dims)}
 
 
 def main():

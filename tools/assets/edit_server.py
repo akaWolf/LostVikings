@@ -446,14 +446,28 @@ def snes_page():
             "in the game. Inserts: BBLS&rarr;TR33&rarr;VLCN, "
             "JMNN&rarr;SNDS&rarr;TMPL&rarr;TTRS, JNKR&rarr;RVTS&rarr;CBLT, "
             "WRLR&rarr;PDDY&rarr;TRPD. Needs the LVX-aware engine build.</p>"
+            "<p>music: <select id='i_mus'>"
+            "<option value=''>as on SNES (world theme)</option>"
+            "<option value='8'>8 — UNUSED full theme (1236 notes, 57s)</option>"
+            "<option value='9'>9 — UNUSED short piece (222 notes, 24s)</option>"
+            "<option value='0'>0 — menu/intro</option>"
+            "<option value='2'>2 — Spaceship</option>"
+            "<option value='3'>3 — Caves</option>"
+            "<option value='4'>4 — Egypt</option>"
+            "<option value='5'>5 — Factory</option>"
+            "<option value='7'>7 — Candy</option>"
+            "</select> <span style='color:#888'>(header +0x05; tracks 1/8/9 "
+            "are in the archive but no level plays them)</span></p>"
             "<button onclick='integrate()'>integrate + pack</button> "
             "<span id='i_st'></span>"
             "<p><a href='/'>&larr; level list</a></p>"
             "<script>"
             "async function integrate(){"
             " const st=document.getElementById('i_st'); st.textContent='...';"
+            " const mv=document.getElementById('i_mus').value;"
             " const r=await fetch('/api/snes/integrate',{method:'POST',"
-            "  headers:{'Content-Type':'application/json'},body:'{}'});"
+            "  headers:{'Content-Type':'application/json'},"
+            "  body:JSON.stringify(mv===''?{}:{music:parseInt(mv)})});"
             " const js=await r.json();"
             " st.textContent=js.ok?('ok: slots '+js.slots.join(',')+"
             "  ' — packed '+js.packed):('ERR '+js.error);}"
@@ -808,6 +822,9 @@ class H(BaseHTTPRequestHandler):
         import snes2pc as SP
         if not os.path.exists(SP.ROM_PATH):
             return self._err(f"ROM not found: {SP.ROM_PATH}")
+        music = body.get("music")
+        if music is not None and int(music) not in IS.MUSIC_TRACKS:
+            return self._err(f"unknown music track {music}")
         with LOCK:
             lvx = []
             for e in IS.PLAN:
@@ -816,7 +833,8 @@ class H(BaseHTTPRequestHandler):
                                  new_cids={"hdr": b, "map": b + 1,
                                            "tiles": b + 2, "gtld": b + 4,
                                            "pal": b + 5},
-                                 next_level=e["next"])
+                                 next_level=e["next"],
+                                 music=None if music is None else int(music))
                 lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
             for e in IS.PLAN:
                 if e["prev_hdr"]:
