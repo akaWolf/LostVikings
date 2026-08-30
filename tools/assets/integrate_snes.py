@@ -88,16 +88,29 @@ PLAN_SMD = [
     # The world-name banner comes from the ROM itself: the scene stripe's
     # first sprite bank IS the letters chunk (0x144 PREHISTORIA, 0x145
     # EGYPT, 0x146 FACTORY, 0x147 WACKY, 0x148 STARSHIP).
+    # de_bg (task #114): the scene field is the DE world backdrop — the
+    # parallax pair from the SNES DE level headers (+0x39 quad map /
+    # +0x3D quad table on the level's own tileset), lvl = the DE level
+    # whose tileset/palette/floor the pair rides on. Pairs per world:
+    # Prehistoria 012/017 (purple mountains + dino silhouettes, row0=1
+    # skips the empty sky row of the 32x16 map), Egypt 028/02E
+    # (pyramids), Factory 040/03F (brick wall strip, tiled), Wacky
+    # 055/054 (candy canes on purple), Ship 06B/06D (starfield, tiled).
     dict(slot=53, smd=0x13D, donor="002A", pw=b"CUT1", next=4,
-         prev_hdr=None, base=0x235),   # vortex(prev=GRND) -> scene -> LLM0
+         prev_hdr=None, base=0x235,    # vortex(prev=GRND) -> scene -> LLM0
+         de_bg=dict(lvl=0x01A, map=0x12, gt=0x17, row0=1)),
     dict(slot=54, smd=0x13E, donor="0053", pw=b"CUT2", next=11,
-         prev_hdr=None, base=0x23B),   # vortex(prev=VLCN) -> scene -> QCKS
+         prev_hdr=None, base=0x23B,    # vortex(prev=VLCN) -> scene -> QCKS
+         de_bg=dict(lvl=0x02F, map=0x28, gt=0x2E)),
     dict(slot=55, smd=0x13F, donor="007A", pw=b"CUT3", next=17,
-         prev_hdr=None, base=0x241),   # vortex(prev=TTRS) -> scene -> JLLY
+         prev_hdr=None, base=0x241,    # vortex(prev=TTRS) -> scene -> JLLY
+         de_bg=dict(lvl=0x041, map=0x40, gt=0x3F)),
     dict(slot=56, smd=0x140, donor="00A6", pw=b"CUT4", next=25,
-         prev_hdr=None, base=0x247),   # vortex(prev=V8TR) -> scene -> NFL8
+         prev_hdr=None, base=0x247,    # vortex(prev=V8TR) -> scene -> NFL8
+         de_bg=dict(lvl=0x05B, map=0x55, gt=0x54)),
     dict(slot=57, smd=0x141, donor="00C6", pw=b"CUT5", next=33,
-         prev_hdr=None, base=0x24D),   # vortex(prev=TRPD) -> scene -> TFFF
+         prev_hdr=None, base=0x24D,    # vortex(prev=TRPD) -> scene -> TFFF
+         de_bg=dict(lvl=0x06F, map=0x6B, gt=0x6D)),
     # NO slot for SMD 0x08C: that is the game-completion scene, and the
     # PC has its OWN version at slot 46 (00DA forest — vikings + the
     # 4B/4C props + music track 8; the SNES version is 0x082 with track
@@ -414,7 +427,8 @@ def do_integrate(scratch, music=None):
                           {"hdr": b, "map": b + 1, "tiles": b + 2,
                            "gtld": b + 4, "pal": b + 5,
                            "banner": 0x258 + (e["slot"] - 53)},
-                          next_level=e["next"], scene_mode=True)
+                          next_level=e["next"], scene_mode=True,
+                          de_bg=e.get("de_bg"))
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"],
                     "demo": DEMO_CID.get(e["slot"], 0)})
     write_demo_chunks(scratch)

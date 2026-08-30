@@ -152,8 +152,145 @@ def parse_tail(c, spawn_end):
     return pal_list, en, anims, banks, achunks
 
 
+def build_de_backdrop(de_bg, CW, CH):
+    """DE (SNES Definitive Edition) world backdrop -> the scene map.
+
+    Task #114 reverse: the DE levels carry a parallax backdrop pair in
+    header fields +0x39 (quad map, 32xN LE PPU-shaped words: quad 0-9,
+    palette row 10-12, prio 13, hflip 14, vflip 15) / +0x3D (quad table,
+    8B entries of tile words in the same shape) on the SAME tileset as
+    the level — the purple mountains of the world-entry shot are the
+    Prehistoria pair 012/017. The scene layout: rows 0/1 stay for the
+    black title band (rewritten by the banner code), rows 2..CH-3 show
+    the backdrop crop (tiled vertically when the strip is short — the
+    Factory bricks / Ship stars repeat), row CH-2 is a walk floor built
+    from the DE level's most common solid quad (solid bit 0x0400), row
+    CH-1 is the hidden support row. SNES bit-13 tile priority is NOT
+    ported: it encodes the BG-vs-OAM layering of the SNES PPU, and both
+    backdrop and floor sit UNDER the figures here (PC bit3 would pull
+    them over the sprites).
+
+    Returns (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, floor_y)
+    in the exact shapes convert_scene ships downstream.
+    """
+    import snes2pc as S2
+    srom = S2.SnesRom()
+    st = LR.parse_stripe(srom.chunk(de_bg["lvl"]))
+    h = bytes.fromhex(st["head"])
+    w16 = lambda o: h[o] | (h[o + 1] << 8)
+    ts = srom.chunk(w16(0x30))
+    bmap, bgt = srom.chunk(de_bg["map"]), srom.chunk(de_bg["gt"])
+    lgt = srom.chunk(w16(0x32))
+    MW, MH = 32, len(bmap) // 2 // 32
+    # floor: the most common solid cell of the donor DE level's own map
+    lmap = srom.chunk(w16(0x2E))
+    W2, H2 = w16(0x29), w16(0x2B)
+    cnt = {}
+    for i in range(W2 * H2):
+        v = lmap[i * 2] | (lmap[i * 2 + 1] << 8)
+        if v & 0xFC00:
+            cnt[v & 0x3FF] = cnt.get(v & 0x3FF, 0) + 1
+    floor_quad = max(cnt, key=cnt.get)
+    # DAC layout: palette rows remap onto these 16-color bases; 64..79
+    # is reserved for the SMD banner letters (sprites paint 64+nibble)
+    PALSLOT = (0, 16, 32, 48, 80, 96, 112)
+    prow_map = {}
+    pairs = []
+    pair_idx = {}
+    pc_gtld = bytearray()
+    quad_pref = {}
+
+    def bake_quad(words):
+        pcvs = []
+        for dw in words:
+            t, prow = dw & 0x3FF, (dw >> 10) & 7
+            hf, vf = (dw >> 14) & 1, (dw >> 15) & 1
+            if prow not in prow_map:
+                assert len(prow_map) < len(PALSLOT), "palette rows overflow"
+                prow_map[prow] = len(prow_map)
+            key = (t, prow)
+            if key not in pair_idx:
+                pair_idx[key] = len(pairs)
+                pairs.append(key)
+            pcvs.append((pair_idx[key] << 6) | (vf << 5) | (hf << 4))
+        return pcvs
+
+    def prefab_of(src, q):
+        k = (src, q)
+        if k not in quad_pref:
+            if src == "zero":
+                if ("ZERO", 0) not in pair_idx:
+                    pair_idx[("ZERO", 0)] = len(pairs)
+                    pairs.append(("ZERO", 0))
+                pcvs = [pair_idx[("ZERO", 0)] << 6] * 4
+            else:
+                gt_src = bgt if src == "bg" else lgt
+                words = [gt_src[q * 8 + i * 2] |
+                         (gt_src[q * 8 + i * 2 + 1] << 8) for i in range(4)]
+                pcvs = bake_quad(words)
+            quad_pref[k] = len(pc_gtld) // 8
+            for pcv in pcvs:
+                pc_gtld.extend((pcv & 0xFF, pcv >> 8))
+        return quad_pref[k]
+
+    r0 = de_bg.get("row0", 0)
+    mmap = bytearray()
+    for y in range(CH):
+        for x in range(CW):
+            if y < 2 or y == CH - 1:
+                v = prefab_of("zero", 0)
+            elif y == CH - 2:
+                v = prefab_of("lvl", floor_quad) | 0x0400
+            else:
+                bo = ((r0 + (y - 2) % MH) * MW + x) * 2
+                bq = bmap[bo] | (bmap[bo + 1] << 8)
+                # the DE backdrop maps carry bare quad indices (bits
+                # 10-15 all clear across the six world pairs — dumped)
+                assert (bq & 0xFC00) == 0, f"bg map cell {bq:04X}"
+                v = prefab_of("bg", bq)
+            mmap.extend((v & 0xFF, v >> 8))
+    assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
+
+    pc_tiles = bytearray()
+    pc_masks = bytearray()
+    for key in pairs:
+        if key[0] == "ZERO":
+            pc_tiles += AC.tile_encode(bytes(64))
+            pc_masks += bytes(8)
+            continue
+        t, prow = key
+        px = S2.snes_tile_decode(ts[t * 32:(t + 1) * 32].ljust(32, b"\x00"))
+        base = PALSLOT[prow_map[prow]]
+        baked = bytes((v + base) if v else 0 for v in px)
+        pc_tiles += AC.tile_encode(baked)
+        m = bytearray(8)
+        for ty in range(8):
+            for tx in range(8):
+                if px[ty * 8 + tx]:
+                    m[(tx & 3) * 2 + (ty >> 2)] |= \
+                        1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
+        pc_masks += m
+
+    # 128-color palette image: rows land on their remap bases; slot 0 =
+    # CGRAM 0 (the see-through/backdrop color); 64..79 left black for
+    # the banner letter colors (filled by convert_scene)
+    cg = S2.compose_cgram(srom, st["pal_list"])
+    pal128 = [(0, 0, 0)] * 128
+    for prow, j in prow_map.items():
+        base = PALSLOT[j]
+        for i in range(16):
+            pal128[base + i] = S2.bgr555_to_vga6(cg[prow * 16 + i])
+    pal128[0] = S2.bgr555_to_vga6(cg[0])
+    floor_y = (CH - 2) * 16
+    print(f"  DE backdrop: pair {de_bg['map']:03X}/{de_bg['gt']:03X} "
+          f"({MW}x{MH}), floor quad {floor_quad:03X}, {len(pairs)} baked "
+          f"tiles, pal rows {sorted(prow_map)} -> "
+          f"{[PALSLOT[prow_map[p]] for p in sorted(prow_map)]}")
+    return (mmap, pc_tiles, pc_masks, pc_gtld, pairs, pal128, floor_y)
+
+
 def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
-                  keep_vikings=True, scene_mode=False):
+                  keep_vikings=True, scene_mode=False, de_bg=None):
     """scene_mode: shape the head like the PC logo/intro scenes (0186/
     018C/017D on the 1C6 script): sel=0, head spawn = class 0xD8 — the
     timed-scene controller that shows the screen for `arg` ticks and
@@ -206,6 +343,17 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # exactly on the map's bottom edge (seen live), and the vikings park
         # at the TOP of this layout so the camera stays clamped at y=0.
         CW, CH = 20, 12
+    if scene_mode and de_bg:
+        # DE-backdrop scenes (task #114): the map is built from the DE
+        # world backdrop pair, the SMD room is dropped whole (only the
+        # banner bank + head music bytes survive from the SMD chunk)
+        de_map, de_tiles, de_masks, de_gtld, de_pairs, de_pal128, \
+            de_floor_y = build_de_backdrop(de_bg, CW, CH)
+        smap, W, H = bytes(de_map), CW, CH
+        spawns = []          # SMD room actors/vikings mean nothing here
+        vik_pos_de = [(96, de_floor_y), (136, de_floor_y),
+                      (176, de_floor_y)]
+    elif scene_mode:
         _vx = [sp["x"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [80]
         _vy = [sp["y"] for sp in spawns if sp["cls"] in (0, 1, 2)] or [224]
         floor_row = min(_vy) // 16
@@ -276,6 +424,10 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         else:
             passed += 1
         out_spawns.append(sp)
+    if scene_mode and de_bg:
+        # synthetic viking spots: standing ON the walk floor row (the
+        # SMD room's viking rows are gone with the room)
+        vik_pos = vik_pos_de
     if scene_mode:
         # the timed exit controller as a PERMANENT spawn-table row (bit
         # 0x800 in the anim word drives sub_13ba5)
@@ -313,58 +465,68 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     tm_id, ts_id, gt_id = new_cids["map"], new_cids["tiles"], new_cids["gtld"]
     pal_chunk = new_cids["pal"]
 
-    # ---- bake (tile, pal) pairs; prio bit 15 -> PC bit 3 + masks ----
-    # The SMD prefab table is SHARED per world (up to ~950 prefabs); a
-    # 33x33 scene uses a small subset — renumber the map to just the used
-    # prefabs, else the baked tileset blows the 10-bit offset ceiling.
-    used = []
-    used_idx = {}
-    for i in range(W * H):
-        p = be16(smap, i * 2) & 0x3FF
-        if p not in used_idx:
-            used_idx[p] = len(used)
-            used.append(p)
-    pairs = []
-    pair_idx = {}
-    prio_ported = 0
-    pc_gtld = bytearray()
-    for p in used:
-        for k in range(4):
-            v = be16(sgt, p * 8 + k * 2)
-            t, pal = v & 0x7FF, (v >> 13) & 3
-            hf, vf, prio = (v >> 11) & 1, (v >> 12) & 1, (v >> 15) & 1
-            prio_ported += prio
-            key = (t, pal)
-            if key not in pair_idx:
-                pair_idx[key] = len(pairs)
-                pairs.append(key)
-            pcv = (pair_idx[key] << 6) | (vf << 5) | (hf << 4) | (prio << 3)
-            pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
-    assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
-    print(f"used prefabs: {len(used)} of {nprefab}; baked tiles: "
-          f"{len(pairs)}; priority bits ported to bit3: {prio_ported}")
+    if de_bg:
+        # DE-backdrop path: build_de_backdrop shipped everything in the
+        # PC shapes already (map is LE, tiles carry the palette rows)
+        mmap = bytearray(de_map)
+        pc_tiles, pc_masks = bytearray(de_tiles), bytearray(de_masks)
+        pc_gtld, pairs = bytearray(de_gtld), list(de_pairs)
+        prio_ported = 0      # SNES bit-13 layering is not ported (see
+        #                      build_de_backdrop)
+    else:
+        # ---- bake (tile, pal) pairs; prio bit 15 -> PC bit 3 + masks ----
+        # The SMD prefab table is SHARED per world (up to ~950 prefabs); a
+        # 33x33 scene uses a small subset — renumber the map to just the
+        # used prefabs, else the baked tileset blows the 10-bit ceiling.
+        used = []
+        used_idx = {}
+        for i in range(W * H):
+            p = be16(smap, i * 2) & 0x3FF
+            if p not in used_idx:
+                used_idx[p] = len(used)
+                used.append(p)
+        pairs = []
+        pair_idx = {}
+        prio_ported = 0
+        pc_gtld = bytearray()
+        for p in used:
+            for k in range(4):
+                v = be16(sgt, p * 8 + k * 2)
+                t, pal = v & 0x7FF, (v >> 13) & 3
+                hf, vf, prio = (v >> 11) & 1, (v >> 12) & 1, (v >> 15) & 1
+                prio_ported += prio
+                key = (t, pal)
+                if key not in pair_idx:
+                    pair_idx[key] = len(pairs)
+                    pairs.append(key)
+                pcv = (pair_idx[key] << 6) | (vf << 5) | (hf << 4) | \
+                    (prio << 3)
+                pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
+        assert len(pairs) <= 1023, f"{len(pairs)} baked > 10-bit offset"
+        print(f"used prefabs: {len(used)} of {nprefab}; baked tiles: "
+              f"{len(pairs)}; priority bits ported to bit3: {prio_ported}")
 
-    pc_tiles = bytearray()
-    pc_masks = bytearray()
-    for (t, pal) in pairs:
-        px = smd_tile_nibs(sts, t) or [0] * 64
-        baked = bytes((v + pal * 16) if v else (pal * 16) for v in px)
-        pc_tiles += AC.tile_encode(baked)
-        m = bytearray(8)
-        for ty in range(8):
-            for tx in range(8):
-                if px[ty * 8 + tx]:
-                    m[(tx & 3) * 2 + (ty >> 2)] |= \
-                        1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
-        pc_masks += m
+        pc_tiles = bytearray()
+        pc_masks = bytearray()
+        for (t, pal) in pairs:
+            px = smd_tile_nibs(sts, t) or [0] * 64
+            baked = bytes((v + pal * 16) if v else (pal * 16) for v in px)
+            pc_tiles += AC.tile_encode(baked)
+            m = bytearray(8)
+            for ty in range(8):
+                for tx in range(8):
+                    if px[ty * 8 + tx]:
+                        m[(tx & 3) * 2 + (ty >> 2)] |= \
+                            1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
+            pc_masks += m
 
-    # ---- map: BE -> LE words, prefab index renumbered to the used set,
-    # type bits (10-15) unchanged ----
-    mmap = bytearray()
-    for i in range(W * H):
-        v = be16(smap, i * 2)
-        v = used_idx[v & 0x3FF] | (v & 0xFC00)
-        mmap += bytes((v & 0xFF, v >> 8))
+        # ---- map: BE -> LE words, prefab index renumbered to the used
+        # set, type bits (10-15) unchanged ----
+        mmap = bytearray()
+        for i in range(W * H):
+            v = be16(smap, i * 2)
+            v = used_idx[v & 0x3FF] | (v & 0xFC00)
+            mmap += bytes((v & 0xFF, v >> 8))
 
     # ---- world-title banner: the ORIGINAL SMD letters. The interlude's
     # FIRST sprite bank in the stripe tail IS the banner chunk (0x144
@@ -456,21 +618,33 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             title_pal_tail.append(smd_color_to_vga6(v))
         title_anim = None
 
-    # ---- palette: CRAM 64 colors -> VGA6 into colors 0..63; the donor's
-    # sprite entries (128+) stay ----
-    cram = [0] * 64
-    for e in pal_list:
-        pd = rom.chunk(e["chunk"])
-        for i in range(len(pd) // 2):
-            if e["start"] + i < 64:
-                cram[e["start"] + i] = be16(pd, i * 2)
-    bg = bytearray()
-    for v in cram:
-        r, g, b = smd_color_to_vga6(v)
-        bg += bytes((r, g, b))
-    # title banner colors ride the same BG pal chunk: slots 64..64+N
-    for (r, g, b) in title_pal_tail:
-        bg += bytes((r, g, b))
+    # ---- palette ----
+    if de_bg:
+        # DE path: 128-color image from the backdrop bake (rows on their
+        # remap bases); the SMD banner letters keep their reserved
+        # 64..79 window inside it
+        pal128 = list(de_pal128)
+        for i, (r, g, b) in enumerate(title_pal_tail):
+            pal128[64 + i] = (r, g, b)
+        bg = bytearray()
+        for (r, g, b) in pal128:
+            bg += bytes((r, g, b))
+    else:
+        # SMD path: CRAM 64 colors -> VGA6 into colors 0..63; the
+        # donor's sprite entries (128+) stay
+        cram = [0] * 64
+        for e in pal_list:
+            pd = rom.chunk(e["chunk"])
+            for i in range(len(pd) // 2):
+                if e["start"] + i < 64:
+                    cram[e["start"] + i] = be16(pd, i * 2)
+        bg = bytearray()
+        for v in cram:
+            r, g, b = smd_color_to_vga6(v)
+            bg += bytes((r, g, b))
+        # title banner colors ride the same BG pal chunk: slots 64..64+N
+        for (r, g, b) in title_pal_tail:
+            bg += bytes((r, g, b))
     new_pal_list = [{"chunk": pal_chunk, "start": 0}]
     import os as _os
     if scene_mode and _os.environ.get("SMD_SCENE_PAL_DIAG"):
@@ -558,6 +732,10 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     for o2 in (0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40):
         head[o2] = donor_raw[o2]
 
+    if de_bg:
+        # the SMD palette anims animated the SMD room (water shimmer
+        # etc.) — that map is gone; the DE backdrops are static
+        pal_en, pal_anims = 0, []
     out = dict(dst)
     out["head"] = bytes(head).hex()
     out["spawns"] = out_spawns
