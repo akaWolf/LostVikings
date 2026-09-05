@@ -34,6 +34,16 @@ import snes2pc as SP               # noqa: E402
 BASE_CID = 0x270                   # map = BASE + 2k, tiles = BASE + 2k + 1
 DE_LEVEL_TABLE = 0x7686            # ROM: 53 words = head ids of slots 0..0x34
 LVX_HEADS = {48: 0x217, 49: 0x21D, 50: 0x223, 51: 0x229, 52: 0x22F}
+# UX stage 4: the DOS intro/ending village levels ARE the SNES ones (same
+# spawn tables, same scripts: PC 0x2B = DE 0x30 village, 0x2E = DE 0x33 the
+# village return) — on the DOS the sky is black, the console draws the sky +
+# mountains as the parallax pair 153 (fx/fy 0040 on both heads). PC 0x2C
+# (abduction) takes NO pair: the SNES draws Tomator's ship hull as the BG
+# layer (map 154) and moves it by fx/fy writes of its DC controller, the DOS
+# draws the whole ship as the class-DE sprite object; PC 0x2F (the final
+# stage 00DA) paints its backdrop in the level map itself (the SNES BG 083
+# differs there — a dragon podium instead of the deck).
+PC_STORY = {0x2B: 0x30, 0x2E: 0x33}
 
 
 def le16(b, o):
@@ -47,15 +57,47 @@ def p16(b, o, v):
 
 def de_slot_of(slot):
     """Our level slot -> DE ROM slot (the same order; exclusives appended)."""
+    if slot in PC_STORY:
+        return PC_STORY[slot]
     if slot < 0x25:
         return slot
     return 0x25 + (slot - 48)
 
 
+def exe_level_head(slot):
+    """The EXE level table entry (level_tables() stops at 42 entries; the
+    story levels 0x2A..0x2F sit right behind them)."""
+    exe = os.path.join(LR.ROOT, "exe_static.bin")
+    d = open(exe, "rb").read()
+    o = LR._EXE_DS + LR._LVL_TBL + slot * 2
+    return d[o] | (d[o + 1] << 8)
+
+
 def pc_head_cid(slot):
+    if slot in PC_STORY:
+        return exe_level_head(slot)
     if slot < 0x25:
         return LR.level_tables()[slot][0]
     return LVX_HEADS[slot]
+
+
+def ensure_head_json(scratch, cid, extras):
+    """The story heads are not part of the extracted level tree — bring the
+    archive payload in as a level_header_stripe extra (same json form as
+    assetc's LevelHeader.extract) so the mod can carry the patched copy."""
+    hp = os.path.join(scratch, "level_headers", f"{cid:04X}.json")
+    if os.path.exists(hp):
+        return hp
+    import assetc as AC
+    data, _ = AC.read_payload(cid, "lzss")
+    files = AC.converter_for("level_header_stripe").extract(cid, data)
+    js = json.loads(files[0][1])
+    os.makedirs(os.path.dirname(hp), exist_ok=True)
+    with open(hp + ".tmp", "w") as f:
+        json.dump(js, f, indent=1)
+    os.replace(hp + ".tmp", hp)
+    extras[f"{cid:04X}"] = {"role": "level_header_stripe"}
+    return hp
 
 
 def de_head(R, de_slot):
@@ -70,7 +112,10 @@ def expand_bg(R, h):
     words, exactly like validate_snes_render / the console's VRAM ring."""
     bw, bh = le16(h, 0x34), le16(h, 0x36)
     bgmap = R.chunk(le16(h, 0x39))
-    gt = R.chunk(le16(h, 0x3D))
+    gtid = le16(h, 0x3D)
+    if gtid == 0xFFFF:                 # the story heads: the level's own quad table
+        gtid = le16(h, 0x32)
+    gt = R.chunk(gtid)
     assert len(bgmap) == bw * bh * 2, (len(bgmap), bw, bh)
     TW, TH = bw * 2, bh * 2
     words = [[0] * TW for _ in range(TH)]
@@ -118,13 +163,13 @@ def integrate(scratch, slots=None):
     d = os.path.join(scratch, "unreferenced")
     os.makedirs(d, exist_ok=True)
     if slots is None:
-        slots = list(range(0x25)) + list(LVX_HEADS)
+        slots = list(range(0x25)) + list(LVX_HEADS) + list(PC_STORY)
     pairs = {}                       # (bgmap, bggt, ts) -> (map cid, tiles cid)
     print("parallax layer (SNES DE BG pairs):")
     for slot in slots:
         de_slot = de_slot_of(slot)
         hid, h = de_head(R, de_slot)
-        key = (le16(h, 0x39), le16(h, 0x3D), le16(h, 0x30))
+        key = (le16(h, 0x39), le16(h, 0x3D) if le16(h, 0x3D) != 0xFFFF else le16(h, 0x32), le16(h, 0x30))
         if 0xFFFF in key:
             print(f"  slot {slot}: DE {de_slot:02X} has no BG pair, skipped")
             continue
@@ -145,12 +190,12 @@ def integrate(scratch, slots=None):
         mc, tc = pairs[key]
         # patch the PC head (scratch copy) — refs + the console's own fields
         cid = pc_head_cid(slot)
-        hp = os.path.join(scratch, "level_headers", f"{cid:04X}.json")
+        hp = ensure_head_json(scratch, cid, extras)
         js = json.load(open(hp))
         raw = bytearray(bytes.fromhex(js["raw"]))
         fx_pc, fy_pc = le16(raw, 0x3F), le16(raw, 0x41)
         fx, fy = le16(h, 0x3F), le16(h, 0x41)
-        if slot < 0x25 and (fx_pc, fy_pc) != (fx, fy):
+        if (slot < 0x25 or slot in PC_STORY) and (fx_pc, fy_pc) != (fx, fy):
             print(f"  slot {slot}: PC head {cid:04X} fx/fy {fx_pc:04X}/{fy_pc:04X} != DE {fx:04X}/{fy:04X}")
         p16(raw, 0x34, le16(h, 0x34))
         p16(raw, 0x36, le16(h, 0x36))

@@ -79,6 +79,8 @@ class SnesRom:
         o = self.off(i)
         end = self.off(i + 1) if i + 1 < self.n else len(self.rom)
         size = self.rom[o] | (self.rom[o + 1] << 8)   # SNES: size, not size-1
+        if size == 0:
+            size = 0x10000                            # the 64 KB frame sets (DE viking anim chunks 0x89..) wrap the u16
         return self._lzss(self.rom[o + 2:end], size)
 
     @staticmethod
@@ -277,7 +279,13 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
         # DS 0x25B3 and this word lands on DS_LEVEL_LOAD 0x25C9)
         head[0x16], head[0x17] = next_level & 0xFF, next_level >> 8
     # SNES-only refs @+0x39/+0x3D -> 0xFFFF exactly like PC levels
-    for o in (0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40):
+    # UX stage 2/4: the donor heads carry the parallax pair refs now — a
+    # converted head must NOT inherit them (+0x39/+0x3B/+0x3D -> FFFF: a
+    # scene field carries its own baked plan B; an exclusive level gets
+    # its own pair from parallax_snes right after). fx/fy stay the donor's.
+    for o in (0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E):
+        head[o] = 0xFF
+    for o in (0x3F, 0x40):
         head[o] = donor_raw[o]
     out = dict(dst)
     out["head"] = bytes(head).hex()

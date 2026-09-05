@@ -1076,11 +1076,17 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     head[0x29], head[0x2A] = W & 0xFF, W >> 8
     head[0x2B], head[0x2C] = H & 0xFF, H >> 8
     head[0x2E], head[0x2F] = tm_id & 0xFF, tm_id >> 8
+    # UX stage 2/4: the donor heads carry the parallax pair refs now — a
+    # scene field must NOT inherit them (+0x39/+0x3B/+0x3D -> FFFF: the field
+    # carries its own baked plan B; the Prehistoria mountains showed under
+    # every interlude's black band in the mod export otherwise).
+    for o in (0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E):
+        head[o] = 0xFF
     head[0x30], head[0x31] = ts_id & 0xFF, ts_id >> 8
     head[0x32], head[0x33] = gt_id & 0xFF, gt_id >> 8
     if next_level is not None:
         head[0x16], head[0x17] = next_level & 0xFF, next_level >> 8
-    for o2 in (0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40):
+    for o2 in (0x3F, 0x40):                  # fx/fy of the donor (unused without a pair)
         head[o2] = donor_raw[o2]
 
     if de_bg:
