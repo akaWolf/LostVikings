@@ -327,32 +327,22 @@ WORLD_CAMERA = {
     # the per-level spawner, invisible, and its periodic spawns only fill
     # the 20-slot object table (the scene held exactly 20 objects with it;
     # a failed spawn on the level-end frame drained stale slots and re-fired
-    # the level-end flag — level 4 jumped to 5, seen live). The bubbles are
-    # the DA rows below.
-    "preh":    dict(cam=(132, 120), spots=[(28, 120), (156, 168), (296, 152)], drop_cls=[0x4A], walk=(0, 56),
+    # the level-end flag — level 4 jumped to 5, seen live). Since the E0/E1
+    # ports the table holds D8 + 8 letters + 2 spots + 48 + trio + 4A = 16.
+    "preh":    dict(cam=(132, 120), spots=[(28, 120), (156, 168), (296, 152)], walk=(0, 56),
                     banner=dict(x0=32, y0=11, prow=3),
-                    # The floating bubbles. The SMD scene makes them with its
-                    # 4A row (pool 70 — a branch the SMD's own 4A has for
-                    # the scene); the PC 4A is a per-level spawner keyed by
-                    # its spawn row (branches with absolute BBLS/CVRN/VLCN
-                    # positions) and the PC bubble class 61 is a WATER
-                    # bubble — in air it drops at 8 px/tick (measured on a
-                    # DS dump). So the scene draws them itself: the SMD's
-                    # own bubble frames (scene bank 0x0C0: bubble, wobble,
-                    # pop — the tiles the console's sprite table shows as
-                    # tile 1387+) ride the scene bank behind the letters and
-                    # an appended class DA (integrate_snes.bubble_blob) plays
-                    # them: rise ~1.3 px/tick from under the raster band,
-                    # pop near screen row 72, ~170-tick lane period — all
-                    # measured on the DE video (2 fps bubble tracking:
-                    # 80 px per 3.5 s, lanes x~104/136/184/248, one bubble
-                    # per lane every ~9 s). Rows = lanes (screen x centre,
-                    # spawn y under the band); the port sets pool = row.
-                    decor=dict(bank=0x0C0, blocks=3),
-                    extra=[dict(cls=0xDA, x=104, y=240, half_w=16, half_h=16, anim=0x0800, pool=0),
-                           dict(cls=0xDA, x=136, y=240, half_w=16, half_h=16, anim=0x0800, pool=0),
-                           dict(cls=0xDA, x=184, y=240, half_w=16, half_h=16, anim=0x0800, pool=0),
-                           dict(cls=0xDA, x=248, y=240, half_w=16, half_h=16, anim=0x0800, pool=0)]),
+                    # The bubbles are the room's own: the SMD geyser 4A row
+                    # (192,344 = screen 60,224, under the ledge edge) runs its
+                    # scene lane cycle (pool 0x46..0x4E, one bubble per 20
+                    # ticks: big 0x25 / medium 0x24 / small 0x23) and the
+                    # bubbles push a touching viking upward (VEL_Y += -1 per
+                    # tick) — Olaf steps off the ledge onto one and rides it
+                    # to the right shelf on the real Genesis. All four classes
+                    # are the SMD bytecode (integrate_snes.bubble_blobs); the
+                    # frames come from the SMD sprite chunks 0C0/0BF/0BE
+                    # (32x32/16x16/8x8, 3 frames each: bubble, wobble, pop)
+                    # shipped as pool units behind the letters (`decor`).
+                    decor=dict(sprites=[(0x0C0, 3, 32), (0x0BF, 3, 16), (0x0BE, 3, 8)])),
     # the left ledge, room row 17 (x -80..159); the pit with the spikes lies
     # at x 160..223
     # SMD class 0A (128,56, half 256x48) has NO PC counterpart in the #110

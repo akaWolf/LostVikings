@@ -74,7 +74,7 @@ def listing(seen, base, names=True):
         out.append(f"{pc:05X}: {op:02X} {raw:<24} {mn}{t}")
     return "\n".join(out)
 
-def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=None, prolog=True):
+def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=None, prolog=True, extra_targets=None):
     """Port SMD class code to a PC blob at `base`: the instructions of the
     ROM regions [(start, end)] in address order, verbatim, with
     - jump/call/branch targets relocated (every target op keeps its word as
@@ -86,41 +86,62 @@ def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=
     - `drops` = SMD pcs of instructions left out,
     - `op19_map` {smd_anim_addr: pc_anim_addr} for the anim-load operands
       of op 0x19 (their word is an anim address, not code),
+    - `extra_targets` {smd_addr: pc_addr} for jump targets OUTSIDE the
+      regions (the shared despawn stub 0x225A0 etc. — the caller provides
+      the PC-side equivalent),
     - a `03 base+3` prolog (sub_1424c re-enters records at the raw pointer)."""
-    edits = edits or {}; inserts = inserts or {}; op19_map = op19_map or {}
+    edits = edits or {}; inserts = inserts or {}; op19_map = op19_map or {}; extra_targets = extra_targets or {}
     b = BANK[bank]
     seen, notes = walk([r[0] for r in regions], b)
     assert not notes, notes
-    for pc in seen:
-        assert any(r0 <= pc < r1 for r0, r1 in regions), hex(pc)
+    inside = lambda pc: any(r0 <= pc < r1 for r0, r1 in regions)
+    # the walk follows jumps into shared code outside the regions (e.g. the
+    # despawn stub): those instructions are not ported, their addresses
+    # must be covered by extra_targets
+    for pc in list(seen):
+        if not inside(pc):
+            assert pc in extra_targets, ("reached outside the regions", hex(pc))
+            del seen[pc]
     order = [pc for r0, r1 in regions for pc in sorted(seen) if r0 <= pc < r1]
     covered = set()
     for pc in order:
         covered.update(range(pc, pc + seen[pc][1]))
+    # bytes of a region the walk never reaches (dead branches, data) are
+    # copied verbatim as raw runs — nothing ported jumps into them
+    raw = {}
     for r0, r1 in regions:
-        gaps = [x for x in range(r0, r1) if x not in covered]
-        assert not gaps, ("unreached bytes in region", hex(r0), [hex(g) for g in gaps[:8]])
-    # layout pass: new address of every instruction
+        x = r0
+        while x < r1:
+            if x in covered:
+                x += 1; continue
+            y = x
+            while y < r1 and y not in covered:
+                y += 1
+            raw[x] = y - x; x = y
+    items = sorted(list(order) + list(raw))
+    # layout pass: new address of every instruction / raw run
     new = {}; cur = base + (3 if prolog else 0)
-    for pc in order:
+    for pc in items:
         if pc in drops:
             continue
         new[pc] = cur
-        cur += seen[pc][1] + len(inserts.get(pc, b""))
+        cur += (raw[pc] if pc in raw else seen[pc][1] + len(inserts.get(pc, b"")))
     out = bytearray()
     if prolog:
         out += bytes((0x03,)) + struct.pack("<H", base + 3)
-    for pc in order:
+    for pc in items:
         if pc in drops:
             continue
+        if pc in raw:
+            out += R[pc:pc + raw[pc]]; continue
         op, ln, kind, tgt = seen[pc]
         ins = bytearray(R[pc:pc + ln])
         for eo, val in edits.items():
             if pc <= eo < pc + ln:
                 ins[eo - pc:eo - pc + len(val)] = val
         if tgt is not None:
-            assert tgt in new, ("target dropped/outside", hex(pc), hex(tgt))
-            ins[ln - 2:ln] = struct.pack("<H", new[tgt])
+            assert tgt in new or tgt in extra_targets, ("target dropped/outside", hex(pc), hex(tgt))
+            ins[ln - 2:ln] = struct.pack("<H", new[tgt] if tgt in new else extra_targets[tgt])
         if op == 0x19:
             a = b + s16(pc + 1)
             assert a in op19_map, ("op 19 anim not mapped", hex(pc), hex(a))

@@ -367,81 +367,107 @@ def d8_timer_blob(base, ticks):
     return bytes(b)
 
 
-def bubble_blob(base, rows, frame0, rise=168, step=4, ticks=3, period=170):
-    """Class DA for the Preh scene: the Genesis bubbles (frames frame0 =
-    bubble, +16 = wobble, +32 = pop, from the SMD scene bank 0x0C0 riding
-    the scene bank behind the letters). Dispatcher on the spawn row (the
-    same `51 k / 73 16` ladder as the letters; unknown row -> 10 destroy),
-    per row a phase wait on the object timer (flags |= 0x1000, field[1C] =
-    phase, yield until 0 — the D8 idiom), then the shared anim: type-2 32
-    strips, X = WORLD_X, and a loop of `0A y` steps up from the spawn point
-    (y = -step*i, `ticks` apart -> rise/ticks*step px per tick: 4 px per 3
-    ticks = 1.33 px/tick, the DE video's 80 px per 3.5 s) with a +-3 px `08`
-    wobble and the wobble frame every other step, the pop frame at the
-    top, then parked 300 px below the spawn point for the rest of the
-    `period`, and around again. Lanes stagger by period/len(rows)."""
-    prolog = bytes((0x03, (base + 3) & 0xFF, ((base + 3) >> 8) & 0xFF))   # the record prolog (sub_1424c re-entry)
-    base += 3
-    n = len(rows)
-    disp = bytearray()
-    branches = []
-    for r in rows:
-        disp += bytes((0x51, r & 0xFF, (r >> 8) & 0xFF))
-        branches.append(len(disp) + 2)
-        disp += bytes((0x73, 0x16, 0x00, 0x00))
-    disp += bytes((0x10,))                       # foreign row: destroy
-    bodies = []
-    go_refs = []
-    for k in range(n):
-        bodies.append(len(disp))
-        phase = (period * k) // n
-        disp += bytes((0x51, 0x00, 0x10, 0x62, 0x08))            # flags |= 0x1000 (timer runs)
-        disp += bytes((0x51, phase & 0xFF, phase >> 8, 0x56, 0x1C))
-        wait = len(disp)
-        disp += bytes((0x00, 0x01, 0x51, 0x00, 0x00, 0x73, 0x1C, 0x00, 0x00))
-        go_refs.append(len(disp) - 2)
-        disp += bytes((0x03,)) + (base + wait).to_bytes(2, "little")
-    go = len(disp)
-    disp += bytes((0x19, 0x00, 0x00))            # anim (patched below)
-    idle = len(disp)
-    disp += bytes((0x2F, 0x00, 0x01, 0x03)) + (base + idle).to_bytes(2, "little")
-    for k in range(n):
-        tgt = base + bodies[k]
-        disp[branches[k]] = tgt & 0xFF
-        disp[branches[k] + 1] = tgt >> 8
-        disp[go_refs[k]] = (base + go) & 0xFF
-        disp[go_refs[k] + 1] = (base + go) >> 8
-    anim_at = base + len(disp)
-    disp[go + 1] = anim_at & 0xFF
-    disp[go + 2] = anim_at >> 8
-    a = bytearray()
-    a += bytes((0x15, 0x01))                     # type-2, 32 strips
-    a += bytes((0x01, frame0 & 0xFF))            # bubble frame
-    a += bytes((0x08, 0x00, 0x00))               # X = WORLD_X
-    loop_at = anim_at + len(a)
-    y = 0
-    i = 0
-    spent = 0
-    while y > -rise:
-        y -= step
-        a += bytes((0x0A,)) + int(y).to_bytes(2, "little", signed=True)
-        dx = 3 if (i // 4) % 2 == 0 else -3
-        a += bytes((0x08,)) + int(dx).to_bytes(2, "little", signed=True)
-        a += bytes((0x01, (frame0 + (16 if i % 2 else 0)) & 0xFF))
-        a += bytes((0x0F, ticks))
-        spent += ticks
-        i += 1
-    a += bytes((0x01, (frame0 + 32) & 0xFF, 0x0F, 0x04))    # pop
-    spent += 4
-    a += bytes((0x0A,)) + int(300).to_bytes(2, "little", signed=True)  # park out of sight
-    a += bytes((0x01, frame0 & 0xFF))
-    rest = max(2, period - spent)
-    while rest > 0:
-        d = min(rest, 250)
-        a += bytes((0x0F, d))
-        rest -= d
-    a += bytes((0x03,)) + loop_at.to_bytes(2, "little")
-    return prolog + bytes(disp) + bytes(a)
+# The Prehistoria bubbles = the SMD room's own geyser and bubble classes as
+# BYTECODE (docs2/GENESIS_ROM_INTERNALS.md §11; tools/assets/smd_lvs.py 4A/25/
+# 24/23): the geyser 4A (bank 4 @0x2AB43..0x2B065; the scene row's pool 0x46
+# selects its lane cycle 0x46..0x4E: one bubble per 20 ticks at x+0xC0/+0x20/
+# +0/+0x86 (small 0x23)/+0x50/+0xE0/+0x30/+0x54 (medium 0x24)/+0x50, then the
+# counter reloads from field 34 = the pool), the bubbles 0x25/0x24/0x23 (bank
+# 3 @0x25C38/0x25D46/0x25D92: rise 1 px/tick, wobble, pop after 110 ticks;
+# a touching viking — `2C 79` search, dy >= -10 — gets the bubble's DY added
+# to its OBJ_VEL_Y (`5B 3a`) = the ride Olaf takes to the right shelf) and
+# their six anims (0x25DDB..0x25E76: static / wobble+pop per size). Port
+# edits, all documented: the anim frame operands map onto our pool units
+# (smd2pc decor: 32x32 stride 16 -> 16, 16x16 4 -> 8, 8x8 1 -> 4), a `15
+# <type>` sprite-type prefix is added to the big (01 = 32 rows) and small
+# (00 = 8 rows) anims the SMD lets the record imply (the medium one carries
+# its own `15 02`), the three pop sounds (SMD ids 0x28/0x2A/0x29) are
+# dropped (no PC ids known), and the classes' despawn exits (`1C -> 0x225A0`
+# = op 10) go to a one-byte `10` stub in the blob.
+BUB_ANIM = [  # (smd_start, smd_end, size, add_type_prefix)
+    (0x25DDB, 0x25DE8, 32, True), (0x25DE8, 0x25E0E, 32, True),
+    (0x25E0E, 0x25E1D, 16, False), (0x25E1D, 0x25E43, 16, True),
+    (0x25E43, 0x25E50, 8, True), (0x25E50, 0x25E72, 8, True),
+    (0x25E72, 0x25E76, 0, False)]                 # the shared `0E / 03 -> self` end block
+BUB_ANIM_END = 0x25E72
+BUB_TYPE = {32: 0x01, 16: 0x02, 8: 0x00}          # cs:32D7 rows: [0]=8 [1]=32 [2]=16
+BUB_STRIDE = {32: (16, 16), 16: (4, 4), 8: (1, 1)}   # (smd tile stride, pc unit stride: type 2 = 16, type 4 = 4, type 1 = 1)
+BUB_CLASSES = {0x25: (0x25C38, 0x25D43), 0x24: (0x25D46, 0x25D8F), 0x23: (0x25D92, 0x25DDB)}
+GEYSER_4A = (0x2AB43, 0x2B068)
+SMD_DESPAWN = 0x225A0                              # `03 a0a5` prolog target = op 10
+BUBBLE_SLOTS = {53}                                # Prehistoria only
+
+
+def bubble_anims(base, frames):
+    """The six bubble anims + the end block relocated to `base`; returns
+    (bytes, {smd_anim_addr: pc_addr})."""
+    import smd_lvs as SL
+    out = bytearray(); amap = {}
+    # pass 1: sizes (the jumps need the end block's final address)
+    def build(end_addr):
+        out = bytearray(); amap = {}
+        for a0, a1, size, prefix in BUB_ANIM:
+            amap[a0] = base + len(out)
+            if prefix:
+                out += bytes((0x15, BUB_TYPE[size]))
+            pc = a0
+            while pc < a1:
+                op = SL.R[pc]
+                if op == 0x01:                           # frame (1-byte payload here)
+                    fr = SL.R[pc + 1]
+                    if size:
+                        ss, ps = BUB_STRIDE[size]
+                        assert fr % ss == 0, (hex(pc), fr)
+                        fr = frames[size] + (fr // ss) * ps
+                        assert fr < 256, fr
+                    out += bytes((0x01, fr)); pc += 2
+                elif op == 0x02:                         # sound: dropped (no PC id)
+                    pc += 3
+                elif op == 0x03:                         # jump -> the end block
+                    tgt = 0x28000 + struct.unpack("<h", SL.R[pc + 1:pc + 3])[0]
+                    assert tgt == BUB_ANIM_END, hex(tgt)
+                    out += bytes((0x03,)) + struct.pack("<H", end_addr); pc += 3
+                elif op in (0x08, 0x0A):                 # X/Y absolute, one sub-sprite
+                    out += SL.R[pc:pc + 3]; pc += 3
+                elif op in (0x0C, 0x0F, 0x15):           # layer bits / delay / type: 1-byte payload
+                    out += SL.R[pc:pc + 2]; pc += 2
+                elif op == 0x0E:                         # end frame
+                    out += bytes((0x0E,)); pc += 1
+                else:
+                    raise AssertionError(f"bubble anim: unexpected cmd {op:02X} @{pc:X}")
+            assert pc == a1, (hex(pc), hex(a1))
+        return bytes(out), amap
+    b0, m0 = build(0)
+    end_addr = m0[BUB_ANIM_END]
+    b1, m1 = build(end_addr)
+    assert len(b1) == len(b0) and m1[BUB_ANIM_END] == end_addr
+    return b1, m1
+
+
+def bubble_blobs(base, frames):
+    """[anims][cls 25][cls 24][cls 23][geyser 4A][10] at `base`; returns
+    (bytes, {cls: record code address})."""
+    import smd_lvs as SL
+    anims, amap = bubble_anims(base, frames)
+    parts = [anims]; addr = {}
+    def total(): return sum(len(x) for x in parts)
+    # the despawn stub `10` goes last: its address needs the final layout,
+    # so lay the classes out twice (their sizes do not depend on it)
+    def layout(stub):
+        parts[:] = [anims]; addr.clear()
+        for cls, (r0, r1) in BUB_CLASSES.items():
+            a = base + total(); addr[cls] = a
+            blob, _ = SL.port_blob([(r0, r1)], 3, a, op19_map=amap, extra_targets={SMD_DESPAWN: stub})
+            parts.append(blob)
+        a = base + total(); addr[0x4A] = a
+        blob, _ = SL.port_blob([GEYSER_4A], 4, a, extra_targets={SMD_DESPAWN: stub})
+        parts.append(blob)
+        return base + total()
+    stub = layout(0)
+    stub2 = layout(stub)
+    assert stub2 == stub
+    parts.append(bytes((0x10,)))
+    return b"".join(parts), addr
 
 
 D8_REST = "04000000101000000500000000000000"   # 1C6's D8 record body
@@ -449,7 +475,6 @@ D8_REST = "04000000101000000500000000000000"   # 1C6's D8 record body
 # +5 = the SMD bank byte 3, +9/+A 16x16, +D = 5, +F = CLASS_BITS 0x0040 —
 # the group the vikings' use probe (op 38 filter 0x0040) looks for
 E1_REST = "03000000101000000500400000000000"
-D9_REST = "04000000202000000500000000000010"   # the D7-shaped 32x32 body (DA decor)
 # the SMD E0 record body in PC shape: bank 4, 32x32, +D = 5, VEL_X/Y_MAX 0x1000
 # (the Starship letters fly in at exactly 16 px/tick — a smaller clamp would
 # slow them down)
@@ -475,7 +500,7 @@ TMPL_BUF = 0xC00 * 16    # the template lives in the animdata segment: 0xC00 par
 FREE_REGION = {0x1C1: (0x3311, 0x374A, ["D2", "D7"])}
 
 
-def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_idx=None):
+def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, frames=None, text_idx=None):
     """One template per scene slot: the canonical world template text
     (assets_raw/lvs/<src>.lvsf) under a new chunk id, its orphan D8/E0/E1
     records retargeted at the blocks — appended past the payload when
@@ -499,13 +524,13 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_i
         pool_len = len(LR.read_payload(0x12F, "lzss")[0])
         assert pool_len % 72 == 0, pool_len
         frame0 = pool_len // 72 + 1
-        dec = (decor or {}).get(slot)                # (rows, frame0) of the DA decor class
+        bub = (frames or {}).get(slot) if slot in BUBBLE_SLOTS else None   # {32/16/8: pool unit base}
         talk = text_idx is not None            # the E1 talk-spot class (e1_talk_blob)
         t_slot = ticks[slot] if isinstance(ticks, dict) else ticks
         # the blocks, sized at base 0 (rebuilt at their final addresses)
         sz_timer = len(d8_timer_blob(0, t_slot))
         sz_letters = len(e0_letters_blob(0, nblk, frame0, pin_y))
-        sz_bub = len(bubble_blob(0, dec[0], dec[1])) if dec else 0
+        sz_bub = len(bubble_blobs(0, bub)[0]) if bub else 0
         sz_talk = len(e1_talk_blob(0)) if talk else 0
         need = sz_timer + sz_letters + sz_bub + sz_talk
         # placement: everything appended past the payload when the 48K
@@ -515,7 +540,7 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_i
         talk_in_region = False
         if n + need <= TMPL_BUF:
             tail_base, region = n, None
-            order = ["timer", "letters"] + (["bub"] if dec else []) + (["talk"] if talk else [])
+            order = ["timer", "letters"] + (["bub"] if bub else []) + (["talk"] if talk else [])
             where = "appended"
         else:
             rbase, rend, victims = FREE_REGION[src]
@@ -534,24 +559,29 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_i
             a = tail_base + len(tail); addr[name] = a
             if name == "timer":   tail += d8_timer_blob(a, t_slot)
             elif name == "letters": tail += e0_letters_blob(a, nblk, frame0, pin_y)
-            elif name == "bub":   tail += bubble_blob(a, dec[0], dec[1])
+            elif name == "bub":   tail += bubble_blobs(a, bub)[0]
             elif name == "talk":  tail += e1_talk_blob(a)
         region_blob = b""
         if region:
             rbase, rend, victims = region
             a = rbase; addr["letters"] = a
             region_blob = e0_letters_blob(a, nblk, frame0, pin_y)
-            if dec:
-                addr["bub"] = rbase + len(region_blob)
-                region_blob += bubble_blob(addr["bub"], dec[0], dec[1])
             if talk_in_region:
                 addr["talk"] = rbase + len(region_blob)
                 region_blob += e1_talk_blob(addr["talk"])
         new_n = n + len(tail)
         recs = [("D8", "record D8 sprite=FFFF flags=00 code==%04X rest=%s" % (addr["timer"], D8_REST)),
                 ("E0", "record E0 sprite=FFFE flags=01 code==%04X rest=%s" % (addr["letters"], E0_REST))]
-        if dec:
-            recs.append(("DA", "record DA sprite=FFFE flags=01 code==%04X rest=%s" % (addr["bub"], D9_REST)))
+        if bub:
+            _, baddr = bubble_blobs(addr["bub"], bub)
+            bsprite = 0x262 + (slot - 53)          # the scene's bubble sprite chunk (smd2pc)
+            for cls in (0x25, 0x24, 0x23):
+                m2 = re.search(r"^record %02X sprite=\S+ flags=(\S+) code=\S+ rest=(\S+)$" % cls, txt, re.M)
+                assert m2, f"template {src:X}: record {cls:02X} not found"
+                recs.append(("%02X" % cls, "record %02X sprite=%04X flags=%s code==%04X rest=%s" % (cls, bsprite, m2.group(1), baddr[cls], m2.group(2))))
+            m2 = re.search(r"^record 4A sprite=(\S+) flags=(\S+) code=\S+ rest=(\S+)$", txt, re.M)
+            assert m2, f"template {src:X}: record 4A not found"
+            recs.append(("4A", "record 4A sprite=%s flags=%s code==%04X rest=%s" % (m2.group(1), m2.group(2), baddr[0x4A], m2.group(3))))
         if talk:
             recs.append(("E1", "record E1 sprite=FFFF flags=01 code==%04X rest=%s" % (addr["talk"], E1_REST)))
         for cls, new in recs:
@@ -596,7 +626,7 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_i
         extras[f"{dst:04X}"] = {"role": "level_script"}
         print(f"  scene template {dst:04X} = {src:04X} ({n}B): D8 timer @{addr['timer']:04X} "
               f"({t_slot} ticks) + {nblk} letters @{addr['letters']:04X}"
-              + (f" + DA decor rows {dec[0]} frame {dec[1]} @{addr['bub']:04X}" if dec else "")
+              + (f" + bubbles 4A/25/24/23 (pool units {bub}) @{addr['bub']:04X}" if bub else "")
               + (f" + E1 talk spots @{addr['talk']:04X}" if talk else "")
               + f", {len(tail)}B appended" + (f" + {len(region_blob)}B {where}" if region else ""))
     with open(ex_path + ".tmp", "w") as f:
@@ -842,19 +872,20 @@ def do_integrate(scratch, music=None):
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"]})
     # SMD scenes (D8 timed cutscenes on the 1C6 scene script)
     import smd2pc as SMD
-    decor = {}
+    frames = {}
     for e in PLAN_SMD:
         b = e["base"]
         print(f"slot {e['slot']} ({e['pw'].decode()}, SMD scene):")
         info = SMD.convert_scene(e["smd"], e["donor"], scratch,
                                  {"hdr": b, "map": b + 1, "tiles": b + 2,
                                   "gtld": b + 4, "pal": b + 5,
-                                  "banner": 0x258 + (e["slot"] - 53)},
+                                  "banner": 0x258 + (e["slot"] - 53),
+                                  "bubbles": 0x262 + (e["slot"] - 53)},
                                  next_level=e["next"], scene_mode=True,
                                  de_bg=e.get("de_bg"),
                                  gen_bg=e.get("gen_bg"))
-        if info.get("decor_rows"):
-            decor[e["slot"]] = (info["decor_rows"], info["decor_frame0"])
+        if info.get("decor_frames"):
+            frames[e["slot"]] = info["decor_frames"]
         # UX stage 0/1: scenes play full-screen with the camera parked at
         # the map's (pin_x, pin_y) = EXT_L room columns + the Genesis camera
         # mod 16 (genesis_scene.layout); bits 4-11 / 12-15 of the flags
@@ -886,7 +917,7 @@ def do_integrate(scratch, music=None):
     restore_1c6(scratch)
     patch_1c6_ladder(scratch)
     text_idx = write_scene_texts(scratch)   # lines 389..406 -> SCENE_TEXT_IDX0+k (e1_talk_blob's delta)
-    build_scene_templates(scratch, decor=decor, text_idx=text_idx)
+    build_scene_templates(scratch, frames=frames, text_idx=text_idx)
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)

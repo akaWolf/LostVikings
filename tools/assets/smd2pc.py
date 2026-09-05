@@ -764,9 +764,9 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     title_pal_tail = []
     title_anim = None
     banner_bank = None
+    bubble_bank = None
     banner_cols = []
     banner_frame0 = 1
-    decor_rows = []
     if scene_mode and smd_banks:
         banner = rom.chunk(smd_banks[0]["chunk"])
         nblk = len(banner) // 512
@@ -849,27 +849,63 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             # (CRAM row 0 = DAC 0..15, the row the console draws them with)
             from genesis_scene import WORLD_CAMERA as _WC2
             _decor = _WC2[gen_bg["world"]].get("decor")
+            decor_frames = {}
+            bubble_bank = None
             if _decor:
-                dbank = rom.chunk(_decor["bank"])
-                assert len(dbank) >= _decor["blocks"] * 512, (len(dbank), _decor)
-                for blk in range(_decor["blocks"]):
-                    px = [[0] * 32 for _ in range(32)]
-                    for t in range(16):
-                        tx, ty = t // 4, t % 4
-                        nib = smd_tile_nibs(dbank, blk * 16 + t) or [0] * 64
-                        for y in range(8):
-                            for x in range(8):
-                                px[ty * 8 + y][tx * 8 + x] = nib[y * 8 + x]
-                    for plane in range(4):
-                        for strip in range(32):
-                            mask = 0
-                            d = bytearray(8)
-                            for j in range(8):
-                                v = px[strip][j * 4 + plane]
-                                if v:
-                                    mask |= 0x80 >> j
-                                    d[j] = v
-                            enc += bytes((mask,)) + bytes(d)
+                # (chunk, frames, size): every frame becomes size rows x 4
+                # planes of (mask + 8 bytes) = 72-byte units (32 rows = 16
+                # units, 16 = 8, 8 = 4); the SMD frame index of an anim
+                # (its own tile stride: 16/4/1) maps to unit_base +
+                # (frame // smd_stride) * pc_stride (integrate_snes). The
+                # units ship as their OWN sprite chunk (new_cids['bubbles'],
+                # listed in the stripe banks right after the banner bank;
+                # the bubble class records name it as their sprite): the
+                # anim frame byte is 8-bit and bank 0 (64 pool units +
+                # prefix + 8 letters x 16 = 193) has no room for 84 more.
+                # Same 71-byte prefix trick as the banner: frame 1 = unit 0.
+                benc = bytearray()
+                for chunk, nframes, size in _decor["sprites"]:
+                    sbank = rom.chunk(chunk)
+                    tpf = (size // 8) ** 2                    # tiles per frame
+                    assert len(sbank) >= nframes * tpf * 32, (chunk, len(sbank))
+                    decor_frames[size] = len(benc) // 72
+                    for fr in range(nframes):
+                        px = [[0] * size for _ in range(size)]
+                        cols = size // 8
+                        for t in range(tpf):
+                            tx, ty = t // cols, t % cols
+                            nib = smd_tile_nibs(sbank, fr * tpf + t) or [0] * 64
+                            for y in range(8):
+                                for x in range(8):
+                                    px[ty * 8 + y][tx * 8 + x] = nib[y * 8 + x]
+                        # PC sprite formats (v2_draw_sprites, jpt_1DA02 /
+                        # jpt_1d514 / jpt_1CF4E): a frame = 4 planes x
+                        # strips x (mask + 8 bytes); the strip geometry per
+                        # type ("15 n" anim op: n=1 -> type 2, n=2 -> type 4,
+                        # n=0 -> type 1):
+                        #   type 2 (32 wide, N rows): strip = 1 row x 8
+                        #     columns j*4+plane, mask bit 7-j;
+                        #   type 4 (16x16, 288 B): strip = 2 rows x 4
+                        #     columns c*4+plane, data[4*r+c], mask bit 7-i;
+                        #   type 1 (8x8, 72 B): strip = 4 rows x 2 columns
+                        #     c*4+plane, data[2*r+c], mask bit 7-i.
+                        rows_per, cols_per = {32: (1, 8), 16: (2, 4), 8: (4, 2)}[size]
+                        for plane in range(4):
+                            for strip in range(size // rows_per):
+                                mask = 0
+                                d = bytearray(8)
+                                for i in range(8):
+                                    rr, cc = divmod(i, cols_per)
+                                    v = px[strip * rows_per + rr][cc * 4 + plane]
+                                    if v:
+                                        mask |= 0x80 >> i
+                                        d[i] = v
+                                benc += bytes((mask,)) + bytes(d)
+                # a bank found by the chunk-id lookup (sub_12f82) gets base =
+                # load offset + 1 and frame k's data at +72k (sub_130a2 adds
+                # k*72, the blitter reads from off-1): NO prefix — the 71-byte
+                # trick belongs to the FFFE bank whose base is 0.
+                bubble_bank = bytes(benc)
             banner_bank = bytes(pool) + bytes(71) + bytes(enc)
             banner_frame0 = len(pool) // 72 + 1
         banner_y = 0
@@ -1077,17 +1113,12 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             rest_banks = [b for b in rest_banks if b["chunk"] != 0x12F]
         out["sprite_banks"] = ([{"chunk": new_cids["banner"],
                                  "pad": "c0000000"}] + rest_banks)
+        if bubble_bank is not None and "bubbles" in new_cids:
+            out["sprite_banks"].insert(1, {"chunk": new_cids["bubbles"],
+                                           "pad": "c0000000"})
         # the letters: the SMD E0 rows of the room (kept above, class E0 =
         # integrate_snes.e0_letters_blob); the banner bank still ships as
         # pool frames frame0 + 16K for the block anims
-        # scene decor rows (class DA, WORLD_CAMERA 'extra' with cls DA):
-        # same convention — the row index keys the DA dispatcher that
-        # integrate_snes.bubble_blob appends to the scene template
-        decor_rows = []
-        for i, sp in enumerate(out_spawns):
-            if sp["cls"] == 0xDA:
-                sp["pool"] = i
-                decor_rows.append(i)
         out["spawns"] = out_spawns
     new_raw = LR.serialize_stripe(out)
 
@@ -1129,6 +1160,12 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         with open(bp + ".tmp", "wb") as f:
             f.write(banner_bank)
         os.replace(bp + ".tmp", bp)
+    if bubble_bank is not None and "bubbles" in new_cids:
+        bp = os.path.join(scratch, "unreferenced",
+                          f"{new_cids['bubbles']:04X}.bin")
+        with open(bp + ".tmp", "wb") as f:
+            f.write(bubble_bank)
+        os.replace(bp + ".tmp", bp)
 
     ex_path = os.path.join(scratch, "extras.json")
     extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
@@ -1138,6 +1175,8 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         extras[f"{cid2:04X}"] = {"role": role2}
     if banner_bank is not None and "banner" in new_cids:
         extras[f"{new_cids['banner']:04X}"] = {"role": "unreferenced"}
+    if bubble_bank is not None and "bubbles" in new_cids:
+        extras[f"{new_cids['bubbles']:04X}"] = {"role": "unreferenced"}
     wjson(ex_path, extras)
 
     print(f"written: header {hdr_id:04X}, map {tm_id:04X}, tiles {ts_id:04X} "
@@ -1151,8 +1190,7 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             "trio": gen_trio,
             # route B: the DA decor rows' indices + the pool frame of the
             # first decor block (integrate_snes.build_scene_templates)
-            "decor_rows": decor_rows if scene_mode else [],
-            "decor_frame0": (banner_frame0 + 16 * len(banner_cols)) if scene_mode and banner_bank is not None else None}
+            "decor_frames": decor_frames if scene_mode else {}}
 
 
 def main():
