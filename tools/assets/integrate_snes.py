@@ -306,7 +306,17 @@ VIK_SLOT = {"erik": 0, "baleog": 2, "olaf": 4}
 # ~245, just short of
 # the room's sensor/cage objects at 256 (the cage drop itself is the
 # Genesis script's, not ported yet).
-SCENE_EVENTS = {54: [("erik", 16.0, [(R, 16), (R | ACT, 2), (R, 12)])]}
+SCENE_EVENTS = {54: [("erik", 16.0, [(R, 16), (R | ACT, 2), (R, 12)])],
+                # Wacky: after his last line Erik walks right to the candy-cane
+                # ladder (room type-3 columns at screen x 112..143, rows 1-6 —
+                # it runs up into the banner band, whose rows carry no type
+                # bits on the scene map) and climbs out of the scene (clip
+                # ~20 s -> ~23 s). The ladder hangs 16 px above the floor, so
+                # walking into it with UP held does not latch (measured);
+                # a jump (ACTION) under it and UP held latch it — the engine
+                # snaps him to x 128 and climbs 4 px/tick; with UP held he
+                # keeps climbing off the top of the screen and stays there
+                56: [("erik", 23.0, [(R, 8), (0, 4), (R, 7), (0, 6), (ACT, 2), (U, 60)])]}
 TICK_HZ = 18.2          # DOS INT8 rate = one game tick
 # displacement of one held-RIGHT/LEFT burst of n ticks, in px, measured on
 # the per-frame trajectories (V2_VIK_DBG=2, Egypt scene): the viking
