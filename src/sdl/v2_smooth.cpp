@@ -109,7 +109,7 @@ void v2_smooth_capture(void) {
     }
 }
 
-// Presenter thread: paint an interpolated 320x200 frame into `out`.
+// Presenter thread: paint an interpolated 320x240 frame into `out` (rows per v2_view_rows).
 // false = nothing to interpolate (option off, chunk screens, level change,
 // first tick) — the caller shows the tick frame as before.
 bool v2_smooth_render(uint8_t* out) {

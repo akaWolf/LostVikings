@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <unistd.h>  // _exit
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 
 const int SCREEN_SCALE = 4;
 const int SCREEN_WIDTH = 320;
@@ -97,7 +98,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                 // snapshot so scene/segment changes keep the pointer fresh.
                 if (wp_armed != 2) {
                     if (const char* e2 = getenv("V2_A2_WP_MOFF")) {
-                        extern uint8_t* v2_a2_softwp_fs_ptr;
+                        // v2_a2_softwp_fs_ptr: file-scope definition above (a block extern inside extern "C" takes C linkage — clang rejects it)
                         extern uint8_t* v2_m2c_base;
                         uint16_t fsseg2 = v2gs(dsb).seg_fs();
                         uint16_t moff2 = (uint16_t)strtol(e2, 0, 0);
@@ -114,7 +115,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                     uint16_t yh = *(const uint16_t*)(dsb + (uint16_t)(LUT_PAGE_ROW + 0x34 + (uint16_t)((y >> 3) * 2)));
                     uint32_t base = ((uint32_t)yh + (uint32_t)(y & 7) * 0x56u + 8u) * 4u + (uint32_t)x;
                     if (base < sizeof(myDrawInfo->drawBuffer)) {
-                        extern uint8_t* v2_a2_softwp_ptr;
+                        // v2_a2_softwp_ptr: file-scope definition above
                         v2_a2_softwp_ptr = myDrawInfo->drawBuffer + base;
                         fprintf(stderr, "A2WP-ARM(soft): base=0x%X x=%d y=%d\n", base, x, y);
                         wp_armed = 1;
@@ -122,7 +123,7 @@ extern "C" void v2_a2_snapshot_page(const uint8_t* dsb, uint32_t crtc_offset, ui
                     // Also arm a soft watch on the REAL FS render-map word of
                     // the letter cell — real-vs-shadow bit dynamics comparison.
                     {
-                        extern uint8_t* v2_a2_softwp_fs_ptr;
+                        // v2_a2_softwp_fs_ptr: file-scope definition above (a block extern inside extern "C" takes C linkage — clang rejects it)
                         extern uint8_t* v2_m2c_base;
                         uint16_t fsseg = v2gs(dsb).seg_fs();
                         uint16_t row = (uint16_t)(y >> 3);
@@ -475,7 +476,7 @@ void sdl_spec_snapshot_take() {
             static int _il = -1;
             if (_il < 0) _il = getenv("V2_INT9_LOG") ? 1 : 0;
             if (_il) {
-                extern int v2_dbg_pre_vm_iter;
+                // v2_dbg_pre_vm_iter: file-scope extern (top of file)
                 fprintf(stderr, "INT9-DRAIN[f%d]: scan=%02X\n",
                         v2_dbg_pre_vm_iter, pend & 0xFF);
             }
@@ -913,7 +914,7 @@ void updateDraw()
 			   // Frame counter in the orig-window title (every ~10 frames) —
 			   // matches the .inp frame column when recording replays.
 			   {
-			       extern int v2_dbg_pre_vm_iter;
+			       // v2_dbg_pre_vm_iter: file-scope extern (top of file)
 			       static int last_shown = -1;
 			       int f = v2_dbg_pre_vm_iter;
 			       if (f - last_shown >= 10 || f < last_shown) {

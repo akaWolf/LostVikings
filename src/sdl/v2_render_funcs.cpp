@@ -11,6 +11,7 @@
 #include "render_v2.h"
 #include "v2_gamestate.h"
 #include "v2_ds_layout.h"
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 
 // Task #21 obj-trace ring (defined in v2_vm.cpp).
 extern "C" void v2_objtrace(const char* tag, int a, int b, int c, int d);
@@ -47,8 +48,8 @@ static inline uint8_t* v2_get_ds_base(uint16_t ds_val) {
 // V2 rendering state — definitions (declared extern in render_v2.h)
 uint8_t* v2_m2c_base = nullptr;
 std::mutex v2_ds_modify_mutex;
-uint8_t  v2_render_buf[320*200];
-uint8_t  v2_display_buf[320*200];
+uint8_t  v2_render_buf[320*240];   // UX stage 9: up to 240 rows (224 on an LVX_TALL224 level)
+uint8_t  v2_display_buf[320*240];
 std::mutex v2_display_mutex;
 uint8_t  v2_hud_buf[320*64];
 // UX stage 0 (full-screen LVX scenes): published with v2_display_buf under
@@ -58,6 +59,7 @@ uint8_t  v2_hud_buf[320*64];
 int v2_display_fullscreen = 0;
 extern "C" int v2_scene_fullscreen(void);   // v2_vm.cpp: LVX_FULLSCREEN of ds:0x25AD
 static thread_local int v2_clip_h = 176;   // per thread: the presenter's passes set their own
+static thread_local int v2_tile_rows = 25; // tile rows the passes paint: 25 (200-line page) or 29 (224 view)
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 
 // Static intro/menu chunk pixels backup. Orig keeps static chunk pixels in VGA
@@ -231,7 +233,7 @@ void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes) {
         if (_t >= 0 && (uint32_t)_t >= dst && (uint32_t)_t < (uint32_t)dst + nbytes) {
             static int _n = 0;
             if (_n < 40) { _n++;
-                extern int v2_dbg_pre_vm_iter;
+                // v2_dbg_pre_vm_iter: file-scope extern (top of file)
                 fprintf(stderr, "SPAN-TRAP f%d dst=%04X src=%04X n=%u srcval@t=%02X cov=%d ra=%p\n",
                         v2_dbg_pre_vm_iter, dst, src, nbytes,
                         v2_vga[(uint32_t)(uint16_t)(src + ((uint32_t)_t - dst)) * 4u],
@@ -369,8 +371,8 @@ void v2_swap_render_buf() {
         // v2_render_buf, HUD in v2_hud_buf — present those.
         extern uint8_t v2_hud_buf[320 * 64];
         // all 200 rows: rows 176..199 matter only on full-screen LVX scenes
-        memcpy(v2_display_buf, v2_render_buf, 320 * 200);
-        v2_display_fullscreen = v2_scene_fullscreen();
+        memcpy(v2_display_buf, v2_render_buf, 320 * 240);
+        { const int r = v2_view_rows(); v2_display_fullscreen = (r > 176) ? r : 0; }   // 0 = HUD layout, else the map rows shown
         extern uint8_t v2_display_hud_buf[];
         memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
         v2_smooth_capture();          // UX stage 9: the tick snapshot for the interpolating presenter
@@ -379,7 +381,7 @@ void v2_swap_render_buf() {
         extern int v2_vga_fetch_page(uint8_t* out, uint32_t count);
         extern uint8_t v2_vga[65536 * 4];
         if (!v2_vga_fetch_page(v2_display_buf, 320 * 176))
-            memcpy(v2_display_buf, v2_render_buf, 320 * 200);
+            memcpy(v2_display_buf, v2_render_buf, 320 * 240);
         extern uint8_t v2_display_hud_buf[];
         for (int y = 0; y < 64; y++)
             memcpy(v2_display_hud_buf + y * 320, v2_vga + (uint32_t)(y * 0x56) * 4u, 320);
@@ -414,7 +416,7 @@ extern "C" void v2_publish_dac_palette(void) {
     // the per-tick publish carries BOTH intra-frame phases to the presenter.
     { static int _lp = -1;
       if (_lp < 0) _lp = getenv("V2_LADDER_TRACE") ? 1 : 0;
-      if (_lp) { extern int v2_dbg_pre_vm_iter;
+      if (_lp) { 
         fprintf(stderr, "LADDER[f%d] PUBLISH 77=%02X%02X%02X\n", v2_dbg_pre_vm_iter,
             v2_dac_shadow[0x77*3], v2_dac_shadow[0x77*3+1], v2_dac_shadow[0x77*3+2]); } }
     for (int i = 0; i < 256; i++) {
@@ -490,7 +492,15 @@ static V2Camera v2_effective_camera(const uint8_t* ds_base) {
 // autoscroll axes take the time-true accumulator instead; the map repeats
 // with its own period; nibble 0 = transparent (DAC 0 stays = the backdrop),
 // the palette row comes from the map cell like the console's tilemap word.
-static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) {
+// UX stage 9 (console finale): the cell's priority bit (SNES tilemap bit 13)
+// splits the layer in two passes like the PPU's BG2 priorities — prio 0
+// under the level tiles (this call from the tile pass), prio 1 over the
+// sprites and under the flagged tiles (the call from v2_draw_flagged_tiles:
+// mode-1 order BG1.1 > BG2.1 > OBJ2 > BG1.0 > BG2.0; the objects draw at
+// priority 2 — the flagged tiles, BG1.1, cover them on the console too).
+// The DE finale keeps the dragon head's top and the torches in BG2 priority-1
+// quads over the opaque stage-front row of BG1.
+static void v2_draw_parallax_pass(const V2StateViewC& st, uint8_t* buf, uint16_t prio) {
     const V2ParallaxLayer& P = v2_parallax;
     if (!P.on || !P.map || !P.tiles) return;
     const int wpx = P.w * 8, hpx = P.h * 8;
@@ -510,6 +520,7 @@ static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) {
         for (int sx = 0; sx < 320; sx++) {
             const int mx = (px + sx) % wpx;
             const uint16_t cell = mrow[mx >> 3];
+            if ((cell & 0x2000) != prio) continue;           // the other priority pass draws it
             const uint32_t idx = cell & 0x3FF;
             if (idx >= P.ntiles) continue;
             const int tx = (cell & 0x4000) ? (7 - (mx & 7)) : (mx & 7);
@@ -519,6 +530,7 @@ static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) {
         }
     }
 }
+static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) { v2_draw_parallax_pass(st, buf, 0); }
 
 void v2_draw_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
@@ -537,7 +549,11 @@ void v2_draw_tiles(uint16_t ds_val) {
     // there (the Ship consoles' lowest rows vanish under it on the Genesis),
     // so the sprite/pixel clip stops at 187; the tile pass still paints all
     // 200 rows (the band itself is map data).
-    v2_clip_h = v2_scene_fullscreen() ? 187 : 176;
+    {
+        const int rows = v2_view_rows();                 // 176 / 200 (scene) / 224 (LVX_TALL224)
+        v2_clip_h = (rows == 200) ? 187 : rows;
+        v2_tile_rows = (rows == 224) ? 29 : 25;          // 29 x 8 = 232 px covers 224 + the sub-tile offset
+    }
 
     // Tile map segment (FS)
     uint16_t fs_seg = st.seg_fs();
@@ -582,7 +598,7 @@ void v2_draw_tiles(uint16_t ds_val) {
     // Normal: clear and draw tiles (all 200 buffer rows: the tile loop below
     // already renders 25 tile rows; rows 176..199 are shown only on
     // full-screen LVX scenes, otherwise the HUD band covers them)
-    memset(buf, 0, 320*200);
+    memset(buf, 0, 320*240);
     // UX stage 2: the parallax layer goes under the tiles; the tile pass then
     // skips the pixels of colour 0 of each palette row (the console's
     // transparent index — on the DOS palette they are blacked out, sub_112ae).
@@ -615,7 +631,7 @@ void v2_draw_tiles(uint16_t ds_val) {
     int pix_off_x = cam.pix_off_x, pix_off_y = cam.pix_off_y;
     int extra_tile_x = cam.tile_shift_x, extra_tile_y = cam.tile_shift_y;
 
-    for (int row_vis = 0; row_vis < 25; row_vis++) {
+    for (int row_vis = 0; row_vis < v2_tile_rows; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
         // Orig sub_16ded has NO row_scrolled bound — just reads LUT and renders
         // whatever it finds. v2 had `if (row_scrolled >= 64) continue;` hardcoded
@@ -654,7 +670,7 @@ void v2_draw_tiles(uint16_t ds_val) {
                 int src_row = vflip ? (7 - row) : row;
                 int sy = screen_y + row;
                 if (sy < 0) continue;
-                if (sy >= 200) break;
+                if (sy >= 240) break;
 
                 // Extract 8 pixels for this row
                 uint8_t pixels[8];
@@ -743,7 +759,7 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
         int src_row = vflip ? (7 - row) : row;
         int sy = screen_y + row;
         if (sy < 0) continue;
-        if (sy >= 200) break;
+        if (sy >= 240) break;
         uint8_t pixels[8];
         for (int plane = 0; plane < 4; plane++) {
             uint8_t b0 = tile[plane * 16 + src_row * 2];
@@ -1197,6 +1213,10 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     uint16_t tgfx_seg = st.seg_tilegfx();
     uint16_t gs_seg = st.seg_gs();
     if (!fs_seg || !tgfx_seg || !gs_seg) return;
+    // UX stage 9: the parallax layer's priority-1 cells over the sprites,
+    // under the flagged tiles (see v2_draw_parallax_pass); only a tile
+    // frame has drawn the layer's lower pass this tick
+    if (v2_last_frame_tiles || v2_tls_presenter) v2_draw_parallax_pass(st, buf, 0x2000);
 
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
@@ -1224,7 +1244,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     int pix_off_x = cam.pix_off_x, pix_off_y = cam.pix_off_y;
     int extra_tile_x = cam.tile_shift_x, extra_tile_y = cam.tile_shift_y;
 
-    for (int row_vis = 0; row_vis < 25; row_vis++) {
+    for (int row_vis = 0; row_vis < v2_tile_rows; row_vis++) {
         uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
         // No `row_scrolled >= 64` clamp — orig sub_1c8f1 (flagged-tile render)
         // doesn't clip rows beyond LUT; v2 hardcode caused tiles missing on
@@ -1291,7 +1311,7 @@ void v2_draw_ui(uint16_t ds_val) {
             }
         }
         if (nz != _last_nz) {
-            extern int v2_dbg_pre_vm_iter;
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
             fprintf(stderr, "V2-UI-COUNT[f%d render=%d lvl=%04X]: nz_cells=%d rows: ",
                 v2_dbg_pre_vm_iter, _frame, st.level(), nz);
             for (int r = 0; r < 22; r++)

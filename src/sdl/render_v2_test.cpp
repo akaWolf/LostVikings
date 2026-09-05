@@ -10,6 +10,7 @@
 
 // Оригинальная структура VGA памяти (для палитры)
 #include <SDL2/SDL.h>
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 struct myDrawInfoS_orig {
     uint8_t drawBuffer[65536*4];
     SDL_Color drawPalette[256];
@@ -46,7 +47,7 @@ void render_callback_v2(void* state)
 
     // UX stage 9: an interpolated frame between the two newest ticks (own
     // passes on a snapshot, v2_smooth.cpp) — else the tick frame as before.
-    static uint8_t v2_smooth_frame[320 * 200];
+    static uint8_t v2_smooth_frame[320 * 240];
     const bool smooth = v2_smooth_render(v2_smooth_frame);
     // debug: V2_SMOOTH_DUMP=<dir> writes the first 48 presented frames after
     // game frame 100 as <dir>/pf_<n>_f<game frame>_t<fraction>.ppm (+ the
@@ -55,7 +56,7 @@ void render_callback_v2(void* state)
         static int dump = -1; static const char* dd = nullptr; static int n = 0; static int from = 100;
         if (dump < 0) { dd = getenv("V2_SMOOTH_DUMP"); dump = (dd && *dd) ? 1 : 0;
                         const char* f0 = getenv("V2_SMOOTH_DUMP_FROM"); if (f0 && *f0) from = atoi(f0); }
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         if (dump == 1 && v2_dbg_pre_vm_iter >= from && n < 48) {
             extern int v2_smooth_last_reason;
             char path[512]; snprintf(path, sizeof path, "%s/pf_%02d_f%d_t%.2f_%s%d_%u.ppm", dd, n, v2_dbg_pre_vm_iter,
@@ -84,7 +85,7 @@ void render_callback_v2(void* state)
         if (g_dump_pgm_request.load(std::memory_order_acquire)) {
             FILE* f = fopen("/tmp/v2_ladder.ppm", "wb");
             if (f) {
-                const int H = v2_display_fullscreen ? 200 : 176;   // UX stage 0
+                const int H = v2_display_fullscreen ? v2_display_fullscreen : 176;   // UX stage 0/9: map rows shown
                 fprintf(f, "P6\n320 %d\n255\n", H);
                 for (int y = 0; y < H; y++) {
                     for (int x = 0; x < 320; x++) {
@@ -110,11 +111,12 @@ void render_callback_v2(void* state)
         std::lock_guard<std::mutex> lock(v2_display_mutex);
         if (v2_display_fullscreen) {
             const uint8_t* src2 = smooth ? v2_smooth_frame : v2_display_buf;   // UX stage 9
-            // UX stage 0: LVX full-screen scene — rows 176..199 come from the
-            // map render (v2_display_buf is 320x200), rows 200..239 stay black.
-            // The HUD band is never painted on these slots ([25CF] bit0 = 0).
+            // UX stage 0/9: LVX full-screen scene (200 rows) or an LVX_TALL224
+            // level (224 rows) — rows 176.. come from the map render, the rest
+            // stay black. The HUD band is never painted on these slots.
+            const int shown = v2_display_fullscreen - 176;
             for (int y = 0; y < 64; y++) {
-                if (y < 24) memcpy(sbuf + (176 + y) * 344, src2 + (176 + y) * 320, 320);
+                if (y < shown) memcpy(sbuf + (176 + y) * 344, src2 + (176 + y) * 320, 320);
                 else        memset(sbuf + (176 + y) * 344, 0, 320);
                 memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
             }

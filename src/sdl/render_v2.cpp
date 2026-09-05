@@ -24,6 +24,7 @@ uint32_t tempDrawBuffer_v2[RENDER_WIDTH_V2*RENDER_HEIGHT_V2];
 
 #include "render_v2.h"
 #include "v2_ui.h"
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 
 struct myDrawInfoS_v2* myDrawInfo_v2 = nullptr;
 SDL_Window* myWindow_v2 = NULL;
@@ -73,12 +74,12 @@ void updateDraw_v2()
       extern SDL_Color v2_display_palette[256];
       extern bool v2_display_palette_valid;
       extern uint8_t v2_vga[65536 * 4];
-      extern uint8_t v2_render_buf[320 * 200];
+      extern uint8_t v2_render_buf[320 * 240];
       extern uint8_t v2_display_buf[];
       extern uint16_t v2_vga_crtc, v2_vga_pan;
       uint32_t vsum = 0, rsum = 0, dsum = 0;
       for (int i = 0; i < 65536 * 4; i += 97) vsum += v2_vga[i];
-      for (int i = 0; i < 320 * 200; i += 7) rsum += v2_render_buf[i];
+      for (int i = 0; i < 320 * 240; i += 7) rsum += v2_render_buf[i];
       for (int i = 0; i < 320 * 176; i += 7) dsum += v2_display_buf[i];
       fprintf(stderr, "V2-PRESENT: calls=%d stable_sum=%u pal_sum=%u pubvalid=%d "
               "vga_sum=%u rbuf_sum=%u dbuf_sum=%u crtc=%04X pan=%u\n",
@@ -295,7 +296,7 @@ void render_thread_proc_v2(void* _state)
       // Frame counter in the window title (updated every ~10 frames) — handy
       // when recording replays: the number matches the .inp frame column.
       {
-          extern int v2_dbg_pre_vm_iter;
+          // v2_dbg_pre_vm_iter: file-scope extern (top of file)
           static int last_shown = -1;
           int f = v2_dbg_pre_vm_iter;
           if (f - last_shown >= 10 || f < last_shown) {

@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "v2_ds_layout.h"
+void sdl_spec_snapshot_take();   // render.cpp (C++ linkage) — declared once at file scope: block externs inside extern "C" functions take C linkage (clang rejects the mismatch)
 
 // Thin exports from v2_vm.cpp (wrappers over file-static v2 functions/tables).
 extern "C" void v2_fntest_call_sub_15972(uint8_t* test_shadow, uint16_t ax, uint16_t di);
@@ -13072,7 +13073,7 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // F10+S mute toggle: the spec-key channel reads the frame snap —
         // arm the press latches and take a snapshot (environment prep).
         extern std::atomic<uint8_t> sdl_spec_press_latch[256];
-        extern void sdl_spec_snapshot_take();
+        // sdl_spec_snapshot_take: file-scope declaration (top of file)
         {   // (#60 branch) [302]&[304]&0x8000 -> the 8D2 entry-gate RETN
             static const FtWr w[] = { {0x302,0x8000},{0x304,0x8000} };
             static const Exp e[] = { {0,0} };
@@ -13219,7 +13220,7 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // the whole 103ca/104a1 prompt chain and return cleanly (12352
         // wipes [3B8] and the 105cb exit fires): exercise-only.
         extern std::atomic<uint8_t> sdl_spec_press_latch[256];
-        extern void sdl_spec_snapshot_take();
+        // sdl_spec_snapshot_take: file-scope declaration (top of file)
         extern uint16_t input_keys;
         uint16_t keep_keys = input_keys;
         // The prompt loop re-reads input via sub_12352: an action bit makes
@@ -13471,7 +13472,7 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // the isolator watchdog (idle). R=0x917F -> state[0x7F], A=0x918A
         // -> state[0x8A].
         extern std::atomic<uint8_t> sdl_spec_state[256];
-        extern void sdl_spec_snapshot_take();
+        // sdl_spec_snapshot_take: file-scope declaration (top of file)
         auto key_thread = [](int idx, int val) {
             return std::thread([idx, val]() {
                 usleep(300000);
@@ -13852,7 +13853,7 @@ int ft_selftest_dosio(FtId id, uint32_t seed) {
         // watchdog fires — an expected escape, covering the whole body.
         extern uint16_t input_keys;
         extern std::atomic<uint8_t> sdl_spec_state[256];
-        extern void sdl_spec_snapshot_take();
+        // sdl_spec_snapshot_take: file-scope declaration (top of file)
         uint16_t keep_keys = input_keys;
         input_keys = 0;
         {   static const FtWr w[] = { {0xA39C,0},{0x92FF,1} };
@@ -15271,7 +15272,7 @@ extern "C" int v2_fntest_selftest_env(void) {
         // land 0x81 (the original LUT value for Enter/Space) in ds:[28C]
         // of BOTH DS copies after the frame-begin drain.
         matched = true;
-        extern void sdl_spec_snapshot_take();
+        // sdl_spec_snapshot_take: file-scope declaration (top of file)
         uint32_t dsl = v2_fntest_game_ds_linear();
         uint8_t* real = (uint8_t*)v2_fntest_m2c_base() + dsl;
         v2_set_m2c_base(v2_fntest_m2c_base());

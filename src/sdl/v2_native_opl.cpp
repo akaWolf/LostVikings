@@ -47,6 +47,7 @@
 #include <unistd.h>
 #include <cstring>
 
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 extern "C" {
 #include "../adlmidi/src/chips/nuked/nukedopl3.h"
 }
@@ -281,7 +282,7 @@ extern "C" void v2_nopl_pump(void) {
     {
         extern bool need_quit;
         extern int g_v2only_max_frames;
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         if (need_quit ||
             (g_v2only_max_frames > 0 && v2_dbg_pre_vm_iter >= g_v2only_max_frames)) {
             fprintf(stderr, "V2_ONLY: max-frames/quit reached in the game "
@@ -314,7 +315,7 @@ extern "C" void v2_nopl_pump(void) {
             static int dbg = -1; static long pumps = 0;
             if (dbg < 0) dbg = getenv("V2_TICKDBG") ? 1 : 0;
             if (dbg && (++pumps % 1000) == 1) {
-                extern int v2_dbg_pre_vm_iter;
+                // v2_dbg_pre_vm_iter: file-scope extern (top of file)
                 fprintf(stderr, "TICKDBG pumps=%ld rframe=%d pvi=%d ticks=%llu acc=%.2f hz=%.1f\n",
                         pumps, cur, v2_dbg_pre_vm_iter,
                         (unsigned long long)g_ticks_done, g_tick_acc, g_tick_hz);

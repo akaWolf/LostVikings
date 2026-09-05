@@ -39,11 +39,11 @@ constexpr uint32_t V2_EXE_STATIC_SIZE = 0x29F00;
 // V2 rendering buffer — single persistent buffer, like drawBuffer in the original.
 // Game thread writes, v2_swap_render_buf copies to v2_display_buf for render thread.
 // Linear format: [y * 320 + x] = palette index, 320x200
-extern uint8_t  v2_render_buf[320*200];
+extern uint8_t  v2_render_buf[320*240];   // UX stage 9: 240 rows (224 shown on an LVX_TALL224 level)
 
 // Display buffer — game copies completed frame here under lock,
 // render thread reads it under the same lock. No race.
-extern uint8_t  v2_display_buf[320*200];
+extern uint8_t  v2_display_buf[320*240];
 // UX stage 0: published with v2_display_buf under v2_display_mutex — 1 when the
 // running slot is an LVX full-screen scene: the presenter shows display rows
 // 176..199 (map) instead of the HUD band.
@@ -85,6 +85,7 @@ extern thread_local uint8_t*        v2_tls_out;
 extern thread_local const uint8_t*  v2_tls_fs;
 extern thread_local const uint32_t* v2_tls_par_acc;   // {acc_x, acc_y} of the parallax autoscroll
 extern thread_local bool            v2_tls_presenter; // passes run outside the VM frame gate
+extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
 void v2_smooth_capture(void);                 // game thread, at the page flip
 bool v2_smooth_render(uint8_t* out);          // presenter: true = out (320x200) holds an interpolated frame
 extern float v2_smooth_last_t;                // debug: fraction of the last interpolated frame

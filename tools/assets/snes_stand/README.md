@@ -33,3 +33,13 @@ keeps the PPU in forced blank until ~f3100 (`emu.takeScreenshot()` and the
 buffer are black there) — the usable frames start at 3200 (password box up,
 level behind it). SMRT/V8TR compared against the engine's SNES-balance
 heads: same layout, art and colours.
+
+## finale_probe.lua (UX stage 9)
+`level_shot.lua` with an env-driven shot window: `SHOT_FROM`/`SHOT_TO`/`SHOT_STEP`
+(defaults 2600/4800/200) and `CGRAM_AT=<frame>` (dumps the 512-byte CGRAM as
+`cgram_f<N>.bin`). Finale (PAR_SLOT=52) evidence for the console-finale variant:
+`SHOT_FROM=4000 SHOT_TO=4040 SHOT_STEP=1` — the crowd's four poses (6/9/6/9 frames);
+`CGRAM_AT=4000` — row 192 = chunk 0x9A (the crowd's blues), row 224 = the dialogue
+palette (the PC's op 13/D9 writes both rows, the SNES only 224).
+Run: `nix-shell -p mesen xvfb` + Xvfb display + a private HOME (see above).
+

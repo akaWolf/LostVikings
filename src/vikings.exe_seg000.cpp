@@ -22,6 +22,7 @@ extern "C" int v2_ail_orig_enabled();
 #include <mutex>
 #include <atomic>
 #include <map>
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 extern "C" void v2_cc_orig_hit(int); // M1 call-parity (#65)
 extern "C" int v2_fntest_running;    // unit-world marker (v2_ail.cpp)
 
@@ -840,7 +841,7 @@ void drawPixel(uint32_t offset, uint8_t color)
       else _rt_lo = -1;
     }
     if (_rtf) {
-      extern int v2_dbg_pre_vm_iter;
+      // v2_dbg_pre_vm_iter: file-scope extern (top of file)
       if (v2_dbg_pre_vm_iter >= _rt_lo && v2_dbg_pre_vm_iter <= _rt_hi) {
         uint8_t rec[6]; *(uint32_t*)rec = offset; rec[4] = color; rec[5] = (uint8_t)(v2_dbg_pre_vm_iter - _rt_lo);
         fwrite(rec, 1, 6, _rtf);
@@ -862,7 +863,7 @@ void drawPixel(uint32_t offset, uint8_t color)
     }
     for (int ti = 0; ti < _ntraps; ti++) {
       if ((long)offset == _traps[ti]) {
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
 #ifdef __linux__
         void* bt[8]; int n = backtrace(bt, 8);
         fprintf(stderr, "DP-TRAP[f%d]: off=%X color=%02X bt:", v2_dbg_pre_vm_iter, offset, color);
@@ -4001,7 +4002,7 @@ sub_10813:
 		static int _bl = -1;
 		if (_bl < 0) _bl = getenv("V2_10813_LOG") ? 1 : 0;
 		if (_bl) {
-			extern int v2_dbg_pre_vm_iter;
+			// v2_dbg_pre_vm_iter: file-scope extern (top of file)
 			fprintf(stderr, "ORIG-10813[f%d]: flag=%02X act=%04X vx=%04X wx=%04X wy=%04X 3B6=%04X 3B8=%04X\n",
 				v2_dbg_pre_vm_iter, (uint8_t)byte_2aa9a, (uint16_t)word_288a2,
 				*(dw*)(raddr(ds, (uint16_t)((uint16_t)word_288a2 + 0x173D))),
@@ -4162,11 +4163,11 @@ loc_10935:
 cs=0x1a2;eip=0x000935; 	T(CMP(byte_3167e, 1));	// 1180 cmp     byte_3167E, 1 ;~ 01A2:0935
 cs=0x1a2;eip=0x00093a; 	J(JNZ(locret_1097e));	// 1181 jnz     short locret_1097E ;~ 01A2:093A
 cs=0x1a2;eip=0x00093c; 	X(MOV(byte_3167e, 0));	// 1182 mov     byte_3167E, 0 ;~ 01A2:093C
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-XOR-302[f%d]: pre=%04X (sub_108c8 ALT+M XOR firing)\n",
 	    v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x000941; 	X(XOR(*(db*)(((db*)&word_287e2)), 1));	// 1183 xor     byte ptr word_287E2, 1 ;~ 01A2:0941
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-XOR-302[f%d]: post=%04X\n",
 	    v2_dbg_pre_vm_iter, word_287e2); }
 cs=0x1a2;eip=0x000946; 	J(JNZ(loc_10959));	// 1184 jnz     short loc_10959 ;~ 01A2:0946
@@ -4175,7 +4176,7 @@ cs=0x1a2;eip=0x000948; 	X(PUSH(bx));	// 1185 push    bx ;~ 01A2:0948
 cs=0x1a2;eip=0x000949; 	T(MOV(si, 0));	// 1186 mov     si, 0 ;~ 01A2:0949
 cs=0x1a2;eip=0x00094c; 	T(MOV(ax, 0));	// 1187 mov     ax, 0 ;~ 01A2:094C
 cs=0x1a2;eip=0x00094f; 	T(MOV(bx, word_2b34b));	// 1188 mov     bx, word_2B34B ;~ 01A2:094F
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-176BD-CALL[f%d]: from sub_108c8 start (eip 0x953) ds:0x302=%04X ax=%04X bx=%04X si=%04X\n",
 	    v2_dbg_pre_vm_iter, word_287e2, ax, bx, si); }
 cs=0x1a2;eip=0x000953; 	J(CALL(sub_176bd,0));	// 1189 call    sub_176BD ;~ 01A2:0953
@@ -6730,7 +6731,7 @@ sub_12352:
 			static int _l = -1;
 			if (_l < 0) _l = getenv("V2_12352_LOG") ? 1 : 0;
 			if (_l) {
-				extern int v2_dbg_pre_vm_iter;
+				// v2_dbg_pre_vm_iter: file-scope extern (top of file)
 				extern long g_sub12352_seq;
 				fprintf(stderr, "12352#%ld[f%d] kd=%04X ik=%04X\n",
 					g_sub12352_seq, v2_dbg_pre_vm_iter, new_kd, (uint16_t)input_keys);
@@ -6886,7 +6887,7 @@ cs=0x1a2;eip=0x002422; 	T(ADD(si, *(dw*)(raddr(ds,di-0x6CBA))));	// 4731 add    
 cs=0x1a2;eip=0x002426; 	X(MOV(*(raddr(ds,si-0x6A94)), al));	// 4732 mov     [si-6A94h], al ;~ 01A2:2426
 	{ uint16_t addr = (uint16_t)(si - 0x6A94);
 	  if (addr >= 0x8200 && addr <= 0x82FF) {
-	    extern int v2_dbg_pre_vm_iter;
+	    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
 	    fprintf(stderr, "ORIG-1241E-WRITE[f%d]: addr=%04X val=%02X\n",
 	            v2_dbg_pre_vm_iter, addr, (uint8_t)al);
 	  }
@@ -7028,7 +7029,7 @@ cs=0x1a2;eip=0x00251a; 	T(MOV(ax, seg_offset(seg001)));	// 4894 mov     ax, seg 
 cs=0x1a2;eip=0x00251d; 	T(MOV(es, ax));	// 4895 mov     es, ax ;~ 01A2:251D
 cs=0x1a2;eip=0x00251f; 	T(MOV(ax, *(dw*)(raddr(es,si+0))));	// 4897 mov     ax, es:[si+0] ;~ 01A2:251F
 cs=0x1a2;eip=0x002524; 	X(MOV(word_2850a, ax));	// 4898 mov     word_2850A, ax ;~ 01A2:2524
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-2850A[f%d]: ax=%04X (write word_2850a in sub_12515)\n",
 	          v2_dbg_pre_vm_iter, (uint16_t)ax); }
 cs=0x1a2;eip=0x002527; 	X(POP(es));	// 4899 pop     es ;~ 01A2:2527
@@ -10578,7 +10579,7 @@ cs=0x1a2;eip=0x0042ae; 	T(SHL(si, 1));	// 8830 shl     si, 1 ;~ 01A2:42AE
 	{ uint8_t v2_orig_opcode = (uint8_t)(si >> 1); uint16_t v2_pc_before = bx - 1; // before INC, same as v2
 	  uint16_t v2_acc_before = *(dw*)(raddr(ds,0x8A));
 	  // Task #85: orig opcode trace for obj 6 (dinosaur) — ALL frames in level 002B
-	  { extern int v2_dbg_pre_vm_iter;
+	  { 
 	    int f = v2_dbg_pre_vm_iter;
 	    uint16_t cur_obj = *(dw*)(raddr(ds, 0x42));
 	    uint16_t cur_lv = *(dw*)(raddr(ds, 0x25AD));
@@ -11284,7 +11285,7 @@ cs=0x1a2;eip=0x0046a9; 	T(MOV(ax, *(dw*)(raddr(ds,0x8A))));	// 9681 mov     ax, 
   }
   // CUR-OP57-302: trap orig op_57 writes to ds:0x302 (music mute) or ds:0x304 (SFX mute)
   if (si == 0x302 || si == 0x304) {
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     fprintf(stderr,
       "ORIG-OP57-302[f%d]: obj=%04X addr=%04X val=%04X lvl=%04X bx=%04X (anim_PC after read+2)\n",
       v2_dbg_pre_vm_iter, *(dw*)(raddr(ds, 0x42)), si, ax,
@@ -16975,7 +16976,7 @@ cs=0x1a2;eip=0x007662; 	J(CALL(sub_10982,0));	// 17140 call    sub_10982 ;~ 01A2
 cs=0x1a2;eip=0x007665; 	T(MOV(ax, 0));	// 17141 mov     ax, 0 ;~ 01A2:7665
 cs=0x1a2;eip=0x007668; 	T(MOV(bx, *(dw*)(raddr(ds,0x2E6B))));	// 17142 mov     bx, ds:2E6Bh ;~ 01A2:7668
 cs=0x1a2;eip=0x00766c; 	T(MOV(si, 0));	// 17143 mov     si, 0 ;~ 01A2:766C
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-176BD-CALL[f%d]: from sub_17561 special init (eip 0x766F) ds:0x302=%04X ax=%04X bx=%04X si=%04X\n",
 	    v2_dbg_pre_vm_iter, word_287e2, ax, bx, si); }
 cs=0x1a2;eip=0x00766f; 	J(CALL(sub_176bd,0));	// 17144 call    sub_176BD ;~ 01A2:766F
@@ -17127,17 +17128,17 @@ seg000_7791_proc:
 	// 17299
 loc_17791:
 	// 5859
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-17791[f%d]: real ds:0x302=%04X 0x304=%04X 25B7=%02X 25B9=%02X\n",
 	    v2_dbg_pre_vm_iter, *(dw*)(raddr(ds,0x302)), *(dw*)(raddr(ds,0x304)),
 	    *(db*)(raddr(ds,0x25B7)), *(db*)(raddr(ds,0x25B9))); }
 cs=0x1a2;eip=0x007791; 	T(TEST(*(dw*)(raddr(ds,0x302)), 0x8000));	// 17301 test    word ptr ds:302h, 8000h ;~ 01A2:7791
 cs=0x1a2;eip=0x007797; 	J(JNZ(locret_177b1));	// 17302 jnz     short locret_177B1 ;~ 01A2:7797
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-17791[f%d]: before sub_1775d, 0x302=%04X\n",
 	    v2_dbg_pre_vm_iter, *(dw*)(raddr(ds,0x302))); }
 cs=0x1a2;eip=0x007799; 	J(CALL(sub_1775d,0));	// 17303 call    sub_1775D ;~ 01A2:7799
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-17791[f%d]: after sub_1775d, 0x302=%04X (will play if 0)\n",
 	    v2_dbg_pre_vm_iter, *(dw*)(raddr(ds,0x302))); }
 cs=0x1a2;eip=0x00779c; 	T(TEST(*(dw*)(raddr(ds,0x302)), 0x0FFFF));	// 17304 test    word ptr ds:302h, 0FFFFh ;~ 01A2:779C
@@ -17145,7 +17146,7 @@ cs=0x1a2;eip=0x0077a2; 	J(JNZ(locret_177b1));	// 17305 jnz     short locret_177B
 cs=0x1a2;eip=0x0077a4; 	T(MOV(si, 0));	// 17306 mov     si, 0 ;~ 01A2:77A4
 cs=0x1a2;eip=0x0077a7; 	T(MOV(ax, 0));	// 17307 mov     ax, 0 ;~ 01A2:77A7
 cs=0x1a2;eip=0x0077aa; 	T(MOV(bx, *(dw*)(raddr(ds,0x2E6B))));	// 17308 mov     bx, ds:2E6Bh ;~ 01A2:77AA
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-176BD-CALL[f%d]: from sub_17791 (eip 0x77AE) ds:0x302=%04X ax=%04X bx=%04X si=%04X\n",
 	    v2_dbg_pre_vm_iter, word_287e2, ax, bx, si); }
 cs=0x1a2;eip=0x0077ae; 	J(CALL(sub_176bd,0));	// 17309 call    sub_176BD ;~ 01A2:77AE
@@ -17169,7 +17170,7 @@ sub_177bb:
 
  // Task #85: caller backtrace to find what fires this in orig (esp. for seqs missing in v2).
 #ifdef __linux__
- { extern int v2_dbg_pre_vm_iter;
+ { 
    if (v2_dbg_pre_vm_iter >= 1165 && v2_dbg_pre_vm_iter <= 1200 || v2_dbg_pre_vm_iter >= 1525 && v2_dbg_pre_vm_iter <= 1555) {
      void* bt[10]; int n = backtrace(bt, 10);
      char** syms = backtrace_symbols(bt, n);
@@ -17261,7 +17262,7 @@ sub_1782a:
  // (after AND ax, 0xFF). Slot loop in orig already iterates ds:[si-0x66EA]
  // for matching seq — we hook in there via the AIL sub_1C79F replacement.
  {
-   extern int v2_dbg_pre_vm_iter;
+   // v2_dbg_pre_vm_iter: file-scope extern (top of file)
    uint16_t _seq = (*(dw*)(raddr(es,bx))) & 0xFF;
    uint16_t _obj = *(dw*)(raddr(ds, 0x42));
    uint16_t _304 = *(dw*)(raddr(ds, 0x304));
@@ -17320,7 +17321,7 @@ cs=0x1a2;eip=0x00787e; 	J(RETN(0));	// 17438 retn ;~ 01A2:787E
 sub_1787f:
 	// 17445
  {
-   extern int v2_dbg_pre_vm_iter;
+   // v2_dbg_pre_vm_iter: file-scope extern (top of file)
    uint16_t _seq = (*(dw*)(raddr(es,bx))) & 0xFF;
    uint16_t _obj = *(dw*)(raddr(ds, 0x42));
    uint16_t _304 = *(dw*)(raddr(ds, 0x304));
@@ -17370,7 +17371,7 @@ cs=0x1a2;eip=0x0078d4; 	X(POP(es));	// 17483 pop     es ;~ 01A2:78D4
 cs=0x1a2;eip=0x0078d5; 	J(RETN(0));	// 17484 retn ;~ 01A2:78D5
 sub_178d6:
 	// 17491
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-178D6-ENTRY[f%d]: real ds:0x302=%04X bx=%04X (anim VM op_D5)\n",
 	    v2_dbg_pre_vm_iter, word_287e2, bx); }
 cs=0x1a2;eip=0x0078d6; 	T(INC(bx));	// 17493 inc     bx ;~ 01A2:78D6
@@ -17383,7 +17384,7 @@ cs=0x1a2;eip=0x0078e0; 	X(PUSH(es));	// 17497 push    es ;~ 01A2:78E0
 cs=0x1a2;eip=0x0078e1; 	T(MOV(si, 0));	// 17498 mov     si, 0 ;~ 01A2:78E1
 cs=0x1a2;eip=0x0078e4; 	T(MOV(ax, 0));	// 17499 mov     ax, 0 ;~ 01A2:78E4
 cs=0x1a2;eip=0x0078e7; 	T(MOV(bx, *(dw*)(raddr(ds,0x2E6B))));	// 17500 mov     bx, ds:2E6Bh ;~ 01A2:78E7
-	{ extern int v2_dbg_pre_vm_iter;
+	{ 
 	  fprintf(stderr, "ORIG-176BD-CALL[f%d]: from sub_178d6 (eip 0x78EB) ds:0x302=%04X ax=%04X bx=%04X si=%04X\n",
 	    v2_dbg_pre_vm_iter, word_287e2, ax, bx, si); }
 cs=0x1a2;eip=0x0078eb; 	J(CALL(sub_176bd,0));	// 17501 call    sub_176BD ;~ 01A2:78EB

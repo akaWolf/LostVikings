@@ -30,6 +30,10 @@
 #include <algorithm>
 #include <SDL2/SDL.h>
 #include "render_v2.h"
+// shadow VGA (v2_render_funcs.cpp), C++ linkage — declared once at file scope:
+// a block-scope extern inside an extern "C" function takes C linkage (clang
+// rejects the mismatch, gcc lets it pass)
+extern uint8_t v2_vga[65536 * 4];
 #include "v2_ui.h"
 #include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
@@ -43,14 +47,27 @@ extern "C" int  v2_fntest_running;    // unit-world marker (v2_ail.cpp)
 extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_gamestate.cpp (phase D)
 extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-field state snapshot
 #include "v2_hash_hot.h"   // (IV) -O2 island for the replay-verify hash kernels
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits (all builds; v2_gamestate.cpp)
 // UX plan stage 0: LVX trailer flags (defined with the LVX loader below;
 // used by the scroll-limit mirror above it).
 enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004,
        LVX_NOGATE = 0x0008,     // no sub_10813 off-screen input gate (Genesis scene recordings)
        LVX_ALT = 0x0010,        // UX stage 7: an ALTERNATIVE head for a canonical slot (SNES balance)
-       LVX_PALTICK3 = 0x0020 }; // the palette-animation timers tick once per 3 console frames
+       LVX_PALTICK3 = 0x0020,   // the palette-animation timers tick once per 3 console frames
                                 // (the Genesis scenes; v2_pal_ui_cycle_101be accumulator)
+       LVX_CONSOLE = 0x0040,    // UX stage 9: an ALTERNATIVE head gated by the CONSOLE FINALE option
+                                // (the SNES finale's BG2 dragon layer + crowd on slot 0x2F)
+       LVX_TALL224 = 0x0080 };  // UX stage 9: the level is viewed 224 rows tall without a HUD band,
+                                // like the console's finale (map rows 16..239): scroll limit,
+                                // camera centring and the object activation edges use 224
+// UX stage 9: the view height of the loaded level in px — 0xB0 (176, the
+// orig VGA split) on every canonical level, 224 on an LVX_TALL224 variant.
+// Set by v2_load_template; read by sub_113b0/113d8 and the sprite culling.
+int v2_view_h_cur = 0xB0;
+// UX stage 9: the console-finale variant head is loaded (v2_load_template);
+// op 13/D9 then keeps palette row 192 for the crowd like the SNES does
+bool v2_console_variant = false;
 struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
                     uint16_t demo_cid; uint16_t flags; uint8_t trio[18]; };
 // LVX3 flags bits 4-11 / 12-15: the camera pin (viewport x 0..255 / y 0..15
@@ -281,7 +298,7 @@ static inline bool v2_ds_hash_skip(uint32_t i) {
 // fx::log_sfx wrapper. orig SFX callers (vikings.exe_seg000.cpp:16079) call
 // directly with source=0 — they're never in replay context anyway.
 void v2_audit_log_sfx(uint8_t source, uint16_t seq, uint16_t obj) {
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     SfxAuditEvent e;
     e.frame = v2_dbg_pre_vm_iter;
     e.seq = seq & 0xFF;
@@ -312,7 +329,7 @@ void v2_audit_check_frame_end() {
     return;
 #endif
     if (orig != v2) {
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         int cur_frame = v2_dbg_pre_vm_iter;
         fprintf(stderr, "AUDIT-FRAME-DIVERGE[f%d]: orig=%d v2=%d (delta=%d)\n",
                 cur_frame, orig, v2, orig - v2);
@@ -680,7 +697,7 @@ void v2_verify_render_buf(int frame) {
     // A2 label below. v2_dbg_pre_vm_iter is left untouched (input-replay tagging
     // and the headless max-frames guard still need its blocking-loop cadence).
     frame = ++v2_render_frame;
-    extern uint8_t v2_render_buf[320*200];
+    extern uint8_t v2_render_buf[320*240];
     if (!myDrawInfo) return;
     uint32_t page_offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
     // CRTC unfold of the visible page (pitch 0x56 bytes/row — task #19).
@@ -1460,7 +1477,7 @@ static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     }
     // Compute deterministic handle: same input on orig + v2 → same handle.
     // obj from VM context (cur_obj = ds[0x42]).
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     extern uint16_t v2_audit_compute_handle(uint16_t seq, uint16_t obj, int frame, int fire_idx);
     extern int v2_audit_v2_next_fire_idx(uint16_t obj);
     uint16_t obj = v2gs(s).cur_obj();
@@ -1953,7 +1970,7 @@ void v2_hw_wp_drain() {
             static int _vb = -1;
             if (_vb < 0) _vb = getenv("V2_WP_VERBOSE") ? 1 : 0;
             if (_vb) {
-                extern int v2_dbg_pre_vm_iter;
+                // v2_dbg_pre_vm_iter: file-scope extern (top of file)
                 fprintf(stderr, "HW-WP-S[f%d]: %s = 0x%02X  store=0x%lX tid=%u\n",
                     v2_dbg_pre_vm_iter, v2_hw_wp_label, val,
                     (unsigned long)store_ip, stid);
@@ -1961,7 +1978,7 @@ void v2_hw_wp_drain() {
             if (_si >= 0) { seen_n[_si]++; }
             else if (seen_cnt < 64) {
                 seen_ip[seen_cnt] = store_ip; seen_n[seen_cnt] = 1; seen_cnt++;
-                extern int v2_dbg_pre_vm_iter;
+                // v2_dbg_pre_vm_iter: file-scope extern (top of file)
                 fprintf(stderr, "HW-WP-NEWIP[f%d]: %s = 0x%02X  store=0x%lX tid=%u\n",
                     v2_dbg_pre_vm_iter, v2_hw_wp_label, val,
                     (unsigned long)store_ip, stid);
@@ -2858,7 +2875,7 @@ static void v2_pal_fade_seq_10fa0(uint8_t* s) {
         v2gs(s).pal_shade_b_b((uint8_t)bx); // byte_28824
         v2_pal_shade_10f03(s);                    // sub_10f03: palette shading → ds:0x8202
         { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
-          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site1\n", v2_dbg_pre_vm_iter);} }
+          if(_lr){ fprintf(stderr, "LADDER[f%d] req4-set @site1\n", v2_dbg_pre_vm_iter);} }
         v2gs(s).pal_req(4);       // word_303DE = 4 (request palette write)
         v2gs(s).pal_src_ptr(DS_PAL_OUT);  // word_303E0 = shaded palette pointer
         // Original: CALL sub_16775; CALL sub_10130
@@ -2885,7 +2902,7 @@ static void v2_save_game_1450b(uint8_t* s, uint8_t al, uint16_t si, uint16_t di)
     v2gs(s).pal_shade_b_b((uint8_t)((uint8_t)di << 1));                       // SHL al, 1; MOV ds:344h, al
     v2gs(s).pal_flags_b(v2gs(s).pal_flags_b() | (1));                                                 // OR byte ptr ds:7EFDh, 1
     { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
-      if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site2\n", v2_dbg_pre_vm_iter);} }
+      if(_lr){ fprintf(stderr, "LADDER[f%d] req4-set @site2\n", v2_dbg_pre_vm_iter);} }
     v2gs(s).pal_req(4);                                   // MOV word ptr ds:7EFEh, 4
     v2gs(s).pal_src_ptr(DS_PAL_OUT);                              // MOV word ptr ds:7F00h, 8202h
     // JMP sub_10E99: palette correction — writes 768 bytes to ds:0x8202
@@ -2923,13 +2940,13 @@ static void v2_vsync_wait_10130(uint8_t* s) {
     // count of this wait (v2_render_callback DECs once per loop pass).
     if (getenv("V2_FLIPTRACE")) {
         static long _wn = 0;
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         fprintf(stderr, "V2-WAIT[%ld] f=%d a39c=%04X\n",
                 ++_wn, v2_dbg_pre_vm_iter, v2gs(s).vsync_count());
     }
     {
         // #32 groove trap: always record (see the flip-site note).
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         extern void v2_flipring_push(uint8_t tag, uint16_t frame,
                                      uint16_t a39c, uint16_t lv, void* ra);
         v2_flipring_push(2, (uint16_t)v2_dbg_pre_vm_iter,
@@ -2993,8 +3010,7 @@ static void v2_level_init_render_115d2(uint8_t* s);
 extern "C" void v2_fntest_call_115d2(uint8_t* shadow) {
 #ifdef V2_RENDER_FROM_SHADOW
     // unit world: the draw layer gates on v2_vm_in_frame (render thread
-    // frame bracket) — arm it for the mirrored call.
-    extern bool v2_vm_in_frame;
+    // frame bracket) — arm it for the mirrored call (declared in render_v2.h).
     bool save = v2_vm_in_frame; v2_vm_in_frame = true;
     v2_level_init_render_115d2(shadow);
     v2_vm_in_frame = save;
@@ -3026,7 +3042,7 @@ extern "C" int v2_fntest_call_104a1(uint8_t* shadow, int max_iters) {
     }
     // orig exit path (eip 0x4F1): one more sub_12352 — the edge killer.
     // Post-exit the key is gone, so the latch feed for this call is 0.
-    { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
+    v2_input_snapshot = 0;
     { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
     v2_read_input_12352_iter(shadow);
     v2_pw_post_loop(shadow);
@@ -3889,7 +3905,7 @@ static void v2_glyph_draw_1E16D(uint8_t* s, uint16_t si_glyph, uint16_t di_vga) 
     // y=bit_dy) of the 8x8 cell; VGA bytes: addr = di + y*0x56 + (bit_dx>>2),
     // plane pass order 0..3, strip halves at di and di+0x158 (4 rows down).
     {
-        extern uint8_t v2_vga[65536 * 4];  (void)v2_vga;
+        (void)v2_vga;                       // file-scope extern above
         static const int bit_dx[8] = {0,4,0,4,0,4,0,4};
         static const int bit_dy[8] = {0,0,1,1,2,2,3,3};
         const uint8_t* glyph = v2_glyph_bytes(s, si_glyph);   // UX6: the language page for its codes
@@ -4110,7 +4126,7 @@ static void v2_pal_correct_10e99(uint8_t* s) {
 static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
     v2_cc_v2_hit(11);   // M1 call-parity CC_1C8F1 (#65)
     uint16_t cx = 0x2B;                                              // MOV cx, 2Bh (columns)
-    uint16_t bx = 0x19;                                              // MOV bx, 19h (rows)
+    uint16_t bx = (v2_view_h_cur == 0xB0) ? 0x19 : 0x1E;            // MOV bx, 19h (rows: the 200-line page; 30 for the 240-line page of an LVX_TALL224 level)
     // line 36-40: di = row_offset_table[ds:0x2581] + ds:0x257F, scaled
     uint16_t di_base = v2gs(s).scroll_row();                    // MOV di, ds:2581h
     di_base <<= 1;                                                    // SHL di, 1
@@ -4565,9 +4581,9 @@ static void v2_draw_type1_1CE78(uint8_t* s, int16_t slot) {
     if (px >= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36439
     edge -= 0x147;                                                     // 36440
     if (px <= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36442
-    edge = (int16_t)v2gs(s).viewport_y() + 0xB0;            // 36443-36444
+    edge = (int16_t)v2gs(s).viewport_y() + v2_view_h_cur;   // 36443-36444 (0xB0; 224 on LVX_TALL224)
     if (py >= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36446
-    edge -= 0xB7;                                                      // 36447
+    edge -= (int16_t)(v2_view_h_cur + 7);                              // 36447 (0xB7)
     if (py < edge)         { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36449
     // In viewport → sub_1CD7B(si=2)
     v2_sprite_draw_1CD7D(s, px, py, 2, 2);                         // 36450-36451
@@ -4632,8 +4648,8 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
         if (v2_m2c_base)
             col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x138B + idx); // 37522-37523
     }
-    // Y bottom edge: viewport_Y + 0xB0 (orig 37526-37535).
-    edge = (int16_t)v2gs(s).viewport_y() + 0xB0;
+    // Y bottom edge: viewport_Y + 0xB0 (orig 37526-37535); 224 on an LVX_TALL224 level.
+    edge = (int16_t)v2gs(s).viewport_y() + v2_view_h_cur;
     if (py >= edge) {                                              // 37529 jge loc_1DB98
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
@@ -4643,7 +4659,7 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
         clip_bot = (uint16_t)(py - edge);                          // 37534-37535 bottom rows clipped
     }
     // Y top edge: −0xB0 (orig 37538-37546).
-    edge -= 0xB0;                                                  // 37538
+    edge -= (int16_t)v2_view_h_cur;                                // 37538
     if (py < edge) {                                               // 37540 jl loc_1DB98
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
@@ -4726,8 +4742,8 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
         uint16_t idx = (uint16_t)((uint16_t)(edge - px) >> 2) << 1; // 36996-36999
         if (v2_m2c_base) col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E9A + idx); // 37000-37001
     }
-    // Y bottom edge (orig 37004-37014).
-    edge = (int16_t)v2gs(s).viewport_y() + 0xB0;
+    // Y bottom edge (orig 37004-37014); 224 on an LVX_TALL224 level.
+    edge = (int16_t)v2gs(s).viewport_y() + v2_view_h_cur;
     if (py >= edge) {                                              // 37007 jge loc_1D6B1
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
@@ -4737,7 +4753,7 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
         clip_bot = (uint16_t)((uint16_t)(py - edge) >> 1);         // 37012-37014 rows→units
     }
     // Y top edge (orig 37017-37026).
-    edge -= 0xB0;                                                  // 37017
+    edge -= (int16_t)v2_view_h_cur;                                // 37017
     if (py < edge) {                                               // 37019 jl loc_1D6B1
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
@@ -4932,7 +4948,7 @@ static void v2_glyph_put_1241e(uint8_t* s, uint8_t ch, uint16_t& si_col, uint16_
     v2_gs_evac_mirror_b(s, addr, ch);
     s[addr] = ch;                                                     // MOV [si-6A94h], al
     if (addr >= 0x8200 && addr <= 0x82FF) {
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         fprintf(stderr, "V2-1241E-WRITE[f%d]: addr=%04X val=%02X si_col=%04X di_row=%04X row_off=%04X\n",
                 v2_dbg_pre_vm_iter, addr, (uint8_t)ch, si_col, di_row, row_off);
     }
@@ -4948,7 +4964,7 @@ static void v2_text_lookup_12515(uint8_t* s, uint16_t ax) {
     uint8_t* seg001 = v2_m2c_base + 0x9480;
     uint16_t text_off = v2_text_ptr_of(seg001, ax);                  // es:[si+0] (UX6: the language bank first)
     v2gs(s).text_idx(text_off);                               // MOV word_2850A, ax
-    { extern int v2_dbg_pre_vm_iter;
+    { 
       fprintf(stderr, "V2-2850A-HELPER[f%d]: ax_in=%04X seg001_off=%04X text_off=%04X\n",
               v2_dbg_pre_vm_iter, ax, si, text_off); }
 }
@@ -5199,7 +5215,7 @@ static void v2_clear_viking_state_111df(uint8_t* s) {
 
 // sub_12816: clear UI glyph list — byte_31A4B=0, clear 0x1B8 words at ds:0x956C
 static void v2_glyph_list_clear_12816(uint8_t* s) {
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     fprintf(stderr, "V2-DLG-CLR[f%d]: sub_12816 lvl=%04X 956B_before=%02X\n",
         v2_dbg_pre_vm_iter, v2gs(s).level(), v2gs(s).glyph_dirty_b());
     v2gs(s).glyph_dirty_b(0); // byte_31A4B
@@ -5255,7 +5271,7 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
     v2gs(s).scroll_limit_x(width * 16 - 0x140); // word_2AA84 (scroll X limit)
     uint16_t height = v2gs(s).map_height();   // word_2AABE (map height in tiles)
     v2gs(s).clip_limit_y(height * 2);        // word_3164A
-    v2gs(s).scroll_limit_y(height * 16 - 0xB0); // word_2AA86 (scroll Y limit)
+    v2gs(s).scroll_limit_y(height * 16 - v2_view_h_cur); // word_2AA86 (scroll Y limit; 0xB0, or 224 on an LVX_TALL224 level)
     // UX stage 0/1 (LVX_CAMLOCK): full-screen scene slots pin the camera at
     // the trailer's (pin_x, pin_y) — v2_lvx_pin_camera parks it there right
     // after sub_113d8 and locks both axes; the limits collapse to the same
@@ -5306,7 +5322,7 @@ static void v2_viewport_init_113d8(uint8_t* s) {
     v2gs(s).scroll_disp_x2(scroll_x >> 1);   // word_317D3
 
     // Y: center on viking, clamp to [0, scroll_Y_limit]
-    ax = ObjMem{s, si}.i16(OBJ_WORLD_Y) - 0x58;   // 16-bit wrap
+    ax = ObjMem{s, si}.i16(OBJ_WORLD_Y) - (int16_t)(v2_view_h_cur / 2);   // 16-bit wrap (0x58 = half the 0xB0 view; 112 on an LVX_TALL224 level)
     if (ax < 0) ax = 0;
     if (ax > (int16_t)v2gs(s).scroll_limit_y()) ax = (int16_t)v2gs(s).scroll_limit_y();
     v2gs(s).viewport_y((uint16_t)ax);   // word_28526 (viewport Y)
@@ -5955,7 +5971,7 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
         static int _bl = -1;
         if (_bl < 0) _bl = getenv("V2_10813_LOG") ? 1 : 0;
         if (_bl) {
-            extern int v2_dbg_pre_vm_iter;
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
             fprintf(stderr, "V2-10813[f%d]: flag=%02X act=%04X vx=%04X wx=%04X wy=%04X 3B6=%04X 3B8=%04X\n",
                     v2_dbg_pre_vm_iter, flag_9a, active,
                     *(uint16_t*)(shadow + (uint16_t)(active + OBJ_WORLD_X)),
@@ -6137,7 +6153,7 @@ static void v2_game_mode_init_11446(uint8_t* s) {
         static int vd = -1;
         if (vd < 0) { const char* e = getenv("V2_VIK_DBG"); vd = (e && *e=='1') ? 1 : 0; }
         if (vd) {
-            extern int v2_dbg_pre_vm_iter;
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
             fprintf(stderr, "VIKDBG f%d MODE-INIT level=%d mode=%02X spawn=(%d,%d) code=%04X anim=%04X pool0=%04X\n",
                     v2_dbg_pre_vm_iter, v2gs(s).level(), mode,
                     (int16_t)v2gs(s).spawn_x(), (int16_t)v2gs(s).spawn_y(),
@@ -6315,7 +6331,7 @@ static void v2_active_viking_init_11784(uint8_t* s) {
 static void v2_clear_pages_16880(uint8_t* s) {
     // OUT(0x3C4, 0x0F02); // VGA sequencer: enable all 4 planes
     // REP STOSW ax=0, cx=0x8000 words (64KB) to es:0 (VGA 0xA000)
-    memset(v2_render_buf, 0, 320 * 200);
+    memset(v2_render_buf, 0, 320 * 240);
     memset(v2_hud_buf, 0, 320 * 64);
     // shadow-VGA: mirror the m2c-port drawBuffer hook, NOT the DOS STOSW. The orig
     // REP STOSW (cx=0x8000 words) wipes the full 64K VGA segment, but the port
@@ -6719,7 +6735,7 @@ static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t
     v2_cc_v2_hit(CC_13809);   // M1 wave-2 (#65)
     // V2_VIK_DBG=1: scene-spawn forensics (viking trio disappearing after the
     // vortex, user report) — log every spawn call with its args and outcome.
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     static int vik_dbg = -1;
     if (vik_dbg < 0) { const char* e = getenv("V2_VIK_DBG"); vik_dbg = (e && *e=='1') ? 1 : 0; }
     v2gs(s).scratch_34(code_seg_idx);                    // 0x3809
@@ -7242,7 +7258,7 @@ static void v2_vga_modex_init_167ff(uint8_t* s) {
     // OUT(0x3C0, 0x61);           // Attribute controller: value (overscan)
     // OUT(0x3C4, 0x0F02);         // Sequencer: enable all 4 planes
     // REP STOSW: clear 64KB VGA memory (es=0xA000, di=0, cx=0x8000, ax=0)
-    memset(v2_render_buf, 0, 320 * 200);
+    memset(v2_render_buf, 0, 320 * 240);
     memset(v2_hud_buf, 0, 320 * 64);
     // shadow-VGA: mirror the m2c-port drawBuffer hook (0x8000 BYTE addresses, not
     // the DOS STOSW's 0x8000 words) — same port quirk as v2_clear_pages_16880.
@@ -7637,7 +7653,7 @@ static void v2_pal_fade_in_10f5d(uint8_t* s) {
         v2gs(s).pal_shade_b_b((uint8_t)bx);
         v2_pal_shade_10f03(s);                       // sub_10F03: shade -> ds:0x8202
         { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
-          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site3\n", v2_dbg_pre_vm_iter);} }
+          if(_lr){ fprintf(stderr, "LADDER[f%d] req4-set @site3\n", v2_dbg_pre_vm_iter);} }
         v2gs(s).pal_req(4);            // word_303DE = 4 (request)
         v2gs(s).pal_src_ptr(DS_PAL_OUT); // word_303E0 = 0x8202
         v2_page_flip_16775(s);
@@ -8085,13 +8101,14 @@ static int v2_lvx_count = 0;
 // flags and the F5/F6 range all keep reading the canonical world)
 static const V2LvxEntry* v2_lvx_find(uint16_t level) {
     for (int i = 0; i < v2_lvx_count; i++)
-        if (v2_lvx[i].level == level && !(v2_lvx[i].flags & LVX_ALT)) return &v2_lvx[i];
+        if (v2_lvx[i].level == level && !(v2_lvx[i].flags & (LVX_ALT | LVX_CONSOLE))) return &v2_lvx[i];
     return nullptr;
 }
-// UX stage 7: the SNES-balance variant head of a canonical slot (or null)
-static const V2LvxEntry* v2_lvx_find_alt(uint16_t level) {
+// UX stage 7/9: a variant head of a canonical slot (or null) — LVX_ALT = the
+// SNES-balance level, LVX_CONSOLE = the console finale; `kind` picks which
+static const V2LvxEntry* v2_lvx_find_alt(uint16_t level, uint16_t kind) {
     for (int i = 0; i < v2_lvx_count; i++)
-        if (v2_lvx[i].level == level && (v2_lvx[i].flags & LVX_ALT)) return &v2_lvx[i];
+        if (v2_lvx[i].level == level && (v2_lvx[i].flags & kind)) return &v2_lvx[i];
     return nullptr;
 }
 
@@ -8115,6 +8132,13 @@ extern "C" int v2_scene_fullscreen(void) {
     uint8_t* s = v2_tls_ds ? (uint8_t*)v2_tls_ds : v2_vm_get_shadow_ds();   // UX stage 9: presenter snapshot
     if (!s) return 0;
     return (v2_lvx_flags(v2gs(s).level()) & LVX_FULLSCREEN) ? 1 : 0;
+}
+// UX stage 9: rows of map the presenter shows for the running level — 176
+// (the orig VGA split: HUD band below), 200 on an LVX full-screen scene,
+// 224 on an LVX_TALL224 level (the console finale; no HUD band either).
+extern "C" int v2_view_rows(void) {
+    if (v2_view_h_cur == 224) return 224;
+    return v2_scene_fullscreen() ? 200 : 176;
 }
 
 // Parse the trailer from a loaded exe_static image (V2_ONLY main calls it).
@@ -8173,9 +8197,29 @@ static void v2_load_template(uint8_t* shadow) {
     // password and the progression stay the canonical ones)
     v2_options_ensure_loaded();
     if (v2_options.snes_balance.load()) {
-        if (const V2LvxEntry* alt = v2_lvx_find_alt(level)) {
+        if (const V2LvxEntry* alt = v2_lvx_find_alt(level, LVX_ALT)) {
             level_chunk = alt->hdr_cid;
             fprintf(stderr, "V2-LVX-ALT: level %u -> SNES balance head %04X\n", level, level_chunk);
+        }
+    }
+    // UX stage 9: the console finale — the SNES DE finale's BG2 dragon layer
+    // and crowd on the PC concert (slot 0x2F), an LVX_CONSOLE variant head;
+    // its LVX_TALL224 flag switches the view to the console's 224 rows
+    v2_view_h_cur = 0xB0;
+    v2_console_variant = false;
+    if (v2_options.console_finale.load()) {
+        if (const V2LvxEntry* alt = v2_lvx_find_alt(level, LVX_CONSOLE)) {
+            level_chunk = alt->hdr_cid;
+            v2_console_variant = true;
+            if (alt->flags & LVX_TALL224) v2_view_h_cur = 224;
+            // the variant's own script when the record names one: a copy of
+            // the world script whose crowd class (4E) points at the converted
+            // SNES crowd bank (16 frames) and whose crowd anim addresses those
+            // frames on the PC's 72-byte units — the shared SNES/PC anim bytes
+            // carry console OAM tile numbers (integrate_snes.finale_integrate)
+            if (alt->tmpl_cid && alt->tmpl_cid != 0xFFFF) template_chunk = alt->tmpl_cid;
+            fprintf(stderr, "V2-LVX-ALT: level %u -> console finale head %04X (view %d rows, script %04X)\n",
+                    level, level_chunk, v2_view_h_cur, template_chunk);
         }
     }
 
@@ -8397,7 +8441,7 @@ extern "C" int v2_state_load(const char* path) {
     v2_vm_acc_base = v2_vm_shadow_ds;
     v2_shadow_initialized = true;
     v2_current_level = v2gs(v2_vm_shadow_ds).level();
-    { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
+    v2_input_snapshot = 0;
     { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
     fprintf(stderr, "V2-STATE: loaded %d blocks from %s (level=%u)\n",
             n, path, (unsigned)v2_current_level);
@@ -8757,15 +8801,16 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     {
         static int vd = -1;
         if (vd < 0) { const char* e = getenv("V2_VIK_DBG"); vd = e ? atoi(e) : 0; }
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         if (vd && (vd >= 2 || (v2_dbg_pre_vm_iter % 16) == 0)) {
             fprintf(stderr, "VIKDBG f%d SLOTS lvl=%d 25BA=%02X 3C2=%04X vp=(%d,%d) |",
                     v2_dbg_pre_vm_iter, v2gs(shadow).level(), shadow[0x25BA],
                     v2gs(shadow).active_viking(),
                     (int16_t)*(uint16_t*)(shadow + DS_VIEWPORT_X),
                     (int16_t)*(uint16_t*)(shadow + DS_VIEWPORT_X + 2));
-            for (uint16_t sl = 0; sl <= 10; sl += 2) {
+            for (uint16_t sl = 0; sl <= (vd >= 3 ? 0xFE : 10); sl += 2) {   // V2_VIK_DBG=3: every slot
                 ObjMem o{shadow, sl};
+                if (vd >= 3 && o.u16(OBJ_CODE_SEG) == 0 && o.u16(OBJ_FLAGS) == 0) continue;
                 fprintf(stderr, " [%d]cs=%04X fl=%04X pc=%04X anim=%04X as=%04X apc=%04X x=%d y=%d",
                         sl, o.u16(OBJ_CODE_SEG), o.u16(OBJ_FLAGS),
                         o.u16(OBJ_PC), o.u16(OBJ_ANIM_IDX), o.u16(OBJ_ANIM_SUB),
@@ -8789,7 +8834,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             const char* e = getenv("V2_START_LEVEL");
             want = (e && *e) ? atoi(e) : -1;
         }
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         if (want >= 0 && v2_dbg_pre_vm_iter >= 2) {
             v2gs(shadow).level_load((uint16_t)want);
             // V2_START_PREV=<n>: also fake the CURRENT level so the loader
@@ -8855,7 +8900,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             if (v2gs(shadow).pal_flags_b() == 0)
                 v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
             { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
-              if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site4\n", v2_dbg_pre_vm_iter);} }
+              if(_lr){ fprintf(stderr, "LADDER[f%d] req4-set @site4\n", v2_dbg_pre_vm_iter);} }
             v2gs(shadow).pal_req(4);
             v2_pal_correct_10e99(shadow);
         }
@@ -10302,11 +10347,11 @@ static void v2_scroll_tracker_16661(uint8_t* shadow) {
     uint16_t cx_y = v2gs(shadow).scroll_disp_x();          // 0x6664
     if (ax_y != cx_y) {                                               // 0x666a JZ
         if ((int16_t)ax_y < (int16_t)cx_y) {                          // 0x666c JG
-            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16E75 f%d\n", v2_dbg_pre_vm_iter);} }
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; fprintf(stderr, "V16E75 f%d\n", v2_dbg_pre_vm_iter);} }
             v2_vga_scroll_col_left_16e75(shadow);      // 0x666e CALL sub_16E75
             v2_mark_dirty_left_166e8(shadow);          // 0x6671 CALL sub_166E8
         } else {
-            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V16F5F f%d\n", v2_dbg_pre_vm_iter);} }
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; fprintf(stderr, "V16F5F f%d\n", v2_dbg_pre_vm_iter);} }
             v2_vga_scroll_col_right_16f5f(shadow);     // 0x6676 CALL sub_16F5F
             v2_mark_dirty_right_16710(shadow);         // 0x6679 CALL sub_16710
         }
@@ -10315,11 +10360,11 @@ static void v2_scroll_tracker_16661(uint8_t* shadow) {
     uint16_t cx_x = v2gs(shadow).scroll_disp_y();          // 0x667f
     if (ax_x != cx_x) {                                               // 0x6685 JZ -> RETN
         if ((int16_t)ax_x < (int16_t)cx_x) {                          // 0x6687 JG
-            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V17049 f%d\n", v2_dbg_pre_vm_iter);} }
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; fprintf(stderr, "V17049 f%d\n", v2_dbg_pre_vm_iter);} }
             v2_vga_scroll_row_top_17049(shadow);       // 0x6689 CALL sub_17049
             v2_mark_dirty_top_16694(shadow);           // loc_16694 tail
         } else {
-            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; extern int v2_dbg_pre_vm_iter; fprintf(stderr, "V170B9 f%d\n", v2_dbg_pre_vm_iter);} }
+            if (getenv("V2_VGAPARITY")) { static int _c=0; if(_c<200){_c++; fprintf(stderr, "V170B9 f%d\n", v2_dbg_pre_vm_iter);} }
             v2_vga_scroll_row_bottom_170b9(shadow);    // 0x668e CALL sub_170B9
             v2_mark_dirty_bottom_166bc(shadow);        // loc_166bc tail
         }
@@ -10441,7 +10486,7 @@ struct V2VM {
                 static int trace = -1;
                 if (trace < 0) { const char* e = getenv("V2_NEXTLVL_TRACE"); trace = (e && e[0]=='1') ? 1 : 0; }
                 if (trace) {
-                    extern int v2_dbg_pre_vm_iter;
+                    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
                     fprintf(stderr, "V2-NEXTLVL: f%d obj=%02X pc=%04X val=%04X (level=%04X)\n",
                             v2_dbg_pre_vm_iter, obj, pc,
                             val, *(uint16_t*)(shadow + DS_LEVEL));
@@ -10716,7 +10761,7 @@ static void v2_vm_op_sound(V2VM& vm) {
 }
 static void v2_vm_sfx_core(V2VM& vm, uint16_t seq) {
     seq &= 0xFF; // AND ax, 0FFh
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     extern uint16_t v2_current_level;
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
     if (vm.ds_read(DS_SFX_MUTE) != 0) {
@@ -10743,7 +10788,7 @@ static void v2_vm_op_sound1(V2VM& vm) {
 }
 static void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param) {
     param &= 0xFF;
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
     bool muted = vm.ds_read(DS_SFX_MUTE) != 0;
     fprintf(stderr, "V2-OP-04[f%d obj=%02X]: stop_seq=%u muted_304=%d\n",
@@ -11069,7 +11114,7 @@ static void v2_vm_op_D7(V2VM& vm) {
     v2_vm_sfx_stopslots_core(vm, seq);
 }
 static void v2_vm_sfx_stopslots_core(V2VM& vm, uint8_t seq) {
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
     bool muted = vm.ds_read(DS_SFX_MUTE) != 0;
     int matched = 0;
@@ -12968,8 +13013,7 @@ extern "C" void v2_fntest_call_sub_1689e(uint8_t* test_shadow, uint16_t si, uint
     v2_vm_acc_base = saved_acc;
 }
 extern "C" uint8_t* v2_fntest_vga_ptr(void) {
-    extern uint8_t v2_vga[65536 * 4];
-    return v2_vga;
+    return v2_vga;                          // file-scope extern above
 }
 // Units 128-130: sub_139ef (viewport bounds leaf) / sub_13a14 / sub_13a34
 // (scroll-band spawn scans).
@@ -15086,7 +15130,7 @@ static void v2_cmdq_log(const char* world, int cmd, uint16_t wr_before, int step
     static int _cq = -1;
     if (_cq < 0) _cq = getenv("V2_CMDQ_LOG") ? 1 : 0;
     if (_cq) {
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         fprintf(stderr, "CMDQ-%s[f%d]: cmd=%d wr=%04X+=%d\n",
                 world, v2_dbg_pre_vm_iter, cmd, wr_before, step);
     }
@@ -15165,8 +15209,16 @@ static void v2_vm_op_13(V2VM& vm) {
         // Palette copy: es:[bx+1] is a POINTER (offset in bytecode) to 48 bytes of palette data.
         // Original: MOV si, es:[bx+1]; swap ds/es; REP MOVSD from ds:si to es:8142 (48 bytes)
         uint16_t src_ptr = *(uint16_t*)(vm.es + vm.pc + 1); // read pointer value
-        for (int i = 0; i < 48; i++) {
-            vm.ds_write_b(DS_PAL_SRC_C192 + i, vm.es[src_ptr + i]);
+        // UX stage 9 (console finale): the SNES DE writes this dialogue
+        // palette to CGRAM row 224 only — Mesen CGRAM at finale frame 4000:
+        // row 192 = the head's chunk 0x9A (the crowd's blues 13-15) intact,
+        // row 224 = the text palette — while the PC duplicates the block into
+        // rows 192 and 224 (its crowd, bank 00F0 on colours 205-207, never
+        // spawns). The variant keeps row 192 for the crowd.
+        if (!v2_console_variant) {
+            for (int i = 0; i < 48; i++) {
+                vm.ds_write_b(DS_PAL_SRC_C192 + i, vm.es[src_ptr + i]);
+            }
         }
         for (int i = 0; i < 48; i++) {
             vm.ds_write_b(DS_PAL_SRC_C224 + i, vm.es[src_ptr + i]);
@@ -15197,7 +15249,7 @@ static void v2_vm_op_13(V2VM& vm) {
         //   - Copy v2_hud_buf → v2_render_buf top 64 rows (viewport top gets HUD picture)
         //   - Clear v2_hud_buf (HUD area emptied)
         //   - Clear v2_render_buf rows 64..176 (rest of viewport cleared)
-        extern uint8_t v2_render_buf[320*200];
+        extern uint8_t v2_render_buf[320*240];
         extern uint8_t v2_hud_buf[320*64];
         // Clear HUD area (= orig STOSB di=0..0x2ADC head part)
         memset(v2_hud_buf, 0, 320 * 64);
@@ -15265,7 +15317,7 @@ static void v2_vm_op_D3(V2VM& vm) {
         // UX stage 7: an LVX_ALT record is a variant of a canonical slot, not a
         // slot — its password IS the canonical one and lives in the ds:0x85A5
         // table below (same DS_LEVEL_LOAD/DS_CMD_ACTIVE writes either way)
-        if (lx.flags & LVX_ALT) continue;
+        if (lx.flags & (LVX_ALT | LVX_CONSOLE)) continue;
         if ((lx.pw[0] & 0x7F) == (pw0 & 0xFF) && (lx.pw[1] & 0x7F) == (pw1 & 0xFF) &&
             (lx.pw[2] & 0x7F) == (pw2 & 0xFF) && (lx.pw[3] & 0x7F) == (pw3 & 0xFF)) {
             vm.ds_write(DS_LEVEL_LOAD, lx.level);
@@ -17105,7 +17157,7 @@ static void v2_vm_op_57(V2VM& vm) {
     // V2-OP57-302: trap writes to music mute flag (sound dispatch sees 0=play, 1=mute).
     // Anim script in cutscene levels writes 0 here to force-unmute music.
     if (addr == 0x302 || addr == 0x304) {
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         fprintf(stderr,
           "V2-OP57-302[f%d]: obj=%02X pc=%04X addr=%04X val=%04X lvl=%04X — writing music mute\n",
           v2_dbg_pre_vm_iter, vm.obj, (uint16_t)(vm.pc - 2), addr,
@@ -17287,7 +17339,7 @@ static bool v2_vm_ch_dispatch_1250b(V2VM& vm, uint8_t& out_mode) {
     uint16_t text_ptr = v2_text_ptr_of(v2_m2c_base + 0x9480, result);   // UX6: the language bank first
     vm.ds_write(DS_TEXT_IDX, text_ptr);
     { static int _t = -1; if (_t < 0) _t = getenv("V2_CH_TRACE") ? 1 : 0;
-      if (_t) { extern int v2_dbg_pre_vm_iter;
+      if (_t) { 
       fprintf(stderr, "V2-2850A-VMOP[f%d]: mode=%02X dispatch_result=%04X seg001_off=%04X text_ptr=%04X\n",
               v2_dbg_pre_vm_iter, (uint8_t)out_mode, result, seg001_off, text_ptr); } }
     return false;
@@ -17377,7 +17429,7 @@ static void v2_vm_op_41(V2VM& vm) {
         // diag (V2_CMDQ_LOG=1): which text record a box shows — the scene
         // review pipeline maps the seg001 pointer back to the SMD line
         { static int _tl = -1; if (_tl < 0) _tl = getenv("V2_CMDQ_LOG") ? 1 : 0;
-          if (_tl) { extern int v2_dbg_pre_vm_iter;
+          if (_tl) { 
             fprintf(stderr, "V2-TEXT41[f%d obj=%02X]: ptr=%04X w=%u h=%u\n",
                     v2_dbg_pre_vm_iter, vm.global_r(DS_CUR_OBJ), text_ptr, w, h); } }
     }
@@ -19855,7 +19907,7 @@ static void v2_page_flip_16775(uint8_t* s) {
     // shift the timing-sensitive count (the printf variant does: 1625→1631).
     if (getenv("V2_FLIPTRACE")) {
         static long _ftn = 0;
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         fprintf(stderr, "V2-FLIP[%ld] f=%d a39c=%04X lv=%04X\n",
                 ++_ftn, v2_dbg_pre_vm_iter,
                 v2gs(s).vsync_count(), v2gs(s).level());
@@ -19863,7 +19915,7 @@ static void v2_page_flip_16775(uint8_t* s) {
     {
         // #32 groove trap: always record (user decision 2026-07-22 — keep the
         // trap armed so a rare anomalous run leaves its trace on disk).
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         extern void v2_flipring_push(uint8_t tag, uint16_t frame,
                                      uint16_t a39c, uint16_t lv, void* ra);
         v2_flipring_push(1, (uint16_t)v2_dbg_pre_vm_iter,
@@ -20205,7 +20257,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         if (v2gs(s).pal_flags_b() == 0)
                             v2gs(s).pal_src_ptr(DS_PAL_SRC);
                         { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
-                          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site5\n", v2_dbg_pre_vm_iter);} }
+                          if(_lr){ fprintf(stderr, "LADDER[f%d] req4-set @site5\n", v2_dbg_pre_vm_iter);} }
                         v2gs(s).pal_req(4);
                         v2_pal_correct_10e99(s);            // JMP sub_10E99 tail
                     }
@@ -20253,7 +20305,7 @@ static void v2_check_117D(const char* where, uint8_t* s, uint8_t* r) {
 // DIAG: polling watch for ds:0x302 divergence. Call from any phase to log
 // changes in real_ds[0x302] or shadow_ds[0x302]. Helper for hunting writer.
 void v2_watch_302(const char* tag) {
-    extern int v2_dbg_pre_vm_iter;
+    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     static uint16_t prev_r = 0xDEAD, prev_s = 0xDEAD;
     static bool hw_armed = false;
     uint16_t r302 = 0xDEAD, s302 = v2gs(v2_vm_shadow_ds).music_mute();
@@ -20285,13 +20337,18 @@ void v2_watch_302(const char* tag) {
 // where the per-frame counter stands still). Returns true when written.
 static bool v2_dbg_dump_frame_ppm(const char* fn) {
     extern uint8_t v2_dac_shadow[768];
-    extern uint8_t v2_render_buf[320*200];
+    extern uint8_t v2_render_buf[320*240];
     extern uint8_t v2_hud_buf[320 * 64];
     FILE* f = fopen(fn, "wb");
     if (!f) return false;
-    fprintf(f, "P6\n320 200\n255\n");
-    const int fs = v2_scene_fullscreen();
-    for (int i = 0; i < 320 * 200; i++) {
+    // UX stage 9: the dump follows the view — 176 map rows + the HUD band on a
+    // canonical level (200 rows), 200 map rows on an LVX scene, 224 on an
+    // LVX_TALL224 level (no HUD band on either)
+    const int view = v2_view_rows();
+    const int rows = view > 200 ? view : 200;
+    fprintf(f, "P6\n320 %d\n255\n", rows);
+    const int fs = view > 176;
+    for (int i = 0; i < 320 * rows; i++) {
         uint8_t c = (i < 320 * 176 || fs) ? v2_render_buf[i] : v2_hud_buf[i - 320 * 176];
         fputc(v2_dac_shadow[c*3+0] << 2, f);
         fputc(v2_dac_shadow[c*3+1] << 2, f);
@@ -20396,16 +20453,16 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         for (int i = 0; i < nsnap; i++)
             if (v2_dbg_pre_vm_iter == snapf[i] || v2_dbg_pre_vm_iter == snapf[i] + 1) snap_now = true;
         if (snap_now) {
-            extern uint8_t v2_render_buf[320*200];
+            extern uint8_t v2_render_buf[320*240];
             char fn[64]; snprintf(fn, sizeof(fn), "/tmp/ladder_f%d.ppm", v2_dbg_pre_vm_iter);
             if (v2_dbg_dump_frame_ppm(fn)) {
                 // raw index map alongside (visual index forensics)
                 char fn2[64]; snprintf(fn2, sizeof(fn2), "/tmp/ladder_f%d.idx", v2_dbg_pre_vm_iter);
                 FILE* f2 = fopen(fn2, "wb");
-                if (f2) { fwrite(v2_render_buf, 1, 320 * 200, f2); fclose(f2); }
+                if (f2) { fwrite(v2_render_buf, 1, 320 * v2_view_rows(), f2); fclose(f2); }   // UX stage 9: 176/200/224 rows
                 // index histogram of the 0x75-0x78 range for the same frame
                 int cnt[4] = {0,0,0,0};
-                for (int i = 0; i < 320 * 200; i++) {
+                for (int i = 0; i < 320 * v2_view_rows(); i++) {
                     uint8_t c = v2_render_buf[i];
                     if (c >= 0x75 && c <= 0x78) cnt[c - 0x75]++;
                 }
@@ -20437,7 +20494,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         static int _pc = -1;
         if (_pc < 0) _pc = getenv("V2_LADDER_TRACE") ? 1 : 0;
         if (_pc) {
-            extern uint8_t v2_render_buf[320*200];
+            extern uint8_t v2_render_buf[320*240];
             int n = 0;
             for (int i = 0; i < 320 * 200; i++)
                 if (v2_render_buf[i] >= 0x75 && v2_render_buf[i] <= 0x78) n++;
@@ -21433,7 +21490,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                     if (v2gs(s).pal_flags_b() == 0)
                         v2gs(s).pal_src_ptr(DS_PAL_SRC);
                     { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
-                      if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site6\n", v2_dbg_pre_vm_iter);} }
+                      if(_lr){ fprintf(stderr, "LADDER[f%d] req4-set @site6\n", v2_dbg_pre_vm_iter);} }
                     v2gs(s).pal_req(4);
                     v2_pal_correct_10e99(s);
                 }
@@ -22903,7 +22960,7 @@ static void v2_pw_post_loop(uint8_t* shadow) {
         if (v2gs(shadow).pal_flags_b() == 0)
             v2gs(shadow).pal_src_ptr(DS_PAL_SRC);
         { static int _lr=-1; if(_lr<0) _lr=getenv("V2_LADDER_TRACE")?1:0;
-          if(_lr){ extern int v2_dbg_pre_vm_iter; fprintf(stderr, "LADDER[f%d] req4-set @site7\n", v2_dbg_pre_vm_iter);} }
+          if(_lr){ fprintf(stderr, "LADDER[f%d] req4-set @site7\n", v2_dbg_pre_vm_iter);} }
         v2gs(shadow).pal_req(4);
         v2_pal_correct_10e99(shadow);
         v2_pw_did_save_1450b = false;
@@ -23111,7 +23168,7 @@ void v2_signal_phase(V2Phase phase, uint16_t ds_val) {
         static int _pl = -1;
         if (_pl < 0) _pl = getenv("V2_PHASE_LOG") ? 1 : 0;
         if (_pl) {
-            extern int v2_dbg_pre_vm_iter;
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
             fprintf(stderr, "PHASE[f%d]: %d\n", v2_dbg_pre_vm_iter, (int)phase);
         }
     }
@@ -23396,7 +23453,7 @@ void v2_vm_coll_trace_compare() {
         if (v.obj != o.obj || v.opcode != o.opcode ||
             v.pc_before != o.pc_before || v.pc_after != o.pc_after || v.hash != o.hash) {
             reported = true;
-            extern int v2_dbg_pre_vm_iter;
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
             fprintf(stderr,
                 "V2-COLL-TRACE: FIRST MISMATCH f=%d idx=%d/%d\n"
                 "  orig: obj=%04X op=%02X pc=%04X->%04X hash=%08X\n"
@@ -23421,7 +23478,7 @@ void v2_vm_coll_trace_compare() {
         }
     }
     if (!reported && v2_coll_trace_len != orig_coll_trace_len) {
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         fprintf(stderr, "V2-COLL-TRACE: length mismatch f=%d v2=%d orig=%d (prefix matched)\n",
             v2_dbg_pre_vm_iter, v2_coll_trace_len, orig_coll_trace_len);
     }

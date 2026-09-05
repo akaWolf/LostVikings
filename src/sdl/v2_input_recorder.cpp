@@ -404,7 +404,7 @@ extern "C" void v2_input_recorder_shutdown(void) {
         // replay can run for exactly the same number of frames (run to the last
         // frame reached during recording — not the last input event, not an
         // arbitrary tail). record.sh reads this for the .frames budget.
-        extern int v2_dbg_pre_vm_iter;
+        // v2_dbg_pre_vm_iter: file-scope extern (top of file)
         fprintf(g_record_file, "# end-frame %d\n", v2_dbg_pre_vm_iter);
         fclose(g_record_file);
         g_record_file = nullptr;

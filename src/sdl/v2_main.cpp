@@ -16,6 +16,7 @@
 #include "v2_gamestate.h"   // stage 4 II.c: evac refresh after teleport load
 #include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
+extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 
 extern bool need_quit;
 
@@ -226,7 +227,7 @@ int main(int argc, char* argv[]) {
         // Per-frame slow-frame warning (any frame whose work alone exceeds budget).
         if (work_ms > FRAME_PERIOD_MS) {
             fps_slow_frames++;
-            extern int v2_dbg_pre_vm_iter;
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
             fprintf(stderr, "FPS-SLOW: frame_iter=%d work=%ums > budget=%ums\n",
                     v2_dbg_pre_vm_iter, work_ms, FRAME_PERIOD_MS);
         }
@@ -254,7 +255,7 @@ int main(int argc, char* argv[]) {
         // №59: plain V2_ONLY --max-frames enforcement (frame counter is the
         // FRAME_BEGIN barrier increment — same counter the traces use).
         if (g_v2only_max_frames > 0) {
-            extern int v2_dbg_pre_vm_iter;
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
             if (v2_dbg_pre_vm_iter >= g_v2only_max_frames) {
                 fprintf(stderr, "V2_ONLY: --max-frames=%d reached, exiting\n",
                         g_v2only_max_frames);

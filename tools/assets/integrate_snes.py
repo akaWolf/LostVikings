@@ -130,6 +130,286 @@ def balance_integrate(scratch, lvx):
         print(f"  level {lvl} {pws[lvl]}: SNES head {de_hdr:04X} -> alt head {b:04X} (next {nxt:02X}, track {pc_raw[0x05]:02X})")
 TMPL_CHUNK.update({slot: dst for slot, (src, dst) in SCENE_TMPL.items()})
 
+
+# UX stage 9 (2026-09-05): the console finale. The SNES DE finale head 0x082
+# (slot 0x34 = PC 0x2F, the rock concert) carries what the DOS build left
+# out: a second layer BG2 (map 0083 x the level's own quad table 0081 on the
+# finale tileset 080, 18x15 quads, fx/fy 1.0 = it stands still behind the
+# stage: the dragon head) and two crowd objects (class 4E at (96,208) and
+# (224,208), pools 0/2; the PC script 1C6 has class 4E with sprite bank 00F0
+# — the "THE END" letters, 12 frames of 1152 B, which no PC head ever loads —
+# so the SNES crowd sheet 0x99 becomes a PC bank of the same shape and the
+# variant's copy of the script points class 4E at it). Torches are the
+# palette animations both heads already share ((1,81,89) (6,26,28) (1,17,17)
+# (2,29,31)). Port: an LVX_CONSOLE variant head of slot 0x2F = the PC head
+# 0xDA + the BG pair refs (stage-2 parallax format, chunks 0x2FB/0x2FC) +
+# the two 4E rows + bank 00F0 in the sprite-bank list; the option CONSOLE
+# FINALE (default on) makes v2_load_template take it.
+FINALE_SLOT, FINALE_DE_SLOT = 0x2F, 0x34
+# archive ids 0x2E8..0x2EF (after the 12 balance levels 0x2A0..0x2E7)
+FINALE_HEAD, FINALE_TILEMAP, FINALE_TILESET, FINALE_GTLD, FINALE_PAL = 0x2E8, 0x2E9, 0x2EA, 0x2EC, 0x2ED
+FINALE_BGMAP, FINALE_BGTILES = 0x2EE, 0x2EF          # masks = FINALE_TILESET + 1 = 0x2EB
+FINALE_CROWD_PAL = 0x2FA                             # SNES palette row 192 (chunk 0x9A): the crowd
+FINALE_CROWD_BANK = 0x2FB                            # SNES bank 0x99 (12 x 32x32 4bpp) as a PC type-2 bank
+FINALE_SCRIPT = 0x2FC                                # copy of the world script 1C6: class 4E -> that bank
+
+
+def finale_integrate(scratch, lvx):
+    """The console finale as an LVX_CONSOLE | LVX_TALL224 variant of slot 0x2F.
+
+    Base = the SNES DE finale converted like a balance level (convert_level:
+    the SNES level map BG1, its tileset/quads baked, its palette with the
+    crowd's row 192): the SNES keeps only the stage platforms and the dragon
+    head's top in BG1 and the whole backdrop in BG2, the PC baked one opaque
+    map instead — so the PC map cannot show the dragon. The SNES world is
+    18 quads (288 px) wide; the 320-px PC view gets the PC map's own columns
+    18-19 (the right speakers; 20-21 are empty) appended with their tiles and
+    quads, so nothing wraps. Then: the BG2 pair as a live layer (fx/fy 1.0,
+    padded to 40 tiles), the PC spawn rows (Erik, Baleog, 4B, Olaf, 4C — the
+    SNES table has no Baleog and a class-48 controller the PC script does not
+    want here) + the two crowd rows 4E, the converted SNES crowd bank first in
+    the sprite-bank list (the SNES pad c0000c10 kept; the engine skips the pad)
+    with the palette row 192 and a script copy whose class 4E names that bank,
+    the PC head's mode/flags/music/next/start point."""
+    import json as _json
+    import parallax_snes as PX
+    de = SP.SnesRom(); R = de.rom
+    de_hid = R[0x7686 + FINALE_DE_SLOT * 2] | (R[0x7686 + FINALE_DE_SLOT * 2 + 1] << 8)
+    h = de.chunk(de_hid)
+    pc_hid = PX.exe_level_head(FINALE_SLOT)
+    pc_raw, _ = AC.read_payload(pc_hid, "lzss")
+    ex_path = os.path.join(scratch, "extras.json")
+    extras = _json.load(open(ex_path)) if os.path.exists(ex_path) else {}
+    for stale in (0x2FB, 0x2FC, 0x2FD):                # ids of the first attempt
+        extras.pop(f"{stale:04X}", None)
+        for rel in (f"unreferenced/{stale:04X}.bin", f"level_headers/{stale:04X}.json", f"tilemaps/{stale:04X}.json"):
+            if os.path.exists(os.path.join(scratch, rel)): os.remove(os.path.join(scratch, rel))
+    with open(ex_path + ".tmp", "w") as f: _json.dump(extras, f, indent=1)
+    os.replace(ex_path + ".tmp", ex_path)
+    PX.ensure_head_json(scratch, pc_hid, extras)        # the donor (story head) into the scratch
+    nxt = pc_raw[0x16] | (pc_raw[0x17] << 8)
+    cids = {"hdr": FINALE_HEAD, "map": FINALE_TILEMAP, "tiles": FINALE_TILESET, "gtld": FINALE_GTLD, "pal": FINALE_PAL}
+    exe = open(os.path.join(LR.ROOT, "exe_static.bin"), "rb").read()
+    sc_o = LR._EXE_DS + LR._SCRIPT_TBL + FINALE_SLOT * 2
+    TMPL_CHUNK[FINALE_SLOT] = exe[sc_o] | (exe[sc_o + 1] << 8)
+    # convert_level checks the SNES spawn classes against the donor world's
+    # script; the story heads are not in LR's 42-level table, so hand it the
+    # exe script-table entry of slot 0x2F (1C6) for the donor head.
+    _sfh = LR.script_for_header
+    LR.script_for_header = lambda hid, _o=_sfh: TMPL_CHUNK[FINALE_SLOT] if hid == pc_hid else _o(hid)
+    try:
+        SP.convert_level(de_hid, f"{pc_hid:04X}", scratch, new_cids=cids, next_level=nxt, music=pc_raw[0x05])
+    finally:
+        LR.script_for_header = _sfh
+
+    # ---- widen the converted level by the PC columns 18-19 ----
+    hp = os.path.join(scratch, "level_headers", f"{FINALE_HEAD:04X}.json")
+    hj = _json.load(open(hp)); raw = bytearray(bytes.fromhex(hj["raw"]))
+    sw, sh = raw[0x29] | (raw[0x2A] << 8), raw[0x2B] | (raw[0x2C] << 8)
+    tmj = _json.load(open(os.path.join(scratch, "tilemaps", f"{FINALE_TILEMAP:04X}.json")))
+    rows = [[int(w, 16) for w in r.split()] for r in tmj["rows"]]
+    # the converted tileset / masks / quads back from the scratch files
+    def compile_role(role, cid):
+        conv = AC.converter_for(role)
+        sample = conv.extract(cid, bytes(64 * 4))         # only to learn the file names
+        files = []
+        for rel, _ in sample:
+            with open(os.path.join(scratch, rel), "rb") as f: files.append((rel, f.read()))
+        return bytearray(conv.compile(files))
+    tiles = compile_role("tileset", FINALE_TILESET)
+    masks = compile_role("tile_masks", FINALE_TILESET + 1)
+    gtld = compile_role("bg_tileset", FINALE_GTLD)
+    pc_qw = pc_raw[0x29] | (pc_raw[0x2A] << 8)
+    pc_tm = AC.read_payload(pc_raw[0x2E] | (pc_raw[0x2F] << 8), "lzss")[0]
+    pc_ts = AC.read_payload(pc_raw[0x30] | (pc_raw[0x31] << 8), "lzss")[0]
+    pc_gt = AC.read_payload(pc_raw[0x32] | (pc_raw[0x33] << 8), "lzss")[0]
+    tile_index = {}
+    for i in range(len(tiles) // 64):
+        tile_index.setdefault(bytes(tiles[i * 64:(i + 1) * 64]), i)
+    quad_index = {}
+    for i in range(len(gtld) // 8):
+        quad_index.setdefault(bytes(gtld[i * 8:(i + 1) * 8]), i)
+    def add_tile(t64):
+        k = bytes(t64)
+        if k in tile_index: return tile_index[k]
+        idx = len(tiles) // 64
+        tiles.extend(k)
+        tp = LR.tile_decode(k)
+        m = bytearray(8)
+        for ty in range(8):
+            for tx in range(8):
+                if tp[ty * 8 + tx]:
+                    m[(tx & 3) * 2 + (ty >> 2)] |= 1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
+        masks.extend(m)
+        tile_index[k] = idx
+        return idx
+    EXTRA_COLS = (18, 19)
+    for y in range(sh):
+        for x in EXTRA_COLS:
+            wv = pc_tm[(y * pc_qw + x) * 2] | (pc_tm[(y * pc_qw + x) * 2 + 1] << 8)
+            e = pc_gt[(wv & 0x3FF) * 8:(wv & 0x3FF) * 8 + 8]
+            words = []
+            for o in (0, 2, 4, 6):
+                dw = e[o] | (e[o + 1] << 8)
+                idx = add_tile(pc_ts[(dw & 0xFFC0):(dw & 0xFFC0) + 64].ljust(64, b"\0"))
+                words.append((idx << 6) | (dw & 0x003F))
+            qk = bytes(v for w in words for v in (w & 0xFF, w >> 8))
+            if qk not in quad_index:
+                quad_index[qk] = len(gtld) // 8
+                gtld.extend(qk)
+            rows[y].append(quad_index[qk] | (wv & 0xFC00))
+    assert len(tiles) // 64 <= 1024, len(tiles) // 64
+    NW = sw + len(EXTRA_COLS)
+    tmj["width"] = NW; tmj["rows"] = [" ".join(f"{w:04X}" for w in r) for r in rows]
+    with open(os.path.join(scratch, "tilemaps", f"{FINALE_TILEMAP:04X}.json"), "w") as f: _json.dump(tmj, f, indent=1)
+    for role, cid, payload in (("tileset", FINALE_TILESET, bytes(tiles)), ("tile_masks", FINALE_TILESET + 1, bytes(masks)),
+                               ("bg_tileset", FINALE_GTLD, bytes(gtld))):
+        for rel, blob in AC.converter_for(role).extract(cid, payload):
+            with open(os.path.join(scratch, rel), "wb") as f: f.write(blob)
+    raw[0x29], raw[0x2A] = NW & 0xFF, NW >> 8
+    hj["width"] = NW
+
+    # ---- the BG2 pair as a live layer, padded to 40 tiles ----
+    mbytes, tbytes, stt = PX.convert_pair(de, h)
+    TW, TH = mbytes[0] | (mbytes[1] << 8), mbytes[2] | (mbytes[3] << 8)
+    n_t = tbytes[0] | (tbytes[1] << 8)
+    tbytes = bytes(((n_t + 1) & 0xFF, (n_t + 1) >> 8)) + tbytes[2:] + bytes(64)   # + one blank tile
+    pm = bytearray(bytes((40 & 0xFF, 0, TH & 0xFF, TH >> 8)))
+    for ty in range(TH):
+        pm += mbytes[4 + ty * TW * 2: 4 + (ty + 1) * TW * 2]
+        pm += bytes((n_t & 0xFF, n_t >> 8)) * (40 - TW)
+    d = os.path.join(scratch, "unreferenced"); os.makedirs(d, exist_ok=True)
+    for cid, blob in ((FINALE_BGMAP, bytes(pm)), (FINALE_BGTILES, tbytes)):
+        with open(os.path.join(d, f"{cid:04X}.bin"), "wb") as f: f.write(blob)
+
+    # ---- the head: PC fixed part, SNES BG fields -> our pair, spawns, banks ----
+    st = LR.parse_stripe(bytes(raw))
+    pcs = LR.parse_stripe(pc_raw); de_st = LR.parse_stripe(h)
+    head = bytearray(st["head"] if isinstance(st["head"], (bytes, bytearray)) else bytes.fromhex(st["head"]))
+    head[0x00:0x29] = pc_raw[0x00:0x29]                 # mode, music, next, viking start point, lvflags: the PC's
+    head[0x16], head[0x17] = nxt & 0xFF, nxt >> 8
+    head[0x34:0x38] = h[0x34:0x38]                      # BG size 18 x 15 quads
+    head[0x39], head[0x3A] = FINALE_BGMAP & 0xFF, FINALE_BGMAP >> 8
+    head[0x3B], head[0x3C] = FINALE_BGTILES & 0xFF, FINALE_BGTILES >> 8
+    head[0x3D], head[0x3E] = 0xFF, 0xFF
+    head[0x3F:0x43] = h[0x3F:0x43]                      # fx/fy 0x0100
+    st["head"] = bytes(head) if isinstance(st["head"], (bytes, bytearray)) else bytes(head).hex()
+    crowd = [s for s in de_st["spawns"] if s["cls"] == 0x4E]
+    assert len(crowd) == 2, crowd
+    st["spawns"] = list(pcs["spawns"]) + crowd
+    de_first = de_st["sprite_banks"][0]
+    assert de_first["pad"] == "c0000c10" and [b["pad"] for b in de_st["sprite_banks"][1:]] == [b["pad"] for b in pcs["sprite_banks"]]
+    # the crowd bank: SNES chunk 0x99 is a 4bpp sheet of 16 tile rows x 12
+    # tiles (4 poses x 3 frames of 32x32, see frame_px) whose nibbles 13-15
+    # are the blues of palette row 192. The PC class 4E of script 1C6 names
+    # bank 00F0 — the same crowd art in PC type 2 (12 frames of 1152 B, the
+    # pixels 205-207 = row 192 colours 13-15) shifted 3 rows up; the SNES
+    # sheet is used so the figures land on the console's rows. Frame = type
+    # 2 (32 wide, 32 rows, 4 planes x 32 strips x (mask + 8 bytes) = 1152 B),
+    # pixel = 192 + nibble; 16 frames so that frame index 4p + j is 16 units
+    sheet = de.chunk(de_first["chunk"])
+    assert de_first["chunk"] == 0x99 and len(sheet) == 12 * 512, (de_first, len(sheet))
+    def snes_tile(b):
+        px = [[0] * 8 for _ in range(8)]
+        for y in range(8):
+            p0, p1, p2, p3 = b[y * 2], b[y * 2 + 1], b[16 + y * 2], b[16 + y * 2 + 1]
+            for x in range(8):
+                bit = 7 - x
+                px[y][x] = ((p0 >> bit) & 1) | (((p1 >> bit) & 1) << 1) | (((p2 >> bit) & 1) << 2) | (((p3 >> bit) & 1) << 3)
+        return px
+    # The crowd animation (identical bytes in the SNES ROM at $B7AA and in the
+    # PC script at 0x83F4): three sub-sprites at x -48/-16/+16, y -16, then
+    # four poses "01 n n+4 n+8" with n = 00/40/80/C0 (delays 2/3/2/3 ticks —
+    # Mesen frames 4000-4040: four crowd states of 6/9/6/9 frames). On the
+    # console the operands are OAM tile numbers over the 16-tile-wide VRAM
+    # sheet: pose p, sub-sprite j = the 4x4 tile block at row 4p, column 4j —
+    # three DIFFERENT frames side by side, rows 0-15 = the whole bank. The
+    # PC's anim op 1 (sub_130ef) turns the same bytes into byte offsets, bank
+    # base + n*72: with 1152-B frames the +4/+8 sub-sprites would read the
+    # previous frame's plane sections and pose 3 the next bank (00F3, the
+    # THE END letters) — the crowd never spawns on the PC, so its bank 00F0
+    # and this anim were never reconciled. The variant lays the frames out
+    # at 16 units each (frame index 4p + j -> unit 16(4p + j)) and patches
+    # the twelve operands in its copy of the script accordingly.
+    def frame_px(fr):
+        # chunk 0x99 = 16 tile rows x 12 tiles (4 poses x 3 frames of 4x4
+        # tiles, 6144 B); in VRAM the rows sit at a 16-tile stride from tile
+        # 0xC0 (the pad's base) with the letters bank 0x9C (base 0xCC) in
+        # columns 12-15. Frame index 4p + j -> sheet rows 4p.., columns 4j..;
+        # j = 3 has no frame (blank). Verified: the PC bank 00F0 holds the
+        # same pixels shifted 3 rows up (F0 row y = sheet row y + 3).
+        px = [[0] * 32 for _ in range(32)]
+        p, j = fr // 4, fr % 4
+        if j == 3:
+            return px
+        for ty in range(4):
+            for tx in range(4):
+                tp = snes_tile(sheet[((4 * p + ty) * 12 + 4 * j + tx) * 32:][:32])
+                for y in range(8):
+                    for x in range(8):
+                        px[ty * 8 + y][tx * 8 + x] = (192 + tp[y][x]) if tp[y][x] else 0
+        return px
+    benc = bytearray()
+    for fr in range(16):
+        px = frame_px(fr)
+        for plane in range(4):
+            for strip in range(32):
+                mask = 0; dd = bytearray(8)
+                for i in range(8):
+                    v = px[strip][i * 4 + plane]
+                    if v:
+                        mask |= 0x80 >> i; dd[i] = v
+                benc += bytes((mask,)) + bytes(dd)
+    assert len(benc) == 16 * 1152, len(benc)
+    with open(os.path.join(d, f"{FINALE_CROWD_BANK:04X}.bin"), "wb") as f: f.write(bytes(benc))
+    # the variant's script: the world script with class 4E's sprite chunk
+    # pointed at the converted bank (the lookup sub_12f82 goes by chunk id)
+    # and the crowd anim's frame operands on the 16-unit frame grid
+    # the mod's 1C6 (the scratch copy already carries the S_8C00 ladder patch
+    # of UX stage 1: vortex -> scene slots 0x35..0x39), not the canonical one
+    sc = bytearray(LR.open_payload(TMPL_CHUNK[FINALE_SLOT], "lzss", scratch))
+    assert sc[0x8C38] == 0x35 and sc[0x8C54] == 0x39, "1C6 ladder patch missing — run the scene templates first"
+    o = 0x4E * 0x15
+    assert sc[o] | (sc[o + 1] << 8) == 0xF0, sc[o:o + 2].hex()
+    sc[o], sc[o + 1] = FINALE_CROWD_BANK & 0xFF, FINALE_CROWD_BANK >> 8
+    anim = bytes.fromhex("08d0fff0ff10000af0fff0fff0ff01000408 0f02 01404448 0f03 01808488 0f02 01c0c4c8 0f03".replace(" ", ""))
+    a = sc.find(anim)
+    assert a == 0x83F4 and sc.find(anim, a + 1) < 0, hex(a)
+    for p, at in enumerate((0x8402, 0x8408, 0x840E, 0x8414)):
+        assert sc[at] == 0x01 and sc[at + 1] == 0x40 * p, sc[at:at + 4].hex()
+        for j in range(3):
+            sc[at + 1 + j] = 16 * (4 * p + j)
+    with open(os.path.join(d, f"{FINALE_SCRIPT:04X}.bin"), "wb") as f: f.write(bytes(sc))
+    st["sprite_banks"] = [{"chunk": FINALE_CROWD_BANK, "pad": de_first["pad"]}] + list(pcs["sprite_banks"])
+    # the crowd's palette row: the SNES list carries chunk 0x9A at colour 192,
+    # the PC list has no row 192 at all (convert_level keeps the donor's rows)
+    row192 = [e for e in de_st["pal_list"] if e["start"] == 192]
+    assert len(row192) == 1 and not [e for e in pcs["pal_list"] if e["start"] == 192], (row192, pcs["pal_list"])
+    cp = de.chunk(row192[0]["chunk"])
+    pal192 = bytes(v for i in range(len(cp) // 2) for v in SP.bgr555_to_vga6(cp[i * 2] | (cp[i * 2 + 1] << 8)))
+    with open(os.path.join(d, f"{FINALE_CROWD_PAL:04X}.bin"), "wb") as f: f.write(pal192)
+    st["pal_list"] = list(st["pal_list"]) + [{"chunk": FINALE_CROWD_PAL, "start": 192}]
+    st["anim_chunks"] = pcs["anim_chunks"]
+    new_raw = LR.serialize_stripe(st)
+    hj["raw"] = new_raw.hex()
+    with open(hp + ".tmp", "w") as f: _json.dump(hj, f, indent=1)
+    os.replace(hp + ".tmp", hp)
+    extras = _json.load(open(ex_path))
+    extras[f"{FINALE_BGMAP:04X}"] = {"role": "unreferenced"}
+    extras[f"{FINALE_BGTILES:04X}"] = {"role": "unreferenced"}
+    extras[f"{FINALE_CROWD_PAL:04X}"] = {"role": "unreferenced"}
+    extras[f"{FINALE_CROWD_BANK:04X}"] = {"role": "unreferenced"}
+    extras[f"{FINALE_SCRIPT:04X}"] = {"role": "unreferenced"}
+    with open(ex_path + ".tmp", "w") as f: _json.dump(extras, f, indent=1)
+    os.replace(ex_path + ".tmp", ex_path)
+    TMPL_CHUNK[FINALE_SLOT] = FINALE_SCRIPT           # the LVX record's script (the canonical slot keeps 1C6)
+    lvx.append({"slot": FINALE_SLOT, "hdr": FINALE_HEAD, "pw": b"\0\0\0\0", "flags": LVX_CONSOLE | LVX_TALL224})
+    print(f"console finale: SNES {de_hid:03X} + PC {pc_hid:04X} cols 18-19 -> head {FINALE_HEAD:04X} map {FINALE_TILEMAP:04X} "
+          f"{NW}x{sh} ({len(tiles)//64} tiles, {len(gtld)//8} quads); BG pair {FINALE_BGMAP:04X}/{FINALE_BGTILES:04X} 40x{TH} tiles; "
+          f"crowd {[(c['x'], c['y']) for c in crowd]}; crowd bank {FINALE_CROWD_BANK:04X} (12 x 1152 B) + palette row 192 "
+          f"{FINALE_CROWD_PAL:04X}; script {FINALE_SCRIPT:04X} (1C6 with 4E -> {FINALE_CROWD_BANK:04X})")
+
+
 # The six SMD/Genesis-only scenes (task: embed into gameplay, as on SMD):
 # five between-world cutscenes replace the PC timewarp room (scene 0x29)
 # on the world edges, the sixth is the game-completion cutscene wedged
@@ -257,6 +537,10 @@ LVX_TRIO = 0x0004         # the record's 18B = sub_11446 mode-2 viking table
 LVX_NOGATE = 0x0008       # no sub_10813 off-screen input gate: the Genesis
                           # recordings walk the trio in from x -68 (the SMD
                           # engine has no such gate — docs2/GENESIS_ROM_INTERNALS.md)
+LVX_CONSOLE = 0x0040      # UX stage 9: an ALTERNATIVE head of a canonical slot gated by the
+                          # CONSOLE FINALE option (the SNES finale's BG2 dragon layer + crowd)
+LVX_TALL224 = 0x0080      # UX stage 9: the level is viewed 224 rows tall without a HUD band
+                          # (map rows 16..239 on the finale, as the console shows it)
 LVX_PALTICK3 = 0x0020     # the palette-animation timers tick once per 3 console
                           # frames (20 Hz; Mednafen 60 fps recordings: Preh grass
                           # reload 2 = a step every 6 frames, Factory letter light
@@ -985,6 +1269,7 @@ def do_integrate(scratch, music=None):
     # UX stage 7: the SNES-balance variants (after the parallax step: their
     # heads copy the canonical heads' pair refs) — the trailer is rebuilt
     balance_integrate(scratch, lvx)
+    finale_integrate(scratch, lvx)
     build_lvx(scratch, lvx)
     # UX stage 6: the language banks (BAC translations, Press Start 2P glyph pages)
     import build_locale
