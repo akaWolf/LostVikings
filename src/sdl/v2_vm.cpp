@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <SDL2/SDL.h>
 #include "render_v2.h"
+#include "v2_ui.h"
 #include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
 #include "v2_timing.h"
@@ -2288,6 +2289,8 @@ static void v2_parallax_load(uint8_t* s) {
     static int env = -1;
     if (env < 0) { const char* e = getenv("V2_PARALLAX"); env = (e && *e == '0') ? 0 : 1; }
     if (!env) return;
+    v2_options_ensure_loaded();
+    if (!v2_options.parallax.load()) return;      // UX stage 3: the options menu switch
     uint16_t mc = *(uint16_t*)(s + 0x25EC);           // head +0x39
     uint16_t tc = *(uint16_t*)(s + 0x25EE);           // head +0x3B
     if (mc == 0xFFFF || tc == 0xFFFF || mc == 0 || tc == 0) return;
@@ -8175,6 +8178,7 @@ extern "C" int v2_state_load(const char* path) {
     // proved identity; this direction re-proves DEserialization).
     v2_gs_deserialize(&st_gs, ds_img);
     v2_gs_serialize(&st_gs, v2_vm_shadow_ds);
+    v2_gs_evac_refresh(v2_vm_shadow_ds);   // UX stage 3: a mid-game load (debug LOAD slot) must re-sync the evacuated members
     // Post-load fixups: world bookkeeping that lives outside the DS.
     v2_vm_acc_base = v2_vm_shadow_ds;
     v2_shadow_initialized = true;
@@ -8184,6 +8188,133 @@ extern "C" int v2_state_load(const char* path) {
     fprintf(stderr, "V2-STATE: loaded %d blocks from %s (level=%u)\n",
             n, path, (unsigned)v2_current_level);
     return 0;
+}
+
+// ============================================================================
+// UX stage 3: the game-thread side of the options menu / debug tools
+// (v2_ui.h). Runs once per tick at the top of v2_game_loop_pre_vm.
+// ============================================================================
+static void v2_parallax_load(uint8_t* s);
+static const V2LvxEntry* v2_lvx_find(uint16_t level);
+static uint16_t v2_lvx_demo_cid(uint16_t level);
+
+// rewind ring: raw copies of the state blocks (debug only, lazily allocated)
+static uint8_t* v2_rw_mem = nullptr;
+static uint32_t v2_rw_stride = 0;
+static int v2_rw_cap = 96, v2_rw_head = 0, v2_rw_count = 0;
+static V2GameState v2_rw_st;
+static bool v2_rw_alloc() {
+    if (v2_rw_mem) return true;
+    V2StateBlock b[20]; int n = 0; v2_state_blocks(b, &n, v2_vm_shadow_ds);
+    uint32_t total = 0; for (int i = 0; i < n; i++) total += b[i].len;
+    v2_rw_stride = total;
+    v2_rw_mem = (uint8_t*)malloc((size_t)total * v2_rw_cap);
+    if (!v2_rw_mem) { fprintf(stderr, "V2-UI: rewind ring: no memory (%u x %d)\n", total, v2_rw_cap); return false; }
+    fprintf(stderr, "V2-UI: rewind ring %d x %u B\n", v2_rw_cap, total);
+    return true;
+}
+// The DS block goes through the typed model exactly like v2_state_save /
+// v2_state_load (shadow -> V2GameState -> image and back): a raw memcpy into
+// the shadow would leave the stage-4 evacuated members behind the bytes
+// (FATAL "evac desync", seen on the first ring restore). The other shadows
+// are plain byte images.
+static void v2_rw_capture() {
+    if (!v2_rw_alloc()) return;
+    uint8_t* slot = v2_rw_mem + (size_t)v2_rw_head * v2_rw_stride;
+    V2StateBlock b[20]; int n = 0; v2_state_blocks(b, &n, slot);   // b[0] = the DS block at the slot start
+    v2_gs_deserialize(&v2_rw_st, v2_vm_shadow_ds);
+    v2_gs_serialize(&v2_rw_st, slot);
+    uint8_t* dst = slot + b[0].len;
+    for (int i = 1; i < n; i++) { memcpy(dst, b[i].ptr, b[i].len); dst += b[i].len; }
+    v2_rw_head = (v2_rw_head + 1) % v2_rw_cap;
+    if (v2_rw_count < v2_rw_cap) v2_rw_count++;
+}
+static bool v2_rw_restore(uint8_t* s) {
+    if (!v2_rw_mem || v2_rw_count == 0) return false;
+    v2_rw_head = (v2_rw_head - 1 + v2_rw_cap) % v2_rw_cap; v2_rw_count--;
+    uint8_t* slot = v2_rw_mem + (size_t)v2_rw_head * v2_rw_stride;
+    V2StateBlock b[20]; int n = 0; v2_state_blocks(b, &n, slot);
+    const uint8_t* src = slot + b[0].len;
+    for (int i = 1; i < n; i++) { memcpy(b[i].ptr, src, b[i].len); src += b[i].len; }
+    v2_gs_deserialize(&v2_rw_st, slot);
+    v2_gs_serialize(&v2_rw_st, v2_vm_shadow_ds);
+    v2_gs_evac_refresh(v2_vm_shadow_ds);          // members <- the restored image (stage-4 evac)
+    v2_vm_acc_base = v2_vm_shadow_ds; v2_shadow_initialized = true;
+    v2_current_level = v2gs(s).level();
+    { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
+    { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
+    return true;
+}
+static void v2_ui_fill_levels(uint8_t* s) {
+    int n = 0;
+    for (int lvl = 0; lvl < 37 && n < 64; lvl++) {          // the DS password table (sub_1287a)
+        V2UiLevel& e = v2_ui_levels[n++]; e.slot = lvl;
+        for (int k = 0; k < 4; k++) e.pw[k] = (char)(s[0x85A5 + lvl * 4 + k] & 0x7F);
+        e.pw[4] = 0;
+    }
+    for (int lvl = 48; lvl < 64 && n < 64; lvl++) {          // LVX slots (their own passwords)
+        const V2LvxEntry* lx = v2_lvx_find((uint16_t)lvl);
+        if (!lx) continue;
+        V2UiLevel& e = v2_ui_levels[n++]; e.slot = lvl;
+        for (int k = 0; k < 4; k++) e.pw[k] = lx->pw[k] ? (char)lx->pw[k] : ' ';
+        e.pw[4] = 0;
+    }
+    v2_ui_nlevels = n;
+}
+static void v2_ui_service(uint8_t* s) {
+    extern bool need_quit; extern bool g_debug_mode;
+    v2_options_ensure_loaded();
+    if (v2_ui_nlevels.load() == 0 && v2_shadow_initialized) v2_ui_fill_levels(s);
+    // the menu pauses the game at the tick boundary (the presenter keeps running)
+    while (v2_ui_menu_open.load() && !need_quit) SDL_Delay(8);
+    // options: parallax on/off at runtime (display lane), interludes on/off
+    static int last_par = -1;
+    int par = v2_options.parallax.load() ? 1 : 0;
+    if (par != last_par) {
+        if (last_par >= 0) { if (par) v2_parallax_load(s); else v2_parallax.on = false; }
+        last_par = par;
+    }
+    static uint16_t last_level = 0xFFFF;
+    uint16_t lv = v2gs(s).level();
+    if (lv != last_level) {
+        last_level = lv;
+        // a Genesis interlude slot that just started while scenes are off: hand
+        // over to its next level at once — the head copy already put +0x16
+        // into DS_LEVEL_LOAD, so arming the transition bit is the exact path
+        // a finished scene takes (v2_level_desc_init_116e3 resets the mode).
+        if (!v2_options.scenes.load() && v2_lvx_demo_cid(lv)) {
+            v2gs(s).frame_flags(v2gs(s).frame_flags() | 1);
+            v2_ui_toast("SCENE SKIPPED");
+        }
+    }
+    if (!g_debug_mode) return;
+    int k;
+    if ((k = v2_ui_req_save.exchange(-1)) >= 0) {
+        char p[64]; snprintf(p, sizeof p, "v2_save_%d.state", k);
+        v2_ui_toast(v2_state_save(p) == 0 ? "STATE SAVED" : "SAVE FAILED");
+    }
+    if ((k = v2_ui_req_load.exchange(-1)) >= 0) {
+        char p[64]; snprintf(p, sizeof p, "v2_save_%d.state", k);
+        if (v2_state_load(p) == 0) { v2_parallax_load(s); v2_ui_toast("STATE LOADED"); }
+        else v2_ui_toast("LOAD FAILED");
+    }
+    if ((k = v2_ui_req_level.exchange(-1)) >= 0) {
+        v2gs(s).level_load((uint16_t)k);
+        v2gs(s).frame_flags(v2gs(s).frame_flags() | 1);   // sub_102ad's arming, as V2_START_LEVEL
+        v2_ui_toast("LEVEL JUMP");
+    }
+    // rewind: a snapshot every 8 ticks; while F8 is held, step back one
+    // snapshot every 4 ticks (the captures stop meanwhile)
+    static int tick = 0; tick++;
+    // debug: V2_UI_TESTREWIND=<tick> holds the rewind for 100 ticks from that
+    // tick (headless review of the ring: the VIKDBG positions run backwards)
+    { static int tr = -2; if (tr == -2) { const char* e = getenv("V2_UI_TESTREWIND"); tr = (e && *e) ? atoi(e) : -1; }
+      if (tr > 0) { if (tick == tr) v2_ui_rewind_hold = true; if (tick == tr + 100) v2_ui_rewind_hold = false; } }
+    if (v2_ui_rewind_hold.load()) {
+        if ((tick & 3) == 0) { if (v2_rw_restore(s)) v2_parallax_load(s); else v2_ui_toast("REWIND: EMPTY"); }
+    } else if ((tick & 7) == 0) {
+        v2_rw_capture();
+    }
 }
 
 // Load pristine EXE data segment from ds_static.bin into shadow DS.
@@ -8368,6 +8499,7 @@ static void v2_run_transition_chain(uint8_t* shadow) {
 }
 
 static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
+    v2_ui_service(shadow);                  // UX stage 3: menu pause / options / debug tools
     // sub_12352: input processing. Exact replica.
     // ax = 0
     // sub_12352 mirror:

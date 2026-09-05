@@ -22,6 +22,7 @@ const int RENDER_HEIGHT_V2 = 240;
 uint32_t tempDrawBuffer_v2[RENDER_WIDTH_V2*RENDER_HEIGHT_V2];
 
 #include "render_v2.h"
+#include "v2_ui.h"
 
 struct myDrawInfoS_v2* myDrawInfo_v2 = nullptr;
 SDL_Window* myWindow_v2 = NULL;
@@ -92,6 +93,24 @@ void updateDraw_v2()
     tempDrawBuffer_v2[i] = SDL_MapRGBA(myFormat_v2, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
   }
   
+  v2_ui_draw(tempDrawBuffer_v2, RENDER_WIDTH_V2, RENDER_HEIGHT_V2, myFormat_v2);   // UX stage 3 overlay
+  // debug: V2_UI_SHOT=<path.ppm> dumps the presented frame once while the
+  // options menu is open (the overlay lives only in this 32-bit buffer)
+  {
+      static int shot = -1; static const char* sp = nullptr;
+      if (shot < 0) { sp = getenv("V2_UI_SHOT"); shot = (sp && *sp) ? 0 : 2; }
+      if (shot == 0 && v2_ui_menu_open.load()) {
+          FILE* f = fopen(sp, "wb");
+          if (f) {
+              fprintf(f, "P6\n%d %d\n255\n", RENDER_WIDTH_V2, RENDER_HEIGHT_V2);
+              for (int i = 0; i < RENDER_WIDTH_V2 * RENDER_HEIGHT_V2; i++) {
+                  Uint8 r, g, b, a; SDL_GetRGBA(tempDrawBuffer_v2[i], myFormat_v2, &r, &g, &b, &a);
+                  fputc(r, f); fputc(g, f); fputc(b, f);
+              }
+              fclose(f); shot = 1;
+          }
+      }
+  }
   SDL_UpdateTexture(myTexture_v2, NULL, tempDrawBuffer_v2, RENDER_WIDTH_V2*sizeof(uint32_t));
   SDL_RenderClear(myRenderer_v2);
   SDL_Rect srcRect = {0, 0, SCREEN_WIDTH_V2, SCREEN_HEIGHT_V2};
@@ -185,6 +204,13 @@ void render_thread_proc_v2(void* _state)
       extern uint16_t input_keys, input_keys_v2;
       SDL_Event event;
       while (v2_input_poll_event(&event) > 0) {
+          // UX stage 3: F1 options menu (every mode) + --debug tools; a
+          // consumed key never reaches the game input, and an open menu
+          // drops the held game keys so nothing sticks under it.
+          if (v2_ui_handle_event(&event)) {
+              if (v2_ui_menu_open.load()) { input_keys = 0; input_keys_v2 = 0; }
+              continue;
+          }
           switch (event.type) {
           case SDL_QUIT:
               need_quit = true;
