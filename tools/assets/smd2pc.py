@@ -1089,9 +1089,17 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     for o2 in (0x3F, 0x40):                  # fx/fy of the donor (unused without a pair)
         head[o2] = donor_raw[o2]
 
-    if de_bg:
+    if de_bg and not gen_bg:
         # the SMD palette anims animated the SMD room (water shimmer
-        # etc.) — that map is gone; the DE backdrops are static
+        # etc.) — that map is gone; the DE backdrops are static.
+        # The Genesis composition (gen_bg) IS the SMD room with CRAM 0..63
+        # on DAC 0..63, so its anims apply verbatim: the 68k routine
+        # (0x111A) rotates the CRAM window start..end exactly like PC
+        # sub_101be (end >= start: colours shift up, [end] -> [start];
+        # else down) once per `reload` frames — verified 2026-09-05
+        # against the Mednafen capture (Prehistoria grass cycles 3 greens,
+        # Starship stars twinkle). The letters (CRAM row 0) and the
+        # vikings (DAC 128+) sit outside every window.
         pal_en, pal_anims = 0, []
     out = dict(dst)
     out["head"] = bytes(head).hex()
