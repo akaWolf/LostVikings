@@ -298,6 +298,44 @@ def build_de_backdrop(de_bg, CW, CH):
 GENESIS_FLOOR_TYPES = {0x13: 0x01}
 
 
+def genesis_plane_b_pair(sc, fx, fy, bg_y, bg_x0):
+    """The scene's plane B as a live parallax pair (tools/assets/parallax_snes.py
+    formats): map = [W u16][H u16][W*H cells] + trailer [off_x u16][off_y u16],
+    cell = tile (0-9) | pal row (10-12) | prio (13) | hflip (14) | vflip (15);
+    tiles = [n u16][n * 64 nibbles]. The SMD nametable word (tile 0-10,
+    hflip 11, vflip 12, pal 13-14, prio 15) carries the same fields.
+    Phase: the engine paints map column (acc/1792 + off_x) and row
+    (viewport_y*fy/256 + off_y); the scene camera is pinned at y = 0 (VIKDBG
+    vp=(80,0)), so off_y = the console's own plane y (cam_y * ratio) and
+    off_x = the plane x at the scene's first visible frame (bg_x0)."""
+    used, remap, tiles = [], {}, bytearray()
+    m = bytearray()
+    TW, TH = sc.bg_w * 2, sc.bg_h * 2
+    m += bytes((TW & 0xFF, TW >> 8, TH & 0xFF, TH >> 8))
+    for qy in range(sc.bg_h):
+        rows = [bytearray(), bytearray()]
+        for qx in range(sc.bg_w):
+            q = be16(sc.bg_map, (qy * sc.bg_w + qx) * 2) & 0x3FF
+            for k in range(4):              # quad_cell order: k = (y//8)*2 + x//8
+                tw = be16(sc.bg_quads, q * 8 + k * 2)
+                t = tw & 0x7FF
+                if t not in remap:
+                    remap[t] = len(used)
+                    used.append(t)
+                    tiles += bytes(sc.tile_px(sc.tiles, t))
+                cell = (remap[t] | (((tw >> 13) & 3) << 10) | (((tw >> 15) & 1) << 13)
+                        | (((tw >> 11) & 1) << 14) | (((tw >> 12) & 1) << 15))
+                rows[k >> 1] += bytes((cell & 0xFF, cell >> 8))
+        m += rows[0] + rows[1]
+    off_x, off_y = bg_x0 % (TW * 8), bg_y % (TH * 8)
+    m += bytes((off_x & 0xFF, off_x >> 8, off_y & 0xFF, off_y >> 8))
+    tc = bytes((len(used) & 0xFF, len(used) >> 8)) + bytes(tiles)
+    print(f"  Genesis plane B -> live parallax layer: {TW}x{TH} tiles, {len(used)} tiles, "
+          f"fx={fx:04X} fy={fy:04X}, phase off=({off_x},{off_y})")
+    return dict(map=bytes(m), tiles=tc, fx=fx, fy=fy, bw=sc.bg_w, bh=sc.bg_h,
+                off_x=off_x, off_y=off_y)
+
+
 def build_genesis_backdrop(gen_bg, CW, CH):
     """Genesis inter-world scene -> the scene map, composed EXACTLY the way
     the Genesis VDP shows it (UX plan stage 1; docs2/VERSIONS_DIFF_ANALYSIS
@@ -349,7 +387,22 @@ def build_genesis_backdrop(gen_bg, CW, CH):
         row = next(sp for sp in sc.spawns if sp["cls"] == cls)
         trio.append((row["x"] - cam_x, row["y"] - cam_y))
     bg_x, bg_y = sc.parallax(cam_x, cam_y, gen_bg.get("bg_x", wc.get("bg_x")))
-    canvas = sc.render_indices(cam_x, cam_y, bg_x, bg_y, rows=200)
+    # UX stage 1 tail (2026-09-05): a plane B that the console drives BY
+    # ITSELF (head +0x46/+0x48 bit 15: 68k 0x1402 adds f/256 px per frame
+    # to the plane position — the Starship starfield streaks past the
+    # doorway at 5 px/frame, measured on the 60 fps Mednafen recording)
+    # cannot be baked into the field: it ships as a live parallax layer in
+    # the stage-2 format (map/tiles chunks, fx/fy bit 15 = the engine's
+    # time-true autoscroll) and the field keeps plane A only — its
+    # transparent pixels (index 0) let the layer through exactly like the
+    # VDP does. Camera-driven planes stay baked: the scene camera never
+    # moves, so the composite IS the console's frame.
+    fx_g, fy_g = sc.bg_flags
+    live = bool((fx_g | fy_g) & 0x8000)
+    canvas = sc.render_indices(cam_x, cam_y, bg_x, bg_y, rows=200, with_bg=not live)
+    if live:
+        gen_bg["parallax_pair"] = genesis_plane_b_pair(
+            sc, fx_g, fy_g, bg_y, gen_bg.get("bg_x0", wc.get("bg_x0", 0)))
 
     def gpx(gx, gy):
         """Genesis screen pixel -> CRAM index; off the frame = the window's
@@ -1101,6 +1154,16 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         head[0x16], head[0x17] = next_level & 0xFF, next_level >> 8
     for o2 in (0x3F, 0x40):                  # fx/fy of the donor (unused without a pair)
         head[o2] = donor_raw[o2]
+    par = gen_bg.get("parallax_pair") if gen_bg else None
+    if par and "par_map" in new_cids:
+        # UX stage 1 tail: the self-driven plane B rides as a live layer —
+        # refs + the SMD head's own fx/fy (+0x46/+0x48, bit 15 = autoscroll)
+        head[0x34], head[0x35] = par["bw"] & 0xFF, par["bw"] >> 8
+        head[0x36], head[0x37] = par["bh"] & 0xFF, par["bh"] >> 8
+        head[0x39], head[0x3A] = new_cids["par_map"] & 0xFF, new_cids["par_map"] >> 8
+        head[0x3B], head[0x3C] = new_cids["par_tiles"] & 0xFF, new_cids["par_tiles"] >> 8
+        head[0x3F], head[0x40] = par["fx"] & 0xFF, par["fx"] >> 8
+        head[0x41], head[0x42] = par["fy"] & 0xFF, par["fy"] >> 8
 
     if de_bg and not gen_bg:
         # the SMD palette anims animated the SMD room (water shimmer
@@ -1193,6 +1256,13 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         with open(bp + ".tmp", "wb") as f:
             f.write(bubble_bank)
         os.replace(bp + ".tmp", bp)
+    if par and "par_map" in new_cids:
+        for cid3, blob in ((new_cids["par_map"], par["map"]),
+                           (new_cids["par_tiles"], par["tiles"])):
+            bp = os.path.join(scratch, "unreferenced", f"{cid3:04X}.bin")
+            with open(bp + ".tmp", "wb") as f:
+                f.write(blob)
+            os.replace(bp + ".tmp", bp)
 
     ex_path = os.path.join(scratch, "extras.json")
     extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
@@ -1204,6 +1274,9 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         extras[f"{new_cids['banner']:04X}"] = {"role": "unreferenced"}
     if bubble_bank is not None and "bubbles" in new_cids:
         extras[f"{new_cids['bubbles']:04X}"] = {"role": "unreferenced"}
+    if par and "par_map" in new_cids:
+        extras[f"{new_cids['par_map']:04X}"] = {"role": "unreferenced"}
+        extras[f"{new_cids['par_tiles']:04X}"] = {"role": "unreferenced"}
     wjson(ex_path, extras)
 
     print(f"written: header {hdr_id:04X}, map {tm_id:04X}, tiles {ts_id:04X} "

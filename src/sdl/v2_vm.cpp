@@ -2314,11 +2314,23 @@ static void v2_parallax_load(uint8_t* s) {
     v2_parallax.fx = *(uint16_t*)(s + 0x25F2);        // head +0x3F
     v2_parallax.fy = *(uint16_t*)(s + 0x25F4);        // head +0x41
     v2_parallax.acc_x = v2_parallax.acc_y = 0;
+    // optional trailer after the cells: [off_x u16][off_y u16] phase offsets in px
+    // (smd2pc.genesis_plane_b_pair — the Starship scene's starfield starts where the
+    // console's plane stands at the scene's first frame; stage-2 SNES pairs have none)
+    v2_parallax.off_x = v2_parallax.off_y = 0;
+    {
+        const uint32_t cells_end = 4u + (uint32_t)w * h * 2u;
+        if (ml >= cells_end + 4u) {
+            v2_parallax.off_x = v2_parallax_mapbuf[cells_end] | (v2_parallax_mapbuf[cells_end + 1] << 8);
+            v2_parallax.off_y = v2_parallax_mapbuf[cells_end + 2] | (v2_parallax_mapbuf[cells_end + 3] << 8);
+        }
+    }
     v2_parallax.tiles = v2_parallax_tilebuf + 2;
     v2_parallax.map = (const uint16_t*)(v2_parallax_mapbuf + 4);
     v2_parallax.on = true;
-    fprintf(stderr, "V2-PARALLAX: level %d: map %04X %ux%u tiles, tileset %04X %u tiles, fx=%04X fy=%04X\n",
-            v2gs(s).level(), mc, w, h, tc, n, v2_parallax.fx, v2_parallax.fy);
+    fprintf(stderr, "V2-PARALLAX: level %d: map %04X %ux%u tiles, tileset %04X %u tiles, fx=%04X fy=%04X off=(%u,%u)\n",
+            v2gs(s).level(), mc, w, h, tc, n, v2_parallax.fx, v2_parallax.fy,
+            v2_parallax.off_x, v2_parallax.off_y);
 }
 
 // ============================================================================

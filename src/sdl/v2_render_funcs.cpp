@@ -489,7 +489,7 @@ static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) {
                              : (int)(((uint32_t)st.viewport_x() * (P.fx & 0x7FFF)) >> 8);
     int py = (P.fy & 0x8000) ? (int)(P.acc_y / 1792u)
                              : (int)(((uint32_t)st.viewport_y() * (P.fy & 0x7FFF)) >> 8);
-    px %= wpx; py %= hpx;
+    px = (px + (int)P.off_x) % wpx; py = (py + (int)P.off_y) % hpx;   // phase offsets (map trailer)
     for (int sy = 0; sy < v2_clip_h; sy++) {
         const int my = (py + sy) % hpx;
         const uint16_t* mrow = P.map + (my >> 3) * P.w;

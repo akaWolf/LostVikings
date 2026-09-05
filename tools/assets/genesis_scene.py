@@ -199,8 +199,10 @@ class GenesisScene:
 
     # -- index-level composition for the PC port ------------------------
     def render_indices(self, cam_x, cam_y, bg_x, bg_y, rows=SCREEN_H,
-                       lower_line=187):
+                       lower_line=187, with_bg=True):
         """Same composition as render() but as CRAM indices (0..63) and with
+        plane B left OUT when with_bg is False (the port then draws it as a
+        live parallax layer — the Starship starfield scrolls by itself) and
         the LOWER band the console draws by a raster split (HInt enabled in
         the scene, reg0 bit4): rows lower_line..+1 = the yellow line (index
         9), everything below = black (index 15) — measured on the DE video at
@@ -214,7 +216,7 @@ class GenesisScene:
             if y >= lower_line:
                 out.append(bytearray([9 if y < lower_line + 2 else 15] * SCREEN_W))
                 continue
-            brow = bg_img[(y + bg_y) % bh] if bg_img else None
+            brow = bg_img[(y + bg_y) % bh] if (bg_img and with_bg) else None
             ry = y + cam_y
             rrow = room_img[ry] if 0 <= ry < rh else None
             win = y < WIN_ROWS * 8
@@ -364,7 +366,14 @@ WORLD_CAMERA = {
     "wacky":   dict(cam=(144, 216), spots=[(64, 152), (208, 152), (26, 152)], walk=(24, 72),
                     banner=dict(x0=80, y0=10, prow=2)),
     # the left console platform, row 21 (x -144..63) — the trio crowds on it
-    "ship":    dict(cam=(144, 208), bg_x=242,
+    # bg_x0: plane B x at the FIRST visible frame of the scene on the console
+    # (Mednafen 60 fps recording of the attract scene: phase 207 at frame
+    # first+51, 222 at first+54 = +5 px/frame, i.e. 208 at the first frame;
+    # the head's +0x46 = 0x8500 drives the plane by itself, 68k 0x1402 ->
+    # 0x44F0 adds 5.0 px per frame to $1720). The live-layer port starts at
+    # this phase (map trailer off_x); bg_x=242 = the state's value 30 s in,
+    # used only by the static composite of the other worlds' check.
+    "ship":    dict(cam=(144, 208), bg_x=242, bg_x0=208,
                     spots=[(40, 128), (56, 128), (20, 128)], walk=(16, 48),
                     banner=dict(x0=32, y0=10, prow=2)),
 }

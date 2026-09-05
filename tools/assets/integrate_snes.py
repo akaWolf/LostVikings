@@ -928,7 +928,10 @@ def do_integrate(scratch, music=None):
                                  {"hdr": b, "map": b + 1, "tiles": b + 2,
                                   "gtld": b + 4, "pal": b + 5,
                                   "banner": 0x258 + (e["slot"] - 53),
-                                  "bubbles": 0x262 + (e["slot"] - 53)},
+                                  "bubbles": 0x262 + (e["slot"] - 53),
+                                  # live plane B pair (Starship starfield)
+                                  "par_map": 0x2F0 + 2 * (e["slot"] - 53),
+                                  "par_tiles": 0x2F1 + 2 * (e["slot"] - 53)},
                                  next_level=e["next"], scene_mode=True,
                                  de_bg=e.get("de_bg"),
                                  gen_bg=e.get("gen_bg"))

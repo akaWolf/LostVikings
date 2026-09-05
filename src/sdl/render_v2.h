@@ -66,6 +66,9 @@ struct V2ParallaxLayer {
     uint16_t w, h;      // map size in 8x8 tiles
     uint16_t fx, fy;    // head +0x3F / +0x41
     uint32_t acc_x, acc_y;   // autoscroll accumulators, units of 1/1792 px
+    uint32_t off_x, off_y;   // phase offsets in px: optional map trailer [off_x u16][off_y u16]
+                             // after the cells (the Genesis scenes' self-driven plane B starts at
+                             // the console's own phase; 0 when the trailer is absent)
     uint32_t ntiles;
     const uint8_t*  tiles;   // ntiles x 64 pixels (nibbles, 0 = transparent)
     const uint16_t* map;     // w*h cells: idx | pal<<10 | prio<<13 | hf<<14 | vf<<15

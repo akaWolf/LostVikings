@@ -18,6 +18,11 @@ of the SNES DE ROM it writes two v2-private chunks
                                     transparent); the level palette rows 0-7 of
                                     the PC equal the SNES CGRAM, so the renderer
                                     paints row*16+nibble straight into the DAC
+    map trailer (optional)          [off_x u16][off_y u16] phase offsets in px
+                                    added to the layer position (the Genesis
+                                    scenes' self-driven plane B starts at the
+                                    console's own phase: smd2pc.genesis_plane_b_pair);
+                                    absent on the SNES pairs written here
 
 and points the heads of the PC levels 0..0x24 (= DE slots 0..0x24) and of the
 five SNES exclusives (LVX slots 48..52 = DE slots 0x25..0x29) at them.  The
