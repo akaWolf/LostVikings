@@ -257,6 +257,12 @@ LVX_TRIO = 0x0004         # the record's 18B = sub_11446 mode-2 viking table
 LVX_NOGATE = 0x0008       # no sub_10813 off-screen input gate: the Genesis
                           # recordings walk the trio in from x -68 (the SMD
                           # engine has no such gate — docs2/GENESIS_ROM_INTERNALS.md)
+LVX_PALTICK3 = 0x0020     # the palette-animation timers tick once per 3 console
+                          # frames (20 Hz; Mednafen 60 fps recordings: Preh grass
+                          # reload 2 = a step every 6 frames, Factory letter light
+                          # reload 1 = every 3) — the engine decrements them on a
+                          # 2/7-per-tick accumulator instead of every 70 Hz tick
+                          # (v2_pal_ui_cycle_101be); canonical slots never carry it
                           # (3 x {x,y,anim} for Erik/Baleog/Olaf, ds:0x8508):
                           # the scene head's +0x07 mode byte is 2 (UX stage 1)
 
@@ -946,7 +952,7 @@ def do_integrate(scratch, music=None):
             pin_x, pin_y = GS.layout(e["gen_bg"]["world"], e["gen_bg"])["pin"]
         flags = LVX_FULLSCREEN | LVX_CAMLOCK | (pin_x << 4) | (pin_y << 12)
         if e.get("gen_bg"):
-            flags |= LVX_NOGATE
+            flags |= LVX_NOGATE | LVX_PALTICK3
         trio = None
         if info.get("trio"):
             # UX stage 1: per-viking placement = the mode-2 table rows of

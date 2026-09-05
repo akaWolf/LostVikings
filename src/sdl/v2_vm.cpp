@@ -48,7 +48,9 @@ extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot
 // used by the scroll-limit mirror above it).
 enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004,
        LVX_NOGATE = 0x0008,     // no sub_10813 off-screen input gate (Genesis scene recordings)
-       LVX_ALT = 0x0010 };      // UX stage 7: an ALTERNATIVE head for a canonical slot (SNES balance)
+       LVX_ALT = 0x0010,        // UX stage 7: an ALTERNATIVE head for a canonical slot (SNES balance)
+       LVX_PALTICK3 = 0x0020 }; // the palette-animation timers tick once per 3 console frames
+                                // (the Genesis scenes; v2_pal_ui_cycle_101be accumulator)
 struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
                     uint16_t demo_cid; uint16_t flags; uint8_t trio[18]; };
 // LVX3 flags bits 4-11 / 12-15: the camera pin (viewport x 0..255 / y 0..15
@@ -3119,7 +3121,24 @@ static void v2_pal_rotate_back_1020f(uint8_t* s, uint16_t si, uint16_t dx) {
 // If counter reaches 0: rotates 3-byte palette entries (sub_10255 for cur<end:
 // block shifts down, saved entry lands at end; sub_1020f for cur>end: the reverse).
 // DS writes: DEC [si+0x258C], word_303DE=2, palette buffer rotations at ds:0x8202+ area.
+// UX stage 1 tail (2026-09-05): the console's palette-animation timers tick
+// once per 3 frames (20 Hz) — 60 fps Mednafen recordings of the attract
+// scenes: Prehistoria grass (reload 2) steps every 6 frames in 32256 of 32256
+// intervals, Egypt torches (reload 2) every 6, the Factory letter light
+// (reload 1) every 3 — while sub_101be decrements them every 70 Hz tick. LVX
+// slots flagged LVX_PALTICK3 (the five Genesis scenes) run the decrement on a
+// time-true accumulator: +2 per tick, one console tick at 7 (= 3.5 ticks =
+// 3 frames at 60 Hz), the same model as the autoscroll layer; non-tick
+// frames do nothing, like the console's. Canonical slots carry no flag —
+// their behaviour is byte-identical to before. Reset on level load.
+static uint8_t v2_pal_tick_acc = 0;
+static void v2_pal_tick_reset(void) { v2_pal_tick_acc = 0; }
 static void v2_pal_ui_cycle_101be(uint8_t* s) {
+    if (v2_lvx_flags(v2gs(s).level()) & LVX_PALTICK3) {
+        v2_pal_tick_acc = (uint8_t)(v2_pal_tick_acc + 2);
+        if (v2_pal_tick_acc < 7) return;
+        v2_pal_tick_acc = (uint8_t)(v2_pal_tick_acc - 7);
+    }
     // V2_LADDER_TRACE=1 (level2 ladder saga): log every pal_anim enable-mask
     // change + every slot rotation with frame numbers. Env-gated.
     static int _lt = -1;
@@ -7936,6 +7955,7 @@ static void v2_load_level_11080(uint8_t* s) {
     // UX stage 2: the parallax layer of this level (display lane; before the
     // fade-in so the first shown frame already carries it).
     v2_parallax_load(s);
+    v2_pal_tick_reset();   // UX stage 1 tail: the console palette-tick accumulator (LVX_PALTICK3)
     // CALL sub_10f5d (orig eip 0x118C): palette fade-in (extracted).
     v2_pal_fade_in_10f5d(s);
     // JMP sub_12345 (orig eip 0x118F, tail): input state clear (extracted).
