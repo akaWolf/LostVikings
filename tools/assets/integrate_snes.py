@@ -90,7 +90,12 @@ TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5}
 # v2_load_template swaps the head in only while the option is on. The
 # canonical head, script, password, next level and the parallax pair stay.
 LVX_ALT = 0x0010
-BALANCE_LEVELS = [1, 4, 5, 6, 8, 9, 12, 20, 23, 24, 25, 26, 32]   # GR8T LLM0 FL0T TRSS CVRN BBLS PHR0 JNKR SMRT V8TR NFL8 WKYY TRPD
+# GR8T is NOT in the list (user 2026-09-04: "drop the exactly identical ones"):
+# its DE data equal the PC data in every byte that matters (map by quad
+# content, type bits, spawn records, head) — the 3 type-bit cells of §5.1
+# exist only in the 1993 ROM. Every level below differs in at least one of
+# those (BBLS also in the viking start block of the head).
+BALANCE_LEVELS = [4, 5, 6, 8, 9, 12, 20, 23, 24, 25, 26, 32]   # LLM0 FL0T TRSS CVRN BBLS PHR0 JNKR SMRT V8TR NFL8 WKYY TRPD
 BALANCE_BASE = 0x2A0                                             # 6 ids per level: hdr map tiles masks gtld pal
 
 
