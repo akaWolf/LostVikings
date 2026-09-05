@@ -35,8 +35,8 @@ CJK = {"ja", "ko", "zh-CN", "zh-TW"}   # phase 2: UTF-8 records + a Unifont 16x1
 MAXW = 30
 MAXW_CJK_PX = 224          # 28 cells of 16/8-px glyphs per line
 CJK_NO_LEAD = set("。、，．！？」』）〕】〉》・ー…：；!?,.)")   # no line starts with these
-PASSWORD_IDX = 269         # the password letters land on a fixed cell row under the title:
-                           # a 16-px title cannot fit above them — the CJK banks keep it English
+PASSWORD_IDX = 269         # the level letters are typed at box row 2 (row 12 of the 10x4 box at
+                           # (15,10)); the CJK title takes box rows 0-1 (one 16-px line)
 RAW_IDX = {4, 5, 6}
 GLYPH0 = 0x60
 TRY_AGAIN_IDX = 271      # class D2 draws YES/NO at fixed cells (15,11)/(21,11) under a box at (13,8):
@@ -125,8 +125,6 @@ def build_bank_cjk(code, strings, G, orig=None):
     recs = {}
     used = set()
     for i, text in strings.items():
-        if i == PASSWORD_IDX:
-            continue
         text = text.replace("\xa0", " ")
         if any(c not in G for c in text if c not in "\n\r"):
             print(f"  {code}: string {i} has glyphs outside the Unifont cache, kept English")
@@ -135,6 +133,13 @@ def build_bank_cjk(code, strings, G, orig=None):
             recs[i] = b"\x01" + text.encode("utf-8") + b"\0"; used |= set(text)
             continue
         lines = cjk_wrap(text, G)
+        if i == PASSWORD_IDX:
+            # the box is 10x4 at (15,10) in the world scripts (op 44 000d01..0f000a);
+            # the level letters are typed at cells 18..21 of row 12 = box row 2,
+            # so a 16-px title on box rows 0-1 sits exactly where the English
+            # title + its blank row were; the width only grows (max with the
+            # original 10 below) and the letters stay inside
+            lines = [" ".join(l for l in lines if l).strip()]
         if i == TRY_AGAIN_IDX:
             lines = [" ".join(l for l in lines if l).strip()]      # one 16-px line: YES/NO sit on the fixed row below
         cells = lambda l: -(-sum(G[c]["w"] for c in l) // 8)
@@ -143,6 +148,9 @@ def build_bank_cjk(code, strings, G, orig=None):
         ow, oh = orig.get(i, (0, 0))
         if i == TRY_AGAIN_IDX:
             w, h = max(w, 15), max(h, 6)      # YES at cell 15, NO at 21 (16-px glyphs: cells 21..26), rows 11-12
+        if i == PASSWORD_IDX:
+            h = max(h, 5)                     # title rows 11-12; the level letters land on row 13 (engine: a glyph
+            #                                   typed under a live wide item moves one row down); frame row 14
         w, h = max(w, ow), max(h, oh)
         body = bytearray(b"\x01")
         for k, l in enumerate(lines):

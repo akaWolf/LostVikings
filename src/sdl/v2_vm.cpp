@@ -5101,6 +5101,24 @@ static void v2_text_item_add(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) 
     }
     flush();
 }
+// UX6 phase 2 tail (2026-09-05): the first free row under a LIVE wide-glyph
+// item that spans glyph row `row` (0 when none does). Live = the item's first
+// cell still holds the space the item filled in (the box close / sub_12816
+// zero the cells); an item spans two cell rows per 16-px line. Row-based on
+// purpose: the world scripts type the password letters at fixed cells 18..21
+// of one row under the title, and a two-glyph title (zh: 密码, cells 16..19)
+// would otherwise split the letters between the rows.
+static uint16_t v2_text_item_row_after(const uint8_t* s, uint16_t row) {
+    for (const auto& it : v2_text_items) {
+        if (!it.on) continue;
+        if (s[(uint16_t)(0x956C + it.row * 40 + it.col)] != 0x20) continue;
+        uint16_t lines = 1;
+        for (size_t i = 0; it.utf8[i]; i++) if ((uint8_t)it.utf8[i] == 0x0D) lines++;
+        uint16_t end = (uint16_t)(it.row + 2 * lines);
+        if (row >= it.row && row < end) return end;
+    }
+    return 0;
+}
 static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
     if (!v2_m2c_base) return;
     uint8_t* seg001 = v2_m2c_base + 0x9480;
@@ -21815,6 +21833,17 @@ void v2_cmd_loop_1086f(uint8_t* s) {
         uint8_t ch = (uint8_t)*(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_SI));
         uint16_t si_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_DI));
         uint16_t di_pos = *(uint16_t*)(s + (uint16_t)(bx_read + DS_CMD_ENTRY_PARAM));
+        // UX6 phase 2 tail: a glyph typed at fixed cells (the world scripts'
+        // op 50: the password letters at row 12 under the PASSWORD title of
+        // the 10x4 box at (15,10)) moves to the first row under a live 16-px
+        // item that spans its row — the CJK title takes rows 11-12, the CJK
+        // record is 5 rows tall, so the letters sit on row 13 inside the
+        // box. No wide item ever exists without a CJK bank: the canonical
+        // path is untouched.
+        if (v2_lang_on && v2_lang_wide) {
+            uint16_t after = v2_text_item_row_after(s, di_pos);
+            if (after) di_pos = after;
+        }
         v2_glyph_put_1241e(s, ch, si_pos, di_pos);
         v2gs(s).glyph_dirty_b(1);
         bx_read += 0x08;
