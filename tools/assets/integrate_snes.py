@@ -684,14 +684,26 @@ def write_scene_texts(scratch):
 # `AE 1a2e` = bit tests of field 2E = the saved pool word), shows line
 # `pool & 0x0FFF`, holds 80 ticks, closes (op 42) and bumps the line
 # index: the next S on the same spot says the next line. The rows carry
-# the SMD pool words VERBATIM (flags + SMD line number); the only port
-# edits, both documented: (1) after the mask, `51 <delta> 59 16` adds the
-# PC text-bank offset (SCENE_TEXT_IDX0 - 389: our copies of lines 389..406
-# sit at 0x3BA0+k); (2) the sfx operand `02 080b` (an SMD sound id) becomes
-# the PC dialogue blip `02 2f50` used by every PC text box (1C1..1C6).
+# the SMD pool words VERBATIM (flags + SMD line number); the port edits,
+# all documented: (1) after the mask, `51 <delta> 59 16` adds the PC
+# text-bank offset (SCENE_TEXT_IDX0 - 389: our copies of lines 389..406 sit
+# at 0x3BA0+k); (2) the sfx operand `02 080b` (an SMD sound id) becomes the
+# PC dialogue blip `02 2f50` used by every PC text box (1C1..1C6); (3) the
+# three colour words of SUB_COLOR become the PC RGB555 of the Genesis fills.
 E1_SMD_MAIN = (0x25ADE, 0x25B7C)     # class code (after the 03 despawn prolog)
 E1_SMD_SUB = (0x27B0D, 0x27B27)      # SUB_COLOR: op 46 by partner slot, 06
-E1_SFX_EDIT = {0x25B4F: bytes.fromhex("2f50")}   # 02 080b -> 02 2f50 (PC dialogue sfx)
+E1_EDITS = {0x25B4F: bytes.fromhex("2f50"),      # 02 080b -> 02 2f50 (PC dialogue sfx)
+            # SUB_COLOR: `partner==2 -> jump 46 0280; ==4 -> jump 46 0080;
+            # else 46 0180` (op 73 jumps when EQUAL) = the Genesis command-6
+            # colour by speaker: 0x8000|1 Erik (slot 0), |2 Baleog (slot 2),
+            # |0 Olaf (slot 4) — a CRAM pick on the SMD. The PC command 6
+            # takes an RGB555 word (r bits 0-4, g 5-9, b 10-14, each doubled
+            # into the VGA DAC colour 3 = the box fill). The fills measured on
+            # the real Genesis (Mednafen, genesis_stand): Erik (206,0,0),
+            # Baleog (0,170,0), Olaf (170,170,0) -> 5-bit 25 / 21 / 21+21.
+            0x27B1C: bytes.fromhex("1900"),           # 46 0180 Erik   0x0019 = red
+            0x27B20: bytes.fromhex("a002"),           # 46 0280 Baleog 0x02A0 = green
+            0x27B24: bytes.fromhex("b502")}           # 46 0080 Olaf   0x02B5 = yellow
 E1_MASK_PC = 0x25AEA                 # `5F 16` (pool &= 0x0FFF): the delta add goes after it
 
 
@@ -701,7 +713,7 @@ def e1_talk_blob(base):
     import smd_lvs as SL
     delta = SCENE_TEXT_IDX0 - SMD_SCENE_LINES[0]
     ins = {E1_MASK_PC: bytes((0x51, delta & 0xFF, delta >> 8, 0x59, 0x16))}
-    blob, _ = SL.port_blob([E1_SMD_MAIN, E1_SMD_SUB], 3, base, edits=E1_SFX_EDIT, inserts=ins)
+    blob, _ = SL.port_blob([E1_SMD_MAIN, E1_SMD_SUB], 3, base, edits=E1_EDITS, inserts=ins)
     return blob
 
 
