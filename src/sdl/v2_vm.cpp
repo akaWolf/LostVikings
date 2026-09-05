@@ -8597,6 +8597,17 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             want = -1;
         }
     }
+    {
+        // debug: V2_TEST_GAMEOVER=<frame> raises the all-dead flag ([334] bit 1,
+        // sub_12e16's game-over signal) at that pre-VM frame — drives the real
+        // game-over path (password shore 0x25 under the world template) headless
+        static int go = -2;
+        if (go == -2) { const char* e = getenv("V2_TEST_GAMEOVER"); go = (e && *e) ? atoi(e) : -1; }
+        if (go > 0 && v2_dbg_pre_vm_iter == go) {
+            v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() | 2);
+            fprintf(stderr, "V2: TEST_GAMEOVER hook -> [334] |= 2 (f%d)\n", v2_dbg_pre_vm_iter);
+        }
+    }
 
     // sub_102ad: level transition trigger (extracted, see the helper zone).
     v2_transition_kick_102ad(shadow);
