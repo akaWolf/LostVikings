@@ -921,6 +921,10 @@ def do_integrate(scratch, music=None):
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.
     build_lvx(scratch, lvx)
+    # UX stage 2: the SNES parallax layer of every level (the five exclusives'
+    # heads exist from this point on)
+    import parallax_snes
+    parallax_snes.integrate(scratch)
     return [e["slot"] for e in PLAN + PLAN_SMD]
 
 

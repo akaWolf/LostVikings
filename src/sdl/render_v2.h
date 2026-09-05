@@ -54,6 +54,24 @@ extern std::mutex v2_display_mutex;
 // Screen rows 176-239 (VGA split screen: always from VGA address 0)
 extern uint8_t  v2_hud_buf[320*64];
 
+// UX stage 2: the SNES parallax layer (display lane only — never touches DS,
+// the shadow VGA or the canon replays). Loaded per level from the head copy
+// in DS (0x25EC map chunk, 0x25EE tile chunk, 0x25F2/0x25F4 = fx/fy), see
+// tools/assets/parallax_snes.py for the chunk formats and the measured model:
+//   par = (cam * f) >> 8 per axis (8.8), bit 15 = autoscroll at f/256 px per
+//   console frame — kept time-true at the 70 Hz tick: acc += f*6 per tick,
+//   px = acc / 1792 (= f/256 * 60/70).
+struct V2ParallaxLayer {
+    bool     on;        // level has a layer and V2_PARALLAX != 0
+    uint16_t w, h;      // map size in 8x8 tiles
+    uint16_t fx, fy;    // head +0x3F / +0x41
+    uint32_t acc_x, acc_y;   // autoscroll accumulators, units of 1/1792 px
+    uint32_t ntiles;
+    const uint8_t*  tiles;   // ntiles x 64 pixels (nibbles, 0 = transparent)
+    const uint16_t* map;     // w*h cells: idx | pal<<10 | prio<<13 | hf<<14 | vf<<15
+};
+extern V2ParallaxLayer v2_parallax;
+
 // Глобальные переменные (extern)
 extern struct myDrawInfoS_v2* myDrawInfo_v2;
 extern uint16_t input_keys_v2;

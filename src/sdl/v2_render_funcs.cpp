@@ -475,6 +475,39 @@ static V2Camera v2_effective_camera(const uint8_t* ds_base) {
     return c;
 }
 
+// UX stage 2: the SNES parallax layer under the level tiles (display lane).
+// par = (viewport * f) >> 8 per axis (8.8 multiplier from the head), the
+// autoscroll axes take the time-true accumulator instead; the map repeats
+// with its own period; nibble 0 = transparent (DAC 0 stays = the backdrop),
+// the palette row comes from the map cell like the console's tilemap word.
+static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) {
+    const V2ParallaxLayer& P = v2_parallax;
+    if (!P.on || !P.map || !P.tiles) return;
+    const int wpx = P.w * 8, hpx = P.h * 8;
+    if (!wpx || !hpx) return;
+    int px = (P.fx & 0x8000) ? (int)(P.acc_x / 1792u)
+                             : (int)(((uint32_t)st.viewport_x() * (P.fx & 0x7FFF)) >> 8);
+    int py = (P.fy & 0x8000) ? (int)(P.acc_y / 1792u)
+                             : (int)(((uint32_t)st.viewport_y() * (P.fy & 0x7FFF)) >> 8);
+    px %= wpx; py %= hpx;
+    for (int sy = 0; sy < v2_clip_h; sy++) {
+        const int my = (py + sy) % hpx;
+        const uint16_t* mrow = P.map + (my >> 3) * P.w;
+        const int ty = my & 7;
+        uint8_t* out = buf + sy * 320;
+        for (int sx = 0; sx < 320; sx++) {
+            const int mx = (px + sx) % wpx;
+            const uint16_t cell = mrow[mx >> 3];
+            const uint32_t idx = cell & 0x3FF;
+            if (idx >= P.ntiles) continue;
+            const int tx = (cell & 0x4000) ? (7 - (mx & 7)) : (mx & 7);
+            const int tyy = (cell & 0x8000) ? (7 - ty) : ty;
+            const uint8_t v = P.tiles[idx * 64 + tyy * 8 + tx];
+            if (v) out[sx] = (uint8_t)(((cell >> 10) & 7) * 16 + v);
+        }
+    }
+}
+
 void v2_draw_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
@@ -533,6 +566,11 @@ void v2_draw_tiles(uint16_t ds_val) {
     // already renders 25 tile rows; rows 176..199 are shown only on
     // full-screen LVX scenes, otherwise the HUD band covers them)
     memset(buf, 0, 320*200);
+    // UX stage 2: the parallax layer goes under the tiles; the tile pass then
+    // skips the pixels of colour 0 of each palette row (the console's
+    // transparent index — on the DOS palette they are blacked out, sub_112ae).
+    v2_draw_parallax(st, buf);
+    const bool par_on = v2_parallax.on;
 
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
@@ -621,6 +659,7 @@ void v2_draw_tiles(uint16_t ds_val) {
                     int sx = screen_x + px;
                     if (sx < 0) continue;
                     if (sx >= 320) break;
+                    if (par_on && (pixels[px] & 0x0F) == 0) continue;   // UX stage 2: row colour 0 = transparent
                     buf[sy * 320 + sx] = pixels[px];
                 }
             }

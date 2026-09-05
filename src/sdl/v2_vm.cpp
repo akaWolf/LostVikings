@@ -2260,6 +2260,78 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
     return v2_read_chunk_archive(chunk_id, dest, max_size, ds_ctx);
 }
 
+
+// ============================================================================
+// UX stage 2: SNES parallax layer — load / tick (render_v2.h V2ParallaxLayer).
+// The chunks are read through the open-asset store WITHOUT the archive
+// loader's DS side effects (no header mirror at 2BB4, no FS ring): the layer
+// is display-lane state, the DS of a mod level must stay what the canon
+// engine would hold.
+// ============================================================================
+V2ParallaxLayer v2_parallax = {};
+static uint8_t  v2_parallax_tilebuf[2 + 1024 * 64];
+static uint8_t  v2_parallax_mapbuf[4 + 128 * 128 * 2];
+
+static bool v2_parallax_read_private(uint16_t cid, uint8_t* dest, uint32_t max_size, uint32_t* out_len) {
+    static uint8_t rec[0x10000 + 16];
+    uint8_t hdr8[8]; uint16_t dsize = 0;
+    uint32_t clen = v2_assets_read(cid, hdr8, &dsize, rec, sizeof(rec));
+    // the lead u16 of a comp block is size-1 (the archive canon: the LZSS
+    // loop runs until the count underflows, i.e. size+1 iterations)
+    if (clen < 2 || (uint32_t)dsize + 1 > max_size) return false;
+    *out_len = v2_lzss_decompress(rec + 2, dest, dsize, nullptr);
+    return *out_len == (uint32_t)dsize + 1;
+}
+
+static void v2_parallax_load(uint8_t* s) {
+    v2_parallax.on = false;
+    static int env = -1;
+    if (env < 0) { const char* e = getenv("V2_PARALLAX"); env = (e && *e == '0') ? 0 : 1; }
+    if (!env) return;
+    uint16_t mc = *(uint16_t*)(s + 0x25EC);           // head +0x39
+    uint16_t tc = *(uint16_t*)(s + 0x25EE);           // head +0x3B
+    if (mc == 0xFFFF || tc == 0xFFFF || mc == 0 || tc == 0) return;
+    if (!v2_assets_on()) return;
+    uint32_t ml = 0, tl = 0;
+    if (!v2_parallax_read_private(mc, v2_parallax_mapbuf, sizeof(v2_parallax_mapbuf), &ml) ||
+        !v2_parallax_read_private(tc, v2_parallax_tilebuf, sizeof(v2_parallax_tilebuf), &tl)) {
+        fprintf(stderr, "V2-PARALLAX: level %d: chunks %04X/%04X unreadable\n", v2gs(s).level(), mc, tc);
+        return;
+    }
+    uint16_t w = v2_parallax_mapbuf[0] | (v2_parallax_mapbuf[1] << 8);
+    uint16_t h = v2_parallax_mapbuf[2] | (v2_parallax_mapbuf[3] << 8);
+    uint32_t n = v2_parallax_tilebuf[0] | (v2_parallax_tilebuf[1] << 8);
+    if (!w || !h || 4u + (uint32_t)w * h * 2u > ml || 2u + n * 64u > tl) {
+        fprintf(stderr, "V2-PARALLAX: level %d: bad chunk geometry w=%u h=%u n=%u (%u/%u B)\n",
+                v2gs(s).level(), w, h, n, ml, tl);
+        return;
+    }
+    v2_parallax.w = w; v2_parallax.h = h; v2_parallax.ntiles = n;
+    v2_parallax.fx = *(uint16_t*)(s + 0x25F2);        // head +0x3F
+    v2_parallax.fy = *(uint16_t*)(s + 0x25F4);        // head +0x41
+    v2_parallax.acc_x = v2_parallax.acc_y = 0;
+    v2_parallax.tiles = v2_parallax_tilebuf + 2;
+    v2_parallax.map = (const uint16_t*)(v2_parallax_mapbuf + 4);
+    v2_parallax.on = true;
+    fprintf(stderr, "V2-PARALLAX: level %d: map %04X %ux%u tiles, tileset %04X %u tiles, fx=%04X fy=%04X\n",
+            v2gs(s).level(), mc, w, h, tc, n, v2_parallax.fx, v2_parallax.fy);
+}
+
+// One game tick: the autoscroll axes advance by f/256 px per CONSOLE frame
+// (60 Hz) — at the 70 Hz tick that is f*6/7 in 1/256 px, kept exact in an
+// accumulator of 1/1792 px, wrapped at the map period.
+static void v2_parallax_tick() {
+    if (!v2_parallax.on) return;
+    if (v2_parallax.fx & 0x8000) {
+        uint32_t period = (uint32_t)v2_parallax.w * 8u * 1792u;
+        v2_parallax.acc_x = (v2_parallax.acc_x + (uint32_t)(v2_parallax.fx & 0x7FFF) * 6u) % period;
+    }
+    if (v2_parallax.fy & 0x8000) {
+        uint32_t period = (uint32_t)v2_parallax.h * 8u * 1792u;
+        v2_parallax.acc_y = (v2_parallax.acc_y + (uint32_t)(v2_parallax.fy & 0x7FFF) * 6u) % period;
+    }
+}
+
 static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
                                       uint8_t* ds_ctx) {
     uint8_t* dctx = ds_ctx ? ds_ctx : v2_vm_shadow_ds;
@@ -7701,6 +7773,9 @@ static void v2_load_level_11080(uint8_t* s) {
         else fprintf(stderr, "V2-115d2-VERIFY: %d diffs total\n", dc);
         fflush(stderr);
     }
+    // UX stage 2: the parallax layer of this level (display lane; before the
+    // fade-in so the first shown frame already carries it).
+    v2_parallax_load(s);
     // CALL sub_10f5d (orig eip 0x118C): palette fade-in (extracted).
     v2_pal_fade_in_10f5d(s);
     // JMP sub_12345 (orig eip 0x118F, tail): input state clear (extracted).
@@ -8306,6 +8381,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 
     // sub_12d72: demo input record/replay tick (extracted, see the helper zone).
     v2_demo_input_12d72(shadow);
+    v2_parallax_tick();                     // UX stage 2: autoscroll axes, once per tick
 
     // Task #104: V2_START_LEVEL=<n> — jump straight to level n (playtest/
     // dev hook). One-shot, a few frames in: does exactly what the game's
