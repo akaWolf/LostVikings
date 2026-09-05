@@ -31,6 +31,7 @@ void v2_options_ensure_loaded() {
             if (!strcmp(key, "parallax")) v2_options.parallax = val != 0;
             else if (!strcmp(key, "scenes")) v2_options.scenes = val != 0;
             else if (!strcmp(key, "snes_balance")) v2_options.snes_balance = val != 0;
+            else if (!strcmp(key, "smooth")) v2_options.smooth = val != 0;
         }
     }
     fclose(f);
@@ -38,7 +39,7 @@ void v2_options_ensure_loaded() {
 void v2_options_save() {
     FILE* f = fopen(OPT_PATH, "w");
     if (!f) return;
-    fprintf(f, "parallax=%d\nscenes=%d\nsnes_balance=%d\nlanguage=%s\n", (int)v2_options.parallax.load(), (int)v2_options.scenes.load(), (int)v2_options.snes_balance.load(), v2_locale_code_at(v2_options.language.load()));
+    fprintf(f, "parallax=%d\nscenes=%d\nsnes_balance=%d\nlanguage=%s\nsmooth=%d\n", (int)v2_options.parallax.load(), (int)v2_options.scenes.load(), (int)v2_options.snes_balance.load(), v2_locale_code_at(v2_options.language.load()), (int)v2_options.smooth.load());
     fclose(f);
 }
 
@@ -123,18 +124,19 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 }
 
 // ------------------------------------------------------------------- menu --
-enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_LEVEL, IT_SAVE, IT_LOAD, IT_COUNT };
+enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_LEVEL, IT_SAVE, IT_LOAD, IT_COUNT };
 static int cursor = 0, sel_slot = 1, sel_level_idx = 0;
 static std::string toast_text; static uint32_t toast_until = 0;
 void v2_ui_toast(const char* text) { toast_text = text; toast_until = SDL_GetTicks() + 1500; }
 
-static int n_items() { return g_debug_mode ? IT_COUNT : 4; }
+static int n_items() { return g_debug_mode ? IT_COUNT : 5; }
 static void activate() {
     switch (cursor) {
     case IT_PARALLAX: v2_options.parallax = !v2_options.parallax.load(); v2_options_save(); break;
     case IT_SCENES:   v2_options.scenes = !v2_options.scenes.load(); v2_options_save(); break;
     case IT_BALANCE:  v2_options.snes_balance = !v2_options.snes_balance.load(); v2_options_save(); v2_ui_toast("SNES BALANCE: NEXT LEVEL"); break;
     case IT_LANG:     { int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + 1) % n; v2_options_save(); } break; }
+    case IT_SMOOTH:   v2_options.smooth = !v2_options.smooth.load(); v2_options_save(); break;
     case IT_LEVEL:    if (v2_ui_nlevels.load() > 0) { v2_ui_req_level = v2_ui_levels[sel_level_idx].slot; v2_ui_menu_open = false; } break;
     case IT_SAVE:     v2_ui_req_save = sel_slot; v2_ui_menu_open = false; break;
     case IT_LOAD:     v2_ui_req_load = sel_slot; v2_ui_menu_open = false; break;
@@ -142,7 +144,7 @@ static void activate() {
 }
 static void adjust(int d) {
     switch (cursor) {
-    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: activate(); break;
+    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_SMOOTH: activate(); break;
     case IT_LANG: { int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + d + n) % n; v2_options_save(); } break; }
     case IT_LEVEL: { int n = v2_ui_nlevels.load(); if (n > 0) sel_level_idx = (sel_level_idx + d + n) % n; break; }
     case IT_SAVE: case IT_LOAD: sel_slot = (sel_slot - 1 + d + 9) % 9 + 1; break;
@@ -195,6 +197,7 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
         { char lc[8]; snprintf(lc, sizeof lc, "%s", v2_locale_code_at(v2_options.language.load()));
           for (char* c = lc; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
           snprintf(lines[n++], 40, "LANGUAGE  < %s >", lc); }
+        snprintf(lines[n++], 40, "SMOOTH    [%s]", v2_options.smooth.load() ? "ON " : "OFF");
         if (g_debug_mode) {
             int nl = v2_ui_nlevels.load();
             if (nl > 0 && sel_level_idx < nl)

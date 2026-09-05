@@ -27,7 +27,16 @@ bool v2_vm_in_frame = false;
 // Helper: get DS base pointer for v2 rendering.
 // With V2_RENDER_FROM_SHADOW: reads from v2 VM's shadow DS (independent from original).
 // Without: reads from real DS (same data as original VM).
+// UX stage 9: presenter overrides (see render_v2.h)
+thread_local const uint8_t*  v2_tls_ds = nullptr;
+thread_local uint8_t*        v2_tls_out = nullptr;
+thread_local const uint8_t*  v2_tls_fs = nullptr;
+thread_local const uint32_t* v2_tls_par_acc = nullptr;
+thread_local bool            v2_tls_presenter = false;
+bool v2_last_frame_tiles = false;   // the last v2_draw_tiles took the tile path (not a chunk screen)
+
 static inline uint8_t* v2_get_ds_base(uint16_t ds_val) {
+    if (v2_tls_ds) return (uint8_t*)v2_tls_ds;
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* shadow = v2_vm_get_shadow_ds();
     if (shadow) return shadow;
@@ -48,7 +57,7 @@ uint8_t  v2_hud_buf[320*64];
 // composition buffer: 176 (orig VGA split) or 200 on a full-screen scene.
 int v2_display_fullscreen = 0;
 extern "C" int v2_scene_fullscreen(void);   // v2_vm.cpp: LVX_FULLSCREEN of ds:0x25AD
-static int v2_clip_h = 176;
+static thread_local int v2_clip_h = 176;   // per thread: the presenter's passes set their own
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 
 // Static intro/menu chunk pixels backup. Orig keeps static chunk pixels in VGA
@@ -364,6 +373,7 @@ void v2_swap_render_buf() {
         v2_display_fullscreen = v2_scene_fullscreen();
         extern uint8_t v2_display_hud_buf[];
         memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
+        v2_smooth_capture();          // UX stage 9: the tick snapshot for the interpolating presenter
 #else
         v2_display_fullscreen = 0;   // verification build presents the shadow-VGA window only
         extern int v2_vga_fetch_page(uint8_t* out, uint32_t count);
@@ -485,9 +495,11 @@ static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) {
     if (!P.on || !P.map || !P.tiles) return;
     const int wpx = P.w * 8, hpx = P.h * 8;
     if (!wpx || !hpx) return;
-    int px = (P.fx & 0x8000) ? (int)(P.acc_x / 1792u)
+    const uint32_t acc_x = v2_tls_par_acc ? v2_tls_par_acc[0] : P.acc_x;   // UX stage 9: interpolated
+    const uint32_t acc_y = v2_tls_par_acc ? v2_tls_par_acc[1] : P.acc_y;
+    int px = (P.fx & 0x8000) ? (int)(acc_x / 1792u)
                              : (int)(((uint32_t)st.viewport_x() * (P.fx & 0x7FFF)) >> 8);
-    int py = (P.fy & 0x8000) ? (int)(P.acc_y / 1792u)
+    int py = (P.fy & 0x8000) ? (int)(acc_y / 1792u)
                              : (int)(((uint32_t)st.viewport_y() * (P.fy & 0x7FFF)) >> 8);
     px = (px + (int)P.off_x) % wpx; py = (py + (int)P.off_y) % hpx;   // phase offsets (map trailer)
     for (int sy = 0; sy < v2_clip_h; sy++) {
@@ -510,13 +522,13 @@ static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) {
 
 void v2_draw_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter) return;
 #endif
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
     V2StateViewC st(ds_base);   // phase D: typed field access
-    uint8_t* buf = v2_render_buf;
+    uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;   // UX stage 9: the presenter's own buffer
     // UX stage 0: clip height for this frame's sprites/UI (200 on a
     // full-screen LVX scene, else the orig 176-row viewport).
     // UX stage 1: on a full-screen scene the console blanks every line from
@@ -555,12 +567,17 @@ void v2_draw_tiles(uint16_t ds_val) {
     // equivalent of orig page-flip + dirty-rect tile-redraw mechanism.
     uint8_t lvl_flags = v2gs(ds_base).level_flags_b();
     if (lvl_flags & 0x42) {
+        if (v2_tls_presenter) return;      // UX stage 9: the presenter never composes chunk screens
+        v2_last_frame_tiles = false;
         if (v2_chunk_bg_valid) {
             memcpy(v2_render_buf, v2_chunk_bg_backup, 320 * 176);
         }
         return;
     }
-    v2_chunk_bg_valid = false; // tile-based level; static backup no longer relevant
+    if (!v2_tls_presenter) {
+        v2_chunk_bg_valid = false; // tile-based level; static backup no longer relevant
+        v2_last_frame_tiles = true;   // UX stage 9: this tick's frame is interpolable
+    }
 
     // Normal: clear and draw tiles (all 200 buffer rows: the tile loop below
     // already renders 25 tile rows; rows 176..199 are shown only on
@@ -575,6 +592,7 @@ void v2_draw_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
     uint8_t* tgfx_base = v2_resolve_segment(tgfx_seg);
+    if (v2_tls_fs) fs_base = (uint8_t*)v2_tls_fs;   // UX stage 9: the presenter's FS snapshot
 #else
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
@@ -691,6 +709,7 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
     uint8_t* tgfx_base = v2_resolve_segment(tgfx_seg);
+    if (v2_tls_fs) fs_base = (uint8_t*)v2_tls_fs;   // UX stage 9: the presenter's FS snapshot
 #else
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
@@ -794,14 +813,14 @@ void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
 // sub_1c8f1 repaints the cell, so the sprite must be repainted over it.
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter) return;
 #endif
     if (!v2_m2c_base || !myDrawInfo_v2) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
     V2StateViewC st(ds_base);   // phase D: typed field access
 
-    uint8_t* buf = v2_render_buf;
+    uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;   // UX stage 9
 
     // Viewport origin — pixel scroll values.
     // Mirrors orig set_display_memory_addr (sub_16775) — apply x_some/y_some shake.
@@ -1166,13 +1185,13 @@ static void v2_render_tile_masked(uint8_t* buf, const uint8_t* tgfx_base,
 
 void v2_draw_flagged_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter) return;
 #endif
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
     V2StateViewC st(ds_base);   // phase D: typed field access
-    uint8_t* buf = v2_render_buf;
+    uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;   // UX stage 9
 
     uint16_t fs_seg = st.seg_fs();
     uint16_t tgfx_seg = st.seg_tilegfx();
@@ -1182,6 +1201,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
     uint8_t* tgfx_base = v2_resolve_segment(tgfx_seg);
+    if (v2_tls_fs) fs_base = (uint8_t*)v2_tls_fs;   // UX stage 9: the presenter's FS snapshot
 #else
     uint8_t* fs_base = v2_m2c_base + ((uint32_t)fs_seg << 4);
     uint8_t* tgfx_base = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
@@ -1246,13 +1266,13 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 // ============================================================================
 void v2_draw_ui(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter) return;
 #endif
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
     uint8_t* ds_base = v2_get_ds_base(ds_val);
     V2StateViewC st(ds_base);   // phase D: typed field access
-    uint8_t* buf = v2_render_buf;
+    uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;   // UX stage 9
 
     // Scan UI element list: 40 columns × 22 rows at ds:0x956C
     uint8_t* ui_list = ds_base + DS_GLYPH_BUF;

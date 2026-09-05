@@ -15,6 +15,7 @@ extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 // ============================================================================
 
 const int SCREEN_SCALE_V2 = 2;
+bool v2_present_vsync = false;   // UX stage 9: SDL_RenderPresent blocks on the display refresh
 const int SCREEN_WIDTH_V2 = 320;
 const int SCREEN_HEIGHT_V2 = 240;
 const int RENDER_WIDTH_V2 = 344;
@@ -185,7 +186,20 @@ void render_thread_proc_v2(void* _state)
   {
     printf("render_v2: Window created successfully!\n");
     printf("render_v2: Creating renderer...\n");
-    myRenderer_v2 = SDL_CreateRenderer(myWindow_v2, -1, SDL_RENDERER_ACCELERATED);
+    // UX stage 9: present at the display's refresh (vsync) — the presenter
+    // paces itself on SDL_RenderPresent then (v2_present_sleep skips its
+    // sleep); the game tick keeps its own pacing (v2_main.cpp) and the
+    // vsync-wait loop its own (v2_tick_sleep), so game speed is unchanged.
+    // V2_NO_PRESENT_VSYNC=1 restores the free-running 15 ms presenter.
+    {
+        const char* e = getenv("V2_NO_PRESENT_VSYNC");
+        Uint32 rf = SDL_RENDERER_ACCELERATED | ((e && *e == '1') ? 0 : SDL_RENDERER_PRESENTVSYNC);
+        myRenderer_v2 = SDL_CreateRenderer(myWindow_v2, -1, rf);
+        SDL_RendererInfo ri;
+        v2_present_vsync = myRenderer_v2 && SDL_GetRendererInfo(myRenderer_v2, &ri) == 0 &&
+                           (ri.flags & SDL_RENDERER_PRESENTVSYNC);
+        printf("render_v2: presenter %s\n", v2_present_vsync ? "vsync" : "15 ms sleep");
+    }
     // Logical size keeps 4:3 aspect (320x240) regardless of window dimensions —
     // SDL letterboxes the texture with black bars when the window's aspect
     // differs from the logical one.

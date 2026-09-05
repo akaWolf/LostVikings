@@ -8112,7 +8112,7 @@ extern "C" uint16_t v2_lvx_flags(uint16_t level) {
 // same source every v2 mirror renders from; 0 on canonical slots and before
 // the VM has a shadow at all, so canonical behavior never changes.
 extern "C" int v2_scene_fullscreen(void) {
-    uint8_t* s = v2_vm_get_shadow_ds();
+    uint8_t* s = v2_tls_ds ? (uint8_t*)v2_tls_ds : v2_vm_get_shadow_ds();   // UX stage 9: presenter snapshot
     if (!s) return 0;
     return (v2_lvx_flags(v2gs(s).level()) & LVX_FULLSCREEN) ? 1 : 0;
 }

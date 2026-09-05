@@ -75,6 +75,20 @@ struct V2ParallaxLayer {
 };
 extern V2ParallaxLayer v2_parallax;
 
+// UX stage 9: presenter-side interpolation (v2_smooth.cpp). The render passes
+// read the DS/FS images and paint the buffer named by these thread-locals;
+// on the game thread they stay null (= the shadow DS / v2_render_buf), the
+// presenter thread points them at its interpolated snapshot and its own
+// composition buffer, so both threads can run the same passes at once.
+extern thread_local const uint8_t*  v2_tls_ds;
+extern thread_local uint8_t*        v2_tls_out;
+extern thread_local const uint8_t*  v2_tls_fs;
+extern thread_local const uint32_t* v2_tls_par_acc;   // {acc_x, acc_y} of the parallax autoscroll
+extern thread_local bool            v2_tls_presenter; // passes run outside the VM frame gate
+void v2_smooth_capture(void);                 // game thread, at the page flip
+bool v2_smooth_render(uint8_t* out);          // presenter: true = out (320x200) holds an interpolated frame
+extern float v2_smooth_last_t;                // debug: fraction of the last interpolated frame
+
 // UX stage 6 phase 2: a text item of a CJK language bank — a box's UTF-8 text
 // (or a raw YES/NO word) that v2_draw_ui paints with the bank's Unifont 16x16
 // glyphs over the cells loc_124c5 filled with spaces. Lives while its first

@@ -204,6 +204,7 @@ CXX_SRCS := \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
+  src/sdl/v2_smooth.cpp \
   src/sdl/v2_vm.cpp \
   src/sdl/v2_hash_hot.cpp \
   src/sdl/v2_input_recorder.cpp \
@@ -234,6 +235,7 @@ CXX_SRCS := \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
   src/sdl/v2_render_funcs.cpp \
+  src/sdl/v2_smooth.cpp \
   src/sdl/v2_vm.cpp \
   src/sdl/v2_hash_hot.cpp \
   src/sdl/v2_input_recorder.cpp \

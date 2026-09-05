@@ -12,6 +12,7 @@ struct V2Options {
     std::atomic<bool> scenes{true};     // play the Genesis interludes (slots 53-57)
     std::atomic<bool> snes_balance{false};   // the SNES 1993 level variants (13 levels), takes effect at the next level load
     std::atomic<int> language{0};            // UX6: index into the language banks (0 = the English original)
+    std::atomic<bool> smooth{true};          // UX9: the presenter interpolates camera/sprites between ticks
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once
