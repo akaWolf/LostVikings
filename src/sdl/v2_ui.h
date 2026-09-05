@@ -10,6 +10,7 @@
 struct V2Options {
     std::atomic<bool> parallax{true};   // the SNES parallax layer (mod levels)
     std::atomic<bool> scenes{true};     // play the Genesis interludes (slots 53-57)
+    std::atomic<bool> snes_balance{false};   // the SNES 1993 level variants (13 levels), takes effect at the next level load
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once

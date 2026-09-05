@@ -223,7 +223,12 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
                 pairs.append(key)
             pcv = (pair_idx[key] << 6) | (vf << 5) | (hf << 4) | (prio << 3)
             pc_gtld += bytes((pcv & 0xFF, pcv >> 8))
-    assert len(pairs) <= 1023, f"{len(pairs)} baked tiles > 10-bit offset"
+    # the draw word carries the tile offset in bits 6-15 (entry & 0xFFC0 =
+    # index*64): 1024 indices, the full 64 KB tileset segment (engine buffers
+    # V2_GS_TILEDATA_SIZE/V2_GS_SHADOW_SIZE = 0x10000; the LZSS lead u16 is
+    # size-1 = 0xFFFF, the loop runs the count down through the wrap). The
+    # SNES Factory table bakes to exactly 1024 pairs (UX stage 7).
+    assert len(pairs) <= 1024, f"{len(pairs)} baked tiles > 10-bit offset"
     print(f"baked tiles: {len(pairs)}; priority bits ported to bit3: "
           f"{prio_ported}")
 

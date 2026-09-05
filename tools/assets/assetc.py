@@ -690,8 +690,29 @@ def pack():
             payload = conv.compile(loaded)
             import struct as _st2
             hdr = _st2.pack("<II", 0, 0)   # synthetic table header
-            comp_block = _st2.pack("<H", (len(payload) - 1) & 0xFFFF) \
-                + lzss_store(payload)
+            # store mode inflates 9/8: the engine reads a compiled record
+            # into a 64 KB window and copies (uint16)clen of it (the
+            # archive's CX read) — a payload whose store stream does not fit
+            # (UX stage 7: the 1024-tile SNES Factory set = 65536 B) gets the
+            # real LZSS of tools/data/lvsc.py (the same greedy coder that
+            # reproduces every level-script block bit-exact), verified here
+            # by decompressing it back.
+            stream = lzss_store(payload)
+            if 2 + len(stream) > 0xFFFF:
+                cwd = os.getcwd()
+                os.chdir(ROOT)
+                try:
+                    import importlib.util as _ilu
+                    spec = _ilu.spec_from_file_location("lvsc", os.path.join(ROOT, "tools/data/lvsc.py"))
+                    lvsc = _ilu.module_from_spec(spec)
+                    spec.loader.exec_module(lvsc)
+                finally:
+                    os.chdir(cwd)
+                stream = lvsc.lzss_compress(payload)
+                assert lvsc.xd.lzss_decompress(stream, len(payload)) == payload, \
+                    f"extras: LZSS round-trip failed for {cid_hex}"
+                assert 2 + len(stream) <= 0xFFFF, f"extras: {cid_hex} compressed {len(stream)} B still too big"
+            comp_block = _st2.pack("<H", (len(payload) - 1) & 0xFFFF) + stream
             open(os.path.join(outdir, f"{cid:04d}.bin"), "wb").write(hdr + comp_block)
             n_extra += 1
     print(f"packed: {len(cmap)}+{n_extra} -> {outdir}")

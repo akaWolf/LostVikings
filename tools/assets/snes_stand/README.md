@@ -24,3 +24,12 @@ with a shake — class 48's entry at file 0x21D0C (`51 0000 57 0c02`) → `2E 05
 it: BG1 h alternates cam/cam+5 every frame while BG2 keeps the value of the
 UNshaken camera (FL0T 42/47 → 21, LLM0 0/5 → 0). The console derives the parallax
 from the viewport without the shake; v2_draw_parallax does the same.
+
+Level start frames (2026-09-04, UX stage 7 reference for the SNES-balance levels):
+`level_shot.lua` forces `PAR_SLOT` the same way, auto-presses A on the dialog
+flag (`$0338 & 0x70`) and writes `SHOT_OUT/shot_<slot>_f<N>.ppm` from
+`emu.getScreenBuffer()` every 200 frames from 2600 to 4800. The forced load
+keeps the PPU in forced blank until ~f3100 (`emu.takeScreenshot()` and the
+buffer are black there) — the usable frames start at 3200 (password box up,
+level behind it). SMRT/V8TR compared against the engine's SNES-balance
+heads: same layout, art and colours.

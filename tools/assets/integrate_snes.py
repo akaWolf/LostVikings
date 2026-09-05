@@ -80,6 +80,49 @@ SCENE_TMPL = {53: (0x1C2, 0x25D), 54: (0x1C3, 0x25E), 55: (0x1C4, 0x25F),
               56: (0x1C5, 0x260), 57: (0x1C1, 0x261)}
 # world template (.lvs) chunks per world of each insert
 TMPL_CHUNK = {48: 0x1C2, 49: 0x1C3, 50: 0x1C3, 51: 0x1C4, 52: 0x1C5}
+
+# UX stage 7 — the "SNES balance" option (user 2026-09-02: off by default;
+# 2026-09-04: whole-level SNES variants for the levels that differ, no
+# cherry-picking, CMB0 stays PC). The 13 levels of VERSIONS_DIFF §5.1 get a
+# second head + map/tiles/masks/quads/palette converted from the SNES DE ROM
+# (the same snes2pc pipeline as the five exclusives) under NEW chunk ids; the
+# LVX trailer lists them with LVX_ALT against the canonical slot number and
+# v2_load_template swaps the head in only while the option is on. The
+# canonical head, script, password, next level and the parallax pair stay.
+LVX_ALT = 0x0010
+BALANCE_LEVELS = [1, 4, 5, 6, 8, 9, 12, 20, 23, 24, 25, 26, 32]   # GR8T LLM0 FL0T TRSS CVRN BBLS PHR0 JNKR SMRT V8TR NFL8 WKYY TRPD
+BALANCE_BASE = 0x2A0                                             # 6 ids per level: hdr map tiles masks gtld pal
+
+
+def balance_integrate(scratch, lvx):
+    """Convert the 13 SNES-variant levels and append their LVX_ALT records."""
+    import json as _json
+    rom = SP.SnesRom()
+    tables = LR.level_tables()
+    pws = LR.level_passwords()
+    print("SNES balance variants:")
+    for k, lvl in enumerate(BALANCE_LEVELS):
+        b = BALANCE_BASE + 6 * k
+        pc_hdr, script = tables[lvl]
+        de_hdr = rom.rom[0x7686 + lvl * 2] | (rom.rom[0x7686 + lvl * 2 + 1] << 8)
+        hp = os.path.join(scratch, "level_headers", f"{pc_hdr:04X}.json")
+        pc_raw = bytes.fromhex(_json.load(open(hp))["raw"])
+        nxt = pc_raw[0x16] | (pc_raw[0x17] << 8)
+        cids = {"hdr": b, "map": b + 1, "tiles": b + 2, "gtld": b + 4, "pal": b + 5}
+        info = SP.convert_level(de_hdr, f"{pc_hdr:04X}", scratch, new_cids=cids,
+                                next_level=nxt, music=pc_raw[0x05])
+        # the console fields of the canonical head (parallax pair refs + fx/fy)
+        ap = os.path.join(scratch, "level_headers", f"{b:04X}.json")
+        aj = _json.load(open(ap))
+        araw = bytearray(bytes.fromhex(aj["raw"]))
+        araw[0x34:0x43] = pc_raw[0x34:0x43]
+        aj["raw"] = bytes(araw).hex()
+        with open(ap + ".tmp", "w") as f:
+            _json.dump(aj, f, indent=1)
+        os.replace(ap + ".tmp", ap)
+        TMPL_CHUNK[lvl] = script
+        lvx.append({"slot": lvl, "hdr": b, "pw": pws[lvl].encode(), "flags": LVX_ALT})
+        print(f"  level {lvl} {pws[lvl]}: SNES head {de_hdr:04X} -> alt head {b:04X} (next {nxt:02X}, track {pc_raw[0x05]:02X})")
 TMPL_CHUNK.update({slot: dst for slot, (src, dst) in SCENE_TMPL.items()})
 
 # The six SMD/Genesis-only scenes (task: embed into gameplay, as on SMD):
@@ -925,6 +968,10 @@ def do_integrate(scratch, music=None):
     # heads exist from this point on)
     import parallax_snes
     parallax_snes.integrate(scratch)
+    # UX stage 7: the SNES-balance variants (after the parallax step: their
+    # heads copy the canonical heads' pair refs) — the trailer is rebuilt
+    balance_integrate(scratch, lvx)
+    build_lvx(scratch, lvx)
     return [e["slot"] for e in PLAN + PLAN_SMD]
 
 

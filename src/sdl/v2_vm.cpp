@@ -47,7 +47,8 @@ extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot
 // UX plan stage 0: LVX trailer flags (defined with the LVX loader below;
 // used by the scroll-limit mirror above it).
 enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004,
-       LVX_NOGATE = 0x0008 };   // no sub_10813 off-screen input gate (Genesis scene recordings)
+       LVX_NOGATE = 0x0008,     // no sub_10813 off-screen input gate (Genesis scene recordings)
+       LVX_ALT = 0x0010 };      // UX stage 7: an ALTERNATIVE head for a canonical slot (SNES balance)
 struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
                     uint16_t demo_cid; uint16_t flags; uint8_t trio[18]; };
 // LVX3 flags bits 4-11 / 12-15: the camera pin (viewport x 0..255 / y 0..15
@@ -7882,12 +7883,21 @@ static uint16_t v2_current_level = 0xFFFF;
 //   lands in DS (the header's +0x07 mode byte = 2 selects the path); the
 //   canonical head modes (0x10 / 6 / 0) never read the table.
 // struct V2LvxEntry: defined next to the LVX_* flags (top of the file)
-static V2LvxEntry v2_lvx[16];
+static V2LvxEntry v2_lvx[32];
 static int v2_lvx_count = 0;
 
+// the canonical lookup skips the LVX_ALT records: they describe a variant of
+// a canonical slot, not a slot of their own (passwords, demo streams, scene
+// flags and the F5/F6 range all keep reading the canonical world)
 static const V2LvxEntry* v2_lvx_find(uint16_t level) {
     for (int i = 0; i < v2_lvx_count; i++)
-        if (v2_lvx[i].level == level) return &v2_lvx[i];
+        if (v2_lvx[i].level == level && !(v2_lvx[i].flags & LVX_ALT)) return &v2_lvx[i];
+    return nullptr;
+}
+// UX stage 7: the SNES-balance variant head of a canonical slot (or null)
+static const V2LvxEntry* v2_lvx_find_alt(uint16_t level) {
+    for (int i = 0; i < v2_lvx_count; i++)
+        if (v2_lvx[i].level == level && (v2_lvx[i].flags & LVX_ALT)) return &v2_lvx[i];
     return nullptr;
 }
 
@@ -7918,7 +7928,7 @@ extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
     v2_lvx_count = 0;
     if (size < 6) return;
     // the trailer sits at the very end: scan the last 4+2+32*16 bytes
-    uint32_t from = size > 4 + 2 + 32 * 16 ? size - (4 + 2 + 32 * 16) : 0;
+    uint32_t from = size > 4 + 2 + 32 * 32 ? size - (4 + 2 + 32 * 32) : 0;
     int32_t at = -1;
     int rec = 10;
     for (uint32_t i = from; i + 6 <= size; i++)
@@ -7930,7 +7940,7 @@ extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
         }
     if (at < 0) return;
     uint16_t n = (uint16_t)(img[at + 4] | (img[at + 5] << 8));
-    if (n > 16 || (uint32_t)at + 6 + (uint32_t)n * rec > size) return;
+    if (n > 32 || (uint32_t)at + 6 + (uint32_t)n * rec > size) return;
     const uint8_t* p = img + at + 6;
     for (uint16_t i = 0; i < n; i++, p += rec) {
         v2_lvx[i].level    = (uint16_t)(p[0] | (p[1] << 8));
@@ -7963,6 +7973,16 @@ static void v2_load_template(uint8_t* shadow) {
     if (const V2LvxEntry* lx = v2_lvx_find(level)) {
         level_chunk = lx->hdr_cid;
         template_chunk = lx->tmpl_cid;
+    }
+    // UX stage 7: with the SNES-balance option on, a canonical slot that has
+    // an LVX_ALT record loads the SNES-variant head instead (the script, the
+    // password and the progression stay the canonical ones)
+    v2_options_ensure_loaded();
+    if (v2_options.snes_balance.load()) {
+        if (const V2LvxEntry* alt = v2_lvx_find_alt(level)) {
+            level_chunk = alt->hdr_cid;
+            fprintf(stderr, "V2-LVX-ALT: level %u -> SNES balance head %04X\n", level, level_chunk);
+        }
     }
 
     // Load template → shadow animation data (ds:0x2E67)
@@ -15021,6 +15041,10 @@ static void v2_vm_op_D3(V2VM& vm) {
     // bounded by the original's CMP si,94h).
     for (int i = 0; i < v2_lvx_count; i++) {
         const V2LvxEntry& lx = v2_lvx[i];
+        // UX stage 7: an LVX_ALT record is a variant of a canonical slot, not a
+        // slot — its password IS the canonical one and lives in the ds:0x85A5
+        // table below (same DS_LEVEL_LOAD/DS_CMD_ACTIVE writes either way)
+        if (lx.flags & LVX_ALT) continue;
         if ((lx.pw[0] & 0x7F) == (pw0 & 0xFF) && (lx.pw[1] & 0x7F) == (pw1 & 0xFF) &&
             (lx.pw[2] & 0x7F) == (pw2 & 0xFF) && (lx.pw[3] & 0x7F) == (pw3 & 0xFF)) {
             vm.ds_write(DS_LEVEL_LOAD, lx.level);
