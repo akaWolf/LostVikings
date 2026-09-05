@@ -45,7 +45,10 @@ extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-f
 extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits (all builds; v2_gamestate.cpp)
 // UX plan stage 0: LVX trailer flags (defined with the LVX loader below;
 // used by the scroll-limit mirror above it).
-enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004 };
+enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004,
+       LVX_NOGATE = 0x0008 };   // no sub_10813 off-screen input gate (Genesis scene recordings)
+struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
+                    uint16_t demo_cid; uint16_t flags; uint8_t trio[18]; };
 // LVX3 flags bits 4-11 / 12-15: the camera pin (viewport x 0..255 / y 0..15
 // in px) of a CAMLOCK slot — the scene map's off-screen left room columns
 // plus the padding that keeps the Genesis composition's room quads
@@ -5671,6 +5674,7 @@ static uint16_t v2_load_anims_116ae(uint8_t* s, uint16_t di) {
 // Divergence #27 fixed at extraction: `active < 6` was UNSIGNED and the
 // [active+0x173D]/[+0x1765] reads lacked the 64K wrap casts (orig 8086
 // wraps; precedent: divergence #21 in v2_viewport_init_113d8).
+static const V2LvxEntry* v2_lvx_find(uint16_t level);   // defined with the LVX trailer parser below
 static void v2_viking_blink_10813(uint8_t* shadow) {
     uint16_t active = v2gs(shadow).active_viking(); // word_288A2
     uint16_t prev = v2gs(shadow).prev_viking();   // word_288A4
@@ -5714,6 +5718,16 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
                     on_screen = true;
             }
         }
+    }
+    // UX stage 1 (task #114): the Genesis interlude scenes drive the trio
+    // with the SMD's own input recordings, which walk the vikings in from
+    // x -68 with the camera pinned; the SMD engine has no off-screen input
+    // gate (no 0x14C/0x0C bounds test anywhere in its 68k code — docs2/
+    // GENESIS_ROM_INTERNALS.md), so the LVX slots flagged LVX_NOGATE keep
+    // their keys off-screen. Every canonical level keeps the orig gate.
+    if (!on_screen) {
+        const V2LvxEntry* lx = v2_lvx_find(v2gs(shadow).level());
+        if (lx && (lx->flags & LVX_NOGATE)) on_screen = true;
     }
     if (!on_screen) {
         // loc_10862: viking out of viewport (or slot >= 6) -> clear keys, return
@@ -7789,8 +7803,7 @@ static uint16_t v2_current_level = 0xFFFF;
 //   gets the table filled from its record right after the level header
 //   lands in DS (the header's +0x07 mode byte = 2 selects the path); the
 //   canonical head modes (0x10 / 6 / 0) never read the table.
-struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
-                    uint16_t demo_cid; uint16_t flags; uint8_t trio[18]; };
+// struct V2LvxEntry: defined next to the LVX_* flags (top of the file)
 static V2LvxEntry v2_lvx[16];
 static int v2_lvx_count = 0;
 
@@ -16908,6 +16921,12 @@ static void v2_vm_op_41(V2VM& vm) {
         vm.ds_write(DS_SCRATCH_34, w);                // word_28514
         uint16_t h = seg001[text_ptr + 1];
         vm.ds_write(DS_SCRATCH_36, h);                // word_28516
+        // diag (V2_CMDQ_LOG=1): which text record a box shows — the scene
+        // review pipeline maps the seg001 pointer back to the SMD line
+        { static int _tl = -1; if (_tl < 0) _tl = getenv("V2_CMDQ_LOG") ? 1 : 0;
+          if (_tl) { extern int v2_dbg_pre_vm_iter;
+            fprintf(stderr, "V2-TEXT41[f%d obj=%02X]: ptr=%04X w=%u h=%u\n",
+                    v2_dbg_pre_vm_iter, vm.global_r(DS_CUR_OBJ), text_ptr, w, h); } }
     }
 
     // 3. sub_12543: second dispatch — orig re-reads the FULL mode word from

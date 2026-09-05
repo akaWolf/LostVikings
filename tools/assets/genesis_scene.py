@@ -296,24 +296,21 @@ class GenesisScene:
 # The SMD scene itself spawns the trio OFF-SCREEN on that platform (the
 # room's spawn rows: Preh screen x -68, Egypt -32, Wacky/Ship -64; Factory
 # Baleog/Olaf -32 and Erik +360 on the right) and walks them in one by one.
-# The PC port places the trio the same way: `trio` = [(screen x, platform
-# top y[, anim bits])] for Erik, Baleog, Olaf — the engine's own mode-2
-# head recipe (sub_11446 -> sub_11569: three vikings from a DS position
-# table, code_seg order 1/0/2 = classes Erik/Baleog/Olaf, class 1 = Erik
-# = object slot 0; dormant in the DOS build, its table is
-# zero) fed per scene through the LVX4 record. Every viking must sit at
-# screen x >= -12: sub_10813 clears the input words while the ACTIVE
-# viking is outside vp_x-12 .. vp_x+332 (the camera-catch-up rule; the
-# scene camera is pinned, so a viking further out never becomes
-# controllable) — at -12 the 32-px body spans -28..4, out of sight behind
-# the sprite's transparent margin. Factory Erik enters from the RIGHT
-# (SMD spawn +360): screen 332 on the bottom floor, anim 0x40 = facing
-# left (the SMD row: class 0 = Baleog at +360). Each y = the platform top:
-# the spawn goes 48 px above it and the
-# viking drops onto a PC-standable cell (engine landing types 1/2/4/5/0x20
-# and slopes >= 0x30 — sub_16260; the Preh bottom grass (0x10) and the
-# Wacky candy floor (0x13) are NOT ground on the PC engine); `walk` = the
-# platform's standable x span.
+# The PC port spawns the trio from THOSE ROWS (smd2pc.build_genesis_backdrop:
+# classes 1/0/2 = Erik/Baleog/Olaf, screen = room - camera, the row's own
+# y) through the engine's mode-2 head recipe (sub_11446 -> sub_11569: three
+# vikings from a DS position table, code_seg order 1/0/2, class 1 = Erik =
+# object slot 0; dormant in the DOS build, its table is zero) fed per scene
+# by the LVX4 record, and drives them with the scene's own Genesis input
+# recording (integrate_snes.smd_recording). sub_10813 would clear the input
+# words while the ACTIVE viking is outside vp_x-12 .. vp_x+332 (the
+# camera-catch-up rule) — the LVX_NOGATE flag lifts that gate on the scene
+# slots (the SMD engine has no such gate: docs2/GENESIS_ROM_INTERNALS.md).
+# `spots`/`walk` (screen px) serve the DE-field path only. Engine landing
+# types 1/2/4/5/0x20 and slopes >= 0x30 (sub_16260); the Preh bottom grass
+# (0x10 — a landing viking DIES on it) and the Wacky candy floor (0x13 — no
+# ground) are translated to plain ground on the scene maps (smd2pc
+# GENESIS_FLOOR_TYPES) so the recording's moves land as on the Genesis.
 # The map carries EXT_L quad columns of the room LEFT of the screen (the
 # off-screen part of the platform, real room cells) so the leftmost viking
 # stands on real geometry — see layout().
@@ -332,8 +329,7 @@ WORLD_CAMERA = {
     # a failed spawn on the level-end frame drained stale slots and re-fired
     # the level-end flag — level 4 jumped to 5, seen live). The bubbles are
     # the DA rows below.
-    "preh":    dict(cam=(132, 120), spots=[(28, 120), (156, 168), (296, 152)], drop_cls=[0x4A],
-                    trio=[(-12, 120), (-12, 120), (-12, 120)], walk=(0, 56),
+    "preh":    dict(cam=(132, 120), spots=[(28, 120), (156, 168), (296, 152)], drop_cls=[0x4A], walk=(0, 56),
                     banner=dict(x0=32, y0=11, prow=3),
                     # The floating bubbles. The SMD scene makes them with its
                     # 4A row (pool 70 — a branch the SMD's own 4A has for
@@ -365,25 +361,21 @@ WORLD_CAMERA = {
     # knocks a standing viking back, kills Erik mid-jump) — nothing of the
     # kind happens on the DE clip. Left out until the SMD class is
     # identified (sprite match against the PC Egypt classes).
-    "egypt":   dict(cam=(80, 144), spots=[(40, 128), (76, 128), (128, 128)], drop_cls=[0x0A],
-                    trio=[(-12, 128), (-12, 128), (-12, 128)], walk=(24, 140),
+    "egypt":   dict(cam=(80, 144), spots=[(40, 128), (76, 128), (128, 128)], drop_cls=[0x0A], walk=(24, 140),
                     banner=dict(x0=80, y0=12, prow=2)),
     # Olaf + Baleog on the left beam (row 17: flat x 48..79, slopes 0x35/0x34
     # at x 16..47), Erik on its right part (x 208..255) — the video shows him
     # climbing the right ladder later. Head at 64: 64 beam, 32 slope, 0 drops
     # onto the lower-left bricks (row 18, y 112)
-    "factory": dict(cam=(112, 176), spots=[(232, 96), (76, 96), (57, 96)],
-                    trio=[(-12, 112), (332, 160, 0x40), (-12, 112)], walk=(52, 76),
+    "factory": dict(cam=(112, 176), spots=[(232, 96), (76, 96), (57, 96)], walk=(52, 76),
                     banner=dict(x0=50, y0=10, prow=2)),
     # the candy floor, room row 23: x -144..79 type 01 (ground), 80..319 type
     # 0x13 (not ground on the PC) — the trio and the stroll stay left of 80
-    "wacky":   dict(cam=(144, 216), spots=[(64, 152), (208, 152), (26, 152)],
-                    trio=[(-12, 152), (-12, 152), (-12, 152)], walk=(24, 72),
+    "wacky":   dict(cam=(144, 216), spots=[(64, 152), (208, 152), (26, 152)], walk=(24, 72),
                     banner=dict(x0=80, y0=10, prow=2)),
     # the left console platform, row 21 (x -144..63) — the trio crowds on it
     "ship":    dict(cam=(144, 208), bg_x=242,
-                    spots=[(40, 128), (56, 128), (20, 128)],
-                    trio=[(-12, 128), (-12, 128), (-12, 128)], walk=(16, 48),
+                    spots=[(40, 128), (56, 128), (20, 128)], walk=(16, 48),
                     banner=dict(x0=32, y0=10, prow=2)),
 }
 
@@ -412,12 +404,13 @@ def layout(world, gen_bg=None):
         x, y = sp["x"] - cam_x + pin_x, sp["y"] - cam_y + pin_y
         cw = max(cw, (x + sp["half_w"]) // 16 + 1)
         ch = max(ch, (y + sp["half_h"]) // 16 + 1)
-    # the trio's waiting spots too: Factory Erik waits PAST the right edge
-    # (screen 332) and needs the room's floor cells under him
-    for t in ((gen_bg or {}).get("trio") or wc["trio"]):
-        x, y = t[0] + pin_x, t[1] + pin_y
-        cw = max(cw, (x + 16) // 16 + 1)
-        ch = max(ch, (y + 16) // 16 + 1)
+    # the trio's own rows too: Factory Erik starts PAST the right edge (room
+    # x 472 = screen 360) and needs the room's floor cells under him
+    for sp in GenesisScene(world).spawns:
+        if sp["cls"] in (0, 1, 2):
+            x, y = sp["x"] - cam_x + pin_x, sp["y"] - cam_y + pin_y
+            cw = max(cw, (x + 16) // 16 + 1)
+            ch = max(ch, (y + 16) // 16 + 1)
     assert pin_x < 256 and pin_y < 16
     return dict(cam=(cam_x, cam_y), pin=(pin_x, pin_y), cw=cw, ch=ch)
 

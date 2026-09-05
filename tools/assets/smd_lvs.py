@@ -48,7 +48,7 @@ def decode(pc, base):
         ln, kind, toff = t[1]; return ln, kind, (base + s16(pc + toff)) if toff is not None else None
     return None, 'complex', None
 
-def walk(entries, base, limit=4000):
+def walk(entries, base, limit=60000):
     seen = {}; todo = list(entries); notes = []
     while todo:
         pc = todo.pop()
@@ -73,6 +73,61 @@ def listing(seen, base, names=True):
         t = f"  -> {tgt:X}" if tgt is not None else ''
         out.append(f"{pc:05X}: {op:02X} {raw:<24} {mn}{t}")
     return "\n".join(out)
+
+def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=None, prolog=True):
+    """Port SMD class code to a PC blob at `base`: the instructions of the
+    ROM regions [(start, end)] in address order, verbatim, with
+    - jump/call/branch targets relocated (every target op keeps its word as
+      the last operand; targets must fall inside the regions),
+    - `edits` {smd_pc_of_byte: bytes} = operand byte overrides (platform
+      constants: DS addresses, level ids, sfx ids),
+    - `inserts` {smd_pc: bytes} = extra bytes emitted right AFTER that
+      instruction (relocations account for the shift),
+    - `drops` = SMD pcs of instructions left out,
+    - `op19_map` {smd_anim_addr: pc_anim_addr} for the anim-load operands
+      of op 0x19 (their word is an anim address, not code),
+    - a `03 base+3` prolog (sub_1424c re-enters records at the raw pointer)."""
+    edits = edits or {}; inserts = inserts or {}; op19_map = op19_map or {}
+    b = BANK[bank]
+    seen, notes = walk([r[0] for r in regions], b)
+    assert not notes, notes
+    for pc in seen:
+        assert any(r0 <= pc < r1 for r0, r1 in regions), hex(pc)
+    order = [pc for r0, r1 in regions for pc in sorted(seen) if r0 <= pc < r1]
+    covered = set()
+    for pc in order:
+        covered.update(range(pc, pc + seen[pc][1]))
+    for r0, r1 in regions:
+        gaps = [x for x in range(r0, r1) if x not in covered]
+        assert not gaps, ("unreached bytes in region", hex(r0), [hex(g) for g in gaps[:8]])
+    # layout pass: new address of every instruction
+    new = {}; cur = base + (3 if prolog else 0)
+    for pc in order:
+        if pc in drops:
+            continue
+        new[pc] = cur
+        cur += seen[pc][1] + len(inserts.get(pc, b""))
+    out = bytearray()
+    if prolog:
+        out += bytes((0x03,)) + struct.pack("<H", base + 3)
+    for pc in order:
+        if pc in drops:
+            continue
+        op, ln, kind, tgt = seen[pc]
+        ins = bytearray(R[pc:pc + ln])
+        for eo, val in edits.items():
+            if pc <= eo < pc + ln:
+                ins[eo - pc:eo - pc + len(val)] = val
+        if tgt is not None:
+            assert tgt in new, ("target dropped/outside", hex(pc), hex(tgt))
+            ins[ln - 2:ln] = struct.pack("<H", new[tgt])
+        if op == 0x19:
+            a = b + s16(pc + 1)
+            assert a in op19_map, ("op 19 anim not mapped", hex(pc), hex(a))
+            ins[1:3] = struct.pack("<H", op19_map[a])
+        out += ins + inserts.get(pc, b"")
+    return bytes(out), new
+
 
 if __name__ == "__main__":
     cls = int(sys.argv[1], 16)

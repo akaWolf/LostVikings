@@ -206,6 +206,9 @@ LVX_CAMLOCK = 0x0002      # camera parked at (pin_x, pin_y) + both scroll axes
                           # map's off-screen left columns + the Genesis
                           # camera mod 16 (genesis_scene.layout, UX stage 1)
 LVX_TRIO = 0x0004         # the record's 18B = sub_11446 mode-2 viking table
+LVX_NOGATE = 0x0008       # no sub_10813 off-screen input gate: the Genesis
+                          # recordings walk the trio in from x -68 (the SMD
+                          # engine has no such gate — docs2/GENESIS_ROM_INTERNALS.md)
                           # (3 x {x,y,anim} for Erik/Baleog/Olaf, ds:0x8508):
                           # the scene head's +0x07 mode byte is 2 (UX stage 1)
 
@@ -256,141 +259,41 @@ def build_lvx(scratch, entries):
 # parks the input silent until the D8 timer ends the scene.
 DEMO_CID = {53: 0x253, 54: 0x254, 55: 0x255, 56: 0x256, 57: 0x257}
 
-R, L, U, D, ACT = 0x100, 0x200, 0x800, 0x400, 0x8000
-NEXT, PREV = 0x10, 0x20      # viking switch edges (sub_12e84)
+# UX stage 1 (2026-09-03, reversed from the SMD 68k — docs2/GENESIS_ROM_INTERNALS
+# .md §7): the Genesis scenes drive their vikings with INPUT RECORDINGS. ROM
+# chunks 0x151..0x155 (68k @0x72EA: level 0x34.. -> 0x151 + (level - 0x34))
+# hold pairs (key16 BE, count16 BE) = the key word held count ticks (player
+# @0x172A); the key bits are the engine's own (R 0x100, L 0x200, D 0x400,
+# U 0x800, ACTION 0x8000, NEXT 0x10, PREV 0x20, S 0x80 = use/talk); the tail
+# (ESC 0x1000, 0xFFFF) = ESC held forever = the scene ends (our D8's ESC
+# exit fires on the first ESC tick). The PC demo stream (sub_12d72) has the
+# same pair semantics in LE — the recording ships byte-swapped, verbatim.
+# No hand-made walk-ins/events/timings: the lines are the E1 talk spots of
+# the scene head (smd2pc.convert_scene) answering the vikings' S presses.
+SMD_RECORDING = {53: 0x151, 54: 0x152, 55: 0x153, 56: 0x154, 57: 0x155}
+TICK_HZ = 70.0        # PC engine ticks per second (VGA 70 Hz); the Genesis ran its recordings at 60
 
-# UX stage 1: the walk-ins. The Genesis scene brings its vikings in ONE BY
-# ONE from off-screen (the room's E1 rows are their stops); the PC scene
-# spawns the trio at screen x -12 (Factory Erik: 332, facing left) through
-# the mode-2 head table (genesis_scene.WORLD_CAMERA['trio']) and the demo
-# stream walks each one to its stop. Timing/stops measured on the DE
-# walkthrough (2 fps montages): (viking, seconds after scene start, stop
-# screen x). Object slots: Erik 0, Baleog 2, Olaf 4 (spawn order code_seg
-# 1/0/2 = classes Erik/Baleog/Olaf — class 1 is Erik: the first spawn is
-# object slot 0, the HUD's first portrait; the scene strips proved the
-# colours live); NEXT (bit 0x10) cycles 0 -> 2 -> 4 -> 0 (sub_12e84).
-# Input reaches only the ACTIVE viking, and only while it stands inside
-# vp_x-12 .. vp_x+332 (sub_10813 clears the input words otherwise) — the
-# waiting spots sit exactly on that edge.
-# Positions read off the DE walkthrough clips (scratchpad vid/*_in.mp4,
-# 1 fps contact sheets) and the rooms' E1 rows (the bubble anchors):
-#  Preh    Erik enters first (x~20 on the ledge), Olaf second (~36, E1
-#          389 "HEY ERIC, WATCH THIS" is his olive bubble); Baleog is not
-#          in the 14 s clip -> late entry ASSUMED (verify on a full clip).
-#  Egypt   Erik 40 and Baleog 76 (E1 394 / 392); Olaf never enters the
-#          22 s clip (the gag: "have Olaf go first" while he is not
-#          there) -> no Olaf entry.
-#  Factory Olaf ~44 and Erik ~64 on the left beam (SMD spawns Erik/Olaf
-#          at (-32, 80/88)); Baleog (class 1, SMD spawn +360) comes from
-#          the RIGHT along the bottom floor to ~304 (E1 396 "COME ON
-#          OVER, OLAF" at (304,144)) about 8 s in.
-#  Wacky   Olaf ~20 (E1 400 at 16), Erik 64 (E1 402); Baleog absent for
-#          the whole 22 s clip -> late entry ASSUMED.
-#  Ship    Olaf 24 (E1 406), Baleog 56 (E1 404), Erik 38.
-SCENE_WALK = {
-    53: [("erik", 1.8, 20), ("olaf", 4.5, 36), ("baleog", 27.0, 52)],
-    54: [("erik", 1.0, 40), ("baleog", 2.5, 76)],
-    55: [("olaf", 0.8, 44), ("erik", 2.0, 64), ("baleog", 8.0, 304)],
-    56: [("erik", 0.5, 64), ("olaf", 1.5, 20), ("baleog", 26.0, 48)],
-    57: [("olaf", 1.0, 24), ("baleog", 3.5, 56), ("erik", 8.5, 38)],
-}
-# waiting spots that are not the default screen x -12 (genesis_scene
-# WORLD_CAMERA trio order Erik/Baleog/Olaf)
-START_X = {55: {"baleog": 332}}
-VIK_SLOT = {"erik": 0, "baleog": 2, "olaf": 4}
-# scripted events after the walk-ins: (viking, seconds, raw RLE). Egypt:
-# Erik boasts, runs right and jumps the spike pit (clip ~13 s -> ~16 s):
-# ACTION while running = Erik's jump (S_4A25: vel_y by the run speed),
-# takeoff ~5 ticks after the press, ~110 px of flight at full speed —
-# pressed at x~93 (16 ticks of run-up) he takes off at ~135 and lands at
-# ~245, just short of
-# the room's sensor/cage objects at 256 (the cage drop itself is the
-# Genesis script's, not ported yet).
-SCENE_EVENTS = {54: [("erik", 16.0, [(R, 16), (R | ACT, 2), (R, 12)])],
-                # Factory: Erik leaves the beam to the right (clip ~4 s -> ~7 s),
-                # crosses the gap to the right platform (screen x 224..271) — a
-                # walking jump off the beam's end carries him there (measured:
-                # apex y 38, landing at 216..224) — walks to the right ladder
-                # (type-4 top cells at x 272..303), climbs down with DOWN held
-                # (rows 7-9, 4 px/tick) and steps off onto the bottom floor at
-                # ~271 (the clip's last frame: Erik ~270, Baleog ~300); measured
-                # live: jump f137-157, ladder f182-196, done ~11.6 s, Baleog's
-                # own entry follows at ~12 s as on the clip
-                55: [("erik", 7.0, [(R, 4), (R | ACT, 2), (R, 12), (0, 6), (R, 8), (0, 4), (R, 5), (0, 6),
-                                    (D, 22), (0, 6)])],
-                # Wacky: after his last line Erik walks right to the candy-cane
-                # ladder (room type-3 columns at screen x 112..143, rows 1-6 —
-                # it runs up into the banner band, whose rows carry no type
-                # bits on the scene map) and climbs out of the scene (clip
-                # ~20 s -> ~23 s). The ladder hangs 16 px above the floor, so
-                # walking into it with UP held does not latch (measured);
-                # a jump (ACTION) under it and UP held latch it — the engine
-                # snaps him to x 128 and climbs 4 px/tick; with UP held he
-                # keeps climbing off the top of the screen and stays there
-                56: [("erik", 23.0, [(R, 8), (0, 4), (R, 7), (0, 6), (ACT, 2), (U, 60)])]}
-TICK_HZ = 18.2          # DOS INT8 rate = one game tick
-# displacement of one held-RIGHT/LEFT burst of n ticks, in px, measured on
-# the per-frame trajectories (V2_VIK_DBG=2, Egypt scene): the viking
-# accelerates ~+0.6 px/tick^2 from a standstill and slides 1-2 ticks after
-# the release; a 1-tick press does not register at all. Erik/Olaf land
-# 1-2 px short of Baleog on the long bursts. Longer holds break into the
-# ~6 px/tick run, so the choreography is stitched from bursts <= 8 ticks
-# with a 4-tick stop between them.
-BURST_PX = {"baleog": {2: 3, 3: 4, 4: 8, 5: 11, 6: 16, 7: 22, 8: 29},
-            "erik":   {2: 3, 3: 4, 4: 8, 5: 11, 6: 15, 7: 21, 8: 27},
-            "olaf":   {2: 3, 3: 4, 4: 8, 5: 11, 6: 15, 7: 21, 8: 27}}
-GAP = 4
 
-def walk_bursts(vik, dist):
-    """(key, ticks) bursts moving viking `vik` by `dist` px (sign = dir):
-    greedy over BURST_PX, the remainder under 3 px is dropped."""
-    key = R if dist > 0 else L
-    tbl = BURST_PX[vik]
-    out = []
-    left = abs(dist)
-    while left >= min(tbl.values()):
-        n = max(k for k, px in tbl.items() if px <= left)
-        out += [(key, n), (0, GAP)]
-        left -= tbl[n]
-    return out
+def smd_recording(slot):
+    """The scene's Genesis input recording as [(key, count)] (host ints)."""
+    b = SM.SmdRom().chunk(SMD_RECORDING[slot])
+    assert len(b) % 4 == 0 and len(b) >= 8, (slot, len(b))
+    pairs = [struct.unpack(">HH", b[i:i + 4]) for i in range(0, len(b), 4)]
+    assert pairs[-1] == (0x1000, 0xFFFF), (slot, pairs[-1])   # the ESC tail
+    return pairs
 
-def walk_script(slot, start_x=None):
-    """The demo RLE for scene `slot` from SCENE_WALK."""
-    start_x = dict(start_x or {})
-    t, active, s = 0, 0, []
-    def emit(k, n):
-        nonlocal t
-        s.append((k, n)); t += n
-    plan = [(sec, vik, stop_x, None) for (vik, sec, stop_x) in SCENE_WALK[slot]]
-    plan += [(sec, vik, None, rle) for (vik, sec, rle) in SCENE_EVENTS.get(slot, [])]
-    plan.sort(key=lambda e: e[0])
-    for sec, vik, stop_x, rle in plan:
-        start = int(round(sec * TICK_HZ))
-        if start > t:
-            emit(0, start - t)
-        while active != VIK_SLOT[vik]:
-            emit(NEXT, 1); emit(0, 4)
-            active = (active + 2) % 6
-        # (Factory ladder, measured for the step-2 choreography: LEFT+UP
-        # held from 332 runs a viking along the bottom floor and latches
-        # the ladder — room type-3 columns at screen x 256..287, the PC
-        # snaps to its centre 272 — after 14 ticks; UP climbs 4 px/tick,
-        # 22 ticks top the 64 px onto the type-4 platform cells.)
-        if rle is not None:
-            for k, n in rle: emit(k, n)
-            continue
-        x0 = start_x.get(vik, -12)
-        for k, n in walk_bursts(vik, stop_x - x0):
-            emit(k, n)
-    emit(0, 0x7FFF)                                # silence till the timer
-    return s
+
+def smd_recording_ticks(slot):
+    """Ticks from the scene start to the recording's ESC tail."""
+    return sum(n for _, n in smd_recording(slot)[:-1])
+
 
 def write_demo_chunks(scratch):
     import json as _json
     ex_path = os.path.join(scratch, "extras.json")
     extras = _json.load(open(ex_path)) if os.path.exists(ex_path) else {}
     for slot, cid in DEMO_CID.items():
-        script = walk_script(slot, START_X.get(slot))
+        script = smd_recording(slot)
         blob = b"".join(struct.pack("<HH", k, n) for k, n in script)
         d = os.path.join(scratch, "unreferenced")
         os.makedirs(d, exist_ok=True)
@@ -408,109 +311,6 @@ def write_demo_chunks(scratch):
         _json.dump(extras, f, indent=1)
     os.replace(tmp, ex_path)
 
-
-
-# #113 letter-fall: the SMD/SNES interludes DROP the banner letters from the
-# sky (video ref; the SMD E0 rows carry per-letter phase in `pool`). Ours is
-# pure data appended PAST the canonical 1C6 payload (0x9F53; the template
-# buffer holds 48K, payload 40787 — room to spare, absolute addresses mean
-# nothing shifts):
-#   - class D9 is an ORPHAN on the PC (no canonical stripe spawns it — full
-#     scan) — its record is retargeted: spr FFFE (pool sprite, base 0),
-#     32x32 body (the D7 rest bytes), code -> the dispatcher below;
-#   - dispatcher: acc=field[16] (OBJ_ANIM_SUB = the spawn ROW INDEX) -> the
-#     canonical `51 k / 73 16 target` ladder (same grammar the S_8C61 row
-#     dispatcher uses) -> op 19 arms the letter's anim; rows 1..8 are the
-#     letters (row 0 stays the D8 timer: its index feeds its OWN duration);
-#   - anim per letter K: 0F phase-delay (the SMD pool cascade), 15 01
-#     (type-2, 32 strips — cs:32D7 table), 01 K*16 (frame = block K: the
-#     banner bank is the FIRST bank of the scene => sprite base 0, and a
-#     32x32 type-2 block is exactly 16 x 72B units), 08 0 (X=WORLD_X),
-#     then a ladder of 0A y-absolutes from -(drop) up to 0 (the first 0A
-#     also RAISES the sprite — canonical A_9F25 pattern), idle loop.
-LETTER_BASE = 0x9F53
-
-def letterfall_blob(nblk, base=LETTER_BASE, frame0=1):
-    """(blob_bytes, dispatcher_addr) — dispatcher first, then 8 anims.
-    `base` = the absolute address the blob lands at (the D9 record's code
-    is the block: it opens with the prolog jmp, spawn enters at pc + 3).
-    `frame0` = the pool
-    frame of block 0: 1 when the banner bank stands alone at sprite base 0
-    (the 1C6 scenes), 65 when it rides behind the world's pool bank 0x12F
-    (route B: 4608 B = 64 units, then the 71-byte prefix — smd2pc)."""
-    # Every block starts with the canonical 3-byte prolog `03 <base+3>`:
-    # the spawn enters a class at record pc + 3, but the level-end frame
-    # (sub_1424c with ds:32F != 0) re-enters EVERY object at the record's
-    # raw code pointer — canonical classes carry that jmp; a record pointed
-    # 3 bytes BEFORE the block ran the previous block's tail as code (the
-    # D8's `0F` = level end: level 4 jumped straight to 5; the Ship scene
-    # died on a ch6/7 FATAL) — seen live.
-    prolog = bytes((0x03, (base + 3) & 0xFF, ((base + 3) >> 8) & 0xFF))
-    LETTER_BASE = base + 3
-    # pass 1: measure the dispatcher: per row: 3 (51 k) + 4 (73 16 addr)
-    # ... + 1 (10 destroy default) ; branch targets: 19 addr (3) + idle jmp (3).
-    disp = bytearray()
-    branches = []
-    for k in range(1, nblk + 1):
-        disp += bytes((0x51, k & 0xFF, 0x00))
-        branches.append(len(disp) + 2)           # patch spot for 73-target
-        disp += bytes((0x73, 0x16, 0x00, 0x00))
-    fall_through = len(disp) + 1
-    disp += bytes((0x03, 0x00, 0x00))            # foreign index: -> letter 1
-                                                 # (diagnosed live: never
-                                                 # destroy — see below)
-    # branch bodies: 19 <anim_k> ; 03 <idle>
-    body_off = []
-    for k in range(nblk):
-        body_off.append(len(disp))
-        disp += bytes((0x19, 0x00, 0x00, 0x03, 0x00, 0x00))
-    idle_off = len(disp)
-    disp += bytes((0x2F, 0x00, 0x01, 0x03, 0x00, 0x00))   # show/idle loop
-    # anims start after the dispatcher
-    anims = bytearray()
-    anim_off = []
-    for k in range(nblk):
-        anim_off.append(len(disp) + len(anims))
-        a = bytearray()
-        a += bytes((0x0F, 4 + k * 7))            # cascade phase (SMD pools)
-        a += bytes((0x15, 0x01))                 # type-2, 32 strips
-        # frame 1+K*16: the render fetches mask@off-1/data@off (1-based,
-        # code-read), the anim 01 gives off = frm*72 from pool base 0 —
-        # the bank ships with a 71-byte zero prefix so off=72 lands the
-        # masks exactly on the encoded stream (block K at 71+K*1152).
-        # ('15 05' was NOT the fix: its reset also rewrites SPRITE_SEG
-        # from the sub's SRC_SEG — killed the draw, seen live.)
-        assert frame0 + k * 16 < 256, (frame0, k)
-        a += bytes((0x01, (frame0 + k * 16) & 0xFF))  # frame = block K
-        a += bytes((0x08, 0x00, 0x00))           # X = WORLD_X
-        y = -(88 + k * 4)
-        while y < 0:
-            a += bytes((0x0A,)) + int(y).to_bytes(2, "little", signed=True)
-            a += bytes((0x0F, 0x02))
-            y += 8
-        a += bytes((0x0A, 0x00, 0x00))           # settle at WORLD_Y
-        loop_at = LETTER_BASE + len(disp) + len(anims) + len(a)
-        a += bytes((0x0F, 0x28))
-        a += bytes((0x03,)) + loop_at.to_bytes(2, "little")
-        anims += a
-    # pass 2: patch dispatcher targets (absolute addresses)
-    ft = LETTER_BASE + body_off[0]
-    disp[fall_through] = ft & 0xFF
-    disp[fall_through + 1] = ft >> 8
-    for k in range(nblk):
-        tgt = LETTER_BASE + body_off[k]
-        disp[branches[k]] = tgt & 0xFF
-        disp[branches[k] + 1] = tgt >> 8
-        ao = LETTER_BASE + anim_off[k]
-        disp[body_off[k] + 1] = ao & 0xFF
-        disp[body_off[k] + 2] = ao >> 8
-        io = LETTER_BASE + idle_off
-        disp[body_off[k] + 4] = io & 0xFF
-        disp[body_off[k] + 5] = io >> 8
-    io = LETTER_BASE + idle_off
-    disp[idle_off + 4] = io & 0xFF
-    disp[idle_off + 5] = io >> 8
-    return prolog + bytes(disp) + bytes(anims)
 
 
 # The 1C6 D8 timed-scene controller, byte for byte (S_8A90..S_8AD0 + its
@@ -536,14 +336,23 @@ def d8_timer_blob(base, ticks):
     prolog jmp (S_94D7 = 1C6's shared object setup, which the world
     templates keep elsewhere) retargets to base+3: D8 needs none of it and
     the spawn path enters at pc+3 anyway."""
-    b = bytearray(D8_CANON)
-    assert len(b) == 0x41, len(b)
+    # UX stage 1 (E0 port): the letters take their block index from the
+    # shared counter [0x158] (e0_letters_blob) — the D8 (spawn row 0, the
+    # first object to run) zeroes it, `51 0000 57 5801`, right after the
+    # prolog; every canon operand below shifts by the 6 inserted bytes.
+    INS = bytes((0x51, 0x00, 0x00, 0x57, 0x58, 0x01))
+    b = bytearray(D8_CANON[:3] + INS + D8_CANON[3:])
+    assert len(b) == 0x41 + len(INS), len(b)
     for off, canon, rel in D8_RELOC:
+        if off >= 3: off += len(INS)            # operand positions after the insert
+        if off > 3: rel += len(INS)             # code targets shift; the prolog's
+                                                # base+3 = the insert itself stays
         assert b[off] | (b[off + 1] << 8) == canon, (off, b[off:off + 2].hex())
         tgt = base + rel
         b[off], b[off + 1] = tgt & 0xFF, tgt >> 8
-    assert b[19:22] == bytes((0x51, 0x3C, 0x00)), b[19:22].hex()
-    b[20], b[21] = ticks & 0xFF, ticks >> 8
+    o = 19 + len(INS)
+    assert b[o:o + 3] == bytes((0x51, 0x3C, 0x00)), b[o:o + 3].hex()
+    b[o + 1], b[o + 2] = ticks & 0xFF, ticks >> 8
     # The 1C6 loop ends the scene on two input edges: `aa 18 b803` (ESC,
     # LUT_BIT_MASK idx 0x18 = 0x1000) and `99 1e b803 / a8 000100` (ACTION
     # 0x8000 = the jump/attack button). The interludes are DEMO-driven and
@@ -553,6 +362,7 @@ def d8_timer_blob(base, ticks):
     # anyway, the intro mask turns a keypress into 0xFFFF.
     a8 = D8_CANON.find(bytes.fromhex("a8000100cf8a"))   # canon offset (relocated above)
     assert a8 > 0, "D8 canon: ACTION exit not found"
+    a8 += len(INS)
     b[a8:a8 + 6] = bytes([0x01] * 6)
     return bytes(b)
 
@@ -570,7 +380,7 @@ def bubble_blob(base, rows, frame0, rise=168, step=4, ticks=3, period=170):
     wobble and the wobble frame every other step, the pop frame at the
     top, then parked 300 px below the spawn point for the rest of the
     `period`, and around again. Lanes stagger by period/len(rows)."""
-    prolog = bytes((0x03, (base + 3) & 0xFF, ((base + 3) >> 8) & 0xFF))   # see letterfall_blob
+    prolog = bytes((0x03, (base + 3) & 0xFF, ((base + 3) >> 8) & 0xFF))   # the record prolog (sub_1424c re-entry)
     base += 3
     n = len(rows)
     disp = bytearray()
@@ -635,13 +445,19 @@ def bubble_blob(base, rows, frame0, rise=168, step=4, ticks=3, period=170):
 
 
 D8_REST = "04000000101000000500000000000000"   # 1C6's D8 record body
-D9_REST = "04000000202000000500000000000010"   # the D7-shaped 32x32 body
-# Scene durations in game ticks (DOS 18.2 Hz; the D8 timer is a 16-bit
-# tick count, d8_timer_blob). Ship: the clip shows the fade to the level
-# 17 s after its start, ~20 s into the scene. The other four are
-# ESTIMATES from the earlier walkthrough timing (Preh ~44 s, Egypt ~40,
-# Factory ~52, Wacky ~46) — their clips end before the fade.
-SCENE_TICKS = {53: 801, 54: 728, 55: 946, 56: 837, 57: 370}
+# the SMD E1 record body in PC shape (docs2/GENESIS_ROM_INTERNALS.md §2/§6):
+# +5 = the SMD bank byte 3, +9/+A 16x16, +D = 5, +F = CLASS_BITS 0x0040 —
+# the group the vikings' use probe (op 38 filter 0x0040) looks for
+E1_REST = "03000000101000000500400000000000"
+D9_REST = "04000000202000000500000000000010"   # the D7-shaped 32x32 body (DA decor)
+# the SMD E0 record body in PC shape: bank 4, 32x32, +D = 5, VEL_X/Y_MAX 0x1000
+# (the Starship letters fly in at exactly 16 px/tick — a smaller clamp would
+# slow them down)
+E0_REST = "04000000202000000500000000100010"
+# D8 timer durations (16-bit tick counts, d8_timer_blob). The scene really
+# ends when the Genesis recording reaches its ESC tail (smd_recording, the
+# D8's ESC exit); the timer is the fallback two seconds behind it.
+SCENE_TICKS = {slot: smd_recording_ticks(slot) + 140 for slot in SMD_RECORDING}
 TMPL_BUF = 0xC00 * 16    # the template lives in the animdata segment: 0xC00 paragraphs
 # Where the blocks go when the template has no room past its payload: the
 # Ship template 1C1 is 48972 B (180 B short of the buffer), so its scene
@@ -651,18 +467,27 @@ TMPL_BUF = 0xC00 * 16    # the template lives in the animdata segment: 0xC00 par
 # incoming; only its own `X = X+0` aliases), and the D2 record is pointed
 # at the 13DB stub like 1C6 does. The region keeps its exact length (the
 # blob is zero-padded), so nothing else in the template shifts.
-FREE_REGION = {0x1C1: (0x3311, 0x3694, "D2")}
+# 2026-09-03: the E1 talk-spot class (187 B) joined the blocks and the Ship
+# tail (180 B) cannot take it next to the D8 — the adjacent D7 region
+# (S_3694..S_374A, 182 B, also unreached from the Ship levels' spawns and
+# op-14 templates: lvs_full.full_walk) merges into the overlay region;
+# both victim records go to the 13DB stub.
+FREE_REGION = {0x1C1: (0x3311, 0x374A, ["D2", "D7"])}
 
 
 def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_idx=None):
     """One template per scene slot: the canonical world template text
-    (assets_raw/lvs/<src>.lvsf) under a new chunk id, its orphan D8/D9
-    records retargeted at the two blocks — appended past the payload when
+    (assets_raw/lvs/<src>.lvsf) under a new chunk id, its orphan D8/E0/E1
+    records retargeted at the blocks — appended past the payload when
     the 48K template buffer has room, else overlaid on FREE_REGION.
     Registered in extras.json as role level_script."""
     ex_path = os.path.join(scratch, "extras.json")
     extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
+    import genesis_scene as GS
+    pin_y_of = {e["slot"]: GS.layout(e["gen_bg"]["world"], e["gen_bg"])["pin"][1]
+                for e in PLAN_SMD if e.get("gen_bg")}
     for slot, (src, dst) in sorted(SCENE_TMPL.items()):
+        pin_y = pin_y_of.get(slot, 0)
         txt = open(os.path.join(AC.RAW, "lvs", f"{src:X}.lvsf")).read()
         m = re.search(r"^chunk %04X size (\d+)$" % src, txt, re.M)
         if not m:
@@ -675,60 +500,67 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_i
         assert pool_len % 72 == 0, pool_len
         frame0 = pool_len // 72 + 1
         dec = (decor or {}).get(slot)                # (rows, frame0) of the DA decor class
-        dia = SCENE_DIALOGUE.get(slot) if text_idx else None
+        talk = text_idx is not None            # the E1 talk-spot class (e1_talk_blob)
         t_slot = ticks[slot] if isinstance(ticks, dict) else ticks
         # the blocks, sized at base 0 (rebuilt at their final addresses)
         sz_timer = len(d8_timer_blob(0, t_slot))
-        sz_letters = len(letterfall_blob(nblk, base=0, frame0=frame0))
+        sz_letters = len(e0_letters_blob(0, nblk, frame0, pin_y))
         sz_bub = len(bubble_blob(0, dec[0], dec[1])) if dec else 0
-        sz_dia = len(dialogue_blob(0, dia, text_idx)) if dia else 0
-        need = sz_timer + sz_letters + sz_bub + sz_dia
+        sz_talk = len(e1_talk_blob(0)) if talk else 0
+        need = sz_timer + sz_letters + sz_bub + sz_talk
         # placement: everything appended past the payload when the 48K
         # buffer has room; else the letters (the big block) overlay
         # FREE_REGION and the small controllers still append — the Ship
         # template 1C1 leaves exactly 180 B past its payload
+        talk_in_region = False
         if n + need <= TMPL_BUF:
             tail_base, region = n, None
-            order = ["timer", "letters"] + (["bub"] if dec else []) + (["dia"] if dia else [])
+            order = ["timer", "letters"] + (["bub"] if dec else []) + (["talk"] if talk else [])
             where = "appended"
         else:
-            rbase, rend, victim = FREE_REGION[src]
+            rbase, rend, victims = FREE_REGION[src]
+            talk_in_region = bool(talk) and sz_letters + sz_bub + sz_talk <= rend - rbase
             assert sz_letters + sz_bub <= rend - rbase, (src, sz_letters + sz_bub, rend - rbase)
-            assert n + sz_timer + sz_dia <= TMPL_BUF, (src, n + sz_timer + sz_dia, TMPL_BUF)
-            tail_base, region = n, (rbase, rend, victim)
-            order = ["timer"] + (["dia"] if dia else [])
-            where = f"letters overlaid on {victim} {rbase:04X}-{rend:04X}, controllers appended"
+            sz_tail = sz_timer + (sz_talk if talk and not talk_in_region else 0)
+            assert n + sz_tail <= TMPL_BUF, (src, n + sz_tail, TMPL_BUF)
+            tail_base, region = n, (rbase, rend, victims)
+            order = ["timer"] + (["talk"] if talk and not talk_in_region else [])
+            where = (f"letters{' + talk spots' if talk_in_region else ''} overlaid on "
+                     f"{'+'.join(victims)} {rbase:04X}-{rend:04X}, controllers appended")
         # build the tail (appended) and the region blob at their addresses
         addr = {}
         tail = b""
         for name in order:
             a = tail_base + len(tail); addr[name] = a
             if name == "timer":   tail += d8_timer_blob(a, t_slot)
-            elif name == "letters": tail += letterfall_blob(nblk, base=a, frame0=frame0)
+            elif name == "letters": tail += e0_letters_blob(a, nblk, frame0, pin_y)
             elif name == "bub":   tail += bubble_blob(a, dec[0], dec[1])
-            elif name == "dia":   tail += dialogue_blob(a, dia, text_idx)
+            elif name == "talk":  tail += e1_talk_blob(a)
         region_blob = b""
         if region:
-            rbase, rend, victim = region
+            rbase, rend, victims = region
             a = rbase; addr["letters"] = a
-            region_blob = letterfall_blob(nblk, base=a, frame0=frame0)
+            region_blob = e0_letters_blob(a, nblk, frame0, pin_y)
             if dec:
                 addr["bub"] = rbase + len(region_blob)
                 region_blob += bubble_blob(addr["bub"], dec[0], dec[1])
+            if talk_in_region:
+                addr["talk"] = rbase + len(region_blob)
+                region_blob += e1_talk_blob(addr["talk"])
         new_n = n + len(tail)
         recs = [("D8", "record D8 sprite=FFFF flags=00 code==%04X rest=%s" % (addr["timer"], D8_REST)),
-                ("D9", "record D9 sprite=FFFE flags=01 code==%04X rest=%s" % (addr["letters"], D9_REST))]
+                ("E0", "record E0 sprite=FFFE flags=01 code==%04X rest=%s" % (addr["letters"], E0_REST))]
         if dec:
             recs.append(("DA", "record DA sprite=FFFE flags=01 code==%04X rest=%s" % (addr["bub"], D9_REST)))
-        if dia:
-            recs.append(("DC", "record DC sprite=FFFF flags=00 code==%04X rest=%s" % (addr["dia"], D8_REST)))
+        if talk:
+            recs.append(("E1", "record E1 sprite=FFFF flags=01 code==%04X rest=%s" % (addr["talk"], E1_REST)))
         for cls, new in recs:
             txt, k = re.subn(r"^record %s .*$" % cls, new, txt, count=1, flags=re.M)
             if k != 1:
                 raise SystemExit(f"template {src:X}: record {cls} not found")
         txt = txt.replace(m.group(0), "chunk %04X size %d" % (dst, new_n), 1)
         if region:
-            rbase, rend, victim = region
+            rbase, rend, victims = region
             lines = txt.split("\n")
             i0 = lines.index("S_%04X:" % rbase)
             i1 = lines.index("S_%04X:" % rend)
@@ -741,11 +573,12 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_i
             pad = bytes(rend - rbase - len(region_blob))
             keep.insert(j, "blob @%04X %s" % (rbase, (region_blob + pad).hex()))
             txt = "\n".join(keep)
-            # the overlaid class must never resolve into our code
-            txt, k = re.subn(r"^record %s sprite=(\S+) flags=(\S+) code=\S+ rest=(\S+)$" % victim,
-                             r"record %s sprite=\1 flags=\2 code=S_13DB rest=\3" % victim, txt, count=1, flags=re.M)
-            if k != 1:
-                raise SystemExit(f"template {src:X}: record {victim} not found")
+            # the overlaid classes must never resolve into our code
+            for victim in victims:
+                txt, k = re.subn(r"^record %s sprite=(\S+) flags=(\S+) code=\S+ rest=(\S+)$" % victim,
+                                 r"record %s sprite=\1 flags=\2 code=S_13DB rest=\3" % victim, txt, count=1, flags=re.M)
+                if k != 1:
+                    raise SystemExit(f"template {src:X}: record {victim} not found")
             stray = [ln for ln in keep if not ln.startswith("record") and any(
                      re.search(r"\b%s\b" % lab, ln) for lab in inside)]
             if stray:
@@ -764,7 +597,7 @@ def build_scene_templates(scratch, nblk=8, ticks=SCENE_TICKS, decor=None, text_i
         print(f"  scene template {dst:04X} = {src:04X} ({n}B): D8 timer @{addr['timer']:04X} "
               f"({t_slot} ticks) + {nblk} letters @{addr['letters']:04X}"
               + (f" + DA decor rows {dec[0]} frame {dec[1]} @{addr['bub']:04X}" if dec else "")
-              + (f" + DC dialogue {len(dia)} lines @{addr['dia']:04X}" if dia else "")
+              + (f" + E1 talk spots @{addr['talk']:04X}" if talk else "")
               + f", {len(tail)}B appended" + (f" + {len(region_blob)}B {where}" if region else ""))
     with open(ex_path + ".tmp", "w") as f:
         json.dump(extras, f, indent=1)
@@ -839,73 +672,106 @@ def write_scene_texts(scratch):
     return idx
 
 
-# The spoken lines per scene: (seconds after scene start, SMD line, bubble
-# anchor screen x, y, seconds shown). Read off the DE clips (scratchpad
-# vid/*_in.mp4, 2 fps frames, bubble colour detection + the contact sheets):
-# the box body's centre x and bottom y. The clips of Egypt/Factory/Wacky/
-# Ship start with the vikings already in place, ~3 s into the scene
-# (ASSUMED offset), Preh's ~1 s in (banner already up, ledge still empty).
-# Speakers by bubble colour: red Erik (394/395/402/403), green Baleog
-# (392/393/396/404/405), olive Olaf (389/398/400/401/406).
-# PC box geometry (measured live, val2 = 0): the box is centred on the
-# anchor x and its bottom border sits 4 px above the anchor y (the tail);
-# sub_12613 clamps it onto the screen. Genesis boxes are ~3% narrower.
-SCENE_DIALOGUE = {
-    53: [(7.0, 389, 100, 111, 3.5)],
-    54: [(3.0, 394, 86, 131, 1.5), (5.0, 392, 153, 139, 3.5), (10.0, 395, 99, 149, 3.5),
-         (20.0, 393, 240, 137, 4.0)],
-    55: [(14.5, 396, 220, 95, 3.5), (20.0, 398, 109, 112, 3.5)],
-    56: [(4.0, 400, 124, 95, 3.5), (9.0, 402, 183, 95, 3.5), (14.5, 401, 104, 82, 2.5),
-         (18.0, 403, 169, 87, 3.5)],
-    57: [(7.0, 404, 119, 119, 3.5), (12.0, 406, 123, 112, 3.5), (16.5, 405, 138, 104, 3.0)],
-}
+# The scene lines = the SMD class E1 "talk spot" ported as BYTECODE (docs2/
+# GENESIS_ROM_INTERNALS.md §6, tools/assets/smd_lvs.py E1): the same VM
+# dialect, the same field LUT (16 SPAWN_POOL = the row's pool, 1C TIMER,
+# 1E/20 X/Y, 30/32 message/sender, 3C PARTNER), the same DS scratch
+# (0x206/0x208/0x20A, 0x42). The object waits for message 0x14 (the
+# viking's S-key use branch — PC 1C6 sends the identical bytes), sets the
+# text colour by the speaker's slot (op 46 = cmd type 6), places the box
+# at the viking (dx/dy from its own spot; the tail code and the 52-px lift
+# come from the marker flags in pool bits 13-15: `97/A9 1e2e`, `AE 1c2e`,
+# `AE 1a2e` = bit tests of field 2E = the saved pool word), shows line
+# `pool & 0x0FFF`, holds 80 ticks, closes (op 42) and bumps the line
+# index: the next S on the same spot says the next line. The rows carry
+# the SMD pool words VERBATIM (flags + SMD line number); the only port
+# edits, both documented: (1) after the mask, `51 <delta> 59 16` adds the
+# PC text-bank offset (SCENE_TEXT_IDX0 - 389: our copies of lines 389..406
+# sit at 0x3BA0+k); (2) the sfx operand `02 080b` (an SMD sound id) becomes
+# the PC dialogue blip `02 2f50` used by every PC text box (1C1..1C6).
+E1_SMD_MAIN = (0x25ADE, 0x25B7C)     # class code (after the 03 despawn prolog)
+E1_SMD_SUB = (0x27B0D, 0x27B27)      # SUB_COLOR: op 46 by partner slot, 06
+E1_SFX_EDIT = {0x25B4F: bytes.fromhex("2f50")}   # 02 080b -> 02 2f50 (PC dialogue sfx)
+E1_MASK_PC = 0x25AEA                 # `5F 16` (pool &= 0x0FFF): the delta add goes after it
 
 
-def dialogue_blob(base, lines, text_idx):
-    """Class DC — the scene's speaker. Bytecode in the 1C6 finale's own
-    idiom (its D8 prolog + the S_9620 wait loop, ops verified in v2_vm):
-    prolog jmp base+3 (spawn enters at record pc + 3) / 19 anim (the 0E
-    byte at the end) / 2F / acc = 0x1000, 62 08 (OR field 08: field 1C
-    counts down) ; per line: acc = delay, 56 1C, 05 WAIT ; 41 00 <idx>
-    <val2 = 0> 00 <x> <y> (text index literal, tail bottom-middle, literal
-    anchor) ; acc = hold, 56 1C, 05 WAIT ; 42 (cmd type 2: box erased) ;
-    then idle: 00 01 03 idle. WAIT: 00 01 / 51 0000 / 73 1C exit / 03 WAIT
-    / exit: 06 (op 73: jump when field == acc)."""
-    b = bytearray()
-    fix = []                                   # (offset, blob-relative target)
-    def emit(*xs):
-        b.extend(xs)
-    def ref(target_getter):
-        fix.append((len(b), target_getter)); emit(0, 0)
-    emit(0x03); ref(lambda: 3)                 # prolog jmp -> base+3
-    emit(0x19); ref(lambda: anim_off)          # anim -> the 0E byte
-    emit(0x2F, 0x51, 0x00, 0x10, 0x62, 0x08)
-    t_prev = 0
-    for (sec, line, x, y, hold) in lines:
-        t = int(round(sec * TICK_HZ))
-        delay = max(1, t - t_prev)
-        emit(0x51, delay & 0xFF, delay >> 8, 0x56, 0x1C, 0x05); ref(lambda: wait_off)
-        idx = text_idx[line]
-        emit(0x41, 0x00, idx & 0xFF, idx >> 8, 0x00, 0x00, 0x00,
-             x & 0xFF, (x >> 8) & 0xFF, y & 0xFF, (y >> 8) & 0xFF)
-        h = int(round(hold * TICK_HZ))
-        emit(0x51, h & 0xFF, h >> 8, 0x56, 0x1C, 0x05); ref(lambda: wait_off)
-        emit(0x42)
-        t_prev = t + h
-    idle_off = len(b)
-    emit(0x00, 0x01, 0x03); ref(lambda: idle_off)
-    wait_off = len(b)
-    emit(0x00, 0x01, 0x51, 0x00, 0x00, 0x73, 0x1C); ref(lambda: exit_off)
-    emit(0x03); ref(lambda: wait_off)
-    exit_off = len(b)
-    emit(0x06)
-    anim_off = len(b)
-    emit(0x0E)
-    for off, getter in fix:
-        a = base + getter()
-        b[off], b[off + 1] = a & 0xFF, a >> 8
-    return bytes(b)
+def e1_talk_blob(base):
+    """Class E1 for the scene templates (smd_lvs.port_blob: prolog, code,
+    colour sub, relocated jumps/calls)."""
+    import smd_lvs as SL
+    delta = SCENE_TEXT_IDX0 - SMD_SCENE_LINES[0]
+    ins = {E1_MASK_PC: bytes((0x51, delta & 0xFF, delta >> 8, 0x59, 0x16))}
+    blob, _ = SL.port_blob([E1_SMD_MAIN, E1_SMD_SUB], 3, base, edits=E1_SFX_EDIT, inserts=ins)
+    return blob
 
+
+# The banner letters = the SMD class E0 ported as BYTECODE (docs2/GENESIS_ROM
+# _INTERNALS.md; tools/assets/smd_lvs.py E0, bank 4 @0x2D7A2): each letter
+# takes its block index from the shared counter [0x158] (spawn order),
+# arms the block's anim, waits `pool` ticks (the row's stagger), then moves
+# by WORLD: Prehistoria/Wacky fall under gravity (flag 0x8000) until y >= 10
+# (Wacky bounces while |dy| > 8), Egypt slides left at 2 px/tick bobbing
+# +-3 px every 8 ticks (15 phases), Factory slides left 3 px/tick for 90
+# ticks (the first letter bumps back), Starship flies in from the right at
+# 16 px/tick for 18 ticks — every path lands exactly on the BAC banner
+# positions (x0 80/50/32, y0 10..12). Port edits, all documented: the level
+# ids (SMD 0x34..0x38 -> our slots 0x35..0x39) and the level word address
+# ([0x1A3E] -> PC DS_LEVEL 0x25AD) — six `51 xx00 / 74 3e1a` pairs; the
+# anim addresses -> our static block anims (below); the three sfx ops (SMD
+# ids 0x51 land/bump, 0x28 bounce) are dropped — no PC ids are known for
+# them (the letters were silent before too). [0x158]/[0x328] are untouched
+# scratch on the PC engine (no v2 reader/writer); the D8 timer zeroes the
+# counter at scene start (d8_timer_blob) — the SMD relies on its per-level
+# RAM clear.
+E0_SMD_MAIN = (0x2D7A2, 0x2D92E)     # class code + its WAIT sub (anims follow at 0x2D92E)
+E0_SMD_ANIM_BASE = 0x2D92E           # the init anim (frame 0), then 8 x 5-byte block anims
+E0_SMD_ANIMS = [0x2D937 + 5 * k for k in range(8)]
+E0_LEVEL_SITES = {0x2D829: 0x34, 0x2D831: 0x35, 0x2D839: 0x36, 0x2D841: 0x37, 0x2D849: 0x38, 0x2D8EC: 0x34}
+E0_LEVEL_ADDR_SITES = (0x2D82C, 0x2D834, 0x2D83C, 0x2D844, 0x2D84C, 0x2D8EF)   # 74 3e1a ...
+E0_SFX_DROPS = (0x2D8CF, 0x2D908, 0x2D911)
+SLOT_OF_SMD_LEVEL = {0x34: 53, 0x35: 54, 0x36: 55, 0x37: 56, 0x38: 57}
+
+
+E0_LAND_Y_SITE = 0x2D8E7             # `81 0a00`: the falling letters stop at y >= 10 (SCREEN y)
+
+
+def e0_letters_blob(base, nblk=8, frame0=1, pin_y=0):
+    """(blob) = prolog + the E0 code ported to `base` + the block anims.
+    `frame0` = the pool frame of block 0 (65 on route B: the banner bank
+    rides behind the world's pool bank 0x12F — smd2pc). `pin_y` = the
+    scene's camera pin (genesis_scene.layout): the E0 rows and the landing
+    threshold are SCREEN coordinates on the SMD, our map = screen + pin."""
+    import smd_lvs as SL
+    edits = {}
+    assert SL.R[E0_LAND_Y_SITE:E0_LAND_Y_SITE + 3] == bytes((0x81, 0x0A, 0x00))
+    edits[E0_LAND_Y_SITE + 1] = struct.pack("<H", 10 + pin_y)
+    for pc, smd_lvl in E0_LEVEL_SITES.items():
+        assert SL.R[pc] == 0x51 and SL.R[pc + 1] == smd_lvl, hex(pc)
+        edits[pc + 1] = bytes((SLOT_OF_SMD_LEVEL[smd_lvl], 0))
+    for pc in E0_LEVEL_ADDR_SITES:
+        assert SL.R[pc] == 0x74 and SL.R[pc + 1:pc + 3] == bytes.fromhex("3e1a"), hex(pc)
+        edits[pc + 1] = struct.pack("<H", 0x25AD)          # DS_LEVEL
+    for pc in E0_SFX_DROPS:
+        assert SL.R[pc] == 0x02, hex(pc)
+    def anims(a0):
+        """static block anims: 15 01 (type-2, 32 strips) / 01 frame (block
+        K = frame0 + 16K) / 08 0 (X = WORLD_X) / 0A 0 (Y = WORLD_Y) /
+        0F 7F + jmp self (the SMD idiom: hold the frame)."""
+        out = bytearray(); addr = []
+        for k in range(nblk):
+            addr.append(a0 + len(out))
+            assert frame0 + k * 16 < 256, (frame0, k)
+            a = bytes((0x15, 0x01, 0x01, (frame0 + k * 16) & 0xFF, 0x08, 0, 0, 0x0A, 0, 0))
+            loop_at = a0 + len(out) + len(a)
+            out += a + bytes((0x0F, 0x7F, 0x03)) + struct.pack("<H", loop_at)
+        return bytes(out), addr
+    # pass 1: the code length with a dummy anim map
+    dummy = {E0_SMD_ANIM_BASE: 0, **{a: 0 for a in E0_SMD_ANIMS}}
+    code, _ = SL.port_blob([E0_SMD_MAIN], 4, base, edits=edits, drops=E0_SFX_DROPS, op19_map=dummy)
+    a_bytes, a_addr = anims(base + len(code))
+    amap = {E0_SMD_ANIM_BASE: a_addr[0], **{a: a_addr[k] for k, a in enumerate(E0_SMD_ANIMS)}}
+    code, _ = SL.port_blob([E0_SMD_MAIN], 4, base, edits=edits, drops=E0_SFX_DROPS, op19_map=amap)
+    return code + a_bytes
 
 def restore_1c6(scratch):
     """The scene script 1C6 goes back to the canonical text (earlier runs
@@ -922,43 +788,6 @@ def restore_1c6(scratch):
     with open(sj + ".tmp", "w") as f:
         json.dump({"payload_len": 40787}, f)
     os.replace(sj + ".tmp", sj)
-
-
-def patch_1c6_letterfall(scratch, nblk=8):
-    p = os.path.join(scratch, "level_scripts", "1C6.lvsf")
-    txt = open(p).read()
-    if "blob @9F53" in txt:
-        return                                    # idempotent rerun
-    blob = letterfall_blob(nblk)
-    # retarget the orphan D9 record: FFFE pool sprite, D7's 32x32 body,
-    # code = our dispatcher (raw address form `code==`)
-    old_rec = ("record D9 sprite=0180 flags=0E code==8AD4 "
-               "rest=040000007f4000000500000000100010")
-    new_rec = ("record D9 sprite=FFFE flags=01 code==%04X "
-               "rest=04000000202000000500000000000010" % (LETTER_BASE - 3))
-    if old_rec not in txt:
-        if "record D9 sprite=FFFE" in txt:
-            return                                # already retargeted
-        raise SystemExit("1C6 D9 record not in the expected canonical form")
-    txt = txt.replace(old_rec, new_rec)
-    # the .lvsf header line carries the chunk size — grow it by the append
-    old_size = "chunk 01C6 size 40787"
-    if old_size not in txt:
-        raise SystemExit("1C6 size header not found")
-    txt = txt.replace(old_size, f"chunk 01C6 size {40787 + len(blob)}")
-    txt = txt.rstrip("\n") + "\nblob @9F53 " + blob.hex() + "\n"
-    tmp = p + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(txt)
-    os.replace(tmp, p)
-    sj = os.path.join(scratch, "level_scripts", "01C6.size.json")
-    meta = json.load(open(sj))
-    meta["payload_len"] = 0x9F53 + len(blob)
-    with open(sj + ".tmp", "w") as f:
-        json.dump(meta, f)
-    os.replace(sj + ".tmp", sj)
-    print(f"  1C6 letter-fall: D9 -> dispatcher @{LETTER_BASE:04X}, "
-          f"{nblk} anims, +{len(blob)}B payload")
 
 
 def patch_1c6_d8_timer(scratch):
@@ -1022,6 +851,8 @@ def do_integrate(scratch, music=None):
             import genesis_scene as GS
             pin_x, pin_y = GS.layout(e["gen_bg"]["world"], e["gen_bg"])["pin"]
         flags = LVX_FULLSCREEN | LVX_CAMLOCK | (pin_x << 4) | (pin_y << 12)
+        if e.get("gen_bg"):
+            flags |= LVX_NOGATE
         trio = None
         if info.get("trio"):
             # UX stage 1: per-viking placement = the mode-2 table rows of
@@ -1042,7 +873,7 @@ def do_integrate(scratch, music=None):
     # (build_scene_templates); 1C6 keeps only the world-ladder retarget
     restore_1c6(scratch)
     patch_1c6_ladder(scratch)
-    text_idx = write_scene_texts(scratch)
+    text_idx = write_scene_texts(scratch)   # lines 389..406 -> SCENE_TEXT_IDX0+k (e1_talk_blob's delta)
     build_scene_templates(scratch, decor=decor, text_idx=text_idx)
     # SNDS (slot 49) lives in a NEW header — its next=50 already baked;
     # its predecessor JMNN (0053) got next=49 above.

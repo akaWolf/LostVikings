@@ -336,9 +336,16 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     pin_x, pin_y = lay["pin"]
     spots = gen_bg.get("spots") or wc["spots"]
     walk = gen_bg.get("walk") or wc["walk"]
-    trio = gen_bg.get("trio") or wc["trio"]
     assert (CW, CH) == (lay["cw"], lay["ch"]), (CW, CH, lay)
     sc = GenesisScene(world)
+    # the trio = the scene's own viking rows (classes 1/0/2 = Erik/Baleog/
+    # Olaf, the mode-2 table order), SCREEN px = room - camera: the SMD
+    # spawns them off-screen (Preh x -68) and its input recording walks them
+    # in (integrate_snes.smd_recording; LVX_NOGATE lifts the PC gate)
+    trio = []
+    for cls in (1, 0, 2):
+        row = next(sp for sp in sc.spawns if sp["cls"] == cls)
+        trio.append((row["x"] - cam_x, row["y"] - cam_y))
     bg_x, bg_y = sc.parallax(cam_x, cam_y, gen_bg.get("bg_x", wc.get("bg_x")))
     canvas = sc.render_indices(cam_x, cam_y, bg_x, bg_y, rows=200)
 
@@ -406,10 +413,9 @@ def build_genesis_backdrop(gen_bg, CW, CH):
         pal128[i] = smd_color_to_vga6(w)
     vik_pos = [(x + pin_x, y + pin_y - 1) for (x, y) in spots]
     walk = (walk[0] + pin_x, walk[1] + pin_x)
-    # spawn 48 px above the platform top (the SNES-style drop-in, out of
-    # sight at screen x -12 / 332), clamped under the window band (0x30)
-    trio = [(t[0] + pin_x, max(0x30, t[1] + pin_y - 1 - 48),
-             (t[2] if len(t) > 2 else 0)) for t in trio]
+    # map px = screen + pin, the SMD row's own y (the same engine convention:
+    # standing on the platform); anim 0 = the head's spawn anim 0x2F
+    trio = [(t[0] + pin_x, t[1] + pin_y, 0) for t in trio]
     print(f"  Genesis scene: world '{world}' room {sc.cid:03X} cam ({cam_x},{cam_y}) "
           f"pin ({pin_x},{pin_y}) map {CW}x{CH}, parallax ({bg_x},{bg_y}); "
           f"{len(tiles)} tiles / {len(prefabs)} prefabs, "
@@ -495,8 +501,8 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # - camera + pin (genesis_scene.layout); the level controller 48
         # sits at (0,0) as in every PC level (its pool = the world index,
         # same convention on both sides); the SMD scene classes E0 (the
-        # letters — ours are the D9 rows) and E1 (actor spots: the viking
-        # walks there and speaks the line in `pool` — not ported yet) drop.
+        # letters) and E1 (the talk spots) stay as rows: both classes are
+        # ported as bytecode (integrate_snes.e0_letters_blob / e1_talk_blob).
         from genesis_scene import layout as _gs_layout2
         _lay2 = _gs_layout2(gen_bg["world"], gen_bg)
         (_cx, _cy), (_px, _py) = _lay2["cam"], _lay2["pin"]
@@ -504,10 +510,28 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         from genesis_scene import WORLD_CAMERA as _WC0g
         _WC0 = _WC0g[gen_bg["world"]]
         for sp in spawns:
-            if sp["cls"] in (0xE0, 0xE1):
-                continue
             sp = dict(sp)
-            if sp["cls"] == 0x48:
+            if sp["cls"] in (0xE0, 0xE1):
+                # the SMD scene classes, ported as bytecode (integrate_snes
+                # e0_letters_blob / e1_talk_blob): rows verbatim — E0 pool =
+                # the letter's stagger (ticks), E1 pool = SMD line | marker
+                # flags; permanent, no sprite of their own (E0 arms the
+                # block anim itself). E1 sits at the ROOM position (the
+                # viking must stand on it); the E0 rows are SCREEN
+                # coordinates (Preh 32+32k / -64: the letters fall straight
+                # down onto the BAC banner x0 = 32 — proven live: the room
+                # conversion parked PREHISTORIA 100 px off the left edge;
+                # Egypt/Factory/Ship 320+32k minus their slide = x0 80/50/32,
+                # Wacky 80+32k) -> map = screen + pin.
+                if sp["cls"] == 0xE1:
+                    sp["x"] = (sp["x"] - _cx + _px) & 0xFFFF
+                    sp["y"] = (sp["y"] - _cy + _py) & 0xFFFF
+                else:
+                    sp["x"] = (sp["x"] + _px) & 0xFFFF
+                    sp["y"] = (sp["y"] + _py) & 0xFFFF
+                sp["anim"] = 0x0800
+                sp["_pc"] = True
+            elif sp["cls"] == 0x48:
                 sp["x"], sp["y"] = 0, 0
             elif sp["cls"] in _WC0.get("drop_cls", []):
                 continue           # room prop without a PC counterpart (see WORLD_CAMERA)
@@ -525,10 +549,6 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             sp["y"] = (sp["y"] + _py) & 0xFFFF
             sp["_pc"] = True
             kept.append(sp)
-        # the scene's speaker (class DC, integrate_snes.dialogue_blob):
-        # a permanent controller row like D8, parked at the map origin
-        kept.append(dict(cls=0xDC, x=0, y=0, half_w=16, half_h=16,
-                         anim=0x0800, pool=0, _pc=True))
         spawns = kept
         de_bg = gen_bg       # downstream: the 'shipped in PC shapes' path
     elif scene_mode and de_bg:
@@ -982,6 +1002,11 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # the SMD scene places its vikings one by one off-screen too
         head[0x07] = 0x02 if gen_trio else 0x10
         head[0x0C], head[0x0D] = 0x00, 0x00
+        # head +0x12 -> ds:25C5 = the switch/trigger bits (the SMD keeps the
+        # same field at its head copy +0x12 = RAM 0x1AB0): the Egypt scene
+        # starts with bit 0 set (its 6D prop reads it) — take the SMD value,
+        # not the donor level's
+        head[0x12], head[0x13] = c[0x13], c[0x12]
         head[0x0E], head[0x0F] = 0x2F, 0x00                # spawn anim 0x2F
         head[0x10], head[0x11] = 0x00, 0x00                # spawn pool0 = 0
         vxs = [p[0] for p in vik_pos] or [80]
@@ -1050,16 +1075,9 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
             rest_banks = [b for b in rest_banks if b["chunk"] != 0x12F]
         out["sprite_banks"] = ([{"chunk": new_cids["banner"],
                                  "pad": "c0000000"}] + rest_banks)
-        # letter spawn rows: AFTER the D8 controller (row 0 keeps the
-        # timer's ANIM_SUB=0 default), rows 1..N — the row index IS the
-        # dispatcher key (OBJ_ANIM_SUB = spawn row index)
-        for blk in range(len(banner_cols)):
-            out_spawns.insert(1 + blk, dict(
-                x=banner_cols[blk], y=banner_y, half_w=16, half_h=16,
-                cls=0xD9, anim=0x0800, pool=1 + blk))
-            # pool -> ds:374 -> OBJ_SPAWN_POOL = the dispatcher key:
-            # field[16] resolves through the runtime LUT to column 0x1B8
-            # (OBJ_SPAWN_POOL) — diagnosed live via the op_73 probe
+        # the letters: the SMD E0 rows of the room (kept above, class E0 =
+        # integrate_snes.e0_letters_blob); the banner bank still ships as
+        # pool frames frame0 + 16K for the block anims
         # scene decor rows (class DA, WORLD_CAMERA 'extra' with cls DA):
         # same convention — the row index keys the DA dispatcher that
         # integrate_snes.bubble_blob appends to the scene template
