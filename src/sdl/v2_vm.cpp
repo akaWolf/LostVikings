@@ -19824,6 +19824,30 @@ void v2_watch_302(const char* tag) {
     v2_hw_wp_drain();
 }
 
+
+// Debug: write the frame the DISPLAY shows (176 viewport rows from
+// v2_render_buf + the 24-row split band from v2_hud_buf; a full-screen LVX
+// scene shows map rows 176..199 instead) as a PPM. Shared by V2_LADDER_SNAP
+// (per-frame list) and V2_SNAP_WAIT (inside the dialog/viking-switch wait,
+// where the per-frame counter stands still). Returns true when written.
+static bool v2_dbg_dump_frame_ppm(const char* fn) {
+    extern uint8_t v2_dac_shadow[768];
+    extern uint8_t v2_render_buf[320*200];
+    extern uint8_t v2_hud_buf[320 * 64];
+    FILE* f = fopen(fn, "wb");
+    if (!f) return false;
+    fprintf(f, "P6\n320 200\n255\n");
+    const int fs = v2_scene_fullscreen();
+    for (int i = 0; i < 320 * 200; i++) {
+        uint8_t c = (i < 320 * 176 || fs) ? v2_render_buf[i] : v2_hud_buf[i - 320 * 176];
+        fputc(v2_dac_shadow[c*3+0] << 2, f);
+        fputc(v2_dac_shadow[c*3+1] << 2, f);
+        fputc(v2_dac_shadow[c*3+2] << 2, f);
+    }
+    fclose(f);
+    return true;
+}
+
 void v2_phase_frame_begin(uint16_t ds_val) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     (void)ds_val;
@@ -19919,30 +19943,9 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         for (int i = 0; i < nsnap; i++)
             if (v2_dbg_pre_vm_iter == snapf[i] || v2_dbg_pre_vm_iter == snapf[i] + 1) snap_now = true;
         if (snap_now) {
-            extern uint8_t v2_dac_shadow[768];
             extern uint8_t v2_render_buf[320*200];
             char fn[64]; snprintf(fn, sizeof(fn), "/tmp/ladder_f%d.ppm", v2_dbg_pre_vm_iter);
-            FILE* f = fopen(fn, "wb");
-            if (f) {
-                fprintf(f, "P6\n320 200\n255\n");
-                // compose the frame the DISPLAY shows: 176 viewport rows
-                // from render_buf + 24 split-band rows from v2_hud_buf
-                // (the raw render_buf tail rows 176..199 are diagnostic
-                // scratch the user never sees — dumping them faked a
-                // "garbage band" during the interlude work)
-                extern uint8_t v2_hud_buf[320 * 64];
-                // UX stage 0: on a full-screen LVX scene the display shows
-                // map rows 176..199 (no HUD band) — dump what is shown.
-                const int fs = v2_scene_fullscreen();
-                for (int i = 0; i < 320 * 200; i++) {
-                    uint8_t c = (i < 320 * 176 || fs)
-                        ? v2_render_buf[i]
-                        : v2_hud_buf[i - 320 * 176];
-                    fputc(v2_dac_shadow[c*3+0] << 2, f);
-                    fputc(v2_dac_shadow[c*3+1] << 2, f);
-                    fputc(v2_dac_shadow[c*3+2] << 2, f);
-                }
-                fclose(f);
+            if (v2_dbg_dump_frame_ppm(fn)) {
                 // raw index map alongside (visual index forensics)
                 char fn2[64]; snprintf(fn2, sizeof(fn2), "/tmp/ladder_f%d.idx", v2_dbg_pre_vm_iter);
                 FILE* f2 = fopen(fn2, "wb");
@@ -19955,7 +19958,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
                 }
                 fprintf(stderr, "LADDER-SNAP[f%d] %s px75=%d px76=%d px77=%d px78=%d\n",
                     v2_dbg_pre_vm_iter, fn, cnt[0], cnt[1], cnt[2], cnt[3]);
-            } else if (f) fclose(f);
+            }
         }
     }
     // V2_LADDER_TRACE: watch the slot bit-LUT at ds:0x93BC (8 bytes) — the
@@ -21514,6 +21517,15 @@ void v2_cmd_loop_1086f(uint8_t* s) {
             v2gs(s).frame_flags(v2gs(s).frame_flags() & (0xFFFB));
 #ifdef V2_ONLY
             extern bool need_quit;
+            // V2_SNAP_WAIT=1: dump the frame shown during the FIRST dialog /
+            // viking-switch wait to /tmp/ladder_wait.ppm (the password box at
+            // a level start sits in this wait; V2_LADDER_SNAP cannot see it —
+            // the per-frame counter does not advance here).
+            {
+                static int _sw = -1;
+                if (_sw < 0) { const char* e = getenv("V2_SNAP_WAIT"); _sw = (e && *e) ? 1 : 0; }
+                if (_sw == 1) { v2_do_render(); v2_dbg_dump_frame_ppm("/tmp/ladder_wait.ppm"); _sw = 2; }
+            }
             // Mirror orig loc_10169 inner loop (eips 0x169..0x18F): loops calling
             // sub_12352+sub_101be+3×(sub_16775+sub_10130+sub_108c8) until input flag
             // (word_28898 & 0xC0C0) detected. Use return value — function resets
