@@ -307,6 +307,17 @@ VIK_SLOT = {"erik": 0, "baleog": 2, "olaf": 4}
 # the room's sensor/cage objects at 256 (the cage drop itself is the
 # Genesis script's, not ported yet).
 SCENE_EVENTS = {54: [("erik", 16.0, [(R, 16), (R | ACT, 2), (R, 12)])],
+                # Factory: Erik leaves the beam to the right (clip ~4 s -> ~7 s),
+                # crosses the gap to the right platform (screen x 224..271) — a
+                # walking jump off the beam's end carries him there (measured:
+                # apex y 38, landing at 216..224) — walks to the right ladder
+                # (type-4 top cells at x 272..303), climbs down with DOWN held
+                # (rows 7-9, 4 px/tick) and steps off onto the bottom floor at
+                # ~271 (the clip's last frame: Erik ~270, Baleog ~300); measured
+                # live: jump f137-157, ladder f182-196, done ~11.6 s, Baleog's
+                # own entry follows at ~12 s as on the clip
+                55: [("erik", 7.0, [(R, 4), (R | ACT, 2), (R, 12), (0, 6), (R, 8), (0, 4), (R, 5), (0, 6),
+                                    (D, 22), (0, 6)])],
                 # Wacky: after his last line Erik walks right to the candy-cane
                 # ladder (room type-3 columns at screen x 112..143, rows 1-6 —
                 # it runs up into the banner band, whose rows carry no type
