@@ -7,3 +7,6 @@ __pycache__/
 # Nix GC-root symlinks (toolchain pins)
 /.nix-sdl2-dev-root
 /.nix-tc-*
+
+# UX stage 6: fetched from nixpkgs by tools/assets/unifont_glyphs.py, not bundled
+fonts/unifont.otf

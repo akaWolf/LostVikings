@@ -30,8 +30,13 @@ import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 LANG_CID0 = 0x300
-LANGS = ["de", "es", "es-MX", "fr", "it", "pl", "pt-BR", "ru"]   # Latin/Cyrillic; CJK = the presenter layer (later)
+LANGS = ["de", "es", "es-MX", "fr", "it", "pl", "pt-BR", "ru", "ja", "ko", "zh-CN", "zh-TW"]
+CJK = {"ja", "ko", "zh-CN", "zh-TW"}   # phase 2: UTF-8 records + a Unifont 16x16 glyph table, drawn by v2_draw_ui
 MAXW = 30
+MAXW_CJK_PX = 224          # 28 cells of 16/8-px glyphs per line
+CJK_NO_LEAD = set("。、，．！？」』）〕】〉》・ー…：；!?,.)")   # no line starts with these
+PASSWORD_IDX = 269         # the password letters land on a fixed cell row under the title:
+                           # a 16-px title cannot fit above them — the CJK banks keep it English
 RAW_IDX = {4, 5, 6}
 GLYPH0 = 0x60
 TRY_AGAIN_IDX = 271      # class D2 draws YES/NO at fixed cells (15,11)/(21,11) under a box at (13,8):
@@ -80,6 +85,93 @@ def dos_glyph(rows):
                 out.append(px[strip * 4 + row][col * 4 + plane])
     assert len(out) == 72
     return bytes(out)
+
+
+def cjk_wrap(text, G):
+    """Lines of at most MAXW_CJK_PX by glyph advance: by words where spaces
+    exist (Korean), by characters otherwise, closing punctuation never leads."""
+    out = []
+    for ln in text.replace("\r", "").split("\n"):
+        ln = ln.replace("\xa0", " ").replace("\u3000", "　").strip()
+        width = lambda t: sum(G[c]["w"] for c in t)
+        if width(ln) <= MAXW_CJK_PX:
+            out.append(ln)
+            continue
+        if " " in ln:
+            cur = ""
+            for w in ln.split(" "):
+                if cur and width(cur + " " + w) > MAXW_CJK_PX:
+                    out.append(cur); cur = w
+                else:
+                    cur = (cur + " " + w) if cur else w
+            out.append(cur)
+            continue
+        cur = ""
+        for c in ln:
+            if width(cur + c) > MAXW_CJK_PX and cur and c not in CJK_NO_LEAD:
+                out.append(cur); cur = c
+            else:
+                cur += c
+        out.append(cur)
+    return out
+
+
+def build_bank_cjk(code, strings, G, orig=None):
+    """UTF-8 records ([w][h][0x01][utf-8 with 0x0D breaks][0], the 0x01 marker
+    routes loc_124c5 to the wide-glyph path) + the Unifont 16x16 table of
+    every character used, located by the 8-byte trailer [u32 offset]"WGLY"."""
+    orig = orig or {}
+    n = 390
+    recs = {}
+    used = set()
+    for i, text in strings.items():
+        if i == PASSWORD_IDX:
+            continue
+        text = text.replace("\xa0", " ")
+        if any(c not in G for c in text if c not in "\n\r"):
+            print(f"  {code}: string {i} has glyphs outside the Unifont cache, kept English")
+            continue
+        if i in RAW_IDX:
+            recs[i] = b"\x01" + text.encode("utf-8") + b"\0"; used |= set(text)
+            continue
+        lines = cjk_wrap(text, G)
+        if i == TRY_AGAIN_IDX:
+            lines = [" ".join(l for l in lines if l).strip()]      # one 16-px line: YES/NO sit on the fixed row below
+        cells = lambda l: -(-sum(G[c]["w"] for c in l) // 8)
+        w = max(cells(l) for l in lines) + 2
+        h = 2 * len(lines) + 2
+        ow, oh = orig.get(i, (0, 0))
+        if i == TRY_AGAIN_IDX:
+            w, h = max(w, 15), max(h, 6)      # YES at cell 15, NO at 21 (16-px glyphs: cells 21..26), rows 11-12
+        w, h = max(w, ow), max(h, oh)
+        body = bytearray(b"\x01")
+        for k, l in enumerate(lines):
+            body += l.encode("utf-8")
+            if k + 1 < len(lines):
+                body.append(0x0D)
+            used |= set(l)
+        recs[i] = bytes((w, h)) + bytes(body) + b"\0"
+    if 4 in recs and 5 in recs:
+        blank = max(sum(G[c]["w"] for c in strings[4]), sum(G[c]["w"] for c in strings[5]))
+        recs[6] = b"\x01" + (" " * (blank // 8)).encode() + b"\0"; used.add(" ")
+    head_len = 0x14 + 2 * n
+    offsets = [0] * n
+    body = bytearray()
+    for i in sorted(recs):
+        offsets[i] = head_len + len(body)
+        body += recs[i]
+    assert head_len + len(body) < 0x8000, (code, head_len + len(body))
+    table = bytearray(struct.pack("<H", len(used)))
+    for c in sorted(used, key=ord):
+        g = G[c]
+        assert ord(c) < 0x10000, c
+        table += struct.pack("<HBB", ord(c), g["w"], 0) + struct.pack("<16H", *g["rows"])
+    hdr = b"LVLB" + code.encode("ascii").ljust(8, b"\0") + struct.pack("<HHHH", n, 0, GLYPH0, 0)
+    payload = hdr + struct.pack("<%dH" % n, *offsets) + bytes(body)
+    wide_off = len(payload)
+    payload += bytes(table) + struct.pack("<I", wide_off) + b"WGLY"
+    assert len(payload) <= 0x10000, (code, len(payload))
+    return payload, len(recs), len(used)
 
 
 def build_bank(code, strings, glyphs, orig=None):
@@ -139,12 +231,16 @@ def build_bank(code, strings, glyphs, orig=None):
 def banks():
     L = json.load(open(os.path.join(ROOT, "tools/assets/bac_lv_locale.json")))
     G = json.load(open(os.path.join(ROOT, "tools/assets/ps2p_glyphs.json")))
+    G16 = json.load(open(os.path.join(ROOT, "tools/assets/unifont16_glyphs.json")))
     orig = {e["i"]: (e["w"], e["h"]) for e in json.load(open(os.path.join(ROOT, "assets/texts_exe.json")))["entries"]
             if e["i"] not in RAW_IDX}
     out = {}
     for k, code in enumerate(LANGS):
         strings = {int(i): s for i, s in L["pc"][code].items() if s is not None}
-        payload, nrec, ng = build_bank(code, strings, G, orig)
+        if code in CJK:
+            payload, nrec, ng = build_bank_cjk(code, strings, G16, orig)
+        else:
+            payload, nrec, ng = build_bank(code, strings, G, orig)
         out[LANG_CID0 + k] = (code, payload, nrec, ng)
     return out
 

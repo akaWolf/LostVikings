@@ -1334,6 +1334,33 @@ void v2_draw_ui(uint16_t ds_val) {
             }
         }
     }
+    // UX6 phase 2: the CJK text items — Unifont 16x16 glyphs of the active bank
+    // over the space-filled cells, the DOS letter style (body 2, shadow (-1,+1) 1)
+    for (auto& it : v2_text_items) {
+        if (!it.on) continue;
+        if (it.row >= 22 || it.col >= 40 || ui_list[it.row * 40 + it.col] != 0x20) { it.on = 0; continue; }
+        int x = it.col * 8, y = it.row * 8;
+        for (size_t i = 0; it.utf8[i]; ) {
+            uint8_t c = (uint8_t)it.utf8[i];
+            if (c == 0x0D) { x = it.col * 8; y += 16; i++; continue; }
+            uint32_t cp; int len = 1;
+            if (c < 0x80) cp = c; else if ((c & 0xE0) == 0xC0) { cp = ((c & 0x1F) << 6) | (it.utf8[i+1] & 0x3F); len = 2; }
+            else { cp = ((c & 0x0F) << 12) | ((it.utf8[i+1] & 0x3F) << 6) | (it.utf8[i+2] & 0x3F); len = 3; }
+            i += len;
+            uint8_t w = 8; const uint8_t* g = v2_lang_wide_glyph(cp, &w);
+            if (!g) { x += w; continue; }
+            for (int pass = 0; pass < 2; pass++)
+                for (int yy = 0; yy < 16; yy++) {
+                    uint16_t bits = (uint16_t)(g[yy * 2] | (g[yy * 2 + 1] << 8));
+                    for (int xx = 0; xx < w; xx++)
+                        if (bits & (0x8000 >> xx)) {
+                            if (pass == 0) v2_put_pixel(buf, x + xx - 1, y + yy + 1, 1);
+                            else v2_put_pixel(buf, x + xx, y + yy, 2);
+                        }
+                }
+            x += w;
+        }
+    }
     // debug: V2_UI_BOXSHOT=<dir> dumps the indexed frame (with the glyph
     // layer just drawn) as <dir>/uibox_<n>.ppm each time the glyph buffer
     // changes while non-empty — text-box review headless (UX stage 6)
@@ -1344,6 +1371,7 @@ void v2_draw_ui(uint16_t ds_val) {
         if (dir && shots < 16) {
             uint32_t sig = 0; int nz = 0;
             for (int pos = 0; pos < 0x370; pos++) { if (ui_list[pos]) { nz++; sig = sig * 31 + ui_list[pos] + pos; } }
+            for (auto& it : v2_text_items) if (it.on) { for (const char* c = it.utf8; *c; c++) sig = sig * 31 + (uint8_t)*c; sig = sig * 31 + it.col + it.row; }   // the CJK items too
             if (nz && sig != last_sig) {
                 extern uint8_t v2_dac_shadow[768];
                 char fn[512]; snprintf(fn, sizeof fn, "%s/uibox_%d.ppm", dir, shots++);

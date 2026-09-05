@@ -72,6 +72,15 @@ struct V2ParallaxLayer {
 };
 extern V2ParallaxLayer v2_parallax;
 
+// UX stage 6 phase 2: a text item of a CJK language bank — a box's UTF-8 text
+// (or a raw YES/NO word) that v2_draw_ui paints with the bank's Unifont 16x16
+// glyphs over the cells loc_124c5 filled with spaces. Lives while its first
+// cell still holds that space (the box close / sub_12816 zero the cells).
+struct V2TextItem { uint8_t on, raw; uint16_t col, row; char utf8[400]; };
+extern V2TextItem v2_text_items[8];
+const uint8_t* v2_lang_wide_glyph(uint32_t cp, uint8_t* w);   // 16 rows u16 LE, bit 15 = left; null = none
+
+
 // Глобальные переменные (extern)
 extern struct myDrawInfoS_v2* myDrawInfo_v2;
 extern uint16_t input_keys_v2;

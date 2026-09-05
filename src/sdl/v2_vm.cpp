@@ -2335,18 +2335,34 @@ static void v2_parallax_load(uint8_t* s) {
 struct V2Locale { char code[8]; uint16_t cid; };
 static V2Locale v2_locales[16];
 static int v2_locale_n = 0;                  // slot 0 = the original English (no bank)
-static uint8_t v2_lang_bank[0x8000];
+static uint8_t v2_lang_bank[0x10000];       // records < 0x8000 (virtual pointers), the wide-glyph table beyond
 static bool v2_lang_on = false;
 static uint16_t v2_lang_nstr = 0, v2_lang_nglyph = 0, v2_lang_g0 = 0x60, v2_lang_nascii = 0;
 static const uint16_t* v2_lang_offs = nullptr;
 static const uint8_t* v2_lang_page = nullptr;
 static int v2_lang_current = 0;
+static const uint8_t* v2_lang_wide = nullptr;   // WGLY table: u16 count, entries [u16 cp][u8 w][u8 0][16 x u16 rows]
+static uint16_t v2_lang_wide_n = 0;
 enum { V2_LANG_CID0 = 0x300 };
+V2TextItem v2_text_items[8];
+static void v2_text_items_clear() { memset(v2_text_items, 0, sizeof v2_text_items); }
+const uint8_t* v2_lang_wide_glyph(uint32_t cp, uint8_t* w) {
+    if (!v2_lang_wide || cp > 0xFFFF) return nullptr;
+    int lo = 0, hi = (int)v2_lang_wide_n - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) >> 1;
+        const uint8_t* e = v2_lang_wide + mid * 36;
+        uint32_t k = (uint32_t)(e[0] | (e[1] << 8));
+        if (k == cp) { *w = e[2]; return e + 4; }
+        if (k < cp) lo = mid + 1; else hi = mid - 1;
+    }
+    return nullptr;
+}
 
 static void v2_locale_scan() {
     v2_locale_n = 1;
     memcpy(v2_locales[0].code, "en", 3); v2_locales[0].cid = 0;
-    static uint8_t tmp[0x8000];
+    static uint8_t tmp[0x10000];
     for (uint16_t cid = V2_LANG_CID0; cid < V2_LANG_CID0 + 15 && v2_locale_n < 16; cid++) {
         uint32_t len = 0;
         if (!v2_parallax_read_private(cid, tmp, sizeof tmp, &len)) break;   // banks are consecutive
@@ -2366,7 +2382,7 @@ int v2_locale_index_of(const char* code) {
     return 0;
 }
 static bool v2_locale_activate(int idx) {
-    v2_lang_on = false; v2_lang_current = 0;
+    v2_lang_on = false; v2_lang_current = 0; v2_text_items_clear();
     if (idx <= 0 || idx >= v2_locale_n) return true;
     uint32_t len = 0;
     if (!v2_parallax_read_private(v2_locales[idx].cid, v2_lang_bank, sizeof v2_lang_bank, &len) || len < 0x14) {
@@ -2379,8 +2395,14 @@ static bool v2_locale_activate(int idx) {
     v2_lang_nascii = (uint16_t)(v2_lang_bank[0x12] | (v2_lang_bank[0x13] << 8));   // 0x21.. page after the main page
     v2_lang_offs = (const uint16_t*)(v2_lang_bank + 0x14);
     v2_lang_page = v2_lang_bank + 0x14 + 2 * v2_lang_nstr;
+    v2_lang_wide = nullptr; v2_lang_wide_n = 0;
+    if (len >= 8 && memcmp(v2_lang_bank + len - 4, "WGLY", 4) == 0) {
+        uint32_t off = (uint32_t)(v2_lang_bank[len - 8] | (v2_lang_bank[len - 7] << 8) | (v2_lang_bank[len - 6] << 16) | (v2_lang_bank[len - 5] << 24));
+        if (off + 2 <= len) { v2_lang_wide_n = (uint16_t)(v2_lang_bank[off] | (v2_lang_bank[off + 1] << 8)); v2_lang_wide = v2_lang_bank + off + 2; }
+    }
+    v2_text_items_clear();
     v2_lang_on = true; v2_lang_current = idx;
-    fprintf(stderr, "V2-LOCALE: %s active (%u strings, %u glyphs, %u B)\n", v2_locales[idx].code, v2_lang_nstr, v2_lang_nglyph, len);
+    fprintf(stderr, "V2-LOCALE: %s active (%u strings, %u glyphs, %u wide, %u B)\n", v2_locales[idx].code, v2_lang_nstr, v2_lang_nglyph, v2_lang_wide_n, len);
     return true;
 }
 // text index -> record pointer (sub_12515): the bank's record when it has one
@@ -5014,10 +5036,48 @@ static void v2_text_frame_12388(uint8_t* s, uint16_t si, uint16_t di, uint8_t al
 // Original: reads bytes from es:bx (seg001), writes glyphs via sub_1241e.
 // Input: si = start column, di = start row, bx = offset in seg001 (past width/height).
 // Uses: word_28514 (width). Writes: word_2854C, glyph buffer.
+// UX6 phase 2: a CJK bank record (0x01 marker) — the UTF-8 text becomes a
+// text item painted by v2_draw_ui; the cells it covers get the space glyph
+// (the box fill; a raw YES/NO word at fixed cells gets them here too) so the
+// item lives exactly as long as those cells do.
+static void v2_text_item_add(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
+    V2TextItem* it = nullptr;
+    for (auto& t : v2_text_items) if (t.on && t.col == si && t.row == di) { it = &t; break; }
+    if (!it) for (auto& t : v2_text_items) if (!t.on) { it = &t; break; }
+    if (!it) it = &v2_text_items[0];
+    memset(it, 0, sizeof *it); it->on = 1; it->col = si; it->row = di;
+    size_t n = 0;
+    while (n + 1 < sizeof it->utf8) {
+        uint8_t c = v2_lang_bank[(uint16_t)(bx - 0x8000)];
+        if (!c) break;
+        it->utf8[n++] = (char)c; bx++;
+    }
+    // cells: one line of 16-px glyphs = 2 rows; width by the bank's advances
+    uint16_t row = di, col = si; uint32_t px = 0;
+    auto flush = [&](void) {
+        uint16_t cells = (uint16_t)((px + 7) / 8);
+        for (uint16_t r = 0; r < 2; r++) { uint16_t c2 = col; for (uint16_t k = 0; k < cells; k++) v2_glyph_put_1241e(s, 0x20, c2, (uint16_t)(row + r)); }
+        row += 2; px = 0;
+    };
+    for (size_t i = 0; i < n; ) {
+        uint8_t c = (uint8_t)it->utf8[i];
+        if (c == 0x0D) { flush(); i++; continue; }
+        uint32_t cp; int len = 1;
+        if (c < 0x80) cp = c; else if ((c & 0xE0) == 0xC0) { cp = ((c & 0x1F) << 6) | (it->utf8[i+1] & 0x3F); len = 2; }
+        else { cp = ((c & 0x0F) << 12) | ((it->utf8[i+1] & 0x3F) << 6) | (it->utf8[i+2] & 0x3F); len = 3; }
+        uint8_t w = 8; const uint8_t* g = v2_lang_wide_glyph(cp, &w); (void)g;
+        px += w; i += len;
+    }
+    flush();
+}
 static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
     if (!v2_m2c_base) return;
     uint8_t* seg001 = v2_m2c_base + 0x9480;
     v2gs(s).text_col(si);                                     // MOV word_2854C, si
+    if (v2_lang_on && v2_lang_wide && bx >= 0x8000 && v2_text_byte(seg001, bx) == 0x01) {   // UX6 phase 2
+        v2_text_item_add(s, si, di, (uint16_t)(bx + 1));
+        return;
+    }
     uint16_t cx = v2gs(s).scratch_34() - 2;                       // MOV cx, word_28514; SUB cx, 2
 
     while (true) {                                                    // loc_124d8
@@ -5096,6 +5156,7 @@ static void v2_glyph_list_clear_12816(uint8_t* s) {
     v2gs(s).glyph_dirty_b(0); // byte_31A4B
     memset(s + DS_GLYPH_BUF, 0, 0x1B8 * 2); // REP STOSW
     v2_gs_evac_mirror_span(s, DS_GLYPH_BUF, 0x1B8 * 2);
+    v2_text_items_clear();                   // UX6 phase 2: the CJK text items die with the cells
 }
 
 // sub_1133a: init HUD from spawn table extension.
