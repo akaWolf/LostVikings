@@ -289,11 +289,13 @@ def build_de_backdrop(de_bg, CW, CH):
 
 
 # Genesis-scene surface types that are ground for the interlude's actors but
-# not on the PC engine: 0x13 (Wacky candy floor — Erik walks it to the ladder
-# on the DE clip) and 0x10 (the Preh bottom grass — Olaf glides down onto it
-# for "GOOD AND SLOW"; on the PC a viking that lands on 0x10 dies, seen live:
-# anim_idx -1, the dead idle loop). Plain ground on the scene map.
-GENESIS_FLOOR_TYPES = {0x13: 0x01, 0x10: 0x01}
+# not on the PC engine: 0x13 (Wacky candy floor — the trio stands on it on the
+# real Genesis, genesis_stand capture; on the PC it is not ground). NOT 0x10:
+# the Prehistoria bottom is the world's instantly-lethal substance on both
+# platforms (a viking landing on it dies on the PC too — seen live); on the
+# Genesis nobody lands there (Olaf rides a geyser bubble across, Erik jumps
+# onto the shelf). Plain ground on the scene map.
+GENESIS_FLOOR_TYPES = {0x13: 0x01}
 
 
 def build_genesis_backdrop(gen_bg, CW, CH):

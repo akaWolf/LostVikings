@@ -307,10 +307,10 @@ class GenesisScene:
 # camera-catch-up rule) — the LVX_NOGATE flag lifts that gate on the scene
 # slots (the SMD engine has no such gate: docs2/GENESIS_ROM_INTERNALS.md).
 # `spots`/`walk` (screen px) serve the DE-field path only. Engine landing
-# types 1/2/4/5/0x20 and slopes >= 0x30 (sub_16260); the Preh bottom grass
-# (0x10 — a landing viking DIES on it) and the Wacky candy floor (0x13 — no
-# ground) are translated to plain ground on the scene maps (smd2pc
-# GENESIS_FLOOR_TYPES) so the recording's moves land as on the Genesis.
+# types 1/2/4/5/0x20 and slopes >= 0x30 (sub_16260); the Wacky candy floor
+# (0x13 — no ground on the PC, walked on the real Genesis) is translated to
+# plain ground on the scene map (smd2pc GENESIS_FLOOR_TYPES); the Preh bottom
+# (0x10) is the world's lethal substance on both platforms and stays so.
 # The map carries EXT_L quad columns of the room LEFT of the screen (the
 # off-screen part of the platform, real room cells) so the leftmost viking
 # stands on real geometry — see layout().
