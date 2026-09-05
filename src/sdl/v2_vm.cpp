@@ -2321,6 +2321,89 @@ static void v2_parallax_load(uint8_t* s) {
             v2gs(s).level(), mc, w, h, tc, n, v2_parallax.fx, v2_parallax.fy);
 }
 
+// ============================================================================
+// UX stage 6 — language banks (tools/assets/build_locale.py). One mod chunk per
+// language at 0x300+: header "LVLB" + code, 390 record offsets, a glyph page in
+// the chunk-2 glyph format (codes 0x60+), then the records [w][h][text 0].
+// The engine maps the active bank at seg001 VIRTUAL pointers 0x8000+: the
+// text-index lookup (sub_12515), the record readers (sub_12529, loc_124c5,
+// the op 41/44 dims) and the glyph fetch (sub_1E16D / v2_draw_ui) go through
+// v2_text_ptr_of / v2_text_byte / v2_glyph_bytes, which fall through to the
+// canonical seg001 / ds:0x687D data unless a bank is active. The English
+// original never activates one — its path is byte-identical to before.
+// ============================================================================
+struct V2Locale { char code[8]; uint16_t cid; };
+static V2Locale v2_locales[16];
+static int v2_locale_n = 0;                  // slot 0 = the original English (no bank)
+static uint8_t v2_lang_bank[0x8000];
+static bool v2_lang_on = false;
+static uint16_t v2_lang_nstr = 0, v2_lang_nglyph = 0, v2_lang_g0 = 0x60, v2_lang_nascii = 0;
+static const uint16_t* v2_lang_offs = nullptr;
+static const uint8_t* v2_lang_page = nullptr;
+static int v2_lang_current = 0;
+enum { V2_LANG_CID0 = 0x300 };
+
+static void v2_locale_scan() {
+    v2_locale_n = 1;
+    memcpy(v2_locales[0].code, "en", 3); v2_locales[0].cid = 0;
+    static uint8_t tmp[0x8000];
+    for (uint16_t cid = V2_LANG_CID0; cid < V2_LANG_CID0 + 15 && v2_locale_n < 16; cid++) {
+        uint32_t len = 0;
+        if (!v2_parallax_read_private(cid, tmp, sizeof tmp, &len)) break;   // banks are consecutive
+        if (len < 0x14 || memcmp(tmp, "LVLB", 4) != 0) break;
+        memcpy(v2_locales[v2_locale_n].code, tmp + 4, 8); v2_locales[v2_locale_n].code[7] = 0;
+        v2_locales[v2_locale_n].cid = cid;
+        v2_locale_n++;
+    }
+    fprintf(stderr, "V2-LOCALE: %d language bank(s):", v2_locale_n - 1);
+    for (int i = 1; i < v2_locale_n; i++) fprintf(stderr, " %s(%04X)", v2_locales[i].code, v2_locales[i].cid);
+    fprintf(stderr, "\n");
+}
+int v2_locale_count() { return v2_locale_n; }
+const char* v2_locale_code_at(int i) { return (i >= 0 && i < v2_locale_n) ? v2_locales[i].code : "en"; }
+int v2_locale_index_of(const char* code) {
+    for (int i = 0; i < v2_locale_n; i++) if (!strcmp(v2_locales[i].code, code)) return i;
+    return 0;
+}
+static bool v2_locale_activate(int idx) {
+    v2_lang_on = false; v2_lang_current = 0;
+    if (idx <= 0 || idx >= v2_locale_n) return true;
+    uint32_t len = 0;
+    if (!v2_parallax_read_private(v2_locales[idx].cid, v2_lang_bank, sizeof v2_lang_bank, &len) || len < 0x14) {
+        fprintf(stderr, "V2-LOCALE: bank %04X (%s) failed to load\n", v2_locales[idx].cid, v2_locales[idx].code);
+        return false;
+    }
+    v2_lang_nstr = (uint16_t)(v2_lang_bank[0x0C] | (v2_lang_bank[0x0D] << 8));
+    v2_lang_nglyph = (uint16_t)(v2_lang_bank[0x0E] | (v2_lang_bank[0x0F] << 8));
+    v2_lang_g0 = (uint16_t)(v2_lang_bank[0x10] | (v2_lang_bank[0x11] << 8));
+    v2_lang_nascii = (uint16_t)(v2_lang_bank[0x12] | (v2_lang_bank[0x13] << 8));   // 0x21.. page after the main page
+    v2_lang_offs = (const uint16_t*)(v2_lang_bank + 0x14);
+    v2_lang_page = v2_lang_bank + 0x14 + 2 * v2_lang_nstr;
+    v2_lang_on = true; v2_lang_current = idx;
+    fprintf(stderr, "V2-LOCALE: %s active (%u strings, %u glyphs, %u B)\n", v2_locales[idx].code, v2_lang_nstr, v2_lang_nglyph, len);
+    return true;
+}
+// text index -> record pointer (sub_12515): the bank's record when it has one
+static inline uint16_t v2_text_ptr_of(const uint8_t* seg001, uint16_t idx) {
+    if (v2_lang_on && idx < v2_lang_nstr && v2_lang_offs[idx])
+        return (uint16_t)(0x8000 + v2_lang_offs[idx]);
+    return *(const uint16_t*)(seg001 + (uint16_t)(idx << 1));
+}
+// one byte of a text record by its (possibly virtual) seg001 pointer
+static inline uint8_t v2_text_byte(const uint8_t* seg001, uint16_t ptr) {
+    if (v2_lang_on && ptr >= 0x8000) return v2_lang_bank[ptr - 0x8000];
+    return seg001[ptr];
+}
+// glyph cell data: the bank's page for its codes, ds:0x687D + idx*72 otherwise
+const uint8_t* v2_glyph_bytes(const uint8_t* s, uint16_t glyph_index) {
+    uint16_t code = (uint16_t)(glyph_index + 0x10);
+    if (v2_lang_on && code >= v2_lang_g0 && code < (uint16_t)(v2_lang_g0 + v2_lang_nglyph))
+        return v2_lang_page + (code - v2_lang_g0) * 72;
+    if (v2_lang_on && code >= 0x21 && code < (uint16_t)(0x21 + v2_lang_nascii))   // the language's face for the DOS codes
+        return v2_lang_page + (v2_lang_nglyph + (code - 0x21)) * 72;
+    return s + (uint16_t)(0x687Du + glyph_index * 72u);
+}
+
 // One game tick: the autoscroll axes advance by f/256 px per CONSOLE frame
 // (60 Hz) — at the 70 Hz tick that is f*6/7 in 1/256 px, kept exact in an
 // accumulator of 1/1792 px, wrapped at the map period.
@@ -3756,7 +3839,7 @@ static void v2_glyph_draw_1E16D(uint8_t* s, uint16_t si_glyph, uint16_t di_vga) 
         extern uint8_t v2_vga[65536 * 4];  (void)v2_vga;
         static const int bit_dx[8] = {0,4,0,4,0,4,0,4};
         static const int bit_dy[8] = {0,0,1,1,2,2,3,3};
-        const uint8_t* glyph = s + (uint16_t)(0x687Du + si_glyph * 72u);
+        const uint8_t* glyph = v2_glyph_bytes(s, si_glyph);   // UX6: the language page for its codes
         extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
         for (int plane = 0; plane < 4; plane++) {
             for (int strip = 0; strip < 2; strip++) {
@@ -4810,7 +4893,7 @@ static void v2_text_lookup_12515(uint8_t* s, uint16_t ax) {
     if (!v2_m2c_base) return;
     uint16_t si = ax << 1;                                           // SHL ax, 1
     uint8_t* seg001 = v2_m2c_base + 0x9480;
-    uint16_t text_off = *(uint16_t*)(seg001 + si);                   // es:[si+0]
+    uint16_t text_off = v2_text_ptr_of(seg001, ax);                  // es:[si+0] (UX6: the language bank first)
     v2gs(s).text_idx(text_off);                               // MOV word_2850A, ax
     { extern int v2_dbg_pre_vm_iter;
       fprintf(stderr, "V2-2850A-HELPER[f%d]: ax_in=%04X seg001_off=%04X text_off=%04X\n",
@@ -4823,9 +4906,9 @@ static void v2_text_lookup_12515(uint8_t* s, uint16_t ax) {
 static void v2_text_dims_12529(uint8_t* s, uint16_t& bx) {
     if (!v2_m2c_base) return;
     uint8_t* seg001 = v2_m2c_base + 0x9480;
-    uint16_t width = (uint16_t)seg001[bx];                           // ah=0; al=es:[bx]
+    uint16_t width = (uint16_t)v2_text_byte(seg001, bx);             // ah=0; al=es:[bx]
     v2gs(s).scratch_34(width);                                  // word_28514
-    uint16_t height = (uint16_t)seg001[bx + 1];                     // al=es:[bx+1]
+    uint16_t height = (uint16_t)v2_text_byte(seg001, (uint16_t)(bx + 1)); // al=es:[bx+1]
     v2gs(s).scratch_36(height);                                 // word_28516
     bx += 2;                                                         // ADD bx, 2
 }
@@ -4938,7 +5021,7 @@ static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t 
     uint16_t cx = v2gs(s).scratch_34() - 2;                       // MOV cx, word_28514; SUB cx, 2
 
     while (true) {                                                    // loc_124d8
-        uint8_t al = seg001[bx];                                     // MOV al, es:[bx]
+        uint8_t al = v2_text_byte(seg001, bx);                       // MOV al, es:[bx]
         if (al == 0) break;                                          // CMP al, 0; JZ loc_12509
         if (al == 0x0D) {                                            // CMP al, 0Dh; JNZ loc_12502
             // CR: fill rest of line with spaces
@@ -4952,7 +5035,7 @@ static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t 
             cx = v2gs(s).scratch_34() - 2;                        // MOV cx, word_28514; SUB cx, 2
             di++;                                                     // INC di
             si = v2gs(s).text_col();                             // MOV si, word_2854C
-            al = seg001[bx];                                          // MOV al, es:[bx]
+            al = v2_text_byte(seg001, bx);                            // MOV al, es:[bx]
             if (al == 0) break;                                      // CMP al, 0; JZ loc_12509
             bx++;                                                     // INC bx
             continue;                                                 // JMP loc_124d8
@@ -8293,6 +8376,22 @@ static void v2_ui_service(uint8_t* s) {
     if (par != last_par) {
         if (last_par >= 0) { if (par) v2_parallax_load(s); else v2_parallax.on = false; }
         last_par = par;
+    }
+    // UX stage 6: the language (a bank swap on the game thread; the next text
+    // command reads the new strings/glyphs)
+    {
+        static bool scanned = false;
+        static int last_lang = 0;
+        if (!scanned) {
+            v2_locale_scan();
+            extern char v2_options_lang_code[8];
+            int idx = v2_locale_index_of(v2_options_lang_code);
+            v2_options.language.store(idx);
+            if (idx) v2_locale_activate(idx);
+            last_lang = idx; scanned = true;
+        }
+        int want = v2_options.language.load();
+        if (want != last_lang) { v2_locale_activate(want); last_lang = want; }
     }
     static uint16_t last_level = 0xFFFF;
     uint16_t lv = v2gs(s).level();
@@ -17074,7 +17173,7 @@ static bool v2_vm_ch_dispatch_1250b(V2VM& vm, uint8_t& out_mode) {
     if (ch_intr) return true;
     // sub_12515: ax = result * 2; read word from seg001:[ax] → word_2850A (DS:0x002A)
     uint16_t seg001_off = result * 2;
-    uint16_t text_ptr = *(uint16_t*)(v2_m2c_base + 0x9480 + seg001_off);
+    uint16_t text_ptr = v2_text_ptr_of(v2_m2c_base + 0x9480, result);   // UX6: the language bank first
     vm.ds_write(DS_TEXT_IDX, text_ptr);
     { static int _t = -1; if (_t < 0) _t = getenv("V2_CH_TRACE") ? 1 : 0;
       if (_t) { extern int v2_dbg_pre_vm_iter;
@@ -17160,9 +17259,9 @@ static void v2_vm_op_41(V2VM& vm) {
         uint16_t text_ptr = vm.ds_read(DS_TEXT_IDX); // word_2850A
         // seg001 base: 0x9480 from m2c_base
         uint8_t* seg001 = v2_m2c_base + 0x9480;
-        uint16_t w = seg001[text_ptr];      // byte → word (ah=0)
+        uint16_t w = v2_text_byte(seg001, text_ptr);      // byte → word (ah=0)
         vm.ds_write(DS_SCRATCH_34, w);                // word_28514
-        uint16_t h = seg001[text_ptr + 1];
+        uint16_t h = v2_text_byte(seg001, (uint16_t)(text_ptr + 1));
         vm.ds_write(DS_SCRATCH_36, h);                // word_28516
         // diag (V2_CMDQ_LOG=1): which text record a box shows — the scene
         // review pipeline maps the seg001 pointer back to the SMD line
@@ -17238,8 +17337,8 @@ static void v2_vm_op_44(V2VM& vm) {
     {
         uint16_t text_ptr = vm.ds_read(DS_TEXT_IDX);
         uint8_t* seg001 = v2_m2c_base + 0x9480;
-        vm.ds_write(DS_SCRATCH_34, (uint16_t)seg001[text_ptr]);
-        vm.ds_write(DS_SCRATCH_36, (uint16_t)seg001[text_ptr + 1]);
+        vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(seg001, text_ptr));
+        vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(seg001, (uint16_t)(text_ptr + 1)));
     }
 
     // 3. sub_12543: second dispatch — full mode word re-read from ds:0x32;

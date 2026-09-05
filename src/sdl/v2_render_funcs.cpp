@@ -1308,12 +1308,13 @@ void v2_draw_ui(uint16_t ds_val) {
 
         // Glyph data at ds:0x687D + glyph_index * 72
         // Original: si = 0x687E + glyph_index*72, reads mask at [si-1]
-        uint8_t* glyph = ds_base + (uint16_t)(0x687Du + glyph_index * 72u);
+        extern const uint8_t* v2_glyph_bytes(const uint8_t*, uint16_t);
+        const uint8_t* glyph = v2_glyph_bytes(ds_base, glyph_index);   // UX6: the language page for its codes
 
         for (int plane = 0; plane < 4; plane++) {
             for (int strip = 0; strip < 2; strip++) {
                 uint8_t mask = glyph[0];
-                uint8_t* data = glyph + 1;
+                const uint8_t* data = glyph + 1;
                 int base_y = screen_y + strip * 4;  // strip 0 → row 0, strip 1 → row 4
 
                 if (mask) {
@@ -1330,6 +1331,31 @@ void v2_draw_ui(uint16_t ds_val) {
                 }
 
                 glyph += 9;
+            }
+        }
+    }
+    // debug: V2_UI_BOXSHOT=<dir> dumps the indexed frame (with the glyph
+    // layer just drawn) as <dir>/uibox_<n>.ppm each time the glyph buffer
+    // changes while non-empty — text-box review headless (UX stage 6)
+    {
+        static const char* dir = nullptr; static int init = 0, shots = 0;
+        static uint32_t last_sig = 0;
+        if (!init) { dir = getenv("V2_UI_BOXSHOT"); init = 1; }
+        if (dir && shots < 16) {
+            uint32_t sig = 0; int nz = 0;
+            for (int pos = 0; pos < 0x370; pos++) { if (ui_list[pos]) { nz++; sig = sig * 31 + ui_list[pos] + pos; } }
+            if (nz && sig != last_sig) {
+                extern uint8_t v2_dac_shadow[768];
+                char fn[512]; snprintf(fn, sizeof fn, "%s/uibox_%d.ppm", dir, shots++);
+                if (FILE* f = fopen(fn, "wb")) {
+                    fprintf(f, "P6\n320 200\n255\n");
+                    for (int i = 0; i < 320 * 200; i++) {
+                        uint8_t c = buf[i];
+                        fputc(v2_dac_shadow[c*3+0] << 2, f); fputc(v2_dac_shadow[c*3+1] << 2, f); fputc(v2_dac_shadow[c*3+2] << 2, f);
+                    }
+                    fclose(f);
+                }
+                last_sig = sig;
             }
         }
     }

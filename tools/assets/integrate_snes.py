@@ -977,6 +977,9 @@ def do_integrate(scratch, music=None):
     # heads copy the canonical heads' pair refs) — the trailer is rebuilt
     balance_integrate(scratch, lvx)
     build_lvx(scratch, lvx)
+    # UX stage 6: the language banks (BAC translations, Press Start 2P glyph pages)
+    import build_locale
+    build_locale.integrate(scratch)
     return [e["slot"] for e in PLAN + PLAN_SMD]
 
 

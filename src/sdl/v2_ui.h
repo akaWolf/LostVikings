@@ -11,10 +11,14 @@ struct V2Options {
     std::atomic<bool> parallax{true};   // the SNES parallax layer (mod levels)
     std::atomic<bool> scenes{true};     // play the Genesis interludes (slots 53-57)
     std::atomic<bool> snes_balance{false};   // the SNES 1993 level variants (13 levels), takes effect at the next level load
+    std::atomic<int> language{0};            // UX6: index into the language banks (0 = the English original)
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once
 void v2_options_save();
+extern char v2_options_lang_code[8];   // the cfg's language code until the banks are scanned
+int v2_locale_count();                 // v2_vm.cpp: 1 + the banks found
+const char* v2_locale_code_at(int i);
 
 // render thread
 bool v2_ui_handle_event(const SDL_Event* e);            // true = consumed
