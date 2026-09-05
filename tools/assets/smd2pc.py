@@ -828,7 +828,6 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
     # 64+nib (a private copy of CRAM row 0), plus a slow rotate over the
     # body/highlight slots for the SNES-style shimmer. ----
     title_pal_tail = []
-    title_anim = None
     banner_bank = None
     bubble_bank = None
     banner_cols = []
@@ -998,16 +997,19 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # striped beige, row 1 the yellow neon sign / orange gloss —
         # render-compared across all four rows). The console's own sprite
         # attributes (BAC states) say row 3 for PREHISTORIA and row 2 for
-        # the other four — the Genesis-composition path uses those. NO
-        # rotate: a [65..70] rotate recolored the lettering white for most
-        # of the cycle (seen live); the video shows a steady banner (the
-        # SMD shine is a separate sprite overlay, chunk 0x142 — not ported).
+        # the other four — the Genesis-composition path uses those. No
+        # invented shimmer (a [65..70] rotate once recolored the lettering
+        # white — seen live); the console's letters change ONLY through the
+        # scene's own palette animations of that CRAM row, which the copy
+        # on 64..79 mirrors below (Mednafen 60 fps recordings 2026-09-05:
+        # Egypt/Ship banners never change after the entrance; Factory's
+        # letter bases run the blue light of window 44..47 — the same
+        # window that animates the room).
         cram_pd = rom.chunk(pal_list[0]["chunk"])
         for i in range(16):
             o2 = banner_prow * 32 + i * 2        # CRAM row banner_prow
             v = be16(cram_pd, o2) if o2 + 1 < len(cram_pd) else 0
             title_pal_tail.append(smd_color_to_vga6(v))
-        title_anim = None
 
     # ---- palette ----
     if de_bg:
@@ -1173,20 +1175,41 @@ def convert_scene(smd_id, donor_cid, scratch, new_cids, next_level=None,
         # (0x111A) rotates the CRAM window start..end exactly like PC
         # sub_101be (end >= start: colours shift up, [end] -> [start];
         # else down) once per `reload` frames — verified 2026-09-05
-        # against the Mednafen capture (Prehistoria grass cycles 3 greens,
-        # Starship stars twinkle). The letters (CRAM row 0) and the
-        # vikings (DAC 128+) sit outside every window.
+        # against the Mednafen capture (Prehistoria grass cycles 3 greens).
+        # The vikings (DAC 128+) sit outside every window; the banner
+        # letters share the room's CRAM row and get their windows mirrored
+        # onto their private copy 64..79 below.
         pal_en, pal_anims = 0, []
     out = dict(dst)
     out["head"] = bytes(head).hex()
     out["spawns"] = out_spawns
     out["pal_list"] = new_pal_list
+    if gen_bg and banner_bank is not None and pal_anims:
+        # The banner letters are sprites on CRAM row banner_prow on the
+        # console, so every palette animation of that row runs through
+        # them too (Factory: window 44..47, reload 1 — the blue light
+        # walks along the letter bases, 60 fps Mednafen recording). Our
+        # letters paint a PRIVATE copy of the row on DAC 64..79, which the
+        # room's entries never touch: mirror each window that lies inside
+        # the row onto the copy (same reload, same direction, same enable
+        # bit — Ship's 39..41 is defined but disabled and stays so).
+        lo = banner_prow * 16
+        mirrored, en_bits = [], 0
+        for k, e in enumerate(pal_anims):
+            s, t2 = e["start"], e["end"]
+            if lo <= min(s, t2) and max(s, t2) <= lo + 15:
+                if (pal_en >> k) & 1:
+                    en_bits |= 1 << (len(pal_anims) + len(mirrored))
+                mirrored.append(dict(e, start=64 + s - lo, end=64 + t2 - lo))
+        if mirrored:
+            assert len(pal_anims) + len(mirrored) <= 8, "8 palette-animation slots"
+            print(f"  banner letters: {len(mirrored)} palette window(s) of CRAM row "
+                  f"{banner_prow} mirrored onto DAC 64+: "
+                  f"{[(m['reload'], m['start'], m['end']) for m in mirrored]}")
+            pal_anims = list(pal_anims) + mirrored
+            pal_en = pal_en | en_bits
     out["pal_anim_en"] = pal_en
     out["pal_anims"] = pal_anims
-    if title_anim is not None:
-        # rotate the title body slots — en gains the next record's bit
-        out["pal_anims"] = list(pal_anims) + [title_anim]
-        out["pal_anim_en"] = pal_en | (1 << len(pal_anims))
     # resource sections: the DONOR level's banks/anims stay (out = dict(dst)).
     # The gameplay trio resolves its pool sprites through the stripe banks —
     # the donor world set carries the viking frames on the right pool slots
