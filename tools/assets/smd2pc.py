@@ -413,6 +413,19 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     pal128 = [(0, 0, 0)] * 128
     for i, w in enumerate(sc.cram):
         pal128[i] = smd_color_to_vga6(w)
+    # DAC 1/2 = the PC text colours. The PC glyph/frame code draws every
+    # dialog with FIXED indices (shadow 1, body 2, fill 3 = the cmd-6
+    # speaker colour) and every PC level palette carries black/white there
+    # (LLM0: DAC 1 (0,0,0), DAC 2 (63,63,63)); CRAM row 0 puts the HUD skin
+    # tones (63,45,27)/(54,27,18) on 1/2, which painted the scene replies
+    # and their box borders orange (user report 2026-09-05). The console
+    # draws its replies white on black-white-black borders (Mednafen
+    # capture: text (238,238,238), border (238,238,238)/(0,0,0)); nothing
+    # else in the composition touches DAC 1/2 — the room planes use no
+    # row-0 index (measured for all five worlds), the letters live on
+    # 64+nib, the bubbles on 5..8, the vikings on 128+.
+    pal128[1] = (0, 0, 0)
+    pal128[2] = (63, 63, 63)
     vik_pos = [(x + pin_x, y + pin_y - 1) for (x, y) in spots]
     walk = (walk[0] + pin_x, walk[1] + pin_x)
     # map px = screen + pin, the SMD row's own y (the same engine convention:
