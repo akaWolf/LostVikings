@@ -466,6 +466,8 @@ def emit_free(cid):
         code = int(raw.split()[4].split('=')[1], 16)
         if code in seen:
             obj_lbl.add(code)
+            if code + 3 in seen:          # the spawn entry (the object's first PC is P+3, past the 3-byte anim redirect)
+                obj_lbl.add(code + 3)
     items.sort(key=lambda x: x[0])
     # overlap resolution: keep the first frame per byte; overlapped
     # secondary frames are not emitted (their bytes are already owned) —
@@ -522,6 +524,34 @@ def emit_free(cid):
             obj_lbl.add(base)
         else:
             an_lbl.add(base)
+    # Level C (2026-09-06), the flowing layout: nothing but the class table is
+    # anchored. A blob is written as `blob <hex>` (no address) and takes its
+    # place in file order like code does; a palette pointer target (op 13 d9)
+    # gets a `P_xxxx:` label line in front of its bytes — a blob is split at
+    # every such target so the label sits at a blob start. Every reference in
+    # the text is a label (S_/A_/P_), so an insertion anywhere just shifts what
+    # follows; an unedited text still lays out to the same bytes.
+    pal_targets = set()
+    for addr, kind, payload in items:
+        if kind == 'op':
+            pc, op, body, tgt = payload
+            if op == 0x13 and len(body) == 3 and body[0] == 0xD9:
+                ptr = struct.unpack_from('<H', body, 1)[0]
+                if ptr + 48 <= len(d):
+                    pal_targets.add(ptr)
+    split = []
+    for addr, kind, payload in items:
+        if kind != 'blob':
+            split.append((addr, kind, payload)); continue
+        p = payload.split()
+        b = bytes.fromhex(p[2]) if len(p) > 2 else b''
+        cuts = sorted(x for x in pal_targets if addr < x < addr + len(b))
+        last = addr
+        for c in cuts + [addr + len(b)]:
+            if c > last:
+                split.append((last, 'blob', f'blob @{last:04X} {b[last - addr:c - addr].hex()}'))
+            last = c
+    items = split
     for addr, kind, payload in items:
         if kind == 'chunk':
             out.append(payload)
@@ -531,7 +561,10 @@ def emit_free(cid):
             p[4] = f'code=S_{code:04X}' if code in seen else f'code=={code:04X}'
             out.append(' '.join(p))
         elif kind == 'blob':
-            out.append(payload)
+            p = payload.split()
+            if addr in pal_targets:
+                out.append(f'P_{addr:04X}:')
+            out.append('blob ' + (p[2] if len(p) > 2 else ''))
         elif kind == 'op':
             pc, op, body, tgt = payload
             if pc in obj_lbl:
@@ -565,8 +598,11 @@ def emit_free(cid):
             elif body:
                 toks.append(body.hex())
             out.append(' '.join(toks))
-    pal_lines = [f'P_{a:04X} = @{a:04X}  ; 48-byte palette block'
-                 for a in sorted(pal_lbls)]
+    # (palette pointers are `P_xxxx:` label lines in the flow now; a target
+    # that is not a blob start — inside decoded code — keeps an absolute anchor)
+    pal_lines = [f'P_{a:04X} = @{a:04X}  ; palette pointer into a non-blob element'
+                 for a in sorted(pal_lbls) if a not in pal_targets or
+                 not any(k == 'blob' and ad == a for ad, k, _ in items)]
     return '\n'.join(out[:1] + alias_lines + pal_lines + out[1:])
 
 def compile_free(text, line_map=None):
@@ -601,18 +637,26 @@ def compile_free(text, line_map=None):
             base, off = p[2].split('+')
             parsed.append(('alias', (p[0], base, int(off)), 0))
         elif p[0] == 'blob':
-            addr = int(p[1][1:], 16)
-            b = bytes.fromhex(p[2]) if len(p) > 2 else b''
-            cursor = max(cursor, addr + len(b))
+            if len(p) > 1 and p[1].startswith('@'):          # anchored (pre level C texts)
+                addr = int(p[1][1:], 16)
+                b = bytes.fromhex(p[2]) if len(p) > 2 else b''
+                cursor = max(cursor, addr + len(b))
+            else:                                             # flowing: takes its place in file order
+                addr = None
+                b = bytes.fromhex(p[1]) if len(p) > 1 else b''
             parsed.append(('blob', (addr, b), len(b)))
         elif p[0] in ('o', 'a'):
             parsed.append((p[0], (lineno, p[1:]), 0))
         else:
             raise ValueError(f'free-form: unknown line {raw!r}')
     # sequential address assignment: records occupy the table; code and
-    # blobs advance a cursor in file order. blobs are anchored (data),
-    # so the cursor jumps to their addr; code fills the gaps in between.
-    img = bytearray(size)
+    # blobs advance a cursor in file order. An anchored blob (`blob @addr`,
+    # older texts) pins the cursor to its addr; a flowing blob and every code
+    # line take the cursor where it stands. The image grows with the content:
+    # its size is the end of the last element (the declared `chunk size` is
+    # a lower bound), capped by the template buffer of 0xC00 paragraphs.
+    MAX_CHUNK = 0xC000
+    img = bytearray(max(size, 0))
     cursor = 0
     pend_labels = []
     enc_items = []
@@ -633,6 +677,11 @@ def compile_free(text, line_map=None):
             continue
         if kind == 'blob':
             addr, b = data
+            if addr is None:
+                addr = cursor
+            for L in pend_labels:                 # a label in front of a blob names its first byte (P_xxxx:)
+                labels[L] = addr
+            pend_labels = []
             cursor = max(cursor, addr + len(b))
             enc_items.append(('bytes', addr, b))
             continue
@@ -662,6 +711,22 @@ def compile_free(text, line_map=None):
         cursor += ln
     for name, base, off in alias_defs:
         labels[name] = labels[base] + off
+    # the laid-out size: the end of the last element; grow (or shrink) the
+    # image to it, never past the template buffer
+    end = 0
+    for item in enc_items:
+        if item[0] == 'record':
+            end = max(end, (int(item[1][1], 16) + 1) * dz.REC)
+        elif item[0] == 'bytes':
+            end = max(end, item[1] + len(item[2]))
+        else:
+            opb, parts = item[2]
+            end = max(end, item[1] + 1 + sum(2 if isinstance(p, str) else len(p) for p in parts))
+    if end > MAX_CHUNK:
+        raise ValueError(f'the script would be {end} bytes; the template buffer holds {MAX_CHUNK} '
+                         f'({end - MAX_CHUNK} too many — drop dead blobs or shorten code)')
+    size = end
+    img = bytearray(size)
     # collision check: sequential code must never run into an anchored
     # element (records/blobs) — that means an edit overflowed a gap.
     taken = bytearray(size)

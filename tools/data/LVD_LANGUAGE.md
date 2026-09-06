@@ -16,9 +16,10 @@ six scripts and compiles them back: every chunk must be byte-identical.
 ## File shape
 
 ```
-chunk 01C1 size 48972
+chunk 01C1 size 48972              ; a lower bound: the size follows the content
 alias S_1500 = S_14FF+1            ; two decode frames sharing bytes (rare)
-P_1234 = @1234                     ; a 48-byte palette anchor (op13 d9)
+P_3BF6:                            ; a palette pointer target (op13 d9) — a label
+blob <hex>                         ; on the 48-byte block that follows
 class baleog record=00 sprite=FFFE flags=01 entry=baleog_anim rest=0300…
 state baleog_anim:                 ; @3850
     goto S_5C87
@@ -32,7 +33,7 @@ state baleog_spawn:
     yield
 A_2618:
 a 14 00                            ; anim code, verbatim
-blob @0607 <hex>                   ; data, verbatim
+blob <hex>                         ; data with no reference from the code (dead)
 ```
 
 * `;` starts a comment. Statements are indented by four spaces; everything else
@@ -43,9 +44,12 @@ blob @0607 <hex>                   ; data, verbatim
 * `class NAME record=T sprite=W flags=B entry=STATE rest=<hex>` is one record
   of the class table (the 0x15-byte template record). The name comes from
   `lvs_names.json` (`t10` when unnamed).
-* Order matters: code is laid out in file order between the anchored elements
-  (records, blobs); an insertion that outgrows its gap is a compile error, as in
-  the .lvsf editor.
+* Layout: the class records sit at their table slots; everything else — code,
+  anim code, `blob <hex>` data — is laid out in file order, and every reference
+  is a label, so inserting or deleting a statement anywhere just moves what
+  follows. A dead `blob` line can simply be deleted. The one limit is the
+  template buffer: a script larger than 49152 bytes is a compile error that
+  says by how much.
 
 ## Statements
 

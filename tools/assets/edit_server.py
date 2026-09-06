@@ -90,7 +90,7 @@ def do_pack():
                 with open(out, "rb") as f:
                     cur = f.read()
                 if len(cur) >= len(base):
-                    base, tail = cur[:len(base)], cur[len(base):]
+                    base, tail = bytearray(cur[:len(base)]), cur[len(base):]   # a slice of bytes is immutable; compile_texts patches in place
             img = TX.compile_texts(js, base)
             with open(out + ".tmp", "wb") as f:
                 f.write(img + tail)
