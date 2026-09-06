@@ -38,6 +38,7 @@
 extern uint8_t* v2_vm_get_shadow_ds();
 extern uint8_t v2_vm_shadow_fs[];
 extern bool v2_last_frame_tiles;     // v2_render_funcs.cpp: the last v2_draw_tiles took the tile path
+extern thread_local int v2_fbw;      // v2_render_funcs.cpp: the frame width this thread renders
 extern "C" int v2_scene_fullscreen(void);
 extern "C" uint16_t v2_lvx_flags(uint16_t level);
 void v2_draw_tiles(uint16_t ds_val);
@@ -57,6 +58,7 @@ struct Snap {
     uint32_t par_acc_x, par_acc_y;
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     bool valid, tile_frame, fullscreen;
+    int w;                      // the frame width the tick rendered at (v2_fbw; UX stage 9 step 4)
 };
 // g_frame[0/1] = the two newest GAME-frame snapshots (positions/camera),
 // g_flip = the newest page flip (sprite frames, UI, FS map)
@@ -78,6 +80,7 @@ inline int16_t lerp16(int16_t a, int16_t b, double t) {
 }  // namespace
 
 float v2_smooth_last_t = -1.0f;    // debug: fraction of the last interpolated frame
+int v2_smooth_last_w = 320;         // the width of the last interpolated frame (its row stride)
 int v2_smooth_last_reason = 0;     // debug: why the last call returned false (0 = it did not)
 
 extern int v2_dbg_pre_vm_iter;   // the game-frame counter (pre-VM barrier)
@@ -90,6 +93,7 @@ static void fill(Snap& S, const uint8_t* s) {
     S.t = SDL_GetPerformanceCounter();
     S.tile_frame = v2_last_frame_tiles;
     S.fullscreen = v2_scene_fullscreen() != 0;
+    S.w = v2_fbw;
     S.valid = true;
 }
 
@@ -109,7 +113,8 @@ void v2_smooth_capture(void) {
     }
 }
 
-// Presenter thread: paint an interpolated 320x240 frame into `out` (rows per v2_view_rows).
+// Presenter thread: paint an interpolated frame into `out` (rows per v2_view_rows,
+// width = the snapshot's v2_fbw, reported in v2_smooth_last_w).
 // false = nothing to interpolate (option off, chunk screens, level change,
 // first tick) — the caller shows the tick frame as before.
 bool v2_smooth_render(uint8_t* out) {
@@ -123,6 +128,7 @@ bool v2_smooth_render(uint8_t* out) {
         if (!C.valid || !P.valid) { v2_smooth_last_reason = 3; return false; }
         if (!C.tile_frame || !P.tile_frame || !g_flip.tile_frame) { v2_smooth_last_reason = 4; return false; }
         if (C.fullscreen != P.fullscreen || C.t <= P.t) { v2_smooth_last_reason = 5; return false; }
+        if (C.w != P.w || C.w != g_flip.w) { v2_smooth_last_reason = 5; return false; }   // a width change = a level change
         if (rd16(C.ds, DS_LEVEL) != rd16(P.ds, DS_LEVEL) || rd16(g_flip.ds, DS_LEVEL) != rd16(C.ds, DS_LEVEL)) {
             v2_smooth_last_reason = 6; return false;                  // same level throughout
         }
@@ -192,6 +198,8 @@ bool v2_smooth_render(uint8_t* out) {
     // the passes, in the gameplay frame's order, on the presenter's buffers
     v2_tls_ds = g_work;
     v2_tls_out = out;
+    v2_fbw = L.w;                   // the presenter thread renders at the snapshot's width
+    v2_smooth_last_w = L.w;
     v2_tls_fs = L.fs;
     v2_tls_par_acc = acc;
     v2_tls_presenter = true;

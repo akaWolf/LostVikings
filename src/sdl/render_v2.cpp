@@ -20,11 +20,12 @@ const int SCREEN_SCALE_V2 = 2;
 bool v2_present_vsync = false;   // UX stage 9: SDL_RenderPresent blocks on the display refresh
 const int SCREEN_WIDTH_V2 = 320;
 const int SCREEN_HEIGHT_V2 = 240;
-const int RENDER_WIDTH_V2 = 344;
+const int RENDER_WIDTH_V2 = 512;   // the linear stride of stableBuffer / tempDrawBuffer = V2_FB_MAX_W (render_v2.h, included below; static_assert there) — was the 344-px VGA pitch, a wide frame needs more
 const int RENDER_HEIGHT_V2 = 240;
 uint32_t tempDrawBuffer_v2[RENDER_WIDTH_V2*RENDER_HEIGHT_V2];
 
 #include "render_v2.h"
+static_assert(RENDER_WIDTH_V2 == V2_FB_MAX_W, "the presenter's row stride must hold the widest frame");
 #include "v2_ui.h"
 extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 
@@ -47,7 +48,7 @@ extern int v2_display_fullscreen;   // v2_render_funcs.cpp: 0 = HUD layout, else
 //   BORDER  BLACK, or GLOW = the frame decimated to 40x30, drawn linear over
 //           the whole output at 28 % brightness behind the picture.
 // V2_PRESENT_SHOT=<path.ppm>[:<call>] dumps the composed output once.
-static SDL_Texture* g_sharp_tex = nullptr; static int g_sharp_k = 0, g_sharp_h = 0;
+static SDL_Texture* g_sharp_tex = nullptr; static int g_sharp_k = 0, g_sharp_h = 0, g_sharp_w = 0;
 static SDL_Texture* g_glow_tex = nullptr;
 static int g_tex_filter = -1;   // the sampling the source texture was created with (0 nearest, 1 linear)
 static SDL_Texture* v2_make_texture(int access, int w, int h, int linear) {
@@ -56,7 +57,9 @@ static SDL_Texture* v2_make_texture(int access, int w, int h, int linear) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     return tx;
 }
+extern int v2_present_w;   // render_v2_test.cpp: the width of the frame in stableBuffer
 static void v2_present_frame(int H) {
+    const int PW = v2_present_w;
     const int filter = v2_options.filter.load();
     const bool integer = v2_options.integer_scale.load();
     const bool a43 = v2_options.aspect43.load();
@@ -71,12 +74,12 @@ static void v2_present_frame(int H) {
     SDL_UpdateTexture(myTexture_v2, NULL, tempDrawBuffer_v2, RENDER_WIDTH_V2 * sizeof(uint32_t));
     int W = 0, Hout = 0;
     SDL_GetRendererOutputSize(myRenderer_v2, &W, &Hout);
-    const int cw = SCREEN_WIDTH_V2, ch = a43 ? SCREEN_HEIGHT_V2 : H;
+    const int cw = PW, ch = a43 ? SCREEN_HEIGHT_V2 : H;   // the 4:3-pixel canvas keeps its 240-row height at any width
     double s = (W > 0 && Hout > 0) ? ((double)W / cw < (double)Hout / ch ? (double)W / cw : (double)Hout / ch) : 1.0;
     if (integer) { s = (double)(int)s; if (s < 1.0) s = 1.0; }
     const int dw = (int)(cw * s + 0.5), dh = (int)(ch * s + 0.5);
     SDL_Rect dst = { (W - dw) / 2, (Hout - dh) / 2, dw, dh };
-    SDL_Rect src = { 0, 0, SCREEN_WIDTH_V2, H };
+    SDL_Rect src = { 0, 0, PW, H };
     SDL_SetRenderDrawColor(myRenderer_v2, 0, 0, 0, 255);
     SDL_RenderClear(myRenderer_v2);
     if (border == 1) {
@@ -94,10 +97,10 @@ static void v2_present_frame(int H) {
     bool drawn = false;
     if (filter == 1) {
         int k = (int)s; if (k < s) k++; if (k < 1) k = 1; if (k > 8) k = 8;
-        if (!g_sharp_tex || g_sharp_k != k || g_sharp_h != H) {
+        if (!g_sharp_tex || g_sharp_k != k || g_sharp_h != H || g_sharp_w != PW) {
             if (g_sharp_tex) SDL_DestroyTexture(g_sharp_tex);
-            g_sharp_tex = v2_make_texture(SDL_TEXTUREACCESS_TARGET, SCREEN_WIDTH_V2 * k, H * k, 1);
-            g_sharp_k = k; g_sharp_h = H;
+            g_sharp_tex = v2_make_texture(SDL_TEXTUREACCESS_TARGET, PW * k, H * k, 1);
+            g_sharp_k = k; g_sharp_h = H; g_sharp_w = PW;
         }
         if (g_sharp_tex) {
             SDL_SetRenderTarget(myRenderer_v2, g_sharp_tex);
@@ -170,7 +173,7 @@ void updateDraw_v2()
       extern SDL_Color v2_display_palette[256];
       extern bool v2_display_palette_valid;
       extern uint8_t v2_vga[65536 * 4];
-      extern uint8_t v2_render_buf[320 * 240];
+      extern uint8_t v2_render_buf[V2_FB_MAX_W*240];
       extern uint8_t v2_display_buf[];
       extern uint16_t v2_vga_crtc, v2_vga_pan;
       uint32_t vsum = 0, rsum = 0, dsum = 0;
@@ -191,10 +194,13 @@ void updateDraw_v2()
     tempDrawBuffer_v2[i] = SDL_MapRGBA(myFormat_v2, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
   }
   
-  // UX stage 9 step 3: the picture is the content rows only — 200 (176 + the
-  // 24-row HUD band of the 320x200 DOS raster, or a full-screen scene) or 224
-  // (LVX_TALL224); the overlay's toast sits above that bottom edge
-  const int content_h = v2_display_fullscreen ? v2_display_fullscreen : 200;
+  // The DOS raster is 320x240 Mode X (square pixels): 176 viewport + the 64-row
+  // HUD band (reference_vga_mode_x: split at line 176, HUD rows 176..239). So a
+  // normal level's picture is the full 240 rows — step 3 wrongly cut it to 200
+  // (a 24-row HUD) and lost the bottom 40 HUD rows (2026-09-06 report). A
+  // full-screen LVX scene shows its own map height (200) with no HUD band, an
+  // LVX_TALL224 level 224; the overlay's toast sits above that bottom edge.
+  const int content_h = v2_display_fullscreen ? v2_display_fullscreen : 240;
   v2_ui_draw(tempDrawBuffer_v2, RENDER_WIDTH_V2, content_h, myFormat_v2);   // UX stage 3 overlay
   // debug: V2_UI_SHOT=<path.ppm> dumps the presented frame once while the
   // options menu is open (the overlay lives only in this 32-bit buffer)

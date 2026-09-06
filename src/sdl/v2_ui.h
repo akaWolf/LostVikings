@@ -19,6 +19,7 @@ struct V2Options {
     std::atomic<bool> integer_scale{false};  // whole multiples of the 320x240 (or 320xH) canvas only
     std::atomic<bool> aspect43{true};        // 4:3 like the DOS monitor (320x200 raster on 320x240) / square pixels
     std::atomic<int>  border{0};             // 0 BLACK, 1 GLOW (the frame blurred and dimmed behind the picture)
+    std::atomic<int>  wide{0};               // UX9 step 4: 0 OFF (the 320-px raster), 1 16:10, 2 16:9 — the view width of the next level (v2_wide_view_width)
     std::atomic<bool> snes_sound{false};     // UX10: the SNES DE music/effects (SPC700 emulation), takes effect at the next level load
 };
 extern V2Options v2_options;
@@ -35,6 +36,11 @@ void v2_ui_toast(const char* text);                     // ~1.5 s message
 
 // game thread <- render thread
 extern std::atomic<bool> v2_ui_menu_open;               // game thread waits at the tick boundary
+// UX9 step 4: the view width the WIDE option asks for, in game pixels: 320 when
+// off; for a 16:10 / 16:9 picture 400 / 426 with the 4:3 pixel (the 320x200
+// raster shown as 4:3, pixel aspect 1.2) and 320 / 356 with square pixels.
+// Read by sub_113b0 at level init (clamped to the map there).
+int v2_wide_view_width();
 extern std::atomic<int>  v2_ui_req_save;                // slot or -1
 extern std::atomic<int>  v2_ui_req_load;
 extern std::atomic<int>  v2_ui_req_level;               // level slot or -1

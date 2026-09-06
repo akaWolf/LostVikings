@@ -48,8 +48,8 @@ static inline uint8_t* v2_get_ds_base(uint16_t ds_val) {
 // V2 rendering state — definitions (declared extern in render_v2.h)
 uint8_t* v2_m2c_base = nullptr;
 std::mutex v2_ds_modify_mutex;
-uint8_t  v2_render_buf[320*240];   // UX stage 9: up to 240 rows (224 on an LVX_TALL224 level)
-uint8_t  v2_display_buf[320*240];
+uint8_t  v2_render_buf[V2_FB_MAX_W*240];   // UX stage 9: up to 240 rows (224 on an LVX_TALL224 level); step 4: up to V2_FB_MAX_W columns, v2_fbw live
+uint8_t  v2_display_buf[V2_FB_MAX_W*240];
 std::mutex v2_display_mutex;
 uint8_t  v2_hud_buf[320*64];
 // UX stage 0 (full-screen LVX scenes): published with v2_display_buf under
@@ -59,6 +59,13 @@ uint8_t  v2_hud_buf[320*64];
 int v2_display_fullscreen = 0;
 extern "C" int v2_scene_fullscreen(void);   // v2_vm.cpp: LVX_FULLSCREEN of ds:0x25AD
 static thread_local int v2_clip_h = 176;   // per thread: the presenter's passes set their own
+// UX stage 9, step 4: the frame width this thread renders (= the row stride of
+// buf and the horizontal clip). The game thread sets it in v2_draw_tiles — 320
+// for a chunk screen, v2_view_w for a tile level; the presenter's passes take
+// the snapshot's width (v2_smooth.cpp). v2_display_w travels with the published frame.
+thread_local int v2_fbw = 320;
+int v2_display_w = 320;
+static inline int v2_fb_cols() { return v2_fbw / 8 + 3; }   // tile columns per row: 43 at 320 (the orig sub_16ded count)
 static thread_local int v2_tile_rows = 25; // tile rows the passes paint: 25 (200-line page) or 29 (224 view)
 extern "C" uint32_t v2_fntest_game_ds_linear(void);
 
@@ -371,13 +378,15 @@ void v2_swap_render_buf() {
         // v2_render_buf, HUD in v2_hud_buf — present those.
         extern uint8_t v2_hud_buf[320 * 64];
         // all 200 rows: rows 176..199 matter only on full-screen LVX scenes
-        memcpy(v2_display_buf, v2_render_buf, 320 * 240);
+        memcpy(v2_display_buf, v2_render_buf, (size_t)v2_fbw * 240);
+        v2_display_w = v2_fbw;   // UX stage 9 step 4: the frame's width travels with it
         { const int r = v2_view_rows(); v2_display_fullscreen = (r > 176) ? r : 0; }   // 0 = HUD layout, else the map rows shown
         extern uint8_t v2_display_hud_buf[];
         memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
         v2_smooth_capture();          // UX stage 9: the tick snapshot for the interpolating presenter
 #else
         v2_display_fullscreen = 0;   // verification build presents the shadow-VGA window only
+        v2_display_w = 320;          // the shadow-VGA window is the 320-px raster
         extern int v2_vga_fetch_page(uint8_t* out, uint32_t count);
         extern uint8_t v2_vga[65536 * 4];
         if (!v2_vga_fetch_page(v2_display_buf, 320 * 176))
@@ -516,8 +525,8 @@ static void v2_draw_parallax_pass(const V2StateViewC& st, uint8_t* buf, uint16_t
         const int my = (py + sy) % hpx;
         const uint16_t* mrow = P.map + (my >> 3) * P.w;
         const int ty = my & 7;
-        uint8_t* out = buf + sy * 320;
-        for (int sx = 0; sx < 320; sx++) {
+        uint8_t* out = buf + sy * v2_fbw;
+        for (int sx = 0; sx < v2_fbw; sx++) {
             const int mx = (px + sx) % wpx;
             const uint16_t cell = mrow[mx >> 3];
             if ((cell & 0x2000) != prio) continue;           // the other priority pass draws it
@@ -585,6 +594,7 @@ void v2_draw_tiles(uint16_t ds_val) {
     if (lvl_flags & 0x42) {
         if (v2_tls_presenter) return;      // UX stage 9: the presenter never composes chunk screens
         v2_last_frame_tiles = false;
+        v2_fbw = 320;                 // UX stage 9 step 4: chunk screens are the 320-px raster
         if (v2_chunk_bg_valid) {
             memcpy(v2_render_buf, v2_chunk_bg_backup, 320 * 176);
         }
@@ -593,12 +603,13 @@ void v2_draw_tiles(uint16_t ds_val) {
     if (!v2_tls_presenter) {
         v2_chunk_bg_valid = false; // tile-based level; static backup no longer relevant
         v2_last_frame_tiles = true;   // UX stage 9: this tick's frame is interpolable
+        v2_fbw = v2_view_w;           // UX stage 9 step 4: a tile level renders its view width (320 unless WIDE)
     }
 
     // Normal: clear and draw tiles (all 200 buffer rows: the tile loop below
     // already renders 25 tile rows; rows 176..199 are shown only on
     // full-screen LVX scenes, otherwise the HUD band covers them)
-    memset(buf, 0, 320*240);
+    memset(buf, 0, (size_t)v2_fbw * 240);
     // UX stage 2: the parallax layer goes under the tiles; the tile pass then
     // skips the pixels of colour 0 of each palette row (the console's
     // transparent index — on the DOS palette they are blacked out, sub_112ae).
@@ -642,7 +653,7 @@ void v2_draw_tiles(uint16_t ds_val) {
         uint16_t lut_off = (uint16_t)(row_scrolled * 2u - LUT_ROW_BASE);
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
-        for (int col_vis = 0; col_vis < 43; col_vis++) {
+        for (int col_vis = 0; col_vis < v2_fb_cols(); col_vis++) {
             uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
 
             // Read tile map entry: word at fs:[(row_base + col_scrolled) * 2]
@@ -692,9 +703,9 @@ void v2_draw_tiles(uint16_t ds_val) {
                 for (int px = 0; px < 8; px++) {
                     int sx = screen_x + px;
                     if (sx < 0) continue;
-                    if (sx >= 320) break;
+                    if (sx >= v2_fbw) break;
                     if (par_on && (pixels[px] & 0x0F) == 0) continue;   // UX stage 2: row colour 0 = transparent
-                    buf[sy * 320 + sx] = pixels[px];
+                    buf[sy * v2_fbw + sx] = pixels[px];
                 }
             }
         }
@@ -742,7 +753,7 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
     int visible_row = abs_row - (int)scroll_x - extra_tile_y;
     int visible_col = abs_col - (int)scroll_y - extra_tile_x;
     if (visible_row < 0 || visible_row >= 25) return;
-    if (visible_col < 0 || visible_col >= 43) return;
+    if (visible_col < 0 || visible_col >= v2_fb_cols()) return;
 
     if ((uint32_t)fs_offset + 1 >= 0x6000) return;
     uint16_t tile_entry = *(uint16_t*)(fs_base + fs_offset);
@@ -775,8 +786,8 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
         for (int px = 0; px < 8; px++) {
             int sx = screen_x + px;
             if (sx < 0) continue;
-            if (sx >= 320) break;
-            buf[sy * 320 + sx] = pixels[px];
+            if (sx >= v2_fbw) break;
+            buf[sy * v2_fbw + sx] = pixels[px];
         }
     }
 }
@@ -812,8 +823,8 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 // Writes ALL colors including 0 (matching original VGA behavior where mask
 // controls which bytes are written, not the color value).
 static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
-    if (sx >= 0 && sx < 320 && sy >= 0 && sy < v2_clip_h)   // 176, or 200 on full-screen scenes
-        buf[sy * 320 + sx] = color;
+    if (sx >= 0 && sx < v2_fbw && sy >= 0 && sy < v2_clip_h)   // 176, or 200 on full-screen scenes; v2_fbw columns
+        buf[sy * v2_fbw + sx] = color;
 }
 
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj = -1);
@@ -1055,7 +1066,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
         // byte-exact page channel is the shadow VGA in v2_vm.cpp.)
         int sprite_h = num_strips * rows_per_strip;
         int sprite_w = bytes_per_row * 4;  // 4 planes
-        if (sx0 >= 320 || sx0 < -sprite_w || sy0 >= v2_clip_h || sy0 < -sprite_h) continue;
+        if (sx0 >= v2_fbw || sx0 < -sprite_w || sy0 >= v2_clip_h || sy0 < -sprite_h) continue;
 
         // Sprite data: resolve segment to shadow buffer, add offset.
         // sprite_off = 1-based offset to first data byte; mask at offset-1.
@@ -1253,7 +1264,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
         uint16_t lut_off = (uint16_t)(row_scrolled * 2u - LUT_ROW_BASE);
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
-        for (int col_vis = 0; col_vis < 43; col_vis++) {
+        for (int col_vis = 0; col_vis < v2_fb_cols(); col_vis++) {
             uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
@@ -1343,7 +1354,7 @@ void v2_draw_ui(uint16_t ds_val) {
         int grid_row = pos / 40;
         int grid_col = pos % 40;
 
-        int screen_x = grid_col * 8;
+        int screen_x = grid_col * 8 + (v2_fbw - 320) / 2;   // UX stage 9 step 4: the 40-cell text plane sits centred on a wide frame
         int screen_y = grid_row * 8;
 
         // Glyph data at ds:0x687D + glyph_index * 72
@@ -1379,10 +1390,10 @@ void v2_draw_ui(uint16_t ds_val) {
     for (auto& it : v2_text_items) {
         if (!it.on) continue;
         if (it.row >= 22 || it.col >= 40 || ui_list[it.row * 40 + it.col] != 0x20) { it.on = 0; continue; }
-        int x = it.col * 8, y = it.row * 8;
+        int x = it.col * 8 + (v2_fbw - 320) / 2, y = it.row * 8;   // centred like the cells
         for (size_t i = 0; it.utf8[i]; ) {
             uint8_t c = (uint8_t)it.utf8[i];
-            if (c == 0x0D) { x = it.col * 8; y += 16; i++; continue; }
+            if (c == 0x0D) { x = it.col * 8 + (v2_fbw - 320) / 2; y += 16; i++; continue; }
             uint32_t cp; int len = 1;
             if (c < 0x80) cp = c; else if ((c & 0xE0) == 0xC0) { cp = ((c & 0x1F) << 6) | (it.utf8[i+1] & 0x3F); len = 2; }
             else { cp = ((c & 0x0F) << 12) | ((it.utf8[i+1] & 0x3F) << 6) | (it.utf8[i+2] & 0x3F); len = 3; }
@@ -1416,8 +1427,8 @@ void v2_draw_ui(uint16_t ds_val) {
                 extern uint8_t v2_dac_shadow[768];
                 char fn[512]; snprintf(fn, sizeof fn, "%s/uibox_%d.ppm", dir, shots++);
                 if (FILE* f = fopen(fn, "wb")) {
-                    fprintf(f, "P6\n320 200\n255\n");
-                    for (int i = 0; i < 320 * 200; i++) {
+                    fprintf(f, "P6\n%d 200\n255\n", v2_fbw);
+                    for (int i = 0; i < v2_fbw * 200; i++) {
                         uint8_t c = buf[i];
                         fputc(v2_dac_shadow[c*3+0] << 2, f); fputc(v2_dac_shadow[c*3+1] << 2, f); fputc(v2_dac_shadow[c*3+2] << 2, f);
                     }

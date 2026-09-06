@@ -67,6 +67,19 @@ enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004,
 // orig VGA split) on every canonical level, 224 on an LVX_TALL224 variant.
 // Set by v2_load_template; read by sub_113b0/113d8 and the sprite culling.
 int v2_view_h_cur = 0xB0;
+// UX stage 9, step 4 (wide screen): the view WIDTH of the loaded level in px —
+// 0x140 (320, the VGA line) on every canonical level; with the WIDE option a
+// level takes the option's width, never more than its map (min(W, map*16)) and
+// never below 0x140. Every window the engine derives from viewport_x is a
+// formula of it — proven by the three originals (SNES 256 / PC 320 / Genesis
+// 320, docs2/WIDESCREEN_ANALYSIS.md §2): the spawn/despawn window
+// -0x10 .. W+0x10 (SNES $CC9B: SBC #$10 / ADC #$0120; PC 0x160), the scroll
+// bands W+0x10 (SNES $CCCC: ADC #$0110; PC 0x150), the camera dead zone
+// W/2 +- 0x10 (SNES $856C: #$70/#$90; PC 0x90/0xB0), the camera start W/2
+// (SNES $9ED3: #$80; PC 0xA0), the sprite culling W (SNES #$0100; PC 0x140),
+// the scroll limit map - W. Set by sub_113b0 at level init from v2_view_w_opt.
+int v2_view_w = 0x140;
+int v2_view_w_opt = 0x140;   // the WIDE option (v2_ui): 0x140, 400 or 426 (320 / 356 with square pixels)
 // UX stage 9: the console-finale variant head is loaded (v2_load_template);
 // op 13/D9 then keeps palette row 192 for the crowd like the SNES does
 bool v2_console_variant = false;
@@ -699,7 +712,7 @@ void v2_verify_render_buf(int frame) {
     // A2 label below. v2_dbg_pre_vm_iter is left untouched (input-replay tagging
     // and the headless max-frames guard still need its blocking-loop cadence).
     frame = ++v2_render_frame;
-    extern uint8_t v2_render_buf[320*240];
+    extern uint8_t v2_render_buf[V2_FB_MAX_W*240];
     if (!myDrawInfo) return;
     uint32_t page_offset = myDrawInfo->myOffset * 4 + myDrawInfo->myPixelOffset;
     // CRTC unfold of the visible page (pitch 0x56 bytes/row — task #19).
@@ -4593,9 +4606,9 @@ static void v2_draw_type1_1CE78(uint8_t* s, int16_t slot) {
     // cs:word_1C830=0xFFFF, cs:word_1C834=0, cs:word_1C832=0
     // Viewport gates (orig 36436-36449): fully out → loc_1D154:
     // set mode=2 (orig 36722), done.
-    int16_t edge = (int16_t)v2gs(s).viewport_x() + 0x140;   // 36436-36437
+    int16_t edge = (int16_t)v2gs(s).viewport_x() + (int16_t)v2_view_w;   // 36436-36437 (0x140 = W)
     if (px >= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36439
-    edge -= 0x147;                                                     // 36440
+    edge -= (int16_t)(v2_view_w + 7);                                  // 36440 (0x147 = W + 7)
     if (px <= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36442
     edge = (int16_t)v2gs(s).viewport_y() + v2_view_h_cur;   // 36443-36444 (0xB0; 224 on LVX_TALL224)
     if (py >= edge)        { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36446
@@ -4641,7 +4654,7 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
     int16_t edge;
 
     // X right edge: viewport_X + 0x140 (orig 37495-37508).
-    edge = (int16_t)v2gs(s).viewport_x() + 0x140;
+    edge = (int16_t)v2gs(s).viewport_x() + (int16_t)v2_view_w;   // 0x140 = W
     if (px >= edge) {                                              // 37498 jge loc_1DB98
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;                      // 37777
     }
@@ -4653,7 +4666,7 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
             col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x1379 + idx); // 37507-37508
     }
     // X left edge: −0x140 (orig 37511-37523).
-    edge -= 0x140;                                                 // 37511
+    edge -= (int16_t)v2_view_w;                                    // 37511 (0x140 = W)
     if (px <= edge) {                                              // 37513 jle loc_1DB98
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
@@ -4737,7 +4750,7 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
     int16_t edge;
 
     // X right edge (orig 36973-36986).
-    edge = (int16_t)v2gs(s).viewport_x() + 0x140;
+    edge = (int16_t)v2gs(s).viewport_x() + (int16_t)v2_view_w;   // 0x140 = W
     if (px >= edge) {                                              // 36976 jge loc_1D6B1
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;                      // 37267
     }
@@ -4748,7 +4761,7 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
         if (v2_m2c_base) col_mask = *(uint16_t*)(v2_m2c_base + cs3 + 0x0E92 + idx); // 36985-36986
     }
     // X left edge (orig 36989-37001).
-    edge -= 0x140;                                                 // 36989
+    edge -= (int16_t)v2_view_w;                                    // 36989 (0x140 = W)
     if (px <= edge) {                                              // 36991 jle loc_1D6B1
         v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return;
     }
@@ -5292,8 +5305,21 @@ static void v2_clear_sprite_res_12fb3(uint8_t* s) {
 // sub_113b0: init scroll limits from map dimensions (word_2AABC/word_2AABE = ds:0x25DC/0x25DE).
 static void v2_scroll_limits_113b0(uint8_t* s) {
     uint16_t width = v2gs(s).map_bp();   // word_2AABC (map width in tiles)
+    // UX stage 9, step 4: the level's view width — the WIDE option's, clamped to
+    // the map (a 20-tile scene room stays 320) and never below the VGA line.
+#ifdef V2_ONLY
+    v2_view_w_opt = v2_wide_view_width();   // the WIDE option (v2_ui); the verification builds stay at the 320 raster
+    // V2_VIEW_W=<px>: force the view width (the deterministic wide canon runs a
+    // HEADLESS+V2_ONLY binary — vikings_headless is the dual-run judge, which
+    // stays 320 — with this set; tests/wide_canon.sh).
+    { static int env_w = -2; if (env_w == -2) { const char* e = getenv("V2_VIEW_W"); env_w = e ? atoi(e) : -1; }
+      if (env_w > 0) v2_view_w_opt = env_w; }
+#endif
+    v2_view_w = v2_view_w_opt;
+    if (v2_view_w > (int)width * 16) v2_view_w = (int)width * 16;
+    if (v2_view_w < 0x140) v2_view_w = 0x140;
     v2gs(s).clip_limit_x(width * 2);         // word_31648
-    v2gs(s).scroll_limit_x(width * 16 - 0x140); // word_2AA84 (scroll X limit)
+    v2gs(s).scroll_limit_x(width * 16 - v2_view_w); // word_2AA84 (scroll X limit: map - W; 0x140 on a canonical level)
     uint16_t height = v2gs(s).map_height();   // word_2AABE (map height in tiles)
     v2gs(s).clip_limit_y(height * 2);        // word_3164A
     v2gs(s).scroll_limit_y(height * 16 - v2_view_h_cur); // word_2AA86 (scroll Y limit; 0xB0, or 224 on an LVX_TALL224 level)
@@ -5336,7 +5362,7 @@ static void v2_viewport_init_113d8(uint8_t* s) {
     if (v2gs(s).active_vk_sel_b() != 0) si = v2gs(s).active_viking(); // byte_2AA9A, word_288A2
 
     // X: center on viking, clamp to [0, scroll_X_limit]
-    int16_t ax = ObjMem{s, si}.i16(OBJ_WORLD_X) - 0xA0;   // 16-bit wrap (unit 46, div #21)
+    int16_t ax = ObjMem{s, si}.i16(OBJ_WORLD_X) - (int16_t)(v2_view_w / 2);   // 16-bit wrap (unit 46, div #21); W/2 = 0xA0 on a canonical level
     if (ax < 0) ax = 0;
     if (ax > (int16_t)v2gs(s).scroll_limit_x()) ax = (int16_t)v2gs(s).scroll_limit_x();
     v2gs(s).viewport_x((uint16_t)ax);   // word_28524 (viewport X)
@@ -5713,7 +5739,7 @@ static void v2_despawn_bounds_13c0c(uint8_t* s) {
     uint16_t vpx = v2gs(s).viewport_x();
     uint16_t ax_raw = (uint16_t)(vpx - 0x10);
     v2gs(s).scratch_34(((int16_t)vpx >= (int16_t)0x10) ? ax_raw : 0);
-    v2gs(s).scratch_36((uint16_t)(ax_raw + 0x160)); // uses ORIGINAL ax
+    v2gs(s).scratch_36((uint16_t)(ax_raw + (v2_view_w + 0x20))); // uses ORIGINAL ax; W + 0x20 = 0x160
     // Y (orig eips 0x3C25-0x3C36): SUB ax,10h; JNS (= bit15 of the RESULT);
     // MOV ax,0 — here ax IS clamped, so BOTH ds:0x38 and ds:0x3A derive from
     // the clamped value (the old dead function derived 0x3A from raw).
@@ -5811,7 +5837,7 @@ static void v2_spawn_bounds_scan_13a94(uint8_t* s) {
 static void v2_viewport_bounds_139ef(uint8_t* s) {
     uint16_t ax = v2gs(s).viewport_x() - 0x10;   // 0x39ef/0x39f2
     v2gs(s).scratch_34(ax);                   // 0x39f5
-    ax += 0x160;                                            // 0x39f8
+    ax += (uint16_t)(v2_view_w + 0x20);                     // 0x39f8 (0x160 = W + 0x20)
     v2gs(s).scratch_36(ax);                   // 0x39fb
     ax = v2gs(s).viewport_y() - 0x10;            // 0x39fe/0x3a01
     v2gs(s).scratch_38(ax);                   // 0x3a04
@@ -5837,7 +5863,7 @@ static void v2_scroll_spawn_up_13a14(uint8_t* s) {
 // sub_13a34 (eips 0x3a34..0x3a52): scroll-down spawn band
 // (ds:36 = vp_x+0x150; ds:34 = that-0x20; ds:38/3A = vp_y-0x10 .. +0xD0).
 static void v2_scroll_spawn_down_13a34(uint8_t* s) {
-    uint16_t ax = v2gs(s).viewport_x() + 0x150;  // 0x3a34/0x3a37
+    uint16_t ax = v2gs(s).viewport_x() + (uint16_t)(v2_view_w + 0x10);  // 0x3a34/0x3a37 (0x150 = W + 0x10)
     v2gs(s).scratch_36(ax);                   // 0x3a3a
     ax -= 0x20;                                             // 0x3a3d
     v2gs(s).scratch_34(ax);                   // 0x3a40
@@ -5857,7 +5883,7 @@ static void v2_scroll_spawn_right_13a54(uint8_t* s) {
     v2gs(s).scratch_38(ax);                   // 0x3a60
     ax = v2gs(s).viewport_x() - 0x10;            // 0x3a63/0x3a66
     v2gs(s).scratch_34(ax);                   // 0x3a69
-    ax += 0x160;                                            // 0x3a6c
+    ax += (uint16_t)(v2_view_w + 0x20);                     // 0x3a6c (0x160 = W + 0x20)
     v2gs(s).scratch_36(ax);                   // 0x3a6f
     v2_spawn_bounds_scan_13a94(s);                          // 0x3a72 JMP loc_13a94
 }
@@ -5871,7 +5897,7 @@ static void v2_scroll_spawn_left_13a74(uint8_t* s) {
     v2gs(s).scratch_3a(ax);                   // 0x3a80
     ax = v2gs(s).viewport_x() - 0x10;            // 0x3a83/0x3a86
     v2gs(s).scratch_34(ax);                   // 0x3a89
-    ax += 0x160;                                            // 0x3a8c
+    ax += (uint16_t)(v2_view_w + 0x20);                     // 0x3a8c (0x160 = W + 0x20)
     v2gs(s).scratch_36(ax);                   // 0x3a8f
     v2_spawn_bounds_scan_13a94(s);                          // 0x3a92 jmp $+2 -> loc_13a94
 }
@@ -9182,7 +9208,7 @@ static void v2_camera_follow_1064b(uint8_t* s) {
 
     // X (orig eips 0x66F-0x6B8)
     {
-        uint16_t sum = (uint16_t)(v2gs(s).viewport_x() + 0x90);
+        uint16_t sum = (uint16_t)(v2gs(s).viewport_x() + (v2_view_w / 2 - 0x10));   // the dead zone's left edge: W/2 - 0x10 = 0x90
         uint16_t obj = ObjMem{s, di}.u16(OBJ_WORLD_X);
         if ((int16_t)sum > (int16_t)obj) {                 // JLE not taken
             uint16_t amt = (uint16_t)(sum - obj);          // wrapped SUB value
@@ -9191,8 +9217,8 @@ static void v2_camera_follow_1064b(uint8_t* s) {
             v2_scroll_left_17496(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
         } else {                                           // loc_10698
             uint16_t diff = (uint16_t)(obj - v2gs(s).viewport_x());
-            if ((int16_t)diff > (int16_t)0xB0) {           // SUB si,0B0h; JLE
-                uint16_t amt = (uint16_t)(diff - 0xB0);
+            if ((int16_t)diff > (int16_t)(v2_view_w / 2 + 0x10)) {           // SUB si,0B0h; JLE — the right edge W/2 + 0x10 = 0xB0
+                uint16_t amt = (uint16_t)(diff - (v2_view_w / 2 + 0x10));
                 if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
                 v2gs(s).scroll_amt_right(amt);
                 v2_scroll_right_1746c(s, *(int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));
@@ -10282,7 +10308,7 @@ static void v2_anim_queue_1406d(uint8_t* shadow) {
             v2gs(shadow).text_row(pos_y);                       // 0x408e
             // Viewport X bounds (0x4097-0x40A1): (pos_x - vp_x + 0x10) JA 0x160 → skip.
             uint16_t ax_x = (uint16_t)(pos_x - v2gs(shadow).viewport_x() + 0x10);
-            if (ax_x > 0x160) break;
+            if (ax_x > (uint16_t)(v2_view_w + 0x20)) break;   // 0x160 = W + 0x20
             // Quadrant clip mask (orig dx, 0x40A2-0x40D3): 8=UL 4=UR 2=LL 1=LR.
             uint16_t clip = 0;
             if (ax_x < 8)      clip |= 0x0A;                   // 0x40a5 JNC / OR dx,0Ah
@@ -10342,7 +10368,7 @@ static void v2_mark_dirty_left_166e8(uint8_t* s) {
 }
 // sub_16710 (eips 0x6710..0x673b): same, X right of viewport+0x121 (JLE skip).
 static void v2_mark_dirty_right_16710(uint8_t* s) {
-    uint16_t dx_vp = v2gs(s).viewport_x() + 0x121;         // 0x6713/0x6717
+    uint16_t dx_vp = v2gs(s).viewport_x() + (uint16_t)(v2_view_w - 0x1F);   // 0x6713/0x6717 (0x121 = W - 0x1F)
     for (int16_t di = 0xFE; di >= 0; di -= 2) {
         if (!(*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x8000)) continue;
         if (*(uint16_t*)(s + di + OBJ_SPRITE_FLAGS) & 0x6000) continue;
@@ -10912,7 +10938,7 @@ void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
 
     // Viewport bounds check — increment counter by 3 if tile visible
     uint16_t vx = (uint16_t)(x_pix - vm.ds_read(DS_VIEWPORT_X) + 0x10);
-    if (vx <= 0x160) {
+    if (vx <= (uint16_t)(v2_view_w + 0x20)) {   // 0x160 = W + 0x20
         uint16_t vy = (uint16_t)(y_pix - vm.ds_read(DS_VIEWPORT_Y) + 0x10);
         if (vy <= 0xD0) {
             vm.ds_write(DS_COUNTER_8734, cx_count + 3);
@@ -11104,7 +11130,7 @@ static bool v2_vm_viewport_check(V2VM& vm, uint16_t si) {
     uint16_t vp_y = vm.ds_read(DS_VIEWPORT_Y);
     int16_t ax = (int16_t)(vp_x + 0x1F);
     if (ax >= (int16_t)obj_x) return false;
-    ax += 0x102;
+    ax += (int16_t)(v2_view_w - 0x3E);   // 0x102: the right bound vp + 0x121 = W - 0x1F
     if (ax < (int16_t)obj_x) return false;
     ax = (int16_t)(vp_y + 0x1F);
     if (ax >= (int16_t)obj_y) return false;
@@ -14321,9 +14347,9 @@ void v2_vm_op_CF(V2VM& vm) {
     uint16_t obj_y = ObjRef{vm, si}.u16(OBJ_WORLD_Y);
 
     bool within = true;
-    // X bounds: vp_x + 0x1F <= obj_x AND vp_x + 0x1F + 0x102 >= obj_x
+    // X bounds: vp_x + 0x1F <= obj_x AND vp_x + 0x1F + 0x102 >= obj_x (0x1F + 0x102 = W - 0x1F)
     if ((int16_t)(vp_x + 0x1F) >= (int16_t)obj_x) within = false;
-    if ((int16_t)(vp_x + 0x1F + 0x102) < (int16_t)obj_x) within = false;
+    if ((int16_t)(vp_x + (v2_view_w - 0x1F)) < (int16_t)obj_x) within = false;
     // Y bounds: vp_y + 0x1F <= obj_y AND vp_y + 0x1F + 0x72 >= obj_y
     if (within) {
         if ((int16_t)(vp_y + 0x1F) >= (int16_t)obj_y) within = false;
@@ -14824,7 +14850,7 @@ void v2_vm_op_CE(V2VM& vm) {
     int16_t ax = (int16_t)(vp_x + 0x1F);
     if (ax >= (int16_t)obj_x) in_viewport = false;
     else {
-        ax += 0x102;
+        ax += (int16_t)(v2_view_w - 0x3E);   // 0x102: the right bound vp + 0x121 = W - 0x1F
         if (ax < (int16_t)obj_x) in_viewport = false;
     }
     if (in_viewport) {
@@ -15203,7 +15229,7 @@ void v2_vm_op_13(V2VM& vm) {
         //   - Copy v2_hud_buf → v2_render_buf top 64 rows (viewport top gets HUD picture)
         //   - Clear v2_hud_buf (HUD area emptied)
         //   - Clear v2_render_buf rows 64..176 (rest of viewport cleared)
-        extern uint8_t v2_render_buf[320*240];
+        extern uint8_t v2_render_buf[V2_FB_MAX_W*240];
         extern uint8_t v2_hud_buf[320*64];
         // Clear HUD area (= orig STOSB di=0..0x2ADC head part)
         memset(v2_hud_buf, 0, 320 * 64);
@@ -19522,7 +19548,7 @@ static void v2_vm_verify_spawn_coverage(uint8_t* shadow) {
         uint16_t hh = *(uint16_t*)(shadow + di_off + (DS_SPAWN_TABLE + 6));
         // Check if in viewport (rough)
         if ((int16_t)(sx + hw) < (int16_t)vp_x) continue;
-        if ((int16_t)(sx - hw) > (int16_t)(vp_x + 0x140)) continue;
+        if ((int16_t)(sx - hw) > (int16_t)(vp_x + v2_view_w)) continue;   // 0x140 = W
         if ((int16_t)(sy + hh) < (int16_t)vp_y) continue;
         if ((int16_t)(sy - hh) > (int16_t)(vp_y + 0xC0)) continue;
         // In viewport — check if spawned
@@ -20225,7 +20251,7 @@ void v2_watch_302(const char* tag) {
 // where the per-frame counter stands still). Returns true when written.
 static bool v2_dbg_dump_frame_ppm(const char* fn) {
     extern uint8_t v2_dac_shadow[768];
-    extern uint8_t v2_render_buf[320*240];
+    extern uint8_t v2_render_buf[V2_FB_MAX_W*240];
     extern uint8_t v2_hud_buf[320 * 64];
     FILE* f = fopen(fn, "wb");
     if (!f) return false;
@@ -20341,7 +20367,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         for (int i = 0; i < nsnap; i++)
             if (v2_dbg_pre_vm_iter == snapf[i] || v2_dbg_pre_vm_iter == snapf[i] + 1) snap_now = true;
         if (snap_now) {
-            extern uint8_t v2_render_buf[320*240];
+            extern uint8_t v2_render_buf[V2_FB_MAX_W*240];
             char fn[64]; snprintf(fn, sizeof(fn), "/tmp/ladder_f%d.ppm", v2_dbg_pre_vm_iter);
             if (v2_dbg_dump_frame_ppm(fn)) {
                 // raw index map alongside (visual index forensics)
@@ -20382,7 +20408,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
         static int _pc = -1;
         if (_pc < 0) _pc = getenv("V2_LADDER_TRACE") ? 1 : 0;
         if (_pc) {
-            extern uint8_t v2_render_buf[320*240];
+            extern uint8_t v2_render_buf[V2_FB_MAX_W*240];
             int n = 0;
             for (int i = 0; i < 320 * 200; i++)
                 if (v2_render_buf[i] >= 0x75 && v2_render_buf[i] <= 0x78) n++;

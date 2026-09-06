@@ -39,11 +39,20 @@ constexpr uint32_t V2_EXE_STATIC_SIZE = 0x29F00;
 // V2 rendering buffer — single persistent buffer, like drawBuffer in the original.
 // Game thread writes, v2_swap_render_buf copies to v2_display_buf for render thread.
 // Linear format: [y * 320 + x] = palette index, 320x200
-extern uint8_t  v2_render_buf[320*240];   // UX stage 9: 240 rows (224 shown on an LVX_TALL224 level)
+// UX stage 9, step 4 (wide screen): the frame buffers hold up to V2_FB_MAX_W
+// columns; the live width is v2_fbw (per thread: the game thread's frame,
+// the presenter's interpolated frame) and v2_display_w is the width the last
+// published frame was rendered at. 320 on every canonical level and on every
+// chunk screen (title, menus, intro); a wide level renders v2_view_w columns.
+#define V2_FB_MAX_W 512
+extern uint8_t  v2_render_buf[V2_FB_MAX_W*240];   // UX stage 9: 240 rows (224 shown on an LVX_TALL224 level)
 
 // Display buffer — game copies completed frame here under lock,
 // render thread reads it under the same lock. No race.
-extern uint8_t  v2_display_buf[320*240];
+extern uint8_t  v2_display_buf[V2_FB_MAX_W*240];
+extern thread_local int v2_fbw;   // the width (= stride) of the frame this thread is rendering
+extern int v2_display_w;          // width of the published v2_display_buf frame (under v2_display_mutex)
+extern int v2_view_w;             // v2_vm.cpp: the loaded level's view width (0x140, or the WIDE option's, clamped to the map)
 // UX stage 0: published with v2_display_buf under v2_display_mutex — 1 when the
 // running slot is an LVX full-screen scene: the presenter shows display rows
 // 176..199 (map) instead of the HUD band.

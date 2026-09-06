@@ -20,6 +20,7 @@ struct myDrawInfoS_orig {
 extern struct myDrawInfoS_orig* myDrawInfo;
 
 // Функция callback вызывается каждый кадр рендер-потоком
+int v2_present_w = 320;   // UX stage 9 step 4: the width of the frame in stableBuffer (read by v2_present_frame)
 void render_callback_v2(void* state)
 {
     static bool palette_copied = false;
@@ -47,8 +48,13 @@ void render_callback_v2(void* state)
 
     // UX stage 9: an interpolated frame between the two newest ticks (own
     // passes on a snapshot, v2_smooth.cpp) — else the tick frame as before.
-    static uint8_t v2_smooth_frame[320 * 240];
+    static uint8_t v2_smooth_frame[V2_FB_MAX_W * 240];
     const bool smooth = v2_smooth_render(v2_smooth_frame);
+    extern int v2_smooth_last_w;
+    // UX stage 9 step 4: the frame's width (its row stride) — the interpolated
+    // frame's own, else the published tick frame's
+    const int FW = smooth ? v2_smooth_last_w : v2_display_w;
+    v2_present_w = FW;
     // debug: V2_SMOOTH_DUMP=<dir> writes the first 48 presented frames after
     // game frame 100 as <dir>/pf_<n>_f<game frame>_t<fraction>.ppm (+ the
     // tick frame it interpolates towards) — proves the sub-tick positions.
@@ -65,8 +71,8 @@ void render_callback_v2(void* state)
             FILE* f = fopen(path, "wb");
             if (f) {
                 const uint8_t* src = smooth ? v2_smooth_frame : v2_display_buf;
-                fprintf(f, "P6\n320 200\n255\n");
-                for (int i = 0; i < 320 * 200; i++) { const SDL_Color& c = myDrawInfo_v2->drawPalette[src[i]]; fputc(c.r, f); fputc(c.g, f); fputc(c.b, f); }
+                fprintf(f, "P6\n%d 200\n255\n", FW);
+                for (int i = 0; i < FW * 200; i++) { const SDL_Color& c = myDrawInfo_v2->drawPalette[src[i]]; fputc(c.r, f); fputc(c.g, f); fputc(c.b, f); }
                 fclose(f);
             }
             n++;
@@ -77,8 +83,8 @@ void render_callback_v2(void* state)
         std::lock_guard<std::mutex> lock(v2_display_mutex);
         const uint8_t* src = smooth ? v2_smooth_frame : v2_display_buf;
         for (int y = 0; y < 176; y++) {
-            memcpy(sbuf + y * 344, src + y * 320, 320);
-            memset(sbuf + y * 344 + 320, 0, 24); // padding
+            memcpy(sbuf + y * V2_FB_MAX_W, src + y * FW, FW);
+            memset(sbuf + y * V2_FB_MAX_W + FW, 0, V2_FB_MAX_W - FW); // padding
         }
         // F12 PGM dump (v2 path). Clear flag AFTER both orig+v2 saved.
         extern std::atomic<bool> g_dump_pgm_request;
@@ -86,10 +92,10 @@ void render_callback_v2(void* state)
             FILE* f = fopen("/tmp/v2_ladder.ppm", "wb");
             if (f) {
                 const int H = v2_display_fullscreen ? v2_display_fullscreen : 176;   // UX stage 0/9: map rows shown
-                fprintf(f, "P6\n320 %d\n255\n", H);
+                fprintf(f, "P6\n%d %d\n255\n", v2_display_w, H);
                 for (int y = 0; y < H; y++) {
-                    for (int x = 0; x < 320; x++) {
-                        uint8_t c = v2_display_buf[y * 320 + x];
+                    for (int x = 0; x < v2_display_w; x++) {
+                        uint8_t c = v2_display_buf[y * v2_display_w + x];
                         fputc(myDrawInfo_v2->drawPalette[c].r, f);
                         fputc(myDrawInfo_v2->drawPalette[c].g, f);
                         fputc(myDrawInfo_v2->drawPalette[c].b, f);
@@ -116,14 +122,17 @@ void render_callback_v2(void* state)
             // stay black. The HUD band is never painted on these slots.
             const int shown = v2_display_fullscreen - 176;
             for (int y = 0; y < 64; y++) {
-                if (y < shown) memcpy(sbuf + (176 + y) * 344, src2 + (176 + y) * 320, 320);
-                else        memset(sbuf + (176 + y) * 344, 0, 320);
-                memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+                if (y < shown) memcpy(sbuf + (176 + y) * V2_FB_MAX_W, src2 + (176 + y) * FW, FW);
+                else        memset(sbuf + (176 + y) * V2_FB_MAX_W, 0, FW);
+                memset(sbuf + (176 + y) * V2_FB_MAX_W + FW, 0, V2_FB_MAX_W - FW); // padding
             }
         } else {
+            // the 320-px HUD art sits centred on a wide frame, the sides stay black
+            const int x0 = (FW - 320) / 2;
             for (int y = 0; y < 64; y++) {
-                memcpy(sbuf + (176 + y) * 344, v2_display_hud_buf + y * 320, 320);
-                memset(sbuf + (176 + y) * 344 + 320, 0, 24); // padding
+                uint8_t* row = sbuf + (176 + y) * V2_FB_MAX_W;
+                memset(row, 0, V2_FB_MAX_W);
+                memcpy(row + x0, v2_display_hud_buf + y * 320, 320);
             }
         }
     }
