@@ -14,9 +14,10 @@ cd "$(dirname "$0")/.."
 case "${WIDE:-2}" in 1) W=384;; 2) W=426;; *) W=${WIDE};; esac
 JOBS=${JOBS:-$(nproc)}
 BIN=vikings_headless_wide
+# EXE_NAME on the command line overrides the Makefile's `vikings_headless`, so the
+# 320 dual-run judge in the repo root is never overwritten by this build
 echo "building $BIN (HEADLESS V2_ONLY)…"
-( ulimit -s unlimited; HEADLESS=1 V2_ONLY=1 RELEASE=1 make CXX=clang++ -j"$JOBS" ) > /tmp/wide_build_$$.log 2>&1 || { echo "FAIL: build"; tail -5 /tmp/wide_build_$$.log; exit 2; }
-cp -f vikings_headless "$BIN"   # HEADLESS+V2_ONLY writes vikings_headless in .obj-headless-v2only; keep it apart from the judge
+( ulimit -s unlimited; HEADLESS=1 V2_ONLY=1 RELEASE=1 make CXX=clang++ EXE_NAME="$BIN" -j"$JOBS" ) > /tmp/wide_build_$$.log 2>&1 || { echo "FAIL: build"; tail -5 /tmp/wide_build_$$.log; exit 2; }
 OUT="/tmp/wide_canon_$$"; rm -rf "$OUT"; mkdir -p "$OUT"
 export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1} V2_VIEW_W=$W
 run_one() {

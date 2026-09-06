@@ -335,6 +335,7 @@ extern "C" int v2_vga_parity_check(const uint8_t* real_drawbuffer, int log_limit
 }
 
 void v2_chunk_bg_update_from_render() {
+    v2_fbw = 320;   // UX stage 9 step 4: a chunk screen's frame is the 320-px raster (the backup below is 320-stride)
     memcpy(v2_chunk_bg_backup, v2_render_buf, 320 * 176);
     v2_chunk_bg_valid = true;
 }
@@ -1508,6 +1509,7 @@ void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
 #endif
 
     // Orig: VGA Mode X 4 planes at display_offset; v2: equivalent rectangle in v2_render_buf.
+    v2_fbw = 320;   // UX stage 9 step 4: the planes below are written 320-stride — the frame is the 320-px raster from here on
     // Plane interleave x = (i % pitch) * 4 + plane, y = i / pitch. pitch=86 = 320/4 + slack.
     for (int p = 0; p < 4; p++) {
         uint8_t* plane_data = chunk + plane_size * p;
