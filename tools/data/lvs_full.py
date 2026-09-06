@@ -99,6 +99,44 @@ ANIM_MN = {
     0x18: 'f339F', 0x19: 'f33DE', 0x1A: 'end_anim',
 }
 
+def _walk_anim_strict(d, entries, lens, obj_seen):
+    """{pc: cmd} of the anim code reachable from `entries` with exact lengths
+    (anim_disasm.ANIM_SCHEME + lens = {cmd pc: {next pc}} for the VAR cmds)."""
+    import importlib.util as iu
+    sp = iu.spec_from_file_location('ad', 'tools/data/anim_disasm.py')
+    ad = iu.module_from_spec(sp)
+    sp.loader.exec_module(ad)
+    seen = {}
+    q = [pc for pc in entries if 0x600 <= pc < len(d)]
+    while q:
+        pc = q.pop()
+        if pc in seen or pc < 0x600 or pc >= len(d) or pc in obj_seen:
+            continue
+        cmd = d[pc]
+        sch = ad.ANIM_SCHEME.get(cmd)
+        if sch is None:
+            continue
+        kind = sch[0]
+        seen[pc] = cmd
+        if kind == 'fixed':
+            q.append(pc + 1 + sch[1])
+        elif kind in ('jump', 'loopstart'):
+            if pc + 3 <= len(d):
+                t = struct.unpack_from('<H', d, pc + 1)[0]
+                if 0x600 <= t < len(d):
+                    q.append(t)
+            if kind == 'loopstart':
+                q.append(pc + 3)
+        elif kind == 'stop':
+            if cmd != 0x1A:
+                q.append(pc + 1 + sch[1])
+        elif kind == 'var':
+            nxts = lens.get(pc)
+            if nxts and len(nxts) == 1:
+                q.append(next(iter(nxts)))
+    return d, seen
+
+
 def anim_layer(cid):
     """Anim-VM instructions with resolved lengths.
     Returns {pc: (cmd, length, kind, tgt)}; unresolved VARs are absent."""
@@ -108,14 +146,40 @@ def anim_layer(cid):
     sp.loader.exec_module(ad)
     import glob as g
     dynlens, dynpcs = ad.load_dyn(g.glob('/tmp/animdump/*.txt'))
+    # Level C (2026-09-06): the STATIC lengths of the VAR commands — the
+    # abstract run of tools/data/anim_static.py over every anim stream with
+    # the owner's sub-sprite count, the 0D mask and the 13 classes (checked
+    # against the corpus: every measured site agrees). Merged into the same
+    # {cmd pc: {next pc}} table the walker and the lister read, so an anim
+    # stream decodes exactly whether or not the corpus ever ran it.
+    sp3 = iu.spec_from_file_location('anim_static', 'tools/data/anim_static.py')
+    AS = iu.module_from_spec(sp3)
+    sp3.loader.exec_module(AS)
+    dyn_here = {pc: {b1 - pc for b1 in s} for pc, s in dynlens.get(cid, {}).items()}
+    for pc, L in AS.resolved(cid, dyn_here).items():
+        have = dynlens[cid].get(pc)
+        if have and have != {pc + 1 + L}:
+            print(f'ANIM-STATIC: {cid:X} @{pc:04X} corpus {sorted(have)} vs static {pc + 1 + L:04X} — corpus kept')
+            continue
+        dynlens[cid][pc] = {pc + 1 + L}
     table = dz.load_draft()
     pt = dz.spawn_entries()
     # #96: rec_scan — op_19 operands inside record-seeded strands feed the
     # anim entry set too (the gen model covers every record's code).
+    # Level C: the STRICT entry model, like the object listing itself — the
+    # op 19 sites of the walked object code (rec_scan=True seeded phantom
+    # classes whose anims have no owner, hence no sub-sprite count and no
+    # VAR lengths: half-decoded strands that looked like data).
     _, _, _, _, _, _, anim_entries = dz.walk(cid, pt.get(cid, set()), table,
-                                             rec_scan=True)
+                                             rec_scan=False)
     entries = set(anim_entries) | dynpcs.get(cid, set())
-    d, seen, stops = ad.walk_anim(cid, entries, dynlens.get(cid, {}))
+    # Level C: a STRICT walk — only continuations the model knows (fixed
+    # lengths, jump/loop targets, static or measured VAR lengths). No superset
+    # guesses: a VAR site without a length ends its strand, and a strand
+    # stops at the class table or inside the object code (the two never
+    # interleave — a continuation there is the end of an anim, not code).
+    d_obj, obj_seen, _ = full_walk(cid)
+    d, seen = _walk_anim_strict(d_obj, entries, dynlens.get(cid, {}), obj_seen)
     out = {}
     lens = dynlens.get(cid, {})
     for pc, cmd in seen.items():
@@ -296,6 +360,8 @@ def emit_structured(cid):
     agroups = {}
     for pc in sorted(anims):
         cmd, ln, kind, tgt = anims[pc]
+        if ln is None:
+            continue                       # unresolved VAR anim site: its bytes stay in a blob
         if any((pc + i) in covered for i in range(ln)):
             continue
         for i in range(pc, pc + ln):

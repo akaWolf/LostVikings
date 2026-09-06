@@ -218,12 +218,28 @@ def spawn_entries(manifest_dir='assets_raw'):
     lc = [struct.unpack_from('<H', ds, 0x940C + i*2)[0] for i in range(48)]
     lt = [struct.unpack_from('<H', ds, 0x946C + i*2)[0] for i in range(48)]
     per_template = {}
+    keep_current = set()   # templates of the levels that run on WHATEVER script is loaded
     for lvl, (cid, tid) in enumerate(zip(lc, lt)):
-        if tid == 0xFFFF:
-            continue
         try:
             d = open(f'{manifest_dir}/chunks/dec/{cid:04d}.bin', 'rb').read()
         except FileNotFoundError:
+            continue
+        if tid == 0xFFFF:
+            # Level C (2026-09-06): a level with script 0xFFFF keeps the current
+            # template (the game-over shore 0x25: sub_111b1 skips the reload) —
+            # its spawn table indexes records of EVERY world script, so its
+            # templates are entries of all of them (class D2, the TRY AGAIN
+            # controller, lives in 1C1..1C5 with a stub in 1C6). The old dyn
+            # corpus supplied these strands; this makes them static.
+            code = struct.unpack_from('<H', d, 0x25BF - 0x25B3)[0]
+            keep_current.add(code)
+            off = 0x25F6 - 0x25B3
+            while off + 14 <= len(d):
+                x = struct.unpack_from('<H', d, off)[0]
+                if x == 0xFFFF:
+                    break
+                keep_current.add(struct.unpack_from('<H', d, off + 8)[0])
+                off += 14
             continue
         # viking records 0/1/2: sub_13809 record idx is its SECOND arg;
         # sub_11569/11446 spawn the trio with constants 1/0/2.
@@ -240,6 +256,8 @@ def spawn_entries(manifest_dir='assets_raw'):
             tmpl = struct.unpack_from('<H', d, off + 8)[0]
             per_template.setdefault(tid, set()).add(tmpl)
             off += 14
+    for tid in per_template:
+        per_template[tid].update(keep_current)
     return per_template
 
 def walk(chunk_id, tmpl_indices, table, extra_entries=(), rec_scan=False):
