@@ -717,7 +717,18 @@ def reference_bytes(cid):
 
 
 def canonical_text(cid):
-    return open(os.path.join(ROOT, 'assets_raw', 'lvs', f'{cid:X}.lvsf'), encoding='utf-8').read()
+    """assets_raw/lvs/<cid>.lvsf — a derived file (assets_raw is not in git):
+    regenerated from the chunk by lvs_full.emit_free when missing."""
+    p = os.path.join(ROOT, 'assets_raw', 'lvs', f'{cid:X}.lvsf')
+    if not os.path.exists(p):
+        lf = mod('lvs_full')
+        cwd = os.getcwd(); os.chdir(ROOT)
+        try: text = lf.emit_free(cid)
+        finally: os.chdir(cwd)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, 'w', encoding='utf-8').write(text)
+        return text
+    return open(p, encoding='utf-8').read()
 
 
 def compile_lvd(text, names):
