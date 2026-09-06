@@ -181,3 +181,29 @@ Known non-goals of v1.5 (roadmap for v2):
 - Semantic state names (`S_walk` instead of `S_3853`).
 - Data-table decoding of the remaining blobs (14-byte records with
   `db13` markers, palette blocks).
+
+
+## Level C (2026-09-06): exact anim lengths, symbolic references
+
+`tools/data/anim_static.py` gives the five VAR anim commands static operand
+lengths (owner sub-sprite count, the 0D mask reset per frame, the 13 classes
+carried across frames/anims to a fixpoint, the 05/06 loop save); the corpus
+is an oracle only (1058/1058 agree). `lvs_full.anim_layer` walks the anim code
+strictly on those lengths from the strict entry model. After that no `o`/`a`
+line carries a raw `=HHHH` word: code<->code, code->anim, anim->anim and
+code->palette references are all labels, and the remaining blobs are
+referenced by nothing (dead code / tables). `disasm.spawn_entries` attributes
+the spawn tables of a script-0xFFFF level (the game-over shore) to every world
+script (class D2). The .lvd language (`tools/data/lvsd.py`,
+`tools/data/LVD_LANGUAGE.md`) is a 1:1 layer over this free-form text.
+
+### Flowing layout (2026-09-06)
+`emit_free` writes `blob <hex>` without an address and `P_xxxx:` label lines in
+front of palette blocks (a blob is split at every pointer target); `compile_free`
+lays out records at their slots and everything else sequentially in file order,
+binds labels to code lines and blobs alike, sizes the image by its last element
+(the `chunk size` word is a lower bound) and refuses anything past 0xC000 (the
+template buffer, 0xC00 paragraphs). Anchored `blob @addr` and `P_x = @addr`
+are still accepted for older texts. An unedited text lays out to the same bytes;
+an insertion anywhere shifts what follows (30 random `nop` insertions per script
+compile to size+1; deleting a blob shrinks the script by its length).
