@@ -552,9 +552,14 @@ LVX_PALTICK3 = 0x0020     # the palette-animation timers tick once per 3 console
 
 
 def build_lvx(scratch, entries):
-    """exe_static.bin + LVX4 trailer: [magic][u16 n][32B records:
+    """exe_static.bin + LVX5 trailer: [magic][u16 n][36B records:
     level u16, hdr_cid u16, tmpl_cid u16, pw 4B, demo_cid u16, flags u16,
-    trio 18B (3 x {x i16, y u16, anim u16}; zeros unless LVX_TRIO)].
+    trio 18B (3 x {x i16, y u16, anim u16}; zeros unless LVX_TRIO),
+    pin_x u16, pin_y u16 (the LVX_CAMLOCK camera pin in px; 2026-09-06: fields
+    of their own — LVX3/LVX4 packed the pin into flags bits 4-11 / 12-15 and
+    the later flag bits LVX_ALT..LVX_TALL224 collided with it: slot 53's pin_x
+    84 = 0x54 read as LVX_CONSOLE and the engine's canonical lookup skipped
+    the scene; the engine still decodes the old images)].
     demo_cid != 0 arms the canonical attract-demo machinery on the slot
     (sub_12d72 RLE input replay, ac=0x8000) — the scene choreography.
     flags (UX plan stage 0): LVX_FULLSCREEN | LVX_CAMLOCK on the interlude
@@ -565,22 +570,24 @@ def build_lvx(scratch, entries):
         src = os.path.join(LR.ROOT, "exe_static.bin")
     img = open(src, "rb").read()
     # strip a previous trailer of any version (idempotent rebuilds)
-    for magic in (b"LVX4", b"LVX3", b"LVX2", b"LVX1"):
+    for magic in (b"LVX5", b"LVX4", b"LVX3", b"LVX2", b"LVX1"):
         m = img.rfind(magic)
-        if m >= 0 and m >= len(img) - 4 - 2 - 32 * 64:
+        if m >= 0 and m >= len(img) - 4 - 2 - 36 * 64:
             img = img[:m]
-    tr = b"LVX4" + struct.pack("<H", len(entries))
+    tr = b"LVX5" + struct.pack("<H", len(entries))
     for e in entries:
         tr += struct.pack("<HHH", e["slot"], e["hdr"], TMPL_CHUNK[e["slot"]])
         tr += e["pw"]
         tr += struct.pack("<HH", e.get("demo", 0), e.get("flags", 0))
         tr += e.get("trio") or bytes(18)
+        pin = e.get("pin") or (0, 0)
+        tr += struct.pack("<HH", pin[0], pin[1])
     out = os.path.join(scratch, "exe_static.bin")
     tmp = out + ".tmp"
     with open(tmp, "wb") as f:
         f.write(img + tr)
     os.replace(tmp, out)
-    print(f"  exe_static: {len(img)}B + LVX4 trailer {len(tr)}B -> {out}")
+    print(f"  exe_static: {len(img)}B + LVX5 trailer {len(tr)}B -> {out}")
 
 
 # ---------------------------------------------------------------------------
@@ -1300,12 +1307,12 @@ def do_integrate(scratch, music=None):
             frames[e["slot"]] = info["decor_frames"]
         # UX stage 0/1: scenes play full-screen with the camera parked at
         # the map's (pin_x, pin_y) = EXT_L room columns + the Genesis camera
-        # mod 16 (genesis_scene.layout); bits 4-11 / 12-15 of the flags
+        # mod 16 (genesis_scene.layout); the record's own pin fields (LVX5)
         pin_x = pin_y = 0
         if e.get("gen_bg"):
             import genesis_scene as GS
             pin_x, pin_y = GS.layout(e["gen_bg"]["world"], e["gen_bg"])["pin"]
-        flags = LVX_FULLSCREEN | LVX_CAMLOCK | (pin_x << 4) | (pin_y << 12)
+        flags = LVX_FULLSCREEN | LVX_CAMLOCK
         if e.get("gen_bg"):
             flags |= LVX_NOGATE | LVX_PALTICK3
         trio = None
@@ -1317,7 +1324,7 @@ def do_integrate(scratch, music=None):
             flags |= LVX_TRIO
         lvx.append({"slot": e["slot"], "hdr": b, "pw": e["pw"],
                     "demo": DEMO_CID.get(e["slot"], 0), "flags": flags,
-                    "trio": trio})
+                    "trio": trio, "pin": (pin_x, pin_y)})
     write_demo_chunks(scratch)
     # canonical predecessors point into the insert chains
     print("progression patch:")

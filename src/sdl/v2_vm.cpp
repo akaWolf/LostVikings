@@ -84,14 +84,20 @@ int v2_view_w_opt = 0x140;   // the WIDE option (v2_ui): 0x140, 400 or 426 (320 
 // op 13/D9 then keeps palette row 192 for the crowd like the SNES does
 bool v2_console_variant = false;
 struct V2LvxEntry { uint16_t level, hdr_cid, tmpl_cid; uint8_t pw[4];
-                    uint16_t demo_cid; uint16_t flags; uint8_t trio[18]; };
-// LVX3 flags bits 4-11 / 12-15: the camera pin (viewport x 0..255 / y 0..15
-// in px) of a CAMLOCK slot — the scene map's off-screen left room columns
-// plus the padding that keeps the Genesis composition's room quads
-// 16-aligned (tools/assets/genesis_scene.py layout(); smd2pc.py
-// build_genesis_backdrop writes the map, integrate_snes.py the flags).
-static inline uint16_t LVX_PIN_X(uint16_t fl) { return (fl >> 4) & 0xFF; }
-static inline uint16_t LVX_PIN_Y(uint16_t fl) { return (fl >> 12) & 0xF; }
+                    uint16_t demo_cid; uint16_t flags; uint8_t trio[18];
+                    uint16_t pin_x, pin_y; };
+// pin_x / pin_y: the camera pin (viewport x / y in px) of a CAMLOCK slot — the
+// scene map's off-screen left room columns plus the padding that keeps the
+// Genesis composition's room quads 16-aligned (tools/assets/genesis_scene.py
+// layout(); smd2pc.py build_genesis_backdrop writes the map, integrate_snes.py
+// the record). An LVX5 record carries the pin in fields of its own; the LVX3/
+// LVX4 images packed it into flags bits 4-11 / 12-15, where the flag bits added
+// later (LVX_ALT 0x10 .. LVX_TALL224 0x80) collided with it — found 2026-09-06:
+// slot 53's pin_x 84 = 0x54 read as LVX_CONSOLE, so v2_lvx_find skipped the
+// scene (no pin, no full screen, no trio), and LVX_PALTICK3 landed in the pin
+// of all five scenes (+2 px). v2_lvx_load decodes a legacy image the only
+// consistent way — a CAMLOCK record's high bits are its pin, nothing else.
+static const V2LvxEntry* v2_lvx_find(uint16_t level);
 extern "C" uint16_t v2_lvx_flags(uint16_t level);
 extern uint8_t* v2_m2c_base;
 
@@ -5316,6 +5322,14 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
       if (env_w > 0) v2_view_w_opt = env_w; }
 #endif
     v2_view_w = v2_view_w_opt;
+    // UX stage 0/1 (LVX_CAMLOCK, looked up once for the pin below): a pinned
+    // interlude scene IS the console's 320-px composition (the room beyond the
+    // Genesis camera window is not part of the picture, and the map ends 80 px
+    // past it) — it keeps the 320 frame at any WIDE setting; the presenter
+    // centres a narrower frame (v2_present_frame: dst = the fitted PW x H).
+    const V2LvxEntry* lx = v2_lvx_find(v2gs(s).level());
+    const uint16_t fl = lx ? lx->flags : 0;
+    if (fl & LVX_CAMLOCK) v2_view_w = 0x140;
     if (v2_view_w > (int)width * 16) v2_view_w = (int)width * 16;
     if (v2_view_w < 0x140) v2_view_w = 0x140;
     v2gs(s).clip_limit_x(width * 2);         // word_31648
@@ -5332,15 +5346,14 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
     // level_load=4 level=53 at this point on slot 53 — so that one is stale.
     // Only LVX slots carry the flag; canonical levels keep the orig limits.
     {
-        const uint16_t fl = v2_lvx_flags(v2gs(s).level());
         if (fl & LVX_CAMLOCK) {
-            v2gs(s).scroll_limit_x(LVX_PIN_X(fl));
-            v2gs(s).scroll_limit_y(LVX_PIN_Y(fl));
+            v2gs(s).scroll_limit_x(lx->pin_x);
+            v2gs(s).scroll_limit_y(lx->pin_y);
         }
         if (getenv("V2_LVX_TRACE"))
-            fprintf(stderr, "LVX-TRACE scroll_limits: level=%u (level_load=%u) flags=%04X map %ux%u -> limits %u,%u\n",
-                    v2gs(s).level(), v2gs(s).level_load(), fl,
-                    width, height, v2gs(s).scroll_limit_x(), v2gs(s).scroll_limit_y());
+            fprintf(stderr, "LVX-TRACE scroll_limits: level=%u (level_load=%u) flags=%04X pin %u,%u map %ux%u view %d -> limits %u,%u\n",
+                    v2gs(s).level(), v2gs(s).level_load(), fl, lx ? lx->pin_x : 0, lx ? lx->pin_y : 0,
+                    width, height, v2_view_w, v2gs(s).scroll_limit_x(), v2gs(s).scroll_limit_y());
     }
     // jmp loc_16595: build row lookup table at ds:0x8F68 (256 entries).
     // ax = ds:0x25DC (from above), shl 1 = row stride in tilemap words.
@@ -5400,9 +5413,10 @@ static void v2_viewport_init_113d8(uint8_t* s) {
 // VM scroll op — which sub_11080 clears at the top of every level load,
 // i.e. before this runs. Canonical levels: no LVX record, nothing happens.
 static void v2_lvx_pin_camera(uint8_t* s) {
-    const uint16_t fl = v2_lvx_flags(v2gs(s).level());
+    const V2LvxEntry* lx = v2_lvx_find(v2gs(s).level());
+    const uint16_t fl = lx ? lx->flags : 0;
     if (!(fl & LVX_CAMLOCK)) return;
-    const uint16_t px = LVX_PIN_X(fl), py = LVX_PIN_Y(fl);
+    const uint16_t px = lx->pin_x, py = lx->pin_y;
     v2gs(s).viewport_x(px);            // word_28524
     v2gs(s).saved_vp_x(px);            // word_2AA5B
     v2gs(s).scroll_col(px >> 3);       // word_2AA5F
@@ -8149,6 +8163,10 @@ static uint16_t v2_current_level = 0xFFFF;
 //   gets the table filled from its record right after the level header
 //   lands in DS (the header's +0x07 mode byte = 2 selects the path); the
 //   canonical head modes (0x10 / 6 / 0) never read the table.
+//   "LVX5" u16 n, n × 36B records {... + pin_x u16, pin_y u16} — 2026-09-06:
+//   the CAMLOCK camera pin in fields of its own (the LVX3/LVX4 images kept it
+//   in flags bits 4-11 / 12-15, colliding with LVX_ALT..LVX_TALL224 — see the
+//   struct's comment; those images decode with the pin split out of the flags).
 // struct V2LvxEntry: defined next to the LVX_* flags (top of the file)
 static V2LvxEntry v2_lvx[32];
 static int v2_lvx_count = 0;
@@ -8202,15 +8220,16 @@ extern "C" int v2_view_rows(void) {
 extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
     v2_lvx_count = 0;
     if (size < 6) return;
-    // the trailer sits at the very end: scan the last 4+2+32*16 bytes
-    uint32_t from = size > 4 + 2 + 32 * 32 ? size - (4 + 2 + 32 * 32) : 0;
+    // the trailer sits at the very end: scan the last 4+2+36*32 bytes
+    uint32_t from = size > 4 + 2 + 36 * 32 ? size - (4 + 2 + 36 * 32) : 0;
     int32_t at = -1;
     int rec = 10;
     for (uint32_t i = from; i + 6 <= size; i++)
         if (!memcmp(img + i, "LVX1", 4) || !memcmp(img + i, "LVX2", 4) ||
-            !memcmp(img + i, "LVX3", 4) || !memcmp(img + i, "LVX4", 4)) {
+            !memcmp(img + i, "LVX3", 4) || !memcmp(img + i, "LVX4", 4) ||
+            !memcmp(img + i, "LVX5", 4)) {
             at = (int32_t)i;
-            rec = (img[i + 3] == '4') ? 32 : (img[i + 3] == '3') ? 14
+            rec = (img[i + 3] == '5') ? 36 : (img[i + 3] == '4') ? 32 : (img[i + 3] == '3') ? 14
                 : (img[i + 3] == '2') ? 12 : 10;
         }
     if (at < 0) return;
@@ -8226,13 +8245,26 @@ extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size) {
         v2_lvx[i].flags    = (rec >= 14) ? (uint16_t)(p[12] | (p[13] << 8)) : 0;
         memset(v2_lvx[i].trio, 0, sizeof v2_lvx[i].trio);
         if (rec >= 32) memcpy(v2_lvx[i].trio, p + 14, 18);
+        if (rec >= 36) {
+            v2_lvx[i].pin_x = (uint16_t)(p[32] | (p[33] << 8));
+            v2_lvx[i].pin_y = (uint16_t)(p[34] | (p[35] << 8));
+        } else if (v2_lvx[i].flags & LVX_CAMLOCK) {
+            // legacy LVX3/LVX4 image: the pin lived in flags bits 4-11 / 12-15
+            // (the struct's comment) — split it out, the low nibble is the flags
+            v2_lvx[i].pin_x = (uint16_t)((v2_lvx[i].flags >> 4) & 0xFF);
+            v2_lvx[i].pin_y = (uint16_t)((v2_lvx[i].flags >> 12) & 0xF);
+            v2_lvx[i].flags &= 0x000F;
+        } else {
+            v2_lvx[i].pin_x = v2_lvx[i].pin_y = 0;
+        }
     }
     v2_lvx_count = n;
-    fprintf(stderr, "V2-LVX: %d extra level slots:", n);
+    fprintf(stderr, "V2-LVX: %d extra level slots (rec %d):", n, rec);
     for (int i = 0; i < n; i++)
-        fprintf(stderr, " %d='%c%c%c%c'(hdr %04X fl %02X)", v2_lvx[i].level,
+        fprintf(stderr, " %d='%c%c%c%c'(hdr %04X fl %02X pin %u,%u)", v2_lvx[i].level,
                 v2_lvx[i].pw[0], v2_lvx[i].pw[1], v2_lvx[i].pw[2],
-                v2_lvx[i].pw[3], v2_lvx[i].hdr_cid, v2_lvx[i].flags);
+                v2_lvx[i].pw[3], v2_lvx[i].hdr_cid, v2_lvx[i].flags,
+                v2_lvx[i].pin_x, v2_lvx[i].pin_y);
     fprintf(stderr, "\n");
 }
 
@@ -20260,14 +20292,22 @@ static bool v2_dbg_dump_frame_ppm(const char* fn) {
     // LVX_TALL224 level (no HUD band on either)
     const int view = v2_view_rows();
     const int rows = view > 200 ? view : 200;
-    fprintf(f, "P6\n320 %d\n255\n", rows);
+    // UX stage 9, step 4: the frame is v2_fbw px wide and that IS its pitch
+    // (320 .. V2_FB_MAX_W; the tile path sets it on this thread); the 320-px
+    // HUD band sits centred on a wide frame like the presenter paints it
+    const int W = v2_fbw;
+    const int x0 = (W - 320) / 2;
+    fprintf(f, "P6\n%d %d\n255\n", W, rows);
     const int fs = view > 176;
-    for (int i = 0; i < 320 * rows; i++) {
-        uint8_t c = (i < 320 * 176 || fs) ? v2_render_buf[i] : v2_hud_buf[i - 320 * 176];
-        fputc(v2_dac_shadow[c*3+0] << 2, f);
-        fputc(v2_dac_shadow[c*3+1] << 2, f);
-        fputc(v2_dac_shadow[c*3+2] << 2, f);
-    }
+    for (int y = 0; y < rows; y++)
+        for (int x = 0; x < W; x++) {
+            uint8_t c = 0;
+            if (y < 176 || fs) c = v2_render_buf[y * W + x];
+            else if (x >= x0 && x < x0 + 320) c = v2_hud_buf[(y - 176) * 320 + (x - x0)];
+            fputc(v2_dac_shadow[c*3+0] << 2, f);
+            fputc(v2_dac_shadow[c*3+1] << 2, f);
+            fputc(v2_dac_shadow[c*3+2] << 2, f);
+        }
     fclose(f);
     return true;
 }

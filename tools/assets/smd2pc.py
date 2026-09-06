@@ -357,8 +357,8 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     and, because the state cameras sit at a half-quad offset in two worlds
     (Preh 132,120 / Wacky 144,216), cam_x % 16 padding px on the left and
     cam_y % 16 padding rows on top so the room quads stay 16-aligned with
-    their type bits; the engine parks the viewport at (pin_x, pin_y) (LVX3
-    flags bits 4-11 / 12-15, v2_lvx_pin_camera) — screen pixel (sx, sy) is
+    their type bits; the engine parks the viewport at (pin_x, pin_y) (the
+    LVX5 record's pin fields, v2_lvx_pin_camera) — screen pixel (sx, sy) is
     map pixel (sx + pin_x, sy + pin_y). Pixels outside the screen are black
     (never shown); type bits everywhere are the room's own.
 

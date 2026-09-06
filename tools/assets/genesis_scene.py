@@ -385,7 +385,7 @@ def layout(world, gen_bg=None):
     integrate_snes): the map holds EXT_L quad columns of room left of the
     screen plus the 320x200 screen, padded so the room quads stay 16-aligned
     with their type bits; the engine parks the viewport at (pin_x, pin_y)
-    (LVX4 flags bits 4-11 / 12-15, v2_lvx_pin_camera) — screen pixel (sx,
+    (the LVX5 record's pin fields, v2_lvx_pin_camera) — screen pixel (sx,
     sy) is map pixel (sx + pin_x, sy + pin_y)."""
     wc = WORLD_CAMERA[world]
     cam_x, cam_y = (gen_bg or {}).get("cam") or wc["cam"]
