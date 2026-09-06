@@ -2,6 +2,8 @@
 #include "v2_timing.h"
 extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 #include <thread>
+#include <vector>
+#include <cstring>
 #include <atomic>
 #include <cassert>
 #include <cstdio>
@@ -33,6 +35,100 @@ SDL_Texture* myTexture_v2 = NULL;
 SDL_PixelFormat *myFormat_v2 = NULL;
 
 extern void render_callback_v2(void *);
+extern int v2_display_fullscreen;   // v2_render_funcs.cpp: 0 = HUD layout, else the map rows shown (200/224)
+
+// UX stage 9, step 3 — the presenter's own layout (no SDL logical size):
+//   ASPECT  4:3 = the raster on a 320x240 canvas like the DOS monitor (200 rows
+//           stretched by 1.2, the 224-row finale by 15/14), 1:1 = square pixels;
+//   INT.SCALE = whole multiples of that canvas only (letterboxed);
+//   FILTER  NEAREST = crisp, LINEAR = bilinear on the source, SHARP = nearest
+//           pre-scale to the next integer multiple, then linear to the window
+//           (crisp pixels, no shimmer at fractional scales);
+//   BORDER  BLACK, or GLOW = the frame decimated to 40x30, drawn linear over
+//           the whole output at 28 % brightness behind the picture.
+// V2_PRESENT_SHOT=<path.ppm>[:<call>] dumps the composed output once.
+static SDL_Texture* g_sharp_tex = nullptr; static int g_sharp_k = 0, g_sharp_h = 0;
+static SDL_Texture* g_glow_tex = nullptr;
+static int g_tex_filter = -1;   // the sampling the source texture was created with (0 nearest, 1 linear)
+static SDL_Texture* v2_make_texture(int access, int w, int h, int linear) {
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, linear ? "1" : "0");   // sampled at creation time
+    SDL_Texture* tx = SDL_CreateTexture(myRenderer_v2, SDL_PIXELFORMAT_RGBA8888, access, w, h);
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+    return tx;
+}
+static void v2_present_frame(int H) {
+    const int filter = v2_options.filter.load();
+    const bool integer = v2_options.integer_scale.load();
+    const bool a43 = v2_options.aspect43.load();
+    const int border = v2_options.border.load();
+    const int want = (filter == 2) ? 1 : 0;
+    if (g_tex_filter != want || !myTexture_v2) {
+        if (myTexture_v2) SDL_DestroyTexture(myTexture_v2);
+        myTexture_v2 = v2_make_texture(SDL_TEXTUREACCESS_STREAMING, RENDER_WIDTH_V2, RENDER_HEIGHT_V2, want);
+        g_tex_filter = want;
+    }
+    if (!myTexture_v2) return;
+    SDL_UpdateTexture(myTexture_v2, NULL, tempDrawBuffer_v2, RENDER_WIDTH_V2 * sizeof(uint32_t));
+    int W = 0, Hout = 0;
+    SDL_GetRendererOutputSize(myRenderer_v2, &W, &Hout);
+    const int cw = SCREEN_WIDTH_V2, ch = a43 ? SCREEN_HEIGHT_V2 : H;
+    double s = (W > 0 && Hout > 0) ? ((double)W / cw < (double)Hout / ch ? (double)W / cw : (double)Hout / ch) : 1.0;
+    if (integer) { s = (double)(int)s; if (s < 1.0) s = 1.0; }
+    const int dw = (int)(cw * s + 0.5), dh = (int)(ch * s + 0.5);
+    SDL_Rect dst = { (W - dw) / 2, (Hout - dh) / 2, dw, dh };
+    SDL_Rect src = { 0, 0, SCREEN_WIDTH_V2, H };
+    SDL_SetRenderDrawColor(myRenderer_v2, 0, 0, 0, 255);
+    SDL_RenderClear(myRenderer_v2);
+    if (border == 1) {
+        if (!g_glow_tex) {
+            g_glow_tex = v2_make_texture(SDL_TEXTUREACCESS_TARGET, 40, 30, 1);
+            if (g_glow_tex) SDL_SetTextureColorMod(g_glow_tex, 72, 72, 72);
+        }
+        if (g_glow_tex) {
+            SDL_SetRenderTarget(myRenderer_v2, g_glow_tex);
+            SDL_RenderCopy(myRenderer_v2, myTexture_v2, &src, NULL);
+            SDL_SetRenderTarget(myRenderer_v2, NULL);
+            SDL_RenderCopy(myRenderer_v2, g_glow_tex, NULL, NULL);
+        }
+    }
+    bool drawn = false;
+    if (filter == 1) {
+        int k = (int)s; if (k < s) k++; if (k < 1) k = 1; if (k > 8) k = 8;
+        if (!g_sharp_tex || g_sharp_k != k || g_sharp_h != H) {
+            if (g_sharp_tex) SDL_DestroyTexture(g_sharp_tex);
+            g_sharp_tex = v2_make_texture(SDL_TEXTUREACCESS_TARGET, SCREEN_WIDTH_V2 * k, H * k, 1);
+            g_sharp_k = k; g_sharp_h = H;
+        }
+        if (g_sharp_tex) {
+            SDL_SetRenderTarget(myRenderer_v2, g_sharp_tex);
+            SDL_RenderCopy(myRenderer_v2, myTexture_v2, &src, NULL);   // nearest, exact integer k
+            SDL_SetRenderTarget(myRenderer_v2, NULL);
+            SDL_RenderCopy(myRenderer_v2, g_sharp_tex, NULL, &dst);   // linear to the window
+            drawn = true;
+        }
+    }
+    if (!drawn) SDL_RenderCopy(myRenderer_v2, myTexture_v2, &src, &dst);
+    {
+        static int shot = -1, at = 1, calls = 0; static const char* path = nullptr; static char pbuf[512];
+        if (shot < 0) {
+            const char* e = getenv("V2_PRESENT_SHOT");
+            shot = (e && *e) ? 0 : 2;
+            if (shot == 0) { snprintf(pbuf, sizeof pbuf, "%s", e); char* c = strrchr(pbuf, ':'); if (c && c[1]) { at = atoi(c + 1); *c = 0; } path = pbuf; }
+        }
+        calls++;
+        if (shot == 0 && calls >= at) {
+            std::vector<uint8_t> px((size_t)W * Hout * 3);
+            if (SDL_RenderReadPixels(myRenderer_v2, NULL, SDL_PIXELFORMAT_RGB24, px.data(), W * 3) == 0) {
+                FILE* f = fopen(path, "wb");
+                if (f) { fprintf(f, "P6\n%d %d\n255\n", W, Hout); fwrite(px.data(), 1, px.size(), f); fclose(f); }
+                fprintf(stderr, "V2-PRESENT-SHOT: %s %dx%d picture %dx%d at (%d,%d) filter=%d int=%d a43=%d border=%d H=%d\n",
+                        path, W, Hout, dst.w, dst.h, dst.x, dst.y, filter, (int)integer, (int)a43, border, H);
+            }
+            shot = 1;
+        }
+    }
+    SDL_RenderPresent(myRenderer_v2);
+}
 extern bool need_quit;  // Используем флаг первого окна
 uint16_t input_keys_v2 = 0;
 bool need_quit_v2 = false;  // Не используется, но оставим для совместимости
@@ -95,7 +191,11 @@ void updateDraw_v2()
     tempDrawBuffer_v2[i] = SDL_MapRGBA(myFormat_v2, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
   }
   
-  v2_ui_draw(tempDrawBuffer_v2, RENDER_WIDTH_V2, RENDER_HEIGHT_V2, myFormat_v2);   // UX stage 3 overlay
+  // UX stage 9 step 3: the picture is the content rows only — 200 (176 + the
+  // 24-row HUD band of the 320x200 DOS raster, or a full-screen scene) or 224
+  // (LVX_TALL224); the overlay's toast sits above that bottom edge
+  const int content_h = v2_display_fullscreen ? v2_display_fullscreen : 200;
+  v2_ui_draw(tempDrawBuffer_v2, RENDER_WIDTH_V2, content_h, myFormat_v2);   // UX stage 3 overlay
   // debug: V2_UI_SHOT=<path.ppm> dumps the presented frame once while the
   // options menu is open (the overlay lives only in this 32-bit buffer)
   {
@@ -113,11 +213,7 @@ void updateDraw_v2()
           }
       }
   }
-  SDL_UpdateTexture(myTexture_v2, NULL, tempDrawBuffer_v2, RENDER_WIDTH_V2*sizeof(uint32_t));
-  SDL_RenderClear(myRenderer_v2);
-  SDL_Rect srcRect = {0, 0, SCREEN_WIDTH_V2, SCREEN_HEIGHT_V2};
-  SDL_RenderCopy(myRenderer_v2, myTexture_v2, &srcRect, NULL);
-  SDL_RenderPresent(myRenderer_v2);
+  v2_present_frame(content_h);
 }
 
 std::thread render_thread_v2;
@@ -147,6 +243,10 @@ void render_thread_proc_v2(void* _state)
   SDL_DisplayMode display_mode;
   int window_width = SCREEN_WIDTH_V2 * SCREEN_SCALE_V2;
   int window_height = SCREEN_HEIGHT_V2 * SCREEN_SCALE_V2;
+  if (const char* e = getenv("V2_WINDOW_SIZE")) {          // UX stage 9: WxH (presenter layout tests)
+      int w = 0, h = 0;
+      if (sscanf(e, "%dx%d", &w, &h) == 2 && w >= 320 && h >= 200) { window_width = w; window_height = h; }
+  }
   int pos_x, pos_y;
   
   if (SDL_GetCurrentDisplayMode(0, &display_mode) == 0) {
@@ -201,11 +301,10 @@ void render_thread_proc_v2(void* _state)
                            (ri.flags & SDL_RENDERER_PRESENTVSYNC);
         printf("render_v2: presenter %s\n", v2_present_vsync ? "vsync" : "15 ms sleep");
     }
-    // Logical size keeps 4:3 aspect (320x240) regardless of window dimensions —
-    // SDL letterboxes the texture with black bars when the window's aspect
-    // differs from the logical one.
-    SDL_RenderSetLogicalSize(myRenderer_v2, SCREEN_WIDTH_V2, SCREEN_HEIGHT_V2);
-    myTexture_v2 = SDL_CreateTexture(myRenderer_v2, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, RENDER_WIDTH_V2, RENDER_HEIGHT_V2);
+    // UX stage 9 step 3: no SDL logical size — v2_present_frame lays the
+    // picture out itself (aspect / integer scale / filter / border options)
+    // and creates the source texture with the sampling the FILTER asks for.
+    myTexture_v2 = nullptr;
     myFormat_v2 = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
     printf("render_v2: Entering main loop...\n");

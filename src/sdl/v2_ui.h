@@ -14,6 +14,11 @@ struct V2Options {
     std::atomic<int> language{0};            // UX6: index into the language banks (0 = the English original)
     std::atomic<bool> smooth{true};          // UX9: the presenter interpolates camera/sprites between ticks
     std::atomic<bool> console_finale{true};  // UX9: the SNES finale's BG2 dragon layer + crowd on the concert (next load)
+    // UX9 step 3 — the presenter's picture (render thread only, no game state):
+    std::atomic<int>  filter{0};             // 0 NEAREST, 1 SHARP (integer pre-scale + linear), 2 LINEAR
+    std::atomic<bool> integer_scale{false};  // whole multiples of the 320x240 (or 320xH) canvas only
+    std::atomic<bool> aspect43{true};        // 4:3 like the DOS monitor (320x200 raster on 320x240) / square pixels
+    std::atomic<int>  border{0};             // 0 BLACK, 1 GLOW (the frame blurred and dimmed behind the picture)
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once

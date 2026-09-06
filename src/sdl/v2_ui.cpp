@@ -33,6 +33,10 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "snes_balance")) v2_options.snes_balance = val != 0;
             else if (!strcmp(key, "smooth")) v2_options.smooth = val != 0;
             else if (!strcmp(key, "console_finale")) v2_options.console_finale = val != 0;
+            else if (!strcmp(key, "filter")) v2_options.filter = (val >= 0 && val <= 2) ? val : 0;
+            else if (!strcmp(key, "integer_scale")) v2_options.integer_scale = val != 0;
+            else if (!strcmp(key, "square_pixels")) v2_options.aspect43 = val == 0;   // the key pattern has no digits
+            else if (!strcmp(key, "border")) v2_options.border = (val >= 0 && val <= 1) ? val : 0;
         }
     }
     fclose(f);
@@ -41,6 +45,7 @@ void v2_options_save() {
     FILE* f = fopen(OPT_PATH, "w");
     if (!f) return;
     fprintf(f, "parallax=%d\nscenes=%d\nsnes_balance=%d\nlanguage=%s\nsmooth=%d\nconsole_finale=%d\n", (int)v2_options.parallax.load(), (int)v2_options.scenes.load(), (int)v2_options.snes_balance.load(), v2_locale_code_at(v2_options.language.load()), (int)v2_options.smooth.load(), (int)v2_options.console_finale.load());
+    fprintf(f, "filter=%d\ninteger_scale=%d\nsquare_pixels=%d\nborder=%d\n", v2_options.filter.load(), (int)v2_options.integer_scale.load(), (int)!v2_options.aspect43.load(), v2_options.border.load());
     fclose(f);
 }
 
@@ -125,12 +130,14 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 }
 
 // ------------------------------------------------------------------- menu --
-enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_LEVEL, IT_SAVE, IT_LOAD, IT_COUNT };
+enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER, IT_INTEGER, IT_ASPECT, IT_BORDER, IT_LEVEL, IT_SAVE, IT_LOAD, IT_COUNT };
+static const char* const FILTER_NAMES[3] = { "NEAREST", "SHARP  ", "LINEAR " };
+static const char* const BORDER_NAMES[2] = { "BLACK", "GLOW " };
 static int cursor = 0, sel_slot = 1, sel_level_idx = 0;
 static std::string toast_text; static uint32_t toast_until = 0;
 void v2_ui_toast(const char* text) { toast_text = text; toast_until = SDL_GetTicks() + 1500; }
 
-static int n_items() { return g_debug_mode ? IT_COUNT : 6; }
+static int n_items() { return g_debug_mode ? IT_COUNT : 10; }
 static void activate() {
     switch (cursor) {
     case IT_PARALLAX: v2_options.parallax = !v2_options.parallax.load(); v2_options_save(); break;
@@ -139,6 +146,10 @@ static void activate() {
     case IT_LANG:     { int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + 1) % n; v2_options_save(); } break; }
     case IT_SMOOTH:   v2_options.smooth = !v2_options.smooth.load(); v2_options_save(); break;
     case IT_FINALE:   v2_options.console_finale = !v2_options.console_finale.load(); v2_options_save(); v2_ui_toast("FINALE: NEXT LOAD"); break;
+    case IT_FILTER:   v2_options.filter = (v2_options.filter.load() + 1) % 3; v2_options_save(); break;
+    case IT_INTEGER:  v2_options.integer_scale = !v2_options.integer_scale.load(); v2_options_save(); break;
+    case IT_ASPECT:   v2_options.aspect43 = !v2_options.aspect43.load(); v2_options_save(); break;
+    case IT_BORDER:   v2_options.border = (v2_options.border.load() + 1) % 2; v2_options_save(); break;
     case IT_LEVEL:    if (v2_ui_nlevels.load() > 0) { v2_ui_req_level = v2_ui_levels[sel_level_idx].slot; v2_ui_menu_open = false; } break;
     case IT_SAVE:     v2_ui_req_save = sel_slot; v2_ui_menu_open = false; break;
     case IT_LOAD:     v2_ui_req_load = sel_slot; v2_ui_menu_open = false; break;
@@ -146,7 +157,9 @@ static void activate() {
 }
 static void adjust(int d) {
     switch (cursor) {
-    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_SMOOTH: case IT_FINALE: activate(); break;
+    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_SMOOTH: case IT_FINALE: case IT_INTEGER: case IT_ASPECT: activate(); break;
+    case IT_FILTER:   v2_options.filter = (v2_options.filter.load() + d + 3) % 3; v2_options_save(); break;
+    case IT_BORDER:   v2_options.border = (v2_options.border.load() + d + 2) % 2; v2_options_save(); break;
     case IT_LANG: { int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + d + n) % n; v2_options_save(); } break; }
     case IT_LEVEL: { int n = v2_ui_nlevels.load(); if (n > 0) sel_level_idx = (sel_level_idx + d + n) % n; break; }
     case IT_SAVE: case IT_LOAD: sel_slot = (sel_slot - 1 + d + 9) % 9 + 1; break;
@@ -191,7 +204,7 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
     const uint32_t YELLOW = SDL_MapRGBA(fmt, 255, 230, 80, 255);
     const uint32_t GREY = SDL_MapRGBA(fmt, 160, 160, 160, 255);
     if (v2_ui_menu_open.load()) {
-        char lines[8][40]; int n = 0;
+        char lines[16][40]; int n = 0;          // title + up to 13 items (debug mode)
         snprintf(lines[n++], 40, "OPTIONS  (F1/ESC CLOSE)");
         snprintf(lines[n++], 40, "PARALLAX  [%s]", v2_options.parallax.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "SCENES    [%s]", v2_options.scenes.load() ? "ON " : "OFF");
@@ -201,6 +214,10 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
           snprintf(lines[n++], 40, "LANGUAGE  < %s >", lc); }
         snprintf(lines[n++], 40, "SMOOTH    [%s]", v2_options.smooth.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "FINALE    [%s]", v2_options.console_finale.load() ? "SNES" : "PC ");
+        snprintf(lines[n++], 40, "FILTER    < %s >", FILTER_NAMES[v2_options.filter.load() % 3]);
+        snprintf(lines[n++], 40, "INT.SCALE [%s]", v2_options.integer_scale.load() ? "ON " : "OFF");
+        snprintf(lines[n++], 40, "ASPECT    [%s]", v2_options.aspect43.load() ? "4:3" : "1:1");
+        snprintf(lines[n++], 40, "BORDER    < %s >", BORDER_NAMES[v2_options.border.load() % 2]);
         if (g_debug_mode) {
             int nl = v2_ui_nlevels.load();
             if (nl > 0 && sel_level_idx < nl)
