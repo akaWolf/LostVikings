@@ -24,13 +24,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential libsdl2-dev pkg-config
+            build-essential clang libsdl2-dev pkg-config
 
       # HEADLESS build first so the smoke test can run before we touch the
       # release artifact. .obj-headless and .obj are separate trees, so the
       # subsequent default build does not need a `make clean` in between.
       - name: Build HEADLESS variant
-        run: HEADLESS=1 make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
+        # clang: v2_vm.cpp (with the transpiled executors since stage 3A) needs
+        # > 8 GB under gcc and dies on the 16 GB runner; clang peaks at ~1.2 GB.
+        # ulimit: clang's parser needs a deep stack for the 40k-line executor.
+        run: ulimit -s unlimited && HEADLESS=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
 
       # Optional gameplay-test asset fetch.
       # DATA.DAT is the copyrighted 1992 asset file — NOT in the repo. If a
@@ -78,10 +81,10 @@ jobs:
         run: ./tests/scenarios.sh
 
       - name: Build release vikings (RELEASE=1 STATIC=1 SDL_STATIC=1)
-        run: make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
+        run: ulimit -s unlimited && make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
 
       - name: Build keymap editor
-        run: make keymap_editor STATIC=1 SDL_STATIC=1
+        run: make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
 
       - name: Verify static linkage (C++ runtime + SDL2)
         run: |
@@ -143,7 +146,9 @@ jobs:
       - name: Build (WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j$(nproc)
+          # -j1: mingw gcc on v2_vm.cpp (the transpiled executors since stage 3A)
+          # needs most of the 16 GB runner by itself — no parallel units beside it
+          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1
 
       - name: Build keymap editor
         run: |
@@ -179,13 +184,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential libsdl2-dev pkg-config
+            build-essential clang libsdl2-dev pkg-config
 
       - name: Build (V2_ONLY=1 RELEASE=1 STATIC=1 SDL_STATIC=1)
-        run: V2_ONLY=1 make RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
+        run: ulimit -s unlimited && V2_ONLY=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
 
       - name: Build keymap editor
-        run: make keymap_editor STATIC=1 SDL_STATIC=1
+        run: make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
 
       - name: Verify static linkage (C++ runtime + SDL2)
         run: |
@@ -245,7 +250,8 @@ jobs:
       - name: Build (V2_ONLY=1 WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j$(nproc)
+          # -j1: see the Windows job above
+          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1
 
       - name: Build keymap editor
         run: |

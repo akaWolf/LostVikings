@@ -165,7 +165,15 @@ $(OBJDIR)/src/sdl/v2_hash_hot.o: CXXFLAGS += -O2
 # v2_vm.cpp peaks >13G under -ggdb3 var-tracking in the V2_ONLY+HEADLESS
 # combo (gen includes + the asset facade) — cap the debug detail for this
 # one unit; everything else keeps full -ggdb3.
+# -fno-var-tracking-assignments is a gcc flag; clang (CXX=clang++, which
+# compiles this unit in ~1.2 GB where gcc needs > 8 GB — the CI's choice on
+# Linux) rejects it, so it is added under gcc only.
+CXX_IS_CLANG := $(findstring clang,$(shell $(CXX) --version 2>/dev/null | head -1))
+ifeq ($(CXX_IS_CLANG),)
 $(OBJDIR)/src/sdl/v2_vm.o: CXXFLAGS += -g1 -fno-var-tracking-assignments
+else
+$(OBJDIR)/src/sdl/v2_vm.o: CXXFLAGS += -g1
+endif
 
 # (#85) The m2c world is NOT -O2-clean: at -O2 the translated goto-labyrinth
 # miscompiles (attract: a stray stack word inside seg002 sub_1c155 shifts the
