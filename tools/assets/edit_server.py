@@ -38,6 +38,8 @@ import anim_bank as AB  # noqa: E402
 import importlib.util as _ilu  # noqa: E402
 _spec = _ilu.spec_from_file_location("lvs_annotate", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "lvs_annotate.py"))
 LA = _ilu.module_from_spec(_spec); _spec.loader.exec_module(LA)   # logic editor (UX п.11): annotated .lvsf + compile_free
+_spec2 = _ilu.spec_from_file_location("lvsd", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "lvsd.py"))
+LD = _ilu.module_from_spec(_spec2); _spec2.loader.exec_module(LD)   # level C: the .lvd language (decompile / lower to .lvsf)
 
 SCRATCH = "/tmp/lv_edit_scratch"
 GAME = [None]          # Popen of the running game (windowed)
@@ -565,11 +567,29 @@ def logic_text(cid):
         return open(p, encoding="utf-8").read(), "scratch"
     return LA.canonical_text(cid), "canonical"
 
-def logic_compile(cid, text, write):
-    """-> dict(ok, size, orig_size, error, written)."""
+def logic_text_lvd(cid):
+    """The .lvd view of the script: the author's own .lvd from the scratch when
+    it is at least as new as the scratch .lvsf, else the decompilation of
+    what logic_text() shows (level C, lvsd.py)."""
+    text, src = logic_text(cid)
+    p = os.path.join(SCRATCH, "level_scripts", f"{cid:X}.lvd")
+    q = os.path.join(SCRATCH, "level_scripts", f"{cid:X}.lvsf")
+    if os.path.exists(p) and (not os.path.exists(q) or os.path.getmtime(p) >= os.path.getmtime(q)):
+        return open(p, encoding="utf-8").read(), "scratch .lvd"
+    lvd, _ = LD.decompile_text(cid, text, LD.Names())
+    return lvd, f"decompiled from the {src} .lvsf"
+
+def logic_compile(cid, text, write, lang="lvsf"):
+    """-> dict(ok, size, orig_size, error, written). lang 'lvd' lowers the
+    .lvd text to .lvsf first (lvsd.Lowerer); the scratch keeps BOTH: the
+    lowered .lvsf (what pack/templates consume) and the .lvd source."""
     cwd = os.getcwd(); os.chdir(LR.ROOT)
+    lvd_src = None
     try:
         try:
+            if lang == "lvd":
+                lvd_src = text
+                text = LD.Lowerer(LD.Names()).lower(text)
             blob = LA.lf().compile_free(text)
         except Exception as e:                                  # noqa: BLE001
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
@@ -579,7 +599,12 @@ def logic_compile(cid, text, write):
     res = {"ok": True, "size": len(blob), "orig_size": orig, "written": False}
     if write:
         d = os.path.join(SCRATCH, "level_scripts"); os.makedirs(d, exist_ok=True)
-        for name, body in ((f"{cid:X}.lvsf", text), (f"{cid:04X}.size.json", json.dumps({"payload_len": len(blob)}))):
+        files = [(f"{cid:X}.lvsf", text), (f"{cid:04X}.size.json", json.dumps({"payload_len": len(blob)}))]
+        if lvd_src is not None:
+            files.append((f"{cid:X}.lvd", lvd_src))
+        elif os.path.exists(os.path.join(d, f"{cid:X}.lvd")):
+            os.remove(os.path.join(d, f"{cid:X}.lvd"))        # a direct .lvsf edit supersedes the .lvd copy
+        for name, body in files:
             with open(os.path.join(d, name) + ".tmp", "w", encoding="utf-8") as f:
                 f.write(body)
             os.replace(os.path.join(d, name) + ".tmp", os.path.join(d, name))
@@ -595,11 +620,58 @@ def logic_compile(cid, text, write):
 
 def logic_revert(cid):
     d = os.path.join(SCRATCH, "level_scripts"); n = 0
-    for name in (f"{cid:X}.lvsf", f"{cid:04X}.size.json"):
+    for name in (f"{cid:X}.lvsf", f"{cid:04X}.size.json", f"{cid:X}.lvd"):
         p = os.path.join(d, name)
         if os.path.exists(p):
             os.remove(p); n += 1
     return n
+
+def logic_page_lvd(cid_hex):
+    """Level C view: the .lvd text (states with names, folded loads) with the
+    same check / compile / pack / play / revert loop as the .lvsf page."""
+    import html as _h, re as _re
+    cid = int(cid_hex, 16)
+    text, src = logic_text_lvd(cid)
+    out = []
+    for line in text.splitlines():
+        code, _, comment = line.partition(";")
+        raw = code.strip()
+        esc = _h.escape(code.rstrip())
+        c = f" <span class=c>;{_h.escape(comment)}</span>" if comment else ""
+        if raw.startswith("state ") and raw.endswith(":"):
+            out.append(f"<div class=l id='{_h.escape(raw[6:-1])}'>{esc}{c}</div>")
+        elif raw.startswith("class "):
+            m = _re.search(r"entry=(\S+)", raw)
+            esc2 = esc.replace(f"entry={_h.escape(m.group(1))}", f"entry=<a href='#{_h.escape(m.group(1))}'>{_h.escape(m.group(1))}</a>") if m else esc
+            out.append(f"<div class=r>{esc2}</div>")
+        elif code.startswith("    "):
+            esc2 = _re.sub(r"\b(goto|call) ([A-Za-z_][A-Za-z0-9_]*)", r"\1 <a href='#\2'>\2</a>", esc)
+            out.append(f"<div class=o>{esc2}{c}</div>")
+        else:
+            out.append(f"<div class=b>{esc}{c}</div>")
+    return ("<!doctype html><meta charset='utf-8'><title>logic " + cid_hex + " .lvd</title>"
+            "<style>body{background:#111;color:#ddd;font:13px monospace;margin:0;display:flex;height:100vh}"
+            "#left{flex:1;overflow:auto;padding:8px;white-space:pre}#right{flex:1;display:flex;flex-direction:column;padding:8px;border-left:1px solid #333}"
+            "a{color:#8cf;text-decoration:none}.c{color:#8a8}.l{color:#fff;margin-top:6px}.r{color:#fc6}.b{color:#555}"
+            "textarea{flex:1;background:#000;color:#ddd;font:12px monospace}button{margin:4px 4px 4px 0}#st{color:#fc6;white-space:pre-wrap}</style>"
+            "<div id=left><h3>script " + cid_hex + " .lvd (" + src + ", " + str(len(text.splitlines())) + " lines) &middot; "
+            "<a href='/logic/" + cid_hex + "'>.lvsf view</a> &middot; <a href='/'>&larr; levels</a></h3>"
+            + "".join(out) + "</div>"
+            "<div id=right><b>edit .lvd</b> <span class=c>(one statement per line, 4-space indent; `state name:` labels; the left operand of a comparison is the accumulator load; compile lowers to .lvsf and assembles)</span>"
+            "<textarea id=src spellcheck=false>" + _h.escape(text) + "</textarea>"
+            "<div><button onclick='doCompile(false)'>check</button><button onclick='doCompile(true)'>compile &rarr; scratch</button>"
+            "<button onclick='doPack()'>pack</button><button onclick='doPlay()'>play</button><button onclick='doRevert()'>revert to canonical</button>"
+            "<button onclick='location.reload()'>re-list</button></div><div id=st></div></div>"
+            "<script>const CID='" + cid_hex + "';"
+            "async function post(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});return await r.json();}"
+            "async function doCompile(w){document.getElementById('st').textContent='compiling...';"
+            " const js=await post('/api/logic/compile',{cid:CID,lang:'lvd',text:document.getElementById('src').value,write:w});"
+            " document.getElementById('st').textContent=js.ok?('ok: '+js.size+' B (original '+js.orig_size+')'+(js.written?' — written to scratch; pack + play':'')):('ERR '+js.error);}"
+            "async function doPack(){document.getElementById('st').textContent='packing...';const js=await post('/api/pack');document.getElementById('st').textContent=js.ok?('packed '+JSON.stringify(js)):('ERR '+js.error);}"
+            "async function doPlay(){const js=await post('/api/play');document.getElementById('st').textContent=js.ok?'game launched':('ERR '+js.error);}"
+            "async function doRevert(){const js=await post('/api/logic/revert',{cid:CID});document.getElementById('st').textContent=js.ok?('removed '+js.removed+' file(s); re-list to see the canonical text'):('ERR '+js.error);}"
+            "</script>")
+
 
 def logic_page(cid_hex):
     cid = int(cid_hex, 16)
@@ -636,7 +708,7 @@ def logic_page(cid_hex):
             "a{color:#8cf;text-decoration:none}.a{color:#777}.c{color:#8a8}.e{color:#fc6}.l{color:#fff;margin-top:6px}"
             ".r{color:#aaa}.b{color:#555}td{padding:1px 8px;border-bottom:1px solid #222}textarea{flex:1;background:#000;color:#ddd;font:12px monospace}"
             "button{margin:4px 4px 4px 0}#st{color:#fc6;white-space:pre-wrap}</style>"
-            "<div id=left><h3>script " + cid_hex + " (" + src + ", " + str(len(text.splitlines())) + " lines) &middot; <a href='/'>&larr; levels</a></h3>"
+            "<div id=left><h3>script " + cid_hex + " (" + src + ", " + str(len(text.splitlines())) + " lines) &middot; <a href='/logic/" + cid_hex + "?lang=lvd'>.lvd view</a> &middot; <a href='/'>&larr; levels</a></h3>"
             + (f"<p class=e>compile error in the shown text: {_h.escape(err)}</p>" if err else "")
             + "<details><summary>class records (" + str(len(rec_rows)) + ")</summary><table><tr><th>rec</th><th>sprite</th><th>code</th></tr>"
             + "".join(rec_rows) + "</table></details>" + "".join(out) + "</div>"
@@ -680,6 +752,7 @@ def level_listing():
             "<p><a href='/texts'>dialog texts</a> &middot; "
             "<a href='/snes'>SNES exclusives</a> &middot; logic (.lvsf): "
             + " ".join(f"<a href='/logic/{c:04X}'>{c:04X}</a>" for c in LOGIC_CIDS)
+            + " &middot; logic (.lvd, level C): " + " ".join(f"<a href='/logic/{c:04X}?lang=lvd'>{c:04X}</a>" for c in LOGIC_CIDS)
             + "".join(f" <a href='/logic/{n[:-5].upper().zfill(4)}'>{n[:-5].upper().zfill(4)}*</a>" for n in sorted(os.listdir(os.path.join(SCRATCH, "level_scripts"))) if n.endswith(".lvsf") and int(n[:-5], 16) not in LOGIC_CIDS) if os.path.isdir(os.path.join(SCRATCH, "level_scripts")) else ""
             + "</p>"
             "<h3>clone level (same world)</h3>"
@@ -749,6 +822,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, texts_page(), "text/html")
             if self.path.startswith("/logic/"):
                 cid_hex = self.path[7:].split("?")[0].upper()
+                if "lang=lvd" in self.path:
+                    return self._send(200, logic_page_lvd(cid_hex), "text/html")
                 return self._send(200, logic_page(cid_hex), "text/html")
             if self.path == "/snes":
                 return self._send(200, snes_page(), "text/html")
@@ -788,7 +863,7 @@ class H(BaseHTTPRequestHandler):
             if self.path == "/api/snes/integrate":
                 return self.api_snes_integrate(body)
             if self.path == "/api/logic/compile":
-                return self._json(logic_compile(int(body["cid"], 16), body.get("text", ""), bool(body.get("write"))))
+                return self._json(logic_compile(int(body["cid"], 16), body.get("text", ""), bool(body.get("write")), body.get("lang", "lvsf")))
             if self.path == "/api/logic/revert":
                 return self._json({"ok": True, "removed": logic_revert(int(body["cid"], 16))})
             self._err("not found", 404)

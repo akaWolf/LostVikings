@@ -126,7 +126,10 @@ class Names:
         return c[0]
     # states / classes / anims -------------------------------------------
     def state(self, cid, lbl):
-        """S_xxxx -> dictionary name or S_xxxx."""
+        """S_xxxx -> dictionary name, or S_xxxx; a label the author named
+        (S_walk, written by the lowerer from `state walk:`) shows as `walk`."""
+        if not re.fullmatch(r'S_[0-9A-Fa-f]{4}', lbl):
+            return lbl[2:] if lbl.startswith('S_') else lbl
         return self.d['states'].get(f'{cid:X}:{lbl[2:]}', lbl)
     def cls(self, cid, t):
         return self.d['classes'].get(f'{cid:X}:{t:02X}', self.d['classes'].get(f'*:{t:02X}', f't{t:02X}'))
