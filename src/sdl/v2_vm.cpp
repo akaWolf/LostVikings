@@ -21423,6 +21423,8 @@ void v2_phase_post_flip3(uint16_t ds_val) {
             if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
                 // loc_10E35: direct QUIT to DOS (orig: sub_16546 VGA cleanup +
                 // sub_1754c AIL exit + INT 21h/4C). v2: stop sound + _exit(0).
+                headless_golden_dump();   // direction V: the attract/title F10 quit is a clean exit too (all builds) —
+                                          // 2026-09-06: synth_title_f10 ends here; the wide canon had no golden for it
                 fflush(stdout); fflush(stderr);
                 extern bool need_quit; need_quit = true; SDL_Delay(50);
                 _exit(0);
@@ -21457,6 +21459,10 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 // Post-loop: check word_28814 & 2 → loc_10E35 (Y in quit prompt
                 // sets this bit → "Quit to DOS").
                 if (v2gs(s).frame_flags() & 2) {
+                    headless_golden_dump();   // direction V: this F10-prompt quit is a clean exit too (all builds) —
+                                              // 2026-09-06: the only quit site without it; the HEADLESS+V2_ONLY wide
+                                              // canon lost the goldens of level5/level6/synth_title_f10 (replays that
+                                              // end here), the dual-run judge reaches its dump through the orig side
                     fflush(stdout); fflush(stderr);
                     need_quit = true; SDL_Delay(50);
                     _exit(0);

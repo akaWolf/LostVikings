@@ -335,5 +335,10 @@
     "AD": 1
    }
   }
- ]
+ ],
+ "silent": {
+  "3B": "ship scene 0x2C: console plays no effect (APU log)",
+  "3F": "ship scene 0x2C: console plays no effect (APU log)",
+  "40": "ship scene 0x2C: console plays no effect (APU log)"
+ }
 }

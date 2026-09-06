@@ -258,6 +258,17 @@ seen_pc = [0x13,0x1B,0x1D,0x1E,0x21,0x26,0x2F,0x30,0x3B,0x3F,0x40,0x44,0x50,0x52
 print('trace ids covered:', [f'{k:02X}' for k in seen_pc if k in votes], 'missing:', [f'{k:02X}' for k in seen_pc if k not in votes])
 import json; json.dump({f'{k:02X}': {f'{sid:02X}': n for (sid, ok), n in v.items()} for k, v in votes.items()}, open('/tmp/lv_sfx_votes.json', 'w'), indent=1)
 
+# PC effects the console has NO twin for — not a pairing gap but the console's
+# behaviour: the SNES intro's ship scene (level 0x2C, where the PC plays these
+# three from the scene controller: 0x40 at the start, 0x3B, then 0x3F thrice)
+# sends the SPC music only — a Mesen APU log of the SNES boot/attract chain
+# (scratchpad apu_probe_intro.lua, 2026-09-06) shows 0 note-ons on tracks 1..3
+# during both 0x2C windows, while the village (0x2B) and the level demos do
+# carry track-1/2 effects. The engine keeps them silent (v2_vm.cpp play hook:
+# no twin -> -1, never a song); this list documents that it is deliberate.
+SILENT_BY_CONSOLE = {0x3B: "ship scene 0x2C: console plays no effect (APU log)",
+                     0x3F: "ship scene 0x2C: console plays no effect (APU log)",
+                     0x40: "ship scene 0x2C: console plays no effect (APU log)"}
 final = {}; conflicts = []; vote_out = {}
 for k in sorted(votes):
     tally = collections.Counter()
@@ -269,5 +280,6 @@ for k in sorted(votes):
     vote_out[f"{k:02X}"] = {f"{s:02X}": n for s, n in tally.most_common()}
 import os
 out = os.path.join('tools', 'assets', 'snes_sfx_map.json')
-json.dump({"map": final, "votes": vote_out, "conflicts": conflicts}, open(out, 'w'), indent=1)
+json.dump({"map": final, "votes": vote_out, "conflicts": conflicts,
+           "silent": {f'{k:02X}': v for k, v in sorted(SILENT_BY_CONSOLE.items())}}, open(out, 'w'), indent=1)
 print(f"{out}: {len(final)} ids mapped, {len(conflicts)} conflicts")

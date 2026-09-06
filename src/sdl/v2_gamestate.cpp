@@ -183,9 +183,10 @@ extern uint8_t* v2_vm_get_shadow_ds();       // C++ linkage (v2_vm.cpp)
 extern "C" int v2_state_save(const char*);
 extern "C" void headless_golden_dump(void) {
     static int done = 0;
-    if (done) return;
     const char* gp = getenv("V2_GOLDEN_DUMP");
     uint8_t* shd = v2_vm_get_shadow_ds();
+    if (gp) fprintf(stderr, "V2-GOLDEN: dump request (done=%d shadow=%s) -> %s\n", done, shd ? "yes" : "NULL", gp);
+    if (done) return;
     // stage 4 II.c: the dump reads through the view (members for evacuated
     // fields) — validate the mirror right before snapshotting.
     if (shd) {
