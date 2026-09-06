@@ -35,6 +35,9 @@ import level_render as LR  # noqa: E402
 import level_edit as LE  # noqa: E402
 import texts_exe as TX  # noqa: E402
 import anim_bank as AB  # noqa: E402
+import importlib.util as _ilu  # noqa: E402
+_spec = _ilu.spec_from_file_location("lvs_annotate", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "lvs_annotate.py"))
+LA = _ilu.module_from_spec(_spec); _spec.loader.exec_module(LA)   # logic editor (UX п.11): annotated .lvsf + compile_free
 
 SCRATCH = "/tmp/lv_edit_scratch"
 GAME = [None]          # Popen of the running game (windowed)
@@ -539,6 +542,115 @@ def mod_export():
     return out
 
 
+# ---------------------------------------------------------------- logic --
+# п.11 (2026-09-06): the logic editor over the free-form .lvsf. Level A —
+# the listing: every code line with its address and the decompiler's
+# expression, labels with the class records that enter there. Level B —
+# the text is editable; /api/logic/compile assembles it (lvs_full.compile_free:
+# sequential layout, symbolic S_/A_ labels resolved in a second pass) and,
+# when it assembles, writes level_scripts/<cid>.lvsf + <cid>.size.json into
+# the scratch — the same files the scene templates use — so pack + play
+# take it from there. The scratch copy (when present) is what the page
+# shows and edits; "revert" deletes it (the canonical chunk returns).
+LOGIC_CIDS = (0x1C1, 0x1C2, 0x1C3, 0x1C4, 0x1C5, 0x1C6)
+
+def logic_text(cid):
+    p = os.path.join(SCRATCH, "level_scripts", f"{cid:X}.lvsf")
+    if os.path.exists(p):
+        return open(p, encoding="utf-8").read(), "scratch"
+    return LA.canonical_text(cid), "canonical"
+
+def logic_compile(cid, text, write):
+    """-> dict(ok, size, orig_size, error, written)."""
+    cwd = os.getcwd(); os.chdir(LR.ROOT)
+    try:
+        try:
+            blob = LA.lf().compile_free(text)
+        except Exception as e:                                  # noqa: BLE001
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        os.chdir(cwd)
+    orig = len(LR.read_payload(cid, "lzss")[0])
+    res = {"ok": True, "size": len(blob), "orig_size": orig, "written": False}
+    if write:
+        d = os.path.join(SCRATCH, "level_scripts"); os.makedirs(d, exist_ok=True)
+        for name, body in ((f"{cid:X}.lvsf", text), (f"{cid:04X}.size.json", json.dumps({"payload_len": len(blob)}))):
+            with open(os.path.join(d, name) + ".tmp", "w", encoding="utf-8") as f:
+                f.write(body)
+            os.replace(os.path.join(d, name) + ".tmp", os.path.join(d, name))
+        if cid >= 0x217:
+            ex_path = os.path.join(SCRATCH, "extras.json")
+            extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
+            extras[f"{cid:04X}"] = {"role": "level_script"}
+            with open(ex_path + ".tmp", "w") as f:
+                json.dump(extras, f, indent=1)
+            os.replace(ex_path + ".tmp", ex_path)
+        res["written"] = True
+    return res
+
+def logic_revert(cid):
+    d = os.path.join(SCRATCH, "level_scripts"); n = 0
+    for name in (f"{cid:X}.lvsf", f"{cid:04X}.size.json"):
+        p = os.path.join(d, name)
+        if os.path.exists(p):
+            os.remove(p); n += 1
+    return n
+
+def logic_page(cid_hex):
+    cid = int(cid_hex, 16)
+    text, src = logic_text(cid)
+    rows, err = LA.annotate(cid, text)
+    import html as _h
+    recs = [r for r in rows if r["kind"] == "record"]
+    rec_rows = []
+    for r in recs:
+        p = r["text"].split()
+        code = next((x.split("=", 1)[1] for x in p if x.startswith("code=")), "")
+        spr = next((x.split("=", 1)[1] for x in p if x.startswith("sprite=")), "")
+        rec_rows.append(f"<tr><td>{p[1]}</td><td>{spr}</td><td><a href='#{code}'>{code}</a></td></tr>")
+    out = []
+    for r in rows:
+        txt = _h.escape(r["text"])
+        if r["kind"] == "label":
+            lbl = r["text"].strip()[:-1]
+            ent = (f" <span class=e>&larr; records {', '.join('%02X' % x for x in r['records'])}</span>" if r["records"] else "")
+            out.append(f"<div class=l id='{lbl}'>{txt}{ent}</div>")
+        elif r["kind"] == "code":
+            a = f"{r['addr']:04X}" if r["addr"] is not None else "    "
+            c = f" <span class=c>; {_h.escape(r['comment'])}</span>" if r["comment"] else ""
+            # label operands become links
+            txt = __import__("re").sub(r"\b([SA]_[0-9A-F]{4})\b", r"<a href='#\1'>\1</a>", txt)
+            out.append(f"<div class=o><span class=a>{a}</span> {txt}{c}</div>")
+        elif r["kind"] == "record":
+            out.append(f"<div class=r>{txt}</div>")
+        else:
+            out.append(f"<div class=b>{txt}</div>")
+    return ("<!doctype html><meta charset='utf-8'><title>logic " + cid_hex + "</title>"
+            "<style>body{background:#111;color:#ddd;font:13px monospace;margin:0;display:flex;height:100vh}"
+            "#left{flex:1;overflow:auto;padding:8px}#right{flex:1;display:flex;flex-direction:column;padding:8px;border-left:1px solid #333}"
+            "a{color:#8cf;text-decoration:none}.a{color:#777}.c{color:#8a8}.e{color:#fc6}.l{color:#fff;margin-top:6px}"
+            ".r{color:#aaa}.b{color:#555}td{padding:1px 8px;border-bottom:1px solid #222}textarea{flex:1;background:#000;color:#ddd;font:12px monospace}"
+            "button{margin:4px 4px 4px 0}#st{color:#fc6;white-space:pre-wrap}</style>"
+            "<div id=left><h3>script " + cid_hex + " (" + src + ", " + str(len(text.splitlines())) + " lines) &middot; <a href='/'>&larr; levels</a></h3>"
+            + (f"<p class=e>compile error in the shown text: {_h.escape(err)}</p>" if err else "")
+            + "<details><summary>class records (" + str(len(rec_rows)) + ")</summary><table><tr><th>rec</th><th>sprite</th><th>code</th></tr>"
+            + "".join(rec_rows) + "</table></details>" + "".join(out) + "</div>"
+            "<div id=right><b>edit .lvsf</b> <span class=a>(free-form: labels S_/A_ resolve on compile; an insert that outgrows its gap is an error)</span>"
+            "<textarea id=src spellcheck=false>" + _h.escape(text) + "</textarea>"
+            "<div><button onclick='doCompile(false)'>check</button><button onclick='doCompile(true)'>compile &rarr; scratch</button>"
+            "<button onclick='doPack()'>pack</button><button onclick='doPlay()'>play</button><button onclick='doRevert()'>revert to canonical</button>"
+            "<button onclick='location.reload()'>re-list</button></div><div id=st></div></div>"
+            "<script>const CID='" + cid_hex + "';"
+            "async function post(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});return await r.json();}"
+            "async function doCompile(w){document.getElementById('st').textContent='compiling...';"
+            " const js=await post('/api/logic/compile',{cid:CID,text:document.getElementById('src').value,write:w});"
+            " document.getElementById('st').textContent=js.ok?('ok: '+js.size+' B (original '+js.orig_size+')'+(js.written?' — written to scratch; pack + play':'')):('ERR '+js.error);}"
+            "async function doPack(){document.getElementById('st').textContent='packing...';const js=await post('/api/pack');document.getElementById('st').textContent=js.ok?('packed '+JSON.stringify(js.packed)):('ERR '+js.error);}"
+            "async function doPlay(){const js=await post('/api/play');document.getElementById('st').textContent=js.ok?'game launched':('ERR '+js.error);}"
+            "async function doRevert(){const js=await post('/api/logic/revert',{cid:CID});document.getElementById('st').textContent=js.ok?('removed '+js.removed+' file(s); re-list to see the canonical text'):('ERR '+js.error);}"
+            "</script>")
+
+
 def level_listing():
     pws = LR.level_passwords()
     rows = []
@@ -561,7 +673,10 @@ def level_listing():
             "<table><tr><th>lvl</th><th>pw</th><th>header</th><th>lvs</th>"
             "<th></th></tr>" + "".join(rows) + "</table>"
             "<p><a href='/texts'>dialog texts</a> &middot; "
-            "<a href='/snes'>SNES exclusives</a></p>"
+            "<a href='/snes'>SNES exclusives</a> &middot; logic (.lvsf): "
+            + " ".join(f"<a href='/logic/{c:04X}'>{c:04X}</a>" for c in LOGIC_CIDS)
+            + "".join(f" <a href='/logic/{n[:-5].upper().zfill(4)}'>{n[:-5].upper().zfill(4)}*</a>" for n in sorted(os.listdir(os.path.join(SCRATCH, "level_scripts"))) if n.endswith(".lvsf") and int(n[:-5], 16) not in LOGIC_CIDS) if os.path.isdir(os.path.join(SCRATCH, "level_scripts")) else ""
+            + "</p>"
             "<h3>clone level (same world)</h3>"
             "src <input id='c_src' size='4'> → dst <input id='c_dst' size='4'> "
             "<button onclick='doClone()'>clone</button> <span id='c_st'></span>"
@@ -627,6 +742,9 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, sprite_page(cid_hex), "text/html")
             if self.path == "/texts":
                 return self._send(200, texts_page(), "text/html")
+            if self.path.startswith("/logic/"):
+                cid_hex = self.path[7:].split("?")[0].upper()
+                return self._send(200, logic_page(cid_hex), "text/html")
             if self.path == "/snes":
                 return self._send(200, snes_page(), "text/html")
             if self.path.startswith("/png/"):
@@ -664,6 +782,10 @@ class H(BaseHTTPRequestHandler):
                 return self.api_snes_convert(body)
             if self.path == "/api/snes/integrate":
                 return self.api_snes_integrate(body)
+            if self.path == "/api/logic/compile":
+                return self._json(logic_compile(int(body["cid"], 16), body.get("text", ""), bool(body.get("write"))))
+            if self.path == "/api/logic/revert":
+                return self._json({"ok": True, "removed": logic_revert(int(body["cid"], 16))})
             self._err("not found", 404)
         except Exception as e:                                  # noqa: BLE001
             self._err(f"{type(e).__name__}: {e}", 500)

@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Logic editor, level A: the free-form .lvsf text of a world script with
+every code line annotated — its address, the decompiler's expression
+(`acc = 0x63`, `self.state_187d = acc`, channel reads/writes ...) and the
+class records that enter at each label.
+
+  lvs_annotate.py CHUNK_HEX [FILE.lvsf]   -> annotated listing on stdout
+
+Sources: the committed anchored listing assets_raw/lvs/<cid>.lvs supplies
+the address -> expression map (its `op @ADDR ... ; expr` lines),
+lvs_full.compile_free(text, line_map) supplies the address of every code
+line of the text being shown (the canonical assets_raw/lvs/<cid>.lvsf, or
+an edited copy; after an edit the map keeps the original addresses, so
+moved code shows no expression until re-listed).
+Read-only: nothing here writes to the scratch or the assets."""
+import sys, os, re, importlib.util
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+
+def _load(name):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, name + '.py'))
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+
+_lf = None
+def lf():
+    global _lf
+    if _lf is None:
+        cwd = os.getcwd(); os.chdir(ROOT)      # lvs_full resolves tools/data/*.py relative to the repo root
+        try: _lf = _load('lvs_full')
+        finally: os.chdir(cwd)
+    return _lf
+
+def canonical_text(cid):
+    """The canonical free-form text of chunk `cid` (assets_raw/lvs)."""
+    p = os.path.join(ROOT, 'assets_raw', 'lvs', f'{cid:X}.lvsf')
+    return open(p, encoding='utf-8').read()
+
+def expr_map(cid):
+    """addr -> expression comment, from the committed anchored listing
+    assets_raw/lvs/<cid>.lvs (`op @ADDR bytes ; expr`) — the structured
+    emitter itself needs the live pc/anim dump corpus to run."""
+    p = os.path.join(ROOT, 'assets_raw', 'lvs', f'{cid:X}.lvs')
+    if not os.path.exists(p): return {}
+    text = open(p, encoding='utf-8').read()
+    m = {}
+    for line in text.splitlines():
+        s = line.strip()
+        if not s.startswith('op @') and not s.startswith('an @'):
+            continue
+        addr = int(s.split('@', 1)[1].split()[0], 16)
+        if ';' in s:
+            m[addr] = s.split(';', 1)[1].strip()
+    return m
+
+def record_entries(text):
+    """label -> [record ids] for the class table lines (record NN ... code=S_xxxx)."""
+    ent = {}
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith('record '):
+            p = s.split()
+            code = next((x.split('=', 1)[1] for x in p if x.startswith('code=')), None)
+            if code: ent.setdefault(code, []).append(int(p[1], 16))
+    return ent
+
+def annotate(cid, text=None):
+    """-> list of dicts {line, kind, addr, text, comment, records}."""
+    if text is None: text = canonical_text(cid)
+    cwd = os.getcwd(); os.chdir(ROOT)
+    try:
+        line_map = []
+        try:
+            lf().compile_free(text, line_map)
+        except Exception as e:                      # an edited text may not compile: show it unannotated
+            line_map = []; err = str(e)
+        else: err = None
+    finally: os.chdir(cwd)
+    addr_of = {ln: a for ln, a in line_map}
+    exprs = expr_map(cid)
+    entries = record_entries(text)
+    out = []
+    for ln, line in enumerate(text.splitlines(), 1):
+        s = line.split(';', 1)[0].strip()
+        kind = ('label' if s.endswith(':') and len(s.split()) == 1 else
+                'code' if s[:2] in ('o ', 'a ') else
+                'record' if s.startswith('record ') else
+                'blob' if s.startswith('blob ') else
+                'alias' if '=' in s and s.startswith('S_') else
+                'other')
+        addr = addr_of.get(ln)
+        out.append({'line': ln, 'kind': kind, 'addr': addr, 'text': line,
+                    'comment': exprs.get(addr) if addr is not None else None,
+                    'records': entries.get(s[:-1]) if kind == 'label' else None})
+    return out, err
+
+if __name__ == '__main__':
+    cid = int(sys.argv[1], 16)
+    text = open(sys.argv[2], encoding='utf-8').read() if len(sys.argv) > 2 else None
+    rows, err = annotate(cid, text)
+    if err: print('; compile error:', err)
+    for r in rows:
+        a = f"{r['addr']:04X}" if r['addr'] is not None else '    '
+        c = f"  ; {r['comment']}" if r['comment'] else ''
+        e = f"  ; <- records {r['records']}" if r['records'] else ''
+        print(f"{a} {r['text']}{c}{e}")
