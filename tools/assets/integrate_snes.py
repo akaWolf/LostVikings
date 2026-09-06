@@ -1314,7 +1314,9 @@ def do_integrate(scratch, music=None):
             pin_x, pin_y = GS.layout(e["gen_bg"]["world"], e["gen_bg"])["pin"]
         flags = LVX_FULLSCREEN | LVX_CAMLOCK
         if e.get("gen_bg"):
-            flags |= LVX_NOGATE | LVX_PALTICK3
+            # + the console's 224-row frame (the room art under its lower
+            # band shown, 2026-09-06 — genesis_scene.layout / smd2pc)
+            flags |= LVX_NOGATE | LVX_PALTICK3 | LVX_TALL224
         trio = None
         if info.get("trio"):
             # UX stage 1: per-viking placement = the mode-2 table rows of

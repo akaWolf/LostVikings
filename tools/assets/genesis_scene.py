@@ -203,17 +203,20 @@ class GenesisScene:
         """Same composition as render() but as CRAM indices (0..63) and with
         plane B left OUT when with_bg is False (the port then draws it as a
         live parallax layer — the Starship starfield scrolls by itself) and
-        the LOWER band the console draws by a raster split (HInt enabled in
-        the scene, reg0 bit4): rows lower_line..+1 = the yellow line (index
-        9), everything below = black (index 15) — measured on the DE video at
-        Genesis resolution (lines at 45-46 and 187-188)."""
+        the LOWER band the console draws by a raster split (the ROM's HInt
+        handler at 0x74B2 writes #$9296: window plane from row 22 down; the
+        VBlank code restores #$9206): rows lower_line..+1 = the yellow line
+        (index 9), everything below = black (index 15) — measured on the DE
+        video at Genesis resolution (lines at 45-46 and 187-188). lower_line
+        None = no band: the room art the console keeps under it (2026-09-06,
+        the user's call: the port shows it on a 224-row scene view)."""
         bg_img, room_img = self._plane_index_images()
         bw = self.bg_w * 16 if bg_img else 0
         bh = self.bg_h * 16 if bg_img else 0
         rw, rh = self.qw * 16, self.qh * 16
         out = []
         for y in range(rows):
-            if y >= lower_line:
+            if lower_line is not None and y >= lower_line:
                 out.append(bytearray([9 if y < lower_line + 2 else 15] * SCREEN_W))
                 continue
             brow = bg_img[(y + bg_y) % bh] if (bg_img and with_bg) else None
@@ -383,16 +386,18 @@ def layout(world, gen_bg=None):
     """The PC scene map geometry for a world (single source of truth for
     smd2pc.build_genesis_backdrop / convert_scene and the LVX4 flags in
     integrate_snes): the map holds EXT_L quad columns of room left of the
-    screen plus the 320x200 screen, padded so the room quads stay 16-aligned
-    with their type bits; the engine parks the viewport at (pin_x, pin_y)
-    (the LVX5 record's pin fields, v2_lvx_pin_camera) — screen pixel (sx,
-    sy) is map pixel (sx + pin_x, sy + pin_y)."""
+    screen plus the 320x224 screen (the console's frame: the port views a
+    scene 224 rows tall, LVX_TALL224, and shows the room art the console hid
+    under its lower band — 2026-09-06), padded so the room quads stay
+    16-aligned with their type bits; the engine parks the viewport at (pin_x,
+    pin_y) (the LVX5 record's pin fields, v2_lvx_pin_camera) — screen pixel
+    (sx, sy) is map pixel (sx + pin_x, sy + pin_y)."""
     wc = WORLD_CAMERA[world]
     cam_x, cam_y = (gen_bg or {}).get("cam") or wc["cam"]
     pin_x = EXT_L * 16 + cam_x % 16
     pin_y = cam_y % 16
     cw = EXT_L + 20 + (1 if cam_x % 16 else 0)
-    ch = (200 + pin_y + 15) // 16
+    ch = (SCREEN_H + pin_y + 15) // 16
     # the room's props that sit past the screen (the Preh bubble geyser 4A
     # is parked 24 px below the bottom edge) need real map cells under
     # them: grow the map to their boxes (never shown — the viewport is

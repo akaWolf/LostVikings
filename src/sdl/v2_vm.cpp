@@ -8296,6 +8296,12 @@ static void v2_load_template(uint8_t* shadow) {
     // its LVX_TALL224 flag switches the view to the console's 224 rows
     v2_view_h_cur = 0xB0;
     v2_console_variant = false;
+    // UX stage 1 (2026-09-06): an interlude scene carries LVX_TALL224 of its
+    // own — the console's 224-row frame, with the room art the Genesis hides
+    // under its lower window band (HInt 0x74B2) on show; same view machinery
+    // as the console finale below
+    if (const V2LvxEntry* lx = v2_lvx_find(level))
+        if (lx->flags & LVX_TALL224) v2_view_h_cur = 224;
     if (v2_options.console_finale.load()) {
         if (const V2LvxEntry* alt = v2_lvx_find_alt(level, LVX_CONSOLE)) {
             level_chunk = alt->hdr_cid;

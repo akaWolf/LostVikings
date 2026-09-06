@@ -341,15 +341,17 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     the Genesis VDP shows it (UX plan stage 1; docs2/VERSIONS_DIFF_ANALYSIS
     §7): plane B = the world parallax quad map (scene head +0x40) at 1/4 of
     the camera, plane A = the scene room at the camera, the window band
-    (black, yellow line at rows 45-46), the raster-split lower band (yellow
-    line at rows 187-188, black below), palette = the scene CRAM. The BAC
+    (black, yellow line at rows 45-46), palette = the scene CRAM. The BAC
     'Definitive Edition' plays these very frames through its Genesis core,
-    so this IS the reference look. Pixels become straight 8x8 tiles (dedup),
+    so this IS the reference look — except the raster-split lower band
+    (yellow line at rows 187-188, black below, the HInt window switch): the
+    port views a scene 224 rows tall (LVX_TALL224) and shows the room art
+    the console keeps under that band (2026-09-06, the user's call). Pixels become straight 8x8 tiles (dedup),
     CRAM 0..63 -> DAC 0..63, 65..79 the banner letters (convert_scene),
     128+ the donor viking rows. Type bits are the room's own (cell under
     each screen quad's center): the trio stands and walks on the Genesis
-    ledge/floor/shelf geometry. The map is CW x CH quads (20 x 13 = 320 x
-    208; rows 200..207 ride below the 200-row full-screen scene viewport).
+    ledge/floor/shelf geometry. The map is CW x CH quads (genesis_scene.
+    layout: EXT_L + 20 columns, (224 + pin_y) rows rounded up to quads).
 
     Camera pin (genesis_scene.layout): the map carries EXT_L quad columns of
     room LEFT of the screen (the off-screen part of the platform the SMD
@@ -399,7 +401,8 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     # moves, so the composite IS the console's frame.
     fx_g, fy_g = sc.bg_flags
     live = bool((fx_g | fy_g) & 0x8000)
-    canvas = sc.render_indices(cam_x, cam_y, bg_x, bg_y, rows=200, with_bg=not live)
+    canvas = sc.render_indices(cam_x, cam_y, bg_x, bg_y, rows=224, lower_line=None,
+                               with_bg=not live)
     if live:
         gen_bg["parallax_pair"] = genesis_plane_b_pair(
             sc, fx_g, fy_g, bg_y, gen_bg.get("bg_x0", wc.get("bg_x0", 0)))
@@ -407,7 +410,7 @@ def build_genesis_backdrop(gen_bg, CW, CH):
     def gpx(gx, gy):
         """Genesis screen pixel -> CRAM index; off the frame = the window's
         black (index 15) — the padding rows/cols never reach the screen."""
-        return canvas[gy][gx] if (0 <= gy < 200 and 0 <= gx < 320) else 15
+        return canvas[gy][gx] if (0 <= gy < 224 and 0 <= gx < 320) else 15
 
     tiles, tile_idx, prefabs, prefab_idx = [], {}, [], {}
     mmap = bytearray()
@@ -418,10 +421,13 @@ def build_genesis_backdrop(gen_bg, CW, CH):
             # room cell under this (16-aligned) map quad; the window band
             # (Genesis rows 0..47 — the console's window plane, priority
             # over sprites: a viking can never be seen standing there) and
-            # the lower band (rows 187+) are presentation, not room — no
-            # type bits on the map rows that lie entirely inside them
-            # (seen live: a dropped viking parked on a room ledge hidden
-            # behind the black band of the Factory scene)
+            # the console's lower band (rows 187+) are presentation, not
+            # room — no type bits on the map rows that lie entirely inside
+            # them (seen live: a dropped viking parked on a room ledge hidden
+            # behind the black band of the Factory scene). The rows below
+            # 187 now SHOW the room art (224-row view) but keep no type bits:
+            # the drop-in trio and the recorded walk never touch them, and
+            # the verified choreography must not move with the picture.
             tb = sc.type_bits(cam_x - pin_x, cam_y - pin_y, x, y)
             # the interlude rooms use surface type 0x13 (the Wacky candy
             # floor) as walkable ground — the DE clip shows Erik walking
