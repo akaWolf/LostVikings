@@ -35,7 +35,13 @@ jobs:
         # clang: v2_vm.cpp (with the transpiled executors since stage 3A) needs
         # > 8 GB under gcc and dies on the 16 GB runner; clang peaks at ~1.2 GB.
         # ulimit: clang's parser needs a deep stack for the 40k-line executor.
-        run: ulimit -s unlimited && HEADLESS=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
+        run: |
+          # the job log is not readable through the API without admin rights — on a
+          # failure the first error lines are surfaced as annotations (check-run API)
+          ulimit -s unlimited
+          set -o pipefail
+          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
+          HEADLESS=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       # Optional gameplay-test asset fetch.
       # DATA.DAT is the copyrighted 1992 asset file — NOT in the repo. If a
@@ -83,7 +89,13 @@ jobs:
         run: ./tests/scenarios.sh
 
       - name: Build release vikings (RELEASE=1 STATIC=1 SDL_STATIC=1)
-        run: ulimit -s unlimited && make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
+        run: |
+          # the job log is not readable through the API without admin rights — on a
+          # failure the first error lines are surfaced as annotations (check-run API)
+          ulimit -s unlimited
+          set -o pipefail
+          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
+          make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
@@ -148,11 +160,14 @@ jobs:
       - name: Build (WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          # -j2: mingw gcc needs ~3.9 GB per generated-executor unit (src/sdl/gen/exec_01cN.cpp,
-          # measured -O2 -g1 on the largest chunk after the split described in v2_vm_gen.h);
-          # two at a time keep the 16 GB runner comfortable, four would not.
-          # needs most of the 16 GB runner by itself — no parallel units beside it
-          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2
+          # -j1: mingw gcc takes ~3.5 GB and 7 minutes per generated-executor unit
+          # (src/sdl/gen/exec_01cN.cpp, measured -O2 -g1 on the largest chunk with the
+          # nix mingw gcc 15 after the split described in v2_vm_gen.h); the runner's
+          # mingw gcc 13 failed the -j2 build in 14 minutes without a readable log,
+          # so one unit at a time until the annotations below say what it was.
+          set -o pipefail
+          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
+          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: |
@@ -191,7 +206,13 @@ jobs:
             build-essential clang libsdl2-dev pkg-config
 
       - name: Build (V2_ONLY=1 RELEASE=1 STATIC=1 SDL_STATIC=1)
-        run: ulimit -s unlimited && V2_ONLY=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc)
+        run: |
+          # the job log is not readable through the API without admin rights — on a
+          # failure the first error lines are surfaced as annotations (check-run API)
+          ulimit -s unlimited
+          set -o pipefail
+          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
+          V2_ONLY=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
@@ -254,8 +275,10 @@ jobs:
       - name: Build (V2_ONLY=1 WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          # -j2: see the Windows job above
-          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2
+          # -j1: see the Windows job above
+          set -o pipefail
+          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
+          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: |
