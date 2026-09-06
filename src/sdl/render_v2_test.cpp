@@ -127,12 +127,28 @@ void render_callback_v2(void* state)
                 memset(sbuf + (176 + y) * V2_FB_MAX_W + FW, 0, V2_FB_MAX_W - FW); // padding
             }
         } else {
-            // the 320-px HUD art sits centred on a wide frame, the sides stay black
+            // the 320-px HUD art sits centred on a wide frame; the wings beside it
+            // continue the stone wall (2026-09-06: the sides were black). The HUD
+            // is a wall of 32-px blocks with the portrait slots in the middle; the
+            // outermost block column on each side (art columns 0..31 / 288..319)
+            // is reflected outward, ping-pong, so the wall runs on without a seam:
+            // the first mirror axis is the picture edge (the block cut there just
+            // doubles), the next ones fall inside the rough stone texture. Only the
+            // wall is used — a plain mirror of 53 columns (16:9) reached into the
+            // first portrait slot.
             const int x0 = (FW - 320) / 2;
+            const int WALL = 32;
             for (int y = 0; y < 64; y++) {
                 uint8_t* row = sbuf + (176 + y) * V2_FB_MAX_W;
+                const uint8_t* art = v2_display_hud_buf + y * 320;
                 memset(row, 0, V2_FB_MAX_W);
-                memcpy(row + x0, v2_display_hud_buf + y * 320, 320);
+                memcpy(row + x0, art, 320);
+                for (int d = 1; d <= x0; d++) {                              // d = distance from the picture edge
+                    const int k = (d - 1) % (2 * WALL);
+                    const int off = (k < WALL) ? k : 2 * WALL - 1 - k;       // 0..31, reflected every 32 px
+                    row[x0 - d] = art[off];                                  // left wing
+                    if (x0 + 320 + d - 1 < FW) row[x0 + 320 + d - 1] = art[319 - off];   // right wing
+                }
             }
         }
     }

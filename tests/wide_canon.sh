@@ -31,7 +31,7 @@ run_one() {
     if ! cmp -s "$OUT/${name}_a.txt" "$OUT/${name}_b.txt"; then echo "FAIL $name (non-deterministic)"; return 1; fi
     echo "PASS $name"
 }
-export -f run_one; export OUT
+export -f run_one; export OUT BIN   # BIN too: run_one runs in xargs subshells (2026-09-06: "./" ran and every replay "crashed")
 ls tests/replays/*.inp | xargs -P "$JOBS" -I{} bash -c 'run_one {}' | tee "$OUT/results.txt"
 pass=$(grep -c '^PASS' "$OUT/results.txt"); fail=$(grep -c '^FAIL' "$OUT/results.txt")
 echo "wide canon (W=$W): $pass deterministic, $fail failed"
