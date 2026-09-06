@@ -39,8 +39,8 @@ extern void render_callback_v2(void *);
 extern int v2_display_fullscreen;   // v2_render_funcs.cpp: 0 = HUD layout, else the map rows shown (200/224)
 
 // UX stage 9, step 3 — the presenter's own layout (no SDL logical size):
-//   ASPECT  4:3 = the raster on a 320x240 canvas like the DOS monitor (200 rows
-//           stretched by 1.2, the 224-row finale by 15/14), 1:1 = square pixels;
+//   the canvas is always the 320x240 raster (square pixels; a 224-row scene sits
+//           at the top with black below — 2026-09-06, the ASPECT toggle is gone);
 //   INT.SCALE = whole multiples of that canvas only (letterboxed);
 //   FILTER  NEAREST = crisp, LINEAR = bilinear on the source, SHARP = nearest
 //           pre-scale to the next integer multiple, then linear to the window
@@ -62,7 +62,6 @@ static void v2_present_frame(int H) {
     const int PW = v2_present_w;
     const int filter = v2_options.filter.load();
     const bool integer = v2_options.integer_scale.load();
-    const bool a43 = v2_options.aspect43.load();
     const int border = v2_options.border.load();
     const int want = (filter == 2) ? 1 : 0;
     if (g_tex_filter != want || !myTexture_v2) {
@@ -74,7 +73,7 @@ static void v2_present_frame(int H) {
     SDL_UpdateTexture(myTexture_v2, NULL, tempDrawBuffer_v2, RENDER_WIDTH_V2 * sizeof(uint32_t));
     int W = 0, Hout = 0;
     SDL_GetRendererOutputSize(myRenderer_v2, &W, &Hout);
-    const int cw = PW, ch = a43 ? SCREEN_HEIGHT_V2 : H;   // the 4:3-pixel canvas keeps its 240-row height at any width
+    const int cw = PW, ch = H;   // the canvas: the frame's width x the 240-row raster (H is always SCREEN_HEIGHT_V2)
     double s = (W > 0 && Hout > 0) ? ((double)W / cw < (double)Hout / ch ? (double)W / cw : (double)Hout / ch) : 1.0;
     if (integer) { s = (double)(int)s; if (s < 1.0) s = 1.0; }
     const int dw = (int)(cw * s + 0.5), dh = (int)(ch * s + 0.5);
@@ -124,8 +123,8 @@ static void v2_present_frame(int H) {
             if (SDL_RenderReadPixels(myRenderer_v2, NULL, SDL_PIXELFORMAT_RGB24, px.data(), W * 3) == 0) {
                 FILE* f = fopen(path, "wb");
                 if (f) { fprintf(f, "P6\n%d %d\n255\n", W, Hout); fwrite(px.data(), 1, px.size(), f); fclose(f); }
-                fprintf(stderr, "V2-PRESENT-SHOT: %s %dx%d picture %dx%d at (%d,%d) filter=%d int=%d a43=%d border=%d H=%d\n",
-                        path, W, Hout, dst.w, dst.h, dst.x, dst.y, filter, (int)integer, (int)a43, border, H);
+                fprintf(stderr, "V2-PRESENT-SHOT: %s %dx%d picture %dx%d at (%d,%d) filter=%d int=%d border=%d H=%d\n",
+                        path, W, Hout, dst.w, dst.h, dst.x, dst.y, filter, (int)integer, border, H);
             }
             shot = 1;
         }
@@ -198,8 +197,9 @@ void updateDraw_v2()
   // HUD band (reference_vga_mode_x: split at line 176, HUD rows 176..239). So a
   // normal level's picture is the full 240 rows — step 3 wrongly cut it to 200
   // (a 24-row HUD) and lost the bottom 40 HUD rows (2026-09-06 report). A
-  // full-screen LVX scene shows its own map height (200) with no HUD band, an
-  // LVX_TALL224 level 224; the overlay's toast sits above that bottom edge.
+  // full-screen LVX scene / an LVX_TALL224 level shows its map rows (224) with
+  // no HUD band and black below; content_h only places the overlay's toast
+  // above that bottom edge — the presented canvas is always the 240-row raster.
   const int content_h = v2_display_fullscreen ? v2_display_fullscreen : 240;
   v2_ui_draw(tempDrawBuffer_v2, RENDER_WIDTH_V2, content_h, myFormat_v2);   // UX stage 3 overlay
   // debug: V2_UI_SHOT=<path.ppm> dumps the presented frame once while the
@@ -219,7 +219,7 @@ void updateDraw_v2()
           }
       }
   }
-  v2_present_frame(content_h);
+  v2_present_frame(SCREEN_HEIGHT_V2);   // TRIAL (not committed): constant 240-row canvas, content unstretched
 }
 
 std::thread render_thread_v2;
