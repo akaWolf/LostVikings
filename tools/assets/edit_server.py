@@ -74,17 +74,22 @@ def do_pack():
         if os.path.exists(tj):
             with open(tj) as f:
                 js = json.load(f)
-            img = TX.compile_texts(js, TX.load_image())
+            base = TX.load_image()
             out = os.path.join(SCRATCH, "exe_static.bin")
-            # keep whatever trailer the image carries past the 0x29F00
-            # static image (task #104 LVX1 extra-level records) — the text
-            # compiler only rebuilds the image itself.
+            # Rebuild the texts ON THE SCRATCH IMAGE when there is one: it carries
+            # integrate_snes.py's seg001 extension (the console scenes' replies past
+            # the original string zone) — baking on the canonical image dropped
+            # them (2026-09-06: a pack after a logic edit zeroed seg001+0x7740..).
+            # The text compiler touches only the original zone. Keep whatever
+            # trailer the image carries past the 0x29F00 static image (task #104
+            # LVX1 extra-level records, LVX4) as well.
             tail = b""
             if os.path.exists(out):
                 with open(out, "rb") as f:
                     cur = f.read()
-                if len(cur) > len(img):
-                    tail = cur[len(img):]
+                if len(cur) >= len(base):
+                    base, tail = cur[:len(base)], cur[len(base):]
+            img = TX.compile_texts(js, base)
             with open(out + ".tmp", "wb") as f:
                 f.write(img + tail)
             os.replace(out + ".tmp", out)

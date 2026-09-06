@@ -140,3 +140,8 @@ VM + `anim_01c1` — 1.46 ГБ; VM + `chunk_01c1` — «virtual memory exhausted
 - `tools/data/gen_optable.py` парсил только `static void v2_vm_op_*` — теперь `static`
   необязателен (вывод не изменился; закоммиченный `optable_draft.json` и до того был
   устаревшим черновиком — не трогался).
+
+Дополнение (2026-09-06, позже): после разбиения оба Windows-job'а падали уже не по памяти, а на
+`src/sdl/v2_gamestate.cpp` — Linux-only `sys/syscall.h`/`execinfo.h` (stage-4 evac-диагностика),
+что стало видно только после добавления в workflow `::error::`-аннотаций (логи job'ов по API
+недоступны без admin-прав). Ограждено `#ifndef _WIN32`; Windows-сборки идут на -j2.

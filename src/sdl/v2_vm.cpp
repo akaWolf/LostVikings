@@ -1468,13 +1468,41 @@ static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     // orig sub_177bb entry eip 0x77BD: TEST ds:304h, 0FFFFh; JNZ drop — the
     // WHOLE body (audit hook, play, slot bookkeeping) sits behind the SFX-mute
     // gate. Mirror it first so muted fires neither log nor touch DS slots.
-    if (v2gs(s).sfx_mute() != 0) return -1;
+    if (v2gs(s).sfx_mute() != 0) { v2_snes_sys_id_hint = -1; return -1; }
     if (v2_snes_sound_enabled()) {                       // UX stage 10: the console's $88E5 — function 3 (id, FFFF, volume)
-        int vol = v2_snes_sfx_vol_hint;
-        if (vol < 0) vol = ((ax_seq & 0xFF) == 0x83) ? 0x50 : 0x60;   // $88D4: 0x50 for the viking switch, else 0x60
-        v2_snes_snd_play_sfx((uint8_t)ax_seq, (uint8_t)vol);
+        // Every id the PC passes here is a PC number: the scripts' effects are XMIDI
+        // sequence numbers (0x05..0x5D) that chunk 0x317 maps to the console's
+        // sequences (0x80..), the PC's system clicks (0..4, played by the pause /
+        // inventory / password screens) become the console's: 0 = a menu opening
+        // ($8435 / $EF1A: the looping effects stop, 0xE7), 1 = the item cursor moving
+        // ($F103..: 0xC4; the inventory's viking switch sets the 0x83 hint itself),
+        // 2 = an item placed ($F26D: 0x83), 3 / 4 = the trash slot ($F265: 0xDF).
+        // An id of 0x80+ (none today) would pass through as the console's own.
+        int id = ax_seq & 0xFF;
+        if (id < 0x80) {
+            if (v2_snes_sys_id_hint >= 0) id = v2_snes_sys_id_hint;
+            else switch (id) {
+            case 0:  id = -1; v2_snes_snd_menu_open(); break;
+            case 1:  id = 0xC4; break;
+            case 2:  id = 0x83; break;
+            case 3: case 4: id = 0xDF; break;
+            default: {                              // a script's effect: the PC number -> the console's sequence (chunk 0x317)
+                int m = v2_snes_sfx_map(id);
+                id = m ? m : -1;                    // no twin -> silence, never a song (the ids below 0x80 are the songs)
+                break; }
+            }
+        }
+        { static int _tr = -1; if (_tr < 0) { const char* e = getenv("V2_SNESSND_TRACE"); _tr = (e && e[0] == '1') ? 1 : 0; }
+          if (_tr) fprintf(stderr, "V2-SNESSND-HOOK: f%d seq=%04X -> id=%d (hint %d, vol hint %d)\n",
+                           v2_dbg_pre_vm_iter, ax_seq, id, v2_snes_sys_id_hint, v2_snes_sfx_vol_hint); }
+        if (id >= 0 && id < 0x100) {
+            int vol = v2_snes_sfx_vol_hint;
+            if (vol < 0) vol = (id == 0x83) ? 0x50 : 0x60;   // $88D4: 0x50 for 0x83, else 0x60
+            v2_snes_snd_play_sfx((uint8_t)id, (uint8_t)vol);
+        }
     }
     v2_snes_sfx_vol_hint = -1;
+    v2_snes_sys_id_hint = -1;
     uint16_t bx_seg = v2gs(s).seg_sound2();
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -2235,6 +2263,17 @@ static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_siz
                 uint32_t fs_read_size = (uint16_t)comp_size;
                 uint32_t avail = (clen >= 2) ? clen - 2 : 0;
                 uint32_t copy = fs_read_size < avail ? fs_read_size : avail;
+                // The archive's invariant: the block lands in FS:0x1000 of a 64 KB
+                // segment, so no record of DATA.DAT holds more than 0xF000 bytes of
+                // stream. A packed asset that does (the 0xD800 SNES sound parts came
+                // out as 0xF302, 2026-09-06) would overrun the shadow — refuse it loudly
+                // instead of corrupting what follows v2_vm_shadow_fs.
+                if (copy > V2_FS_SHADOW_SIZE - 0x1000) {
+                    fprintf(stderr, "FATAL: chunk %04X: compressed block of %u bytes exceeds the archive's "
+                            "FS window (0x%X) — repack it in smaller parts\n", chunk_id, copy,
+                            (unsigned)(V2_FS_SHADOW_SIZE - 0x1000));
+                    _exit(1);
+                }
                 memcpy(v2_vm_shadow_fs + 0x1000, rec + 2, copy);
                 memset(v2_vm_shadow_fs, 0, 0x1000);
                 static uint8_t comp_buf2[0x10000];
@@ -10706,7 +10745,7 @@ void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param) {
     fprintf(stderr, "V2-OP-04[f%d obj=%02X]: stop_seq=%u muted_304=%d\n",
             v2_dbg_pre_vm_iter, cur_obj, param, muted ? 1 : 0);
     if (muted) return; // sound disabled
-    if (v2_snes_sound_enabled()) v2_snes_snd_stop_sfx(param);   // UX stage 10: $C2F6 — function 4 (id, FFFF)
+    if (v2_snes_sound_enabled()) { int m = v2_snes_sfx_map(param & 0xFF); if (m) v2_snes_snd_stop_sfx((uint8_t)m); }   // UX stage 10: $C2F6 — function 4 (id, FFFF); the PC number mapped like the play
     // #61 native AIL: the orig slot scan calls fnAB stop + fn98 release per
     // matching slot and clears the DS words — no SDL fallback semantics.
     if (v2_ail_native_on() && v2_ail_booted()) {
@@ -22180,6 +22219,9 @@ static bool v2_hud_cat_probe_12250(uint8_t* s, uint16_t di_cat, uint16_t& ax_out
 // item cursor to its selected slot, redraw the selectors (sub_120D1),
 // restart the blink timer, open nearby gates (sub_11F47), click (SFX 1).
 static void v2_pause_switch_viking(uint8_t* shadow, uint16_t viking) {
+    // UX stage 10: the console's inventory plays 0x83 only when the shown viking
+    // changes ($F04A / $F08C: CMP $0475; BEQ skip) — the PC clicks (SFX 1) either way.
+    const bool viking_changed = viking != v2gs(shadow).active_viking();
     v2gs(shadow).active_viking(viking);                    // 3842
     uint16_t sel = *(uint16_t*)(shadow + viking + (DS_HUD_SEL));         // 3843
     uint16_t slot = (uint16_t)((viking << 1) + sel);                     // 3844-3845
@@ -22188,7 +22230,10 @@ static void v2_pause_switch_viking(uint8_t* shadow, uint16_t viking) {
     (void)v2_hud_selectors_120d1(shadow);                                     // 3850 call sub_120D1
     v2gs(shadow).quit_blink(0x11);                         // 3851
     v2_viking_proximity_11f47(shadow);                                   // 3852 call sub_11F47
-    if (v2gs(shadow).sfx_mute_lobref() == 0) fx::play_sfx_no_audit(shadow, 1);      // 3853-3854
+    if (v2gs(shadow).sfx_mute_lobref() == 0) {
+        if (v2_snes_sound_enabled()) v2_snes_sys_id_hint = viking_changed ? 0x83 : 0x100;
+        fx::play_sfx_no_audit(shadow, 1);                                // 3853-3854
+    }
 }
 
 // sub_11CBB (seg000 3719-3989): pause-menu inventory interaction, one frame.
@@ -22500,6 +22545,7 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
     //   → sub_108c8 → sub_12d72 (if word_288AC bit15 set).
     // ALL must be mirrored — orig calls these per-iter, shadow must too or DS diverges.
     bool cbb_exit = v2_pause_items_11cbb(shadow);            // item interaction (ds:0x441-44B)
+    bool esc_quit = false;
     v2_selector_blink_11c52(shadow);                            // selector blink DEC
     v2_hud_update_11792(shadow);                            // HUD update: healthbar/item/selector/portrait
     v2_page_flip_16775(shadow);                            // page flip (sets 0xA39C=1, 0x92EE pan)
@@ -22528,8 +22574,11 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
         }
         // orig eip 0x1c40-0x1c4a: TEST word_28898, 0x1000; JZ loc_11c4b; STC.
         // ESC during transition = exit.
-        if (v2gs(shadow).input_edges() & 0x1000) cbb_exit = true;
+        if (v2gs(shadow).input_edges() & 0x1000) { cbb_exit = true; esc_quit = true; }
     }
+    // UX stage 10: the console restarts the looping effects when its menu closes on
+    // the continue path ($84AC / $EF75) and not on the quit exit ($84A2: $0338 |= 2).
+    if (cbb_exit && !esc_quit && v2_snes_sound_enabled()) v2_snes_snd_menu_close();
     return cbb_exit;
 }
 
@@ -22774,6 +22823,9 @@ static void v2_pw_post_loop(uint8_t* shadow) {
     v2_read_input_12352_iter(shadow);
 #endif
     if (exit_ax == 0) v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() | (2));   // OR word_28814, 2
+    // UX stage 10: the prompt opened with the console's menu sound (SFX 0 -> $890A + 0xE7);
+    // its continue exit restarts the looping effects ($8943), the quit exit (Y) does not.
+    if (exit_ax != 0 && v2_snes_sound_enabled()) v2_snes_snd_menu_close();
     // loc_104FF: cleanup renders (orig lines 2779-2807, two iterations of full render block)
     v2gs(shadow).text_fullscreen(1);            // word_31A49 = 1
     v2gs(shadow).ui_throttle(0);            // word_31DBC = 0

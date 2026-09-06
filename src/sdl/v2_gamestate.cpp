@@ -7,7 +7,9 @@
 // that no byte has two owners.
 
 #include "v2_gamestate.h"
-#include <sys/syscall.h>
+#ifndef _WIN32
+#include <sys/syscall.h>   // SYS_gettid for the evac diff lines (Linux; mingw has neither)
+#endif
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
@@ -355,12 +357,17 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
     if (!v2_gs_evac_on(ds)) return 0;
     v2_gs_evac_check_calls++;
     int diffs = 0;
+#ifdef _WIN32
+#define V2_GS_TID() 0L                             // the diff line's thread id: Linux-only (no gettid on mingw)
+#else
+#define V2_GS_TID() ((long)syscall(SYS_gettid))
+#endif
 #define V2_GS_EV_CHK(name, off, idx_expr, img_expr) \
     do { uint16_t _img = (img_expr); \
          if ((idx_expr) != _img) { \
              if (diffs < 8) \
                  fprintf(stderr, "V2-GS-EVAC-DIFF: %s @%04X member=%04X image=%04X tid=%ld\n", \
-                         #name, (unsigned)(off), (idx_expr), _img, (long)syscall(SYS_gettid)); \
+                         #name, (unsigned)(off), (idx_expr), _img, V2_GS_TID()); \
              diffs++; } } while (0)
 #define V2_GS_EV1(name, off) \
     V2_GS_EV_CHK(name, (off), g_gs_evac.name, *(const uint16_t*)(ds + (off)));
@@ -416,14 +423,19 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
     return diffs;
 }
 
-// stage-4 diag: first desyncs seen AT READ TIME, with backtrace.
+// stage-4 diag: first desyncs seen AT READ TIME, with backtrace (glibc; the
+// message alone on mingw, which has no execinfo).
+#ifndef _WIN32
 #include <execinfo.h>
+#endif
 extern "C" void v2_gs_evac_read_desync(const char* fld, uint32_t off, uint16_t mem, uint16_t img) {
     static int n = 0;
     if (n >= 4) return;
     n++;
     fprintf(stderr, "V2-EVAC-READ-DESYNC[%d]: %s @%04X member=%04X image=%04X\n",
             n, fld, off, mem, img);
+#ifndef _WIN32
     void* bt[8]; int bn = backtrace(bt, 8);
     backtrace_symbols_fd(bt, bn, 2);
+#endif
 }

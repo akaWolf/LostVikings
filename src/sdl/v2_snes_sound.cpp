@@ -13,7 +13,10 @@
 #include <chrono>
 
 // ---------------------------------------------------------------- assets --
-enum { SND_DRIVER = 0x310, SND_DIR = 0x311, SND_DATA0 = 0x312, SND_NDATA = 4, SND_LEVELS = 0x316 };
+// The block store is split into parts of 0xC000 bytes (integrate_snes.py SND_PART: a
+// chunk's compressed block must fit the archive loader's FS window of 0xF000 bytes);
+// the parts occupy 0x312.. and are read until the first missing chunk (at most SND_NDATA).
+enum { SND_DRIVER = 0x310, SND_DIR = 0x311, SND_DATA0 = 0x312, SND_NDATA = 4, SND_LEVELS = 0x316, SND_SFXMAP = 0x317 };
 static const uint16_t DRIVER_SIZE = 0x15A2;          // $05:8D35 LDX #$15A2
 static const uint16_t DRIVER_ENTRY = 0x1000;         // $05:8D22 LDA #$1000
 // $00:885F: the music volume per set — eight bytes, but the glue indexes it
@@ -22,6 +25,10 @@ static const uint16_t DRIVER_ENTRY = 0x1000;         // $05:8D22 LDA #$1000
 static const uint8_t MUSIC_VOL[10] = { 0x50, 0x20, 0x20, 0x30, 0x30, 0x30, 0x50, 0x30, 0xAD, 0x60 };
 
 int v2_snes_sfx_vol_hint = -1;
+int v2_snes_sys_id_hint = -1;
+// V2_SNESSND_TRACE=1: every API function the manager issues (play / param / 07 / stop all)
+// and the menu glue, with the engine's tick — the console-side view of a run.
+static int snd_trace_on() { static int on = -1; if (on < 0) { const char* e = getenv("V2_SNESSND_TRACE"); on = (e && e[0] == '1') ? 1 : 0; } return on; }
 
 struct Block { uint8_t type, id; uint16_t len; uint32_t off; };
 static std::vector<uint8_t> g_driver, g_dir, g_data;
@@ -30,7 +37,7 @@ static uint8_t g_levels[256];                         // [set][entry mode][exit 
 static bool g_assets_ok = false;
 
 // ------------------------------------------------------- game -> sound --
-enum CmdKind : uint8_t { CMD_LEVEL_START = 1, CMD_LEVEL_EXIT, CMD_SFX, CMD_STOP, CMD_PARAM, CMD_MUSIC, CMD_FADE, CMD_MUSIC_ON, CMD_SFX_ON };
+enum CmdKind : uint8_t { CMD_LEVEL_START = 1, CMD_LEVEL_EXIT, CMD_SFX, CMD_STOP, CMD_PARAM, CMD_MUSIC, CMD_FADE, CMD_MUSIC_ON, CMD_SFX_ON, CMD_MENU_OPEN, CMD_MENU_CLOSE };
 struct Cmd { uint8_t kind; uint8_t a; uint16_t b; };
 enum { CMD_RING = 256 };
 static Cmd g_cmd[CMD_RING];
@@ -63,6 +70,8 @@ struct Engine {
     int      cur_set;                                 // $19D3 (-1 = none loaded)
     bool     music_on, sfx_on, sound_on;              // $0302 / $0304 / $0306
     uint16_t last_music_id;                           // $0360
+    uint8_t  ambient_mask;                            // $19D5: the looping effects $890A found playing (bits $897B), for $8943
+    int      menu_depth;                              // the PC nests its screens (pause -> quit prompt); the effects stop at the first open and restart at the last close
     // pacing
     double   tick_acc;
     // debug
@@ -258,6 +267,7 @@ static void release_track_voices(int t) {
 }
 // function 3 ($858A): play sequence `id` (>= 0x80: restart if already playing)
 static int fn_play(uint8_t id, uint16_t flag, uint16_t vol) {
+    if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u play %02X vol %02X\n", E->frame_no, id, vol);
     int t = -1;
     if (id >= 0x80) {
         for (int i = 0; i < 4; i++) if (tr16(i, 0) == id) { t = i; break; }
@@ -280,6 +290,7 @@ static int fn_play(uint8_t id, uint16_t flag, uint16_t vol) {
 }
 // function 4 ($889F): FFFF = stop the sequence, else fade-out step v
 static int fn_param(uint8_t id, uint16_t v) {
+    if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u param %02X %04X\n", E->frame_no, id, v);
     for (int t = 0; t < 4; t++) if (tr16(t, 0) == id) {
         if (v == 0xFFFF) { trw16(t, 0, 0xFFFF); release_track_voices(t); }
         else { trw16(t, 0x12, v); trw16(t, 0x10, 1); }
@@ -444,21 +455,44 @@ static void glue_dispatch(uint8_t set, uint8_t mode) {
     default: break;
     }
 }
-// $00:890A: the eight looping effects (started by the scripts) are stopped
-// at level init, the ones that were playing remembered in $19D5 for $8943
+// $00:890A / $00:8943: the eight looping effects (started by the scripts) are
+// stopped when the pause menu ($8435, START) or the inventory ($EF1A, SELECT)
+// opens — each one function 4 (id, FFFF) actually stopped (carry clear) is
+// remembered as its bit of $897B in $19D5 — and restarted with its own volume
+// ($898B) when the menu closes on the continue path ($84AC / $EF75; the quit
+// exit skips it). Both menus then play 0xE7 through $88D4 (volume 0x60).
 static const uint8_t AMBIENT_IDS[8] = { 0x85, 0x8D, 0x91, 0x98, 0x99, 0xAC, 0xB5, 0xE0 };   // $00:8983
-static void glue_stop_ambient() {
-    if (!E->sfx_on) return;
-    for (int i = 0; i < 8; i++) fn_param(AMBIENT_IDS[i], 0xFFFF);
+static const uint8_t AMBIENT_VOL[8] = { 0x7F, 0x40, 0x61, 0x4F, 0x4F, 0x7F, 0x40, 0x7F };   // $00:898B
+static void glue_stop_ambient() {                     // $890A
+    if (!E->sfx_on) return;                           // $0304
+    E->ambient_mask = 0;                              // STZ $19D5
+    for (int i = 0; i < 8; i++)                       // $891F: function 4 (id, FFFF); BCC -> $19D5 |= $897B[X]
+        if (fn_param(AMBIENT_IDS[i], 0xFFFF) == 0) E->ambient_mask |= (uint8_t)(1 << i);
 }
+static void glue_restart_ambient() {                  // $8943
+    if (!E->sfx_on) return;                           // $0304
+    for (int i = 0; i < 8; i++)                       // $8955: bit set -> function 3 (id, FFFF, $898B[X])
+        if (E->ambient_mask & (1 << i)) fn_play(AMBIENT_IDS[i], 0xFFFF, AMBIENT_VOL[i]);
+}
+static void glue_menu_open() {                        // $843A-$8440 / $EF26-$EF44
+    if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u menu open (depth %d)\n", E->frame_no, E->menu_depth);
+    if (E->menu_depth++ == 0) glue_stop_ambient();
+    if (E->sfx_on) fn_play(0xE7, 0xFFFF, 0x60);      // $88D4 -> $88E5 (function 3 when $0304)
+}
+static void glue_menu_close() {                       // $84AC / $EF75
+    if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u menu close (depth %d, mask %02X)\n", E->frame_no, E->menu_depth, E->ambient_mask);
+    if (E->menu_depth > 0 && --E->menu_depth == 0) glue_restart_ambient();
+}
+// $00:9BCC — the level entry: $87E1 (function 7 by $0306, then the dispatch by
+// the head's entry mode) and $88B1 (the silent song when music is off). No
+// effect plays here: 0xE7 belongs to the menus above.
 static void glue_level_start(uint16_t level) {
-    glue_stop_ambient();                              // $EF26 (level init) before the level-start effect
+    E->menu_depth = 0;
     fn_07(0, E->sound_on ? 0 : 0xFFFF);              // $87E1: function 7 by $0306
     const uint8_t* L = &g_levels[(level & 63) * 4];
     if (L[0] == 0xFF) return;                         // no SNES twin — keep whatever plays
     glue_dispatch(L[0], L[1]);                        // by head+4
     if (!E->music_on) fn_play(0x30, 0xFFFF, 0x20);   // $88B1
-    if (E->sfx_on) fn_play(0xE7, 0xFFFF, 0x60);      // $EF41: the level-start effect
 }
 static void glue_level_exit(uint16_t level) {
     const uint8_t* L = &g_levels[(level & 63) * 4];
@@ -476,6 +510,8 @@ static void handle(const Cmd& c) {
     case CMD_FADE:        if (E->music_on) fn_param(c.a, 0x0080); break;        // $C330
     case CMD_MUSIC_ON:    E->music_on = c.a != 0; break;
     case CMD_SFX_ON:      E->sfx_on = c.a != 0; break;
+    case CMD_MENU_OPEN:   glue_menu_open(); break;
+    case CMD_MENU_CLOSE:  glue_menu_close(); break;
     }
 }
 
@@ -521,6 +557,12 @@ static void thread_main() {
 // ---------------------------------------------------------------- API --
 bool v2_snes_sound_enabled() { return v2_options.snes_sound.load(); }
 
+// PC effect number -> the console's sequence id (0 = the PC sound has no console twin).
+// The scripts are the same programs on both machines but op 2 / anim command 2 carry
+// each machine's own numbering (PC: the XMIDI sequence 0x03..0x5D, SNES: the driver
+// sequences 0x80..0xEA); tools/assets/snes_sfx_map.py derives the table from the
+// paired class and animation code, integrate_snes.py packs it as chunk 0x317.
+static uint8_t g_sfx_map[256];
 static bool load_assets() {
     if (g_assets_ok) return true;
     static uint8_t buf[0x10000];
@@ -539,6 +581,10 @@ static bool load_assets() {
     n = v2_snd_read_chunk(SND_LEVELS, buf, sizeof buf);
     memset(g_levels, 0xFF, sizeof g_levels);
     if (n) memcpy(g_levels, buf, n < sizeof g_levels ? n : sizeof g_levels);
+    n = v2_snd_read_chunk(SND_SFXMAP, buf, sizeof buf);
+    memset(g_sfx_map, 0, sizeof g_sfx_map);
+    if (n) memcpy(g_sfx_map, buf, n < sizeof g_sfx_map ? n : sizeof g_sfx_map);
+    else fprintf(stderr, "V2-SNESSND: no effect map chunk %04X — the scripts' effects stay silent\n", SND_SFXMAP);
     // the directory: [u24 size][entries][FF]; data offsets cumulative
     g_blocks.clear();
     uint32_t off = 0;
@@ -574,6 +620,9 @@ void v2_snes_snd_play_music(uint8_t id)            { if (live()) push(CMD_MUSIC,
 void v2_snes_snd_fade_music(uint8_t id)            { if (live()) push(CMD_FADE, id, 0); }
 void v2_snes_snd_set_music_on(bool on)             { if (live()) push(CMD_MUSIC_ON, on ? 1 : 0, 0); }
 void v2_snes_snd_set_sfx_on(bool on)               { if (live()) push(CMD_SFX_ON, on ? 1 : 0, 0); }
+void v2_snes_snd_menu_open()                       { if (live()) push(CMD_MENU_OPEN, 0, 0); }
+int  v2_snes_sfx_map(int pc_id)                    { return (pc_id >= 0 && pc_id < 256 && g_assets_ok) ? g_sfx_map[pc_id] : 0; }
+void v2_snes_snd_menu_close()                      { if (live()) push(CMD_MENU_CLOSE, 0, 0); }
 
 // audio thread: linear resampling 32000 -> rate from the output ring
 bool v2_snes_sound_mix(int16_t* out, uint32_t frames, uint32_t rate) {

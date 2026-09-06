@@ -19,7 +19,7 @@ void v2_snes_sound_start();                          // game thread: load the as
 void v2_snes_sound_shutdown();
 
 // game-thread events = the console's glue
-void v2_snes_snd_level_start(uint16_t level);        // $87E1 (function 7 + dispatch by head+4) + $88B1 + SFX 0xE7
+void v2_snes_snd_level_start(uint16_t level);        // $9BCC: $87E1 (function 7 + dispatch by head+4) + $88B1
 void v2_snes_snd_level_exit(uint16_t level);         // $87F9: dispatch by head+6 (death / level end)
 void v2_snes_snd_play_sfx(uint8_t id, uint8_t vol);  // $88E5: function 3 (id, FFFF, vol)
 void v2_snes_snd_stop_sfx(uint8_t id);               // $88F9 with FFFF: function 4 (id, FFFF)
@@ -28,6 +28,9 @@ void v2_snes_snd_play_music(uint8_t id);             // op 213 ($C314): function
 void v2_snes_snd_fade_music(uint8_t id);             // op 214 ($C330): function 4 (id, 0x80) when music is on
 void v2_snes_snd_set_music_on(bool on);              // the console's $0302 (music enabled)
 void v2_snes_snd_set_sfx_on(bool on);                // the console's $0304 (effects enabled)
+void v2_snes_snd_menu_open();                        // $8435 / $EF1A: the pause menu / inventory opens — $890A stops the looping effects (remembering them in $19D5), then SFX 0xE7
+void v2_snes_snd_menu_close();
+int  v2_snes_sfx_map(int pc_id);                     // the PC effect number's console sequence id (chunk 0x317), 0 = none                       // $84AC / $EF75: the menu closes — $8943 restarts the remembered effects (not on the quit exit)
 
 // audio thread: fill `frames` stereo frames at `rate` from the SNES output;
 // false = the option is off / nothing produced (caller keeps its own mix)
@@ -37,6 +40,11 @@ bool v2_snes_sound_mix(int16_t* out, uint32_t frames, uint32_t rate);
 // SFX entry point reads this hint (set by the op handlers) — -1 = none,
 // the glue's default (0x60, 0x50 for the viking-switch sound 0x83) applies.
 extern int v2_snes_sfx_vol_hint;
+// The PC's own system clicks (sub_177bb ids 0..4: pause, cursor, item placed, trash) are
+// translated to the console's ids by the hook; a site that knows better sets this to the
+// console id it wants (0x83 for the inventory's viking switch, 0x100 = no sound) before
+// the call. Consumed by the next play.
+extern int v2_snes_sys_id_hint;
 
 // v2_vm.cpp: read a chunk without DS side effects (scratch ds_ctx)
 extern "C" uint32_t v2_snd_read_chunk(uint16_t cid, uint8_t* dest, uint32_t max);

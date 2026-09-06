@@ -160,14 +160,14 @@ jobs:
       - name: Build (WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          # -j1: mingw gcc takes ~3.5 GB and 7 minutes per generated-executor unit
-          # (src/sdl/gen/exec_01cN.cpp, measured -O2 -g1 on the largest chunk with the
-          # nix mingw gcc 15 after the split described in v2_vm_gen.h); the runner's
-          # mingw gcc 13 failed the -j2 build in 14 minutes without a readable log,
-          # so one unit at a time until the annotations below say what it was.
+          # -j2: mingw gcc takes ~3.5 GB and 7 minutes per generated-executor unit
+          # (src/sdl/gen/exec_01cN.cpp, measured -O2 -g1 on the largest chunk after the
+          # split described in v2_vm_gen.h) — two at a time fit the 16 GB runner, four
+          # would not. (The -j2 failures of 77ab302 were not memory: the annotations
+          # below showed a Linux-only header in v2_gamestate.cpp, since guarded.)
           set -o pipefail
           free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: |
@@ -275,10 +275,10 @@ jobs:
       - name: Build (V2_ONLY=1 WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          # -j1: see the Windows job above
+          # -j2: see the Windows job above
           set -o pipefail
           free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: |

@@ -1205,7 +1205,13 @@ def patch_1c6_d8_timer(scratch):
 # slot (0..0x2F and the SNES-exclusive LVX slots) — the console's glue reads
 # them from the head copy at $19D7.
 SND_DRIVER, SND_DIR, SND_DATA0, SND_NDATA, SND_LEVELS = 0x310, 0x311, 0x312, 4, 0x316
-SND_PART = 0xD800          # LZSS expands the BRR data ~1.11x; the stream must stay under 0xFFFF
+SND_SFXMAP = 0x317         # PC effect number -> console sequence id (tools/assets/snes_sfx_map.json)
+# The archive loader (sub_1c8f1 mirror v2_read_chunk) copies a chunk's compressed block
+# into FS:0x1000 of a 64 KB segment: a record may hold at most 0xF000 bytes of
+# stream. LZSS expands the BRR sample data ~1.13x (a 0xD800 part came out as 0xF302
+# and overran the window — the FORTIFY abort of 2026-09-06), so the parts stay at
+# 0xC000: 0xD830 compressed, 0x7D0 under the limit.
+SND_PART = 0xC000
 
 
 def snes_sound_integrate(scratch):
@@ -1240,13 +1246,22 @@ def snes_sound_integrate(scratch):
         hid, h = PX.de_head(de, de_slot)
         tbl[slot * 4], tbl[slot * 4 + 1], tbl[slot * 4 + 2], tbl[slot * 4 + 3] = h[5], h[4], h[6], 0
     blobs.append((SND_LEVELS, bytes(tbl)))
+    # PC effect number -> console sequence id. The scripts carry each machine's own
+    # numbering in op 2 / anim command 2 (PC: XMIDI sequence numbers, SNES: driver
+    # sequences 0x80..); snes_sfx_map.py pairs the sites of the same classes and
+    # animations and writes the table as JSON — packed here as 256 bytes (0 = no twin).
+    mp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "snes_sfx_map.json")
+    with open(mp) as f: sm = json.load(f)["map"]
+    sfx = bytearray(256)
+    for k, v in sm.items(): sfx[int(k, 16)] = int(v, 16)
+    blobs.append((SND_SFXMAP, bytes(sfx)))
     for cid, blob in blobs:
         with open(os.path.join(d, f"{cid:04X}.bin"), "wb") as f: f.write(blob)
         extras[f"{cid:04X}"] = {"role": "unreferenced"}
     with open(ex_path + ".tmp", "w") as f: json.dump(extras, f, indent=1)
     os.replace(ex_path + ".tmp", ex_path)
     print(f"SNES sound: driver {len(driver)} B -> {SND_DRIVER:04X}, directory {len(directory)} B ({n} blocks) -> {SND_DIR:04X}, "
-          f"data {len(data)} B -> {len(parts)} parts from {SND_DATA0:04X}, level sets -> {SND_LEVELS:04X} "
+          f"data {len(data)} B -> {len(parts)} parts from {SND_DATA0:04X}, effect map ({sum(1 for b in sfx if b)} ids) -> {SND_SFXMAP:04X}, level sets -> {SND_LEVELS:04X} "
           f"(slot 1: set {tbl[4]:02X} entry {tbl[5]:02X} exit {tbl[6]:02X}; finale: set {tbl[0x2F*4]:02X} entry {tbl[0x2F*4+1]:02X})")
 
 
