@@ -19,6 +19,7 @@ struct V2Options {
     std::atomic<bool> integer_scale{false};  // whole multiples of the 320x240 (or 320xH) canvas only
     std::atomic<bool> aspect43{true};        // 4:3 like the DOS monitor (320x200 raster on 320x240) / square pixels
     std::atomic<int>  border{0};             // 0 BLACK, 1 GLOW (the frame blurred and dimmed behind the picture)
+    std::atomic<bool> snes_sound{false};     // UX10: the SNES DE music/effects (SPC700 emulation), takes effect at the next level load
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once

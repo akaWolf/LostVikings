@@ -31,6 +31,8 @@ const uint32_t MYFREQ = 44100;
 static SDL_AudioFormat myFormat;
 static uint8_t myBuffer[16384];   // device mix buffer (cherry-pick 3f2114a size)
 
+#include "v2_snes_sound.h"
+static uint32_t g_snes_mix_rate = 0;   // UX stage 10: the device rate for the SNES resampler
 void my_audio_callback(void* argument, Uint8* stream, int len)
 {
     auto _cb_start = std::chrono::steady_clock::now();
@@ -76,6 +78,9 @@ void my_audio_callback(void* argument, Uint8* stream, int len)
         // Native AIL channel: the interpreted-driver OPL3 render. Inert until
         // the driver boots (no ticks pumped → the chip stays silent).
         v2_nopl_mix((int16_t*)myBuffer, (uint32_t)(len / (2 * sizeof(int16_t))));
+        // UX stage 10: with the SNES sound option on, the console's mix
+        // replaces the OPL render (the AIL machine keeps running unheard)
+        v2_snes_sound_mix((int16_t*)myBuffer, (uint32_t)(len / (2 * sizeof(int16_t))), g_snes_mix_rate);
     }
 
     // Diagnostic tap: V2_AUDIO_DUMP=<path> writes the exact device-bound mix
@@ -148,6 +153,7 @@ void sound_init()
 
     // #61 native AIL channel renders at the obtained device rate.
     v2_nopl_set_mix_rate((uint32_t)obtained.freq);
+    g_snes_mix_rate = (uint32_t)obtained.freq;
 
     SDL_PauseAudio(0);
 }

@@ -35,6 +35,7 @@
 // rejects the mismatch, gcc lets it pass)
 extern uint8_t v2_vga[65536 * 4];
 #include "v2_ui.h"
+#include "v2_snes_sound.h"   // UX stage 10: the SNES DE sound option (hooks below)
 #include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
 #include "v2_timing.h"
@@ -1467,6 +1468,12 @@ static int v2_sfx_play_177bb_v2(uint8_t* s, uint16_t ax_seq) {
     // WHOLE body (audit hook, play, slot bookkeeping) sits behind the SFX-mute
     // gate. Mirror it first so muted fires neither log nor touch DS slots.
     if (v2gs(s).sfx_mute() != 0) return -1;
+    if (v2_snes_sound_enabled()) {                       // UX stage 10: the console's $88E5 — function 3 (id, FFFF, volume)
+        int vol = v2_snes_sfx_vol_hint;
+        if (vol < 0) vol = ((ax_seq & 0xFF) == 0x83) ? 0x50 : 0x60;   // $88D4: 0x50 for the viking switch, else 0x60
+        v2_snes_snd_play_sfx((uint8_t)ax_seq, (uint8_t)vol);
+    }
+    v2_snes_sfx_vol_hint = -1;
     uint16_t bx_seg = v2gs(s).seg_sound2();
     uint32_t size = 0;
     uint8_t* xmidi = v2_resolve_snd_seg(s, bx_seg, &size);
@@ -3221,6 +3228,7 @@ static void v2_audio_tick_108c8(uint8_t* s) {
     if (v2gs(s).spec_key_s_b() == 1) {              // CMP byte_3166B, 1; JNZ skip
         v2gs(s).spec_key_s_b(0);                                                   // MOV byte_3166B, 0
         v2gs(s).sfx_mute_lobref() ^= 1;                                                  // XOR byte ptr word_287E4, 1
+        if (v2_snes_sound_enabled()) v2_snes_snd_set_sfx_on(v2gs(s).sfx_mute() == 0);   // UX stage 10: $0304 mirror
         if (v2gs(s).sfx_mute_lobref() != 0) {                                           // JZ skips stop → do stop when nonzero
             // Mute toggled ON: stop SFX channels. Orig eip 0x8F5-0x933: per
             // occupied slot fnAB (1c79f) + fn98 (1c769) + FFFF/FFFF words —
@@ -3245,6 +3253,7 @@ static void v2_audio_tick_108c8(uint8_t* s) {
     if (v2gs(s).spec_key_m_b() != 1) return;        // CMP byte_3167E, 1; JNZ ret
     v2gs(s).spec_key_m_b(0);                                                       // MOV byte_3167E, 0
     v2gs(s).music_mute_lobref() ^= 1;                                                      // XOR byte ptr word_287E2, 1
+    if (v2_snes_sound_enabled()) v2_snes_snd_set_music_on(v2gs(s).music_mute() == 0);   // UX stage 10: $0302 mirror
     if (v2gs(s).music_mute_lobref() != 0) {                                                 // JNZ loc_10959 (music STOP path)
         // loc_10959: music OFF. Skip if bit 15 set.
         if (!(v2gs(s).music_mute() & 0x8000)) {
@@ -5211,6 +5220,15 @@ static void v2_clear_viking_state_111df(uint8_t* s) {
     v2gs(s).pal_shade_g2_b(0); // byte_28826
     v2gs(s).pal_shade_b2_b(0); // byte_28827
     v2gs(s).scratch_348(0); // word_28828
+}
+
+// UX stage 10: the SNES sound module reads its chunks through a scratch
+// ds_ctx — the loader's DS side effects (chunk header, decomp size, evac
+// mirror) land in a private 64 KB buffer, never in the game's DS.
+extern "C" uint32_t v2_snd_read_chunk(uint16_t cid, uint8_t* dest, uint32_t max) {
+    static uint8_t* scratch = nullptr;
+    if (!scratch) { scratch = (uint8_t*)calloc(1, 0x10000); if (!scratch) return 0; }
+    return v2_read_chunk(cid, dest, max, scratch);
 }
 
 // sub_12816: clear UI glyph list — byte_31A4B=0, clear 0x1B8 words at ds:0x956C
@@ -7937,6 +7955,12 @@ static void v2_load_level_11080(uint8_t* s) {
     v2_lvx_pin_camera(s);
     // sub_17749: music/sound init at level enter. Dispatches via off_3285A[ds:0x25B7 & 0xFF].
     v2_music_dispatch(s, 0x25B7);
+    if (v2_snes_sound_enabled()) {                       // UX stage 10: the console's level-entry glue ($00:9BCC)
+        v2_snes_sound_start();
+        v2_snes_snd_set_music_on(v2gs(s).music_mute() == 0);
+        v2_snes_snd_set_sfx_on(v2gs(s).sfx_mute() == 0);
+        v2_snes_snd_level_start(new_level);
+    }
     // sub_173c7: init scroll tracking
     v2_scroll_init_173c7(s);
     // FS compare with SNAPSHOT (taken right after orig sub_173c7, before game loop modifies it)
@@ -8761,6 +8785,7 @@ static void v2_run_transition_chain(uint8_t* shadow) {
     v2gs(shadow).frame_flags(0);
     // 2. sub_1774f: level-exit music dispatch via off_3285A[ds:0x25B9 & 0xFF]
     v2_music_dispatch(shadow, 0x25B9);
+            if (v2_snes_sound_enabled()) v2_snes_snd_level_exit(v2gs(shadow).level());   // UX stage 10: $87F9 by head+6
     // 3. INC word_2880F (ds:0x032F)
     v2gs(shadow).transition((uint16_t)(v2gs(shadow).transition() + 1));
     // 4. sub_14207: full VM pass (with priority object loop)
@@ -8941,6 +8966,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // instead of ds:0x25B7. Typically case 2 (fade) here; sub_11080 will reload
             // the new level's track via sub_17749 with new ds:0x25B7.
             v2_music_dispatch(shadow, 0x25B9);
+            if (v2_snes_sound_enabled()) v2_snes_snd_level_exit(v2gs(shadow).level());   // UX stage 10: $87F9 by head+6
             v2gs(shadow).transition((uint16_t)(v2gs(shadow).transition() + 1)); // INC word_2880F
             // sub_14207: full VM pass (with priority object loop)
             // TRANSITION VERIFY: compare sub-sprite Y before VM, after VM, after sub_11080
@@ -10757,7 +10783,9 @@ static void v2_vm_op_skip3(V2VM& vm) { vm.pc += 3; }
 static void v2_vm_sfx_core(V2VM& vm, uint16_t seq);
 static void v2_vm_op_sound(V2VM& vm) {
     uint16_t seq = vm.read_u16();
+    v2_snes_sfx_vol_hint = seq >> 8;                     // UX stage 10: op 2 on the console = play SFX (id, volume)
     v2_vm_sfx_core(vm, seq);
+    v2_snes_sfx_vol_hint = -1;
 }
 static void v2_vm_sfx_core(V2VM& vm, uint16_t seq) {
     seq &= 0xFF; // AND ax, 0FFh
@@ -10794,6 +10822,7 @@ static void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param) {
     fprintf(stderr, "V2-OP-04[f%d obj=%02X]: stop_seq=%u muted_304=%d\n",
             v2_dbg_pre_vm_iter, cur_obj, param, muted ? 1 : 0);
     if (muted) return; // sound disabled
+    if (v2_snes_sound_enabled()) v2_snes_snd_stop_sfx(param);   // UX stage 10: $C2F6 — function 4 (id, FFFF)
     // #61 native AIL: the orig slot scan calls fnAB stop + fn98 release per
     // matching slot and clears the DS words — no SDL fallback semantics.
     if (v2_ail_native_on() && v2_ail_booted()) {
@@ -11085,7 +11114,9 @@ static void v2_vm_op_D4(V2VM& vm) {
 // Original (vikings.exe_seg000.cpp:16062): INC bx (1 byte); if ds:0x302==0:
 // sub_176bd(si=0, ax=0, bx=ds:0x2E6B) → play music. v2 mirrors via v2_music_start_178d6_v2.
 static void v2_vm_op_D5(V2VM& vm) {
+    uint8_t snes_id = vm.es[vm.pc];                      // UX stage 10: $C314 — function 3 (id, FFFF, 0x30) when music is on
     vm.pc += 1;
+    if (v2_snes_sound_enabled()) v2_snes_snd_play_music(snes_id);
     v2_music_start_178d6_v2(v2_vm_shadow_ds);
 }
 
@@ -16277,7 +16308,9 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
             anim_bx += 2;
             uint16_t seq = ax_word & 0xFF;
             if (vm.ds_read(DS_SFX_MUTE) == 0) {  // mute check (mirror sub_177bb)
+                v2_snes_sfx_vol_hint = ax_word >> 8;     // UX stage 10: the console's volume byte ($D6CF path)
                 fx::play_sfx(vm.shadow, seq, vm.global_r(DS_CUR_OBJ));
+                v2_snes_sfx_vol_hint = -1;
             }
             return true;
         }
@@ -20172,6 +20205,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 if (v2gs(s).key_alt_b() == 1 && v2gs(s).spec_key_s_b() == 1) {
                     v2gs(s).spec_key_s_b(0);   // byte_3166B = 0
                     v2gs(s).sfx_mute_lobref() ^= 1;   // word_287E4 ^= 1
+                    if (v2_snes_sound_enabled()) v2_snes_snd_set_sfx_on(v2gs(s).sfx_mute() == 0);   // UX stage 10: $0304 mirror
                     if (v2gs(s).sfx_mute_lobref() & 1) {
                         // Toggle set → stop sounds on channel si=2..8
                         for (uint16_t si_s = 2; (int16_t)si_s < 0x0A; si_s += 2) {
@@ -20189,6 +20223,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                 if (v2gs(s).spec_key_m_b() == 1) {
                     v2gs(s).spec_key_m_b(0);   // byte_3167E = 0
                     v2gs(s).music_mute_lobref() ^= 1;   // word_287E2 ^= 1
+                    if (v2_snes_sound_enabled()) v2_snes_snd_set_music_on(v2gs(s).music_mute() == 0);   // UX stage 10: $0302 mirror
                     if (!(v2gs(s).music_mute_lobref() & 1)) {
                         // sub_176bd(si=0, ax=0, bx=ds:0x2E6B) — AIL play, skipped
                     } else if (!(v2gs(s).music_mute() & 0x8000)) {

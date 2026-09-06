@@ -215,7 +215,12 @@ CXX_SRCS := \
   src/sdl/v2_gamestate.cpp \
   src/sdl/v2_assets.cpp \
   src/sdl/v2_keymap.cpp \
-  src/sdl/v2_ui.cpp
+  src/sdl/v2_ui.cpp \
+  src/sdl/v2_snes_sound.cpp \
+  src/sdl/third_party/snes_spc/Snes_Spc.cpp \
+  src/sdl/third_party/snes_spc/Spc_Cpu.cpp \
+  src/sdl/third_party/snes_spc/Spc_Dsp.cpp \
+  src/sdl/third_party/snes_spc/Spc_Filter.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
 CXX_SRCS += src/sdl/play.cpp
@@ -247,7 +252,12 @@ CXX_SRCS := \
   src/sdl/v2_ail.cpp \
   src/sdl/v2_ail_native.cpp \
   src/sdl/v2_gamestate.cpp \
-  src/sdl/v2_assets.cpp
+  src/sdl/v2_assets.cpp \
+  src/sdl/v2_snes_sound.cpp \
+  src/sdl/third_party/snes_spc/Snes_Spc.cpp \
+  src/sdl/third_party/snes_spc/Spc_Cpu.cpp \
+  src/sdl/third_party/snes_spc/Spc_Dsp.cpp \
+  src/sdl/third_party/snes_spc/Spc_Filter.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
 CXX_SRCS += src/sdl/play.cpp

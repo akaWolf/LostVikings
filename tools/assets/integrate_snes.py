@@ -1194,6 +1194,62 @@ def patch_1c6_d8_timer(scratch):
     print("  1C6 S_8A90: D8 default timer 60 -> 300 ticks")
 
 
+# UX stage 10 (2026-09-06): the SNES DE sound engine's data — the SPC700 driver
+# (0x15A2 bytes at $05:8FAE, IPL-loaded to APU $1000 by $05:8D14) and the
+# block store at $05:A550 ([u24 dir size][dir: [type][id][len u16]... FF]
+# [blocks in dir order]: 0 samples, 1 instruments, 2 small blocks, 3 sequences,
+# 4 song sets) — see docs2/SNES_SOUND_ENGINE.md. The store (169 KB) is split
+# into <= 0xD800-byte parts (assetc streams are u16-sized; BRR expands under LZSS). Plus a table of the
+# SNES level head bytes +5 (music set), +4 (music mode at level entry, the
+# $87E1 dispatcher by $19DB) and +6 (mode at exit/death, $87F9 by $19DD) per PC
+# slot (0..0x2F and the SNES-exclusive LVX slots) — the console's glue reads
+# them from the head copy at $19D7.
+SND_DRIVER, SND_DIR, SND_DATA0, SND_NDATA, SND_LEVELS = 0x310, 0x311, 0x312, 4, 0x316
+SND_PART = 0xD800          # LZSS expands the BRR data ~1.11x; the stream must stay under 0xFFFF
+
+
+def snes_sound_integrate(scratch):
+    import parallax_snes as PX
+    de = SP.SnesRom(); R = de.rom
+    def lorom(bank, addr): return (bank << 15) | (addr - 0x8000)
+    drv_off = lorom(5, 0x8FAE); driver = R[drv_off:drv_off + 0x15A2]
+    base = lorom(5, 0xA550)
+    dsz = R[base] | (R[base + 1] << 8) | (R[base + 2] << 16)
+    p = base + 3; total = 0; n = 0
+    while R[p] != 0xFF:
+        total += R[p + 2] | (R[p + 3] << 8); p += 4; n += 1
+    assert p + 1 == base + dsz, (hex(p), hex(base + dsz))
+    directory = R[base:base + dsz]            # header + entries + FF
+    data = R[base + dsz:base + dsz + total]
+    parts = [data[i:i + SND_PART] for i in range(0, len(data), SND_PART)]
+    assert len(parts) <= SND_NDATA, len(parts)
+    d = os.path.join(scratch, "unreferenced"); os.makedirs(d, exist_ok=True)
+    ex_path = os.path.join(scratch, "extras.json")
+    extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
+    blobs = [(SND_DRIVER, driver), (SND_DIR, directory)] + [(SND_DATA0 + k, b) for k, b in enumerate(parts)]
+    # per-slot SNES head bytes +5 (set) / +6 (mode); 0xFF = no SNES level
+    tbl = bytearray(b"\xff\xff\xff\xff" * 64)   # per slot: [+5 set][+4 mode at entry][+6 mode at exit][0]
+    # PC slot -> DE ROM slot: levels 0..0x24 as is, the story heads with a
+    # SNES twin (PC_STORY: 0x2B/0x2E), the finale 0x2F -> DE 0x34, the five
+    # SNES exclusives 48..52 -> DE 0x25.. (parallax_snes.de_slot_of covers
+    # the first and last groups only)
+    de_of = {s: s for s in range(0x25)}
+    de_of.update(PX.PC_STORY); de_of[0x2F] = FINALE_DE_SLOT
+    de_of.update({s: 0x25 + (s - 48) for s in PX.LVX_HEADS})
+    for slot, de_slot in de_of.items():
+        hid, h = PX.de_head(de, de_slot)
+        tbl[slot * 4], tbl[slot * 4 + 1], tbl[slot * 4 + 2], tbl[slot * 4 + 3] = h[5], h[4], h[6], 0
+    blobs.append((SND_LEVELS, bytes(tbl)))
+    for cid, blob in blobs:
+        with open(os.path.join(d, f"{cid:04X}.bin"), "wb") as f: f.write(blob)
+        extras[f"{cid:04X}"] = {"role": "unreferenced"}
+    with open(ex_path + ".tmp", "w") as f: json.dump(extras, f, indent=1)
+    os.replace(ex_path + ".tmp", ex_path)
+    print(f"SNES sound: driver {len(driver)} B -> {SND_DRIVER:04X}, directory {len(directory)} B ({n} blocks) -> {SND_DIR:04X}, "
+          f"data {len(data)} B -> {len(parts)} parts from {SND_DATA0:04X}, level sets -> {SND_LEVELS:04X} "
+          f"(slot 1: set {tbl[4]:02X} entry {tbl[5]:02X} exit {tbl[6]:02X}; finale: set {tbl[0x2F*4]:02X} entry {tbl[0x2F*4+1]:02X})")
+
+
 def do_integrate(scratch, music=None):
     """Full console-content integration: 5 SNES levels + 6 SMD scenes."""
     lvx = []
@@ -1270,6 +1326,7 @@ def do_integrate(scratch, music=None):
     # heads copy the canonical heads' pair refs) — the trailer is rebuilt
     balance_integrate(scratch, lvx)
     finale_integrate(scratch, lvx)
+    snes_sound_integrate(scratch)
     build_lvx(scratch, lvx)
     # UX stage 6: the language banks (BAC translations, Press Start 2P glyph pages)
     import build_locale

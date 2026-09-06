@@ -1,0 +1,1 @@
+snes_spc 0.9.x (Shay Green) as shipped in game-music-emu (https://github.com/libgme/game-music-emu, gme/Snes_Spc.*, Spc_Cpu.*, Spc_Dsp.*, Spc_Filter.*, blargg_*.h), LGPL 2.1 — see LICENSE.LGPL-2.1. Local change: blargg_config.h defines BLARGG_LITTLE_ENDIAN.
