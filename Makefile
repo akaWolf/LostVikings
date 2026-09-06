@@ -162,17 +162,21 @@ CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 # verify hash kernels were ~77% of CPU at the project-wide -O0.
 # gcc takes the LAST -O flag, so appending wins over the -O0 in $(DBG).
 $(OBJDIR)/src/sdl/v2_hash_hot.o: CXXFLAGS += -O2
-# v2_vm.cpp peaks >13G under -ggdb3 var-tracking in the V2_ONLY+HEADLESS
-# combo (gen includes + the asset facade) — cap the debug detail for this
-# one unit; everything else keeps full -ggdb3.
-# -fno-var-tracking-assignments is a gcc flag; clang (CXX=clang++, which
-# compiles this unit in ~1.2 GB where gcc needs > 8 GB — the CI's choice on
-# Linux) rejects it, so it is added under gcc only.
+# The generated world-script executors (src/sdl/gen/exec_01cN.cpp, one unit per
+# chunk: piece functions + router, see v2_vm_gen.h) and v2_vm.cpp itself cap
+# the debug detail at -g1: with full -ggdb3 var-tracking the old single unit
+# (v2_vm.cpp with all twelve executors included) peaked >13G, and even at -g1
+# it needed more than 7 GB under gcc -O2 — the split keeps every unit in
+# ordinary memory. -fno-var-tracking-assignments is a gcc flag; clang
+# (CXX=clang++, the CI's choice on Linux) rejects it, so it is added under gcc
+# only.
 CXX_IS_CLANG := $(findstring clang,$(shell $(CXX) --version 2>/dev/null | head -1))
 ifeq ($(CXX_IS_CLANG),)
 $(OBJDIR)/src/sdl/v2_vm.o: CXXFLAGS += -g1 -fno-var-tracking-assignments
+$(OBJDIR)/src/sdl/gen/exec_01c%.o: CXXFLAGS += -g1 -fno-var-tracking-assignments
 else
 $(OBJDIR)/src/sdl/v2_vm.o: CXXFLAGS += -g1
+$(OBJDIR)/src/sdl/gen/exec_01c%.o: CXXFLAGS += -g1
 endif
 
 # (#85) The m2c world is NOT -O2-clean: at -O2 the translated goto-labyrinth
@@ -214,6 +218,12 @@ CXX_SRCS := \
   src/sdl/v2_render_funcs.cpp \
   src/sdl/v2_smooth.cpp \
   src/sdl/v2_vm.cpp \
+  src/sdl/gen/exec_01c1.cpp \
+  src/sdl/gen/exec_01c2.cpp \
+  src/sdl/gen/exec_01c3.cpp \
+  src/sdl/gen/exec_01c4.cpp \
+  src/sdl/gen/exec_01c5.cpp \
+  src/sdl/gen/exec_01c6.cpp \
   src/sdl/v2_hash_hot.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_native_opl.cpp \
@@ -250,6 +260,12 @@ CXX_SRCS := \
   src/sdl/v2_render_funcs.cpp \
   src/sdl/v2_smooth.cpp \
   src/sdl/v2_vm.cpp \
+  src/sdl/gen/exec_01c1.cpp \
+  src/sdl/gen/exec_01c2.cpp \
+  src/sdl/gen/exec_01c3.cpp \
+  src/sdl/gen/exec_01c4.cpp \
+  src/sdl/gen/exec_01c5.cpp \
+  src/sdl/gen/exec_01c6.cpp \
   src/sdl/v2_hash_hot.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_keymap.cpp \

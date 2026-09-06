@@ -41,6 +41,7 @@ extern uint8_t v2_vga[65536 * 4];
 #include "v2_timing.h"
 #include "v2_gamestate.h"
 #include "v2_obj_view.h"
+#include "v2_vm_gen.h"      // V2VM + everything the generated executors (src/sdl/gen/exec_01cN.cpp) share with this file
 
 // Access to emulated memory
 extern "C" int  v2_ail_native_on();
@@ -1255,7 +1256,7 @@ void v2_verify_audio_slots_symmetry(uint8_t* real_ds, uint8_t* shadow_ds, int fr
 
 // Shadow of DS segment (animation table + globals).
 // Covers ds:0x0000 to ds:0x1C00 — all animation fields + globals.
-static const uint32_t V2_VM_SHADOW_SIZE = 0x10000; // Full 64KB DS segment
+// V2_VM_SHADOW_SIZE (0x10000, the full 64KB DS segment) is defined in v2_vm_gen.h.
 static uint8_t v2_vm_shadow_ds[V2_VM_SHADOW_SIZE];
 
 static uint16_t v2_pre_vm_32F_snapshot = 0; // ds:0x32F before pre-VM phase modifies it
@@ -1602,51 +1603,18 @@ static bool v2_sprite_shadow_active = false;
 // Accumulator lives in the active shadow DS at offset 0x8A — same as original.
 // v2_vm_acc_base points to whichever shadow is active (main or replay).
 // This ensures opcode handlers always write acc to the correct shadow.
-static uint8_t* v2_vm_acc_base = v2_vm_shadow_ds;
-// stage-4: the accumulator lives on the typed carrier. The proxy keeps the
-// 159 call sites reading/writing naturally while every store goes
-// member+image (write-through) via the mirror. acc_base may point at a
-// fn-test shadow — evac_on() is false there and the flat path is used.
-struct V2AccProxy {
-    // FLIPPED (wave 9): reads come from the carrier member; the fn-test
-    // shadows are not canonical and keep the flat path.
-    operator uint16_t() const {
-        const uint8_t* b = v2_vm_acc_base;
-        if (v2_gs_evac_on(b)) {
-            uint16_t img = *(const uint16_t*)(b + DS_ACCUMULATOR);
-            if (g_gs_evac.accumulator != img)
-                v2_gs_evac_read_desync("accumulator", DS_ACCUMULATOR, g_gs_evac.accumulator, img);
-            return g_gs_evac.accumulator;
-        }
-        return *(const uint16_t*)(b + DS_ACCUMULATOR);
-    }
-    V2AccProxy& operator=(uint16_t v) {
-        uint8_t* b = v2_vm_acc_base;
-        if (v2_gs_evac_on(b)) g_gs_evac.accumulator = v;
-        *(uint16_t*)(b + DS_ACCUMULATOR) = v;
-        return *this;
-    }
-    V2AccProxy& operator&=(uint16_t v)  { return *this = (uint16_t)((uint16_t)*this & v); }
-    V2AccProxy& operator<<=(int sh)     { return *this = (uint16_t)((uint16_t)*this << sh); }
-};
-static V2AccProxy v2_vm_accumulator;
+uint8_t* v2_vm_acc_base = v2_vm_shadow_ds;   // extern in v2_vm_gen.h (V2AccProxy)
+// struct V2AccProxy is defined in v2_vm_gen.h (the generated executors use the accumulator).
+V2AccProxy v2_vm_accumulator;   // extern in v2_vm_gen.h
 
 // Per-opcode execution trace for verification
-struct V2VMTraceEntry {
-    uint8_t  opcode;
-    uint16_t pc_before;  // PC before opcode dispatch (after reading opcode byte)
-    uint16_t pc_after;   // PC after opcode execution
-    uint16_t acc_before; // accumulator BEFORE opcode
-    uint16_t acc_after;  // accumulator AFTER opcode
-    uint16_t es_seg;     // es segment value at this opcode
-};
-static const int V2_VM_TRACE_MAX = 512;
-static V2VMTraceEntry v2_vm_trace[128][V2_VM_TRACE_MAX]; // per object slot
-static int v2_vm_trace_count[128];
+// struct V2VMTraceEntry / V2_VM_TRACE_MAX: v2_vm_gen.h (the executors record into the ring).
+V2VMTraceEntry v2_vm_trace[128][V2_VM_TRACE_MAX]; // per object slot (extern in v2_vm_gen.h)
+int v2_vm_trace_count[128];   // extern in v2_vm_gen.h
 
 // Per-object detailed trace: set v2_trace_object to object index (0,2,4,...) to log every opcode.
 // Set to 0xFFFF to disable. Traces to stderr with PC, opcode, accumulator, key DS reads.
-static uint16_t v2_trace_object = 0xFFFF;
+uint16_t v2_trace_object = 0xFFFF;   // extern in v2_vm_gen.h (G_POST)
 // Env override (diagnostics): V2_TRACE_OBJECT=hex object index.
 static void v2_trace_object_env_init() {
     static bool done = false;
@@ -1658,7 +1626,7 @@ static void v2_trace_object_env_init() {
 
 // Anim command counters for verification
 int v2_orig_anim_cmd_count = 0;  // incremented by original's anim cmd loop
-static int v2_v2_anim_cmd_count = 0;  // incremented by v2's anim cmd loop
+int v2_v2_anim_cmd_count = 0;  // incremented by v2's anim cmd loop (extern in v2_vm_gen.h)
 
 static bool v2_replay_verify_active = false; // when true, resolve_segment uses real memory
 uint16_t v2_input_snapshot = 0; // snapshot of input_keys taken by seg000 after orig sub_12352
@@ -2036,7 +2004,7 @@ void v2_hw_wp_arm_ds(uint16_t /*offset*/) {}
 
 
 // Forward declarations
-static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
+int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
                           uint16_t si_anim);
 static void v2_vm_init_table();
 
@@ -2779,8 +2747,8 @@ static uint16_t v2_vm_bittest_153ea(V2VM& vm);
 static uint16_t v2_vm_bittest_15403(V2VM& vm);
 static uint16_t v2_vm_bittest_1542a(V2VM& vm);
 static uint16_t v2_vm_bittest_15445(V2VM& vm);
-static uint32_t v2_ds_hash(uint8_t* ds);
-static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx);
+uint32_t v2_ds_hash(uint8_t* ds);
+uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx);
 static uint32_t v2_es_hash(uint8_t* ds, uint16_t obj_idx);
 static uint32_t v2_fs_hash(uint8_t* ds);
 static uint32_t v2_fs_hash_shadow();
@@ -6748,7 +6716,7 @@ static bool v2_obj_template_init_13e52(uint8_t* s, uint16_t si, uint16_t bx) {
 // Inputs (orig regs): ax = code_seg_idx, di = spawn table index (0xFFFF = none),
 // si = anim flags; position pre-staged in ds:6C/6E by the caller.
 // Returns the new slot (orig: DI, CLC) or -1 (orig: DI=0, STC).
-static int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
+int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn,
                           uint16_t si_anim) {
     v2_cc_v2_hit(CC_13809);   // M1 wave-2 (#65)
     // V2_VIK_DBG=1: scene-spawn forensics (viking trio disappearing after the
@@ -9289,7 +9257,7 @@ uint32_t v2_orig_post_vm_ds_hash[5] = {0,0,0,0,0};
 static uint8_t v2_orig_post_vm_ds_bytes[5][0x10000];
 static bool    v2_orig_post_vm_ds_valid[5] = {0};
 int v2_orig_post_vm_frame = 0; // bumps on each idx=0 record (once per game frame)
-static uint32_t v2_ds_hash(uint8_t* ds); // forward; defined later in this file
+uint32_t v2_ds_hash(uint8_t* ds); // forward; defined later in this file
 // (#83) The former snap-pair hold + spin-pump + AIL-checkpoint scaffolding
 // is GONE: the audible path is the sink instance (audio thread, sample-clock
 // ticks — v2_ail.cpp), and the real+shadow verify pair is back on purely
@@ -10455,93 +10423,9 @@ static void v2_vm_reset_frame_state(uint8_t* ds) {
 }
 
 // ============================================================================
-// VM State
+// VM State — struct V2VM is defined in v2_vm_gen.h (shared with the generated
+// executors' translation units src/sdl/gen/exec_01cN.cpp).
 // ============================================================================
-struct V2VM {
-    uint8_t* ds;          // Real DS segment (for reading data outside shadow range)
-    uint8_t* shadow;      // Shadow DS (for reads/writes within animation table)
-    uint8_t* es;          // Current code segment pointer
-    uint8_t* cs_base;     // CS segment base (seg000 = m2c_base + 0x1A20)
-    uint16_t obj;         // Current object index
-    uint16_t pc;          // Bytecode pointer
-    bool running;         // False when opcode 0x00 yields
-    bool carry;           // Carry flag (set by animation load functions)
-    int slot;             // Object slot index (obj / 2)
-    // Shadow SI register (task #15): NOT carried across opcodes — the orig
-    // dispatcher rewrites si = opcode*2 at every fetch (loc_142a6). Handlers'
-    // local si writers (channel getters, 12515 tail) update it; the op
-    // 41/44/45 ch6/7 escapes store it into [bx+0x1DA9].
-    uint16_t si_track = 0;
-    // Shadow DI register (task #15): mirrors the 8086 DI value the orig VM
-    // carries across opcodes/objects. Written by the deterministic DI writers
-    // (ch3 field addressing, search scans, per-opcode MOV di sites) and read
-    // by the ch6/7 escape paths of op 41/44/45, which store the STALE di into
-    // the command buffer word [bx+0x1DAB] (the orig continues through the
-    // wrapper writes with whatever di held at escape time).
-    uint16_t di_track = 0;
-    // DX clobber model for the ch4 getter (sub_12312 Path1, divergence №40):
-    // MOV edx,15A4E35h (0x231E) + MUL edx (0x2324) leave EDX = high32 of
-    // seed*0x15A4E35 — the real 386 destroys DX inside the RNG fetch. Opcode
-    // bodies that keep a value in DX across a later dispatch (op27 X @0x4F11,
-    // op29 Y @0x5025) must replace it with ch4_mul_dx when the LAST dispatch
-    // took the ch4 Path1 route. Path2 (LFSR, [0x42C]!=0) clobbers only AX.
-    // (EAX's high half also survives as low16(new_seed) after ROR — no 16-bit
-    // VM path ever reads it, so it is not modelled.)
-    // The dispatcher clears the flag before every dispatch.
-    bool     ch4_mul_clobber = false;
-    uint16_t ch4_mul_dx = 0;
-
-    // Bytecode read helpers
-    uint8_t  read_u8()  { uint8_t  v = es[pc]; pc += 1; return v; }
-    uint16_t read_u16() { uint16_t v = *(uint16_t*)(es + pc); pc += 2; return v; }
-
-    // DS read: use shadow if within range, otherwise real DS
-    uint16_t ds_read(uint16_t addr) {
-        if (addr < V2_VM_SHADOW_SIZE - 1)
-            return *(uint16_t*)(shadow + addr);
-        return *(uint16_t*)(ds + addr);
-    }
-
-    // DS write: write to shadow if within range (never write to real DS)
-    void ds_write(uint16_t addr, uint16_t val) {
-        if (addr < V2_VM_SHADOW_SIZE - 1) {
-            // V2_NEXTLVL_TRACE=1 (#104 progression): log every VM write into
-            // DS_LEVEL_LOAD with the executing object + bytecode pc — the
-            // "who sets the next level" forensics channel.
-            if (addr == DS_LEVEL_LOAD) {
-                static int trace = -1;
-                if (trace < 0) { const char* e = getenv("V2_NEXTLVL_TRACE"); trace = (e && e[0]=='1') ? 1 : 0; }
-                if (trace) {
-                    // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-                    fprintf(stderr, "V2-NEXTLVL: f%d obj=%02X pc=%04X val=%04X (level=%04X)\n",
-                            v2_dbg_pre_vm_iter, obj, pc,
-                            val, *(uint16_t*)(shadow + DS_LEVEL));
-                }
-            }
-            // stage-4 II.c: the operand write path mirrors evacuated fields
-            // (interpreter bodies/helpers reach them with computed addresses).
-            v2_gs_evac_mirror_w(shadow, addr, val);
-            *(uint16_t*)(shadow + addr) = val;
-        }
-    }
-
-    // DS byte write
-    void ds_write_b(uint16_t addr, uint8_t val) {
-        if (addr < V2_VM_SHADOW_SIZE) {
-            // stage-4 II.c: byte operand path mirrors evacuated fields too
-            v2_gs_evac_mirror_b(shadow, addr, val);
-            shadow[addr] = val;
-        }
-    }
-
-    // Field access for current object
-    uint16_t field_r(uint16_t offset) { return ds_read(obj + offset); }
-    void     field_w(uint16_t offset, uint16_t val) { ds_write(obj + offset, val); }
-
-    // Global access
-    uint16_t global_r(uint16_t offset) { return ds_read(offset); }
-    void     global_w(uint16_t offset, uint16_t val) { ds_write(offset, val); }
-};
 
 // ObjRef backend (declared in v2_obj_view.h): forwards through the VM
 // accessors (shadow bounds check + single write path).
@@ -10557,7 +10441,7 @@ typedef void (*V2VMOpFn)(V2VM& vm);
 // Forward declarations
 static void v2_vm_op_unimpl(V2VM& vm);
 static bool v2_vm_collision_check_155d6(V2VM& vm);
-static void v2_vm_runtime_dispatch(V2VM& vm, uint16_t table_ds_offset, uint16_t index);
+void v2_vm_runtime_dispatch(V2VM& vm, uint16_t table_ds_offset, uint16_t index);
 static uint16_t v2_vm_read_literal(V2VM& vm);
 static uint16_t v2_vm_read_indexed_field(V2VM& vm);
 static void v2_vm_do_jump(V2VM& vm);
@@ -10692,7 +10576,7 @@ static void v2_vm_ch67_ub_guard(V2VM& vm, const char* site) {
 static void v2_vm_setter_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode);
 static bool v2_vm_ch_dispatch_1250b(V2VM& vm, uint8_t& out_mode);
 static bool v2_vm_ch_escape_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di);
-static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd);
+bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd);
 static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm);
 
 // 0x05 = sub_142c1 (same as call-jump): save alt_pc, then jump
@@ -10713,7 +10597,7 @@ static void v2_vm_subdispatch_unimpl(V2VM& vm, uint16_t cs_addr);
 // Dispatch through a runtime table. Reads entry from real DS.
 // table_ds_offset = DS offset of the dispatch table
 // index = entry index (NOT multiplied by 2 — we do it here)
-static void v2_vm_runtime_dispatch(V2VM& vm, uint16_t table_ds_offset, uint16_t index) {
+void v2_vm_runtime_dispatch(V2VM& vm, uint16_t table_ds_offset, uint16_t index) {
     uint16_t cs_addr = *(uint16_t*)(vm.shadow +table_ds_offset + index * 2);
 
     // Map CS address to v2 handler
@@ -10755,7 +10639,7 @@ static void v2_vm_subdispatch_unimpl(V2VM& vm, uint16_t cs_addr) {
 
 // 0x0F (sub_1431c): Exit VM + set flag ds:0x334 |= 1. Same as yield.
 // 0x0F = sub_1431c: [si+0x132D] = bx; OR [si+0x1585], 0x200; POP ax; RETN
-static void v2_vm_op_exit_with_flag(V2VM& vm) {
+void v2_vm_op_exit_with_flag(V2VM& vm) {
     extern int v2_orig_post_vm_frame;
     extern int v2_dbg_pre_vm_iter, v2_dbg_post_vm_iter;
     { static int _vc = 0; if (++_vc <= 10)
@@ -10780,14 +10664,14 @@ static void v2_vm_op_skip3(V2VM& vm) { vm.pc += 3; }
 //   printf debug; play_xmidi_external(raddr(ds:0x2E6D, 0), chunk_sizes[ds:0x2E6D<<4], ax); RETN
 // The slot-allocation logic below RETN is dead code in SDL build (was AIL bookkeeping).
 // We still keep the slot writes for shadow-DS bookkeeping (excluded from verify).
-static void v2_vm_sfx_core(V2VM& vm, uint16_t seq);
-static void v2_vm_op_sound(V2VM& vm) {
+void v2_vm_sfx_core(V2VM& vm, uint16_t seq);
+void v2_vm_op_sound(V2VM& vm) {
     uint16_t seq = vm.read_u16();
     v2_snes_sfx_vol_hint = seq >> 8;                     // UX stage 10: op 2 on the console = play SFX (id, volume)
     v2_vm_sfx_core(vm, seq);
     v2_snes_sfx_vol_hint = -1;
 }
-static void v2_vm_sfx_core(V2VM& vm, uint16_t seq) {
+void v2_vm_sfx_core(V2VM& vm, uint16_t seq) {
     seq &= 0xFF; // AND ax, 0FFh
     // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     extern uint16_t v2_current_level;
@@ -10809,12 +10693,12 @@ static void v2_vm_sfx_core(V2VM& vm, uint16_t seq) {
 // 0x04 (sub_1782a): Stop sound. 1 byte consumed.
 // Original: reads channel number, checks ds:0x304, finds matching slot,
 // calls AIL stop sequence.
-static void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param);
-static void v2_vm_op_sound1(V2VM& vm) {
+void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param);
+void v2_vm_op_sound1(V2VM& vm) {
     uint8_t param = vm.read_u8();
     v2_vm_sfx_stop_core(vm, param);
 }
-static void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param) {
+void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param) {
     param &= 0xFF;
     // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
@@ -10851,7 +10735,7 @@ static void v2_vm_sfx_stop_core(V2VM& vm, uint8_t param) {
 // sub_141ba: Read tile from tile map at (si, di). Returns full 16-bit tile word.
 // Bounds-checks si against ds:0x25DC, di against ds:0x25DE.
 // Out of bounds: returns 0x400 (si) or 0 (di).
-static uint16_t v2_vm_tile_read_141ba(V2VM& vm, uint16_t si, uint16_t di) {
+uint16_t v2_vm_tile_read_141ba(V2VM& vm, uint16_t si, uint16_t di) {
     if (si >= vm.ds_read(DS_MAP_BP)) return 0x400;   // bounds exits leave DI
     if (di >= vm.ds_read(DS_MAP_HEIGHT)) return 0;
     uint16_t di2 = di << 1;
@@ -10882,13 +10766,13 @@ static uint16_t v2_vm_tile_read_141ba(V2VM& vm, uint16_t si, uint16_t di) {
 }
 
 // sub_141b3: Read tile index (lower 10 bits) at (si, di).
-static uint16_t v2_vm_tile_low_141b3(V2VM& vm, uint16_t si, uint16_t di) {
+uint16_t v2_vm_tile_low_141b3(V2VM& vm, uint16_t si, uint16_t di) {
     return v2_vm_tile_read_141ba(vm, si, di) & 0x3FF;
 }
 
 // sub_141a7: Read tile TYPE at (si, di) — 141ba word, then
 // AND 0xFC00; XCHG ah,al; SHR ax,2 (== high 6 bits >> 10, in place).
-static uint16_t v2_vm_tile_type_141a7(V2VM& vm, uint16_t si, uint16_t di) {
+uint16_t v2_vm_tile_type_141a7(V2VM& vm, uint16_t si, uint16_t di) {
     uint16_t t = (uint16_t)(v2_vm_tile_read_141ba(vm, si, di) & 0xFC00);
     t = (uint16_t)((t >> 8) | (t << 8));   // XCHG ah, al
     return (uint16_t)(t >> 2);
@@ -10902,7 +10786,7 @@ static uint16_t v2_vm_tile_type_px_14199(V2VM& vm, uint16_t si, uint16_t di) {
 
 // sub_141e0: Write tile word ax to tile map at (si, di).
 // push si, di; di*=2; si*=2; si+=ds:[di-0x7098]; es=ds:0x2E63; es:[si]=ax; pop di, si.
-static void v2_vm_tile_write_141e0(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
+void v2_vm_tile_write_141e0(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
     // Write to shadow tile map (not real memory — original handles the real tile map).
     uint16_t di2 = di << 1;
     uint16_t si2 = si << 1;
@@ -10925,7 +10809,7 @@ static void v2_vm_tile_write_141e0(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
 // Also writes 4 tile words to FS (VGA) pages — skipped for v2.
 // Called with si=X_tile, di=Y_tile, ax=tile_value.
 static int v2_13fc2_count = 0;
-static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
+void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax) {
     v2_13fc2_count++;
     vm.ds_write(DS_MODE_WORD, ax);
     uint16_t x_pix = si << 4;   // si * 16
@@ -11005,7 +10889,7 @@ static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t 
 static void v2_vm_op_0C(V2VM& vm);
 
 // sub_15505: [si+0x15AD] -= [di+0x15D5]; if no borrow → 0. 0 bytes.
-static void v2_vm_res_deduct_15505(V2VM& vm, uint16_t si, uint16_t di) {
+void v2_vm_res_deduct_15505(V2VM& vm, uint16_t si, uint16_t di) {
     uint16_t a = ObjRef{vm, si}.u16(OBJ_RES_HANDLE);
     uint16_t b = ObjRef{vm, di}.u16(OBJ_RES_COST);
     ObjRef{vm, si}.w16(OBJ_RES_HANDLE, (a < b) ? (uint16_t)(a - b) : 0);
@@ -11028,7 +10912,7 @@ static void v2_vm_op_3A(V2VM& vm) {
     v2_vm_res_deduct_15505(vm, si, di);
 }
 
-static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);  // vertical-flip body (defined below)
+void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);  // vertical-flip body (defined below)
 
 // 0x09 (sub_13743): Conditional vflip — if flag 0x80 NOT set → call sub_13757. 0 bytes.
 static void v2_vm_op_09(V2VM& vm) {
@@ -11037,7 +10921,7 @@ static void v2_vm_op_09(V2VM& vm) {
 }
 
 // 0x0A (sub_13733): Conditional vflip — if flag 0x80 set → call sub_13757. 0 bytes.
-static void v2_vm_op_0A(V2VM& vm) {
+void v2_vm_op_0A(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x80) v2_vm_vflip_body_13757(vm, si);
 }
@@ -11045,7 +10929,7 @@ static void v2_vm_op_0A(V2VM& vm) {
 // 0xD4 (sub_1531c): velocity direction from position delta. Exact replica.
 // Reads: 1 mode byte (off_30C98 X+Y dispatch, may consume 0-4 more bytes) + 1 threshold byte.
 // Writes: [si+0x164D] = X velocity, [si+0x1675] = Y velocity.
-static void v2_vm_op_D4(V2VM& vm) {
+void v2_vm_op_D4(V2VM& vm) {
     vm.ds_write(DS_AIM_SIGN_X, 0);
     vm.ds_write(DS_AIM_SIGN_Y, 0);
     // Orig sub_1531c eips 0x5328-0x532C: MOV ax, es:[bx] (word read), INC bx (1 byte),
@@ -11113,7 +10997,7 @@ static void v2_vm_op_D4(V2VM& vm) {
 // 0xD5 (sub_178d6): Sound play via sub_176bd. 1 byte consumed.
 // Original (vikings.exe_seg000.cpp:16062): INC bx (1 byte); if ds:0x302==0:
 // sub_176bd(si=0, ax=0, bx=ds:0x2E6B) → play music. v2 mirrors via v2_music_start_178d6_v2.
-static void v2_vm_op_D5(V2VM& vm) {
+void v2_vm_op_D5(V2VM& vm) {
     uint8_t snes_id = vm.es[vm.pc];                      // UX stage 10: $C314 — function 3 (id, FFFF, 0x30) when music is on
     vm.pc += 1;
     if (v2_snes_sound_enabled()) v2_snes_snd_play_music(snes_id);
@@ -11138,13 +11022,13 @@ static void v2_vm_op_D6(V2VM& vm) {
 // If found: AIL stop+release (sub_1C79F + sub_1C769) — orig SDL port LEFT THESE
 // AS AIL stubs (no SDL replacement). Then clears slots.
 // V2 uses adlmidi via stored handle (v2_vm_op_sound stored player num).
-static void v2_vm_sfx_stopslots_core(V2VM& vm, uint8_t seq);
-static void v2_vm_op_D7(V2VM& vm) {
+void v2_vm_sfx_stopslots_core(V2VM& vm, uint8_t seq);
+void v2_vm_op_D7(V2VM& vm) {
     uint8_t seq = vm.es[vm.pc] & 0xFF;
     vm.pc += 3;
     v2_vm_sfx_stopslots_core(vm, seq);
 }
-static void v2_vm_sfx_stopslots_core(V2VM& vm, uint8_t seq) {
+void v2_vm_sfx_stopslots_core(V2VM& vm, uint8_t seq) {
     // v2_dbg_pre_vm_iter: file-scope extern (top of file)
     uint16_t cur_obj = vm.global_r(DS_CUR_OBJ);
     bool muted = vm.ds_read(DS_SFX_MUTE) != 0;
@@ -11206,10 +11090,10 @@ static void v2_vm_op_CD(V2VM& vm) {
 }
 
 // Forward declarations for C0-C6 opcodes
-static bool v2_vm_obj_search_down_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_obj_search_up_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
-static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+bool v2_vm_obj_search_down_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+bool v2_vm_obj_search_up_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
+bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
 static void v2_vm_do_call_jump(V2VM& vm);
 
 // Helper: vikings-only object search wrapper.
@@ -11281,7 +11165,7 @@ static void v2_vm_op_C4(V2VM& vm) {
 
 // 0xC1 (sub_151f2): vikings-only flip-aware X obj search + off_30C8E[0]. 1 byte.
 // flag SET → loc_151da → sub_15df2 (X_end+1). NOT set → loc_15214 → sub_15de5 (X_start-1).
-static void v2_vm_op_C1(V2VM& vm) {
+void v2_vm_op_C1(V2VM& vm) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     uint16_t saved = vm.ds_read(DS_OBJ_COUNT);
     vm.ds_write(DS_OBJ_COUNT, 6);
@@ -11340,9 +11224,9 @@ static void v2_vm_op_C6(V2VM& vm) {
 
 // Forward declarations for search functions defined later
 static bool v2_vm_tile_scan_x_159f6(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t dx);
-static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
-static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
+bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di);
+bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
 
 // sub_1603e (seg000 eips 0x603E..0x60CE): flip-aware single-point object
 // search. Own prologue: ds:0x34=filter; probe X = [di+1535]-1 if flags&0x40
@@ -11426,14 +11310,14 @@ static bool v2_vm_tile_probe_15ac4(V2VM& vm, uint16_t filter_si, uint16_t obj_di
 // sub_158e6: animation load using flip-aware SINGLE-POINT search.
 // sub_15ac4: single tile check at (X_flip_edge, Y_end+1).
 // sub_1603e: object search at X_flip_edge (own prologue re-writes 34/36/38).
-static void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+void v2_vm_probe_front_158e6(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     if (v2_vm_tile_probe_15ac4(vm, filter_si, obj_di)) { vm.carry = true; return; }
     vm.carry = v2_vm_obj_probe_1603e(vm, filter_si, obj_di);
 }
 
 // sub_158aa: animation load using X_start-1 search (sub_159c6 tile + sub_15de5 obj).
-static void v2_vm_probe_left_158aa(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+void v2_vm_probe_left_158aa(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     bool found = v2_vm_tile_scan_x_159f6(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_X0) - 1);
     if (found) { vm.carry = true; return; }
@@ -11443,7 +11327,7 @@ static void v2_vm_probe_left_158aa(V2VM& vm, uint16_t filter_si, uint16_t obj_di
 // 0x24 (sub_144ad): Flip-aware animation load. 1 byte. off_30C8E[2].
 // flag 0x40 SET → sub_158b9 (X_end+1 search)
 // flag 0x40 NOT set → sub_158aa (X_start-1 search)
-static void v2_vm_op_24(V2VM& vm) {
+void v2_vm_op_24(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
@@ -11501,9 +11385,9 @@ static uint16_t v2_field_addr_D(V2VM& vm) {
 }
 
 // 0x61 (sub_147cb): AND [field_A + 0x14E5], acc. 1 byte.
-static void v2_vm_op_61(V2VM& vm) { uint16_t a = v2_field_addr_A(vm); ObjRef{vm, a}.w16(OBJ_FIELD_BASE, ObjRef{vm, a}.u16(OBJ_FIELD_BASE) & v2_vm_accumulator); }
+void v2_vm_op_61(V2VM& vm) { uint16_t a = v2_field_addr_A(vm); ObjRef{vm, a}.w16(OBJ_FIELD_BASE, ObjRef{vm, a}.u16(OBJ_FIELD_BASE) & v2_vm_accumulator); }
 // 0x65 (sub_14827): XOR [field_B + 0x14E5], acc. 1 byte.
-static void v2_vm_op_65(V2VM& vm) { uint16_t a = v2_field_addr_B(vm); ObjRef{vm, a}.w16(OBJ_BBOX_Y0, ObjRef{vm, a}.u16(OBJ_BBOX_Y0) ^ v2_vm_accumulator); }
+void v2_vm_op_65(V2VM& vm) { uint16_t a = v2_field_addr_B(vm); ObjRef{vm, a}.w16(OBJ_BBOX_Y0, ObjRef{vm, a}.u16(OBJ_BBOX_Y0) ^ v2_vm_accumulator); }
 
 // 0x15 (sub_150fc): Relative position to active viking → 2 sub_154bf writes. 1 byte.
 static void v2_vm_op_15(V2VM& vm) {
@@ -11539,7 +11423,7 @@ static void v2_vm_op_15(V2VM& vm) {
 // mirror X bounds around 2*[si+173Dh], then the sub-sprite loop — which in
 // the orig is a DO-WHILE (body first, CMP di,cx / JL at the end): it runs
 // at least once whenever [si+1AD5h] != 0, even if [si+1A85h] >= [si+1AADh].
-static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si) {
+void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si) {
     ObjRef self{vm, si};
     self.w16(OBJ_FLAGS, self.u16(OBJ_FLAGS) ^ 0x40);                      // XOR [si+1585h], 40h
     uint16_t ax = (uint16_t)((uint16_t)(self.u16(OBJ_WORLD_X) << 1)
@@ -11569,7 +11453,7 @@ static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si) {
 // sub_136a0 on the Y axis: flag 0x80, bounds [si+150Dh]/[si+14E5h] around
 // 2*[si+1765h], sub-sprite loop is a DO-WHILE (runs at least once when
 // [si+1AD5h] != 0).
-static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si) {
+void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si) {
     ObjRef self{vm, si};
     self.w16(OBJ_FLAGS, self.u16(OBJ_FLAGS) ^ 0x80);                      // XOR [si+1585h], 80h
     uint16_t ax = (uint16_t)((uint16_t)(self.u16(OBJ_WORLD_Y)
@@ -11629,7 +11513,7 @@ static void v2_vm_op_0D(V2VM& vm) {
 }
 
 // 0x0E (sub_142fc): Set bit in ds:[byte+0x356]. 0 bytes.
-static void v2_vm_op_0E(V2VM& vm) {
+void v2_vm_op_0E(V2VM& vm) {
     vm.si_track = vm.global_r(DS_CUR_OBJ);            // MOV si, ds:42h
     int16_t val = (int16_t)vm.field_r(OBJ_ANIM_SUB);
     vm.di_track = (uint16_t)val;                // MOV di, [si+16C5h]
@@ -11660,7 +11544,7 @@ static void v2_vm_op_load_alt_pc(V2VM& vm) {
 // 5. si = ds:[si - 0x6CBA]; si += ds:0x42
 // 6. ds:[si + 0x14E5] &= dx
 // 7. ds:[si + 0x14E5] |= ds:0x8A
-static void v2_vm_op_9C(V2VM& vm) {
+void v2_vm_op_9C(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0)
         v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
@@ -11674,7 +11558,7 @@ static void v2_vm_op_9C(V2VM& vm) {
 
 // 0x12 (sub_14340): Release animation object. 0 bytes.
 // di=ds:0x42; si=ds:[di+0x1995]; calls sub_15505 (sprite release)
-static void v2_vm_op_12(V2VM& vm) {
+void v2_vm_op_12(V2VM& vm) {
     // sub_14340: di=ds:0x42; si=[di+0x1995]; CALL sub_15505
     // sub_15505: [si+15AD] -= [di+15D5]; if no borrow → 0
     uint16_t di = vm.global_r(DS_CUR_OBJ);
@@ -11809,10 +11693,10 @@ static bool v2_vm_obj_search(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint
 }
 
 // Entry point wrappers for object search
-static bool v2_vm_obj_search_up_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+bool v2_vm_obj_search_up_15fb1(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_obj_search(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_FIELD_BASE) - 1);
 }
-static bool v2_vm_obj_search_down_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+bool v2_vm_obj_search_down_15fbe(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_obj_search(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_Y1) + 1);
 }
 
@@ -11888,7 +11772,7 @@ static bool v2_vm_obj_at_pos_160cf(V2VM& vm, uint16_t filter_si) {
 
 // sub_1589b: animation load using ds:0x6C/0x6E position search.
 // ds:0x3B4=0xFFFF; call sub_15ae9 (tile at 6C/6E); JC→ret; call sub_160cf (obj at 6C/6E); ret.
-static void v2_vm_probe_at_pos_1589b(V2VM& vm, uint16_t filter_si) {
+void v2_vm_probe_at_pos_1589b(V2VM& vm, uint16_t filter_si) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     bool found_tile = v2_vm_tile_at_pos_15ae9(vm, filter_si);
     if (found_tile) {
@@ -12006,7 +11890,7 @@ static bool v2_vm_tile_search_x_159df_at(V2VM& vm, uint16_t filter_si, uint16_t 
 }
 
 // loc_15dfd: X-axis object search core (common for sub_15df2 and sub_15de5).
-static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search) {
+bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search) {
     vm.ds_write(DS_SCRATCH_34, filter_si);
     vm.ds_write(DS_SCRATCH_36, x_search);
     uint8_t* rds = vm.shadow;
@@ -12045,12 +11929,12 @@ static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di
 }
 
 // sub_15de5/sub_15df2 wrappers:
-static bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+bool v2_vm_obj_search_left_15de5(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     return v2_vm_obj_scan_x_15dfd(vm, filter_si, obj_di, ObjRef{vm, obj_di}.u16(OBJ_BBOX_X0) - 1);
 }
 
 // sub_158b9: animation load using X-axis search paths (X_end + 1).
-static void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     bool found = v2_vm_tile_search_right_159df(vm, filter_si, obj_di);
     if (found) {
@@ -12063,7 +11947,7 @@ static void v2_vm_probe_right_158b9(V2VM& vm, uint16_t filter_si, uint16_t obj_d
 // sub_158c8: animation load using Y_start-1 search paths.
 // ds:0x3B4 = 0xFFFF; call sub_15a57 (tile search Y_start-1);
 // if carry → return; call sub_15fb1 (obj search Y_start-1); return carry.
-static void v2_vm_probe_up_158c8(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+void v2_vm_probe_up_158c8(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     bool found_a = v2_vm_tile_search_up_15a57(vm, filter_si, obj_di);
     if (found_a) {
@@ -12074,7 +11958,7 @@ static void v2_vm_probe_up_158c8(V2VM& vm, uint16_t filter_si, uint16_t obj_di) 
 }
 
 // sub_158d7: animation load function. Sets carry based on search results.
-static void v2_vm_probe_down_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
+void v2_vm_probe_down_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di) {
 // V2-158d7 spam — commented (599 lines/run)
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     bool found_a = v2_vm_tile_search_down_15A70(vm, filter_si, obj_di);
@@ -12088,7 +11972,7 @@ static void v2_vm_probe_down_158d7(V2VM& vm, uint16_t filter_si, uint16_t obj_di
 
 // 0x14 (sub_14f59): Object creation. Full implementation.
 // Reads 3 mode bytes + dispatches, then calls sub_13809 to create a new object.
-static void v2_vm_op_14(V2VM& vm) {
+void v2_vm_op_14(V2VM& vm) {
     // Step 1: Read mode1 byte → dual dispatch → X position (ds:0x6C), Y position (ds:0x6E)
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
@@ -12160,7 +12044,7 @@ static void v2_vm_op_14(V2VM& vm) {
 // off_30C8E[2] = loc_144f3: carry → skip 2, no carry → jump
 
 // 0x1F (sub_14469): Animation load + off_30C8E[0] dispatch. 1 byte.
-static void v2_vm_op_1F(V2VM& vm) {
+void v2_vm_op_1F(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
@@ -12181,7 +12065,7 @@ static void v2_vm_op_1F(V2VM& vm) {
 // 0xC2 (sub_151b8): Player-proximity search + off_30C8E[0]. 1 byte.
 // Saves ds:0x372, sets to 6 (search only player objects 0-5).
 // NOT flipped → sub_15df2, flipped → sub_15de5.
-static void v2_vm_op_C2(V2VM& vm) {
+void v2_vm_op_C2(V2VM& vm) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     uint16_t saved_372 = vm.ds_read(DS_OBJ_COUNT);
     vm.ds_write(DS_OBJ_COUNT, 6); // limit search to players
@@ -12214,7 +12098,7 @@ static void v2_vm_op_C2(V2VM& vm) {
 
 // 0x1E (sub_1444f): Anim load via sub_158c8 (Y-search variant) + off_30C8E[0]. 1 byte.
 // orig sub_1444f → loc_14455 → CALL sub_158c8 → JMP off_30C8E[0].
-static void v2_vm_op_1E(V2VM& vm) {
+void v2_vm_op_1E(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
@@ -12236,7 +12120,7 @@ static void v2_vm_op_1E(V2VM& vm) {
 // flag 0x40 NOT set → sub_158aa (X_start-1), flag 0x40 SET → sub_158b9 (X_end+1).
 // orig sub_144a9 → loc_144af → if [si+1585]&0x40 → loc_14495 (sub_158b9 path),
 // else loc_144bb (sub_158aa path).
-static void v2_vm_op_20(V2VM& vm) {
+void v2_vm_op_20(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     bool flipped = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t anim_idx = vm.read_u8();
@@ -12261,7 +12145,7 @@ static void v2_vm_op_20(V2VM& vm) {
 
 // 0x21 (sub_14483): Anim load + off_30C8E[0]. 1 byte.
 // NOT flipped → sub_158b9, flipped → sub_158aa.
-static void v2_vm_op_21(V2VM& vm) {
+void v2_vm_op_21(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     bool flipped = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t anim_idx = vm.read_u8();
@@ -12286,7 +12170,7 @@ static void v2_vm_op_21(V2VM& vm) {
 
 // 0x23 (sub_1446d): Animation load + off_30C8E[2] dispatch. 1 byte.
 // 0x22 (sub_14453): Anim load via sub_158c8 (Y_start-1 paths) + off_30C8E[2]. 1 byte.
-static void v2_vm_op_22(V2VM& vm) {
+void v2_vm_op_22(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
@@ -12327,7 +12211,7 @@ static void v2_vm_op_31(V2VM& vm) {
     }
 }
 
-static void v2_vm_op_23(V2VM& vm) {
+void v2_vm_op_23(V2VM& vm) {
     uint8_t anim_idx = vm.read_u8();
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     vm.di_track = di;   // orig: MOV di,ds:42h; 159xx/15dxx scans PUSH/POP-clean (task #15)
@@ -12347,7 +12231,7 @@ static void v2_vm_op_23(V2VM& vm) {
 
 // 0x08 (sub_1367c): Horizontal flip if flag 0x40 set. 0 bytes.
 // Like 0x0C but for horizontal direction. Calls sub_136a0 if flag set.
-static void v2_vm_op_08(V2VM& vm) {
+void v2_vm_op_08(V2VM& vm) {
     // sub_1367c: TEST [si+1585h], 40h / JZ ret → call sub_136a0 when set
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (!(ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)) return;
@@ -12356,13 +12240,13 @@ static void v2_vm_op_08(V2VM& vm) {
 
 // 0x5D (sub_14771): Subtract acc from value at address. 2 bytes.
 // si=es:[bx]; bx+=2; ds:[si] -= ds:0x8A
-static void v2_vm_op_5D(V2VM& vm) {
+void v2_vm_op_5D(V2VM& vm) {
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, vm.ds_read(addr) - v2_vm_accumulator);
 }
 
 // 0x7C (sub_1491b): Signed >= literal (2B). acc >= val → JUMP. acc < val → skip 2.
-static void v2_vm_op_7C(V2VM& vm) {
+void v2_vm_op_7C(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if ((int16_t)v2_vm_accumulator >= (int16_t)val) {
         v2_vm_do_jump(vm);
@@ -12371,11 +12255,11 @@ static void v2_vm_op_7C(V2VM& vm) {
     }
 }
 
-static uint16_t v2_vm_read_random(V2VM& vm); // forward decl
+uint16_t v2_vm_read_random(V2VM& vm); // forward decl
 static uint16_t v2_vm_read_indexed_field_1995(V2VM& vm); // forward decl
 
 // 0x7F (sub_14963): Signed >= indexed+1995 (1B). acc >= val → JUMP. Variant A.
-static void v2_vm_op_7F(V2VM& vm) {
+void v2_vm_op_7F(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if ((int16_t)v2_vm_accumulator >= (int16_t)val) {
         v2_vm_do_jump(vm);
@@ -12385,7 +12269,7 @@ static void v2_vm_op_7F(V2VM& vm) {
 }
 
 // 0x80 (sub_1497b): Signed >= random (0B). acc >= val → JUMP. Variant A.
-static void v2_vm_op_80(V2VM& vm) {
+void v2_vm_op_80(V2VM& vm) {
     uint16_t val = v2_vm_read_random(vm);
     if ((int16_t)v2_vm_accumulator >= (int16_t)val) {
         v2_vm_do_jump(vm);
@@ -12405,7 +12289,7 @@ static void v2_vm_op_85(V2VM& vm) {
 }
 
 // 0x81 (sub_14993): Signed >= literal (2B). acc >= val → SKIP 2. acc < val → jump. Variant B.
-static void v2_vm_op_81(V2VM& vm) {
+void v2_vm_op_81(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if ((int16_t)v2_vm_accumulator >= (int16_t)val) {
         vm.pc += 2;
@@ -12480,7 +12364,7 @@ static void v2_despawn_13c93(V2VM& vm, uint16_t di) {
     }
 }
 
-static void v2_vm_op_10(V2VM& vm) {
+void v2_vm_op_10(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     // orig exit regs: di=[0x42] (sub_13c93 is PUSH/POP di-balanced),
     // si=[0x42] re-read after the call (0x432F) — task #15 tracking.
@@ -12493,7 +12377,7 @@ static void v2_vm_op_10(V2VM& vm) {
 }
 
 // 0x1C (sub_1443d): If ds:[obj+0x1A35] != 0 → skip 2, else jump. 0 bytes.
-static void v2_vm_op_1C(V2VM& vm) {
+void v2_vm_op_1C(V2VM& vm) {
     if (vm.field_r(OBJ_ANIM_TIMER) != 0) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
@@ -12502,7 +12386,7 @@ static void v2_vm_op_1C(V2VM& vm) {
 // OR byte [si+0x114E] with 2 (equivalent to OR word 0x114D with 0x0200).
 // Orig loop is a DO-WHILE with NO [0x1AD5] gate (loc_145F1: body first,
 // CMP si,cx / JL at end) — the body runs at least once unconditionally.
-static void v2_vm_op_3F(V2VM& vm) {
+void v2_vm_op_3F(V2VM& vm) {
     ObjRef self{vm, vm.global_r(DS_CUR_OBJ)};
     uint16_t cx = self.u16(OBJ_SUB_END);
     uint16_t si = self.u16(OBJ_SUB_SLOT);
@@ -12517,7 +12401,7 @@ static void v2_vm_op_3F(V2VM& vm) {
 
 // 0x40 (sub_14604): Clear bits 13-14 on all sub-sprites. 0 bytes.
 // Same DO-WHILE shape as sub_145e5 (loc_14610) — at least one iteration.
-static void v2_vm_op_40(V2VM& vm) {
+void v2_vm_op_40(V2VM& vm) {
     ObjRef self{vm, vm.global_r(DS_CUR_OBJ)};
     uint16_t cx = self.u16(OBJ_SUB_END);
     uint16_t si = self.u16(OBJ_SUB_SLOT);
@@ -12530,7 +12414,7 @@ static void v2_vm_op_40(V2VM& vm) {
 }
 
 // 0x5C (sub_1474b): Subtract acc from indexed field. 1 byte.
-static void v2_vm_op_5C(V2VM& vm) {
+void v2_vm_op_5C(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
@@ -12744,7 +12628,7 @@ static bool v2_x_bbox_vel_15cef(V2VM& vm, uint16_t si, uint16_t di, bool use_x1)
 // Units 77-78: sub_15de5 / sub_15df2 — X-axis object search (shared core
 // loc_15dfd). DS: 0x34=filter, 0x36=probe X, 0x3A slot cursor, on hit
 // 0x3B2=[si+17DD] full word + 0x3B4=slot. CF.
-static bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
+bool v2_vm_obj_scan_x_15dfd(V2VM& vm, uint16_t filter_si, uint16_t obj_di, uint16_t x_search);
 extern "C" int v2_fntest_call_sub_15cef(uint8_t* test_shadow, uint16_t si, uint16_t di) {
     V2VM vm{};
     vm.ds = test_shadow;
@@ -12833,7 +12717,7 @@ extern "C" void v2_fntest_call_sub_1592d(uint8_t* test_shadow, uint16_t ax, uint
     v2_vm_xsnap_1592d(vm, di, ax);
 }
 // Units 92-93: sub_15505 (resource deduct) / sub_15517 (velocity clear).
-static void v2_vm_res_deduct_15505(V2VM& vm, uint16_t si, uint16_t di);
+void v2_vm_res_deduct_15505(V2VM& vm, uint16_t si, uint16_t di);
 static void v2_clear_velocities_15517(uint8_t* ds);
 extern "C" void v2_fntest_call_sub_15505(uint8_t* test_shadow, uint16_t si, uint16_t di) {
     V2VM vm{};
@@ -12942,7 +12826,7 @@ extern "C" int32_t v2_fntest_call_sub_13809(uint8_t* test_shadow, uint16_t ax, u
 }
 // Unit 127: sub_13fc2 — mark tile dirty (FS quad write + tracking arrays).
 // Returns (di_track << 16) | si_track for the #15 register channel.
-static void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax);
+void v2_vm_tile_dirty_13fc2(V2VM& vm, uint16_t si, uint16_t di, uint16_t ax);
 extern "C" uint32_t v2_fntest_call_sub_13fc2(uint8_t* test_shadow, uint16_t ax, uint16_t si, uint16_t di) {
     V2VM vm{};
     vm.ds = test_shadow; vm.shadow = test_shadow;
@@ -13092,7 +12976,7 @@ extern "C" void v2_fntest_call_sub_16661(uint8_t* test_shadow) {
 // Units 152-153: sub_13084 (anim command interpreter core) / sub_135cf
 // (anim velocity tail).
 static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx);
-static void v2_vm_anim_tail_135cf(V2VM& vm);
+void v2_vm_anim_tail_135cf(V2VM& vm);
 extern "C" uint16_t v2_fntest_call_sub_13084(uint8_t* test_shadow, uint16_t bx, uint16_t obj) {
     v2_vm_init_table();
     uint8_t* saved_acc = v2_vm_acc_base;
@@ -13196,8 +13080,8 @@ extern "C" void v2_fntest_call_sub_1625d(uint8_t* test_shadow) {
 }
 
 // Units 114-115: sub_136a0 / sub_13757 — h/v-flip bodies.
-static void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si);
-static void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);
+void v2_vm_hflip_body_136a0(V2VM& vm, uint16_t si);
+void v2_vm_vflip_body_13757(V2VM& vm, uint16_t si);
 extern "C" void v2_fntest_call_sub_136a0(uint8_t* test_shadow, uint16_t si) {
     V2VM vm{};
     vm.ds = test_shadow; vm.shadow = test_shadow; vm.obj = si;
@@ -13310,7 +13194,7 @@ extern "C" int32_t v2_fntest_call_bittest(uint8_t* test_shadow, uint16_t pc, int
 }
 
 // Unit 105: sub_163ac — platform/step probe (three-level tile checks).
-static bool v2_vm_platform_check_163ac(V2VM& vm);
+bool v2_vm_platform_check_163ac(V2VM& vm);
 extern "C" int v2_fntest_call_sub_163ac(uint8_t* test_shadow) {
     uint8_t* saved_acc = v2_vm_acc_base;
     v2_vm_acc_base = test_shadow;
@@ -13442,8 +13326,8 @@ extern "C" void v2_fntest_call_sub_116e3(uint8_t* test_shadow) { v2_level_desc_i
 // Anim frame interpreter units: sub_1303a (cmd loop core) / sub_13031
 // (+ sub_135cf tail). The anim script lives INSIDE the DS image (the
 // oracle enters with es==ds), so vm.es = the case image too.
-static void v2_vm_anim_interp_1303a(V2VM& vm);   // defined below
-static void v2_vm_anim_tail_135cf(V2VM& vm);   // defined below
+void v2_vm_anim_interp_1303a(V2VM& vm);   // defined below
+void v2_vm_anim_tail_135cf(V2VM& vm);   // defined below
 extern "C" void v2_fntest_call_anim(uint8_t* test_shadow, uint16_t obj, int which) {
     V2VM vm{};
     vm.ds = test_shadow; vm.shadow = test_shadow;
@@ -13538,7 +13422,7 @@ static int v2_vm_text_xy_125fa(V2VM& vm, uint16_t& si_out, uint16_t& di_out) {
 }
 
 // sub_12613: glyph coordinate clamps around the [34]/[36] scroll bias.
-static void v2_vm_glyph_clamp_12613(V2VM& vm, uint16_t& si_pos, uint16_t& di_pos) {
+void v2_vm_glyph_clamp_12613(V2VM& vm, uint16_t& si_pos, uint16_t& di_pos) {
     uint16_t w14 = vm.ds_read(DS_SCRATCH_34);
     uint16_t w16 = vm.ds_read(DS_SCRATCH_36);
     si_pos = (uint16_t)(si_pos + w14);
@@ -14190,13 +14074,13 @@ static bool v2_vm_tile_coll_down_15afd(V2VM& vm, uint16_t filter_si, uint16_t di
 // Path 1 (ds:0x390 > 0): full bounding box check via sub_15AFD etc.
 // Path 2 (ds:0x390 < 0): no collision, just consume byte
 // Path 3 (ds:0x390 == 0): check bit in [obj+0x13F5] → collision if set
-static bool v2_vm_collision_1584e_f(V2VM& vm, uint8_t filter);
+bool v2_vm_collision_1584e_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_1584e(V2VM& vm) {
     // stream wrapper: every phase branch consumes exactly 1 byte
     uint8_t filter = vm.read_u8();
     return v2_vm_collision_1584e_f(vm, filter);
 }
-static bool v2_vm_collision_1584e_f(V2VM& vm, uint8_t filter) {
+bool v2_vm_collision_1584e_f(V2VM& vm, uint8_t filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
 
     if (state == 0) {
@@ -14258,13 +14142,13 @@ static bool v2_vm_collision_1584e_f(V2VM& vm, uint8_t filter) {
 // sub_157eb: UPward collision check (orig — analog sub_1584e but uses sub_15911/sub_15c93).
 // Same state-machine: state==0 → check collision bit (return CARRY if set),
 // state<0 → INC bx, no carry, state>0 → full check (always CLC).
-static bool v2_vm_collision_157eb_f(V2VM& vm, uint8_t filter);
+bool v2_vm_collision_157eb_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_157eb(V2VM& vm) {
     // stream wrapper: every phase branch consumes exactly 1 byte
     uint8_t filter = vm.read_u8();
     return v2_vm_collision_157eb_f(vm, filter);
 }
-static bool v2_vm_collision_157eb_f(V2VM& vm, uint8_t filter) {
+bool v2_vm_collision_157eb_f(V2VM& vm, uint8_t filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     if (state == 0) {
         // loc_15823: INC bx (consumed by the wrapper) + check collision bit
@@ -14318,7 +14202,7 @@ static bool v2_vm_collision_157eb_f(V2VM& vm, uint8_t filter) {
 // 0x3C (sub_15838): Collision check via sub_1584e + ds:0x38E increment.
 // BOTH paths (collision and no-collision) add 2 to ds:0x38E.
 // On collision: call-jump. On no collision: skip 2.
-static void v2_vm_op_3C(V2VM& vm) {
+void v2_vm_op_3C(V2VM& vm) {
     bool collision = v2_vm_collision_check_1584e(vm);
     // Both paths: ADD ds:38Eh, 2
     vm.ds_write(DS_COLL_BIT_IDX, vm.ds_read(DS_COLL_BIT_IDX) + 2);
@@ -14327,14 +14211,14 @@ static void v2_vm_op_3C(V2VM& vm) {
 
 // 0xB2 (sub_14e37): sub_153ea (3 bytes bit test) + conditional.
 // If ne → skip 2, eq → call-jump.
-static void v2_vm_op_B2(V2VM& vm) {
+void v2_vm_op_B2(V2VM& vm) {
     uint16_t result = v2_vm_bittest_153ea(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
 // 0x7E (sub_1494b): Signed >= comparison with indirect value (2 bytes).
 // acc >= val (signed) → jump, else skip 2.
-static void v2_vm_op_7E(V2VM& vm) {
+void v2_vm_op_7E(V2VM& vm) {
     uint16_t val = v2_vm_read_indirect(vm);
     int16_t dx = (int16_t)v2_vm_accumulator - (int16_t)val;
     if ((int16_t)v2_vm_accumulator >= (int16_t)val) {
@@ -14346,7 +14230,7 @@ static void v2_vm_op_7E(V2VM& vm) {
 
 // 0x83 (sub_149c3): Signed < comparison with indirect value (2 bytes).
 // acc < val (signed) → jump, acc >= val → skip 2. Opposite of 0x7E.
-static void v2_vm_op_83(V2VM& vm) {
+void v2_vm_op_83(V2VM& vm) {
     uint16_t val = v2_vm_read_indirect(vm);
     if ((int16_t)v2_vm_accumulator < (int16_t)val) {
         v2_vm_do_jump(vm);
@@ -14359,7 +14243,7 @@ static void v2_vm_op_83(V2VM& vm) {
 // If NOT hflip (flag 0x40 clear) → ds:[addr] += acc (sub_14704)
 // If hflip (flag 0x40 set) → ds:[addr] -= acc (sub_14771)
 // Consumes 2 bytes (word address from bytecode).
-static void v2_vm_op_91(V2VM& vm) {
+void v2_vm_op_91(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t addr = vm.read_u16();
     if (!(ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)) {
@@ -14374,13 +14258,13 @@ static void v2_vm_op_91(V2VM& vm) {
 // 0x98 (sub_14b52): Load accumulator from sub_15403 (indexed field bit test, 2 bytes).
 // sub_15403: byte idx1 (mask), byte idx2 (field) → pattern B (ds:0x42-relative).
 // si = ds:[idx2 - 0x6CBA] + ds:0x42; ax = ds:[si + 0x14E5] & ds:[idx1 - 0x6C34]; acc = 0 or 1.
-static void v2_vm_op_98(V2VM& vm) {
+void v2_vm_op_98(V2VM& vm) {
     v2_vm_accumulator = v2_vm_bittest_15403(vm);
 }
 
 // 0xAD (sub_14de4): sub_153ea bit test (3 bytes) + if eq → skip 2, ne → jump.
 // Opposite of 0xB2 (which does call-jump instead of jump).
-static void v2_vm_op_AD(V2VM& vm) {
+void v2_vm_op_AD(V2VM& vm) {
     uint16_t result = v2_vm_bittest_153ea(vm);
     if (result == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -14388,7 +14272,7 @@ static void v2_vm_op_AD(V2VM& vm) {
 // 0xCF (sub_152c6): Viewport bounds check on sub-object → outside viewport: jump, within: skip 2.
 // Checks ds:[obj+0x1995] object's X/Y against viewport ds:0x44/0x46.
 // PUSH 2 → if within: off_30C92[2] = skip 2, if outside: off_30C94[2] = jump
-static void v2_vm_op_CF(V2VM& vm) {
+void v2_vm_op_CF(V2VM& vm) {
     uint16_t si_obj = vm.global_r(DS_CUR_OBJ);
     uint16_t si = ObjRef{vm, si_obj}.u16(OBJ_PARTNER); // sub-object
 
@@ -14413,7 +14297,7 @@ static void v2_vm_op_CF(V2VM& vm) {
 
 // 0x6A (sub_1488b): Unsigned >= comparison with INDIRECT value (2 bytes).
 // CALL sub_1549a (read indirect, 2B) → acc >= val → jump, else skip 2.
-static void v2_vm_op_6A(V2VM& vm) {
+void v2_vm_op_6A(V2VM& vm) {
     uint16_t val = v2_vm_read_indirect(vm); // sub_1549a: 2 bytes
     if (v2_vm_accumulator >= val) {
         v2_vm_do_jump(vm);
@@ -14424,7 +14308,7 @@ static void v2_vm_op_6A(V2VM& vm) {
 
 // 0x94 (sub_14763): Conditional add/sub acc to addr — OPPOSITE of 0x91.
 // NOT hflip → subtract (sub_14771), hflip → add (sub_14704). 2 bytes.
-static void v2_vm_op_94(V2VM& vm) {
+void v2_vm_op_94(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t addr = vm.read_u16();
     if (!(ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)) {
@@ -14438,20 +14322,20 @@ static void v2_vm_op_94(V2VM& vm) {
 
 // 0xA8 (sub_14d91): sub_153ea bit test (3 bytes). If ne → skip 2, eq → jump.
 // sub_153ea: byte idx + word VALUE (bytecode literal, NOT ds:[addr]!) → test
-static void v2_vm_op_A8(V2VM& vm) {
+void v2_vm_op_A8(V2VM& vm) {
     uint16_t result = v2_vm_bittest_153ea(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
 // 0xB3 (sub_14e47): sub_15403 bit test (2B, pattern B). If ne → skip 2, eq → call-jump.
-static void v2_vm_op_B3(V2VM& vm) {
+void v2_vm_op_B3(V2VM& vm) {
     uint16_t result = v2_vm_bittest_15403(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
 // 0x0B (sub_1369c): Unconditional hflip. 0 bytes. Always flips.
 // sub_1369c: MOV si, ds:42h; falls through to sub_136a0 (full hflip with sub-sprites).
-static void v2_vm_op_0B(V2VM& vm) {
+void v2_vm_op_0B(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     v2_vm_hflip_body_136a0(vm, si);
 }
@@ -14467,11 +14351,11 @@ static void v2_vm_op_17(V2VM& vm) {
     ObjRef{vm, si}.w16(OBJ_VEL_Y, (uint16_t)(int16_t)vy);
 }
 
-static void v2_vm_pal_correct_10e99(V2VM& vm); // forward decl
+void v2_vm_pal_correct_10e99(V2VM& vm); // forward decl
 
 // 0x3E (sub_14590): Clear palette base. 0 bytes.
 // Clears ds:0x342-0x344, AND ds:0x7EFD & 0xFE, conditional ds:0x7F00, then sub_10e99.
-static void v2_vm_op_3E(V2VM& vm) {
+void v2_vm_op_3E(V2VM& vm) {
     v2_cc_v2_hit(CC_14590);   // M1 wave-2 (#65) — VM-op copy of sub_14590
     vm.ds_write_b(DS_PAL_SHADE_R, 0);
     vm.ds_write_b(DS_PAL_SHADE_G, 0);
@@ -14489,7 +14373,7 @@ static void v2_vm_op_3E(V2VM& vm) {
 // mode1: bits 0-2 = X dispatch, bits 3-5 = Y dispatch
 // mode2: bits 0-2 = tile value dispatch
 // Calls sub_141e0 (tile map write) + sub_13fc2 (mark tile dirty, update tracking)
-static void v2_vm_op_29(V2VM& vm) {
+void v2_vm_op_29(V2VM& vm) {
     // Mode byte 1: X/Y via dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
@@ -14516,14 +14400,14 @@ static void v2_vm_op_29(V2VM& vm) {
 // 0x2C (sub_15f2c): Collision search with type filter + jump. 3 bytes (1 mode + 2 target).
 // Searches objects 0,2,4 for matching type + bounds overlap.
 // On match: bx = jump target, stores matched obj. On no match: bx += 4 (3 params + 1 extra).
-static void v2_vm_search_2c_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target);
-static void v2_vm_op_2C(V2VM& vm) {
+void v2_vm_search_2c_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target);
+void v2_vm_op_2C(V2VM& vm) {
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint16_t filter_idx = ax_word & 0xFF;
     uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
     v2_vm_search_2c_core(vm, filter_idx, jump_target);
 }
-static void v2_vm_search_2c_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target) {
+void v2_vm_search_2c_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target) {
     // ds:0x3AE = ds:[si+0x14E5] - 1 (self Y - 1)
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
     vm.ds_write(DS_SEARCH_Y, ObjRef{vm, self_si}.u16(OBJ_BBOX_Y0) - 1);
@@ -14575,7 +14459,7 @@ static void v2_vm_search_2c_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_ta
 // Verified with seg000 lines 11685-11698.
 // Reads mode byte, sub_15473(mode) → X target, sub_15470(mode) → Y target.
 // DS writes: [obj+1945]=X_delta, [obj+196D]=Y_delta, [obj+141D]=0x100.
-static void v2_vm_op_48(V2VM& vm) {
+void v2_vm_op_48(V2VM& vm) {
     // MOV ax, es:[bx]; INC bx — read mode byte
     uint16_t word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode = (uint8_t)(word & 0xFF);
@@ -14598,14 +14482,14 @@ static void v2_vm_op_48(V2VM& vm) {
 // 0x35 (sub_15e91): Collision search ALL objects (not just vikings). 3 bytes + 1 skip on miss.
 // Like 0x2C but loop range is 0..ds:0x372 instead of 0..6.
 // Verified with seg000 lines 14143-14201.
-static void v2_vm_search_35_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target);
-static void v2_vm_op_35(V2VM& vm) {
+void v2_vm_search_35_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target);
+void v2_vm_op_35(V2VM& vm) {
     uint16_t ax_word = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint16_t filter_idx = ax_word & 0xFF;
     uint16_t jump_target = *(uint16_t*)(vm.es + vm.pc); vm.pc += 2;
     v2_vm_search_35_core(vm, filter_idx, jump_target);
 }
-static void v2_vm_search_35_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target) {
+void v2_vm_search_35_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_target) {
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
     vm.ds_write(DS_SEARCH_Y, ObjRef{vm, self_si}.u16(OBJ_BBOX_Y0) - 1);
 
@@ -14653,7 +14537,7 @@ static void v2_vm_search_35_core(V2VM& vm, uint16_t filter_idx, uint16_t jump_ta
 
 // 0x2D (sub_15f25): Continue collision search from previous match. 0 bytes on miss.
 // Resumes search from ds:0x3B0 + 2. On match: jump to ds:0x3AC. On miss: 0 bytes.
-static void v2_vm_op_2D(V2VM& vm) {
+void v2_vm_op_2D(V2VM& vm) {
     // DEC bx (original decrements PC by 1)
     vm.pc -= 1;
     uint16_t self_si = vm.global_r(DS_CUR_OBJ);
@@ -14699,7 +14583,7 @@ static void v2_vm_op_2D(V2VM& vm) {
 // with per-channel subtraction and clamping to [0, 0x3F].
 // Color offsets: R = ds:0x342 | ds:0x345, G = ds:0x343 | ds:0x346, B = ds:0x344 | ds:0x347.
 // First 3 bytes get color correction, then 45 bytes copied raw, then 240×3 bytes corrected.
-static void v2_vm_pal_correct_10e99(V2VM& vm) {
+void v2_vm_pal_correct_10e99(V2VM& vm) {
     uint8_t r_off = v2gs(vm.shadow).pal_shade_r_b() | v2gs(vm.shadow).pal_shade_r2_b();
     uint8_t g_off = v2gs(vm.shadow).pal_shade_g_b() | v2gs(vm.shadow).pal_shade_g2_b();
     uint8_t b_off = v2gs(vm.shadow).pal_shade_b_b() | v2gs(vm.shadow).pal_shade_b2_b();
@@ -14752,26 +14636,26 @@ static uint16_t v2_vm_indexed_1995_target(V2VM& vm) {
 }
 
 // 0x5B (sub_14721): ADD acc to indexed+1995 field. 1 byte.
-static void v2_vm_op_5B(V2VM& vm) {
+void v2_vm_op_5B(V2VM& vm) {
     uint16_t addr = v2_vm_indexed_1995_target(vm);
     vm.ds_write(addr, vm.ds_read(addr) + v2_vm_accumulator);
 }
 
 // 0x5E (sub_1478b): SUB acc from indexed+1995 field. 1 byte.
-static void v2_vm_op_5E(V2VM& vm) {
+void v2_vm_op_5E(V2VM& vm) {
     uint16_t addr = v2_vm_indexed_1995_target(vm);
     vm.ds_write(addr, vm.ds_read(addr) - v2_vm_accumulator);
 }
 
 // 0x64 (sub_1480b): OR acc into indexed+1995 field. 1 byte.
-static void v2_vm_op_64(V2VM& vm) {
+void v2_vm_op_64(V2VM& vm) {
     uint16_t addr = v2_vm_indexed_1995_target(vm);
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
 }
 
 // 0x66 (sub_1483f): XOR acc with ds:[addr]. 2 bytes (direct address).
 // si = es:[bx]; bx += 2; ds:[si] ^= acc
-static void v2_vm_op_66(V2VM& vm) {
+void v2_vm_op_66(V2VM& vm) {
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, vm.ds_read(addr) ^ v2_vm_accumulator);
 }
@@ -14799,7 +14683,7 @@ static void v2_vm_field_sub_1474b(V2VM& vm) {
 }
 
 // 0x6E (sub_148d3): indexed field (sub_15485, 1B), unsigned acc < val → jump, else skip 2.
-static void v2_vm_op_6E(V2VM& vm) {
+void v2_vm_op_6E(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm);
     if (v2_vm_accumulator < val)
         v2_vm_do_jump(vm);
@@ -14808,7 +14692,7 @@ static void v2_vm_op_6E(V2VM& vm) {
 }
 
 // 0x70 (sub_148f7): indexed+1995 (sub_154a3, 1B), unsigned acc < val → jump, else skip 2.
-static void v2_vm_op_70(V2VM& vm) {
+void v2_vm_op_70(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if (v2_vm_accumulator < val)
         v2_vm_do_jump(vm);
@@ -14817,7 +14701,7 @@ static void v2_vm_op_70(V2VM& vm) {
 }
 
 // 0x75 (sub_14a3b): indexed+1995 (sub_154a3, 1B), val != acc → skip 2, val == acc → jump.
-static void v2_vm_op_75(V2VM& vm) {
+void v2_vm_op_75(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if (val != v2_vm_accumulator)
         vm.pc += 2;
@@ -14826,7 +14710,7 @@ static void v2_vm_op_75(V2VM& vm) {
 }
 
 // 0x7A (sub_14a8b): indexed+1995 (sub_154a3, 1B), val == acc → skip 2, val != acc → jump.
-static void v2_vm_op_7A(V2VM& vm) {
+void v2_vm_op_7A(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if (val == v2_vm_accumulator)
         vm.pc += 2;
@@ -14835,7 +14719,7 @@ static void v2_vm_op_7A(V2VM& vm) {
 }
 
 // 0x84 (sub_149db): indexed+1995 (sub_154a3, 1B), signed acc >= val → skip 2, else → jump.
-static void v2_vm_op_84(V2VM& vm) {
+void v2_vm_op_84(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if ((int16_t)v2_vm_accumulator >= (int16_t)val)
         vm.pc += 2;
@@ -14845,7 +14729,7 @@ static void v2_vm_op_84(V2VM& vm) {
 
 // 0x90 (sub_146d0): conditional ADD/SUB based on bit 0x40 flag. 1 byte.
 // If bit 0x40 clear → ADD (sub_146de). If set → SUB (sub_1474b).
-static void v2_vm_op_90(V2VM& vm) {
+void v2_vm_op_90(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)
         v2_vm_field_sub_1474b(vm);
@@ -14855,7 +14739,7 @@ static void v2_vm_op_90(V2VM& vm) {
 
 // 0x93 (sub_1473d): conditional SUB/ADD — opposite of 0x90. 1 byte.
 // If bit 0x40 clear → SUB (sub_1474b). If set → ADD (sub_146de).
-static void v2_vm_op_93(V2VM& vm) {
+void v2_vm_op_93(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)
         v2_vm_field_add_146de(vm);
@@ -14866,7 +14750,7 @@ static void v2_vm_op_93(V2VM& vm) {
 // 0x92 (sub_14713): hflip conditional ADD/SUB indexed+1995. 1 byte.
 // Verified with seg000 lines 9772-9775.
 // bit 0x40 clear → ADD (v2_vm_op_5B), bit 0x40 set → SUB (v2_vm_op_5E)
-static void v2_vm_op_92(V2VM& vm) {
+void v2_vm_op_92(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40)
         v2_vm_op_5E(vm); // SUB indexed+1995
@@ -14888,7 +14772,7 @@ static void v2_vm_op_95(V2VM& vm) {
 // Checks if object at ds:0x42 is within extended viewport bounds.
 // In viewport → off_30C92[2] = skip 2. Not in viewport → off_30C94[2] = jump.
 // Viewport check: (ds:0x44+0x1F < obj_X < ds:0x44+0x121) AND (ds:0x46+0x1F < obj_Y < ds:0x46+0x91)
-static void v2_vm_op_CE(V2VM& vm) {
+void v2_vm_op_CE(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t obj_x = ObjRef{vm, si}.u16(OBJ_WORLD_X);
     uint16_t obj_y = ObjRef{vm, si}.u16(OBJ_WORLD_Y);
@@ -14926,7 +14810,7 @@ static void v2_vm_op_CE(V2VM& vm) {
 // Reads 3 bytes, SHL each by 1, stores to ds:0x345-347.
 // Sets ds:0x7EFD |= 2, ds:0x7EFE = 4, ds:0x7F00 = 0x8202.
 // Then calls sub_10e99 (palette color correction).
-static void v2_vm_op_4C(V2VM& vm) {
+void v2_vm_op_4C(V2VM& vm) {
     uint8_t r = vm.read_u8();
     vm.ds_write_b(DS_PAL_SHADE_R2, (uint8_t)(r << 1));
     uint8_t g = vm.read_u8();
@@ -14944,7 +14828,7 @@ static void v2_vm_op_4C(V2VM& vm) {
 // Clears ds:0x345-347 to 0, AND ds:0x7EFD with 0xFD.
 // If result is 0: ds:0x7F00 = 0x7F02. ds:0x7EFE = 4.
 // Then calls sub_10e99 (palette color correction).
-static void v2_vm_op_4D(V2VM& vm) {
+void v2_vm_op_4D(V2VM& vm) {
     vm.ds_write_b(DS_PAL_SHADE_R2, 0);
     vm.ds_write_b(DS_PAL_SHADE_G2, 0);
     vm.ds_write_b(DS_PAL_SHADE_B2, 0);
@@ -14959,7 +14843,7 @@ static void v2_vm_op_4D(V2VM& vm) {
 
 // 0x3B (sub_1524a): Set sprite/animation params. 2 bytes.
 // ds:0x39C = ax & 0xFF; ds:0x3A0 = 0; ds:0x3A4 = (ax >> 6) & 0x3FC
-static void v2_vm_op_3B(V2VM& vm) {
+void v2_vm_op_3B(V2VM& vm) {
     uint16_t ax = vm.read_u16();
     vm.ds_write(DS_SHAKE_SRC_Y, ax & 0xFF);
     vm.ds_write(DS_SHAKE_Y, 0);
@@ -14969,7 +14853,7 @@ static void v2_vm_op_3B(V2VM& vm) {
 // 0x2A (sub_15078): Tilemap modification — set lower bits. 2 mode bytes + 3 dispatches.
 // Reads X/Y position + tile index. Reads current tile, keeps upper 6 bits, ORs new lower 10 bits.
 // Calls sub_141e0 (write) + sub_13fc2 (mark dirty).
-static void v2_vm_op_2A(V2VM& vm) {
+void v2_vm_op_2A(V2VM& vm) {
     // Mode byte 1: X/Y position via dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
@@ -15000,7 +14884,7 @@ static void v2_vm_op_2A(V2VM& vm) {
 // Dispatches X, Y, tile_val. Transforms tile_val (xchg ah,al; shl 2; and FC00) to upper 6 bits.
 // Reads current tile via sub_141b3 (& 0x3FF = lower 10 bits), ORs with new flags.
 // Writes back via sub_141e0. No sub_13fc2 call.
-static void v2_vm_op_2B(V2VM& vm) {
+void v2_vm_op_2B(V2VM& vm) {
     // Mode byte 1: X/Y via dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
@@ -15036,7 +14920,7 @@ static void v2_vm_op_2B(V2VM& vm) {
 // 0x28 (sub_14f27): Tile-aligned position write. 2 mode bytes + 4 dispatches.
 // Mode1: read X/Y from off_30C98, align to 16px grid (& 0xFFF0 | 8)
 // Mode2: write via sub_154bf (X), loc_154bc (Y)
-static void v2_vm_op_28(V2VM& vm) {
+void v2_vm_op_28(V2VM& vm) {
     // Read mode1 byte
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
@@ -15109,13 +14993,13 @@ static void v2_vm_op_D0(V2VM& vm) {
 // 0xD1 (sub_15f17): Vikings-only collision search (unsigned comparisons). 3 bytes.
 // DIFFERENT from D0: loop limit si<6 (3 vikings only), unsigned JB/JNB for Y bounds,
 // inverted second Y check (JNB = skip if >=, NOT JL = skip if <).
-static void v2_vm_search_d1_core(V2VM& vm, uint16_t filter, uint16_t target);
-static void v2_vm_op_D1(V2VM& vm) {
+void v2_vm_search_d1_core(V2VM& vm, uint16_t filter, uint16_t target);
+void v2_vm_op_D1(V2VM& vm) {
     uint8_t filter = vm.read_u8();
     uint16_t target = vm.read_u16();
     v2_vm_search_d1_core(vm, filter, target);
 }
-static void v2_vm_search_d1_core(V2VM& vm, uint16_t filter, uint16_t target) {
+void v2_vm_search_d1_core(V2VM& vm, uint16_t filter, uint16_t target) {
     uint16_t si_self = vm.global_r(DS_CUR_OBJ);
     vm.ds_write(DS_SEARCH_Y, ObjRef{vm, si_self}.u16(OBJ_BBOX_Y1) + 1);
     vm.ds_write(DS_SEARCH_FILTER, filter);
@@ -15157,7 +15041,7 @@ static void v2_vm_search_d1_core(V2VM& vm, uint16_t filter, uint16_t target) {
 // logged (world tag, cmd type, wr offset before, wr step) — the divergence
 // repro shows one world enqueuing a 0x24-byte batch on the split frame while
 // the other enqueues nothing; this locates the writing op/site exactly.
-static void v2_cmdq_log(const char* world, int cmd, uint16_t wr_before, int step) {
+void v2_cmdq_log(const char* world, int cmd, uint16_t wr_before, int step) {
     static int _cq = -1;
     if (_cq < 0) _cq = getenv("V2_CMDQ_LOG") ? 1 : 0;
     if (_cq) {
@@ -15172,7 +15056,7 @@ extern "C" void v2_cmdq_log_orig(int cmd, uint16_t wr_before, int step) {
 }
 
 // 0x43 (sub_1267b): Command buffer write type=4. 0 bytes.
-static void v2_vm_op_43(V2VM& vm) {
+void v2_vm_op_43(V2VM& vm) {
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 4);
     v2_cmdq_log("v2", 4, bx_cmd, 2);
@@ -15181,7 +15065,7 @@ static void v2_vm_op_43(V2VM& vm) {
 
 // sub_163ac: Tile type check for platform detection. 0 bytes. Sets carry.
 // sub_163ac: Exact tile check chain. 3 sub_14199 calls with conditional logic.
-static bool v2_vm_platform_check_163ac(V2VM& vm) {
+bool v2_vm_platform_check_163ac(V2VM& vm) {
     uint16_t obj = vm.global_r(DS_CUR_OBJ);
     uint16_t si_x;
     if (!(ObjRef{vm, obj}.u16(OBJ_FLAGS) & 0x40)) {
@@ -15232,7 +15116,7 @@ static bool v2_vm_platform_check_163ac(V2VM& vm) {
 // 0x13 (sub_1434c): Level/palette command. 3 bytes consumed (always ADD bx,3).
 // al byte determines action: 0xD9=palette copy, 0x11=text menu, 0x01=level transition.
 // All paths end with ADD bx,3.
-static void v2_vm_op_13(V2VM& vm) {
+void v2_vm_op_13(V2VM& vm) {
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     uint8_t al = (uint8_t)(word & 0xFF);
 
@@ -15315,7 +15199,7 @@ static void v2_vm_op_13(V2VM& vm) {
 }
 
 // 0x4E (sub_144fd): sub_163ac tile check + off_30C8E[0]. 0 bytes.
-static void v2_vm_op_4E(V2VM& vm) {
+void v2_vm_op_4E(V2VM& vm) {
     vm.carry = v2_vm_platform_check_163ac(vm);
     // off_30C8E[0] = loc_144e9: no carry → skip 2, carry → jump
     uint16_t cs_addr = v2gs(vm.shadow).vm_subdispatch_tbl(0);
@@ -15329,7 +15213,7 @@ static void v2_vm_op_4E(V2VM& vm) {
 }
 
 // 0xD3 (sub_12829): Password verify. 0 bytes. Searches password table, sets level.
-static void v2_vm_op_D3(V2VM& vm) {
+void v2_vm_op_D3(V2VM& vm) {
     // Search table at ds:[(uint16_t)(si - 0x7A5B)] for 4-byte match
     // with word_287F0..287F6 (at ds:0x0310..0x0316, offset = 0x287F0 - 0x284E0)
     uint16_t pw0 = vm.ds_read(DS_PW_CHAR0);
@@ -15379,7 +15263,7 @@ static void v2_vm_op_D3(V2VM& vm) {
 }
 
 // 0x2E (sub_1522c): Set collision search params. 2 bytes consumed.
-static void v2_vm_op_2E(V2VM& vm) {
+void v2_vm_op_2E(V2VM& vm) {
     uint16_t word = vm.read_u16();
     vm.ds_write(DS_SHAKE_SRC_X, word & 0xFF);
     vm.ds_write(DS_SHAKE_X, 0);
@@ -15389,7 +15273,7 @@ static void v2_vm_op_2E(V2VM& vm) {
 // 0x50 (sub_126a9): Text position cmd. 2 mode bytes + 3 off_30C98 dispatches.
 // Writes results to ds:0x34 (word_28514), ds:0x6C (word_2854C), ds:0x6E (word_2854E).
 // Then writes command buffer entry (type=8, X, Y, param) + advances buffer.
-static void v2_vm_op_50(V2VM& vm) {
+void v2_vm_op_50(V2VM& vm) {
     // Mode byte 1: dual dispatch
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc); vm.pc += 1;
     uint8_t mode1 = (uint8_t)(word1 & 0xFF);
@@ -15417,7 +15301,7 @@ static void v2_vm_op_50(V2VM& vm) {
 }
 
 // 0x6D (sub_148c1): sub_1547e (literal, 2B). Unsigned acc < val → jump, acc >= val → skip 2.
-static void v2_vm_op_6D(V2VM& vm) {
+void v2_vm_op_6D(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if (v2_vm_accumulator < val) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
@@ -15429,14 +15313,14 @@ static void v2_vm_op_6D(V2VM& vm) {
 
 // 0x6B (sub_1489d): indexed+1995, unsigned acc >= val → jump. 1B + 2B jump.
 // Verified: seg000 lines 10075-10084.
-static void v2_vm_op_6B(V2VM& vm) {
+void v2_vm_op_6B(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if (v2_vm_accumulator >= val) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
 
 // 0x6C (sub_148af): random, unsigned acc >= val → jump. 0B + 2B jump.
 // Verified: seg000 lines 10093-10102.
-static void v2_vm_op_6C(V2VM& vm) {
+void v2_vm_op_6C(V2VM& vm) {
     uint16_t val = v2_vm_read_random(vm);
     if (v2_vm_accumulator >= val) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
@@ -15450,14 +15334,14 @@ static void v2_vm_op_6F(V2VM& vm) {
 
 // 0x71 (sub_14909): random, unsigned acc < val → jump. 0B + 2B jump.
 // Verified: seg000 lines 10183-10192.
-static void v2_vm_op_71(V2VM& vm) {
+void v2_vm_op_71(V2VM& vm) {
     uint16_t val = v2_vm_read_random(vm);
     if (v2_vm_accumulator < val) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
 
 // 0x76 (sub_14a4b): random, eq → jump, ne → skip 2. 0B + 2B jump.
 // Verified: seg000 lines 10539-10547. CMP ax(val), ds:8Ah(acc); JNZ skip.
-static void v2_vm_op_76(V2VM& vm) {
+void v2_vm_op_76(V2VM& vm) {
     uint16_t val = v2_vm_read_random(vm);
     if (v2_vm_accumulator == val) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
@@ -15471,7 +15355,7 @@ static void v2_vm_op_7B(V2VM& vm) {
 
 // 0x89 (sub_14adb): indexed+1995, ne → skip, eq → call-jump. 1B + 2B jump.
 // Verified: seg000 lines ~10750. CMP ax(val), ds:8Ah(acc); JNZ skip; JMP sub_142C1.
-static void v2_vm_op_89(V2VM& vm) {
+void v2_vm_op_89(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if (v2_vm_accumulator == val) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
@@ -15485,14 +15369,14 @@ static void v2_vm_op_8A(V2VM& vm) {
 
 // 0x8D (sub_14b1b): indirect, eq → skip, ne → call-jump. 2B + 2B jump.
 // Verified: seg000 lines ~10804. CMP ax(val), ds:8Ah(acc); JZ skip; JMP sub_142C1.
-static void v2_vm_op_8D(V2VM& vm) {
+void v2_vm_op_8D(V2VM& vm) {
     uint16_t val = v2_vm_read_indirect(vm);
     if (v2_vm_accumulator != val) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
 
 // 0x8E (sub_14b2b): indexed+1995, eq → skip, ne → call-jump. 1B + 2B jump.
 // Verified: seg000 lines ~10822. CMP ax(val), ds:8Ah(acc); JZ skip; JMP sub_142C1.
-static void v2_vm_op_8E(V2VM& vm) {
+void v2_vm_op_8E(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_1995(vm);
     if (v2_vm_accumulator != val) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
@@ -15674,7 +15558,7 @@ static void v2_vm_op_BB(V2VM& vm) {
 
 // 0xBF (sub_1515c): vikings sub_15fb1 + off_30C8E[0]. 1 byte.
 // Verified: seg000 lines 11895-11923. push 0, jmp loc_15162 (shared with 0xC3 but off_30C8E[0]).
-static void v2_vm_op_BF(V2VM& vm) {
+void v2_vm_op_BF(V2VM& vm) {
     vm.ds_write(DS_SEARCH_RES_SLOT, 0xFFFF);
     uint16_t saved = vm.ds_read(DS_OBJ_COUNT);
     vm.ds_write(DS_OBJ_COUNT, 6);
@@ -15703,7 +15587,7 @@ static void v2_vm_op_9B(V2VM& vm) {
 }
 
 // 0xC8 (sub_1527b): write acc to state[idx*14+2]. 0 bytes.
-static void v2_vm_op_C8(V2VM& vm) {
+void v2_vm_op_C8(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
@@ -15711,7 +15595,7 @@ static void v2_vm_op_C8(V2VM& vm) {
 }
 
 // 0xCA (sub_152b3): write acc to state[idx*14+0xC]. 0 bytes.
-static void v2_vm_op_CA(V2VM& vm) {
+void v2_vm_op_CA(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
@@ -15728,7 +15612,7 @@ static void v2_vm_op_CA(V2VM& vm) {
 // (LCG result) differs at op_55 boundary. Fix: keep shadow seed in sync by
 // running same LCG on shadow as orig runs on real (started from same
 // init value via ds_static.bin load).
-static void v2_vm_op_55(V2VM& vm) {
+void v2_vm_op_55(V2VM& vm) {
     uint16_t check = v2gs(vm.shadow).game_mode_ac(); // word_288AC
     if (check != 0) {
         // Alternate XOR random — orig: ax=word_28832; XCHG ah,al; word_28832=ax;
@@ -15755,7 +15639,7 @@ static void v2_vm_op_55(V2VM& vm) {
 }
 
 // 0xC9 (sub_1529a): AND acc 0xCDFF + write to state[idx*14+0xA]. 0 bytes.
-static void v2_vm_op_C9(V2VM& vm) {
+void v2_vm_op_C9(V2VM& vm) {
     v2_vm_accumulator &= 0xCDFF;
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
@@ -15764,20 +15648,20 @@ static void v2_vm_op_C9(V2VM& vm) {
 }
 
 // 0x69 (sub_14879): sub_15485 (indexed field, 1B). Unsigned acc >= val → jump, else skip 2.
-static void v2_vm_op_69(V2VM& vm) {
+void v2_vm_op_69(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm);
     if (v2_vm_accumulator >= val) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
 
 // 0xB0 (sub_14e14): sub_15445 (indexed+1995 bit test, 2 bytes) + eq→skip, ne→jump.
-static void v2_vm_op_B0(V2VM& vm) {
+void v2_vm_op_B0(V2VM& vm) {
     // sub_15445: 2 bytes consumed
     uint16_t val = v2_vm_read_indexed_field_15445(vm);
     if (val == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
 // 0xBC (sub_14681): SHL acc<<8 + store to indexed field. 1 byte.
-static void v2_vm_op_BC(V2VM& vm) {
+void v2_vm_op_BC(V2VM& vm) {
     v2_vm_accumulator <<= 8;
     uint8_t idx = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
@@ -15795,7 +15679,7 @@ static void v2_vm_op_BE(V2VM& vm) {
 }
 
 // 0x07 (sub_1368c): Horizontal flip if NOT hflip. 0 bytes. Opposite of 0x08.
-static void v2_vm_op_07(V2VM& vm) {
+void v2_vm_op_07(V2VM& vm) {
     // sub_1368c: TEST [si+1585h], 40h / JNZ ret → call sub_136a0 when clear
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     if (ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40) return;
@@ -15805,7 +15689,7 @@ static void v2_vm_op_07(V2VM& vm) {
 // 0x26 (sub_14edd): Read 2 mode bytes, 4 dispatches (2×off_30C98 + 2×off_30CA2).
 // Mode1: dispatch (mode1 & 7) → >> 4 → ds:0x6C, dispatch ((mode1 >> 3) & 7) → >> 4 → ds:0x6E
 // Mode2: sub_154bf(ds:0x6C, mode2), sub_154bf(ds:0x6E, mode2 >> 3)
-static void v2_vm_op_26(V2VM& vm) {
+void v2_vm_op_26(V2VM& vm) {
     // Read mode1 byte
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
@@ -15834,13 +15718,13 @@ static void v2_vm_op_26(V2VM& vm) {
 
 // 0x63 (sub_147ff): OR acc with ds:[addr]. 2 bytes.
 // si = es:[bx]; ADD bx,2; ax = ds:0x8A; OR ds:[si], ax
-static void v2_vm_op_63(V2VM& vm) {
+void v2_vm_op_63(V2VM& vm) {
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, vm.ds_read(addr) | v2_vm_accumulator);
 }
 
 // 0x7D (sub_14933): Signed >= indexed field (1 byte). acc >= val → jump, else skip 2.
-static void v2_vm_op_7D(V2VM& vm) {
+void v2_vm_op_7D(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm);
     if ((int16_t)v2_vm_accumulator >= (int16_t)val) {
         v2_vm_do_jump(vm);
@@ -15853,7 +15737,7 @@ static void v2_vm_op_7D(V2VM& vm) {
 // 1. Read byte idx (1B). If acc != 0: acc = mask[idx-0x6C34].
 // 2. dx = ds:[idx-0x6C14] (clear mask).
 // 3. Read word addr (2B). AND ds:[addr], dx. OR ds:[addr], acc.
-static void v2_vm_op_9D(V2VM& vm) {
+void v2_vm_op_9D(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     if (v2_vm_accumulator != 0) {
         v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_BIT_MASK));
@@ -15868,7 +15752,7 @@ static void v2_vm_op_9D(V2VM& vm) {
 
 // 0x9E (sub_14bcf): Conditional mask set + AND/OR indexed+1995 field. 2 bytes.
 // idx1 (mask), idx2 (field via indexed+1995 pattern A).
-static void v2_vm_op_9E(V2VM& vm) {
+void v2_vm_op_9E(V2VM& vm) {
     uint8_t idx1 = vm.read_u8();
     if (v2_vm_accumulator != 0) {
         v2_vm_accumulator = *(uint16_t*)(vm.shadow +(uint16_t)(idx1 - LUT_BIT_MASK));
@@ -15883,14 +15767,14 @@ static void v2_vm_op_9E(V2VM& vm) {
 }
 
 // 0xB5 (sub_14e67): sub_15445 (indexed+1995 bit test, 2 bytes). If ne → skip 2, eq → call-jump.
-static void v2_vm_op_B5(V2VM& vm) {
+void v2_vm_op_B5(V2VM& vm) {
     uint16_t result = v2_vm_read_indexed_field_15445(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
 // 0x5F (sub_147a7): AND acc with indexed field. 1 byte.
 // ds:[si+0x14E5] &= acc, where si = lookup[idx] + ds:0x42.
-static void v2_vm_op_5F(V2VM& vm) {
+void v2_vm_op_5F(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t si = *(uint16_t*)(vm.shadow +(uint16_t)(idx - LUT_FIELD_OFF));
     si += vm.global_r(DS_CUR_OBJ);
@@ -15899,7 +15783,7 @@ static void v2_vm_op_5F(V2VM& vm) {
 }
 
 // 0xAA (sub_14db1): sub_1542a (ds:[addr] bit test, 3 bytes). ne → skip 2, eq → jump.
-static void v2_vm_op_AA(V2VM& vm) {
+void v2_vm_op_AA(V2VM& vm) {
     uint16_t result = v2_vm_bittest_1542a(vm);
     if (result != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -15907,7 +15791,7 @@ static void v2_vm_op_AA(V2VM& vm) {
 // 0x27 (sub_14f09): Tile lookup + position write. 2 mode bytes + dispatches.
 // Read mode1: dual off_30C98 dispatch → X/Y coords. Call sub_141a7 (tile type lookup).
 // Read mode2: single sub_154bf dispatch with result.
-static void v2_vm_op_27(V2VM& vm) {
+void v2_vm_op_27(V2VM& vm) {
     // sub_14f09: exact replica
     uint16_t word1 = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
@@ -15929,7 +15813,7 @@ static void v2_vm_op_27(V2VM& vm) {
 }
 
 // 0x59 (sub_146de): Add acc to indexed field. 1 byte.
-static void v2_vm_op_59(V2VM& vm) {
+void v2_vm_op_59(V2VM& vm) {
     uint8_t idx = vm.read_u8();
     uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
@@ -15940,7 +15824,7 @@ static void v2_vm_op_59(V2VM& vm) {
 
 // 0xAE (sub_14df4): sub_15403 bit test (2B, pattern B). If eq → skip 2, ne → jump.
 static uint16_t v2_vm_read_indexed_field_15403(V2VM& vm); // forward decl
-static void v2_vm_op_AE(V2VM& vm) {
+void v2_vm_op_AE(V2VM& vm) {
     uint16_t result = v2_vm_read_indexed_field_15403(vm);
     if (result == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -15948,7 +15832,7 @@ static void v2_vm_op_AE(V2VM& vm) {
 // 0x36 (sub_15e8a): Search objects for collision match starting from ds:0x3B0.
 // DEC bx first. If match found: save bx to alt_pc, set ds:0x1995=matched obj, jump to ds:0x3AC.
 // If no match: INC bx (net 0 bytes).
-static void v2_vm_op_36(V2VM& vm) {
+void v2_vm_op_36(V2VM& vm) {
     vm.pc -= 1; // DEC bx
     uint16_t si = vm.ds_read(DS_SEARCH_SI);
     uint16_t table_end = vm.global_r(DS_OBJ_COUNT);
@@ -16013,7 +15897,7 @@ static void v2_vm_op_36(V2VM& vm) {
 // 0x45 (sub_12634): Text display + command buffer write type=0x0A.
 // sub_1250b → first dispatch; sub_125fa → mode byte + 2 dispatches → si,di.
 // Then writes to command buffer: type=0x0A, params=si,di,ds:0x002A. Advances cmd ptr by 8.
-static void v2_vm_op_45(V2VM& vm) {
+void v2_vm_op_45(V2VM& vm) {
     // sub_1250b: read mode byte + dispatch (result unused by sub_12634)
     uint8_t mode1;
     v2_vm_ch_dispatch_1250b(vm, mode1);
@@ -16037,14 +15921,14 @@ static void v2_vm_op_45(V2VM& vm) {
 }
 
 // 0x87 (sub_14abb): Indexed field (1 byte) conditional. ne → skip 2, eq → call-jump.
-static void v2_vm_op_87(V2VM& vm) {
+void v2_vm_op_87(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm); // sub_15485: 1 byte
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
 // 0xC2 (sub_15268): Write acc to animation state table. 0 bytes.
 // ds:[obj+0x16C5] * 14 + 0x25F6 = target address; write acc there.
-static void v2_vm_op_C7(V2VM& vm) {
+void v2_vm_op_C7(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     uint16_t idx = ObjRef{vm, si}.u16(OBJ_ANIM_SUB);
     if (idx & 0x8000) return;
@@ -16054,7 +15938,7 @@ static void v2_vm_op_C7(V2VM& vm) {
 
 // 0x82 (sub_149ab): Signed >= comparison with indexed field (1 byte).
 // If acc >= val (signed) → skip 2, else → jump. (acc < val → jump)
-static void v2_vm_op_82(V2VM& vm) {
+void v2_vm_op_82(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm);
     if ((int16_t)v2_vm_accumulator >= (int16_t)val) {
         vm.pc += 2;
@@ -16065,14 +15949,14 @@ static void v2_vm_op_82(V2VM& vm) {
 
 // 0x37 (sub_155c0): Collision check sub_155d6 (1 byte) + skip/call-jump.
 // Like 0x1A but without PUSH/POP ds:0x372 (no temporary limit change).
-static void v2_vm_op_37(V2VM& vm) {
+void v2_vm_op_37(V2VM& vm) {
     bool collision = v2_vm_collision_check_155d6(vm);
     vm.ds_write(DS_COLL_BIT_IDX, vm.ds_read(DS_COLL_BIT_IDX) + 2); // ALWAYS increment
     if (collision) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
 
 // 0x42 (sub_12669): Command buffer write type=2. 0 bytes.
-static void v2_vm_op_42(V2VM& vm) {
+void v2_vm_op_42(V2VM& vm) {
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 2);
     v2_cmdq_log("v2", 2, bx_cmd, 2);
@@ -16080,7 +15964,7 @@ static void v2_vm_op_42(V2VM& vm) {
 }
 
 // 0xD2 (sub_1287a): Password system setup. 0 bytes. Reads level password from table.
-static void v2_vm_op_D2(V2VM& vm) {
+void v2_vm_op_D2(V2VM& vm) {
     // si = word_2AA8D (current level index) = DS:0x25AD
     uint16_t si = vm.ds_read(DS_LEVEL);
     // #104: LVX slots carry their password in the trailer (the ds:0x85A5
@@ -16108,7 +15992,7 @@ static void v2_vm_op_D2(V2VM& vm) {
 // 0x25 (sub_14487): Animation load + off_30C8E dispatch. 1 byte + dispatch.
 // 0x25 (sub_14487): test flag 0x40 → if NOT set: read filter, call sub_158b9, off_30C8E[2]
 //                                     if SET: fall to loc_144bb (different path)
-static void v2_vm_op_25(V2VM& vm) {
+void v2_vm_op_25(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     bool flag40 = ObjRef{vm, si}.u16(OBJ_FLAGS) & 0x40;
     uint8_t anim_idx = vm.read_u8();
@@ -16134,14 +16018,14 @@ static void v2_vm_op_25(V2VM& vm) {
 
 // 0x4B (sub_16252): OR flag 0x2000 on object. 0 bytes.
 // si=ds:0x42; ds:[si+0x1585] |= 0x2000
-static void v2_vm_op_4B(V2VM& vm) {
+void v2_vm_op_4B(V2VM& vm) {
     uint16_t si = vm.global_r(DS_CUR_OBJ);
     ObjRef{vm, si}.w16(OBJ_FLAGS, ObjRef{vm, si}.u16(OBJ_FLAGS) | 0x2000);
 }
 
 // 0x19 (sub_14428): Set anim state. 2 bytes.
 // ax=es:[bx]; bx+=2; ds:[obj+0x1A0D]=ax; ds:[obj+0x1A35]=1
-static void v2_vm_op_19(V2VM& vm) {
+void v2_vm_op_19(V2VM& vm) {
     uint16_t val = vm.read_u16();
     vm.field_w(OBJ_ANIM_PC, val);
     vm.field_w(OBJ_ANIM_TIMER, 1);
@@ -16150,22 +16034,17 @@ static void v2_vm_op_19(V2VM& vm) {
 // Animation frame bytecode interpreter — replicates sub_13084.
 // Reads animation commands from es:anim_bx via off_30BC6 dispatch (ds:0x86E6).
 // Timer at ds:0x78 delays between frames.
-// Debug ring buffer for anim cmd trace (last N commands before error)
-struct AnimCmdTrace {
-    uint8_t cmd;
-    uint16_t handler;
-    uint16_t bx_before;
-    uint16_t bx_after;
-};
-static AnimCmdTrace v2_anim_trace[16];
-static int v2_anim_trace_idx = 0;
+// Debug ring buffer for anim cmd trace (last N commands before error):
+// struct AnimCmdTrace is defined in v2_vm_gen.h (the anim executors fill it).
+AnimCmdTrace v2_anim_trace[16];   // extern in v2_vm_gen.h
+int v2_anim_trace_idx = 0;
 
 // Stage-1 anim-VM ground truth (V2_ANIM_DUMP=<file>): unique
 // (template, bx_before, cmd, bx_after) rows — bx_before is the position
 // AFTER the command byte. The anim commands have runtime-dependent
 // operand lengths (per-sub-sprite loops), so the live stream IS the
 // length oracle for the anim disassembler. Called from BOTH executors.
-static void v2_animdump_note(uint8_t* shadow, uint16_t bx_before,
+void v2_animdump_note(uint8_t* shadow, uint16_t bx_before,
                              uint8_t cmd, uint16_t bx_after) {
     static int _ad = -1;
     static const char* _af = nullptr;
@@ -16277,7 +16156,7 @@ static void v2_vm_run_anim_frame(V2VM& vm, uint16_t& anim_bx) {
 // Globals for cutscene controller trap (defined here, declared extern above).
 
 // Execute a single anim cmd. Returns true = continue (next cmd), false = exit (end/delay).
-static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd) {
+bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd) {
     switch (handler) {
         case 0x34D3: // [3] sub_134d3: JUMP — bx = es:[bx]
             anim_bx = *(uint16_t*)(vm.es + anim_bx);
@@ -16926,7 +16805,7 @@ static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, u
 }
 
 // sub_1303a: setup globals → run anim interpreter → copy results back
-static void v2_vm_anim_interp_1303a(V2VM& vm) {
+void v2_vm_anim_interp_1303a(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     uint16_t anim_bx = ObjRef{vm, di}.u16(OBJ_ANIM_PC);
     if (anim_bx == 0xFFFF) return;
@@ -16960,7 +16839,7 @@ static void v2_vm_anim_interp_1303a(V2VM& vm) {
 // 0x2F (sub_13031): Animation update. 0 bytes. PUSH bx, calls, POP bx.
 // sub_135cf: velocity/bounds update after animation frame.
 // Clamps velocity to max values, applies flip, adds to velocity accumulators.
-static void v2_vm_anim_tail_135cf(V2VM& vm) {
+void v2_vm_anim_tail_135cf(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     ObjRef self{vm, di};
     // Check if update needed
@@ -17009,14 +16888,14 @@ static void v2_vm_anim_tail_135cf(V2VM& vm) {
     self.w16(OBJ_VEL_Y, self.u16(OBJ_VEL_Y) + dy_acc);    // 0x366f
 }
 
-static void v2_vm_op_2F(V2VM& vm) {
+void v2_vm_op_2F(V2VM& vm) {
     v2_vm_anim_interp_1303a(vm);
     v2_vm_anim_tail_135cf(vm);
 }
 
 // 0x46 (sub_1268d): Command buffer write type=6 with param. 2 bytes.
 // word_2A66F is at DS:0x218F (NOT 0xA66F — that was the linear address).
-static void v2_vm_op_46(V2VM& vm) {
+void v2_vm_op_46(V2VM& vm) {
     uint16_t param = vm.read_u16();
     uint16_t bx_cmd = vm.ds_read(DS_CMD_WRITE);
     vm.ds_write(bx_cmd + DS_CMD_BUF, 6);
@@ -17026,12 +16905,12 @@ static void v2_vm_op_46(V2VM& vm) {
 }
 
 // 0x96 (sub_14675): Store acc to obj field 0x1995. 0 bytes.
-static void v2_vm_op_96(V2VM& vm) {
+void v2_vm_op_96(V2VM& vm) {
     vm.field_w(OBJ_PARTNER, v2_vm_accumulator);
 }
 
 // 0x56 (sub_14686): Store acc to indexed field. 1 byte.
-static void v2_vm_op_56(V2VM& vm) {
+void v2_vm_op_56(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
@@ -17040,7 +16919,7 @@ static void v2_vm_op_56(V2VM& vm) {
 }
 
 // 0x58 (sub_146b4): Store acc to indexed+0x1995 field. 1 byte.
-static void v2_vm_op_58(V2VM& vm) {
+void v2_vm_op_58(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
@@ -17050,20 +16929,20 @@ static void v2_vm_op_58(V2VM& vm) {
 }
 
 // 0x5A (sub_14704): Add acc to value at address. 2 bytes.
-static void v2_vm_op_5A(V2VM& vm) {
+void v2_vm_op_5A(V2VM& vm) {
     uint16_t addr = vm.read_u16();
     uint16_t val = vm.ds_read(addr);
     vm.ds_write(addr, val + v2_vm_accumulator);
 }
 
 // 0x60 (sub_147bf): AND value at address with acc. 2 bytes.
-static void v2_vm_op_60(V2VM& vm) {
+void v2_vm_op_60(V2VM& vm) {
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, vm.ds_read(addr) & v2_vm_accumulator);
 }
 
 // 0x62 (sub_147e7): OR indexed field with acc. 1 byte.
-static void v2_vm_op_62(V2VM& vm) {
+void v2_vm_op_62(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t si = *(uint16_t*)(vm.shadow +lookup);
@@ -17074,7 +16953,7 @@ static void v2_vm_op_62(V2VM& vm) {
 
 // 0x67 (sub_1484b): XOR indexed+0x1995 field with acc. 1 byte.
 // Original: XOR [di+14E5h], ax (NOT AND!)
-static void v2_vm_op_67(V2VM& vm) {
+void v2_vm_op_67(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t lookup = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup);
@@ -17086,7 +16965,7 @@ static void v2_vm_op_67(V2VM& vm) {
 
 // 0x18 (sub_14409): Set velocity + parent ref. 2 bytes (two signed bytes).
 // ds:[obj+0x141D]=ds:[obj+0x1995]; vx=CBW(byte); ds:[obj+0x1945]=vx; vy=CBW(byte); ds:[obj+0x196D]=vy
-static void v2_vm_op_18(V2VM& vm) {
+void v2_vm_op_18(V2VM& vm) {
     vm.field_w(OBJ_ANIM_TABLE, vm.field_r(OBJ_PARTNER));
     int8_t vx = (int8_t)vm.read_u8();
     vm.field_w(OBJ_VEL_X, (uint16_t)(int16_t)vx);
@@ -17140,7 +17019,7 @@ static uint16_t v2_vm_bittest_15445(V2VM& vm) {           // partner field, bx+=
 // Reads: byte idx1 (bitmask), byte idx2 (field index)
 // di = table[idx2] + ds:[obj+0x1995]; val = ds:[di+0x14E5]; mask = ds:[idx1-0x6C34]
 // acc = (val & mask) ? 1 : 0
-static void v2_vm_op_bit_test_indexed(V2VM& vm) {
+void v2_vm_op_bit_test_indexed(V2VM& vm) {
     v2_vm_accumulator = v2_vm_bittest_15445(vm);
 }
 
@@ -17151,19 +17030,19 @@ static void v2_vm_op_bit_test_indexed(V2VM& vm) {
 // PUSH ax; ax = es:[bx]; ADD bx,2 → val (WORD from bytecode, NOT ds:[addr]!)
 // POP si=idx; AND ax, ds:[si-0x6C34] → bit test of bytecode value
 // JZ → ax=0; else ax=1; MOV ds:8A, ax
-static void v2_vm_op_bit_test(V2VM& vm) {
+void v2_vm_op_bit_test(V2VM& vm) {
     v2_vm_accumulator = v2_vm_bittest_153ea(vm);
 }
 
 // 0x99 (sub_14b59→sub_1542a): bit test of ds:[addr]. 3 bytes.
 // byte idx + word addr → val=ds:[addr], mask=ds:[idx-0x6C34], acc=(val&mask)?1:0
-static void v2_vm_op_bit_test_addr(V2VM& vm) {
+void v2_vm_op_bit_test_addr(V2VM& vm) {
     v2_vm_accumulator = v2_vm_bittest_1542a(vm);
 }
 
 // 0x54 (sub_14652): Load accumulator from indexed field + ds:[obj+0x1995] offset. 1 byte.
 // Like sub_15485 but adds ds:[obj+0x1995] to the table lookup result.
-static void v2_vm_op_load_acc_indexed_1995(V2VM& vm) {
+void v2_vm_op_load_acc_indexed_1995(V2VM& vm) {
     uint16_t idx = vm.read_u8();
     uint16_t lookup_addr = (uint16_t)(idx - LUT_FIELD_OFF);
     uint16_t di = *(uint16_t*)(vm.shadow +lookup_addr);
@@ -17175,7 +17054,7 @@ static void v2_vm_op_load_acc_indexed_1995(V2VM& vm) {
 
 // 0x57 (sub_146a3): Store acc to address. 2 bytes.
 // si=es:[bx]; bx+=2; ax=ds:0x8A; ds:[si]=ax
-static void v2_vm_op_57(V2VM& vm) {
+void v2_vm_op_57(V2VM& vm) {
     uint16_t addr = vm.read_u16();
     // V2-OP57-3E4: trap writes to item slot region (0x3E4 master + 0x3FC mirror)
     if (addr >= 0x3E4 && addr <= 0x413) {
@@ -17201,7 +17080,7 @@ static void v2_vm_op_57(V2VM& vm) {
 
 // 0xBD (sub_1469e): SHL acc << 8, then store (falls through to 0x57).
 // SHL ds:0x8A, 8; then si=es:[bx]; bx+=2; ds:[si]=ds:0x8A
-static void v2_vm_op_BD(V2VM& vm) {
+void v2_vm_op_BD(V2VM& vm) {
     v2_vm_accumulator <<= 8;
     uint16_t addr = vm.read_u16();
     vm.ds_write(addr, v2_vm_accumulator);
@@ -17256,7 +17135,7 @@ static uint16_t v2_vm_read_indexed_field_1995(V2VM& vm) {
 // else: EAX = dword_30B19 * 0x15A4E35 + 1; store; return (AX >> 8) & 0x7FFF
 // sub_12312: exact replica using shadow DS for state.
 // dword_30B19 (LCG seed) at DS:0x8639, word_288AC at DS:0x03CC, word_28832 at DS:0x0352.
-static uint16_t v2_vm_read_random(V2VM& vm) {
+uint16_t v2_vm_read_random(V2VM& vm) {
     uint16_t mode_flag = vm.ds_read(DS_GAME_MODE_AC); // word_288AC
     if (mode_flag != 0) {
         // Path 2: LFSR — xchg ah,al; word_28832 = ax; RCL ax,3; word_28832 ^= ax
@@ -17441,7 +17320,7 @@ static bool v2_vm_ch_escape_125a3(V2VM& vm, uint16_t& out_si, uint16_t& out_di) 
 // Bytecode consumption: sub_1250b(1 + N1) + sub_12543(N2) + sub_125a3(1 + N3 + N4) = 2 + N1+N2+N3+N4
 // Each Ni is determined by off_30C98 dispatch (0-2 bytes each).
 // After all reads: writes to command buffer, text rendering. No further bytecode consumed.
-static void v2_vm_op_41(V2VM& vm) {
+void v2_vm_op_41(V2VM& vm) {
     // sub_1242e: exact replica
 
     // 1. sub_1250b: read mode byte + first value dispatch → text index, sets word_2850A (0x2A)
@@ -17522,7 +17401,7 @@ static void v2_vm_op_41(V2VM& vm) {
     }
 }
 
-static void v2_vm_op_44(V2VM& vm) {
+void v2_vm_op_44(V2VM& vm) {
     // sub_1246d: exact replica — like 0x41 but uses sub_125fa instead of sub_125a3, no sub_12549
 
     // 1. sub_1250b
@@ -17622,65 +17501,65 @@ static void v2_vm_do_call_jump(V2VM& vm) {
 
 // --- Pattern A: if (val != acc) skip else jump ---
 // 0x72: literal
-static void v2_vm_op_72(V2VM& vm) {
+void v2_vm_op_72(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 // 0x73: indexed field
-static void v2_vm_op_73(V2VM& vm) {
+void v2_vm_op_73(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm);
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 // 0x74: indirect
-static void v2_vm_op_74(V2VM& vm) {
+void v2_vm_op_74(V2VM& vm) {
     uint16_t val = v2_vm_read_indirect(vm);
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
 // --- 0x68: if (acc >= literal) jump, else skip 2 (JB = unsigned below) ---
-static void v2_vm_op_68(V2VM& vm) {
+void v2_vm_op_68(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if (v2_vm_accumulator >= val) { v2_vm_do_jump(vm); } else { vm.pc += 2; }
 }
 
 // --- Pattern B: if (val == acc) skip else jump ---
 // 0x77: literal
-static void v2_vm_op_77(V2VM& vm) {
+void v2_vm_op_77(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if (val == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 // 0x78: indexed field
-static void v2_vm_op_78(V2VM& vm) {
+void v2_vm_op_78(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm);
     if (val == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
 // --- Pattern C: if (val == acc) skip else call-jump ---
 // 0x8B: literal
-static void v2_vm_op_8B(V2VM& vm) {
+void v2_vm_op_8B(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if (val == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 // 0x8C: indexed field
-static void v2_vm_op_8C(V2VM& vm) {
+void v2_vm_op_8C(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field(vm);
     if (val == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
 // --- 0x79: indirect, if eq skip else jump ---
-static void v2_vm_op_79(V2VM& vm) {
+void v2_vm_op_79(V2VM& vm) {
     uint16_t val = v2_vm_read_indirect(vm);
     if (val == v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
 
 // --- 0x86: literal, if ne skip else call-jump ---
-static void v2_vm_op_86(V2VM& vm) {
+void v2_vm_op_86(V2VM& vm) {
     uint16_t val = v2_vm_read_literal(vm);
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
 
 // --- 0x88: indirect, if ne skip else call-jump ---
-static void v2_vm_op_88(V2VM& vm) {
+void v2_vm_op_88(V2VM& vm) {
     uint16_t val = v2_vm_read_indirect(vm);
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_call_jump(vm); }
 }
@@ -17692,7 +17571,7 @@ static uint16_t v2_vm_read_indexed_field_15403(V2VM& vm) {
 }
 
 // --- 0xA9: sub_15403 (2B indexed), if ne skip else jump ---
-static void v2_vm_op_A9(V2VM& vm) {
+void v2_vm_op_A9(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_15403(vm);
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -17703,7 +17582,7 @@ static uint16_t v2_vm_read_indexed_field_15445(V2VM& vm) {
 }
 
 // --- 0xAB: sub_15445 (2B indexed+1995), if ne skip else jump ---
-static void v2_vm_op_AB(V2VM& vm) {
+void v2_vm_op_AB(V2VM& vm) {
     uint16_t val = v2_vm_read_indexed_field_15445(vm);
     if (val != v2_vm_accumulator) { vm.pc += 2; } else { v2_vm_do_jump(vm); }
 }
@@ -17713,17 +17592,17 @@ static void v2_vm_op_AB(V2VM& vm) {
 // ============================================================================
 
 // 0x51: load literal word to accumulator
-static void v2_vm_op_load_acc_literal(V2VM& vm) {
+void v2_vm_op_load_acc_literal(V2VM& vm) {
     v2_vm_accumulator = vm.read_u16();
 }
 
 // 0x52: load indexed field to accumulator
-static void v2_vm_op_load_acc_indexed(V2VM& vm) {
+void v2_vm_op_load_acc_indexed(V2VM& vm) {
     v2_vm_accumulator = v2_vm_read_indexed_field(vm);
 }
 
 // 0x53: load indirect to accumulator
-static void v2_vm_op_load_acc_indirect(V2VM& vm) {
+void v2_vm_op_load_acc_indirect(V2VM& vm) {
     v2_vm_accumulator = v2_vm_read_indirect(vm);
 }
 
@@ -17737,12 +17616,12 @@ static void v2_vm_op_load_acc_indirect(V2VM& vm) {
 //   state == 0 (loc_1566a): check collision BIT in [di+0x13F5] → STC if set
 //   state > 0 (loc_15667): CLC always (no collision)
 //   state < 0 (loc_155e5): bounding box check, SET collision bit, CLC always
-static bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter);
+bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_155d6(V2VM& vm) {
     uint8_t filter = vm.read_u8(); // ALL paths consume 1 byte
     return v2_vm_collision_155d6_f(vm, filter);
 }
-static bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter) {
+bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
 
     uint16_t di = vm.global_r(DS_CUR_OBJ);
@@ -17811,13 +17690,13 @@ static bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter) {
 // Same 2-phase system as sub_155d6 but:
 // - Filter is a 2-byte word (not 1 byte)
 // - Filter check: TEST [si+0x1625], dx (bit test, not equality)
-static bool v2_vm_collision_156c0_f(V2VM& vm, uint16_t dx_filter);
+bool v2_vm_collision_156c0_f(V2VM& vm, uint16_t dx_filter);
 static bool v2_vm_collision_check_156c0(V2VM& vm) {
     // stream wrapper: every phase branch consumes exactly 2 bytes
     uint16_t dx_filter = vm.read_u16();
     return v2_vm_collision_156c0_f(vm, dx_filter);
 }
-static bool v2_vm_collision_156c0_f(V2VM& vm, uint16_t dx_filter) {
+bool v2_vm_collision_156c0_f(V2VM& vm, uint16_t dx_filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     ObjRef self{vm, di};
@@ -17962,13 +17841,13 @@ static bool v2_vm_xvel_obj_search_15c37(V2VM& vm, uint16_t filter_si, uint16_t d
 // state > 0: calls sub_158f5 (search) + sub_15c37 (directional check). Complex.
 // Phase 1 (state==0) and phase-skip (state<0) fully implemented.
 // Phase 2 (state>0): full search + directional check → always returns CLC with collision bit setting.
-static bool v2_vm_collision_15788_f(V2VM& vm, uint8_t filter);
+bool v2_vm_collision_15788_f(V2VM& vm, uint8_t filter);
 static bool v2_vm_collision_check_15788(V2VM& vm) {
     // stream wrapper: every phase branch consumes exactly 1 byte
     uint8_t filter = vm.read_u8();
     return v2_vm_collision_15788_f(vm, filter);
 }
-static bool v2_vm_collision_15788_f(V2VM& vm, uint8_t filter) {
+bool v2_vm_collision_15788_f(V2VM& vm, uint8_t filter) {
     int16_t state = (int16_t)vm.global_r(DS_COLL_PHASE);
     uint16_t di = vm.global_r(DS_CUR_OBJ);
 
@@ -18027,14 +17906,14 @@ static bool v2_vm_collision_15788_f(V2VM& vm, uint8_t filter) {
 }
 
 // 0x32 (sub_15772): collision_15788 + ds:0x38E += 2 (always) + skip/call-jump
-static void v2_vm_op_32(V2VM& vm) {
+void v2_vm_op_32(V2VM& vm) {
     bool collision = v2_vm_collision_check_15788(vm);
     vm.ds_write(DS_COLL_BIT_IDX, vm.ds_read(DS_COLL_BIT_IDX) + 2); // ALWAYS increment
     if (collision) { v2_vm_do_call_jump(vm); } else { vm.pc += 2; }
 }
 
 // 0x33 (sub_157d5): collision_157eb (sub_1584e) + ds:0x38E += 2 (always) + skip/call-jump
-static void v2_vm_op_33(V2VM& vm) {
+void v2_vm_op_33(V2VM& vm) {
     // Orig: sub_157eb (UPward collision) — NOT sub_1584e (downward).
     bool collision = v2_vm_collision_check_157eb(vm);
     vm.ds_write(DS_COLL_BIT_IDX, vm.ds_read(DS_COLL_BIT_IDX) + 2); // ALWAYS increment
@@ -18045,7 +17924,7 @@ static void v2_vm_op_33(V2VM& vm) {
 
 // 0x1A (sub_1559c): PUSH ds:0x372, set 6, collision_155d6, POP, branch
 // helper consumes 1 byte; on no collision: skip 2 more; on collision: call-jump
-static void v2_vm_op_1A(V2VM& vm) {
+void v2_vm_op_1A(V2VM& vm) {
     // orig sub_1559c (eip 0x559c): PUSH ds:0x372; MOV ds:0x372, 6 — temporarily
     // limit the collision_155d6 AABB scan to the 3 viking objects (si < 6); POP
     // ds:0x372 after. Without this, v2 scanned the full object table and found
@@ -18060,7 +17939,7 @@ static void v2_vm_op_1A(V2VM& vm) {
 }
 
 // 0x1D (sub_15686): collision_156c0 + ds:0x38E += 2
-static void v2_vm_op_1D(V2VM& vm) {
+void v2_vm_op_1D(V2VM& vm) {
     // orig sub_15686 (eip 0x5686): PUSH ds:0x372; MOV ds:0x372, 6 — same
     // viking-only scan limit as op_1A (sub_1559c); POP ds:0x372 after.
     // (op_38/sub_156aa calls collision_156c0 WITHOUT this limit — see v2_vm_op_38.)
@@ -18073,7 +17952,7 @@ static void v2_vm_op_1D(V2VM& vm) {
 }
 
 // 0x38 (sub_156aa): collision_156c0 + ds:0x38E += 2
-static void v2_vm_op_38(V2VM& vm) {
+void v2_vm_op_38(V2VM& vm) {
     bool collision = v2_vm_collision_check_156c0(vm);
     vm.ds_write(DS_COLL_BIT_IDX, vm.ds_read(DS_COLL_BIT_IDX) + 2); // ALWAYS increment
     if (collision) { v2_vm_do_call_jump(vm); } else { vm.pc += 2;
@@ -18172,7 +18051,7 @@ static void v2_vm_setter_154bf(V2VM& vm, uint16_t ax_val, uint8_t mode) {
 // 2. Read anim byte
 // 3. Call sub_1589B (animation load at 6C/6E position)
 // 4. Dispatch off_30C8E[0]
-static void v2_vm_op_49(V2VM& vm) {
+void v2_vm_op_49(V2VM& vm) {
     // Read mode byte (1 byte consumed)
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
@@ -18212,7 +18091,7 @@ static void v2_vm_op_49(V2VM& vm) {
 }
 
 // 0x4A (sub_14fc8): Same as 0x49 but PUSH 2 → off_30C8E[2] dispatch.
-static void v2_vm_op_4A(V2VM& vm) {
+void v2_vm_op_4A(V2VM& vm) {
     uint16_t word = *(uint16_t*)(vm.es + vm.pc);
     vm.pc += 1;
     uint8_t mode = (uint8_t)(word & 0xFF);
@@ -18238,7 +18117,7 @@ static void v2_vm_op_4A(V2VM& vm) {
 
 // 0x3D (sub_14532): Palette set. 3 bytes. Writes RGB*2 to ds:0x342-0x344.
 // Then OR ds:0x7EFD |= 1, ds:0x7EFE = 4, ds:0x7F00 = 0x8202, JMP sub_10e99.
-static void v2_vm_op_3D(V2VM& vm) {
+void v2_vm_op_3D(V2VM& vm) {
     uint8_t r = vm.read_u8();
     uint8_t g = vm.read_u8();
     uint8_t b = vm.read_u8();
@@ -18256,7 +18135,7 @@ static void v2_vm_op_3D(V2VM& vm) {
 // Iterates objects 0,2,4 (3 players), finds nearest by Manhattan distance.
 // Then falls through to 0x16's logic (loc_1510E).
 // Consumes same bytes as 0x16: 1 mode byte + N + M.
-static void v2_vm_op_34(V2VM& vm) {
+void v2_vm_op_34(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ); // current object
     // Exact replica of orig sub_150b5 (task #94, mk_16 f950 divergence):
     //   50C1: candidate filter is CMP [si+15ADh],0 (OBJ_RES_HANDLE) — NOT
@@ -18308,7 +18187,7 @@ static void v2_vm_op_34(V2VM& vm) {
 // 0x16 (sub_15106): Position delta computation + dual sub_154bf dispatch.
 // Reads 1 mode byte, then dispatches twice (X axis, Y axis) through off_30CA2.
 // Total bytes consumed: 1 (mode) + N (X handler) + M (Y handler).
-static void v2_vm_op_16(V2VM& vm) {
+void v2_vm_op_16(V2VM& vm) {
     uint16_t di = vm.global_r(DS_CUR_OBJ);
     uint16_t si_sub = ObjRef{vm, di}.u16(OBJ_PARTNER); // sub-object index
 
@@ -18354,7 +18233,7 @@ static void v2_vm_op_A3(V2VM& vm) {
 }
 
 // 0xAF (sub_14e04): sub_1542a bit test (3 bytes), compare with acc, eq → skip 2, ne → jump.
-static void v2_vm_op_AF(V2VM& vm) {
+void v2_vm_op_AF(V2VM& vm) {
     // sub_1542a: byte idx + word addr → val=ds:[addr], mask=ds:[idx-0x6C34]
     uint8_t idx = vm.read_u8();
     uint16_t addr = vm.read_u16();
@@ -18371,7 +18250,7 @@ static void v2_vm_op_AF(V2VM& vm) {
 
 // 0x30 (sub_144cf): push 0, sub_158e6 (flip-aware X tile search), off_30C8E[0].
 // 1 byte param (filter index) + 2 byte jump target. Carry → jump, no carry → skip 2.
-static void v2_vm_op_30(V2VM& vm) {
+void v2_vm_op_30(V2VM& vm) {
     uint8_t filter = vm.read_u8();
     uint16_t obj_di = vm.global_r(DS_CUR_OBJ);
     v2_vm_probe_front_158e6(vm, filter, obj_di);
@@ -18398,7 +18277,7 @@ static void v2_vm_op_39(V2VM& vm) {
 
 // 0x4F (sub_14501): push 2, sub_163ac (tile check), off_30C8E[2].
 // 0 byte params + 2 byte jump target. Same as 0x4E but dispatch index 2.
-static void v2_vm_op_4F(V2VM& vm) {
+void v2_vm_op_4F(V2VM& vm) {
     vm.carry = v2_vm_platform_check_163ac(vm);
     // orig sub_14501: PUSH 2 → JMP off_30C8E[si] — honest table dispatch (#97).
     // Stock table word[1] = 0x44F3: JC → carry = skip 2, no carry = jump
@@ -18907,7 +18786,7 @@ static void v2_vm_init_table() {
 // (template_chunk, pc, opcode) triples actually executed — the static
 // walker is validated against this live stream. Called from BOTH
 // executors (interpreter loop and the gencode G_PRE macro).
-static void v2_pcdump_note(uint8_t* shadow, uint16_t pc_before, uint8_t opcode) {
+void v2_pcdump_note(uint8_t* shadow, uint16_t pc_before, uint8_t opcode) {
     static int _pd = -1;
     static const char* _pf = nullptr;
     if (_pd < 0) { _pf = getenv("V2_PC_DUMP"); _pd = _pf ? 1 : 0; }
@@ -18949,72 +18828,11 @@ static int v2_gencode_enabled() {
     }
     return on;
 }
-#ifndef V2_ONLY
-#define V2_GEN_HASHSNAP \
-        const uint32_t _h1 = v2_ds_hash(vm.shadow); \
-        const uint32_t _h2 = v2_obj_hash(vm.shadow, vm.obj);
-#define V2_GEN_TRACES(PC, OP, PCB, ACCB) \
-        { extern void v2_vm_trace_record_v2_ext(uint16_t, uint16_t, uint8_t, \
-              uint16_t, uint16_t, uint16_t, uint16_t, uint8_t*, uint32_t, uint32_t); \
-          extern uint16_t v2_vm_step_per_obj[128]; \
-          v2_vm_trace_record_v2_ext(vm.obj, v2_vm_step_per_obj[vm.slot]++, (OP), \
-                                    (PCB), vm.pc, (ACCB), v2_vm_accumulator, \
-                                    vm.shadow, _h1, _h2); } \
-        { int& _cnt = v2_vm_trace_count[vm.slot]; \
-          if (_cnt < V2_VM_TRACE_MAX) { \
-              v2_vm_trace[vm.slot][_cnt].opcode = (OP); \
-              v2_vm_trace[vm.slot][_cnt].pc_before = (uint16_t)((PCB) + 1); \
-              v2_vm_trace[vm.slot][_cnt].pc_after = vm.pc; \
-              v2_vm_trace[vm.slot][_cnt].acc_before = (ACCB); \
-              v2_vm_trace[vm.slot][_cnt].acc_after = v2_vm_accumulator; \
-              v2_vm_trace[vm.slot][_cnt].es_seg = \
-                  (uint16_t)((vm.es - v2_m2c_base) >> 4); \
-              _cnt++; } }
-#else
-#define V2_GEN_HASHSNAP
-#define V2_GEN_TRACES(PC, OP, PCB, ACCB) \
-        { extern uint16_t v2_vm_step_per_obj[128]; \
-          v2_vm_step_per_obj[vm.slot]++; } \
-        { int& _cnt = v2_vm_trace_count[vm.slot]; \
-          if (_cnt < V2_VM_TRACE_MAX) { \
-              v2_vm_trace[vm.slot][_cnt].opcode = (OP); \
-              v2_vm_trace[vm.slot][_cnt].pc_before = (uint16_t)((PCB) + 1); \
-              v2_vm_trace[vm.slot][_cnt].pc_after = vm.pc; \
-              v2_vm_trace[vm.slot][_cnt].acc_before = (ACCB); \
-              v2_vm_trace[vm.slot][_cnt].acc_after = v2_vm_accumulator; \
-              v2_vm_trace[vm.slot][_cnt].es_seg = \
-                  (uint16_t)((vm.es - v2_m2c_base) >> 4); \
-              _cnt++; } }
-#endif
-#define G_PRE(PC, OP) \
-        if (--max_ops < 0) return true; \
-        { const uint16_t _pcb = (PC); \
-          const uint16_t _accb = v2_vm_accumulator; \
-          V2_GEN_HASHSNAP \
-          v2_pcdump_note(vm.shadow, (PC), (OP)); \
-          vm.pc = (uint16_t)((PC) + 1); \
-          vm.si_track = (uint16_t)((OP) << 1);
-#define G_POST(PC, OP) \
-          V2_GEN_TRACES(PC, OP, _pcb, _accb) \
-          if (vm.obj == v2_trace_object) \
-              fprintf(stderr, "V2-OBJ-TRACE: obj=%02X op=%02X pc=%04X\xe2\x86\x92%04X " \
-                      "acc=%04X\xe2\x86\x92%04X es=%04X\n", vm.obj, (OP), _pcb, vm.pc, \
-                      _accb, v2_vm_accumulator, \
-                      *(uint16_t*)(vm.shadow + vm.obj + OBJ_CODE_SEG)); \
-          if (!vm.running) return true; }
+// G_PRE / G_POST / V2_GEN_HASHSNAP / V2_GEN_TRACES — the executor macros — live in
+// v2_vm_gen.h with the generated executors (built per chunk in src/sdl/gen/exec_01cN.cpp).
 
-#include "gen/chunk_01c1.gen.inc"
-#include "gen/chunk_01c2.gen.inc"
-#include "gen/chunk_01c3.gen.inc"
-#include "gen/chunk_01c4.gen.inc"
-#include "gen/chunk_01c5.gen.inc"
-#include "gen/chunk_01c6.gen.inc"
-#include "gen/anim_01c1.gen.inc"
-#include "gen/anim_01c2.gen.inc"
-#include "gen/anim_01c3.gen.inc"
-#include "gen/anim_01c4.gen.inc"
-#include "gen/anim_01c5.gen.inc"
-#include "gen/anim_01c6.gen.inc"
+// The executors themselves are compiled per chunk: src/sdl/gen/exec_01cN.cpp
+// includes chunk_01cN.gen.inc + anim_01cN.gen.inc and exports the _entry points.
 
 static bool v2_gen_anim_dispatch(V2VM& vm, uint16_t& anim_bx, int& max) {
     if (!v2_gencode_enabled() || v2_gen_tmpl_dirty) return false;
@@ -19023,20 +18841,16 @@ static bool v2_gen_anim_dispatch(V2VM& vm, uint16_t& anim_bx, int& max) {
           fprintf(stderr, "V2-GEN: anim dispatch active (chunk 0x%X, bx=%04X)\n",
                   v2gs(vm.shadow).template_chunk(), anim_bx); } }
     switch (v2gs(vm.shadow).template_chunk()) {
-    case 0x1C1: return v2_gen_anim_1c1(vm, anim_bx, max);
-    case 0x1C2: return v2_gen_anim_1c2(vm, anim_bx, max);
-    case 0x1C3: return v2_gen_anim_1c3(vm, anim_bx, max);
-    case 0x1C4: return v2_gen_anim_1c4(vm, anim_bx, max);
-    case 0x1C5: return v2_gen_anim_1c5(vm, anim_bx, max);
-    case 0x1C6: return v2_gen_anim_1c6(vm, anim_bx, max);
+    case 0x1C1: return v2_gen_anim_1c1_entry(vm, anim_bx, max);
+    case 0x1C2: return v2_gen_anim_1c2_entry(vm, anim_bx, max);
+    case 0x1C3: return v2_gen_anim_1c3_entry(vm, anim_bx, max);
+    case 0x1C4: return v2_gen_anim_1c4_entry(vm, anim_bx, max);
+    case 0x1C5: return v2_gen_anim_1c5_entry(vm, anim_bx, max);
+    case 0x1C6: return v2_gen_anim_1c6_entry(vm, anim_bx, max);
     default: return false;
     }
 }
 
-#undef G_PRE
-#undef G_POST
-#undef V2_GEN_HASHSNAP
-#undef V2_GEN_TRACES
 #endif // V2_GENCODE
 
 static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
@@ -19144,12 +18958,12 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
         && es_seg != 0 && es_seg == v2gs(shadow).seg_anim()) {
         bool g_ok = false, g_known = true;
         switch (v2gs(shadow).template_chunk()) {
-        case 0x1C1: g_ok = v2_gen_exec_1c1(vm, max_ops); break;
-        case 0x1C2: g_ok = v2_gen_exec_1c2(vm, max_ops); break;
-        case 0x1C3: g_ok = v2_gen_exec_1c3(vm, max_ops); break;
-        case 0x1C4: g_ok = v2_gen_exec_1c4(vm, max_ops); break;
-        case 0x1C5: g_ok = v2_gen_exec_1c5(vm, max_ops); break;
-        case 0x1C6: g_ok = v2_gen_exec_1c6(vm, max_ops); break;
+        case 0x1C1: g_ok = v2_gen_exec_1c1_entry(vm, max_ops); break;
+        case 0x1C2: g_ok = v2_gen_exec_1c2_entry(vm, max_ops); break;
+        case 0x1C3: g_ok = v2_gen_exec_1c3_entry(vm, max_ops); break;
+        case 0x1C4: g_ok = v2_gen_exec_1c4_entry(vm, max_ops); break;
+        case 0x1C5: g_ok = v2_gen_exec_1c5_entry(vm, max_ops); break;
+        case 0x1C6: g_ok = v2_gen_exec_1c6_entry(vm, max_ops); break;
         default: g_known = false; break;   // synthetic fn-test worlds
         }
         if (g_known) {
@@ -21139,7 +20953,7 @@ void v2_phase_render1(uint16_t ds_val) {
 }
 
 static bool v2_ds_hash_skip(uint32_t i);
-static uint32_t v2_ds_hash(uint8_t* ds);
+uint32_t v2_ds_hash(uint8_t* ds);
 
 // sub_12E2D (seg000 6065-6099): pick the viking to control. Returns the slot
 // unchanged when it is not a viking row (>=6) or still alive; a dead slot
@@ -23332,7 +23146,7 @@ void v2_vm_verify_init(uint16_t obj_idx, uint16_t orig_es, uint16_t orig_pc, uin
 // can reference them.
 static inline bool v2_ds_hash_skip(uint32_t i);  // forward decl — body at top
 
-static uint32_t v2_ds_hash(uint8_t* ds) {
+uint32_t v2_ds_hash(uint8_t* ds) {
     v2_ds_skip_ensure();
     return v2h_ds_hash(ds);   // (IV) -O2 kernel, bit-identical order/polynomial
 }
@@ -23362,7 +23176,7 @@ struct VMTraceEntry {
 };
 
 // Per-object slice — fields at scattered offsets, summed via hash for quick localization.
-static uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx) {
+uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx) {
     uint32_t h = 0;
     static const uint16_t offs[] = {
         OBJ_CODE_SEG, OBJ_PC, OBJ_ALT_PC, OBJ_ANIM_TABLE, OBJ_WIDTH, OBJ_HEIGHT, OBJ_BBOX_Y0, OBJ_BBOX_Y1,
@@ -23933,7 +23747,7 @@ void v2_vm_replay_anim_cmd(uint8_t* ds_before, uint8_t* ds_after, uint8_t* es_pt
 }
 
 // Forward: execute single anim cmd. Returns true = continue, false = exit.
-static bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd);
+bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t cmd);
 
 // Per-opcode verification: called from original VM's opcode loop.
 // obj_idx = current object, step = opcode index within this object's frame,

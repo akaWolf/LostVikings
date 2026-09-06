@@ -29,6 +29,8 @@ jobs:
       # HEADLESS build first so the smoke test can run before we touch the
       # release artifact. .obj-headless and .obj are separate trees, so the
       # subsequent default build does not need a `make clean` in between.
+      - name: Generated-executor declarations are current (tools/data/gen_vm_decls.py --check)
+        run: python3 tools/data/gen_vm_decls.py --check
       - name: Build HEADLESS variant
         # clang: v2_vm.cpp (with the transpiled executors since stage 3A) needs
         # > 8 GB under gcc and dies on the 16 GB runner; clang peaks at ~1.2 GB.
@@ -146,9 +148,11 @@ jobs:
       - name: Build (WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          # -j1: mingw gcc on v2_vm.cpp (the transpiled executors since stage 3A)
+          # -j2: mingw gcc needs ~3.9 GB per generated-executor unit (src/sdl/gen/exec_01cN.cpp,
+          # measured -O2 -g1 on the largest chunk after the split described in v2_vm_gen.h);
+          # two at a time keep the 16 GB runner comfortable, four would not.
           # needs most of the 16 GB runner by itself — no parallel units beside it
-          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1
+          make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2
 
       - name: Build keymap editor
         run: |
@@ -250,8 +254,8 @@ jobs:
       - name: Build (V2_ONLY=1 WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
-          # -j1: see the Windows job above
-          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j1
+          # -j2: see the Windows job above
+          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2
 
       - name: Build keymap editor
         run: |

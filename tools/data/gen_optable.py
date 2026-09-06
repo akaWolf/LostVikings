@@ -47,7 +47,9 @@ def main():
                          r'([a-zA-Z_0-9]+);(?:\s*//\s*(.*))?', src):
         assigns[int(m.group(1), 16)] = (m.group(2), (m.group(3) or '').strip())
     bodies = {}
-    for m in re.finditer(r'static void (v2_vm_op_[A-Za-z_0-9]+)\(V2VM& vm\)\s*\{', src):
+    # the handlers the generated executors call have external linkage since the
+    # executors moved into their own translation units (v2_vm_gen.h): static is optional
+    for m in re.finditer(r'(?:static )?void (v2_vm_op_[A-Za-z_0-9]+)\(V2VM& vm\)\s*\{', src):
         name = m.group(1); i = m.end(); depth = 1
         while depth and i < len(src):
             c = src[i]
