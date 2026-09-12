@@ -186,14 +186,17 @@ The material of the console versions — the SNES parallax layers of the
 TMPL, RVTS, PDDY, with their passwords), the Genesis interludes between
 the worlds, the SNES 1993 level variants, the console finale, the twelve
 languages of the Blizzard Arcade Collection and the SNES music and
-effects — is a mod package over the open asset tree
-(`mods/console_content.mod.json`), not part of `DATA.DAT`. It plays in
-the **V2_ONLY** build only (the default build keeps `DATA.DAT` as the
-oracle of the orig-vs-mirror verification) and needs a *content pack*
-built from your `DATA.DAT`:
+effects — is converted from the console ROM images by the tools of
+`tools/assets/` (`integrate_snes.py` and the converters it drives) on
+top of the open tree of your `DATA.DAT`. None of it is in the
+repository: you need your own SNES DE image and Genesis image (any file
+names — they are found by their SHA-256). It plays in the **V2_ONLY**
+build only (the default build keeps `DATA.DAT` as the oracle of the
+orig-vs-mirror verification):
 
 ```sh
-make content              # = python3 tools/assets/build_content.py (python3, ~10 s)
+mkdir -p roms && cp /path/to/LostVikingsDE.sfc /path/to/LV.gen roms/   # or --snes-rom / --genesis-rom
+make content              # = python3 tools/assets/build_content.py (python3, ~25 s)
 V2_ONLY=1 make -j$(nproc)
 ./vikings
 ```
@@ -211,11 +214,11 @@ level editor's scratch tree has the same layout:
 `tools/assets/edit_server.py --scratch <dir>`).
 
 The V2_ONLY release bundles carry the builder as `content-tools/` (the
-scripts, the mod package and its two inputs from the repo — no game
+scripts and their inputs from the repo — no game data, no console
 data): `python3 content-tools/tools/assets/build_content.py` in the
-bundle directory, with `DATA.DAT` beside `vikings`, writes `content/`
-there. The pack itself is never redistributed: it is derived from
-`DATA.DAT` and the console ROMs.
+bundle directory, with `DATA.DAT` and the two images beside `vikings`,
+writes `content/` there. The pack itself is never redistributed: it is
+derived from `DATA.DAT` and the console images.
 
 ## CLI options
 

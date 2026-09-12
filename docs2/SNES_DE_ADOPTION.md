@@ -103,6 +103,9 @@ SNES walk-скроллер (157) играет Candy (track 7); PC 1AF — track 
   модов больше НЕ нужен.
 - Мод-пакеты несут scratch-корень (extras.json, exe_static.bin с LVX,
   texts_exe.json); `edit_server.py --export-mod/--import-mod` CLI.
-- `mods/console_content.mod.json` — весь консольный контент одним файлом
-  (97 файлов); import→pack воспроизводит .compiled бит-в-бит, цепь
-  39→41→53→4 доказана в движке на импортированном дереве.
+- Мод-пакет консольного контента (`console_content.mod.json`, 97 файлов
+  на тот момент) хранился в репозитории до 2026-09-10; import→pack
+  воспроизводил .compiled бит-в-бит, цепь 39→41→53→4 доказана в движке на
+  импортированном дереве. С 2026-09-10 контент не хранится, а
+  конвертируется из образов SNES DE и Genesis (`tools/assets/build_content.py`,
+  `make content`; стор побайтно тот же), мод-пакеты в `mods/` игнорируются git.

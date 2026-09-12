@@ -422,8 +422,9 @@ DEPS     := $(ALL_OBJS:.o=.d)
 all: $(EXE_NAME)
 
 # The console content pack for the V2_ONLY engine (the SNES / Genesis material
-# of the UX plan): DATA.DAT + mods/console_content.mod.json -> content/, which a
-# V2_ONLY binary beside it picks up by itself. tools/assets/build_content.py.
+# of the UX plan): DATA.DAT + the user's SNES DE and Genesis images (roms/, or
+# --snes-rom / --genesis-rom) -> content/, which a V2_ONLY binary beside it picks
+# up by itself. tools/assets/build_content.py.
 content:
 	python3 tools/assets/build_content.py
 

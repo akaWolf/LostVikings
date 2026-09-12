@@ -236,11 +236,15 @@ def build_bank(code, strings, glyphs, orig=None):
     return payload, len(recs), len(charset)
 
 
-def banks():
+def banks(texts_path=None):
+    """texts_path: the texts_exe.json whose box sizes are the floor (default the
+    canonical extraction assets/texts_exe.json; build_content.py's tree carries
+    its own copy of the same extraction)."""
     L = json.load(open(os.path.join(ROOT, "tools/assets/bac_lv_locale.json")))
     G = json.load(open(os.path.join(ROOT, "tools/assets/ps2p_glyphs.json")))
     G16 = json.load(open(os.path.join(ROOT, "tools/assets/unifont16_glyphs.json")))
-    orig = {e["i"]: (e["w"], e["h"]) for e in json.load(open(os.path.join(ROOT, "assets/texts_exe.json")))["entries"]
+    orig = {e["i"]: (e["w"], e["h"])
+            for e in json.load(open(texts_path or os.path.join(ROOT, "assets/texts_exe.json")))["entries"]
             if e["i"] not in RAW_IDX}
     out = {}
     for k, code in enumerate(LANGS):
@@ -258,8 +262,9 @@ def integrate(scratch):
     ex_path = os.path.join(scratch, "extras.json")
     extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
     os.makedirs(os.path.join(scratch, "unreferenced"), exist_ok=True)
+    tp = os.path.join(scratch, "texts_exe.json")
     print("language banks:")
-    for cid, (code, payload, nrec, ng) in sorted(banks().items()):
+    for cid, (code, payload, nrec, ng) in sorted(banks(tp if os.path.exists(tp) else None).items()):
         with open(os.path.join(scratch, "unreferenced", f"{cid:04X}.bin"), "wb") as f:
             f.write(payload)
         extras[f"{cid:04X}"] = {"role": "unreferenced"}

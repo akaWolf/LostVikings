@@ -423,8 +423,10 @@ jobs:
             the C++ runtime are statically linked — no extra DLLs/.so required.
             The V2_ONLY bundles also carry `content-tools/`: the builder of the
             console content pack (SNES parallax, the SNES-only levels, the Genesis
-            interludes, languages, SNES sound — README, "Console content"); run
-            `python3 content-tools/tools/assets/build_content.py` beside `DATA.DAT`.
+            interludes, languages, SNES sound — README, "Console content") — the
+            converters only, no console data: run
+            `python3 content-tools/tools/assets/build_content.py` beside `DATA.DAT`
+            and your own SNES DE and Genesis images.
 
             All modes require the copyrighted `DATA.DAT` from a legal copy of
             the 1992 Lost Vikings (e.g. the GOG release). It is not

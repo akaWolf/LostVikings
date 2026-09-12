@@ -56,14 +56,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import assetc as AC  # noqa: E402
 import level_render as LR  # noqa: E402
 
-ROM_PATH = "/home/akawolf/projects/own/LostVikingsDE/LostVikingsDE.sfc"
+# The SNES DE ROM: LV_SNES_ROM=<path> (tools/assets/build_content.py sets it
+# from --snes-rom or its search), else roms/LostVikingsDE.sfc under the repo
+# root (roms/ is git-ignored — the console images are the user's).
+ROM_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                        "roms", "LostVikingsDE.sfc")
 # BG palettes land in 'unreferenced' archive ids (>=384B each), one per
 # converted level so several exclusives can coexist in one tree.
 PAL_CHUNK_DEFAULT = 0x0155
 
 
 class SnesRom:
-    def __init__(self, path=ROM_PATH):
+    def __init__(self, path=None):
+        path = path or os.environ.get("LV_SNES_ROM") or ROM_PATH
         with open(path, "rb") as f:
             self.rom = f.read()
         self.base = 0x58000

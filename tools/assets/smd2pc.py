@@ -40,13 +40,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import assetc as AC  # noqa: E402
 import level_render as LR  # noqa: E402
 
-ROM_PATH = "/home/akawolf/projects/own/LostVikingsDE/LostVikingsSMD/LV.gen"
+# The Genesis ROM: LV_GENESIS_ROM=<path> (tools/assets/build_content.py sets it
+# from --genesis-rom or its search), else roms/LV.gen under the repo root
+# (roms/ is git-ignored — the console images are the user's).
+ROM_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                        "roms", "LV.gen")
 MAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "smd2pc_map.json")
 
 
 class SmdRom:
-    def __init__(self, path=ROM_PATH):
+    def __init__(self, path=None):
+        path = path or os.environ.get("LV_GENESIS_ROM") or ROM_PATH
         with open(path, "rb") as f:
             self.rom = f.read()
         self.base = 0x30000

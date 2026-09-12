@@ -12,6 +12,8 @@ assets_raw/lvs/*
 /assets/
 # the console content pack built by tools/assets/build_content.py (make content)
 /content/
+# mod packages exported by tools/assets/edit_server.py --export-mod: console-derived data, never committed
+/mods/
 __pycache__/
 
 # Nix GC-root symlinks (toolchain pins)

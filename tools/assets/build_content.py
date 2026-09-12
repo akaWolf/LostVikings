@@ -5,38 +5,55 @@ The SNES / Genesis material of the UX plan — the SNES DE parallax layers of
 the 42 levels, the five SNES-exclusive levels in the progression (TR33, SNDS,
 TMPL, RVTS, PDDY) with their passwords, the Genesis interludes, the SNES 1993
 level variants (the F1 SNES BALANCE switch), the console finale, the language
-banks and the SNES sound banks — lives in mods/console_content.mod.json: a mod
-package over the OPEN asset tree (326 files — 210 new chunks 0x1B2..0x317,
-edited level headers and world scripts, exe_static.bin with the LVX5 trailer).
-The engine reads it through the asset store, in the V2_ONLY build only (the
-default build keeps DATA.DAT as the oracle of the orig-vs-mirror verification):
-V2_ASSETS_DIR=<content>/.compiled and V2_EXE_STATIC=<content>/exe_static.bin —
-or, with neither variable set, a content/ directory next to the executable or
-in the working directory (v2_main.cpp; V2_CONTENT=0 turns that lookup off).
+banks and the SNES music and effects — is CONVERTED FROM THE CONSOLE IMAGES by
+tools/assets/integrate_snes.py (snes2pc, smd2pc / genesis_scene, parallax_snes,
+the SNES sound driver and banks, the language banks from the BAC translations
+cached in bac_lv_locale.json) on top of the open tree of the user's DATA.DAT.
+None of it is in the repository or in the release bundles: the build needs the
+two ROM images, and the pack it writes is never redistributed.
 
-This script builds that directory from the user's DATA.DAT, nothing else is
-written:
+The engine reads the pack through the asset store, in the V2_ONLY build only
+(the default build keeps DATA.DAT as the oracle of the orig-vs-mirror
+verification): V2_ASSETS_DIR=<content>/.compiled and
+V2_EXE_STATIC=<content>/exe_static.bin — or, with neither variable set, a
+content/ directory next to the executable or in the working directory
+(v2_main.cpp; V2_CONTENT=0 turns that lookup off).
+
+Steps (nothing outside the output directory is written):
   1. tools/data/extract_datadat.py: DATA.DAT -> content/raw (the manifest and
      the comp/dec chunks; the extractor verifies the round trip back to the
      archive byte for byte)
   2. tools/assets/assetc.py: the open tree content/<role>/... — every chunk
      extracted and compiled back byte-exact (the judge). Its inputs from the
      repo: assets_raw/chunk_map.json (the chunk roles) and assets_raw/lvs/
-     *.lvsf (the DSL text of the six world scripts; the mod carries edited
-     copies of that form, which a byte dump could not take)
-  3. the mod package applied over the tree (edit_server.mod_import)
+     *.lvsf (the DSL text of the six world scripts; the converters edit 1C6
+     in that form). texts_exe.py extract -> content/texts_exe.json: the
+     dialog boxes of the static image (the language banks keep their sizes)
+  3. integrate_snes.do_integrate(content): the console content from the two
+     images — or, with --mod, a mod package of edit_server.py --export-mod
+     applied instead (edit_server.mod_import)
   4. edit_server.do_pack: content/.compiled/NNNN.bin — the 535 archive records
      (an untouched asset keeps the archive's own LZSS stream) plus the extras
-     — and content/exe_static.bin (the mod's image)
+     — and content/exe_static.bin (the texts baked on the image, the LVX
+     trailer of the extra level slots kept)
+
+The ROM images: --snes-rom / --genesis-rom, else found by SHA-256 among the
+.sfc/.smc/.gen/.bin/.md/.rom files of the working directory, its roms/, the
+repo root's roms/ and the directory of DATA.DAT. The known images are the ones
+the converters were verified against (the store they produce is byte for byte
+the one of the reference build); --any-rom accepts another dump — the
+converters check the chunk tables themselves, the result is unverified.
 
 The result has the scratch-tree layout of tools/assets/edit_server.py, so the
 editor can work on it (--scratch content). Usage:
   python3 tools/assets/build_content.py [--data DATA.DAT] [--out content] [--fresh]
+                                       [--snes-rom X.sfc --genesis-rom Y.gen | --mod PKG.json]
 The same tree ships in the V2_ONLY release bundles as content-tools/ (the
-scripts, the mod package and the two repo inputs): run it from the bundle
-directory with DATA.DAT beside the executable.
+scripts and their repo inputs, no game data): run it from the bundle directory
+with DATA.DAT and the two images beside the executable.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -50,11 +67,24 @@ sys.path.insert(0, HERE)
 
 ARCHIVE_CHUNKS = 535          # the 1992 DATA.DAT
 STATIC_IMAGE = 0x29F00        # exe_static.bin: the m2c static image; the LVX trailer sits past it
+# the images the converters were verified against (tools/assets/snes2pc.py, smd2pc.py)
+SNES_ROM_SHA256 = "4bf0ef43b5e47ea253157b1a1cba87a523e639cac3733617e049e8e6dd617af2"
+GENESIS_ROM_SHA256 = "0d71e903be21b77c9a77ee84d5990fd84a07aa7ec876ff733efbf05497388b83"
+ROM_EXTS = (".sfc", ".smc", ".gen", ".bin", ".md", ".rom")
+ROM_SIZE_MIN, ROM_SIZE_MAX = 0x80000, 0x800000
 
 
 def fail(msg):
     sys.stderr.write("build_content: " + msg + "\n")
     sys.exit(1)
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for blk in iter(lambda: f.read(1 << 20), b""):
+            h.update(blk)
+    return h.hexdigest()
 
 
 def find_data(arg):
@@ -66,12 +96,44 @@ def find_data(arg):
     fail("DATA.DAT not found — pass --data <path> (the archive of a legal copy of the 1992 game)")
 
 
+def find_rom(arg, want, name, flag, data_dir, any_rom):
+    """--<flag> <file> (its hash checked unless --any-rom), else the file with
+    the known hash among the ROM-shaped files of the usual directories."""
+    if arg:
+        p = os.path.abspath(arg)
+        if not os.path.exists(p):
+            fail(f"--{flag}: {p} not found")
+        h = sha256_of(p)
+        if h != want and not any_rom:
+            fail(f"{p}: SHA-256 {h[:16]}… is not the {name} image the converters were verified "
+                 f"against ({want[:16]}…); --any-rom uses it anyway (unverified result)")
+        return p
+    dirs, seen = [], set()
+    for d in (os.getcwd(), os.path.join(os.getcwd(), "roms"), os.path.join(ROOT, "roms"), data_dir):
+        d = os.path.abspath(d)
+        if d not in seen and os.path.isdir(d):
+            seen.add(d)
+            dirs.append(d)
+    for d in dirs:
+        for fn in sorted(os.listdir(d)):
+            p = os.path.join(d, fn)
+            if not os.path.isfile(p) or os.path.splitext(fn)[1].lower() not in ROM_EXTS:
+                continue
+            if not ROM_SIZE_MIN <= os.path.getsize(p) <= ROM_SIZE_MAX:
+                continue
+            if sha256_of(p) == want:
+                return p
+    fail(f"the {name} image was not found — pass --{flag} <file> (searched " + ", ".join(dirs) + ")")
+
+
 def main():
     ap = argparse.ArgumentParser(description="build the console content pack for the V2_ONLY engine")
     ap.add_argument("--data", help="DATA.DAT (default: ./DATA.DAT, then the repo root)")
     ap.add_argument("--out", default="content", help="output directory (default: ./content)")
-    ap.add_argument("--mod", default=os.path.join(ROOT, "mods", "console_content.mod.json"),
-                    help="the mod package (default: mods/console_content.mod.json)")
+    ap.add_argument("--snes-rom", help="the SNES DE image (default: found by its SHA-256, see the module doc)")
+    ap.add_argument("--genesis-rom", help="the Genesis image (default: found by its SHA-256)")
+    ap.add_argument("--any-rom", action="store_true", help="accept images with other hashes (unverified result)")
+    ap.add_argument("--mod", help="apply this mod package (edit_server.py --export-mod) instead of converting the images")
     ap.add_argument("--fresh", action="store_true", help="remove an existing output directory first")
     args = ap.parse_args()
     sys.argv = sys.argv[:1]   # assetc.main() reads argv[1] ("--pack")
@@ -81,10 +143,22 @@ def main():
     raw = os.path.join(out, "raw")
     cmap_src = os.path.join(ROOT, "assets_raw", "chunk_map.json")
     lvs_src = os.path.join(ROOT, "assets_raw", "lvs")
-    for p, what in ((data, "DATA.DAT"), (args.mod, "the mod package"), (cmap_src, "assets_raw/chunk_map.json"),
-                    (lvs_src, "assets_raw/lvs")):
+    for p, what in ((data, "DATA.DAT"), (cmap_src, "assets_raw/chunk_map.json"), (lvs_src, "assets_raw/lvs")):
         if not os.path.exists(p):
             fail(f"{what} not found: {p}")
+    image = next((p for p in (os.path.join(ROOT, "exe_static.bin"), os.path.join(os.getcwd(), "exe_static.bin"))
+                  if os.path.exists(p)), None)
+    if not image:
+        fail("exe_static.bin (the static EXE image: the repo root, or the bundle directory) not found")
+    mod = snes = genesis = None
+    if args.mod:
+        mod = os.path.abspath(args.mod)
+        if not os.path.exists(mod):
+            fail(f"--mod: {mod} not found")
+    else:
+        snes = find_rom(args.snes_rom, SNES_ROM_SHA256, "SNES DE", "snes-rom", os.path.dirname(data), args.any_rom)
+        genesis = find_rom(args.genesis_rom, GENESIS_ROM_SHA256, "Genesis", "genesis-rom", os.path.dirname(data),
+                           args.any_rom)
     if os.path.abspath(os.path.dirname(data)) == out:
         fail("--out must not be the directory of DATA.DAT")
     if os.path.exists(out):
@@ -92,6 +166,9 @@ def main():
             fail(f"{out} exists — rerun with --fresh to rebuild it (everything inside is replaced)")
         shutil.rmtree(out)
     os.makedirs(raw)
+    # every user path is absolute from here on; the tools address their own
+    # tables relative to the repo root (tools/data/disasm.py, lvsc.py ...)
+    os.chdir(ROOT)
 
     # 1. the archive -> raw chunks
     print(f"[1/4] extracting {data} -> {raw}")
@@ -113,18 +190,30 @@ def main():
     if os.path.exists(smap):
         shutil.copy(smap, os.path.join(raw, "sprite_map.json"))
 
-    # 2. the open tree, judged byte-exact against the archive
+    # 2. the open tree, judged byte-exact against the archive; the image's texts
     print(f"[2/4] converting the {ARCHIVE_CHUNKS} chunks into the open tree {out}")
     import assetc
     assetc.RAW = raw
     assetc.ASSETS = out
     assetc.main()
+    import texts_exe as TX
+    with open(os.path.join(out, "texts_exe.json"), "w") as f:
+        json.dump(TX.extract(TX.load_image(image)), f, indent=1)
 
-    # 3. the mod package
-    print(f"[3/4] applying {args.mod}")
+    # 3. the console content
     import edit_server as E
     E.SCRATCH = out
-    n_mod = E.mod_import(args.mod)
+    if mod:
+        print(f"[3/4] applying {mod}")
+        n_src = E.mod_import(mod)
+        source = f"{n_src} files of {mod}"
+    else:
+        print(f"[3/4] converting the console images: {snes}, {genesis}")
+        os.environ["LV_SNES_ROM"] = snes
+        os.environ["LV_GENESIS_ROM"] = genesis
+        import integrate_snes as I
+        slots = I.do_integrate(out)
+        source = f"{len(slots)} console level slots from the two images"
 
     # 4. the engine-facing store
     print("[4/4] packing")
@@ -137,15 +226,15 @@ def main():
         fail(f".compiled holds {n_rec} records, expected {len(ids)} ({ARCHIVE_CHUNKS} archive ids + {len(extras)} extras)")
     exe = os.path.join(out, "exe_static.bin")
     if not os.path.exists(exe):
-        fail("the mod package carries no exe_static.bin")
+        fail("no exe_static.bin came out of step 3")
     img = open(exe, "rb").read()
     trailer = re.findall(rb"LVX[0-9A-Z]", img[STATIC_IMAGE:])
     if len(img) <= STATIC_IMAGE or not trailer:
         fail(f"{exe}: no LVX trailer past the static image ({len(img)} B)")
     print(f"done: {out}")
     print(f"      {n_rec} records in .compiled ({ARCHIVE_CHUNKS} archive ids, {len(extras)} extras, "
-          f"{ARCHIVE_CHUNKS + len(extras) - n_rec} of them replacing an archive id), "
-          f"{n_mod} mod files, exe_static.bin {len(img)} B with the {trailer[0].decode()} trailer")
+          f"{ARCHIVE_CHUNKS + len(extras) - n_rec} of them replacing an archive id); {source}; "
+          f"exe_static.bin {len(img)} B with the {trailer[0].decode()} trailer")
     print("      V2_ONLY build: a content/ directory beside the executable (or in the working")
     print("      directory) is picked up by itself; elsewhere:")
     print(f"      V2_ASSETS_DIR={out}/.compiled V2_EXE_STATIC={exe} ./vikings")
