@@ -36,8 +36,9 @@ a 14 00                            ; anim code, verbatim
 blob <hex>                         ; data with no reference from the code (dead)
 ```
 
-* `;` starts a comment. Statements are indented by four spaces; everything else
-  starts at column 0.
+* `;` starts a comment. Statements are indented by four spaces (switch cases
+  by eight), the inner labels of a func by two; everything else starts at
+  column 0.
 * `state NAME:` names a code label. NAME is a dictionary name, an automatic
   owner name, or a name you write yourself (letters, digits, `_`; not four hex
   digits). Targets of `goto` / `call` / `entry=` use the same names. The
@@ -140,22 +141,31 @@ any call-branch such as the collision families — before the return overwrites
 the address. A `func` is a subroutine that respects that:
 
 ```
-func shared_40_43_48_56_1:      ; @5C1E
-    self.timer = 0x20
+func t60_5:                     ; @5C1E
+    if self.timer == 0 goto t60_6
+    self.timer -= 1
+    return
+  t60_6:                        ; an inner label: a block of the same func
     anim A_5F10
     return
     ...
-    call shared_40_43_48_56_1(self.state_187d = 3, acc = 1)
+    call t60_5(self.state_187d = 3, acc = 1)
 ```
 
-* `func NAME:` declares it. The decompiler writes `func` for every label that
-  is entered by `call` only, whose body up to the next label ends in `return`
-  and holds no other call, and that no code falls into; everything else stays
-  `state` (it can still be called — it just is not checked).
-* The compiler checks a `func`: entered by `call` only (no goto, no case, no
-  class entry), ends in `return` before the next label, no `call` or
-  `if … call` inside, and the statement before it is `goto`/`return`/`exit`/
-  `despawn` (a `yield` falls through in time). Each violation names its line.
+* `func NAME:` declares it; the blocks that follow under inner labels
+  `  NAME:` (two spaces, then the name) belong to it, up to the next `state`
+  / `func` / class / data line. The decompiler writes `func` for every call
+  target whose run of blocks qualifies (the longest such run), everything
+  else stays `state` (it can still be called — it just is not checked).
+* The rules, checked by the compiler on every `func` (each violation names
+  its line): the header is entered by `call` only (no goto, no case, no
+  class entry, and the code before it does not fall into it — a `yield`
+  falls through in time); an inner label is entered from inside the func
+  only, is never called and is no class entry; no `call` / `if … call`
+  anywhere inside; the last block ends in `return`, `goto`, `exit` or
+  `despawn` (nothing falls out of a func). Branches OUT of a func to a state
+  are allowed: the flow leaves without returning, which the VM does not mind.
+  Loops inside (`goto` back to the header or an inner label) are allowed.
 * Arguments: `call F(self.f = N, [g] = N, partner.f = N, acc = X)` is exactly
   the literal stores, then the optional `acc = X`, then `call F` — in that
   order, because a store uses the accumulator. The value a function leaves in

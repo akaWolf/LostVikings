@@ -638,14 +638,16 @@ def logic_page_lvd(cid_hex):
         raw = code.strip()
         esc = _h.escape(code.rstrip())
         c = f" <span class=c>;{_h.escape(comment)}</span>" if comment else ""
-        if raw.startswith("state ") and raw.endswith(":"):
-            out.append(f"<div class=l id='{_h.escape(raw[6:-1])}'>{esc}{c}</div>")
+        if raw.startswith(("state ", "func ")) and raw.endswith(":"):
+            out.append(f"<div class=l id='{_h.escape(raw.split()[1][:-1])}'>{esc}{c}</div>")
+        elif code.startswith("  ") and not code.startswith("    ") and raw.endswith(":"):      # an inner label of a func
+            out.append(f"<div class=l id='{_h.escape(raw[:-1])}'>{esc}{c}</div>")
         elif raw.startswith("class "):
             m = _re.search(r"entry=(\S+)", raw)
             esc2 = esc.replace(f"entry={_h.escape(m.group(1))}", f"entry=<a href='#{_h.escape(m.group(1))}'>{_h.escape(m.group(1))}</a>") if m else esc
             out.append(f"<div class=r>{esc2}</div>")
         elif code.startswith("    "):
-            esc2 = _re.sub(r"\b(goto|call) ([A-Za-z_][A-Za-z0-9_]*)", r"\1 <a href='#\2'>\2</a>", esc)
+            esc2 = _re.sub(r"\b(goto|call|-&gt;) ([A-Za-z_][A-Za-z0-9_]*)", r"\1 <a href='#\2'>\2</a>", esc)   # goto/call targets and switch cases
             out.append(f"<div class=o>{esc2}{c}</div>")
         else:
             out.append(f"<div class=b>{esc}{c}</div>")

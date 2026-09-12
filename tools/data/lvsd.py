@@ -676,56 +676,131 @@ SW_RX = re.compile(rf'^    if {VAL_RX} == {LIT_RX} goto ([A-Za-z_][A-Za-z0-9_]*|
 SEL_RX = re.compile(rf'^    if {LIT_RX} == {VAL_RX} goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{{4}})$')
 
 
-# func: a subroutine — a label that is only ever entered by `call`, whose body
-# (the statements up to the next label) ends in `return`, holds no other call
-# (the VM keeps ONE return address per object, OBJ_ALT_PC: a nested call or a
-# call-branch would lose it) and is not fallen into from the statement before.
-# Declared `func NAME:`; a hand-written one is checked for the same rules.
+# func: a subroutine. The VM keeps ONE return address per object (OBJ_ALT_PC:
+# `call` writes it, `return` reads it), so a func is a run of blocks that is
+# entered by `call` only, holds no other call or call-branch, whose inner
+# labels are entered from inside only and whose last block does not fall
+# through — Cfg.func_extent. Declared `func NAME:`, its further blocks as
+# inner labels `  NAME:`; a hand-written one is checked for the same rules.
 # Parameters: `call F(self.f = N, [g] = N, partner.f = N, acc = X)` is the
 # literal stores (each `acc = N; store`) then the optional `acc = X`, then the
 # call — written back in that order, so acc holds X at entry.
-CALLISH_RX = re.compile(r'^(call \S+|if .* call \S+|select .*|switch .*)$')
 NONFALL = {'goto', 'return', 'exit', 'despawn'}
 STORE_ARG_RX = re.compile(r'^(self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|partner\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|\[(?:[A-Za-z_][A-Za-z0-9_]*|[0-9A-Fa-f]{4})\]) = (0x[0-9A-Fa-f]+|-?\d+)$')
 ACC_ARG_RX = re.compile(r'^acc = (.+)$')
 
 
 def label_of(line):
-    m = re.match(r'^(state|func) (\S+):', line)
-    return m.group(2) if m else None
+    """the name a header/label line defines: `state X:`, `func X:`, or an inner label `  X:`"""
+    m = re.match(r'^(?:(?:state|func) (\S+)|  (\S+)):', line.split(';', 1)[0].rstrip())
+    return (m.group(1) or m.group(2)) if m else None
+
+
+class Cfg:
+    """The control-flow graph of a .lvd text (the decompiler and the compiler
+    read the same one, so a func the decompiler writes passes the checks and
+    a func that passes the checks is re-detected with the same extent).
+    Blocks: a `state`/`func` header or an inner label plus the indented lines
+    up to the next non-indented line; a block falls through into the next
+    block only when nothing but blank/comment lines lies between them.
+    Edges (non-call): goto, the branch and search families, switch/select
+    cases, fallthrough, class entries (`entry` pseudo-source). Call edges are
+    kept apart (call, if … call, call F(args))."""
+    def __init__(self, lines):
+        self.lines = lines
+        self.blocks = []          # [name, line index of the header, [(line index, stmt)], adjacent to the next block]
+        self.kind = {}            # name -> 'state' | 'func' | 'inner'
+        self.entries = {}         # class entry name -> line index
+        cur = None
+        for i, l in enumerate(lines):
+            code = l.split(';', 1)[0].rstrip()
+            if not code.strip(): continue
+            m = re.match(r'^(state|func) (\S+):$', code)
+            if m:
+                if cur is not None: cur[3] = True
+                cur = [m.group(2), i, [], False]; self.blocks.append(cur); self.kind[m.group(2)] = m.group(1); continue
+            m = re.match(r'^  (\S+):$', code)
+            if m:
+                if cur is not None: cur[3] = True
+                cur = [m.group(1), i, [], False]; self.blocks.append(cur); self.kind[m.group(1)] = 'inner'; continue
+            if code.startswith(('    ', '\t')):
+                if cur is None: cur = [f'<orphan@{i}>', i, [], False]; self.blocks.append(cur); self.kind[cur[0]] = 'orphan'
+                cur[2].append((i, code.strip())); continue
+            if code.startswith('class '):
+                mm = re.search(r'entry=(\S+)', code)
+                if mm: self.entries[mm.group(1)] = i
+            cur = None                                   # class / blob / anim / alias / chunk: no fallthrough across it
+        self.index = {b[0]: k for k, b in enumerate(self.blocks)}
+        self.succ = {}; self.calls = {}; self.falls = {}; self.call_lines = {}
+        for k, (name, hi, stmts, adj) in enumerate(self.blocks):
+            succ = []; calls = []
+            for li, st in stmts:
+                m = re.match(r'^call (\S+?)(\(.*\))?$', st)
+                if m: calls.append((m.group(1), li)); continue
+                m = re.match(r'^if .* call (\S+)$', st)
+                if m: calls.append((m.group(1), li)); continue
+                m = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> (\S+)$', st)
+                if m: succ.append((m.group(2), li)); continue
+                m = re.search(r'\bgoto (\S+)$', st)
+                if m: succ.append((m.group(1), li))
+            last = stmts[-1][1].split()[0] if stmts else ''
+            falls = last not in NONFALL
+            if falls and adj and k + 1 < len(self.blocks):
+                succ.append((self.blocks[k + 1][0], stmts[-1][0] if stmts else hi))
+            self.succ[name] = succ; self.calls[name] = calls; self.falls[name] = falls
+        self.preds = collections.defaultdict(list)       # name -> [(source block, line)]
+        self.callers = collections.defaultdict(list)
+        for name in self.succ:
+            for t, li in self.succ[name]: self.preds[t].append((name, li))
+            for t, li in self.calls[name]: self.callers[t].append((name, li))
+
+    def closure(self, start):
+        seen = {start}; st = [start]
+        while st:
+            n = st.pop()
+            for t, _ in self.succ.get(n, ()):
+                if t in self.index and t not in seen: seen.add(t); st.append(t)
+        return seen
+
+    def func_extent(self, E):
+        """The blocks of a func headed by E: the longest run of adjacent blocks
+        from E, every one reachable from E, such that (a) no block holds a
+        call or call-branch, (b) no block but E is called and none is a class
+        entry, (c) every block but E is entered from inside the run only, (d)
+        E is entered from outside the run by calls only (an internal loop back
+        to E is fine; a fallthrough from the block before is not), (e) the
+        last block does not fall through. None when no run qualifies."""
+        if E not in self.index or E not in self.callers: return None
+        k0 = self.index[E]; C = self.closure(E); run = [E]
+        while self.blocks[k0 + len(run) - 1][3] and k0 + len(run) < len(self.blocks):
+            nxt = self.blocks[k0 + len(run)][0]
+            if nxt not in C or self.kind.get(nxt) == 'orphan': break
+            run.append(nxt)
+        for k in range(len(run), 0, -1):
+            P = run[:k]; Ps = set(P)
+            if any(self.calls[n] for n in P): continue
+            if any(n in self.callers for n in P[1:]) or any(n in self.entries for n in P): continue
+            if any(p not in Ps for n in P[1:] for p, _ in self.preds.get(n, ())): continue
+            if any(p not in Ps for p, _ in self.preds.get(E, ())): continue
+            if self.falls[P[-1]]: continue
+            return P
+        return None
 
 
 def fold_funcs(lines):
-    """-> (lines, funcs, folded calls)"""
-    calls = collections.Counter(); jumps = collections.Counter()
-    for l in lines:
-        s = l.split(';', 1)[0].strip()
-        if s.startswith('class '):
-            m = re.search(r'entry=(\S+)', s); jumps[m.group(1)] += 1
-        if not l.startswith('    '): continue
-        m = re.match(r'^(?:if .* )?call (\S+)$', s)
-        if m: calls[m.group(1)] += 1
-        for m in re.finditer(r'\bgoto (\S+)', s): jumps[m.group(1)] += 1
-        m = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> (\S+)$', s)
-        if m: jumps[m.group(2)] += 1
-        m = re.match(r'^search_\S+ goto (\S+)$', s)
-        if m: jumps[m.group(1)] += 1
-    funcs = set(); out = list(lines); nfn = 0
-    i = 0
-    while i < len(lines):
-        name = label_of(lines[i])
-        if name and name in calls and name not in jumps:
-            body = []; j = i + 1
-            while j < len(lines) and (lines[j].startswith('    ') or not lines[j].split(';', 1)[0].strip()):
-                if lines[j].split(';', 1)[0].strip(): body.append(lines[j].split(';', 1)[0].strip())
-                j += 1
-            q = i - 1
-            while q >= 0 and not lines[q].split(';', 1)[0].strip(): q -= 1
-            prev = lines[q].split(';', 1)[0].strip() if q >= 0 else ''
-            prev_falls = lines[q].startswith('    ') and prev.split()[0] not in NONFALL if q >= 0 else False
-            if body and body[-1] == 'return' and not any(CALLISH_RX.match(s) for s in body[:-1]) and not prev_falls:
-                funcs.add(name); out[i] = lines[i].replace('state ', 'func ', 1); nfn += 1
-        i += 1
+    """-> (lines, funcs, folded calls). `func NAME:` for every call target
+    whose extent qualifies (Cfg.func_extent); the blocks after the header
+    inside the extent become inner labels `  NAME:`."""
+    cfg = Cfg(lines); out = list(lines); funcs = set(); nfn = 0
+    for E in cfg.callers:
+        P = cfg.func_extent(E)
+        if P is None or cfg.kind.get(E) != 'state': continue
+        funcs.add(E); nfn += 1
+        hi = cfg.blocks[cfg.index[E]][1]
+        out[hi] = out[hi].replace('state ', 'func ', 1)
+        for n in P[1:]:
+            li = cfg.blocks[cfg.index[n]][1]
+            out[li] = '  ' + out[li][len('state '):]
     # call sugar: literal stores (+ one acc load) right before `call F` of a func
     res = []; ncall = 0; k = 0
     while k < len(out):
@@ -894,38 +969,42 @@ class Lowerer:
         raise ValueError(f'cannot parse statement: {s!r}')
 
     def check_funcs(self, text):
-        """The rules a `func` must satisfy (the VM keeps one return address
-        per object): entered by `call` only; the body up to the next label ends
-        in `return` and holds no other call or call-branch; not fallen into."""
+        """The rules a `func` must satisfy (Cfg.func_extent, the VM keeps one
+        return address per object), each violation with its line."""
         lines = text.splitlines()
-        code = [(n, l.split(';', 1)[0].rstrip()) for n, l in enumerate(lines, 1)]
-        funcs = [(n, label_of(l)) for n, l in code if l.startswith('func ')]
-        if not funcs: return
-        jumps = collections.Counter()
-        for n, l in code:
-            s = l.strip()
-            if s.startswith('class '):
-                m = re.search(r'entry=(\S+)', s); jumps[m.group(1)] += 1
-            if not l.startswith('    '): continue
-            for m in re.finditer(r'\bgoto (\S+)', s): jumps[m.group(1)] += 1
-            m = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> (\S+)$', s)
-            if m: jumps[m.group(2)] += 1
-        for n, name in funcs:
-            if name in jumps:
-                raise ValueError(f'line {n}: func {name} is entered by goto/branch/entry — a func is entered by call only')
-            body = []; j = n
-            while j < len(code) and (code[j][1].startswith('    ') or not code[j][1].strip()):
-                if code[j][1].strip(): body.append((code[j][0], code[j][1].strip()))
-                j += 1
-            if not body or body[-1][1] != 'return':
-                raise ValueError(f'line {n}: func {name} must end in `return` before the next label')
-            for bn, s in body[:-1]:
-                if CALLISH_RX.match(s):
-                    raise ValueError(f'line {bn}: func {name}: a call inside a func loses the return address (the VM keeps one per object)')
-            q = n - 2
-            while q >= 0 and not code[q][1].strip(): q -= 1
-            if q >= 0 and code[q][1].startswith('    ') and code[q][1].strip().split()[0] not in NONFALL:
-                raise ValueError(f'line {n}: func {name} is fallen into from line {code[q][0]} — end the previous code with goto/return/exit/despawn')
+        cfg = Cfg(lines)
+        for name, kind in cfg.kind.items():
+            if kind != 'inner': continue
+            k = cfg.index[name]; q = k - 1
+            while q >= 0 and cfg.kind[cfg.blocks[q][0]] == 'inner': q -= 1
+            if q < 0 or cfg.kind[cfg.blocks[q][0]] != 'func' or not all(cfg.blocks[x][3] for x in range(q, k)):
+                raise ValueError(f'line {cfg.blocks[k][1] + 1}: inner label {name} must follow a func (or its inner labels) directly')
+        for E, kind in cfg.kind.items():
+            if kind != 'func': continue
+            k = cfg.index[E]; P = [E]
+            while k + len(P) < len(cfg.blocks) and cfg.kind[cfg.blocks[k + len(P)][0]] == 'inner': P.append(cfg.blocks[k + len(P)][0])
+            Ps = set(P); hl = cfg.blocks[k][1] + 1
+            for n in P:
+                for t, li in cfg.calls[n]:
+                    raise ValueError(f'line {li + 1}: func {E}: a call inside a func loses the return address (the VM keeps one per object)')
+                if n in cfg.entries:
+                    raise ValueError(f'line {cfg.entries[n] + 1}: func {E}: {n} is a class entry — a func is entered by call only')
+            for n in P[1:]:
+                for c, li in cfg.callers.get(n, ()):
+                    raise ValueError(f'line {li + 1}: {n} is a label inside func {E} — call the func, not a label inside it')
+                for p, li in cfg.preds.get(n, ()):
+                    if p not in Ps: raise ValueError(f'line {li + 1}: {n} is a label inside func {E} and is entered from outside it')
+            for p, li in cfg.preds.get(E, ()):
+                if p in Ps: continue
+                how = 'fallen into' if (cfg.index.get(p) == k - 1 and not any(t == E for t, _ in cfg.succ[p][:-1])) and cfg.falls[p] else 'entered by goto/branch'
+                if how == 'fallen into' and any(t == E for t, l2 in cfg.succ[p] if l2 != li): how = 'entered by goto/branch'
+                raise ValueError(f'line {hl}: func {E} is {how} from line {li + 1} — a func is entered by call only' +
+                                 (' (end the previous code with goto/return/exit/despawn)' if how == 'fallen into' else ''))
+            if E not in cfg.callers:
+                raise ValueError(f'line {hl}: func {E} is never called')
+            last = cfg.blocks[cfg.index[P[-1]]]
+            if cfg.falls[P[-1]]:
+                raise ValueError(f'line {(last[2][-1][0] if last[2] else last[1]) + 1}: func {E} falls through past its last block — end it with return/goto/exit/despawn')
 
     def lower(self, text):
         self.check_funcs(text)
@@ -944,6 +1023,9 @@ class Lowerer:
                     stmt = f'if {val} == {mc.group(1)} goto {mc.group(2)}' if kw == 'switch' else f'if {mc.group(1)} == {val} goto {mc.group(2)}'
                     out.extend(self.statement(stmt)); continue
                 block = None
+                mi = re.match(r'^  ([A-Za-z_][A-Za-z0-9_]*):$', code)     # an inner label of a func
+                if mi:
+                    out.append(self.label(mi.group(1)) + ':'); continue
                 if code.startswith('    ') or code.startswith('\t'):   # indented = a statement (checked first:
                     mb = re.match(r'^(switch|select) (\S+):$', raw)     # `x = y` statements look like aliases)
                     if mb:
